@@ -28,7 +28,8 @@
  * as it is — that arm is the control, and it passes both before and
  * after the change.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryGguiSessionStore,
@@ -39,9 +40,13 @@ import type {
   EmbeddingProvider,
   UiGenerateResult,
 } from '@ggui-ai/mcp-server-core';
-import type { DataContract } from '@ggui-ai/protocol';
+import { renderOutputSchema } from '@ggui-ai/protocol';
+import type { DataContract, GguiRenderOutput } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
-import { createGguiRenderHandler } from './render.js';
+import {
+  createGguiRenderHandler,
+  type GguiSessionPostSuccessArgs,
+} from './render.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { isHandlerFailure, type HandlerContext } from '../types.js';
 
@@ -300,5 +305,60 @@ describe('ggui_render — no gate at all (control)', () => {
       throw new Error(`expected success, got: ${out.errorText}`);
     }
     expect(out.outcome).toBe('rendered');
+  });
+});
+
+/**
+ * Two guards on the seams #786 touched but did not pin.
+ *
+ * The envelope declaration is ONE line in `render.ts` and it is the only
+ * thing that makes the transport enforce the presence rules: without it
+ * `build-mcp.ts` falls back to `z.object(handler.outputSchema)`, a
+ * REBUILT raw shape that carries no `superRefine` and so accepts a
+ * refusal with committed state. The transport pins in
+ * `build-mcp.test.ts` use a synthetic handler, and the suites above call
+ * `handler.handler(...)` directly — so deleting the line left every
+ * suite green while the wire silently lost both rules. This is the pin
+ * that fails instead.
+ *
+ * The hook bundle's `action` is the other one. Demoting the six identity
+ * fields to optional (to make room for the refused arm, where nothing is
+ * committed) widened `GguiRenderOutput['action']` to include `undefined`
+ * — and `GguiSessionPostSuccessArgs` read that type straight through,
+ * even though the hook fires ONLY after a committed render. That is the
+ * same strictness loss `CommittedIdentity` exists to undo, on a public
+ * interface a deployment's hook implementation compiles against.
+ */
+describe('ggui_render — the seams #786 widened (drift guards)', () => {
+  it('declares `outputEnvelopeSchema`, and the raw-shape fallback proves it load-bearing', () => {
+    const h = buildHarness(undefined);
+
+    // The declaration itself. Delete the line in render.ts and this fails.
+    expect(h.handler.outputEnvelopeSchema).toBe(renderOutputSchema);
+
+    // Why it matters: a refusal carrying committed state is exactly what
+    // the presence rules reject — and exactly what the fallback admits.
+    const leaky = {
+      outcome: 'refused',
+      sessionId: 'render_leak',
+      refusal: {
+        code: 'hard_cap_exceeded',
+        message: 'the configured render cap for this app was reached',
+        fix: 'the cap resets at the start of the next period',
+        retry: 'next-period',
+        handshake: 'intact',
+      },
+    };
+    expect(h.handler.outputEnvelopeSchema?.safeParse(leaky).success).toBe(false);
+    expect(z.object(h.handler.outputSchema).safeParse(leaky).success).toBe(true);
+  });
+
+  it('keeps `action` non-optional on the committed-arm hook bundle', () => {
+    // Derived from the wire type, never re-listed: the hook fires only
+    // after a commit, so its `action` is the wire field with `undefined`
+    // removed.
+    expectTypeOf<GguiSessionPostSuccessArgs['action']>().toEqualTypeOf<
+      NonNullable<GguiRenderOutput['action']>
+    >();
   });
 });

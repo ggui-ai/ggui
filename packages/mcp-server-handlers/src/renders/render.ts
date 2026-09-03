@@ -366,8 +366,17 @@ export interface GguiSessionPostSuccessArgs {
    * own input object to surface them in the hook impl.
    */
   readonly intent: string;
-  /** Decision action classification — same value as on the response. */
-  readonly action: GguiRenderOutput['action'];
+  /**
+   * Decision action classification — same value as on the response.
+   *
+   * `Required<…>` because the hook fires ONLY after a committed render.
+   * The wire field went optional in ggui#786 to make room for the refused
+   * arm (where nothing is committed and no action was decided); reading
+   * that type straight through would have widened this bundle to admit
+   * `undefined` on a path where it can never occur — the same strictness
+   * loss {@link CommittedIdentity} undoes for the handler's own outputs.
+   */
+  readonly action: Required<GguiRenderOutput>['action'];
   /** Whether the render committed real componentCode. */
   readonly codeReady: boolean;
   /**
