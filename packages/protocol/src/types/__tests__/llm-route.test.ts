@@ -343,6 +343,16 @@ describe('toLiteLlmString — forward serialization for observability', () => {
 });
 
 describe('parseAnyLlmRoute — combined parser', () => {
+  it('resolves a LiteLLM alias in the canonical form too — one model-id vocabulary, two separators (#818 origin)', () => {
+    // `anthropic/claude-haiku-4-5` resolves through LITELLM_TO_WIRE to the
+    // dated wire id; the same alias with the canonical separator MUST land
+    // on the same route, or a caller who read the alias in our docs gets
+    // `model_not_in_tier` for a model that is in the tier.
+    const viaLiteLlm = parseAnyLlmRoute('anthropic/claude-haiku-4-5');
+    expect(viaLiteLlm).toEqual({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001' });
+    expect(parseLlmRoute('anthropic:claude-haiku-4-5')).toEqual(viaLiteLlm);
+    expect(parseAnyLlmRoute('anthropic:claude-haiku-4-5')).toEqual(viaLiteLlm);
+  });
   it('parses canonical `provider:model` form', () => {
     expect(parseAnyLlmRoute('anthropic:claude-haiku-4-5-20251001')).toEqual({
       provider: 'anthropic',
