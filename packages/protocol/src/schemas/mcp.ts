@@ -610,11 +610,18 @@ export type PreGenerationRefusal = z.infer<typeof renderRefusalSchema>;
  * nothing, so ANY other key (a `sessionId`, a `resourceUri`, an
  * `error`) means the projection leaked state that does not exist.
  *
- * The envelope carries nothing render-specific, so a second refusing
- * tool would reuse it verbatim rather than mint a dialect. Today
- * `ggui_render` is the only tool that carries a refusing gate;
+ * Today `ggui_render` is the only tool that carries a refusing gate;
  * {@link renderOutputSchema} delegates its refused arm here rather than
  * restating the rules, so there is exactly ONE declaration of them.
+ *
+ * NOT reusable verbatim by a second refusing tool, despite the strict
+ * shape reading as generic: {@link renderRefusalSchema} REQUIRES
+ * `handshake: 'intact'`, and that field is render-only by
+ * construction — a mutation consumes no handshake, so it has nothing
+ * to report intact. A mutation arm therefore lands WITH its first
+ * emitter, sharing the facts this envelope carries (`code`, `message`,
+ * `fix`, `retry`, one closed registry) and carrying no `handshake`
+ * field at all (ggui#798).
  */
 export const refusedOutputSchema = z.strictObject({
   outcome: z.literal('refused'),
