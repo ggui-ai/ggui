@@ -3117,6 +3117,14 @@
  *      reference and against the shipping projector in
  *      `@ggui-ai/mcp-server-handlers`) and `registry-completeness`
  *      (the registry's structural pins, bound to the LIVE registry).
+ *
+ * FOLLOWER — moves in the SAME commit as this constant, pinned by a
+ * gate that fails loud when it lags: the `protocol` field of every
+ * shipped `samples/gguis/<name>/ggui.json` (the `@ggui-ai/project-config`
+ * samples-protocol conformance test; README contract: `protocol` MUST
+ * match the installed `PROTOCOL_VERSION`). The samples are what a new
+ * project starts from, so a stale literal there ships as a stale
+ * declaration.
  */
 export const PROTOCOL_VERSION = "draft-2026-09-04";
 
