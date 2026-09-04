@@ -21,6 +21,7 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server as HttpServer } from 'node:http';
+import { PROTOCOL_VERSION } from '@ggui-ai/protocol';
 import { createGguiServer, type GguiServer } from './server.js';
 
 const silentLogger = {
@@ -121,7 +122,10 @@ describe('GET /ggui/console/config', () => {
     tmpDir = realpathSync(mkdtempSync(join(tmpdir(), 'ggui-config-valid-')));
     const manifest = {
       schema: '1',
-      protocol: '1.1',
+      // The installed stamp — the loader refuses any other declaration
+      // (UPGRADE_REQUIRED), so a fictional version here would test the
+      // refusal, not the config route.
+      protocol: PROTOCOL_VERSION,
       app: { slug: 'unit-test', name: 'Unit Test' },
     };
     const json = JSON.stringify(manifest, null, 2);
@@ -151,7 +155,7 @@ describe('GET /ggui/console/config', () => {
   it('returns raw + error message (no manifest) when ggui.json fails validation', async () => {
     tmpDir = realpathSync(mkdtempSync(join(tmpdir(), 'ggui-config-invalid-')));
     // Missing required `app` field — schema rejection.
-    const badJson = JSON.stringify({ schema: '1', protocol: '1.1' }, null, 2);
+    const badJson = JSON.stringify({ schema: '1', protocol: PROTOCOL_VERSION }, null, 2);
     writeFileSync(join(tmpDir, 'ggui.json'), badJson, 'utf-8');
     process.chdir(tmpDir);
     fx = await boot({ console: {} });
