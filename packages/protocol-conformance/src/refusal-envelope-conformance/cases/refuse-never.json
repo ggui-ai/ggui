@@ -1,21 +1,21 @@
 {
   "name": "refuse-never",
-  "description": "A refusal no caller action can lift. It still projects to a normal isError tool result \u2014 a terminal refusal is a wire state, never a thrown error.",
+  "description": "A refusal no caller action can lift. It still projects to a normal isError tool result — a terminal refusal is a wire state, never a thrown error. Carried on `billing_mode_anomaly` since registry v9 retired `tier_unrecognized`; the graded property is the `never` retry class, not the particular code.",
   "refusal": {
-    "code": "tier_unrecognized",
-    "message": "the plan recorded on this app matches none this deployment declares",
+    "code": "billing_mode_anomaly",
+    "message": "the app record declares a funding mode this deployment does not recognise",
     "fix": "no caller or owner action restores rendering under this identity; the operator reconciles the record",
     "retry": "never",
     "handshake": "intact"
   },
   "expect": {
     "isError": true,
-    "text": "tier_unrecognized: the plan recorded on this app matches none this deployment declares no caller or owner action restores rendering under this identity; the operator reconciles the record",
+    "text": "billing_mode_anomaly: the app record declares a funding mode this deployment does not recognise no caller or owner action restores rendering under this identity; the operator reconciles the record",
     "structuredContent": {
       "outcome": "refused",
       "refusal": {
-        "code": "tier_unrecognized",
-        "message": "the plan recorded on this app matches none this deployment declares",
+        "code": "billing_mode_anomaly",
+        "message": "the app record declares a funding mode this deployment does not recognise",
         "fix": "no caller or owner action restores rendering under this identity; the operator reconciles the record",
         "retry": "never",
         "handshake": "intact"

@@ -193,7 +193,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
 });
 
 describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
-  it('ships exactly the sixteen render-gate codes (v2 + v5 + v7 + v8)', () => {
+  it('ships exactly the thirteen render-gate codes (v2 + v5 + v7 + v8 + v9)', () => {
     expect(codesOn('render-gate')).toEqual(
       [
         'app_canceled',
@@ -206,14 +206,11 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
         // per-issuer one below: one state, one code.
         'app_rate_limited',
         'billing_mode_anomaly',
-        'free_allowance_exceeded',
         'hard_cap_exceeded',
         'insufficient_credit',
         'issuer_rate_limited',
         'managed_default_cap_exceeded',
         'model_not_in_tier',
-        'tier_unrecognized',
-        'trial_elsewhere',
         'trial_exhausted',
         'trial_expired',
         'unsupported_provider',
@@ -346,12 +343,20 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     expect(src).toContain('caller');
   });
 
-  it('carries the deletion trigger on `free_allowance_exceeded`', () => {
-    // The ruling keeps the row and requires the note: it is deleted in
-    // the same slice as #770 D6 (pre-launch, no shim).
+  it('the three v9-deleted codes are GONE from the registry source', () => {
+    // v9 ruling: `free_allowance_exceeded`, `trial_elsewhere` and
+    // `tier_unrecognized` leave the registry. Pre-launch means the row
+    // goes with no shim and no `@deprecated` — so absence from the
+    // SOURCE, not just from the derived enum, is what this pins: a
+    // commented-out row would still be a half-migration.
     const src = registrySource();
-    expect(src).toContain('free_allowance_exceeded');
-    expect(src).toMatch(/#770/);
+    for (const gone of [
+      'free_allowance_exceeded',
+      'trial_elsewhere',
+      'tier_unrecognized',
+    ]) {
+      expect(src, gone).not.toContain(gone);
+    }
   });
 
   it('marks the rows side-effect-free so a bundler can drop them', () => {
@@ -359,7 +364,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     // and emitters, ~8 KB raw. They ride the root barrel, and the root
     // barrel is bundled into `@ggui-ai/iframe-runtime`, which is
     // size-gated. A browser never reads a refusal ROW: the only thing
-    // that reaches it is the 16-string wire enum inside
+    // that reaches it is the 13-string wire enum inside
     // `renderRefusalSchema`. Without the annotation a bundler must
     // assume the definer call is side-effectful and keeps every row —
     // which is what pushed the runtime over its budget. The build gate
@@ -396,21 +401,20 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     // self-hoster does not have; the rest of this file already says
     // "plan" for exactly that reason.
     //
-    // The three names below already ride LIVE wires minted before this
+    // The two names below already ride LIVE wires minted before this
     // registry existed — `already_on_tier` is thrown by the owner
-    // checkout mutation and read by the console, `tier_unrecognized` is
-    // an allowance state the console renders, `model_not_in_tier` is
-    // emitted by a deployment's generation gate and documented in the
+    // checkout mutation and read by the console, and `model_not_in_tier`
+    // is emitted by a deployment's generation gate and documented in the
     // federated-billing policy. Renaming one is a coordinated change
     // across the emitting surface and its consumers, not a
     // protocol-local edit, so they are exempted BY NAME and the token is
     // banned everywhere else: a NEW code, a description or an emitter
     // that reaches for it fails here rather than at review.
-    const grandfathered = [
-      'model_not_in_tier',
-      'tier_unrecognized',
-      'already_on_tier',
-    ];
+    //
+    // v9 shrank this list by one: `tier_unrecognized` left the registry
+    // entirely, so it no longer needs an exemption. `already_on_tier`
+    // stays — its row is owner-api and is untouched by v9.
+    const grandfathered = ['model_not_in_tier', 'already_on_tier'];
     const stripped = grandfathered.reduce(
       (src, name) => src.split(name).join(''),
       registrySource(),

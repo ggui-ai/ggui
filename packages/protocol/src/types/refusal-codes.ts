@@ -178,17 +178,6 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     description:
       'The requested model is not among those the app is allowed to use. The caller picks an allowed model and retries — the one render-gate state an agent may act on itself.',
   },
-  // Shipped policy, deliberately temporary: this row is DELETED in the
-  // same slice as ggui#770 D6 (the pricing-ladder change that removes
-  // the allowance it names) — pre-launch, no shim, no `@deprecated`.
-  free_allowance_exceeded: {
-    code: 'free_allowance_exceeded',
-    surfaces: ['render-gate'],
-    retry: 'next-period',
-    emitter: "a deployment's generation gate, no-charge allowance arm",
-    description:
-      'The app used up the no-charge allowance this deployment grants per period. The allowance is restored at the next period boundary.',
-  },
   managed_default_cap_exceeded: {
     code: 'managed_default_cap_exceeded',
     surfaces: ['render-gate'],
@@ -245,22 +234,6 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     emitter: "a deployment's generation gate, trial arm",
     description:
       "The app's trial window has closed. The owner starts a paid plan.",
-  },
-  trial_elsewhere: {
-    code: 'trial_elsewhere',
-    surfaces: ['render-gate'],
-    retry: 'never',
-    emitter: "a deployment's generation gate, trial arm",
-    description:
-      'The owner already holds a trial on a different app, and this deployment grants one trial per owner. Nothing restores a trial on THIS app.',
-  },
-  tier_unrecognized: {
-    code: 'tier_unrecognized',
-    surfaces: ['render-gate'],
-    retry: 'never',
-    emitter: "a deployment's generation gate, plan-lookup arm",
-    description:
-      'The plan recorded on the app matches none this deployment declares. Only the operator who wrote the record can reconcile it.',
   },
   issuer_rate_limited: {
     code: 'issuer_rate_limited',
@@ -458,15 +431,12 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveRenderGateCodes([
   'insufficient_credit',
   'hard_cap_exceeded',
   'model_not_in_tier',
-  'free_allowance_exceeded',
   'managed_default_cap_exceeded',
   'app_policy_missing',
   'billing_mode_anomaly',
   'app_canceled',
   'trial_exhausted',
   'trial_expired',
-  'trial_elsewhere',
-  'tier_unrecognized',
   'issuer_rate_limited',
   'app_rate_limited',
   'app_deprovisioned',
