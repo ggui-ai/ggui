@@ -716,9 +716,11 @@ describe('mutation output schemas — LLM-visible field descriptions (#798)', ()
  *
  * §7.1's failure envelope is for a generation that RAN and failed: the
  * error session IS committed, so `sessionId` / `contractHash` / `cache`
- * are live handles. A refusal fires BEFORE input parsing — no handshake
- * read, no session committed, no spend — so the identity fields are
- * structurally ABSENT and `refusal` carries the whole story. The
+ * are live handles. A refusal fires before the HANDLER's own input
+ * parse — no handshake read, no session committed, no spend — so the
+ * identity fields are structurally ABSENT and `refusal` carries the
+ * whole story. (It does not beat the SDK's shape check, which runs
+ * first; the claim is nothing READ, not nothing validated.) The
  * `outcome` discriminant is what lets a reader tell the three apart
  * without guessing from which fields happen to be present.
  *
