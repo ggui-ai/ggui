@@ -805,10 +805,15 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * (Genuine faults inside a gate — a store that is down — still
    * throw; that path is unchanged. What must not throw is a REFUSAL.)
    *
-   * Receives raw input (untyped) so the gate can inspect deployment-
-   * specific fields (e.g. `infra.model` for provider derivation)
-   * before zod validation strips them. The handler still validates the
-   * wire shape afterward; the gate doesn't replace input validation.
+   * Receives the input as it reaches the handler — typed `unknown`
+   * because THIS handler has not parsed it yet, so the gate can read
+   * declared deployment fields (e.g. `infra.model` for provider
+   * derivation) without paying for that parse. It does NOT see keys
+   * the SDK already dropped: on the wire path the SDK validates the
+   * call against the declared `inputSchema` and strips every
+   * undeclared key before any handler runs, so a gate written to
+   * detect them never fires. The handler still validates the wire
+   * shape afterward; the gate doesn't replace input validation.
    *
    * OSS deployments typically leave this absent — no per-render
    * policy. A deployment that funds generation binds it and answers
