@@ -1865,8 +1865,11 @@
  *          now `{stackItemId, updated}`.
  *      Pre-launch no-backcompat: consumers that read any of the dropped
  *      fields off the wire response MUST migrate. Internal telemetry
- *      threading via TS-only `HandshakeOutput` / `PushOutput` /
- *      `UpdateOutput` shapes is preserved for handler-side callers.
+ *      threading via the TS-only `HandshakeOutput` / `PushOutput`
+ *      shapes is preserved for handler-side callers. (`ggui_update`'s
+ *      parallel TS shape is gone as of ggui#798 — the handler's return
+ *      type is `GguiUpdateOutput`, `z.infer` of `updateOutputSchema`,
+ *      so there is nothing left for it to carry beyond the wire.)
  *
  *   u2. **`validatePropsData` is closed-shape (strict mode).** Keys
  *      not declared on `propsSpec.properties` are now rejected with

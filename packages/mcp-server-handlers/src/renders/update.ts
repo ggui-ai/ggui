@@ -60,10 +60,11 @@
  * `resultMeta` collapsed from `ai.ggui/session` + `ai.ggui/stack-item`
  * to one `ai.ggui/render`.
  */
-import { z } from 'zod';
 import {
   ContractViolationError,
+  updateOutputSchema,
   type ComponentGguiSession,
+  type GguiUpdateOutput,
   type JsonObject,
 } from '@ggui-ai/protocol';
 import {
@@ -248,60 +249,26 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
 // persist→ledger→fan flow, parameterized on the tool.
 const inputSchema = mutationInputSchema;
 
-const outputSchema = {
-  sessionId: z.string(),
-  updated: z.boolean(),
-  /**
-   * The epoch-pinned URI of the NEW history record this update minted
-   * (`ui://ggui/render/{id}[/{key}]#{epoch}` — #483). On a no-op
-   * (`updated: false`) no record is minted and this is the bare
-   * live-head URI. SDKs that strip `_meta` from tool_results (OpenAI
-   * Agents SDK, Google ADK) reach the URI via this LLM-visible field;
-   * SDKs that preserve `_meta` also see it on `_meta.ui.resourceUri`.
-   */
-  resourceUri: z.string(),
-  /**
-   * The session's head epoch after this call — advanced by one on a
-   * real update, unchanged on a no-op. `ggui_render` mints epoch 0;
-   * the row is the authority (#483).
-   */
-  epoch: z.number().int().min(0),
-  /**
-   * Present ONLY on a no-op: the patch validated and conformed but
-   * left props identical to the current state, so nothing was written,
-   * nothing changes on screen, and NO history record was minted.
-   * Model-visible by design — the common producer of a no-op is an LLM
-   * echoing existing props back, and this is its only feedback channel.
-   */
-  warning: z.string().optional(),
-  /**
-   * ggui#560 — schema attestation (same three-field family as the
-   * handshake disclosure; no value field, the spec cannot change on
-   * this leg).
-   */
-  propsSchemaHash: z
-    .string()
-    .optional()
-    .describe(
-      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.',
-    ),
-  propsSchemaProfile: z
-    .string()
-    .optional()
-    .describe(
-      "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.",
-    ),
-} as const;
-
-interface UpdateOutput {
-  sessionId: string;
-  updated: boolean;
-  resourceUri: string;
-  epoch: number;
-  warning?: string;
-  propsSchemaHash?: string;
-  propsSchemaProfile?: string;
-}
+/**
+ * Canonical wire output shape — pulled from `@ggui-ai/protocol`'s
+ * `updateOutputSchema`, the same way `ggui_render` pulls
+ * `renderOutputSchema`. `.shape` unpacks the zod object back to a
+ * field-record for SharedHandler's type-level inference and for MCP
+ * registration (the spec requires the declared `Tool.outputSchema`
+ * root to be a JSON Schema of type `object`).
+ *
+ * No `outputEnvelopeSchema`: unlike `renderOutputSchema` this schema
+ * carries no cross-field refinement, so rebuilding `z.object(shape)`
+ * at the transport reproduces it exactly. There is nothing a composed
+ * schema would enforce that the raw shape does not.
+ *
+ * The field docs — including the `.describe()` strings an agent reads
+ * out of `tools/list` — live on the schema in `@ggui-ai/protocol`.
+ * They are deliberately NOT restated here: this used to be a parallel
+ * declaration, and a docstring saying "must not drift" was the only
+ * thing binding the two (ggui#798).
+ */
+const outputSchema = updateOutputSchema.shape;
 
 /**
  * Build the OSS `ggui_update` handler. Handler is additive — declared
@@ -311,7 +278,7 @@ interface UpdateOutput {
  */
 export function createGguiUpdateHandler(
   deps: GguiUpdateHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, UpdateOutput> {
+): SharedHandler<typeof inputSchema, typeof outputSchema, GguiUpdateOutput> {
   return {
     name: 'ggui_update',
     title: 'Update',
@@ -334,7 +301,7 @@ export function createGguiUpdateHandler(
       "Render the session's updated state as a NEW card in the conversation — a new history entry. The history number (epoch) advances by one and the previous card becomes a frozen history record; use this for state milestones worth showing in the transcript, or when the original card is no longer visible or usable. For an IN-PLACE repaint of the card the user is already looking at (the common consume → domain-tool → repaint loop), use ggui_amend instead — it changes the same card quietly and adds nothing to the conversation.  Two mutation modes:  (1) `{sessionId, kind:'replace', props}` — full props replacement; `props` IS the new state. Use when most fields change or you want deterministic restoration.  (2) `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta. Top-level keys merge shallow, nested objects merge recursively, a `null` value DELETES that key, arrays fully replace.  Both modes validate the FINAL props (post-merge for `merge`) against the GguiSession's `propsSpec` (when declared) and reject on violation. Mutation ownership: only the GguiSession-creating identity may overwrite.",
     inputSchema,
     outputSchema,
-    async handler(input, ctx: HandlerContext): Promise<UpdateOutput> {
+    async handler(input, ctx: HandlerContext): Promise<GguiUpdateOutput> {
       // Shared mutation core (#483) — 'ggui_update' advances the
       // history epoch and mints a new record; the pinned URI is
       // composed here from the core's bare mount URI.

@@ -1006,9 +1006,26 @@ export const amendInputSchema = z.discriminatedUnion('kind', [
 ]);
 
 /**
- * Wire-output shape — minimal acknowledgement. The handler carries
- * `decision`, `contract`, `contractHash` on its internal `UpdateOutput`
- * TS shape — zod strips them before structuredContent serialization.
+ * Agent-facing description of the schema-attestation hash, shared by
+ * both mutation tools (ggui#560). It is not a comment: `.describe()`
+ * ships as JSON-Schema `description` in the tool declaration, so this
+ * string is what an agent reads out of `tools/list` when it has to
+ * decide whether a hash mismatch means the contract moved under it.
+ * Declared once so the two tools cannot say different things about the
+ * same field.
+ */
+const PROPS_SCHEMA_HASH_DESCRIPTION =
+  'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.';
+
+/** Agent-facing description of the grammar-profile classifier. Same rationale as {@link PROPS_SCHEMA_HASH_DESCRIPTION}. */
+const PROPS_SCHEMA_PROFILE_DESCRIPTION =
+  "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.";
+
+/**
+ * Wire-output shape — minimal acknowledgement. This schema IS the
+ * handler's declared output: `ggui_update` registers `.shape` and its
+ * return type is `GguiUpdateOutput` (`z.infer` of this schema), so
+ * there is no second declaration to keep in step (ggui#798).
  *
  * Every REAL update (`updated: true`) mints a new history record and
  * its result carries the `ai.ggui/render` slice as a FULL bootable
@@ -1034,8 +1051,7 @@ export const updateOutputSchema = z.object({
    * no-op (`updated: false`) no record is minted and this is the bare
    * live-head URI. Mirrored on the LLM-visible structuredContent so
    * SDKs that strip `_meta` from tool_results can still reach the
-   * mount URI. Kept in sync with the update handler's wire shape —
-   * this export and the handler's inline schema must not drift.
+   * mount URI.
    */
   resourceUri: z.string(),
   /**
@@ -1065,9 +1081,15 @@ export const updateOutputSchema = z.object({
    * session-continuity guarantee, so a mismatch is the observable form
    * of a contract changing mid-session.
    */
-  propsSchemaHash: z.string().optional(),
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(PROPS_SCHEMA_HASH_DESCRIPTION),
   /** Present with `propsSchemaHash`; same profile classifier as the handshake's. */
-  propsSchemaProfile: z.string().optional(),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(PROPS_SCHEMA_PROFILE_DESCRIPTION),
 });
 
 /**
@@ -1076,6 +1098,10 @@ export const updateOutputSchema = z.object({
  * mints a record, so there is no pinned URI to return and no epoch
  * field — the history number is untouched by construction). The
  * mounted card receives the new props over the live channels.
+ *
+ * As with {@link updateOutputSchema}, this schema IS the handler's
+ * declared output — `ggui_amend` registers `.shape` and returns
+ * `GguiAmendOutput` (ggui#798).
  */
 export const amendOutputSchema = z.object({
   sessionId: z.string(),
@@ -1084,9 +1110,15 @@ export const amendOutputSchema = z.object({
   /** Same no-op feedback channel as ggui_update's `warning`. */
   warning: z.string().optional(),
   /** Schema attestation (ggui#560) — same semantics as ggui_update's. */
-  propsSchemaHash: z.string().optional(),
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(PROPS_SCHEMA_HASH_DESCRIPTION),
   /** Present with `propsSchemaHash`. */
-  propsSchemaProfile: z.string().optional(),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(PROPS_SCHEMA_PROFILE_DESCRIPTION),
 });
 
 /**

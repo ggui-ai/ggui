@@ -18,7 +18,10 @@
  * Git reading: `ggui_update` = commit (new history entry);
  * `ggui_amend` = commit --amend (fix up the current one).
  */
-import { z } from 'zod';
+import {
+  amendOutputSchema,
+  type GguiAmendOutput,
+} from '@ggui-ai/protocol';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import {
   mutationInputSchema,
@@ -35,52 +38,22 @@ import type { GguiUpdateHandlerDeps } from './update.js';
  */
 export type GguiAmendHandlerDeps = GguiUpdateHandlerDeps;
 
-const outputSchema = {
-  sessionId: z.string(),
-  updated: z.boolean(),
-  /**
-   * The BARE live-head URI — amend targets the mounted card and never
-   * mints a record, so there is no pinned URI to return and no epoch
-   * field (the history number is untouched by construction).
-   *
-   * NORMATIVE re-anchor reference (SPEC §7.1.2.1, ggui#652 /
-   * guuey#535): together with `sessionId` this is the durable record
-   * that an in-place repaint touched this session at this turn. A
-   * host's persistence layer MAY consume it as a locator-only
-   * re-anchor — `resources/read`-resolvable, stable for the session's
-   * lifetime — so a restored transcript re-positions the card at its
-   * latest referencing turn and rehydrates CURRENT state instead of a
-   * stale earlier snapshot. It rides structuredContent (LLM-visible,
-   * same rationale as ggui_update's resourceUri: consumers that strip
-   * `_meta` still reach it) and MUST NOT move to a result `_meta`
-   * slice — see the NO-resultMeta pin below.
-   */
-  resourceUri: z.string(),
-  /** No-op feedback channel — same semantics as ggui_update's. */
-  warning: z.string().optional(),
-  /** ggui#560 — schema attestation, same semantics as ggui_update's. */
-  propsSchemaHash: z
-    .string()
-    .optional()
-    .describe(
-      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.',
-    ),
-  propsSchemaProfile: z
-    .string()
-    .optional()
-    .describe(
-      "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.",
-    ),
-} as const;
+/**
+ * Canonical wire output shape — pulled from `@ggui-ai/protocol`'s
+ * `amendOutputSchema`, the same way `ggui_update` pulls
+ * `updateOutputSchema` and `ggui_render` pulls `renderOutputSchema`.
+ * `.shape` unpacks the zod object back to a field-record for
+ * SharedHandler's type-level inference and for MCP registration.
+ *
+ * The field docs — including the `.describe()` strings that reach an
+ * agent through `tools/list` — live on the schema in
+ * `@ggui-ai/protocol`; restating them here is what made this a
+ * parallel declaration (ggui#798). The one claim worth keeping local
+ * is the NO-resultMeta pin below, which is about this handler rather
+ * than about the wire shape.
+ */
+const outputSchema = amendOutputSchema.shape;
 
-interface AmendOutput {
-  sessionId: string;
-  updated: boolean;
-  resourceUri: string;
-  warning?: string;
-  propsSchemaHash?: string;
-  propsSchemaProfile?: string;
-}
 
 /**
  * Build the OSS `ggui_amend` handler. Additive, like `update:` — server
@@ -88,7 +61,11 @@ interface AmendOutput {
  */
 export function createGguiAmendHandler(
   deps: GguiAmendHandlerDeps,
-): SharedHandler<typeof mutationInputSchema, typeof outputSchema, AmendOutput> {
+): SharedHandler<
+  typeof mutationInputSchema,
+  typeof outputSchema,
+  GguiAmendOutput
+> {
   return {
     name: 'ggui_amend',
     title: 'Amend',
@@ -102,7 +79,7 @@ export function createGguiAmendHandler(
       "Update the rendered UI's props IN PLACE — repaint the currently mounted card without adding a new card to the conversation; the history number does not advance. This is the DEFAULT mutation of the render/update family for reacting to user gestures (see ggui_update for the new-card variant). USE THIS AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is staring at stale props. Skipping this leaves the card frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_amend → loop`. The card repaints WITHOUT losing scroll position, focus, or uncommitted input.  Two mutation modes:  (1) `{sessionId, kind:'replace', props}` — full props replacement.  (2) `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta (null deletes a key; arrays fully replace). Prefer `merge` after a single domain-tool mutation.  Both modes validate the FINAL props against the GguiSession's `propsSpec` (when declared) and reject on violation.  For a state MILESTONE that deserves its own new card in the conversation — or when the original card is no longer visible or usable — use ggui_update instead (it renders the state as a new card and advances the history number).",
     inputSchema: mutationInputSchema,
     outputSchema,
-    async handler(input, ctx: HandlerContext): Promise<AmendOutput> {
+    async handler(input, ctx: HandlerContext): Promise<GguiAmendOutput> {
       const r = await runPropsMutation(deps, 'ggui_amend', input, ctx);
       return {
         sessionId: r.sessionId,
