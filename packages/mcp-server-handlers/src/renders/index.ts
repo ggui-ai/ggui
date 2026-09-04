@@ -224,7 +224,6 @@ export {
 } from "./sync-context.js";
 export {
   createGguiUpdateHandler,
-  type BillingGate,
   type GguiUpdateHandlerDeps,
   type PropsUpdateNotifier,
 } from "./update.js";

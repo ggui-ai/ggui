@@ -1037,10 +1037,11 @@ const PROPS_SCHEMA_PROFILE_DESCRIPTION =
  * bridge-pull) is `ggui_amend`'s job.
  *
  * NO refusal arm (ggui#786): the pre-generation refusal envelope rides
- * `ggui_render` only. `ggui_update` binds no refusing gate — its
- * `BillingGate` is a different, post-parse seam, and `handshake:
- * 'intact'` is meaningless on a tool that consumes no handshake. A
- * mutation arm is a separate slice, not a mechanical port.
+ * `ggui_render` only. There is no pre-state gate on the mutation tools
+ * today — nothing on this path can decline a call before it reads —
+ * and `handshake: 'intact'` would assert something meaningless on a
+ * tool that consumes no handshake. The arm lands with its first
+ * emitter (ggui#798), not as a mechanical port of the render one.
  */
 export const updateOutputSchema = z.object({
   sessionId: z.string(),

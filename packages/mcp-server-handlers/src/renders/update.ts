@@ -31,16 +31,14 @@
  *
  * Pure render-mutation flow:
  *   1. Parse the flat shape (strict), then narrow the union — surface
- *      "wrong fields for this kind" before the gate and before any
- *      tenant work, so a malformed call costs zero store reads and zero
- *      gate evaluations.
- *   2. Pre-mutation `billingGate.preCheck` (cloud traffic-class gate).
- *   3. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
- *   4. Apply patch via the shared `applyGguiSessionPatch` helper:
+ *      "wrong fields for this kind" before any tenant work, so a
+ *      malformed call costs zero store reads.
+ *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
+ *   3. Apply patch via the shared `applyGguiSessionPatch` helper:
  *      - throws `ContractViolationError{tool:'ggui_update'}` on schema fail
- *   5. Persist the updated render via `renderStore.commit(...)` (upserts
+ *   4. Persist the updated render via `renderStore.commit(...)` (upserts
  *      by `render.id`, preserves lifecycle).
- *   6. Best-effort live delivery via the optional `propsUpdateNotifier`
+ *   5. Best-effort live delivery via the optional `propsUpdateNotifier`
  *      seam (closure forwarded by the host onto
  *      `GguiSessionChannelServer.sendPropsUpdate`). Failures are swallowed —
  *      the persistence write is the source of truth, the WS push is a
@@ -134,33 +132,6 @@ export interface PropsUpdateNotifier {
 export { GguiSessionNotFoundError, ContractViolationError };
 
 /**
- * Pre-mutation gate. The handler invokes `preCheck` before any state
- * change. Throwing aborts the call with the error verbatim — the gate
- * implementor owns the typed error shape (cloud's `RenderForbiddenError`
- * carrying a structured envelope; OSS deployments leave the gate
- * unbound and skip the check entirely).
- *
- * As of ggui#386 (2026-07-27) no first-party deployment binds a gate on
- * update — ggui_update performs no generation and no charge, so cloud's
- * former Phase-3c traffic gate here was a category error and was
- * deleted. The seam stays: it is the documented extension point for any
- * deployment that DOES want a pre-mutation policy on update, and the
- * alignment contract test uses it to pin that malformed input rejects
- * before the gate ever runs.
- */
-export interface BillingGate {
-  preCheck(input: {
-    readonly ctx: HandlerContext;
-    /**
-     * Which tool the gate is firing for. Lets a single gate impl run
-     * different policies per call-site (e.g. update is free / render
-     * triggers a credit charge).
-     */
-    readonly tool: 'ggui_update' | 'ggui_amend' | 'ggui_render';
-  }): Promise<void> | void;
-}
-
-/**
  * Deps for the OSS `ggui_update` handler — a small narrow seam set,
  * all optional parts marked as such.
  *
@@ -222,13 +193,6 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
    * contract; absent dep = noop.
    */
   readonly telemetrySink?: TelemetrySink;
-  /**
-   * Optional pre-mutation gate. See {@link BillingGate}. Hosted
-   * deployments bind a real gate (cloud's traffic-class /
-   * non-playground / kind=user check); OSS leaves unset and the gate
-   * step is a no-op.
-   */
-  readonly billingGate?: BillingGate;
   /**
    * Optional description override. Hosted deployments may want
    * different prose than OSS. When unset, the handler uses the OSS

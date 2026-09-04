@@ -125,10 +125,9 @@ export async function runPropsMutation(
 
       // Narrow on kind FIRST. Each branch enforces required-field +
       // mutual-exclusion semantics that the flat raw-shape can't
-      // express. Runs before the billing gate and before any store
-      // read, so a malformed call costs nothing: no gate evaluation,
-      // no DynamoDB read, no trace emission — and the caller gets the
-      // contract error rather than whatever the gate would have said.
+      // express. Runs before any store read, so a malformed call costs
+      // nothing: no persistence read, no trace emission — and the
+      // caller gets the contract error naming the field it got wrong.
       const kind = parsed.kind;
       let patchInput:
         | { mode: 'replace'; props: JsonObject }
@@ -190,13 +189,6 @@ export async function runPropsMutation(
           });
         }
         patchInput = { mode: 'merge', patch: parsed.patch as JsonObject };
-      }
-
-      // Pre-mutation gate. Throws to abort BEFORE any state change.
-      // OSS default: no gate bound, no-op. Cloud binds a traffic-class
-      // gate here.
-      if (deps.billingGate) {
-        await deps.billingGate.preCheck({ ctx, tool });
       }
 
       // Resolve sessionId from wire OR threaded HandlerContext.

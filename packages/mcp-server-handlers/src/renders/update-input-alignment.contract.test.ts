@@ -27,11 +27,10 @@
  *     Protocol rejects, handler accepts, and that divergence is
  *     asserted HERE as intentional rather than left as an undeclared
  *     loosening.
- *  4. MALFORMED COSTS NOTHING — union narrowing runs before the billing
- *     gate and before any store read, so a malformed call burns zero
- *     gate evaluations and zero DynamoDB reads (and the update.ts flow
- *     doc's "before tenant work" claim stays true by test rather than
- *     by prose).
+ *  4. MALFORMED COSTS NOTHING — union narrowing runs before any store
+ *     read, so a malformed call burns zero persistence reads (and the
+ *     update.ts flow doc's "before tenant work" claim stays true by
+ *     test rather than by prose).
  *
  * The one tolerance this file does NOT cover: the MCP SDK transport
  * parses tool args non-strictly and strips unknown keys BEFORE any
@@ -49,7 +48,6 @@ import {
   createGguiUpdateHandler,
   ContractViolationError,
   GguiSessionNotFoundError,
-  type BillingGate,
 } from './update';
 
 const APP = 'app-align';
@@ -182,14 +180,16 @@ describe('ggui_update handler ↔ updateInputSchema alignment (ggui#385)', () =>
     expect(handler.outputSchema).toBe(updateOutputSchema.shape);
   });
 
-  it('a malformed payload costs zero gate evaluations and zero store reads', async () => {
+  it('a malformed payload costs zero store reads', async () => {
+    // The store read is the observable: it is the first thing on this
+    // path that costs anything (a round trip, and on a hosted
+    // deployment a billed one), and it is where tenant scoping starts.
+    // Union narrowing has to reject BEFORE it, or a caller who sent
+    // `kind:'replace'` with a `patch` has already paid for a lookup
+    // that could never have been used.
     const store = new InMemoryGguiSessionStore();
     const getSpy = vi.spyOn(store, 'get');
-    const gate: BillingGate = { preCheck: vi.fn() };
-    const handler = createGguiUpdateHandler({
-      renderStore: store,
-      billingGate: gate,
-    });
+    const handler = createGguiUpdateHandler({ renderStore: store });
 
     await expect(
       handler.handler(
@@ -198,7 +198,6 @@ describe('ggui_update handler ↔ updateInputSchema alignment (ggui#385)', () =>
       ),
     ).rejects.toBeInstanceOf(ContractViolationError);
 
-    expect(gate.preCheck).not.toHaveBeenCalled();
     expect(getSpy).not.toHaveBeenCalled();
   });
 });
