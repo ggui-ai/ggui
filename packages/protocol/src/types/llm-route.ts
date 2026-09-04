@@ -408,8 +408,13 @@ export function parseLlmRoute(serialized: string): LlmRoute | null {
   const provider = serialized.substring(0, sep);
   const model = serialized.substring(sep + 1);
   if (model.length === 0) return null;
-  if (!isValidLlmRoute(provider, model)) return null;
-  return { provider, model } as LlmRoute;
+  if (!isLlmProvider(provider)) return null;
+  // One model-id vocabulary, two separators: the LiteLLM aliases resolve
+  // here exactly as in `parseLiteLlmString`, so `anthropic:claude-haiku-4-5`
+  // and `anthropic/claude-haiku-4-5` are the same route (#818 origin).
+  const mapped = LITELLM_TO_WIRE[provider]?.[model] ?? model;
+  if (!isValidLlmRoute(provider, mapped)) return null;
+  return { provider, model: mapped } as LlmRoute;
 }
 
 // ============================================================================
