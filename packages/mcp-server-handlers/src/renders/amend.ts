@@ -54,7 +54,6 @@ export type GguiAmendHandlerDeps = GguiUpdateHandlerDeps;
  */
 const outputSchema = amendOutputSchema.shape;
 
-
 /**
  * Build the OSS `ggui_amend` handler. Additive, like `update:` — server
  * composers opt in via the dedicated `amend:` slot.
