@@ -934,8 +934,8 @@ export interface ChannelNotifier {
  * consumes a prior `ggui_handshake` record. The handshake captures the
  * intent + blueprintDraft and produces the suggestion the render acts
  * on. A PRE-GENERATION refusal (ggui#786) is the exception: it is
- * projected before the parse, so it reads no handshake and leaves the
- * record valid for a retry on the same `handshakeId`.
+ * projected before this handler's parse, so it reads no handshake and
+ * leaves the record valid for a retry on the same `handshakeId`.
  *
  * Decision is now expressed by PRESENCE of `override`, not a
  * discriminated union:
@@ -2703,16 +2703,21 @@ export function createGguiRenderHandler(
       // handshake record the agent already wrote in the prior
       // `ggui_handshake` round-trip. Schema-required handshakeId
       // carries an educational `required_error` so a missing-handshakeId
-      // zod parse error includes actionable recovery text inside the
-      // JSON-RPC -32602 envelope.
+      // zod parse error includes actionable recovery text. The SDK
+      // catches its own InvalidParams and hands that text back as a
+      // tool RESULT with `isError: true` (`MCP error -32602: Input
+      // validation error: …`), not as a JSON-RPC error object.
 
-      // Pre-validation gate fires BEFORE input parsing so a
-      // deployment's own policy checks can decline the render without
-      // spending validation work. A returned refusal is projected
-      // right here — before the parse, before any store read — which
-      // is what makes "nothing parsed, no handshake read, nothing
-      // committed, no postSuccessHook" true by construction rather
-      // than by discipline (SPEC §7.1, refused arm).
+      // Pre-validation gate fires before THIS handler's input parse so
+      // a deployment's own policy checks can decline the render
+      // without spending work. It does NOT beat the SDK, which has
+      // already checked the call against the declared `inputSchema` —
+      // a wire-malformed call never gets here, so a gate never sees
+      // one. A returned refusal is projected right here — before this
+      // parse, before any store read — which is what makes "nothing
+      // read, nothing committed, no postSuccessHook" true by
+      // construction rather than by discipline (SPEC §7.1, refused
+      // arm).
       if (deps.preValidationGate) {
         const refusal = await deps.preValidationGate(ctx, input);
         if (refusal !== undefined) {

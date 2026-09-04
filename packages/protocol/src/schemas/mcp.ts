@@ -539,10 +539,12 @@ export const renderErrorSchema = z.object({
  *     and `error` carries the classification. The handshake is
  *     consumed.
  *   - `refused` — the deployment declined the call BEFORE it did any
- *     work: nothing parsed, no state read, nothing committed, no
- *     spend. The identity fields are structurally ABSENT and `refusal`
- *     carries the whole story; the handshake is INTACT, so the same id
- *     is valid on a retry.
+ *     work: no state read, nothing committed, no spend. (The SDK has
+ *     already checked the call against the declared `inputSchema` —
+ *     the claim is nothing READ, not nothing validated.) The identity
+ *     fields are structurally ABSENT and `refusal` carries the whole
+ *     story; the handshake is INTACT, so the same id is valid on a
+ *     retry.
  *
  * Declared HERE rather than in `types/mcp.ts` (which re-exports the
  * inferred type) so `types/render.ts` can reference it without a

@@ -3112,9 +3112,10 @@
  *      render-gate subset; a code outside it fails the wire enum.
  *   r5. **Hook contract** — `preValidationGate` RETURNS a refusal
  *      instead of throwing; the handler owns the envelope and
- *      projects it before input parsing. A gate that throws to
- *      refuse is a conformance failure, observable in the
- *      `tool_invoked` line.
+ *      projects it before the handler's OWN input parse (after the
+ *      SDK's declared-shape validation, so a wire-malformed call
+ *      never reaches a gate). A gate that throws to refuse is a
+ *      conformance failure, observable in the `tool_invoked` line.
  *   r6. **Conformance:** two catalogs — `refusal-envelope-conformance`
  *      (the projection obligation, graded against a kit-local
  *      reference and against the shipping projector in

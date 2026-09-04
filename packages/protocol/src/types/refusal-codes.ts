@@ -3,9 +3,11 @@
  * (ggui#786).
  *
  * A **pre-generation refusal** is a deployment declining a call BEFORE
- * it does any work: nothing parsed, no state read, nothing committed,
- * no model spend. It is a third outcome, not a failure — a failure
- * describes work that ran and did not produce a result. The wire shape
+ * it does any work: no state read, nothing committed, no model spend.
+ * (The call has already passed the SDK's check against the declared
+ * `inputSchema`; the claim is nothing READ, not nothing validated.)
+ * It is a third outcome, not a failure — a failure describes work
+ * that ran and did not produce a result. The wire shape
  * of a refused render lives in `../schemas/mcp.ts`
  * (`renderRefusalSchema`); this file owns the NAMES.
  *
