@@ -48,9 +48,9 @@
  *   - Connection-id management. The standalone server uses
  *     live-channel fan-out; a cloud deployment's connection-id and
  *     stale-connection cleanup stay deployment-specific.
- *   - Billing / traffic-class gates. The standalone server is
- *     single-tenant by default; a cloud deployment layers its own
- *     gates on top.
+ *   - Pre-state policy gates. There is no policy seam on this path at
+ *     all — a deployment that wants one puts it ahead of the handler,
+ *     at its own route or transport layer.
  *
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `{sessionId, stackItemId, …}` resolution + stack mutation to a single
@@ -209,8 +209,8 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
 
 // Wire grammar + the mutation flow live in the shared core (#483):
 // `mutationInputSchema` is the flat raw-shape BOTH tools declare, and
-// `runPropsMutation` is the single resolve→gate→validate→patch→
-// persist→ledger→fan flow, parameterized on the tool.
+// `runPropsMutation` is the single validate→resolve→tenancy-gate→
+// patch→persist→ledger→fan flow, parameterized on the tool.
 const inputSchema = mutationInputSchema;
 
 /**
