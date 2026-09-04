@@ -262,6 +262,16 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     description:
       'The app record has no owner claim any more \u2014 either the claim was removed, or the record names no issuing tenant at all. A record with no owner cannot be funded, so nothing renders under it and no caller action restores it.',
   },
+  billing_path_missing: {
+    code: 'billing_path_missing',
+    surfaces: ['render-gate'],
+    retry: 'after-fix',
+    fixBy: 'owner',
+    emitter:
+      "the generation gate's fall-through arm: a non-playground identity that resolves to no billing path (not a trial account, not a managed app, not a credit holder)",
+    description:
+      'The caller has no billing subject on this deployment, so nothing renders under it. The owner provisions one — a trial account, a managed policy, or credit. A deployment MAY suppress this refusal by operator override; that switch is deployment policy, not a wire state.',
+  },
 
   // ── owner-api ─────────────────────────────────────────────────────
   subscription_exists: {
@@ -436,6 +446,7 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveRenderGateCodes([
   'managed_default_cap_exceeded',
   'app_policy_missing',
   'billing_mode_anomaly',
+  'billing_path_missing',
   'app_canceled',
   'trial_exhausted',
   'trial_expired',
