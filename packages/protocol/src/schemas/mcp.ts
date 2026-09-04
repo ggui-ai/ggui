@@ -1116,6 +1116,28 @@ export const updateOutputSchema = z.object({
 export const amendOutputSchema = z.object({
   sessionId: z.string(),
   updated: z.boolean(),
+  /**
+   * The BARE live-head URI — amend targets the mounted card and never
+   * mints a record, so there is no pinned URI to return and no epoch
+   * field (the history number is untouched by construction).
+   *
+   * NORMATIVE re-anchor reference (SPEC §7.1.2.1, ggui#652 /
+   * guuey#535): together with `sessionId` this is the durable record
+   * that an in-place repaint touched this session at this turn. A
+   * host's persistence layer MAY consume it as a locator-only
+   * re-anchor — `resources/read`-resolvable, stable for the session's
+   * lifetime — so a restored transcript re-positions the card at its
+   * latest referencing turn and rehydrates CURRENT state instead of a
+   * stale earlier snapshot. It rides `structuredContent` (LLM-visible,
+   * same rationale as ggui_update's resourceUri: consumers that strip
+   * `_meta` still reach it) and MUST NOT move to a result `_meta`
+   * slice — any result `_meta` on this tool makes view-minting hosts
+   * break the in-place semantics.
+   *
+   * Both this field and `sessionId` are REQUIRED, which is what makes
+   * SPEC §7.1.2.1's "structurally guaranteed" true rather than a
+   * convention.
+   */
   resourceUri: z.string(),
   /** Same no-op feedback channel as ggui_update's `warning`. */
   warning: z.string().optional(),
