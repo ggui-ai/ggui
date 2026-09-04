@@ -101,7 +101,12 @@ import {
   NoopRateLimiter,
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
-import type { AppThemeBase, HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
+import type {
+  AppThemeBase,
+  GguiRenderHandlerDeps,
+  HandlerContext,
+  SharedHandler,
+} from "@ggui-ai/mcp-server-handlers";
 import {
   createGguiListGadgetsHandler,
   createGguiListThemesHandler,
@@ -586,7 +591,7 @@ export function buildOpsBlueprintHandlers(input: {
         ...(bundle.cacheRegistry ? { cacheRegistry: bundle.cacheRegistry } : {}),
         ...(input.telemetry ? { telemetry: input.telemetry } : {}),
         authorizeAppAccess: bundle.authorizeAppAccess,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   // `ggui_ops_register_blueprint` — sibling of `_generate_*` that
@@ -603,26 +608,26 @@ export function buildOpsBlueprintHandlers(input: {
       ...(bundle.cacheRegistry ? { cacheRegistry: bundle.cacheRegistry } : {}),
       ...(input.telemetry ? { telemetry: input.telemetry } : {}),
       authorizeAppAccess: bundle.authorizeAppAccess,
-    }) as SharedHandler<ZodRawShape, ZodRawShape>
+    })
   );
   handlers.push(
     createGguiOpsListBlueprintsHandler({
       blueprintStore: bundle.blueprintStore,
       blueprintSearch: bundle.blueprintSearch,
       authorizeAppAccess: bundle.authorizeAppAccess,
-    }) as SharedHandler<ZodRawShape, ZodRawShape>
+    })
   );
   handlers.push(
     createGguiOpsUpdateBlueprintHandler({
       blueprintStore: bundle.blueprintStore,
       authorizeAppAccess: bundle.authorizeAppAccess,
-    }) as SharedHandler<ZodRawShape, ZodRawShape>
+    })
   );
   handlers.push(
     createGguiOpsDeleteBlueprintHandler({
       blueprintStore: bundle.blueprintStore,
       authorizeAppAccess: bundle.authorizeAppAccess,
-    }) as SharedHandler<ZodRawShape, ZodRawShape>
+    })
   );
   return handlers;
 }
@@ -735,6 +740,23 @@ export function defaultHandlers(deps: {
      * handler's own `DEFAULT_RENDER_TTL_MS` (1h) fallback.
      */
     readonly renderTtlMs?: number;
+    /**
+     * Pre-generation gate — forwarded as-is to `createGguiRenderHandler`'s
+     * `preValidationGate`: a deployment's own per-render policy, answered
+     * with a registered refusal code before the handler's own parse and
+     * before any store read (a refusal reads nothing and commits nothing;
+     * the transport's `inputSchema` validation has already run). Absent =
+     * no gate, every render proceeds. Bindable here so a deployment need
+     * not supply a custom `handlers` list to bind it.
+     */
+    readonly preValidationGate?: GguiRenderHandlerDeps['preValidationGate'];
+    /**
+     * The gate's other end — forwarded as-is to `createGguiRenderHandler`'s
+     * `postFailureHook`: fires once on every failure of a render whose
+     * gate passed, so whatever the gate reserved can be released. Absent =
+     * no hook.
+     */
+    readonly postFailureHook?: GguiRenderHandlerDeps['postFailureHook'];
     /**
      * Optional bootstrap-credential minter. When present, `ggui_render`
      * (the renamed render-commit tool) results carry the
@@ -1159,19 +1181,19 @@ export function defaultHandlers(deps: {
       vectors: deps.vectors,
       ...(deps.blueprints ? { blueprints: deps.blueprints } : {}),
       ...(deps.registrySearch ? { registry: deps.registrySearch } : {}),
-    }) as SharedHandler<ZodRawShape, ZodRawShape>,
+    }),
     createListFeaturedBlueprintsHandler(
       deps.blueprints ? { blueprints: deps.blueprints } : {}
-    ) as SharedHandler<ZodRawShape, ZodRawShape>,
+    ),
     // Spec / discovery handlers — zero-deps. These may be tagged
     // `audience: ['protocol']`, which mounts them on the `/control`
     // plane rather than the agent-facing data plane.
-    createDescribeBlueprintFormatHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    createDescribeDataContractFormatHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    createGetBlueprintBoilerplateHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    createGetExampleBlueprintsHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    createListAvailablePrimitivesHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    createValidateBlueprintHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
+    createDescribeBlueprintFormatHandler(),
+    createDescribeDataContractFormatHandler(),
+    createGetBlueprintBoilerplateHandler(),
+    createGetExampleBlueprintsHandler(),
+    createListAvailablePrimitivesHandler(),
+    createValidateBlueprintHandler(),
     // `ggui_runtime_submit_action` — wired-action receiver. Registered
     // as app-visible (`_meta.ui.visibility: ['app']`) per MCP Apps
     // spec §401 so iframe-issued `tools/call` invocations land here
@@ -1187,14 +1209,14 @@ export function defaultHandlers(deps: {
       activeConsumerRegistry,
       ...(deps.render?.renderStore ? { renderStore: deps.render.renderStore } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
-    }) as SharedHandler<ZodRawShape, ZodRawShape>,
+    }),
     // `ggui_list_gadgets` — per-app discovery. Returns the registered
     // gadget catalog (stdlib seed by default). Reads `app.gadgets`
     // off the bound `AppMetadataStore`; falls back to `STDLIB_GADGETS`
     // when the row is absent (sandbox-app permitted-error path).
     createGguiListGadgetsHandler({
       appMetadataStore: deps.appMetadataStore ?? new InMemoryAppMetadataStore(),
-    }) as SharedHandler<ZodRawShape, ZodRawShape>,
+    }),
   ];
   // `ggui_list_themes` — per-app theme catalog discovery. Registered
   // only when BOTH a per-app metadata source AND a global theme
@@ -1206,7 +1228,7 @@ export function defaultHandlers(deps: {
       createGguiListThemesHandler({
         appMetadataStore: deps.appMetadataStore,
         themes: deps.themes,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   // `ggui_runtime_declare_tool_catalog` — WRITE side of cross-runtime
@@ -1222,7 +1244,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiDeclareToolCatalogHandler({
         catalogStore: deps.toolIdentityCatalogStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   // ggui_runtime_sync_context — runtime → server contextSpec snapshot mirror.
@@ -1242,7 +1264,7 @@ export function defaultHandlers(deps: {
         ...(deps.render.renderIdentityStore
           ? { renderIdentityStore: deps.render.renderIdentityStore }
           : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // `ggui_runtime_pull` — terminal bridge-pull rung of the live-channel
     // failover ladder (WS → SSE → HTTP polling → bridge-pull). A
@@ -1256,7 +1278,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRuntimePullHandler({
         renderStore: deps.render.renderStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // `ggui_runtime_telemetry` — the iframe runtime's transport
     // self-report (visibility ['app'], same view-callable channel as
@@ -1270,7 +1292,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRuntimeTelemetryHandler({
         ...(deps.logger ? { logger: deps.logger } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-
     // envelope refresh tool. Registered only when a refresh seam is
@@ -1282,7 +1304,7 @@ export function defaultHandlers(deps: {
       handlers.push(
         createGguiRefreshWsTokenHandler({
           refreshSeam: deps.render.bootstrapRefresh,
-        }) as SharedHandler<ZodRawShape, ZodRawShape>
+        })
       );
     }
     // Phase B (flatten-render-identity): the session lifetime entry
@@ -1297,10 +1319,7 @@ export function defaultHandlers(deps: {
     // every call — shipping a tool with no functionality confused
     // agents more than the absence. Absent registry ⇒ absent tool.
     handlers.push(
-      createRenderBlueprintHandler({ uiRegistry: deps.uiRegistry }) as SharedHandler<
-        ZodRawShape,
-        ZodRawShape
-      >
+      createRenderBlueprintHandler({ uiRegistry: deps.uiRegistry })
     );
   }
   // Generation-progress lifecycle emitter — shared by handshake/render/
@@ -1352,7 +1371,7 @@ export function defaultHandlers(deps: {
         // fired (the handler dep predates the wiring — P2 of
         // docs/plans/2026-08-19-schema-precise-render.md pinned it).
         ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   if (deps.update) {
@@ -1386,7 +1405,7 @@ export function defaultHandlers(deps: {
         // measurement — update-time violations are baselined with
         // render-time ones, not hidden).
         ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // ggui_amend rides the SAME deps slot (#483 tool split): one
     // mutation core, one wiring. It reads only the mutation-flow deps
@@ -1404,7 +1423,7 @@ export function defaultHandlers(deps: {
           : {}),
         // Same mutation core as ggui_update — same violation events.
         ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   // ggui_consume registers whenever render is bound (it shares the
@@ -1457,7 +1476,7 @@ export function defaultHandlers(deps: {
         ...(drainAckNotifier ? { drainAckNotifier } : {}),
         logger: drainTelemetryLogger,
         ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // 2026-05-14 — `ggui_runtime_claim_pending` retired alongside the
     // iframe-side 10s claim timer. The pipe is the single source of
@@ -1476,7 +1495,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiGetSessionHandler({
         renderStore: deps.render.renderStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // ggui_get_render_source (#282 data-plane rider) — the calling
     // app reads its OWN render's generated source. No heartbeat: a
@@ -1484,7 +1503,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiGetRenderSourceHandler({
         renderStore: deps.render.renderStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // ggui_list_sessions — host-scoped render enumeration for resume.
     // Folds the ws-token mint into the same call so the host doesn't
@@ -1507,7 +1526,7 @@ export function defaultHandlers(deps: {
               },
             }
           : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
     // `ggui_emit` routes outbound stream envelopes through the active
     // `GguiSessionChannelServer.sendToGguiSession`
@@ -1547,7 +1566,7 @@ export function defaultHandlers(deps: {
           // wire frame have a stable handle.
           return { seq };
         },
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   if (deps.render) {
@@ -1557,6 +1576,12 @@ export function defaultHandlers(deps: {
         ...(deps.payloadTraceSink ? { payloadTraceSink: deps.payloadTraceSink } : {}),
         ...(deps.render.renderTtlMs !== undefined
           ? { renderTtlMs: deps.render.renderTtlMs }
+          : {}),
+        ...(deps.render.preValidationGate
+          ? { preValidationGate: deps.render.preValidationGate }
+          : {}),
+        ...(deps.render.postFailureHook
+          ? { postFailureHook: deps.render.postFailureHook }
           : {}),
         // Plugin slice Commit 3 — render reads App.gadgets to
         // gate `clientCapabilities.gadgets[*].hook` references via
@@ -1635,7 +1660,7 @@ export function defaultHandlers(deps: {
         // instance.
         ...(deps.handshake ? { handshakeStore: deps.handshake.kvStore } : {}),
         ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   // Operator-class blueprint tools — see `buildOpsBlueprintHandlers`
@@ -1730,18 +1755,12 @@ export function buildOpsBundleHandlers(
   if (deps.opsApps) {
     const { apps, userDefaultApp } = deps.opsApps;
     handlers.push(
-      createListAppsHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createCreateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createUpdateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createSetAppThemeHandler({ apps, ...(deps.knownThemeIds !== undefined ? { knownThemeIds: deps.knownThemeIds } : {}) }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createDeleteAppHandler({ apps, userDefaultApp }) as SharedHandler<
-        ZodRawShape,
-        ZodRawShape
-      >,
-      createSetDefaultAppHandler({ apps, userDefaultApp }) as SharedHandler<
-        ZodRawShape,
-        ZodRawShape
-      >
+      createListAppsHandler({ apps }),
+      createCreateAppHandler({ apps }),
+      createUpdateAppHandler({ apps }),
+      createSetAppThemeHandler({ apps, ...(deps.knownThemeIds !== undefined ? { knownThemeIds: deps.knownThemeIds } : {}) }),
+      createDeleteAppHandler({ apps, userDefaultApp }),
+      createSetDefaultAppHandler({ apps, userDefaultApp })
     );
   }
   if (deps.opsThemes) {
@@ -1754,42 +1773,36 @@ export function buildOpsBundleHandlers(
         coverageValidator,
         manifestTokens,
         staticThemeIds,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createListThemesHandler({ apps, themeStore }) as SharedHandler<
-        ZodRawShape,
-        ZodRawShape
-      >,
-      createDeleteThemeHandler({ apps, themeStore }) as SharedHandler<
-        ZodRawShape,
-        ZodRawShape
-      >
+      }),
+      createListThemesHandler({ apps, themeStore }),
+      createDeleteThemeHandler({ apps, themeStore })
     );
   }
   if (deps.opsOrgs) {
     const { orgs, invites } = deps.opsOrgs;
     handlers.push(
-      createListOrgsHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createCreateOrgHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createRenameOrgHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createRemoveOrgMemberHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createGetOrgBalanceHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createInviteToOrgHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createRevokeInviteHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>
+      createListOrgsHandler({ orgs }),
+      createCreateOrgHandler({ orgs }),
+      createRenameOrgHandler({ orgs }),
+      createRemoveOrgMemberHandler({ orgs }),
+      createGetOrgBalanceHandler({ orgs }),
+      createInviteToOrgHandler({ invites }),
+      createRevokeInviteHandler({ invites })
     );
   }
   if (deps.opsConnectorKeys) {
     const { connectorKeys } = deps.opsConnectorKeys;
     handlers.push(
-      createListConnectorKeysHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createIssueConnectorKeyHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createRevokeConnectorKeyHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>
+      createListConnectorKeysHandler({ connectorKeys }),
+      createIssueConnectorKeyHandler({ connectorKeys }),
+      createRevokeConnectorKeyHandler({ connectorKeys })
     );
   }
   if (deps.opsCoupon) {
     handlers.push(
       createRedeemCouponHandler({
         coupons: deps.opsCoupon.coupons,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   if (deps.opsBlueprint) {
@@ -2328,6 +2341,28 @@ export interface CreateGguiServerOptions {
    * falls back to independently.
    */
   readonly renderTtlMs?: number;
+  /**
+   * Pre-generation gate for `ggui_render` — forwarded as-is to the
+   * render handler's `preValidationGate`: this deployment's own
+   * per-render policy, answered with a registered refusal code. It fires
+   * before the render handler's own parse and before any store read —
+   * the SDK's `inputSchema` validation has already run at this site, so
+   * the gate sees a schema-valid call with declared fields only — and a
+   * refusal reads nothing, commits nothing and consumes no handshake.
+   * Absent = no gate, every render proceeds.
+   *
+   * Bindable here, beside `renderStore`, so a deployment does not have
+   * to supply a full custom `handlers` list to gate renders.
+   */
+  readonly renderPreValidationGate?: GguiRenderHandlerDeps['preValidationGate'];
+  /**
+   * The gate's other end — forwarded as-is to the render handler's
+   * `postFailureHook`: fires exactly once on every failure of a render
+   * whose gate passed (thrown, or the `outcome:'failed'` envelope), so
+   * whatever the gate reserved can be released. Never on a refusal,
+   * never after a delivered render. Absent = no hook.
+   */
+  readonly renderPostFailureHook?: GguiRenderHandlerDeps['postFailureHook'];
 
   /**
    * #457 — total-lifetime bound on render-row RESURRECTION: the
@@ -4409,6 +4444,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             render: {
               renderStore,
               ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
+              ...(opts.renderPreValidationGate
+                ? { preValidationGate: opts.renderPreValidationGate }
+                : {}),
+              ...(opts.renderPostFailureHook
+                ? { postFailureHook: opts.renderPostFailureHook }
+                : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC

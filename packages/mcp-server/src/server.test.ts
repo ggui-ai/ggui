@@ -26,11 +26,12 @@ import {
   MockEmbeddingProvider,
   createInMemoryBlueprintSearch,
   createInMemoryGeneratorRegistry,
+  InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { BlueprintProvider, UiGenerator } from '@ggui-ai/mcp-server-core';
 import { createGguiServer, type GguiServer } from './server.js';
 import { isRecord } from '@ggui-ai/protocol';
-import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
+import type { GguiRenderHandlerDeps, HandlerContext } from '@ggui-ai/mcp-server-handlers';
 import type { GenerationCredentials } from '@ggui-ai/mcp-server-handlers/renders';
 
 interface BootedFixture {
@@ -2061,6 +2062,85 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
     }
   });
 
+  // #813 — the #786 pre-generation gate and its #804 other end are bindable
+  // through createGguiServer's own `render*` options (beside `renderStore`),
+  // not only via a custom handlers list. The gate is a deployment's per-render policy; a self-hoster
+  // must be able to bind it where they bind the render store.
+  const GATE_REFUSAL = {
+    code: 'hard_cap_exceeded' as const,
+    message: 'the configured render cap for this app was reached',
+    fix: 'the cap resets at the start of the next period; no action restores it sooner',
+    retry: 'next-period' as const,
+    handshake: 'intact' as const,
+  };
+  it('#813: a preValidationGate bound through createGguiServer fires on ggui_render and its refusal is projected', async () => {
+    // Typed at source: the mocks carry the seam's own signatures, so their
+    // recorded calls need no narrowing below.
+    const preValidationGate = vi.fn<NonNullable<GguiRenderHandlerDeps['preValidationGate']>>(
+      async () => GATE_REFUSAL,
+    );
+    const postFailureHook = vi.fn<NonNullable<GguiRenderHandlerDeps['postFailureHook']>>();
+    fx = await bootHandshake({
+      renderStore: new InMemoryGguiSessionStore(),
+      renderPreValidationGate: preValidationGate,
+      renderPostFailureHook: postFailureHook,
+    });
+    const client = await connect(fx);
+    try {
+      const hs = await client.callTool({
+        name: 'ggui_handshake',
+        arguments: { intent: 'weather card for Tokyo', blueprintDraft: { contract: {} } },
+      });
+      expect(hs.isError).toBeFalsy();
+      const hsContent = hs.structuredContent as { handshakeId: string };
+      const r = await client.callTool({
+        name: 'ggui_render',
+        arguments: { handshakeId: hsContent.handshakeId, props: {} },
+      });
+      expect(r.isError).toBe(true);
+      const c = r.structuredContent as { outcome?: string; refusal?: { code?: string } };
+      expect(c.outcome).toBe('refused');
+      expect(c.refusal?.code).toBe(GATE_REFUSAL.code);
+      expect(preValidationGate).toHaveBeenCalledTimes(1);
+      const gateCall = preValidationGate.mock.calls[0];
+      if (!gateCall) throw new Error('gate call not recorded');
+      const [ctx, rawInput] = gateCall;
+      expect(ctx.appId).toEqual(expect.any(String));
+      // The raw input reaches the gate as the SDK validated it — the
+      // declared fields of the call, handshakeId included.
+      expect(rawInput).toMatchObject({ handshakeId: hsContent.handshakeId });
+      // A refusal is not a failure — nothing passed the gate.
+      expect(postFailureHook).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+    }
+  });
+  it('#813: a postFailureHook bound through createGguiServer fires when the render fails after the gate allowed it', async () => {
+    const postFailureHook = vi.fn<NonNullable<GguiRenderHandlerDeps['postFailureHook']>>();
+    fx = await bootHandshake({
+      renderStore: new InMemoryGguiSessionStore(),
+      renderPreValidationGate: async () => undefined,
+      renderPostFailureHook: postFailureHook,
+    });
+    const client = await connect(fx);
+    try {
+      // An unknown handshake fails after the gate allowed the call. This
+      // file already pins that a thrown handler error comes back as an
+      // isError TOOL RESULT (not a JSON-RPC failure) — a thrown failure
+      // carries no envelope, which is exactly why `surfacedAs: 'thrown'`
+      // exists.
+      const r = await client.callTool({
+        name: 'ggui_render',
+        arguments: { handshakeId: 'hs-does-not-exist', props: {} },
+      });
+      expect(r.isError).toBe(true);
+      expect(r.structuredContent).toBeUndefined();
+      expect(postFailureHook).toHaveBeenCalledTimes(1);
+      expect(postFailureHook.mock.calls[0]?.[0]?.surfacedAs).toBe('thrown');
+    } finally {
+      await client.close();
+    }
+  });
   it('ggui_handshake → ggui_render({handshakeId}) round-trip succeeds over MCP', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
