@@ -1756,6 +1756,20 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).toMatch(/`cache` marker/);
   });
 
+  // #786: the wire carries THREE outcomes, so the skim-first line an
+  // agent reads must name the discriminant BEFORE the identity fields
+  // it only sometimes gets, and must not teach an auto-retry the
+  // registry forbids.
+  it('teaches reading `outcome` first, and the refused arm carries only `refusal`', () => {
+    const d = description();
+    expect(d).toMatch(/READ THE RESPONSE'S `outcome` FIRST/);
+    expect(d).toMatch(/`rendered` \| `failed` \| `refused`/);
+    expect(d).toMatch(/`failed` adds `error` and CONSUMES the handshake/);
+    expect(d).toMatch(/carries ONLY `refusal`/);
+    expect(d).toMatch(/handshake is INTACT/);
+    expect(d).toMatch(/Never auto-retry a refusal whose registered `fixBy` is not `caller`/);
+  });
+
   it('no longer frames blueprintId as provisional/minted-at-handshake', () => {
     const d = description();
     expect(d).not.toMatch(/provisional blueprintId/);

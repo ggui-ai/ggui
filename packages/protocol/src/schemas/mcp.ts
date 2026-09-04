@@ -729,9 +729,10 @@ export const resourceReadErrorSchema = z.object({
 });
 
 /**
- * Wire-output shape — `{sessionId, resourceUri?, action, contractHash,
- * cache, error?, nextStep?}`. `contractHash` (data-contract identity)
- * and `cache` (reuse outcome) are required wire fields on this schema.
+ * Wire-output shape. `outcome` is the discriminant and the only
+ * unconditionally required field; which of the others exist follows
+ * from it, per the THREE OUTCOMES section below — that section is the
+ * single summary of this shape, so do not restate it here.
  * The handler carries `shortCode`, `codeReady`, `handshakeId`,
  * `decision`, `contract`, `codeUrl`, `codeHash`
  * on its internal `RenderOutput` TS shape for telemetry / post-classify

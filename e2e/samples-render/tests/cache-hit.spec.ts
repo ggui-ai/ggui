@@ -188,9 +188,19 @@ interface RenderCacheMarker {
  * `contractHash` + `cache` are the reuse-visibility fields surfaced on
  * `renderOutputSchema`; `action` rides along for completeness but is NOT
  * asserted on (it tracks render-row reuse, orthogonal to blueprint reuse — D1).
+ *
+ * Local mirror of `renderOutputSchema` (`oss/packages/protocol/src/schemas/
+ * mcp.ts`), inlined for the same self-containment reason as `mcpCall` below.
+ * `outcome` is that schema's discriminant and its one unconditionally
+ * required field (SPEC §7.1): the identity fields below are present IFF
+ * `outcome` is `'rendered'` or `'failed'`, which is why they stay optional
+ * here. A `'refused'` result carries `outcome` + a `refusal` and nothing
+ * else — this spec asserts reuse on committed renders, so it narrows on
+ * `outcome` rather than modelling the refusal arm.
  */
 interface GguiSessionResult {
   isError?: boolean;
+  outcome?: 'rendered' | 'failed' | 'refused';
   sessionId?: string;
   action?: string;
   blueprintId?: string;
@@ -314,6 +324,14 @@ async function renderOnce(
   const render = call.structuredContent;
   if (!render) {
     throw new Error(`ggui_render returned no structuredContent: ${JSON.stringify(env.result)}`);
+  }
+  // Gate on the discriminant before any caller reads an identity field:
+  // only `rendered` and `failed` carry them, and a refusal carries none
+  // at all. Every reuse assertion below is about a COMMITTED render, so a
+  // non-`rendered` outcome must fail loudly here rather than surface
+  // downstream as an undefined blueprintId.
+  if (render.outcome !== 'rendered') {
+    throw new Error(`ggui_render did not render: ${JSON.stringify(env.result)}`);
   }
   return { ...render, ms, suggestion: handshake?.suggestion };
 }
