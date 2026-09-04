@@ -673,6 +673,45 @@ describe('ggui_update', () => {
 });
 
 /**
+ * LLM-visible metadata on the mutation output schemas (ggui#798).
+ *
+ * `.describe()` is not documentation — it ships as JSON-Schema
+ * `description` in the tool declaration every agent reads from
+ * `tools/list`. The schema attestation fields (ggui#560) are the two
+ * that need it: an agent that cannot tell what `propsSchemaHash` is
+ * cannot act on a mismatch.
+ *
+ * The handlers register these schemas' `.shape` directly, so THIS is
+ * the only place the strings can live. A JSDoc comment above the field
+ * is invisible to the wire; a description asserted here cannot be
+ * dropped without failing.
+ */
+describe('mutation output schemas — LLM-visible field descriptions (#798)', () => {
+  const HASH_DESCRIPTION =
+    'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.';
+  const PROFILE_DESCRIPTION =
+    "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.";
+
+  it('updateOutputSchema describes the schema-attestation fields', () => {
+    expect(updateOutputSchema.shape.propsSchemaHash.description).toBe(
+      HASH_DESCRIPTION,
+    );
+    expect(updateOutputSchema.shape.propsSchemaProfile.description).toBe(
+      PROFILE_DESCRIPTION,
+    );
+  });
+
+  it('amendOutputSchema describes the schema-attestation fields', () => {
+    expect(amendOutputSchema.shape.propsSchemaHash.description).toBe(
+      HASH_DESCRIPTION,
+    );
+    expect(amendOutputSchema.shape.propsSchemaProfile.description).toBe(
+      PROFILE_DESCRIPTION,
+    );
+  });
+});
+
+/**
  * Pre-generation refusal envelope (ggui#786) — the THIRD outcome.
  *
  * §7.1's failure envelope is for a generation that RAN and failed: the

@@ -173,11 +173,13 @@ describe('ggui_update handler ↔ updateInputSchema alignment (ggui#385)', () =>
     );
     const parsed = updateOutputSchema.parse(out);
     expect(Object.keys(parsed).sort()).toEqual(Object.keys(out).sort());
-    // And the declared shapes agree key-for-key, so adding a field to
-    // either side alone fails here before it can ship as drift.
-    expect(Object.keys(handler.outputSchema).sort()).toEqual(
-      Object.keys(updateOutputSchema.shape).sort(),
-    );
+    // IDENTITY, not parity (ggui#798): the declared shape IS the
+    // protocol schema's `.shape`, the same object. A key-for-key
+    // comparison could only ever catch a MISSING or EXTRA field — it
+    // was blind to a field whose zod type or `.describe()` string
+    // diverged, which is the drift that actually reaches an agent
+    // through `tools/list`. There is nothing left to keep in sync.
+    expect(handler.outputSchema).toBe(updateOutputSchema.shape);
   });
 
   it('a malformed payload costs zero gate evaluations and zero store reads', async () => {
