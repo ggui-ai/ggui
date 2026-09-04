@@ -633,8 +633,10 @@ export const refusedOutputSchema = z.strictObject({
 /**
  * The refused arm's presence rule: the WHOLE payload must be
  * {@link refusedOutputSchema}. Delegating here rather than restating
- * the rule inline keeps one declaration of the refused envelope — the
- * same one a second refusing tool would delegate to.
+ * the rule inline keeps one declaration of the RENDER refused
+ * envelope. A mutation arm cannot delegate to it — that schema
+ * REQUIRES `handshake: 'intact'` — so it mints its own with its first
+ * emitter, sharing the facts and carrying no `handshake` (ggui#798).
  */
 function refineRefusedArm(value: unknown, ctx: z.RefinementCtx): void {
   if (refusedOutputSchema.safeParse(value).success) return;
