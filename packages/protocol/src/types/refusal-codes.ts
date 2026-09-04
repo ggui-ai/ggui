@@ -270,7 +270,7 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     emitter:
       "the generation gate's fall-through arm: a non-playground identity that resolves to no billing path (not a trial account, not a managed app, not a credit holder)",
     description:
-      'The caller has no billing subject on this deployment, so nothing renders under it. The owner provisions one — a trial account, a managed policy, or credit. A deployment MAY suppress this refusal by operator override; that switch is deployment policy, not a wire state.',
+      'The caller has no billing subject on this deployment, so nothing renders under it. The owner provisions one — a trial account, a managed policy, or credit. Unlike `billing_mode_anomaly` — an app record that exists and declares a funding mode this deployment cannot read — no record arm applies here: there is simply no subject to bill. A deployment MAY suppress this refusal by operator override; that switch is deployment policy, not a wire state.',
   },
 
   // ── owner-api ─────────────────────────────────────────────────────

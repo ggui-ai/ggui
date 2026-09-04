@@ -369,7 +369,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     // and emitters, ~8 KB raw. They ride the root barrel, and the root
     // barrel is bundled into `@ggui-ai/iframe-runtime`, which is
     // size-gated. A browser never reads a refusal ROW: the only thing
-    // that reaches it is the 13-string wire enum inside
+    // that reaches it is the wire enum (`RENDER_GATE_REFUSAL_CODES`) inside
     // `renderRefusalSchema`. Without the annotation a bundler must
     // assume the definer call is side-effectful and keeps every row —
     // which is what pushed the runtime over its budget. The build gate
