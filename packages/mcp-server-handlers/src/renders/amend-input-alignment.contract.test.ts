@@ -47,7 +47,7 @@ describe('ggui_amend input/output alignment', () => {
     expect(flatKeys).toEqual([...armKeys].sort());
   });
 
-  it('handler wire output parses under amendOutputSchema, key-for-key', async () => {
+  it('handler wire output parses under amendOutputSchema, and the declared shape IS the schema', async () => {
     const { handler } = await makeSeededHandler();
     const out = await handler.handler(
       { sessionId: 'render-1', kind: 'replace' as const, props: { x: 2 } },
@@ -55,9 +55,13 @@ describe('ggui_amend input/output alignment', () => {
     );
     const parsed = amendOutputSchema.parse(out);
     expect(Object.keys(parsed).sort()).toEqual(Object.keys(out).sort());
-    expect(Object.keys(handler.outputSchema).sort()).toEqual(
-      Object.keys(amendOutputSchema.shape).sort(),
-    );
+    // IDENTITY, not parity (ggui#798) — the same pin `ggui_update`
+    // carries. A key-for-key comparison could only ever catch a
+    // MISSING or EXTRA field; it stayed green against a declaration
+    // that had merely COPIED the shape, and so was blind to a field
+    // whose zod type or `.describe()` string had diverged — which is
+    // the drift that actually reaches an agent through `tools/list`.
+    expect(handler.outputSchema).toBe(amendOutputSchema.shape);
   });
 
   it('in-process dispatch faces the strict contract — unknown keys reject', async () => {
