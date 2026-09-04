@@ -179,6 +179,7 @@ export {
   type GenerationCredentials,
   type GenerationDeps,
   type GguiRenderHandlerDeps,
+  type GguiSessionPostFailureArgs,
   type GguiSessionPostSuccessArgs,
   type RenderOutput,
 } from "./render.js";

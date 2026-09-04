@@ -344,6 +344,42 @@ export interface GenerationCredentials {
 }
 
 /**
+ * Argument bundle handed to {@link GguiRenderHandlerDeps.postFailureHook}
+ * — a union on `surfacedAs`, because the two arms guarantee different
+ * things and the type says so rather than the docstring.
+ */
+export type GguiSessionPostFailureArgs =
+  | {
+      readonly ctx: HandlerContext;
+      /** The caller saw a throw. */
+      readonly surfacedAs: 'thrown';
+      /**
+       * The session the attempt minted, when it got that far — a failure
+       * thrown before the mint (unknown handshake, rate limit) carries none.
+       */
+      readonly sessionId?: string;
+      /** The thrown value, as thrown. */
+      readonly error: unknown;
+    }
+  | {
+      readonly ctx: HandlerContext;
+      /** The caller received the `outcome:'failed'` envelope. */
+      readonly surfacedAs: 'failed';
+      /** Always minted on this arm — the failure was committed under it. */
+      readonly sessionId: string;
+      /** The generation failure the envelope carries. */
+      readonly error: RenderError;
+    };
+
+/** Per-call bookkeeping behind the failure seam — see {@link GguiRenderHandlerDeps.postFailureHook}. */
+interface RenderAttempt {
+  /** Set once the session id is minted; a throw before that carries none. */
+  sessionId?: string;
+  /** True once the success response is assembled — later throws are not render failures. */
+  settled: boolean;
+}
+
+/**
  * Argument bundle handed to {@link GguiRenderHandlerDeps.postSuccessHook}.
  *
  * Carries the resolved render state at success-time so cloud-side
@@ -801,6 +837,30 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   ) => Promise<void> | void;
 
   /**
+   * Post-failure hook — the other end of {@link GguiRenderHandlerDeps.preValidationGate}.
+   * Fires on EVERY failure of a render whose gate passed: a failure the
+   * handler THROWS (unknown handshake, rate limit, contract violation, a
+   * store or provider error, our own bug) and the returned
+   * `outcome:'failed'` envelope alike — so a deployment that reserved
+   * something at the gate (a render quota hold) can release it. Never on
+   * a refusal (nothing passed the gate), and never once the success
+   * response is assembled (a throwing `postSuccessHook` is not a render
+   * failure — the reservation was consumed). A `rendered` envelope with
+   * `codeReady:false` (a placeholder, a probe, or a cache hit whose
+   * commit was rejected) is not a failure here either — it reaches
+   * `postSuccessHook` with `codeReady:false`, as it always has.
+   *
+   * Contract: awaited, fire-and-forget posture — a throw from the hook is
+   * reported and dropped, and the ORIGINAL outcome is what the caller
+   * sees (the failed envelope is still returned, the thrown error still
+   * thrown). The hook impl owns its own retries. OSS deployments leave it
+   * absent.
+   */
+  readonly postFailureHook?: (
+    args: GguiSessionPostFailureArgs,
+  ) => Promise<void> | void;
+
+  /**
    * Pre-resolved generator escape hatch. When set, the handler uses
    * THIS function in place of the {@link GenerationDeps.uiGenerator} +
    * {@link GenerationDeps.resolveLlm} pipeline. The seam input
@@ -1133,6 +1193,27 @@ export async function assertKnownThemeId(
   });
 }
 
+/**
+ * Run the failure hook without letting its own failure replace the
+ * render's: the hook's throw is reported (one-shot warn — the handler has
+ * no logger dep today, the same posture as the theme-overlay arm) and
+ * dropped, so the caller still sees the original outcome.
+ */
+async function fireRenderFailureHook(
+  hook: NonNullable<GguiRenderHandlerDeps['postFailureHook']>,
+  args: GguiSessionPostFailureArgs,
+): Promise<void> {
+  try {
+    await hook(args);
+  } catch (hookError) {
+    // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
+    console.warn(
+      '[ggui_render.post_failure_hook_threw]',
+      hookError instanceof Error ? hookError.message : String(hookError),
+    );
+  }
+}
+
 export function createGguiRenderHandler(
   deps: GguiRenderHandlerDeps,
 ): SharedHandler<
@@ -1140,6 +1221,1429 @@ export function createGguiRenderHandler(
   typeof outputSchema,
   RenderOutput | HandlerFailure<RenderFailureOutput | RenderRefusedOutput>
 > {
+  /**
+   * The render attempt proper — everything after `preValidationGate`
+   * passed. Split out so the handler can bracket it with the failure
+   * seam (see {@link GguiRenderHandlerDeps.postFailureHook}); `attempt`
+   * is that seam's per-call bookkeeping.
+   */
+  async function renderAfterGate(
+    input: unknown,
+    ctx: HandlerContext,
+    attempt: RenderAttempt,
+  ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput>> {
+    const parsed = z.object(inputSchema).parse(input);
+    // themeId DOOR (ggui#598 slice 3) — before any store or
+    // generation work: a typo'd id refuses here, where it was typed.
+    if (parsed.themeId !== undefined) {
+      await assertKnownThemeId(parsed.themeId, ctx.appId, deps);
+    }
+
+    if (!deps.handshakeStore) {
+      throw new Error(
+        'ggui_render: requires the handler to be built with a `handshakeStore:` KeyValueStore dep — the same instance `createGguiHandshakeHandler` wrote to.',
+      );
+    }
+    // Peek-first, consume-on-success. Recoverable validation errors
+    // below (routing-target / schema-compat / props-validation) leave
+    // the handshake alive so the agent can fix the input and retry on
+    // the same handshakeId without re-handshaking. The atomic consume
+    // happens once all input validation has passed and we're committed
+    // to running the generation/cache flow.
+    const handshakeRecord: HandshakeRecord | null =
+      await peekHandshakeRecord(
+        deps.handshakeStore,
+        ctx.appId,
+        parsed.handshakeId,
+      );
+    if (!handshakeRecord) {
+      throw new HandshakeNotFoundError(parsed.handshakeId);
+    }
+
+    const storedInput = handshakeRecord.input;
+    const override = parsed.override;
+
+    // Decision is expressed by PRESENCE of `override`, not a
+    // discriminated union. PATCH semantics over the agreed proposal:
+    //
+    //   - `override === undefined` (ACCEPT) — use the handshake's
+    //     stored effectiveContract + the negotiator's projected
+    //     variance verbatim. Reuses the proposed blueprint identity.
+    //   - `override.contract` — re-draft the contract (STRICT —
+    //     `validateContract` runs below as the commit gate; the server
+    //     does NOT repair it). Cold-gens against the new contract.
+    //   - `override.variance` — re-aim the variant axis while keeping
+    //     the agreed contract. Re-resolves the EFFECTIVE
+    //     `(contractKey, variantKey)` — reuse if a blueprint exists
+    //     there, else cold-gen registered under the new variantKey.
+    //
+    // The effective contract + variance feed the rest of the handler.
+    // The override only changes WHICH contract / variance get
+    // installed and WHICH blueprint identity we resolve / surface.
+    //
+    // `acceptanceClassification` is telemetry-only — it distinguishes
+    // accept-vs-override on the cache trace; the STRICT override-
+    // contract gate keys on it too (an unchanged agreed contract never
+    // fails that gate).
+    const effectiveContract: DataContract =
+      override?.contract ?? handshakeRecord.effectiveContract;
+    // Accept path — the negotiator's projected variance on the
+    // suggestion is canonical (carries agent draft for origin=agent,
+    // cached blueprint's tags for origin=cache, synth-amended tags for
+    // origin=synth). Override re-aims it.
+    const effectiveVariance: BlueprintVariance | undefined =
+      override?.variance ?? handshakeRecord.suggestion.blueprintMeta.variance;
+    const acceptanceClassification: 'accept' | 'override' =
+      override === undefined ? 'accept' : 'override';
+
+    // Measurement denominator (`render.attempted`) — emitted the
+    // moment the handshake record resolves, BEFORE any gate, so
+    // every attempt that reached contract-relevant processing
+    // counts. Recoverable violations below peek-don't-consume the
+    // handshake, so retries share this handshakeId and first-vs-
+    // retry ordering is derivable from event order.
+    emitRenderAttempted(deps.telemetrySink, {
+      appId: ctx.appId,
+      handshakeId: parsed.handshakeId,
+      origin: handshakeRecord.suggestion.origin,
+      overridePresent: override !== undefined,
+    });
+
+    // Telemetry: classification observable on every render so the
+    // cache trace shows accept-vs-override patterns.
+    emitCacheTraceEvent({
+      id: newCacheTraceId(),
+      at: Date.now(),
+      durationMs: 0,
+      scope: ctx.appId,
+      intent: truncateCacheTraceIntent(storedInput.intent),
+      expectedKey: handshakeRecord.suggestion.blueprintMeta.contractHash,
+      threshold: 0,
+      decision: 'render-classify',
+      candidates: [],
+      agentClassification:
+        acceptanceClassification === 'accept' ? 'confirm' : 'override',
+      reason:
+        acceptanceClassification === 'accept'
+          ? `render-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}${
+              handshakeRecord.suggestion.blueprintMeta.blueprintId
+                ? `, blueprintId=${handshakeRecord.suggestion.blueprintMeta.blueprintId}`
+                : ''
+            })`
+          : `render-classify: agent overrode handshake suggestion with a fresh draft`,
+    });
+
+    // Effective story for the rest of the handler.
+    const story: {
+      readonly intent: string;
+      readonly contract: DataContract;
+      readonly variance?: BlueprintVariance;
+    } = {
+      intent: storedInput.intent,
+      contract: effectiveContract,
+      ...(effectiveVariance !== undefined
+        ? { variance: effectiveVariance }
+        : {}),
+    };
+
+    // Effective variant axis of the reuse key — computed once from the
+    // EFFECTIVE variance (proposed on accept, re-aimed on
+    // `override.variance`). `variantKey()` self-normalizes absent /
+    // empty variance to the stable default-variant sentinel. Paired
+    // with `blueprintKey(effectiveContract)`, this is the
+    // `(contractKey, variantKey)` reuse key the registry indexes on —
+    // the §6 re-resolution and the cold-gen registration below both
+    // key on it, so reuse / registration stay on the same identity.
+    const effectiveVariantKey = variantKey(effectiveVariance);
+
+    // Contract axis of that same reuse key. Pure over the effective
+    // contract, so it is computed ONCE here and read everywhere:
+    // the §6 exact re-resolution, the wire `contractHash` field, the
+    // resource-URI segment, and the durable identity record every
+    // commit site writes. Hoisted to handler scope because the
+    // identity write-through happens at commit time — well before
+    // the wire output is assembled.
+    const effectiveContractKey = blueprintKey(effectiveContract);
+
+    // Bind the identity slice a commit will record. The blueprint id
+    // is per-path (a reuse knows it up front; a cold gen resolves it
+    // via registration immediately BEFORE its success commit — #460),
+    // which is why it is a parameter and the contract/variant axes
+    // are captured.
+    const identityWriterFor = (
+      blueprintId: string | null,
+    ): ((committed: StoredGguiSession) => Promise<void>) =>
+      (committed) =>
+        writeRenderIdentity(deps.renderIdentityStore, committed, {
+          blueprintId,
+          contractKey: effectiveContractKey,
+          variantKey: effectiveVariantKey,
+        });
+
+    // Resolved gadget catalog, lifted to handler scope. When
+    // `appMetadataStore` is bound, the registry-membership block
+    // below captures the catalog (App record's `gadgets`, or
+    // `STDLIB_GADGETS` on fallback). On cold-gen, this is threaded
+    // into the generator's `UiGenerateInput.appGadgets` so the
+    // code-gen system prompt's `clientCapabilities — registered
+    // catalog` section renders the SAME catalog the synth + decision
+    // LLMs see. Stays `undefined` when `appMetadataStore` is unset —
+    // the system prompt falls through to its STDLIB default.
+    let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
+
+    // Resolved per-app theme overlay, lifted to handler scope
+    // alongside `resolvedAppLibraries`. When `appMetadataStore` is
+    // bound, the registry block below snapshots `App.theme` here so
+    // both render-commit builders (cold-gen + cached) sidecar it onto
+    // the persisted `ComponentGguiSession.theme`. Stays `undefined`
+    // when `appMetadataStore` is unset or the App declares no theme.
+    let appTheme: AppTheme | undefined;
+
+    // Admission check. Fires BEFORE state changes — a rate-limited
+    // caller should get 429 without the server doing any real work.
+    if (deps.rateLimiter) {
+      const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? ctx.userId ?? "anon"}`;
+      const decision = await deps.rateLimiter.check({
+        key: limiterKey,
+        cost: 1,
+      });
+      if (!decision.allowed) {
+        throw new RateLimitedError(limiterKey, decision);
+      }
+    }
+
+    // Single deterministic contract gate — the SAME `validateContract`
+    // the handshake backstop runs (retired fields, inner-schema
+    // validity, cross-references, name invariants, schema-compat). On
+    // the ACCEPT path (and on a `override.variance`-only re-aim, which
+    // keeps the agreed contract) this re-checks an already-validated
+    // contract (defense-in-depth; never fires). On an `override.contract`
+    // re-draft it is the STRICT commit gate: a forced contract MUST
+    // conform — the server does not repair it ("use mine verbatim"). A
+    // failure is rethrown with a pointer back to ggui_handshake (which
+    // DOES repair), so the agent recovers instead of looping on
+    // override.
+    try {
+      validateContract(story.contract);
+    } catch (err) {
+      emitRenderContractViolation(deps.telemetrySink, {
+        appId: ctx.appId,
+        tool: 'ggui_render',
+        site: 'contract_gate',
+        violationClass:
+          acceptanceClassification === 'override'
+            ? 'override_contract_invalid'
+            : 'contract_schema_invalid',
+        handshakeId: parsed.handshakeId,
+        origin: handshakeRecord.suggestion.origin,
+        overridePresent: override !== undefined,
+      });
+      if (acceptanceClassification === 'override') {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `override_contract_invalid: your override.contract failed validation — ${detail} override.contract COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and render WITHOUT override (accept the proposal) — do NOT retry override with the same contract.`,
+        );
+      }
+      throw err;
+    }
+
+    // Duplicate-gadget-hook gate (gadget-specific; not part of the
+    // contract gate). Two bindings with the same (package, hook)
+    // double-mount the wrapper; hard reject so the violation is
+    // observable rather than silently tolerated.
+    assertNoDuplicateGadgetHooks(story.contract);
+
+    // Gadget registry gate + enrichment. First: every
+    // `(package, export name)` the contract references on
+    // `clientCapabilities.gadgets` MUST resolve in `App.gadgets`.
+    // Second: the referenced package descriptors are snapshotted
+    // onto `ComponentGguiSession.gadgetDescriptors` so the persisted
+    // render carries full teaching text + bundleUrl + styleUrl +
+    // connect[]. No-op when `appMetadataStore` is unset.
+    if (deps.appMetadataStore) {
+      const appRecord = await deps.appMetadataStore.get(ctx.appId);
+      const appGadgets = resolveAppGadgets(appRecord?.gadgets);
+      assertGadgetsRegistered(story.contract, appGadgets);
+      assertPublicEnvSatisfied(
+        story.contract,
+        appGadgets,
+        appRecord?.publicEnv,
+      );
+      resolvedAppLibraries = filterDescriptorsToContract(
+        story.contract,
+        appGadgets,
+      );
+      appTheme = appRecord?.theme;
+    }
+
+    // (Name-invariant + schema-compat invariants are covered by the
+    // single `validateContract` gate above — no separate asserts here.)
+
+    // Schema-compat validation against the AUTHORED contract via the
+    // server's registered tool registry. Defensive backstops at gen
+    // and cache-hit commit phases (see `runGenerationIntoGguiSession` +
+    // `commitCachedGguiSession`) cover contracts that differ from
+    // `story.contract` (synth-emit, matched-blueprint reuse).
+    if (deps.checkRenderContracts && story.contract) {
+      try {
+        deps.checkRenderContracts({
+          ...(story.contract.actionSpec
+            ? { actionSpec: story.contract.actionSpec }
+            : {}),
+          ...(story.contract.streamSpec
+            ? { streamSpec: story.contract.streamSpec }
+            : {}),
+          ...(story.contract.agentCapabilities
+            ? { agentCapabilities: story.contract.agentCapabilities }
+            : {}),
+        });
+      } catch (err) {
+        emitRenderContractViolation(deps.telemetrySink, {
+          appId: ctx.appId,
+          tool: 'ggui_render',
+          site: 'schema_compat',
+          violationClass: 'schema_mismatch',
+          handshakeId: parsed.handshakeId,
+          origin: handshakeRecord.suggestion.origin,
+          overridePresent: override !== undefined,
+        });
+        throw err;
+      }
+    }
+
+    // Props validation against the agreed contract. Schema-precise
+    // render (frozen shape, guuey#271): absent an `override.contract`
+    // patch, the validator is the schema PERSISTED on the handshake
+    // record — the byte-identical artifact the handshake returned on
+    // the wire — so the returned and enforced schemas cannot diverge
+    // under rolling-deploy version skew (the AUTHORITY obligation is
+    // structural). An `override.contract` re-draft (outside the
+    // AUTHORITY proviso) and the TTL-bounded mixed-version window
+    // (records written by the previous build carry no persisted
+    // schema) recompute via the same builder the handshake uses —
+    // one synthesis either way. The wire `props` is required (value
+    // may be `{}`), but the accept-path drop below resets it to
+    // `undefined` (= "no runtime props"), so the local stays
+    // `Record<string, unknown> | undefined`.
+    let runtimeProps: Record<string, unknown> | undefined = parsed.props;
+    if (effectiveContract.propsSpec) {
+      const propsToValidate: Record<string, unknown> = runtimeProps ?? {};
+      const persistedSchema =
+        override?.contract === undefined
+          ? handshakeRecord.propsSchema
+          : undefined;
+      const enforcedSchema =
+        persistedSchema ??
+        buildEnforcedPropsSchema(effectiveContract.propsSpec);
+      const enforcedSchemaHash =
+        (override?.contract === undefined
+          ? handshakeRecord.propsSchemaHash
+          : undefined) ?? computePropsSchemaHash(enforcedSchema);
+      const propsValidation = validatePropsDataWithSchema(
+        propsToValidate,
+        enforcedSchema,
+      );
+      if (!propsValidation.valid) {
+        emitRenderContractViolation(deps.telemetrySink, {
+          appId: ctx.appId,
+          tool: 'ggui_render',
+          site: 'props_validation',
+          violationClass: 'props',
+          handshakeId: parsed.handshakeId,
+          origin: handshakeRecord.suggestion.origin,
+          overridePresent: override !== undefined,
+          violations: propsValidation.violations,
+          propsSchemaHash: enforcedSchemaHash,
+        });
+        throw new ContractViolationError({
+          tool: 'ggui_render',
+          violations: propsValidation.violations,
+          hint: 'Fix the props to satisfy the agreed propsSpec, or send `override: {contract}` to re-draft the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
+          propsSchemaHash: enforcedSchemaHash,
+        });
+      }
+    } else if (
+      runtimeProps !== undefined &&
+      Object.keys(runtimeProps).length > 0
+    ) {
+      if (acceptanceClassification === 'accept') {
+        // Forgiving ACCEPT: the negotiator may have RESHAPED the
+        // contract (e.g. synth moves a mutable collection like `todos`
+        // from propsSpec → contextSpec), so the agent's accept-path
+        // props — authored against its ORIGINAL draft — no longer fit.
+        // The agreed contract declares no propsSpec, so the props are
+        // unusable; DROP them (the UI starts from contextSpec defaults)
+        // rather than hard-failing. The agent populates live state via
+        // ggui_update after render. Override stays STRICT (below).
+        const droppedKeys = Object.keys(runtimeProps).join(', ');
+        // eslint-disable-next-line no-console -- operator-visible signal
+        console.warn(
+          `[ggui_render] accept-path props dropped — the agreed contract declares no propsSpec ` +
+            `(synth likely reshaped propsSpec → contextSpec). Dropped keys: ${droppedKeys}. ` +
+            `Populate live state with ggui_update after render.`,
+        );
+        runtimeProps = undefined;
+      } else {
+        // The enforced schema for a propsSpec-less contract IS the
+        // empty closed wrapper — its hash identifies what rejected
+        // these props (frozen no-propsSpec rule).
+        const emptyWrapperHash = computePropsSchemaHash(
+          buildEnforcedPropsSchema({ properties: {} }),
+        );
+        emitRenderContractViolation(deps.telemetrySink, {
+          appId: ctx.appId,
+          tool: 'ggui_render',
+          site: 'override_no_propsspec',
+          violationClass: 'props',
+          handshakeId: parsed.handshakeId,
+          origin: handshakeRecord.suggestion.origin,
+          overridePresent: true,
+          propsSchemaHash: emptyWrapperHash,
+        });
+        throw new ContractViolationError({
+          tool: 'ggui_render',
+          propsSchemaHash: emptyWrapperHash,
+          violations: [
+            {
+              field: 'props',
+              message:
+                'props supplied but your override.contract declares no propsSpec. Pass `props: {}`, or add a propsSpec covering these fields.',
+              expected: 'props: {} (contract has no propsSpec)',
+              received: `props with keys: ${Object.keys(runtimeProps).join(', ')}`,
+            },
+          ],
+          hint: 'Your override.contract has no propsSpec, so it takes no props. Pass `props: {}`, add a propsSpec — or omit `override` and accept the proposal (the accept path tolerates mismatched props instead of failing). The handshake record is preserved; retry on the SAME handshakeId.',
+        });
+      }
+    }
+
+    // Atomically consume the handshake record now that input
+    // validation has succeeded.
+    const consumed = await consumeHandshakeRecord(
+      deps.handshakeStore,
+      ctx.appId,
+      parsed.handshakeId,
+    );
+    if (!consumed) {
+      throw new HandshakeNotFoundError(parsed.handshakeId);
+    }
+
+    // Resolve or mint the render id. The handshake negotiator MAY
+    // suggest reusing an existing render via `target.sessionId` (the
+    // cache / update path); absent ⇒ mint a fresh id. Reuse only
+    // counts when the existing render is visible to the caller
+    // (same appId, and same userId when the stored row carries one) —
+    // cross-tenant / cross-user id collisions fall back to mint.
+    const requestedId = handshakeRecord.target.sessionId;
+    let sessionId: string;
+    let action: RenderOutput['action'];
+
+    if (requestedId) {
+      const existing = await deps.renderStore.get(requestedId);
+      if (isVisibleToCaller(existing, ctx)) {
+        sessionId = existing.id;
+        action = 'reuse';
+      } else {
+        sessionId = requestedId;
+        action = 'create';
+      }
+    } else {
+      sessionId = deps.sessionIdFactory
+        ? deps.sessionIdFactory()
+        : randomUUID();
+      action = 'create';
+    }
+    attempt.sessionId = sessionId;
+
+    // Devtools payload trace. No-op when no sink is registered.
+    // Post-Phase-B the sink shape addresses by `sessionId` directly
+    // (every render IS the addressable row).
+    emitPayloadTraceEvent(deps.payloadTraceSink, {
+      direction: 'outbound-update',
+      sessionId,
+      appId: ctx.appId,
+      tool: 'ggui_render',
+      payload: { handshakeId: parsed.handshakeId, story },
+    });
+
+    // Emit render_started so progress UIs can show a
+    // `constructing` state immediately, without waiting for cold-
+    // gen to settle. Fire-and-forget.
+    deps.lifecycleEmitter?.emit(sessionId, {
+      kind: 'render_started',
+      sessionId,
+      intent: story.intent,
+    });
+
+    // Open the sessionId-keyed pending-events pipe (Model C). This
+    // MUST happen before any iframe-side dispatch could fire — the
+    // user can click before the agent's first `ggui_consume`, and
+    // `ggui_runtime_submit_action` needs an open pipe to append to.
+    // Idempotent: re-mark on the same sessionId is a no-op.
+    if (deps.pendingEventConsumer) {
+      try {
+        deps.pendingEventConsumer.markCreated?.(sessionId);
+      } catch {
+        // Pipe open failures are non-fatal — `ui/message` fallback
+        // on the host still routes gestures on the next chat turn.
+      }
+    }
+
+    const shortCode = generateShortCode();
+
+    // Record shortCode → render binding for same-origin console
+    // viewer lookups. Post Phase-B identity collapse: `sessionId` IS
+    // the addressable unit, so the binding row carries a single
+    // `sessionId` field (the prior `sessionId` + `stackItemId` slot
+    // pair always held the same value at the bind site).
+    if (deps.shortCodeIndex) {
+      try {
+        await deps.shortCodeIndex.put(shortCode, {
+          sessionId,
+          appId: ctx.appId,
+        });
+      } catch {
+        // Silent: the index is a convenience layer. If it rejects
+        // (bounded-store eviction, backend hiccup), the next
+        // console viewer request 404s on that shortCode, which
+        // is the correct degraded behavior.
+      }
+    }
+
+    // Set by the provisional-preview branch below when it commits its
+    // placeholder row, so the placeholder-mode branch after the
+    // generation gate doesn't commit an identical row twice (#365).
+    let placeholderCommitted = false;
+
+    // Provisional preview kickoff. Runs ONLY when the handler was
+    // built with `provisionalPreview` deps AND the gate passes.
+    //
+    // Preview runs CONCURRENTLY with generation below: it is
+    // kicked off here (fire-and-forget), then the generation
+    // `await` blocks the render RPC. Viewer sees preview frames
+    // stream over `_ggui:preview` while the generator call is in
+    // flight; on success/failure we tear down preview via
+    // `finalizeProvisionalPreview` and the authoritative render is
+    // the final state.
+    const previewGate = evaluateProvisionalPreviewGate(
+      deps.provisionalPreview,
+      { story },
+      { appId: ctx.appId, sessionId },
+    );
+    if (previewGate.kind === 'skip') {
+      deps.provisionalPreview?.onOutcome?.({
+        status: 'skipped',
+        reason: previewGate.reason,
+        sessionId,
+        appId: ctx.appId,
+      });
+    } else if (deps.provisionalPreview) {
+      const handle = kickoffProvisionalPreview(deps.provisionalPreview, {
+        sessionId,
+        appId: ctx.appId,
+        story,
+      });
+      // Register into the optional handoff registry so a later
+      // handler (generation success below, apply-render-patch
+      // setting componentCode, render teardown, shutdown) can
+      // cancel by `sessionId`. Absent registry → the preamble still
+      // runs; it just has no external cancellation site.
+      deps.provisionalPreview.registry?.register(sessionId, handle);
+
+      // Placeholder render — drives the provisional preview path.
+      // The iframe-runtime mounts `mountProvisional` per render
+      // (empty `componentCode` routes to the provisional branch).
+      // Without an item committed, `_ggui:preview` frames the
+      // emitter just kicked off would paint into the void.
+      //
+      // Lifecycle: this placeholder lives until generation settles.
+      // `renderStore.commit` upserts by `render.id`, so when the
+      // cold-generation success / cache-hit / generation-failed
+      // paths below call `commit` with the SAME `sessionId`, the
+      // placeholder is replaced in-place — no double-commit, no
+      // stale entry. When generation is NOT wired (no provider
+      // key), the placeholder stays for the render's lifetime;
+      // that's the honest "we have no code yet but the preview
+      // surface is mounted" state.
+      //
+      // We bypass the schema-compat hook here because the
+      // placeholder declares no contract; the hook fires when
+      // generation later commits the real render. Live-subscriber
+      // notify DOES fire so a viewer that connects mid-render sees
+      // the placeholder show up — without the notify the renderer
+      // wouldn't know to mount a surface for it.
+      const nowEpochMs = Date.now();
+      const placeholder: ComponentGguiSession = {
+        id: sessionId,
+        appId: ctx.appId,
+        type: 'component',
+        componentCode: '',
+        prompt: story.intent,
+        contentType: 'application/javascript+react',
+        createdAt: nowEpochMs,
+        lastActivityAt: nowEpochMs,
+        expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
+        eventSequence: 0,
+      };
+      try {
+        const committed = await deps.renderStore.commit({
+          render: placeholder,
+          appId: ctx.appId,
+          userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        });
+        placeholderCommitted = true;
+        // The placeholder is a real row a locator can address, so it
+        // gets a record too — the later in-place replacement
+        // overwrites it with the settled identity.
+        await identityWriterFor(null)(committed);
+      } catch {
+        // Defensive — a placeholder-commit failure is not fatal to
+        // the render. The sessionId + shortCode are already minted;
+        // the worst case is the live renderer paints nothing for
+        // this render, which is the same "preview never wired"
+        // degraded state callers without `provisionalPreview`
+        // already see.
+      }
+      safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, placeholder);
+    }
+
+    // Generation + cache gate. Absent generation deps = placeholder
+    // mode: story renders return `codeReady: false`. The placeholder
+    // render committed just above (when provisionalPreview was wired)
+    // keeps the live-renderer's provisional surface mounted;
+    // generation-off doesn't paint anything onto it but also doesn't
+    // leave the renderer with no anchor. When generation IS wired:
+    //
+    //   - If `generation.cache` is also wired, attempt a retrieval
+    //     first. A hit synthesizes a GguiSession from the cached
+    //     componentCode (skip LLM entirely) and surfaces
+    //     `cache.hit:true` on the render output.
+    //   - On a miss (or cache absent), run the generator as before.
+    //     On success, when cache is wired, record the produced
+    //     componentCode into the scope so the next same-intent
+    //     render hits.
+    let generatedCodeReady = false;
+    // Canonical failure carried off the cold-gen outcome. Set iff
+    // `runGenerationIntoGguiSession` returned `ok: false` — the ONLY
+    // path that produces the isError failure envelope. Placeholder
+    // mode (no generation deps), probe cards, and cache-hit commit
+    // rejections keep today's success-shaped envelope.
+    let generationFailure: RenderError | undefined;
+    // Reuse outcome for this render — surfaced on the wire `cache` field.
+    let cacheMarker: RenderCacheMarker | undefined;
+    // Opaque component id surfaced on the wire `blueprintId` field. A
+    // reuse decision resolves it to the stored UUID via the §6
+    // point-read; a cold gen sets it to the freshly-minted UUID
+    // `safelyRegisterBlueprint` returns. Stays `undefined` on the
+    // genuinely-no-component branches (probe-card / generation-off),
+    // which surface `blueprintId: ''` per spec §9.1 present-on-
+    // materialisation.
+    let resolvedBlueprintId: string | undefined;
+
+    // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
+    // the MCP Apps protocol probe diagnostic system card.
+    const PROBE_INTENT_PREFIX = '[ggui:probe]';
+    if (story.intent.startsWith(PROBE_INTENT_PREFIX)) {
+      const nowEpochMs = Date.now();
+      const probeRender: SystemGguiSession = {
+        id: sessionId,
+        appId: ctx.appId,
+        type: 'system',
+        kind: 'mcp-apps-probe',
+        createdAt: nowEpochMs,
+        lastActivityAt: nowEpochMs,
+        expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
+        eventSequence: 0,
+        props: { intent: story.intent },
+      };
+      try {
+        const committed = await deps.renderStore.commit({
+          render: probeRender,
+          appId: ctx.appId,
+          userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        });
+        safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
+        generatedCodeReady = true;
+        await identityWriterFor(null)(committed);
+      } catch {
+        // Commit failure leaves codeReady=false; downstream synth
+        // emits an empty bootstrap which the runtime renders as the
+        // generic system-card fallback.
+      }
+      await safelyFinalizePreview(deps.provisionalPreview, sessionId, 'probe');
+    } else if (deps.generation) {
+      const intent = story.intent;
+      const forceCreate = storedInput.forceCreate === true;
+
+      // §6 deterministic reuse resolution. The render flow NO LONGER runs its
+      // own semantic match (`matchBlueprint` is gone from this
+      // handler). Three paths, all keyed on the EFFECTIVE
+      // `(contractKey, variantKey)` identity:
+      //
+      //   - ACCEPT (`override === undefined`) + `origin:'cache'` — the
+      //     handshake already decided and stored the matched
+      //     blueprint's identity (`handshakeRecord.matchedBlueprint`).
+      //     Effective == proposed, so we O(1) point-read the stored
+      //     row by UUID and serve its componentCode — the same, single
+      //     match the handshake chose.
+      //   - `override.variance` (contract unchanged) — the variant
+      //     axis changed, so the proposed `matchedBlueprint` no longer
+      //     names the right component. RE-RESOLVE at the effective
+      //     `(blueprintKey(effectiveContract), effectiveVariantKey)`
+      //     via the index — reuse if a row exists there, else cold-gen
+      //     registered under the new variantKey.
+      //   - `override.contract` — a fresh contract; skip the
+      //     point-read entirely and cold-gen against it (the STRICT
+      //     `validateContract` commit gate already ran above).
+      //
+      // `blueprintId` equality across two renders therefore genuinely
+      // means the same component was reused (no second, divergent
+      // matcher to disagree).
+      //
+      // Self-heal: a dangling `matchedBlueprint.id` or a stale index
+      // binding (row evicted / gone between handshake and render)
+      // resolves to `null` → `blueprintHit` stays null → we fall
+      // through to cold-gen. Never throws. `forceCreate` (agent opted
+      // out after a declined handshake) skips reuse entirely.
+      let blueprintHit: {
+        readonly id: string;
+        readonly contractKey: string;
+        readonly componentCode: string;
+        readonly cosine: number;
+        readonly contract: DataContract;
+        /**
+         * Content hash of the matched blueprint's authored source,
+         * when the registry row carries one. The body is resolved
+         * from `CodeStore` just before the commit below — never
+         * inlined here (the point-read only fetches the row, not
+         * the body).
+         */
+        readonly sourceCodeHash?: string;
+      } | null = null;
+
+      // Cross-deployment reuse fan-out. The handshake matcher fans out
+      // across pools (decide-handshake.ts), so it can propose reusing a
+      // blueprint that lives in a seed pool — a SEPARATE registry under
+      // `pool.scope` (e.g. `'shared'`), not the per-app store. Both §6
+      // point-reads below must mirror that fan-out: try the per-app
+      // store FIRST (a deployment's own blueprint wins), then each seed
+      // pool under `pool.scope ?? ctx.appId`, stopping at the first hit.
+      // A miss everywhere leaves `blueprintHit` null → existing cold-gen
+      // fallthrough (self-heal, unchanged). With `seedPools` undefined
+      // both helpers collapse to exactly the old single per-app read.
+      const seedPools = deps.generation.seedPools ?? [];
+      // Both helpers below are wrapped so a lookup FAULT (a backend
+      // reject — throttle, network blip, transient IAM error) degrades
+      // exactly like a genuine miss, keeping the "Never throws"
+      // self-heal contract above true for real remote-backed stores,
+      // not just an in-memory index that could structurally never
+      // reject. Mirrors the sibling guards on every other index
+      // consumer (blueprint-matcher.ts's exact-key probe,
+      // decideHandshake's per-pool probe) — this was the one §6
+      // point-read that had none.
+      const readByIdAcrossPools = async (id: string) => {
+        try {
+          const perApp = deps.generation?.cache
+            ? await readBlueprintById(
+                { vectorStore: deps.generation.cache.vectorStore },
+                ctx.appId,
+                id,
+              )
+            : null;
+          if (perApp) return perApp;
+          for (const pool of seedPools) {
+            const hit = await readBlueprintById(
+              { vectorStore: pool.registry.vectorStore },
+              pool.scope ?? ctx.appId,
+              id,
+            );
+            if (hit) return hit;
+          }
+          return null;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
+          console.warn(`[ggui_render] blueprint reuse read-by-id failed, falling through to cold-gen: ${msg}`);
+          return null;
+        }
+      };
+      const findExactAcrossPools = async (
+        contractKey: string,
+        variantKey_: string,
+      ) => {
+        try {
+          const perApp = deps.generation?.cache?.index
+            ? await findBlueprintExact(
+                {
+                  vectorStore: deps.generation.cache.vectorStore,
+                  index: deps.generation.cache.index,
+                },
+                ctx.appId,
+                'template',
+                contractKey,
+                variantKey_,
+              )
+            : null;
+          if (perApp) return perApp;
+          for (const pool of seedPools) {
+            const hit = await findBlueprintExact(
+              {
+                vectorStore: pool.registry.vectorStore,
+                index: pool.registry.index,
+              },
+              pool.scope ?? ctx.appId,
+              'template',
+              contractKey,
+              variantKey_,
+            );
+            if (hit) return hit;
+          }
+          return null;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
+          console.warn(`[ggui_render] blueprint reuse exact-key lookup failed, falling through to cold-gen: ${msg}`);
+          return null;
+        }
+      };
+
+      const matched = handshakeRecord.matchedBlueprint;
+      if (
+        override === undefined &&
+        handshakeRecord.suggestion.origin === 'cache' &&
+        matched &&
+        deps.generation.cache?.index &&
+        !forceCreate
+      ) {
+        // ACCEPT — effective == proposed; point-read the stored row
+        // (per-app first, then seed pools — see fan-out comment above).
+        const bp = await readByIdAcrossPools(matched.id);
+        if (bp) {
+          blueprintHit = {
+            id: bp.id,
+            contractKey: bp.contractKey,
+            componentCode: bp.componentCode,
+            // The matcher's measured cosine, persisted on the handshake
+            // record (#564 — this was hardcoded 1, misreporting the
+            // wire's documented semantic similarity). `?? 1` covers
+            // ONLY records persisted by a pre-#564 pod inside the
+            // rolling-deploy skew window (the record store's TTL
+            // bounds it); those were all reported as 1 before, so the
+            // fallback preserves their prior behavior, never invents.
+            cosine: matched.cosine ?? 1,
+            contract: bp.contract,
+            ...(bp.sourceCodeHash !== undefined
+              ? { sourceCodeHash: bp.sourceCodeHash }
+              : {}),
+          };
+        }
+      } else if (
+        override?.variance !== undefined &&
+        override.contract === undefined &&
+        deps.generation.cache?.index &&
+        !forceCreate
+      ) {
+        // OVERRIDE.variance — the contract is unchanged but the variant
+        // axis moved. Re-resolve at the EFFECTIVE
+        // `(contractKey, effectiveVariantKey)` and reuse a stored
+        // component for that exact variant if one exists (per-app first,
+        // then seed pools — see fan-out comment above).
+        const bp = await findExactAcrossPools(
+          effectiveContractKey,
+          effectiveVariantKey,
+        );
+        if (bp) {
+          blueprintHit = {
+            id: bp.id,
+            contractKey: bp.contractKey,
+            componentCode: bp.componentCode,
+            // Exact `(contractKey, variantKey)` re-resolution — cosine 1
+            // by definition (canonical identity, no retrieval; NOT a
+            // #564 hardcode).
+            cosine: 1,
+            contract: bp.contract,
+            ...(bp.sourceCodeHash !== undefined
+              ? { sourceCodeHash: bp.sourceCodeHash }
+              : {}),
+          };
+        }
+      }
+
+      if (blueprintHit) {
+        // Reuse → the stored UUID is the materialised component id.
+        // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
+        // Resolved BEFORE the commit so the identity record written
+        // at that commit already carries the id (no backfill needed
+        // on this path).
+        resolvedBlueprintId = blueprintHit.id;
+
+        // Authored source — resolve the body
+        // from CodeStore by the row's stored hash, if any. Best-
+        // effort: a miss or a read failure commits the reuse render
+        // without `sourceCode`, exactly like a blueprint that never
+        // had one — never blocks the render.
+        const codeStore = deps.generation.cache?.durability?.codeStore;
+        let reuseSourceCode: string | undefined;
+        if (blueprintHit.sourceCodeHash !== undefined && codeStore) {
+          try {
+            reuseSourceCode =
+              (await codeStore.get(blueprintHit.sourceCodeHash)) ?? undefined;
+          } catch (err) {
+            // eslint-disable-next-line no-console -- operator-visible, non-fatal
+            console.warn(
+              `[ggui_render] authored-source body read failed on reuse — committing without sourceCode: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        generatedCodeReady = await commitCachedGguiSession(
+          deps.renderStore,
+          deps.provisionalPreview,
+          deps.channelNotifier,
+          deps.checkRenderContracts,
+          deps.renderTtlMs,
+          {
+            sessionId,
+            appId: ctx.appId,
+            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+            story,
+            writeIdentity: identityWriterFor(blueprintHit.id),
+            cacheHit: {
+              cachedBlueprintId: blueprintHit.id,
+              similarity: blueprintHit.cosine,
+              componentCode: blueprintHit.componentCode,
+              cachedIntent: intent,
+              cachedAt: new Date().toISOString(),
+              ...(reuseSourceCode !== undefined
+                ? { sourceCode: reuseSourceCode }
+                : {}),
+              // Project the matched blueprint's contract onto the
+              // cache hit so commitCachedGguiSession lands the wire-surface
+              // specs and capability catalog on the new render.
+              // Symmetric with runGenerationIntoGguiSession's render build:
+              // both paths emit the same shape, and bootstrap-meta
+              // derivation reads from one place.
+              ...(blueprintHit.contract.actionSpec
+                ? { actionSpec: blueprintHit.contract.actionSpec }
+                : {}),
+              ...(blueprintHit.contract.streamSpec
+                ? { streamSpec: blueprintHit.contract.streamSpec }
+                : {}),
+              ...(blueprintHit.contract.propsSpec
+                ? { propsSpec: blueprintHit.contract.propsSpec }
+                : {}),
+              ...(blueprintHit.contract.contextSpec
+                ? { contextSpec: blueprintHit.contract.contextSpec }
+                : {}),
+              // Project agentCapabilities through the blueprint-hit path
+              // so commitCachedGguiSession's schema-compat escape hatch
+              // recognizes cross-MCP tools the reused contract's
+              // actionSpec.nextStep / streamSpec.source.tool reference.
+              // Without it the exempt set is empty and any reused
+              // blueprint whose nextStep is a domain (non-ggui_*) tool
+              // fails "tool not registered". Symmetric with the cold-gen
+              // path (runGenerationIntoGguiSession's render build).
+              ...(blueprintHit.contract.agentCapabilities
+                ? { agentCapabilities: blueprintHit.contract.agentCapabilities }
+                : {}),
+              // Project clientCapabilities through the blueprint-hit
+              // path so the cached commit emits Permissions-Policy
+              // directives whenever the matched blueprint's contract
+              // declared them.
+              ...(blueprintHit.contract.clientCapabilities
+                ? {
+                    clientCapabilities:
+                      blueprintHit.contract.clientCapabilities,
+                  }
+                : {}),
+            },
+            ...(runtimeProps !== undefined
+              ? { runtimeProps: runtimeProps as JsonObject }
+              : {}),
+            ...(resolvedAppLibraries !== undefined
+              ? { appGadgets: resolvedAppLibraries }
+              : {}),
+            ...(appTheme !== undefined ? { appTheme } : {}),
+          },
+        );
+        cacheMarker = {
+          hit: true,
+          similarity: blueprintHit.cosine,
+          cachedBlueprintId: blueprintHit.id,
+          llmCallsAvoided: 1,
+          kind: 'full-template',
+          reason: 'full-template: reused a stored interface for this contract',
+        };
+      } else {
+        // The `.d.ts` fetch is deferred to HERE — the cold-gen
+        // branch — not done eagerly after the registry gate. On a
+        // blueprint cache hit the fetched types would be discarded
+        // (cache-hit commits don't typecheck or build a prompt),
+        // and a network transient in the fetch would wrongly fail a
+        // render that had a valid cache hit. Only cold generation
+        // consumes `gadgetTypes`, so only cold generation pays the
+        // fetch.
+        const resolvedGadgetTypes =
+          resolvedAppLibraries !== undefined
+            ? await fetchGadgetTypes(resolvedAppLibraries)
+            : undefined;
+        const generationCache = deps.generation.cache;
+        const outcome = await runGenerationIntoGguiSession(
+          deps.generation,
+          deps.renderStore,
+          deps.provisionalPreview,
+          deps.channelNotifier,
+          deps.checkRenderContracts,
+          deps.generator,
+          deps.renderTtlMs,
+          {
+            ctx,
+            sessionId,
+            story,
+            // #460 — the callee binds each commit's id itself:
+            // failure commits bind null; the success commit binds
+            // whatever `resolveBlueprintId` returned, resolved
+            // BEFORE that commit (no backfill exists anymore).
+            writeIdentityFor: identityWriterFor,
+            // Registration is the resolve hook, passed only when a
+            // cache is bound (unbound deployments keep null ids —
+            // #445). Failures swallow to undefined inside
+            // `safelyRegisterBlueprint`, incl. fail-closed
+            // rejections. The cache handle is captured as a const so
+            // the async closure keeps the narrowing.
+            ...(generationCache
+              ? {
+                  resolveBlueprintId: async (produced: {
+                    readonly componentCode: string;
+                    readonly source: LlmBlueprintSource;
+                    readonly sourceCode?: string;
+                  }) =>
+                    safelyRegisterBlueprint(
+                      {
+                        embedding: generationCache.embedding,
+                        vectorStore: generationCache.vectorStore,
+                        index: generationCache.index,
+                        // Forwarded so a fresh mint is written
+                        // through to durable storage. Undefined on
+                        // deployments that bound none, which
+                        // `registerBlueprint` treats as a no-op.
+                        ...(generationCache.durability !== undefined
+                          ? { durability: generationCache.durability }
+                          : {}),
+                      },
+                      ctx.appId,
+                      {
+                        kind: 'template',
+                        contract: story.contract,
+                        intent,
+                        componentCode: produced.componentCode,
+                        // Engine provenance from the generator's own
+                        // metadata stamp — a fresh generation mints
+                        // an `llm`-sourced row.
+                        source: produced.source,
+                        // Authored source — threaded to the registry
+                        // so cache-reuse renders of this blueprint
+                        // can serve it too.
+                        ...(produced.sourceCode !== undefined
+                          ? { sourceCode: produced.sourceCode }
+                          : {}),
+                        // Register under the EFFECTIVE variance
+                        // (proposed on accept, re-aimed on
+                        // `override.variance`) so the row's
+                        // `variantKey` equals `effectiveVariantKey`
+                        // — the same `(contractKey, variantKey)`
+                        // identity the §6 re-resolution and the wire
+                        // output key on.
+                        ...(effectiveVariance !== undefined
+                          ? { variance: effectiveVariance }
+                          : {}),
+                      },
+                    ),
+                }
+              : {}),
+            ...(runtimeProps !== undefined
+              ? { runtimeProps: runtimeProps as JsonObject }
+              : {}),
+            ...(resolvedAppLibraries !== undefined
+              ? { appGadgets: resolvedAppLibraries }
+              : {}),
+            ...(appTheme !== undefined ? { appTheme } : {}),
+            ...(resolvedGadgetTypes !== undefined
+              ? { gadgetTypes: resolvedGadgetTypes }
+              : {}),
+            // MP.5 (2026-05-24): typed `infra.model` flows from
+            // the agent's wire input through the parsed schema
+            // into the generator. Cloud's seam reads
+            // `generateInput.infra?.model` to populate
+            // `RunGenerationArgs.model`; the OSS generator path
+            // ignores it (resolveLlm picks the model).
+            ...(parsed.infra !== undefined ? { infra: parsed.infra } : {}),
+          },
+        );
+        generatedCodeReady = outcome.ok;
+        if (!outcome.ok) {
+          generationFailure = outcome.failure;
+        }
+        if (deps.generation.cache) {
+          cacheMarker = {
+            hit: false,
+            llmCallsAvoided: 0,
+            kind: 'cold',
+            reason: outcome.ok
+              ? 'cold: generated fresh — no saved interface fit this render'
+              : 'cold: generation failed — no interface was produced',
+          };
+          // #460 — registration already ran INSIDE the generation
+          // call, before the success commit (the resolve hook
+          // above); the outcome carries the id the committed
+          // identity record was written with. No backfill exists.
+          if (outcome.ok) {
+            resolvedBlueprintId = outcome.blueprintId;
+          }
+        }
+      }
+    } else if (!placeholderCommitted) {
+      // Placeholder mode: no probe prefix, no generation deps (a
+      // keyless `ggui serve` / `bootOssServer`). Every branch above
+      // commits a row; without this one the render would return a
+      // sessionId that NOTHING backs — and the two tools that gate on
+      // `renderStore.get` (`ggui_consume`, `ggui_get_session`) would
+      // reject the very id `ggui_render` just handed the agent, while
+      // `markCreated` (unconditional, above) has already opened the
+      // pending-events pipe and `ggui_runtime_submit_action` happily
+      // appends to it. That asymmetry — gestures accepted into a pipe
+      // no consumer can ever drain — is issue #365.
+      //
+      // The row also carries the tenancy the consume path authorizes
+      // against (`appId` + `userId` → `isVisibleToCaller`), so there
+      // is no way to honor a keyless consume without it.
+      //
+      // `componentCode: ''` is the honest state: the surface exists
+      // and can receive gestures, but no code was generated. Callers
+      // read `codeReady: false` (unchanged). Committed only when the
+      // provisional-preview branch above did not already commit an
+      // identical placeholder for this sessionId.
+      const nowEpochMs = Date.now();
+      const placeholder: ComponentGguiSession = {
+        id: sessionId,
+        appId: ctx.appId,
+        type: 'component',
+        componentCode: '',
+        prompt: story.intent,
+        contentType: 'application/javascript+react',
+        createdAt: nowEpochMs,
+        lastActivityAt: nowEpochMs,
+        expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
+        eventSequence: 0,
+      };
+      try {
+        const committed = await deps.renderStore.commit({
+          render: placeholder,
+          appId: ctx.appId,
+          userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        });
+        await identityWriterFor(null)(committed);
+      } catch {
+        // Defensive, matching the provisional-preview placeholder
+        // above: a failed commit leaves the pre-#365 behavior
+        // (consume rejects), not a failed render.
+      }
+    }
+
+    // Content-addressable code delivery. When `codeStore`
+    // + `codeBaseUrl` are wired AND the just-committed render has
+    // non-empty `componentCode`, write (hash, code) to the store and
+    // surface `codeUrl` + `codeHash` on the response.
+    //
+    // The lookup re-reads the render because the commit happened
+    // several branches above (cache-hit, fresh generation, MCP Apps
+    // inbound) — re-reading is simpler than threading a reference
+    // through every branch and matches resultMeta's own pattern.
+    //
+    // A store failure does NOT fail the render: the code is already
+    // generated and the row already committed. But nothing catches
+    // the envelope either — the guard above narrowed this to a
+    // compiled-component render, and `codeUrl` is the only STATIC
+    // delivery surface such a render has (the other static mode,
+    // system-card `kind`, is excluded by that same guard). What
+    // survives is deployment-shaped, and no arm of it is visible on
+    // the wire:
+    //
+    //   - `mintWsToken` wired ⇒ the slice still carries the live
+    //     trio, the iframe subscribes, and the WS delivers the
+    //     render body. Cost: the zero-round-trip first paint.
+    //   - A host that resolves `resourceUri` re-mints `codeUrl`
+    //     against this same store at READ time, so a transient
+    //     fault costs it nothing.
+    //   - Neither ⇒ this envelope's slice keeps `runtimeUrl` and no
+    //     mode discriminator, which hosts read as "not a mountable
+    //     ggui render".
+    //
+    // Hence the named event rather than a swallow — see
+    // `code-delivery-events.ts`. A render with no `componentCode`
+    // (the placeholder / system arms) is not a failure and emits
+    // nothing: there was never a body to deliver.
+    let codeUrl: string | undefined;
+    let codeHash: string | undefined;
+    let codeModuleUrl: string | undefined;
+    if (deps.codeStore && deps.codeBaseUrl) {
+      try {
+        const stored = await deps.renderStore.get(sessionId);
+        const rendered = stored?.render;
+        if (
+          rendered
+          && rendered.type !== 'mcpApps'
+          && rendered.type !== 'system'
+          && typeof rendered.componentCode === 'string'
+          && rendered.componentCode.length > 0
+        ) {
+          const hash = deps.codeStore.hashOf(rendered.componentCode);
+          await deps.codeStore.put(hash, rendered.componentCode);
+          codeHash = hash;
+          const base = deps.codeBaseUrl.replace(/\/$/, '');
+          codeUrl = `${base}/code/${hash}.js`;
+          // Strict-CSP module-variant twin (ggui#522 slice 2) —
+          // minted only alongside a raw codeUrl; the minter declines
+          // for code that imports shim-less packages.
+          codeModuleUrl = deps.mintCodeModuleUrl?.({
+            code: rendered.componentCode,
+            hash,
+            base,
+          });
+        }
+      } catch (err) {
+        // Named for the OUTCOME, not the call: a throwing
+        // `renderStore.get` or `hashOf` reaches here too, and the
+        // consequence is identical — this envelope has no codeUrl.
+        // `error` carries which one it was.
+        reportRenderCodeWriteFailed({
+          sessionId,
+          appId: ctx.appId,
+          liveChannelWired: deps.mintWsToken !== undefined,
+          cause: err,
+        });
+      }
+    }
+
+    // Per-render theme overlay. The commit paths above
+    // (cold-gen / cache-hit / probe / placeholder) construct the
+    // render from their own templates; none of them know about the
+    // agent's `parsed.themeId` input. Rather than thread themeId
+    // through every constructor, we read the just-committed render
+    // once + re-commit with `themeId` set when the agent requested a
+    // per-render override. `renderStore.commit` is upsert-by-id so
+    // this collapses to a single row update; the bootstrap-projection
+    // block in `resultMeta` then reads the overlaid value via the
+    // same lookup path that drives `deriveRenderMeta`.
+    //
+    // Failure here downgrades to "no per-render theme override" (the
+    // app default / process default still apply via the layered
+    // resolution chain). Better than failing the whole render for a
+    // cosmetic overlay.
+    if (parsed.themeId !== undefined) {
+      try {
+        const stored = await deps.renderStore.get(sessionId);
+        const top = stored?.render;
+        if (
+          top &&
+          top.type !== 'mcpApps' &&
+          top.type !== 'system'
+        ) {
+          const overlaid: ComponentGguiSession = { ...top, themeId: parsed.themeId };
+          const committed = await deps.renderStore.commit({
+            render: overlaid,
+            appId: ctx.appId,
+            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+          });
+          // Last commit of the render when a theme override is in
+          // play, and every reuse / cold-gen path has settled by
+          // here — so this write carries the final blueprint id
+          // (already resolved before the success commit, #460).
+          await identityWriterFor(resolvedBlueprintId ?? null)(committed);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
+        console.warn(
+          '[ggui_render.theme_overlay_failed]',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    // ── Failure envelope (SPEC §7.1) ──────────────────────────────
+    //
+    // A failed/rejected generation returns the in-result failure
+    // marker instead of the success shape. The transport projects it
+    // to `isError: true` + the model-visible content text + the SAME
+    // schema-conformant structuredContent shape (with `error` set,
+    // `resourceUri` absent — nothing mountable, `nextStep` absent —
+    // the content text carries the recovery), and NO `_meta` (no
+    // mount affordance for a failed render).
+    //
+    // The error GguiSession was ALREADY committed by
+    // `runGenerationIntoGguiSession` (WS notify + render-resource
+    // unchanged) — `sessionId` on this envelope remains a live
+    // handle into the session channel's archaeology
+    // (`GguiSession.error` carries the failure message).
+    if (generationFailure) {
+      const failureResult: RenderFailureOutput = {
+        outcome: 'failed',
+        sessionId,
+        action,
+        shortCode,
+        codeReady: false,
+        handshakeId: handshakeRecord.handshakeId,
+        contractHash: effectiveContractKey,
+        // Present-on-materialisation (§9.1): no component
+        // materialised, so the id is the empty sentinel.
+        blueprintId: '',
+        variantKey: effectiveVariantKey,
+        cache: cacheMarker ?? {
+          hit: false,
+          llmCallsAvoided: 0,
+          kind: 'cold',
+          reason:
+            'cold: generation failed — no interface was produced',
+        },
+        error: generationFailure,
+      };
+      // Same side-effect seam as the success return: cloud's hook
+      // observes EVERY settled render (it already fires with
+      // `codeReady: false` today) — suppressing it here would
+      // silently drop cloud-side metering/cache side-effects.
+      if (deps.postSuccessHook) {
+        await deps.postSuccessHook({
+          ctx,
+          sessionId,
+          contract: effectiveContract,
+          contractHash: effectiveContractKey,
+          intent: story.intent,
+          action,
+          codeReady: false,
+          cacheHit: false,
+          // Mirrors the failure envelope above: no component
+          // materialised ⇒ empty-sentinel id; the variant axis is
+          // still the one the attempt keyed on.
+          blueprintId: '',
+          variantKey: effectiveVariantKey,
+        });
+      }
+      return handlerFailure(
+        failureResult,
+        buildRenderFailureText(generationFailure),
+      );
+    }
+
+    // Conditional `nextStep` — emit a consume-recovery hint ONLY when
+    // the resolved contract has a non-empty `actionSpec`. Pure-display
+    // renders (props only) get no `nextStep` because there's nothing
+    // for the agent to consume.
+    const hasActions =
+      effectiveContract.actionSpec !== undefined &&
+      Object.keys(effectiveContract.actionSpec).length > 0;
+    const nextStep = hasActions
+      ? {
+          tool: 'ggui_consume' as const,
+          // Imperative + honest: `timeout` MUST ride the hint —
+          // consume's own default is 0 (single non-blocking drain),
+          // so an agent copying a timeout-less example gets an
+          // instant empty result and reasonably ends its turn (the
+          // first live claude.ai test died exactly this way). 25 is
+          // the server-enforced per-call cap (SPEC §7.3).
+          description:
+            "The UI has interactive actions. After this turn's other tool calls, you may long-poll once (waits up to 25s) to catch an immediate gesture; if `events` comes back empty, end your turn — later gestures arrive as new user messages carrying their own consume directive.",
+          example: `ggui_consume({ sessionId: "${sessionId}", timeout: 25 })`,
+          args: { sessionId, timeout: 25 },
+        }
+      : undefined;
+
+    // Render response architecture (2026-05-13):
+    //   - `outputSchema` defines the LLM-visible subset (3 fields).
+    //   - This `result` carries the FULL set — extras are stripped
+    //     by zod's `.parse()` (z.object default behavior) before
+    //     the JSON-RPC `structuredContent` is built.
+    //   - Internal seams (resultMeta, postSuccessHook, tests) read
+    //     from this rich in-memory object.
+    // Per-render resource URI — same formula `resultMeta` uses to
+    // build `_meta.ui.resourceUri`. Surfacing it on the LLM-visible
+    // structuredContent too lets agent SDKs that strip `_meta` from
+    // tool_results (OpenAI Agents SDK, Google ADK) still hand a
+    // mount handle to their frontend without the side-channel.
+    const blueprintSegmentForOutput = effectiveContractKey
+      ? `/${effectiveContractKey}`
+      : '';
+    const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${blueprintSegmentForOutput}`;
+    const result: RenderOutput = {
+      outcome: 'rendered',
+      sessionId,
+      resourceUri: resourceUriForOutput,
+      action,
+      shortCode,
+      codeReady: generatedCodeReady,
+      handshakeId: handshakeRecord.handshakeId,
+      contractHash: effectiveContractKey,
+      // Reuse → stored UUID (§6 point-read); cold-gen → minted UUID
+      // (`safelyRegisterBlueprint`). Empty only on the
+      // genuinely-no-component branches (probe-card / generation-off),
+      // which never materialise a component — spec §9.1
+      // present-on-materialisation.
+      blueprintId: resolvedBlueprintId ?? '',
+      // Variant axis of the reuse key — the same `effectiveVariantKey`
+      // the §6 re-resolution + cold-gen registration keyed on, so a
+      // different variance is observably a distinct variant on the wire.
+      variantKey: effectiveVariantKey,
+      cache: cacheMarker ?? {
+        hit: false,
+        llmCallsAvoided: 0,
+        kind: 'cold',
+        reason: 'cold: no reuse occurred for this render',
+      },
+      ...(codeUrl ? { codeUrl, codeHash } : {}),
+      ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
+      ...(nextStep ? { nextStep } : {}),
+    };
+
+    // Success terminal (`render.committed`). Every success path —
+    // cold-gen, cache reuse, probe, generation-off — converges on
+    // this assembly; the generation-failure arm returned above and
+    // deliberately does NOT count as committed.
+    emitRenderCommitted(deps.telemetrySink, {
+      appId: ctx.appId,
+      handshakeId: handshakeRecord.handshakeId,
+      codeReady: generatedCodeReady,
+      cacheHit: cacheMarker?.hit ?? false,
+    });
+
+    // The response is assembled: the render is delivered. From here a
+    // throw (the success hook's own) is not a render failure, so the
+    // failure seam stays silent — the reservation the gate took was
+    // legitimately consumed.
+    attempt.settled = true;
+
+    // Post-success hook for fire-and-forget side-effects.
+    if (deps.postSuccessHook) {
+      await deps.postSuccessHook({
+        ctx,
+        sessionId,
+        contract: effectiveContract,
+        contractHash: effectiveContractKey,
+        intent: story.intent,
+        action,
+        codeReady: generatedCodeReady,
+        // Always defined + accurate: `result.cache` is assigned from
+        // `cacheMarker ?? { hit: false, … }`, set on BOTH the
+        // blueprint-reuse and cold-gen branches above.
+        cacheHit: result.cache.hit,
+        // Same values the wire result carries — see the `result`
+        // assembly above for the per-branch semantics.
+        blueprintId: result.blueprintId,
+        variantKey: result.variantKey,
+      });
+    }
+
+    return result;
+  }
+
   return {
     name: 'ggui_render',
     title: 'Render',
@@ -1219,1408 +2723,36 @@ export function createGguiRenderHandler(
         }
       }
 
-      const parsed = z.object(inputSchema).parse(input);
-      // themeId DOOR (ggui#598 slice 3) — before any store or
-      // generation work: a typo'd id refuses here, where it was typed.
-      if (parsed.themeId !== undefined) {
-        await assertKnownThemeId(parsed.themeId, ctx.appId, deps);
-      }
-
-      if (!deps.handshakeStore) {
-        throw new Error(
-          'ggui_render: requires the handler to be built with a `handshakeStore:` KeyValueStore dep — the same instance `createGguiHandshakeHandler` wrote to.',
-        );
-      }
-      // Peek-first, consume-on-success. Recoverable validation errors
-      // below (routing-target / schema-compat / props-validation) leave
-      // the handshake alive so the agent can fix the input and retry on
-      // the same handshakeId without re-handshaking. The atomic consume
-      // happens once all input validation has passed and we're committed
-      // to running the generation/cache flow.
-      const handshakeRecord: HandshakeRecord | null =
-        await peekHandshakeRecord(
-          deps.handshakeStore,
-          ctx.appId,
-          parsed.handshakeId,
-        );
-      if (!handshakeRecord) {
-        throw new HandshakeNotFoundError(parsed.handshakeId);
-      }
-
-      const storedInput = handshakeRecord.input;
-      const override = parsed.override;
-
-      // Decision is expressed by PRESENCE of `override`, not a
-      // discriminated union. PATCH semantics over the agreed proposal:
-      //
-      //   - `override === undefined` (ACCEPT) — use the handshake's
-      //     stored effectiveContract + the negotiator's projected
-      //     variance verbatim. Reuses the proposed blueprint identity.
-      //   - `override.contract` — re-draft the contract (STRICT —
-      //     `validateContract` runs below as the commit gate; the server
-      //     does NOT repair it). Cold-gens against the new contract.
-      //   - `override.variance` — re-aim the variant axis while keeping
-      //     the agreed contract. Re-resolves the EFFECTIVE
-      //     `(contractKey, variantKey)` — reuse if a blueprint exists
-      //     there, else cold-gen registered under the new variantKey.
-      //
-      // The effective contract + variance feed the rest of the handler.
-      // The override only changes WHICH contract / variance get
-      // installed and WHICH blueprint identity we resolve / surface.
-      //
-      // `acceptanceClassification` is telemetry-only — it distinguishes
-      // accept-vs-override on the cache trace; the STRICT override-
-      // contract gate keys on it too (an unchanged agreed contract never
-      // fails that gate).
-      const effectiveContract: DataContract =
-        override?.contract ?? handshakeRecord.effectiveContract;
-      // Accept path — the negotiator's projected variance on the
-      // suggestion is canonical (carries agent draft for origin=agent,
-      // cached blueprint's tags for origin=cache, synth-amended tags for
-      // origin=synth). Override re-aims it.
-      const effectiveVariance: BlueprintVariance | undefined =
-        override?.variance ?? handshakeRecord.suggestion.blueprintMeta.variance;
-      const acceptanceClassification: 'accept' | 'override' =
-        override === undefined ? 'accept' : 'override';
-
-      // Measurement denominator (`render.attempted`) — emitted the
-      // moment the handshake record resolves, BEFORE any gate, so
-      // every attempt that reached contract-relevant processing
-      // counts. Recoverable violations below peek-don't-consume the
-      // handshake, so retries share this handshakeId and first-vs-
-      // retry ordering is derivable from event order.
-      emitRenderAttempted(deps.telemetrySink, {
-        appId: ctx.appId,
-        handshakeId: parsed.handshakeId,
-        origin: handshakeRecord.suggestion.origin,
-        overridePresent: override !== undefined,
-      });
-
-      // Telemetry: classification observable on every render so the
-      // cache trace shows accept-vs-override patterns.
-      emitCacheTraceEvent({
-        id: newCacheTraceId(),
-        at: Date.now(),
-        durationMs: 0,
-        scope: ctx.appId,
-        intent: truncateCacheTraceIntent(storedInput.intent),
-        expectedKey: handshakeRecord.suggestion.blueprintMeta.contractHash,
-        threshold: 0,
-        decision: 'render-classify',
-        candidates: [],
-        agentClassification:
-          acceptanceClassification === 'accept' ? 'confirm' : 'override',
-        reason:
-          acceptanceClassification === 'accept'
-            ? `render-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}${
-                handshakeRecord.suggestion.blueprintMeta.blueprintId
-                  ? `, blueprintId=${handshakeRecord.suggestion.blueprintMeta.blueprintId}`
-                  : ''
-              })`
-            : `render-classify: agent overrode handshake suggestion with a fresh draft`,
-      });
-
-      // Effective story for the rest of the handler.
-      const story: {
-        readonly intent: string;
-        readonly contract: DataContract;
-        readonly variance?: BlueprintVariance;
-      } = {
-        intent: storedInput.intent,
-        contract: effectiveContract,
-        ...(effectiveVariance !== undefined
-          ? { variance: effectiveVariance }
-          : {}),
-      };
-
-      // Effective variant axis of the reuse key — computed once from the
-      // EFFECTIVE variance (proposed on accept, re-aimed on
-      // `override.variance`). `variantKey()` self-normalizes absent /
-      // empty variance to the stable default-variant sentinel. Paired
-      // with `blueprintKey(effectiveContract)`, this is the
-      // `(contractKey, variantKey)` reuse key the registry indexes on —
-      // the §6 re-resolution and the cold-gen registration below both
-      // key on it, so reuse / registration stay on the same identity.
-      const effectiveVariantKey = variantKey(effectiveVariance);
-
-      // Contract axis of that same reuse key. Pure over the effective
-      // contract, so it is computed ONCE here and read everywhere:
-      // the §6 exact re-resolution, the wire `contractHash` field, the
-      // resource-URI segment, and the durable identity record every
-      // commit site writes. Hoisted to handler scope because the
-      // identity write-through happens at commit time — well before
-      // the wire output is assembled.
-      const effectiveContractKey = blueprintKey(effectiveContract);
-
-      // Bind the identity slice a commit will record. The blueprint id
-      // is per-path (a reuse knows it up front; a cold gen resolves it
-      // via registration immediately BEFORE its success commit — #460),
-      // which is why it is a parameter and the contract/variant axes
-      // are captured.
-      const identityWriterFor = (
-        blueprintId: string | null,
-      ): ((committed: StoredGguiSession) => Promise<void>) =>
-        (committed) =>
-          writeRenderIdentity(deps.renderIdentityStore, committed, {
-            blueprintId,
-            contractKey: effectiveContractKey,
-            variantKey: effectiveVariantKey,
-          });
-
-      // Resolved gadget catalog, lifted to handler scope. When
-      // `appMetadataStore` is bound, the registry-membership block
-      // below captures the catalog (App record's `gadgets`, or
-      // `STDLIB_GADGETS` on fallback). On cold-gen, this is threaded
-      // into the generator's `UiGenerateInput.appGadgets` so the
-      // code-gen system prompt's `clientCapabilities — registered
-      // catalog` section renders the SAME catalog the synth + decision
-      // LLMs see. Stays `undefined` when `appMetadataStore` is unset —
-      // the system prompt falls through to its STDLIB default.
-      let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
-
-      // Resolved per-app theme overlay, lifted to handler scope
-      // alongside `resolvedAppLibraries`. When `appMetadataStore` is
-      // bound, the registry block below snapshots `App.theme` here so
-      // both render-commit builders (cold-gen + cached) sidecar it onto
-      // the persisted `ComponentGguiSession.theme`. Stays `undefined`
-      // when `appMetadataStore` is unset or the App declares no theme.
-      let appTheme: AppTheme | undefined;
-
-      // Admission check. Fires BEFORE state changes — a rate-limited
-      // caller should get 429 without the server doing any real work.
-      if (deps.rateLimiter) {
-        const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? ctx.userId ?? "anon"}`;
-        const decision = await deps.rateLimiter.check({
-          key: limiterKey,
-          cost: 1,
-        });
-        if (!decision.allowed) {
-          throw new RateLimitedError(limiterKey, decision);
-        }
-      }
-
-      // Single deterministic contract gate — the SAME `validateContract`
-      // the handshake backstop runs (retired fields, inner-schema
-      // validity, cross-references, name invariants, schema-compat). On
-      // the ACCEPT path (and on a `override.variance`-only re-aim, which
-      // keeps the agreed contract) this re-checks an already-validated
-      // contract (defense-in-depth; never fires). On an `override.contract`
-      // re-draft it is the STRICT commit gate: a forced contract MUST
-      // conform — the server does not repair it ("use mine verbatim"). A
-      // failure is rethrown with a pointer back to ggui_handshake (which
-      // DOES repair), so the agent recovers instead of looping on
-      // override.
+      // Everything past the gate is ONE attempt: a failure anywhere in it —
+      // thrown, or the returned outcome:'failed' envelope — reaches
+      // `postFailureHook` exactly once, so a deployment that reserved
+      // something at the gate can release it. A refusal never gets here;
+      // a settled success never fires it.
+      const attempt: RenderAttempt = { settled: false };
+      let result: Awaited<ReturnType<typeof renderAfterGate>>;
       try {
-        validateContract(story.contract);
-      } catch (err) {
-        emitRenderContractViolation(deps.telemetrySink, {
-          appId: ctx.appId,
-          tool: 'ggui_render',
-          site: 'contract_gate',
-          violationClass:
-            acceptanceClassification === 'override'
-              ? 'override_contract_invalid'
-              : 'contract_schema_invalid',
-          handshakeId: parsed.handshakeId,
-          origin: handshakeRecord.suggestion.origin,
-          overridePresent: override !== undefined,
-        });
-        if (acceptanceClassification === 'override') {
-          const detail = err instanceof Error ? err.message : String(err);
-          throw new Error(
-            `override_contract_invalid: your override.contract failed validation — ${detail} override.contract COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and render WITHOUT override (accept the proposal) — do NOT retry override with the same contract.`,
-          );
-        }
-        throw err;
-      }
-
-      // Duplicate-gadget-hook gate (gadget-specific; not part of the
-      // contract gate). Two bindings with the same (package, hook)
-      // double-mount the wrapper; hard reject so the violation is
-      // observable rather than silently tolerated.
-      assertNoDuplicateGadgetHooks(story.contract);
-
-      // Gadget registry gate + enrichment. First: every
-      // `(package, export name)` the contract references on
-      // `clientCapabilities.gadgets` MUST resolve in `App.gadgets`.
-      // Second: the referenced package descriptors are snapshotted
-      // onto `ComponentGguiSession.gadgetDescriptors` so the persisted
-      // render carries full teaching text + bundleUrl + styleUrl +
-      // connect[]. No-op when `appMetadataStore` is unset.
-      if (deps.appMetadataStore) {
-        const appRecord = await deps.appMetadataStore.get(ctx.appId);
-        const appGadgets = resolveAppGadgets(appRecord?.gadgets);
-        assertGadgetsRegistered(story.contract, appGadgets);
-        assertPublicEnvSatisfied(
-          story.contract,
-          appGadgets,
-          appRecord?.publicEnv,
-        );
-        resolvedAppLibraries = filterDescriptorsToContract(
-          story.contract,
-          appGadgets,
-        );
-        appTheme = appRecord?.theme;
-      }
-
-      // (Name-invariant + schema-compat invariants are covered by the
-      // single `validateContract` gate above — no separate asserts here.)
-
-      // Schema-compat validation against the AUTHORED contract via the
-      // server's registered tool registry. Defensive backstops at gen
-      // and cache-hit commit phases (see `runGenerationIntoGguiSession` +
-      // `commitCachedGguiSession`) cover contracts that differ from
-      // `story.contract` (synth-emit, matched-blueprint reuse).
-      if (deps.checkRenderContracts && story.contract) {
-        try {
-          deps.checkRenderContracts({
-            ...(story.contract.actionSpec
-              ? { actionSpec: story.contract.actionSpec }
-              : {}),
-            ...(story.contract.streamSpec
-              ? { streamSpec: story.contract.streamSpec }
-              : {}),
-            ...(story.contract.agentCapabilities
-              ? { agentCapabilities: story.contract.agentCapabilities }
-              : {}),
-          });
-        } catch (err) {
-          emitRenderContractViolation(deps.telemetrySink, {
-            appId: ctx.appId,
-            tool: 'ggui_render',
-            site: 'schema_compat',
-            violationClass: 'schema_mismatch',
-            handshakeId: parsed.handshakeId,
-            origin: handshakeRecord.suggestion.origin,
-            overridePresent: override !== undefined,
-          });
-          throw err;
-        }
-      }
-
-      // Props validation against the agreed contract. Schema-precise
-      // render (frozen shape, guuey#271): absent an `override.contract`
-      // patch, the validator is the schema PERSISTED on the handshake
-      // record — the byte-identical artifact the handshake returned on
-      // the wire — so the returned and enforced schemas cannot diverge
-      // under rolling-deploy version skew (the AUTHORITY obligation is
-      // structural). An `override.contract` re-draft (outside the
-      // AUTHORITY proviso) and the TTL-bounded mixed-version window
-      // (records written by the previous build carry no persisted
-      // schema) recompute via the same builder the handshake uses —
-      // one synthesis either way. The wire `props` is required (value
-      // may be `{}`), but the accept-path drop below resets it to
-      // `undefined` (= "no runtime props"), so the local stays
-      // `Record<string, unknown> | undefined`.
-      let runtimeProps: Record<string, unknown> | undefined = parsed.props;
-      if (effectiveContract.propsSpec) {
-        const propsToValidate: Record<string, unknown> = runtimeProps ?? {};
-        const persistedSchema =
-          override?.contract === undefined
-            ? handshakeRecord.propsSchema
-            : undefined;
-        const enforcedSchema =
-          persistedSchema ??
-          buildEnforcedPropsSchema(effectiveContract.propsSpec);
-        const enforcedSchemaHash =
-          (override?.contract === undefined
-            ? handshakeRecord.propsSchemaHash
-            : undefined) ?? computePropsSchemaHash(enforcedSchema);
-        const propsValidation = validatePropsDataWithSchema(
-          propsToValidate,
-          enforcedSchema,
-        );
-        if (!propsValidation.valid) {
-          emitRenderContractViolation(deps.telemetrySink, {
-            appId: ctx.appId,
-            tool: 'ggui_render',
-            site: 'props_validation',
-            violationClass: 'props',
-            handshakeId: parsed.handshakeId,
-            origin: handshakeRecord.suggestion.origin,
-            overridePresent: override !== undefined,
-            violations: propsValidation.violations,
-            propsSchemaHash: enforcedSchemaHash,
-          });
-          throw new ContractViolationError({
-            tool: 'ggui_render',
-            violations: propsValidation.violations,
-            hint: 'Fix the props to satisfy the agreed propsSpec, or send `override: {contract}` to re-draft the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
-            propsSchemaHash: enforcedSchemaHash,
-          });
-        }
-      } else if (
-        runtimeProps !== undefined &&
-        Object.keys(runtimeProps).length > 0
-      ) {
-        if (acceptanceClassification === 'accept') {
-          // Forgiving ACCEPT: the negotiator may have RESHAPED the
-          // contract (e.g. synth moves a mutable collection like `todos`
-          // from propsSpec → contextSpec), so the agent's accept-path
-          // props — authored against its ORIGINAL draft — no longer fit.
-          // The agreed contract declares no propsSpec, so the props are
-          // unusable; DROP them (the UI starts from contextSpec defaults)
-          // rather than hard-failing. The agent populates live state via
-          // ggui_update after render. Override stays STRICT (below).
-          const droppedKeys = Object.keys(runtimeProps).join(', ');
-          // eslint-disable-next-line no-console -- operator-visible signal
-          console.warn(
-            `[ggui_render] accept-path props dropped — the agreed contract declares no propsSpec ` +
-              `(synth likely reshaped propsSpec → contextSpec). Dropped keys: ${droppedKeys}. ` +
-              `Populate live state with ggui_update after render.`,
-          );
-          runtimeProps = undefined;
-        } else {
-          // The enforced schema for a propsSpec-less contract IS the
-          // empty closed wrapper — its hash identifies what rejected
-          // these props (frozen no-propsSpec rule).
-          const emptyWrapperHash = computePropsSchemaHash(
-            buildEnforcedPropsSchema({ properties: {} }),
-          );
-          emitRenderContractViolation(deps.telemetrySink, {
-            appId: ctx.appId,
-            tool: 'ggui_render',
-            site: 'override_no_propsspec',
-            violationClass: 'props',
-            handshakeId: parsed.handshakeId,
-            origin: handshakeRecord.suggestion.origin,
-            overridePresent: true,
-            propsSchemaHash: emptyWrapperHash,
-          });
-          throw new ContractViolationError({
-            tool: 'ggui_render',
-            propsSchemaHash: emptyWrapperHash,
-            violations: [
-              {
-                field: 'props',
-                message:
-                  'props supplied but your override.contract declares no propsSpec. Pass `props: {}`, or add a propsSpec covering these fields.',
-                expected: 'props: {} (contract has no propsSpec)',
-                received: `props with keys: ${Object.keys(runtimeProps).join(', ')}`,
-              },
-            ],
-            hint: 'Your override.contract has no propsSpec, so it takes no props. Pass `props: {}`, add a propsSpec — or omit `override` and accept the proposal (the accept path tolerates mismatched props instead of failing). The handshake record is preserved; retry on the SAME handshakeId.',
-          });
-        }
-      }
-
-      // Atomically consume the handshake record now that input
-      // validation has succeeded.
-      const consumed = await consumeHandshakeRecord(
-        deps.handshakeStore,
-        ctx.appId,
-        parsed.handshakeId,
-      );
-      if (!consumed) {
-        throw new HandshakeNotFoundError(parsed.handshakeId);
-      }
-
-      // Resolve or mint the render id. The handshake negotiator MAY
-      // suggest reusing an existing render via `target.sessionId` (the
-      // cache / update path); absent ⇒ mint a fresh id. Reuse only
-      // counts when the existing render is visible to the caller
-      // (same appId, and same userId when the stored row carries one) —
-      // cross-tenant / cross-user id collisions fall back to mint.
-      const requestedId = handshakeRecord.target.sessionId;
-      let sessionId: string;
-      let action: RenderOutput['action'];
-
-      if (requestedId) {
-        const existing = await deps.renderStore.get(requestedId);
-        if (isVisibleToCaller(existing, ctx)) {
-          sessionId = existing.id;
-          action = 'reuse';
-        } else {
-          sessionId = requestedId;
-          action = 'create';
-        }
-      } else {
-        sessionId = deps.sessionIdFactory
-          ? deps.sessionIdFactory()
-          : randomUUID();
-        action = 'create';
-      }
-
-      // Devtools payload trace. No-op when no sink is registered.
-      // Post-Phase-B the sink shape addresses by `sessionId` directly
-      // (every render IS the addressable row).
-      emitPayloadTraceEvent(deps.payloadTraceSink, {
-        direction: 'outbound-update',
-        sessionId,
-        appId: ctx.appId,
-        tool: 'ggui_render',
-        payload: { handshakeId: parsed.handshakeId, story },
-      });
-
-      // Emit render_started so progress UIs can show a
-      // `constructing` state immediately, without waiting for cold-
-      // gen to settle. Fire-and-forget.
-      deps.lifecycleEmitter?.emit(sessionId, {
-        kind: 'render_started',
-        sessionId,
-        intent: story.intent,
-      });
-
-      // Open the sessionId-keyed pending-events pipe (Model C). This
-      // MUST happen before any iframe-side dispatch could fire — the
-      // user can click before the agent's first `ggui_consume`, and
-      // `ggui_runtime_submit_action` needs an open pipe to append to.
-      // Idempotent: re-mark on the same sessionId is a no-op.
-      if (deps.pendingEventConsumer) {
-        try {
-          deps.pendingEventConsumer.markCreated?.(sessionId);
-        } catch {
-          // Pipe open failures are non-fatal — `ui/message` fallback
-          // on the host still routes gestures on the next chat turn.
-        }
-      }
-
-      const shortCode = generateShortCode();
-
-      // Record shortCode → render binding for same-origin console
-      // viewer lookups. Post Phase-B identity collapse: `sessionId` IS
-      // the addressable unit, so the binding row carries a single
-      // `sessionId` field (the prior `sessionId` + `stackItemId` slot
-      // pair always held the same value at the bind site).
-      if (deps.shortCodeIndex) {
-        try {
-          await deps.shortCodeIndex.put(shortCode, {
-            sessionId,
-            appId: ctx.appId,
-          });
-        } catch {
-          // Silent: the index is a convenience layer. If it rejects
-          // (bounded-store eviction, backend hiccup), the next
-          // console viewer request 404s on that shortCode, which
-          // is the correct degraded behavior.
-        }
-      }
-
-      // Set by the provisional-preview branch below when it commits its
-      // placeholder row, so the placeholder-mode branch after the
-      // generation gate doesn't commit an identical row twice (#365).
-      let placeholderCommitted = false;
-
-      // Provisional preview kickoff. Runs ONLY when the handler was
-      // built with `provisionalPreview` deps AND the gate passes.
-      //
-      // Preview runs CONCURRENTLY with generation below: it is
-      // kicked off here (fire-and-forget), then the generation
-      // `await` blocks the render RPC. Viewer sees preview frames
-      // stream over `_ggui:preview` while the generator call is in
-      // flight; on success/failure we tear down preview via
-      // `finalizeProvisionalPreview` and the authoritative render is
-      // the final state.
-      const previewGate = evaluateProvisionalPreviewGate(
-        deps.provisionalPreview,
-        { story },
-        { appId: ctx.appId, sessionId },
-      );
-      if (previewGate.kind === 'skip') {
-        deps.provisionalPreview?.onOutcome?.({
-          status: 'skipped',
-          reason: previewGate.reason,
-          sessionId,
-          appId: ctx.appId,
-        });
-      } else if (deps.provisionalPreview) {
-        const handle = kickoffProvisionalPreview(deps.provisionalPreview, {
-          sessionId,
-          appId: ctx.appId,
-          story,
-        });
-        // Register into the optional handoff registry so a later
-        // handler (generation success below, apply-render-patch
-        // setting componentCode, render teardown, shutdown) can
-        // cancel by `sessionId`. Absent registry → the preamble still
-        // runs; it just has no external cancellation site.
-        deps.provisionalPreview.registry?.register(sessionId, handle);
-
-        // Placeholder render — drives the provisional preview path.
-        // The iframe-runtime mounts `mountProvisional` per render
-        // (empty `componentCode` routes to the provisional branch).
-        // Without an item committed, `_ggui:preview` frames the
-        // emitter just kicked off would paint into the void.
-        //
-        // Lifecycle: this placeholder lives until generation settles.
-        // `renderStore.commit` upserts by `render.id`, so when the
-        // cold-generation success / cache-hit / generation-failed
-        // paths below call `commit` with the SAME `sessionId`, the
-        // placeholder is replaced in-place — no double-commit, no
-        // stale entry. When generation is NOT wired (no provider
-        // key), the placeholder stays for the render's lifetime;
-        // that's the honest "we have no code yet but the preview
-        // surface is mounted" state.
-        //
-        // We bypass the schema-compat hook here because the
-        // placeholder declares no contract; the hook fires when
-        // generation later commits the real render. Live-subscriber
-        // notify DOES fire so a viewer that connects mid-render sees
-        // the placeholder show up — without the notify the renderer
-        // wouldn't know to mount a surface for it.
-        const nowEpochMs = Date.now();
-        const placeholder: ComponentGguiSession = {
-          id: sessionId,
-          appId: ctx.appId,
-          type: 'component',
-          componentCode: '',
-          prompt: story.intent,
-          contentType: 'application/javascript+react',
-          createdAt: nowEpochMs,
-          lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
-          eventSequence: 0,
-        };
-        try {
-          const committed = await deps.renderStore.commit({
-            render: placeholder,
-            appId: ctx.appId,
-            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
-          });
-          placeholderCommitted = true;
-          // The placeholder is a real row a locator can address, so it
-          // gets a record too — the later in-place replacement
-          // overwrites it with the settled identity.
-          await identityWriterFor(null)(committed);
-        } catch {
-          // Defensive — a placeholder-commit failure is not fatal to
-          // the render. The sessionId + shortCode are already minted;
-          // the worst case is the live renderer paints nothing for
-          // this render, which is the same "preview never wired"
-          // degraded state callers without `provisionalPreview`
-          // already see.
-        }
-        safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, placeholder);
-      }
-
-      // Generation + cache gate. Absent generation deps = placeholder
-      // mode: story renders return `codeReady: false`. The placeholder
-      // render committed just above (when provisionalPreview was wired)
-      // keeps the live-renderer's provisional surface mounted;
-      // generation-off doesn't paint anything onto it but also doesn't
-      // leave the renderer with no anchor. When generation IS wired:
-      //
-      //   - If `generation.cache` is also wired, attempt a retrieval
-      //     first. A hit synthesizes a GguiSession from the cached
-      //     componentCode (skip LLM entirely) and surfaces
-      //     `cache.hit:true` on the render output.
-      //   - On a miss (or cache absent), run the generator as before.
-      //     On success, when cache is wired, record the produced
-      //     componentCode into the scope so the next same-intent
-      //     render hits.
-      let generatedCodeReady = false;
-      // Canonical failure carried off the cold-gen outcome. Set iff
-      // `runGenerationIntoGguiSession` returned `ok: false` — the ONLY
-      // path that produces the isError failure envelope. Placeholder
-      // mode (no generation deps), probe cards, and cache-hit commit
-      // rejections keep today's success-shaped envelope.
-      let generationFailure: RenderError | undefined;
-      // Reuse outcome for this render — surfaced on the wire `cache` field.
-      let cacheMarker: RenderCacheMarker | undefined;
-      // Opaque component id surfaced on the wire `blueprintId` field. A
-      // reuse decision resolves it to the stored UUID via the §6
-      // point-read; a cold gen sets it to the freshly-minted UUID
-      // `safelyRegisterBlueprint` returns. Stays `undefined` on the
-      // genuinely-no-component branches (probe-card / generation-off),
-      // which surface `blueprintId: ''` per spec §9.1 present-on-
-      // materialisation.
-      let resolvedBlueprintId: string | undefined;
-
-      // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
-      // the MCP Apps protocol probe diagnostic system card.
-      const PROBE_INTENT_PREFIX = '[ggui:probe]';
-      if (story.intent.startsWith(PROBE_INTENT_PREFIX)) {
-        const nowEpochMs = Date.now();
-        const probeRender: SystemGguiSession = {
-          id: sessionId,
-          appId: ctx.appId,
-          type: 'system',
-          kind: 'mcp-apps-probe',
-          createdAt: nowEpochMs,
-          lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
-          eventSequence: 0,
-          props: { intent: story.intent },
-        };
-        try {
-          const committed = await deps.renderStore.commit({
-            render: probeRender,
-            appId: ctx.appId,
-            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
-          });
-          safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
-          generatedCodeReady = true;
-          await identityWriterFor(null)(committed);
-        } catch {
-          // Commit failure leaves codeReady=false; downstream synth
-          // emits an empty bootstrap which the runtime renders as the
-          // generic system-card fallback.
-        }
-        await safelyFinalizePreview(deps.provisionalPreview, sessionId, 'probe');
-      } else if (deps.generation) {
-        const intent = story.intent;
-        const forceCreate = storedInput.forceCreate === true;
-
-        // §6 deterministic reuse resolution. The render flow NO LONGER runs its
-        // own semantic match (`matchBlueprint` is gone from this
-        // handler). Three paths, all keyed on the EFFECTIVE
-        // `(contractKey, variantKey)` identity:
-        //
-        //   - ACCEPT (`override === undefined`) + `origin:'cache'` — the
-        //     handshake already decided and stored the matched
-        //     blueprint's identity (`handshakeRecord.matchedBlueprint`).
-        //     Effective == proposed, so we O(1) point-read the stored
-        //     row by UUID and serve its componentCode — the same, single
-        //     match the handshake chose.
-        //   - `override.variance` (contract unchanged) — the variant
-        //     axis changed, so the proposed `matchedBlueprint` no longer
-        //     names the right component. RE-RESOLVE at the effective
-        //     `(blueprintKey(effectiveContract), effectiveVariantKey)`
-        //     via the index — reuse if a row exists there, else cold-gen
-        //     registered under the new variantKey.
-        //   - `override.contract` — a fresh contract; skip the
-        //     point-read entirely and cold-gen against it (the STRICT
-        //     `validateContract` commit gate already ran above).
-        //
-        // `blueprintId` equality across two renders therefore genuinely
-        // means the same component was reused (no second, divergent
-        // matcher to disagree).
-        //
-        // Self-heal: a dangling `matchedBlueprint.id` or a stale index
-        // binding (row evicted / gone between handshake and render)
-        // resolves to `null` → `blueprintHit` stays null → we fall
-        // through to cold-gen. Never throws. `forceCreate` (agent opted
-        // out after a declined handshake) skips reuse entirely.
-        let blueprintHit: {
-          readonly id: string;
-          readonly contractKey: string;
-          readonly componentCode: string;
-          readonly cosine: number;
-          readonly contract: DataContract;
-          /**
-           * Content hash of the matched blueprint's authored source,
-           * when the registry row carries one. The body is resolved
-           * from `CodeStore` just before the commit below — never
-           * inlined here (the point-read only fetches the row, not
-           * the body).
-           */
-          readonly sourceCodeHash?: string;
-        } | null = null;
-
-        // Cross-deployment reuse fan-out. The handshake matcher fans out
-        // across pools (decide-handshake.ts), so it can propose reusing a
-        // blueprint that lives in a seed pool — a SEPARATE registry under
-        // `pool.scope` (e.g. `'shared'`), not the per-app store. Both §6
-        // point-reads below must mirror that fan-out: try the per-app
-        // store FIRST (a deployment's own blueprint wins), then each seed
-        // pool under `pool.scope ?? ctx.appId`, stopping at the first hit.
-        // A miss everywhere leaves `blueprintHit` null → existing cold-gen
-        // fallthrough (self-heal, unchanged). With `seedPools` undefined
-        // both helpers collapse to exactly the old single per-app read.
-        const seedPools = deps.generation.seedPools ?? [];
-        // Both helpers below are wrapped so a lookup FAULT (a backend
-        // reject — throttle, network blip, transient IAM error) degrades
-        // exactly like a genuine miss, keeping the "Never throws"
-        // self-heal contract above true for real remote-backed stores,
-        // not just an in-memory index that could structurally never
-        // reject. Mirrors the sibling guards on every other index
-        // consumer (blueprint-matcher.ts's exact-key probe,
-        // decideHandshake's per-pool probe) — this was the one §6
-        // point-read that had none.
-        const readByIdAcrossPools = async (id: string) => {
-          try {
-            const perApp = deps.generation?.cache
-              ? await readBlueprintById(
-                  { vectorStore: deps.generation.cache.vectorStore },
-                  ctx.appId,
-                  id,
-                )
-              : null;
-            if (perApp) return perApp;
-            for (const pool of seedPools) {
-              const hit = await readBlueprintById(
-                { vectorStore: pool.registry.vectorStore },
-                pool.scope ?? ctx.appId,
-                id,
-              );
-              if (hit) return hit;
-            }
-            return null;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
-            console.warn(`[ggui_render] blueprint reuse read-by-id failed, falling through to cold-gen: ${msg}`);
-            return null;
-          }
-        };
-        const findExactAcrossPools = async (
-          contractKey: string,
-          variantKey_: string,
-        ) => {
-          try {
-            const perApp = deps.generation?.cache?.index
-              ? await findBlueprintExact(
-                  {
-                    vectorStore: deps.generation.cache.vectorStore,
-                    index: deps.generation.cache.index,
-                  },
-                  ctx.appId,
-                  'template',
-                  contractKey,
-                  variantKey_,
-                )
-              : null;
-            if (perApp) return perApp;
-            for (const pool of seedPools) {
-              const hit = await findBlueprintExact(
-                {
-                  vectorStore: pool.registry.vectorStore,
-                  index: pool.registry.index,
-                },
-                pool.scope ?? ctx.appId,
-                'template',
-                contractKey,
-                variantKey_,
-              );
-              if (hit) return hit;
-            }
-            return null;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
-            console.warn(`[ggui_render] blueprint reuse exact-key lookup failed, falling through to cold-gen: ${msg}`);
-            return null;
-          }
-        };
-
-        const matched = handshakeRecord.matchedBlueprint;
-        if (
-          override === undefined &&
-          handshakeRecord.suggestion.origin === 'cache' &&
-          matched &&
-          deps.generation.cache?.index &&
-          !forceCreate
-        ) {
-          // ACCEPT — effective == proposed; point-read the stored row
-          // (per-app first, then seed pools — see fan-out comment above).
-          const bp = await readByIdAcrossPools(matched.id);
-          if (bp) {
-            blueprintHit = {
-              id: bp.id,
-              contractKey: bp.contractKey,
-              componentCode: bp.componentCode,
-              // The matcher's measured cosine, persisted on the handshake
-              // record (#564 — this was hardcoded 1, misreporting the
-              // wire's documented semantic similarity). `?? 1` covers
-              // ONLY records persisted by a pre-#564 pod inside the
-              // rolling-deploy skew window (the record store's TTL
-              // bounds it); those were all reported as 1 before, so the
-              // fallback preserves their prior behavior, never invents.
-              cosine: matched.cosine ?? 1,
-              contract: bp.contract,
-              ...(bp.sourceCodeHash !== undefined
-                ? { sourceCodeHash: bp.sourceCodeHash }
-                : {}),
-            };
-          }
-        } else if (
-          override?.variance !== undefined &&
-          override.contract === undefined &&
-          deps.generation.cache?.index &&
-          !forceCreate
-        ) {
-          // OVERRIDE.variance — the contract is unchanged but the variant
-          // axis moved. Re-resolve at the EFFECTIVE
-          // `(contractKey, effectiveVariantKey)` and reuse a stored
-          // component for that exact variant if one exists (per-app first,
-          // then seed pools — see fan-out comment above).
-          const bp = await findExactAcrossPools(
-            effectiveContractKey,
-            effectiveVariantKey,
-          );
-          if (bp) {
-            blueprintHit = {
-              id: bp.id,
-              contractKey: bp.contractKey,
-              componentCode: bp.componentCode,
-              // Exact `(contractKey, variantKey)` re-resolution — cosine 1
-              // by definition (canonical identity, no retrieval; NOT a
-              // #564 hardcode).
-              cosine: 1,
-              contract: bp.contract,
-              ...(bp.sourceCodeHash !== undefined
-                ? { sourceCodeHash: bp.sourceCodeHash }
-                : {}),
-            };
-          }
-        }
-
-        if (blueprintHit) {
-          // Reuse → the stored UUID is the materialised component id.
-          // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
-          // Resolved BEFORE the commit so the identity record written
-          // at that commit already carries the id (no backfill needed
-          // on this path).
-          resolvedBlueprintId = blueprintHit.id;
-
-          // Authored source — resolve the body
-          // from CodeStore by the row's stored hash, if any. Best-
-          // effort: a miss or a read failure commits the reuse render
-          // without `sourceCode`, exactly like a blueprint that never
-          // had one — never blocks the render.
-          const codeStore = deps.generation.cache?.durability?.codeStore;
-          let reuseSourceCode: string | undefined;
-          if (blueprintHit.sourceCodeHash !== undefined && codeStore) {
-            try {
-              reuseSourceCode =
-                (await codeStore.get(blueprintHit.sourceCodeHash)) ?? undefined;
-            } catch (err) {
-              // eslint-disable-next-line no-console -- operator-visible, non-fatal
-              console.warn(
-                `[ggui_render] authored-source body read failed on reuse — committing without sourceCode: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            }
-          }
-
-          generatedCodeReady = await commitCachedGguiSession(
-            deps.renderStore,
-            deps.provisionalPreview,
-            deps.channelNotifier,
-            deps.checkRenderContracts,
-            deps.renderTtlMs,
-            {
-              sessionId,
-              appId: ctx.appId,
-              userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
-              story,
-              writeIdentity: identityWriterFor(blueprintHit.id),
-              cacheHit: {
-                cachedBlueprintId: blueprintHit.id,
-                similarity: blueprintHit.cosine,
-                componentCode: blueprintHit.componentCode,
-                cachedIntent: intent,
-                cachedAt: new Date().toISOString(),
-                ...(reuseSourceCode !== undefined
-                  ? { sourceCode: reuseSourceCode }
-                  : {}),
-                // Project the matched blueprint's contract onto the
-                // cache hit so commitCachedGguiSession lands the wire-surface
-                // specs and capability catalog on the new render.
-                // Symmetric with runGenerationIntoGguiSession's render build:
-                // both paths emit the same shape, and bootstrap-meta
-                // derivation reads from one place.
-                ...(blueprintHit.contract.actionSpec
-                  ? { actionSpec: blueprintHit.contract.actionSpec }
-                  : {}),
-                ...(blueprintHit.contract.streamSpec
-                  ? { streamSpec: blueprintHit.contract.streamSpec }
-                  : {}),
-                ...(blueprintHit.contract.propsSpec
-                  ? { propsSpec: blueprintHit.contract.propsSpec }
-                  : {}),
-                ...(blueprintHit.contract.contextSpec
-                  ? { contextSpec: blueprintHit.contract.contextSpec }
-                  : {}),
-                // Project agentCapabilities through the blueprint-hit path
-                // so commitCachedGguiSession's schema-compat escape hatch
-                // recognizes cross-MCP tools the reused contract's
-                // actionSpec.nextStep / streamSpec.source.tool reference.
-                // Without it the exempt set is empty and any reused
-                // blueprint whose nextStep is a domain (non-ggui_*) tool
-                // fails "tool not registered". Symmetric with the cold-gen
-                // path (runGenerationIntoGguiSession's render build).
-                ...(blueprintHit.contract.agentCapabilities
-                  ? { agentCapabilities: blueprintHit.contract.agentCapabilities }
-                  : {}),
-                // Project clientCapabilities through the blueprint-hit
-                // path so the cached commit emits Permissions-Policy
-                // directives whenever the matched blueprint's contract
-                // declared them.
-                ...(blueprintHit.contract.clientCapabilities
-                  ? {
-                      clientCapabilities:
-                        blueprintHit.contract.clientCapabilities,
-                    }
-                  : {}),
-              },
-              ...(runtimeProps !== undefined
-                ? { runtimeProps: runtimeProps as JsonObject }
-                : {}),
-              ...(resolvedAppLibraries !== undefined
-                ? { appGadgets: resolvedAppLibraries }
-                : {}),
-              ...(appTheme !== undefined ? { appTheme } : {}),
-            },
-          );
-          cacheMarker = {
-            hit: true,
-            similarity: blueprintHit.cosine,
-            cachedBlueprintId: blueprintHit.id,
-            llmCallsAvoided: 1,
-            kind: 'full-template',
-            reason: 'full-template: reused a stored interface for this contract',
-          };
-        } else {
-          // The `.d.ts` fetch is deferred to HERE — the cold-gen
-          // branch — not done eagerly after the registry gate. On a
-          // blueprint cache hit the fetched types would be discarded
-          // (cache-hit commits don't typecheck or build a prompt),
-          // and a network transient in the fetch would wrongly fail a
-          // render that had a valid cache hit. Only cold generation
-          // consumes `gadgetTypes`, so only cold generation pays the
-          // fetch.
-          const resolvedGadgetTypes =
-            resolvedAppLibraries !== undefined
-              ? await fetchGadgetTypes(resolvedAppLibraries)
-              : undefined;
-          const generationCache = deps.generation.cache;
-          const outcome = await runGenerationIntoGguiSession(
-            deps.generation,
-            deps.renderStore,
-            deps.provisionalPreview,
-            deps.channelNotifier,
-            deps.checkRenderContracts,
-            deps.generator,
-            deps.renderTtlMs,
-            {
-              ctx,
-              sessionId,
-              story,
-              // #460 — the callee binds each commit's id itself:
-              // failure commits bind null; the success commit binds
-              // whatever `resolveBlueprintId` returned, resolved
-              // BEFORE that commit (no backfill exists anymore).
-              writeIdentityFor: identityWriterFor,
-              // Registration is the resolve hook, passed only when a
-              // cache is bound (unbound deployments keep null ids —
-              // #445). Failures swallow to undefined inside
-              // `safelyRegisterBlueprint`, incl. fail-closed
-              // rejections. The cache handle is captured as a const so
-              // the async closure keeps the narrowing.
-              ...(generationCache
-                ? {
-                    resolveBlueprintId: async (produced: {
-                      readonly componentCode: string;
-                      readonly source: LlmBlueprintSource;
-                      readonly sourceCode?: string;
-                    }) =>
-                      safelyRegisterBlueprint(
-                        {
-                          embedding: generationCache.embedding,
-                          vectorStore: generationCache.vectorStore,
-                          index: generationCache.index,
-                          // Forwarded so a fresh mint is written
-                          // through to durable storage. Undefined on
-                          // deployments that bound none, which
-                          // `registerBlueprint` treats as a no-op.
-                          ...(generationCache.durability !== undefined
-                            ? { durability: generationCache.durability }
-                            : {}),
-                        },
-                        ctx.appId,
-                        {
-                          kind: 'template',
-                          contract: story.contract,
-                          intent,
-                          componentCode: produced.componentCode,
-                          // Engine provenance from the generator's own
-                          // metadata stamp — a fresh generation mints
-                          // an `llm`-sourced row.
-                          source: produced.source,
-                          // Authored source — threaded to the registry
-                          // so cache-reuse renders of this blueprint
-                          // can serve it too.
-                          ...(produced.sourceCode !== undefined
-                            ? { sourceCode: produced.sourceCode }
-                            : {}),
-                          // Register under the EFFECTIVE variance
-                          // (proposed on accept, re-aimed on
-                          // `override.variance`) so the row's
-                          // `variantKey` equals `effectiveVariantKey`
-                          // — the same `(contractKey, variantKey)`
-                          // identity the §6 re-resolution and the wire
-                          // output key on.
-                          ...(effectiveVariance !== undefined
-                            ? { variance: effectiveVariance }
-                            : {}),
-                        },
-                      ),
-                  }
-                : {}),
-              ...(runtimeProps !== undefined
-                ? { runtimeProps: runtimeProps as JsonObject }
-                : {}),
-              ...(resolvedAppLibraries !== undefined
-                ? { appGadgets: resolvedAppLibraries }
-                : {}),
-              ...(appTheme !== undefined ? { appTheme } : {}),
-              ...(resolvedGadgetTypes !== undefined
-                ? { gadgetTypes: resolvedGadgetTypes }
-                : {}),
-              // MP.5 (2026-05-24): typed `infra.model` flows from
-              // the agent's wire input through the parsed schema
-              // into the generator. Cloud's seam reads
-              // `generateInput.infra?.model` to populate
-              // `RunGenerationArgs.model`; the OSS generator path
-              // ignores it (resolveLlm picks the model).
-              ...(parsed.infra !== undefined ? { infra: parsed.infra } : {}),
-            },
-          );
-          generatedCodeReady = outcome.ok;
-          if (!outcome.ok) {
-            generationFailure = outcome.failure;
-          }
-          if (deps.generation.cache) {
-            cacheMarker = {
-              hit: false,
-              llmCallsAvoided: 0,
-              kind: 'cold',
-              reason: outcome.ok
-                ? 'cold: generated fresh — no saved interface fit this render'
-                : 'cold: generation failed — no interface was produced',
-            };
-            // #460 — registration already ran INSIDE the generation
-            // call, before the success commit (the resolve hook
-            // above); the outcome carries the id the committed
-            // identity record was written with. No backfill exists.
-            if (outcome.ok) {
-              resolvedBlueprintId = outcome.blueprintId;
-            }
-          }
-        }
-      } else if (!placeholderCommitted) {
-        // Placeholder mode: no probe prefix, no generation deps (a
-        // keyless `ggui serve` / `bootOssServer`). Every branch above
-        // commits a row; without this one the render would return a
-        // sessionId that NOTHING backs — and the two tools that gate on
-        // `renderStore.get` (`ggui_consume`, `ggui_get_session`) would
-        // reject the very id `ggui_render` just handed the agent, while
-        // `markCreated` (unconditional, above) has already opened the
-        // pending-events pipe and `ggui_runtime_submit_action` happily
-        // appends to it. That asymmetry — gestures accepted into a pipe
-        // no consumer can ever drain — is issue #365.
-        //
-        // The row also carries the tenancy the consume path authorizes
-        // against (`appId` + `userId` → `isVisibleToCaller`), so there
-        // is no way to honor a keyless consume without it.
-        //
-        // `componentCode: ''` is the honest state: the surface exists
-        // and can receive gestures, but no code was generated. Callers
-        // read `codeReady: false` (unchanged). Committed only when the
-        // provisional-preview branch above did not already commit an
-        // identical placeholder for this sessionId.
-        const nowEpochMs = Date.now();
-        const placeholder: ComponentGguiSession = {
-          id: sessionId,
-          appId: ctx.appId,
-          type: 'component',
-          componentCode: '',
-          prompt: story.intent,
-          contentType: 'application/javascript+react',
-          createdAt: nowEpochMs,
-          lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
-          eventSequence: 0,
-        };
-        try {
-          const committed = await deps.renderStore.commit({
-            render: placeholder,
-            appId: ctx.appId,
-            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
-          });
-          await identityWriterFor(null)(committed);
-        } catch {
-          // Defensive, matching the provisional-preview placeholder
-          // above: a failed commit leaves the pre-#365 behavior
-          // (consume rejects), not a failed render.
-        }
-      }
-
-      // Content-addressable code delivery. When `codeStore`
-      // + `codeBaseUrl` are wired AND the just-committed render has
-      // non-empty `componentCode`, write (hash, code) to the store and
-      // surface `codeUrl` + `codeHash` on the response.
-      //
-      // The lookup re-reads the render because the commit happened
-      // several branches above (cache-hit, fresh generation, MCP Apps
-      // inbound) — re-reading is simpler than threading a reference
-      // through every branch and matches resultMeta's own pattern.
-      //
-      // A store failure does NOT fail the render: the code is already
-      // generated and the row already committed. But nothing catches
-      // the envelope either — the guard above narrowed this to a
-      // compiled-component render, and `codeUrl` is the only STATIC
-      // delivery surface such a render has (the other static mode,
-      // system-card `kind`, is excluded by that same guard). What
-      // survives is deployment-shaped, and no arm of it is visible on
-      // the wire:
-      //
-      //   - `mintWsToken` wired ⇒ the slice still carries the live
-      //     trio, the iframe subscribes, and the WS delivers the
-      //     render body. Cost: the zero-round-trip first paint.
-      //   - A host that resolves `resourceUri` re-mints `codeUrl`
-      //     against this same store at READ time, so a transient
-      //     fault costs it nothing.
-      //   - Neither ⇒ this envelope's slice keeps `runtimeUrl` and no
-      //     mode discriminator, which hosts read as "not a mountable
-      //     ggui render".
-      //
-      // Hence the named event rather than a swallow — see
-      // `code-delivery-events.ts`. A render with no `componentCode`
-      // (the placeholder / system arms) is not a failure and emits
-      // nothing: there was never a body to deliver.
-      let codeUrl: string | undefined;
-      let codeHash: string | undefined;
-      let codeModuleUrl: string | undefined;
-      if (deps.codeStore && deps.codeBaseUrl) {
-        try {
-          const stored = await deps.renderStore.get(sessionId);
-          const rendered = stored?.render;
-          if (
-            rendered
-            && rendered.type !== 'mcpApps'
-            && rendered.type !== 'system'
-            && typeof rendered.componentCode === 'string'
-            && rendered.componentCode.length > 0
-          ) {
-            const hash = deps.codeStore.hashOf(rendered.componentCode);
-            await deps.codeStore.put(hash, rendered.componentCode);
-            codeHash = hash;
-            const base = deps.codeBaseUrl.replace(/\/$/, '');
-            codeUrl = `${base}/code/${hash}.js`;
-            // Strict-CSP module-variant twin (ggui#522 slice 2) —
-            // minted only alongside a raw codeUrl; the minter declines
-            // for code that imports shim-less packages.
-            codeModuleUrl = deps.mintCodeModuleUrl?.({
-              code: rendered.componentCode,
-              hash,
-              base,
-            });
-          }
-        } catch (err) {
-          // Named for the OUTCOME, not the call: a throwing
-          // `renderStore.get` or `hashOf` reaches here too, and the
-          // consequence is identical — this envelope has no codeUrl.
-          // `error` carries which one it was.
-          reportRenderCodeWriteFailed({
-            sessionId,
-            appId: ctx.appId,
-            liveChannelWired: deps.mintWsToken !== undefined,
-            cause: err,
-          });
-        }
-      }
-
-      // Per-render theme overlay. The commit paths above
-      // (cold-gen / cache-hit / probe / placeholder) construct the
-      // render from their own templates; none of them know about the
-      // agent's `parsed.themeId` input. Rather than thread themeId
-      // through every constructor, we read the just-committed render
-      // once + re-commit with `themeId` set when the agent requested a
-      // per-render override. `renderStore.commit` is upsert-by-id so
-      // this collapses to a single row update; the bootstrap-projection
-      // block in `resultMeta` then reads the overlaid value via the
-      // same lookup path that drives `deriveRenderMeta`.
-      //
-      // Failure here downgrades to "no per-render theme override" (the
-      // app default / process default still apply via the layered
-      // resolution chain). Better than failing the whole render for a
-      // cosmetic overlay.
-      if (parsed.themeId !== undefined) {
-        try {
-          const stored = await deps.renderStore.get(sessionId);
-          const top = stored?.render;
-          if (
-            top &&
-            top.type !== 'mcpApps' &&
-            top.type !== 'system'
-          ) {
-            const overlaid: ComponentGguiSession = { ...top, themeId: parsed.themeId };
-            const committed = await deps.renderStore.commit({
-              render: overlaid,
-              appId: ctx.appId,
-              userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
-            });
-            // Last commit of the render when a theme override is in
-            // play, and every reuse / cold-gen path has settled by
-            // here — so this write carries the final blueprint id
-            // (already resolved before the success commit, #460).
-            await identityWriterFor(resolvedBlueprintId ?? null)(committed);
-          }
-        } catch (err) {
-          // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
-          console.warn(
-            '[ggui_render.theme_overlay_failed]',
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
-
-      // ── Failure envelope (SPEC §7.1) ──────────────────────────────
-      //
-      // A failed/rejected generation returns the in-result failure
-      // marker instead of the success shape. The transport projects it
-      // to `isError: true` + the model-visible content text + the SAME
-      // schema-conformant structuredContent shape (with `error` set,
-      // `resourceUri` absent — nothing mountable, `nextStep` absent —
-      // the content text carries the recovery), and NO `_meta` (no
-      // mount affordance for a failed render).
-      //
-      // The error GguiSession was ALREADY committed by
-      // `runGenerationIntoGguiSession` (WS notify + render-resource
-      // unchanged) — `sessionId` on this envelope remains a live
-      // handle into the session channel's archaeology
-      // (`GguiSession.error` carries the failure message).
-      if (generationFailure) {
-        const failureResult: RenderFailureOutput = {
-          outcome: 'failed',
-          sessionId,
-          action,
-          shortCode,
-          codeReady: false,
-          handshakeId: handshakeRecord.handshakeId,
-          contractHash: effectiveContractKey,
-          // Present-on-materialisation (§9.1): no component
-          // materialised, so the id is the empty sentinel.
-          blueprintId: '',
-          variantKey: effectiveVariantKey,
-          cache: cacheMarker ?? {
-            hit: false,
-            llmCallsAvoided: 0,
-            kind: 'cold',
-            reason:
-              'cold: generation failed — no interface was produced',
-          },
-          error: generationFailure,
-        };
-        // Same side-effect seam as the success return: cloud's hook
-        // observes EVERY settled render (it already fires with
-        // `codeReady: false` today) — suppressing it here would
-        // silently drop cloud-side metering/cache side-effects.
-        if (deps.postSuccessHook) {
-          await deps.postSuccessHook({
+        result = await renderAfterGate(input, ctx, attempt);
+      } catch (error) {
+        if (deps.postFailureHook && !attempt.settled) {
+          await fireRenderFailureHook(deps.postFailureHook, {
             ctx,
-            sessionId,
-            contract: effectiveContract,
-            contractHash: effectiveContractKey,
-            intent: story.intent,
-            action,
-            codeReady: false,
-            cacheHit: false,
-            // Mirrors the failure envelope above: no component
-            // materialised ⇒ empty-sentinel id; the variant axis is
-            // still the one the attempt keyed on.
-            blueprintId: '',
-            variantKey: effectiveVariantKey,
+            ...(attempt.sessionId !== undefined ? { sessionId: attempt.sessionId } : {}),
+            error,
+            surfacedAs: 'thrown',
           });
         }
-        return handlerFailure(
-          failureResult,
-          buildRenderFailureText(generationFailure),
-        );
+        throw error;
       }
-
-      // Conditional `nextStep` — emit a consume-recovery hint ONLY when
-      // the resolved contract has a non-empty `actionSpec`. Pure-display
-      // renders (props only) get no `nextStep` because there's nothing
-      // for the agent to consume.
-      const hasActions =
-        effectiveContract.actionSpec !== undefined &&
-        Object.keys(effectiveContract.actionSpec).length > 0;
-      const nextStep = hasActions
-        ? {
-            tool: 'ggui_consume' as const,
-            // Imperative + honest: `timeout` MUST ride the hint —
-            // consume's own default is 0 (single non-blocking drain),
-            // so an agent copying a timeout-less example gets an
-            // instant empty result and reasonably ends its turn (the
-            // first live claude.ai test died exactly this way). 25 is
-            // the server-enforced per-call cap (SPEC §7.3).
-            description:
-              "The UI has interactive actions. After this turn's other tool calls, you may long-poll once (waits up to 25s) to catch an immediate gesture; if `events` comes back empty, end your turn — later gestures arrive as new user messages carrying their own consume directive.",
-            example: `ggui_consume({ sessionId: "${sessionId}", timeout: 25 })`,
-            args: { sessionId, timeout: 25 },
-          }
-        : undefined;
-
-      // Render response architecture (2026-05-13):
-      //   - `outputSchema` defines the LLM-visible subset (3 fields).
-      //   - This `result` carries the FULL set — extras are stripped
-      //     by zod's `.parse()` (z.object default behavior) before
-      //     the JSON-RPC `structuredContent` is built.
-      //   - Internal seams (resultMeta, postSuccessHook, tests) read
-      //     from this rich in-memory object.
-      // Per-render resource URI — same formula `resultMeta` uses to
-      // build `_meta.ui.resourceUri`. Surfacing it on the LLM-visible
-      // structuredContent too lets agent SDKs that strip `_meta` from
-      // tool_results (OpenAI Agents SDK, Google ADK) still hand a
-      // mount handle to their frontend without the side-channel.
-      const blueprintSegmentForOutput = effectiveContractKey
-        ? `/${effectiveContractKey}`
-        : '';
-      const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${blueprintSegmentForOutput}`;
-      const result: RenderOutput = {
-        outcome: 'rendered',
-        sessionId,
-        resourceUri: resourceUriForOutput,
-        action,
-        shortCode,
-        codeReady: generatedCodeReady,
-        handshakeId: handshakeRecord.handshakeId,
-        contractHash: effectiveContractKey,
-        // Reuse → stored UUID (§6 point-read); cold-gen → minted UUID
-        // (`safelyRegisterBlueprint`). Empty only on the
-        // genuinely-no-component branches (probe-card / generation-off),
-        // which never materialise a component — spec §9.1
-        // present-on-materialisation.
-        blueprintId: resolvedBlueprintId ?? '',
-        // Variant axis of the reuse key — the same `effectiveVariantKey`
-        // the §6 re-resolution + cold-gen registration keyed on, so a
-        // different variance is observably a distinct variant on the wire.
-        variantKey: effectiveVariantKey,
-        cache: cacheMarker ?? {
-          hit: false,
-          llmCallsAvoided: 0,
-          kind: 'cold',
-          reason: 'cold: no reuse occurred for this render',
-        },
-        ...(codeUrl ? { codeUrl, codeHash } : {}),
-        ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
-        ...(nextStep ? { nextStep } : {}),
-      };
-
-      // Success terminal (`render.committed`). Every success path —
-      // cold-gen, cache reuse, probe, generation-off — converges on
-      // this assembly; the generation-failure arm returned above and
-      // deliberately does NOT count as committed.
-      emitRenderCommitted(deps.telemetrySink, {
-        appId: ctx.appId,
-        handshakeId: handshakeRecord.handshakeId,
-        codeReady: generatedCodeReady,
-        cacheHit: cacheMarker?.hit ?? false,
-      });
-
-      // Post-success hook for fire-and-forget side-effects.
-      if (deps.postSuccessHook) {
-        await deps.postSuccessHook({
+      if (deps.postFailureHook && isHandlerFailure(result)) {
+        // The envelope itself is the source of truth for this arm: the
+        // session it was committed under and the typed generation error.
+        await fireRenderFailureHook(deps.postFailureHook, {
           ctx,
-          sessionId,
-          contract: effectiveContract,
-          contractHash: effectiveContractKey,
-          intent: story.intent,
-          action,
-          codeReady: generatedCodeReady,
-          // Always defined + accurate: `result.cache` is assigned from
-          // `cacheMarker ?? { hit: false, … }`, set on BOTH the
-          // blueprint-reuse and cold-gen branches above.
-          cacheHit: result.cache.hit,
-          // Same values the wire result carries — see the `result`
-          // assembly above for the per-branch semantics.
-          blueprintId: result.blueprintId,
-          variantKey: result.variantKey,
+          sessionId: result.data.sessionId,
+          error: result.data.error,
+          surfacedAs: 'failed',
         });
       }
-
       return result;
     },
     resultMeta: async (output, _input, ctx) => {

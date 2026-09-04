@@ -45,6 +45,7 @@ import type { DataContract, GguiRenderOutput } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   createGguiRenderHandler,
+  type GguiSessionPostFailureArgs,
   type GguiSessionPostSuccessArgs,
 } from './render.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
@@ -360,5 +361,219 @@ describe('ggui_render — the seams #786 widened (drift guards)', () => {
     expectTypeOf<GguiSessionPostSuccessArgs['action']>().toEqualTypeOf<
       NonNullable<GguiRenderOutput['action']>
     >();
+  });
+});
+
+// ─── #804: the failure seam ───────────────────────────────────────────────────
+//
+// A deployment that reserves something at `preValidationGate` (a trial
+// render, a credit hold) needs the other end: `postFailureHook` fires on
+// EVERY failure of a render whose gate passed — whether the handler throws
+// or returns the `outcome:'failed'` envelope — and never on a refusal
+// (nothing passed the gate) or a success (the reservation was consumed).
+
+/** Build a render handler with both hooks captured; `generator` overrides the fake. */
+function buildFailureHarness(opts: {
+  readonly gate?: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['preValidationGate'];
+  readonly generator?: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['generator'];
+  readonly postSuccessHook?: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['postSuccessHook'];
+  readonly postFailureHook: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['postFailureHook'];
+  readonly checkRenderContracts?: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['checkRenderContracts'];
+}) {
+  const handshakeStore = new InMemoryKeyValueStore();
+  const renderStore = new InMemoryGguiSessionStore();
+  const postSuccessHook = opts.postSuccessHook ?? vi.fn();
+  const handler = createGguiRenderHandler({
+    handshakeStore,
+    renderStore,
+    postSuccessHook,
+    postFailureHook: opts.postFailureHook,
+    ...(opts.gate ? { preValidationGate: opts.gate } : {}),
+    ...(opts.checkRenderContracts ? { checkRenderContracts: opts.checkRenderContracts } : {}),
+    generation: {
+      uiGenerator: {
+        slug: 'ui-gen-default-fake',
+        tier: 'default',
+        model: 'fake',
+        generate: fakeGenerator,
+      },
+      resolveLlm: () => null,
+      blueprints: { get: async () => null, list: async () => [] },
+      cache: {
+        embedding: fakeEmbedding,
+        vectorStore: new InMemoryVectorStore(),
+        index: new InMemoryBlueprintIndex(),
+      },
+    },
+    generator: opts.generator ?? fakeGenerator,
+  });
+  return { handler, handshakeStore, renderStore, postSuccessHook };
+}
+
+const GENERATION_ERROR = { code: 'PRODUCTION_FAILED' as const, message: 'provider 500' };
+
+describe('ggui_render — postFailureHook (#804): every failure after the gate passed', () => {
+  it('fires on the returned outcome:failed envelope with the session and the generation error', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({
+      gate: async () => undefined,
+      generator: async () => ({ ok: false, error: GENERATION_ERROR }),
+      postFailureHook,
+    });
+    const handshakeId = 'hs-fail-envelope-1';
+    await seedAgentHandshake(h.handshakeStore, handshakeId);
+    const out = await h.handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
+    expect(postFailureHook).toHaveBeenCalledTimes(1);
+    const args: GguiSessionPostFailureArgs = postFailureHook.mock.calls[0]?.[0];
+    expect(args.ctx).toBe(CTX);
+    expect(args.sessionId).toBe(out.data.sessionId);
+    expect(args.surfacedAs).toBe('failed');
+    expect(args.error).toEqual(GENERATION_ERROR);
+    // Unchanged contract: the success hook observes EVERY settled render, a
+    // failed envelope included (codeReady:false) — the failure hook is the
+    // addition, not a replacement.
+    expect(h.postSuccessHook).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires on a failure the handler THROWS after the gate passed (no session minted yet)', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({ gate: async () => undefined, postFailureHook });
+    // No handshake seeded: the handler throws HandshakeNotFound after the gate allowed the call.
+    await expect(h.handler.handler({ handshakeId: 'hs-missing', props: {} }, CTX)).rejects.toThrow();
+    expect(postFailureHook).toHaveBeenCalledTimes(1);
+    const args: GguiSessionPostFailureArgs = postFailureHook.mock.calls[0]?.[0];
+    expect(args.ctx).toBe(CTX);
+    expect(args.sessionId).toBeUndefined();
+    expect(args.surfacedAs).toBe('thrown');
+    expect(args.error).toBeInstanceOf(Error);
+    expect(h.postSuccessHook).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire on a refusal — nothing passed the gate', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({ gate: async () => REFUSAL, postFailureHook });
+    const out = await h.handler.handler({ handshakeId: 'hs-refused-x', props: {} }, CTX);
+    expect(isHandlerFailure(out) && out.data.outcome === 'refused').toBe(true);
+    expect(postFailureHook).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire on success', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({ gate: async () => undefined, postFailureHook });
+    const handshakeId = 'hs-ok-1';
+    await seedAgentHandshake(h.handshakeStore, handshakeId);
+    const out = await h.handler.handler({ handshakeId, props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(false);
+    expect(postFailureHook).not.toHaveBeenCalled();
+    expect(h.postSuccessHook).toHaveBeenCalledTimes(1);
+  });
+
+  it('a hook that throws masks nothing: the failed envelope is still returned, the original error still thrown', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const throwing = vi.fn(async () => {
+        throw new Error('release failed');
+      });
+      const envelope = buildFailureHarness({
+        gate: async () => undefined,
+        generator: async () => ({ ok: false, error: GENERATION_ERROR }),
+        postFailureHook: throwing,
+      });
+      const handshakeId = 'hs-fail-envelope-2';
+      await seedAgentHandshake(envelope.handshakeStore, handshakeId);
+      const out = await envelope.handler.handler({ handshakeId, props: {} }, CTX);
+      expect(isHandlerFailure(out) && out.data.outcome === 'failed').toBe(true);
+
+      const thrown = buildFailureHarness({ gate: async () => undefined, postFailureHook: throwing });
+      await expect(thrown.handler.handler({ handshakeId: 'hs-missing-2', props: {} }, CTX)).rejects.toThrow(
+        /handshake/i,
+      );
+      expect(throwing).toHaveBeenCalledTimes(2);
+      // The hook's own failure is reported, not silently dropped.
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does NOT fire when postSuccessHook throws after the response is assembled — the render settled', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({
+      gate: async () => undefined,
+      postSuccessHook: async () => {
+        throw new Error('rag index write failed');
+      },
+      postFailureHook,
+    });
+    const handshakeId = 'hs-ok-2';
+    await seedAgentHandshake(h.handshakeStore, handshakeId);
+    // The success hook's contract is unchanged: the handler propagates its throw.
+    await expect(h.handler.handler({ handshakeId, props: {} }, CTX)).rejects.toThrow('rag index write failed');
+    expect(postFailureHook).not.toHaveBeenCalled();
+  });
+
+  it('fires on a failure thrown AFTER the session was minted, and carries that session', async () => {
+    const postFailureHook = vi.fn();
+    // The schema-compat check runs twice on a cold render: once before the
+    // session is minted (inside its own rethrowing guard) and once inside
+    // generation, after the mint. Throwing on the second call is a throw
+    // with a session behind it.
+    let calls = 0;
+    const h = buildFailureHarness({
+      gate: async () => undefined,
+      checkRenderContracts: () => {
+        calls += 1;
+        if (calls >= 2) throw new Error('post-mint boom');
+      },
+      postFailureHook,
+    });
+    const handshakeId = 'hs-post-mint-throw';
+    await seedAgentHandshake(h.handshakeStore, handshakeId);
+    await expect(h.handler.handler({ handshakeId, props: {} }, CTX)).rejects.toThrow('post-mint boom');
+    expect(postFailureHook).toHaveBeenCalledTimes(1);
+    const args: GguiSessionPostFailureArgs = postFailureHook.mock.calls[0]?.[0];
+    expect(args.surfacedAs).toBe('thrown');
+    expect(typeof args.sessionId).toBe('string');
+    expect(args.error).toBeInstanceOf(Error);
+  });
+
+  it('STILL fires when postSuccessHook throws on the FAILED envelope path — nothing was consumed there', async () => {
+    // The mirror of the settled-success case: on a failed generation the
+    // success hook also runs (metering observes every settled render); if
+    // THAT throws, the render still failed and the seam must still fire —
+    // once, with the session, carrying the throw the caller sees.
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({
+      gate: async () => undefined,
+      generator: async () => ({ ok: false, error: GENERATION_ERROR }),
+      postSuccessHook: async () => {
+        throw new Error('metering write failed');
+      },
+      postFailureHook,
+    });
+    const handshakeId = 'hs-fail-then-hook-throws';
+    await seedAgentHandshake(h.handshakeStore, handshakeId);
+    await expect(h.handler.handler({ handshakeId, props: {} }, CTX)).rejects.toThrow('metering write failed');
+    expect(postFailureHook).toHaveBeenCalledTimes(1);
+    const args: GguiSessionPostFailureArgs = postFailureHook.mock.calls[0]?.[0];
+    expect(args.surfacedAs).toBe('thrown');
+    expect(typeof args.sessionId).toBe('string');
+    expect(args.error).toBeInstanceOf(Error);
+    expect((args.error as Error).message).toBe('metering write failed');
+  });
+
+  it('does NOT fire when the gate itself throws — the gate never passed', async () => {
+    const postFailureHook = vi.fn();
+    const h = buildFailureHarness({
+      gate: async () => {
+        throw new Error('gate exploded');
+      },
+      postFailureHook,
+    });
+    await expect(h.handler.handler({ handshakeId: 'hs-any', props: {} }, CTX)).rejects.toThrow('gate exploded');
+    expect(postFailureHook).not.toHaveBeenCalled();
   });
 });
