@@ -1055,9 +1055,9 @@ type RenderFailureOutput = GguiRenderOutput &
 /**
  * Internal handler-output type (REFUSED shape) — the structuredContent
  * of a PRE-GENERATION refusal. Deliberately NOT an intersection with
- * {@link GguiRenderOutput}: nothing was parsed, read or committed, so a
- * stray `sessionId` here is a type error at the projection site rather
- * than a wire-validation failure later.
+ * {@link GguiRenderOutput}: nothing read, nothing committed, so a stray
+ * `sessionId` here is a type error at the projection site rather than a
+ * wire-validation failure later.
  */
 type RenderRefusedOutput = z.infer<typeof refusedOutputSchema>;
 

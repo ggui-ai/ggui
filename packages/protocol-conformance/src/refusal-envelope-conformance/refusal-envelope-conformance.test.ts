@@ -72,7 +72,7 @@ function referenceProject(
     text: `${refusal.code}: ${refusal.message} ${refusal.fix}`,
     structuredContent: { outcome: 'refused', refusal },
     hasMeta: false,
-    // Nothing was parsed, no handshake read, nothing committed.
+    // Nothing read, no handshake consumed, nothing committed.
     identityFields: [],
   };
 }

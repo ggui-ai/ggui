@@ -1457,8 +1457,10 @@ export function isFailedRenderOutput(
 }
 
 /**
- * A PRE-GENERATION refusal — nothing was parsed, read or committed, so
- * every identity field is absent and `refusal` carries the state.
+ * A PRE-GENERATION refusal — nothing read and nothing committed, so
+ * every identity field is absent and `refusal` carries the state. (Not
+ * "nothing parsed": the SDK has already checked the call against the
+ * tool's declared `inputSchema` by the time a gate can refuse it.)
  */
 export function isRefusedRenderOutput(
   output: RenderOutputValue,

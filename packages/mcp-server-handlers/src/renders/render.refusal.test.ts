@@ -178,10 +178,16 @@ describe('ggui_render — a gate that RETURNS a refusal', () => {
     expect(out.data).toEqual({ outcome: 'refused', refusal: REFUSAL });
   });
 
-  it('refuses a SYNTACTICALLY INVALID input — proof the projection runs before the parse', async () => {
+  it("refuses a SYNTACTICALLY INVALID input — proof the projection runs before THIS handler's parse", async () => {
     // `{}` carries no handshakeId and no props: `z.object(inputSchema)
     // .parse` would raise a ZodError. Returning the envelope instead is
     // the only way this call can succeed, so it pins the ordering.
+    //
+    // The ordering is observable IN-PROCESS only: this dispatches the
+    // handler directly, with no SDK in front of it. On the wire the SDK
+    // validates `{}` against the declared `inputSchema` first and the
+    // call never reaches the gate, so no refusal is projected for a
+    // wire-malformed call (SPEC §7.1).
     const h = buildHarness(async () => REFUSAL);
 
     const out = await h.handler.handler({}, CTX);
@@ -191,7 +197,7 @@ describe('ggui_render — a gate that RETURNS a refusal', () => {
     expect(out.data).toEqual({ outcome: 'refused', refusal: REFUSAL });
   });
 
-  it('carries no identity fields — nothing was parsed, nothing committed', async () => {
+  it('carries no identity fields — nothing read, nothing committed', async () => {
     const h = buildHarness(async () => REFUSAL);
 
     const out = await h.handler.handler({}, CTX);
