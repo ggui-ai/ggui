@@ -13,9 +13,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createStubAgentRuntime } from '@ggui-ai/agent-runtime';
 import { runDev } from './run-dev.js';
 
+// The installed `@ggui-ai/protocol` PROTOCOL_VERSION — the loader `runDev`
+// uses refuses any other declaration (UPGRADE_REQUIRED). Moves with the stamp.
+const PROTOCOL = 'draft-2026-09-04';
+
 const PROJECT_JSON = JSON.stringify({
   schema: '1',
-  protocol: '1.1',
+  protocol: PROTOCOL,
   app: { slug: 'weather', name: 'Weather Bot' },
 });
 
@@ -54,7 +58,7 @@ describe('runDev — agent runtime supervision', () => {
       const inputs = controller.lastInput();
       expect(inputs?.project.slug).toBe('weather');
       expect(inputs?.project.name).toBe('Weather Bot');
-      expect(inputs?.project.protocol).toBe('1.1');
+      expect(inputs?.project.protocol).toBe(PROTOCOL);
       expect(inputs?.projectRoot).toBe(tmp);
 
       expect(lines.join('\n')).toContain('runtime: stub-agent (stub-run-1)');

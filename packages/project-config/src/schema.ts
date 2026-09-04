@@ -74,10 +74,15 @@ const SlugSchema = z
  * The wire contract version this app speaks — distinct from the
  * `schema` field which versions the file format itself.
  *
- * Future tightening: could import a known-versions list from
- * `@ggui-ai/protocol` and validate membership. Deliberately left as
- * pattern-only for v1 to avoid the cross-package dep until a real
- * consumer benefits from the tighter check.
+ * Pattern-only HERE by design, and stays so: `ggui.json` is a
+ * declaration layer, and a parser that rejected a well-formed old
+ * declaration would make the file unreadable exactly when the reader
+ * must say "upgrade" — unparseable is not unsupported. Membership
+ * against `CLIENT_SUPPORTED_VERSIONS` is the LOADER's check
+ * (`loadGguiJson` in `./node.ts`), which refuses non-members with the
+ * wire's own `UPGRADE_REQUIRED` under the handshake's `versionPolicy`
+ * knob. Shipped samples additionally pin the CURRENT stamp as a house
+ * rule (`samples-protocol.conformance.test.ts`).
  */
 const ProtocolVersionSchema = z
   .string()

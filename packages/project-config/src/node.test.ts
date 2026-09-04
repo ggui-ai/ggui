@@ -7,11 +7,17 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CLIENT_SUPPORTED_VERSIONS,
+  PROTOCOL_VERSION,
+  UPGRADE_REQUIRED,
+} from '@ggui-ai/protocol';
 import type { GguiJsonV1 } from './schema.js';
 import {
   findGguiJson,
   GguiJsonLoadError,
+  GguiJsonProtocolUnsupportedError,
   loadGguiJson,
   safeLoadGguiJson,
   saveGguiJson,
@@ -19,7 +25,7 @@ import {
 
 const MINIMAL_V1: GguiJsonV1 = {
   schema: '1',
-  protocol: '1.1',
+  protocol: PROTOCOL_VERSION,
   app: { slug: 'weather-bot', name: 'Weather Bot' },
   blueprints: { include: [] },
   primitives: {
@@ -28,6 +34,81 @@ const MINIMAL_V1: GguiJsonV1 = {
   },
   mcpMounts: [],
 };
+
+// A well-formed declaration (passes the pattern schema) that no build of this
+// package speaks — the loader's "unsupported" state, distinct from "unparseable".
+const UNSUPPORTED_DECLARATION = 'draft-2000-01-01';
+
+describe('ggui.json loader — protocol membership is the loader\'s check (#810)', () => {
+  let workDir: string;
+  let path: string;
+
+  beforeEach(() => {
+    workDir = mkdtempSync(join(tmpdir(), 'ggui-json-protocol-'));
+    path = join(workDir, 'ggui.json');
+  });
+
+  afterEach(() => {
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  const writeDeclaring = (protocol: string): void => {
+    writeFileSync(path, JSON.stringify({ ...MINIMAL_V1, protocol }), 'utf-8');
+  };
+
+  it('refuses a declaration outside CLIENT_SUPPORTED_VERSIONS with the wire\'s own outcome (UPGRADE_REQUIRED) by default', () => {
+    writeDeclaring(UNSUPPORTED_DECLARATION);
+    try {
+      loadGguiJson(path);
+      expect.unreachable('load should have refused an unsupported protocol declaration');
+    } catch (err) {
+      expect(err).toBeInstanceOf(GguiJsonProtocolUnsupportedError);
+      // Existing catch sites keep working: it IS a load error.
+      expect(err).toBeInstanceOf(GguiJsonLoadError);
+      const refusal = err as GguiJsonProtocolUnsupportedError;
+      expect(refusal.code).toBe(UPGRADE_REQUIRED);
+      expect(refusal.declared).toBe(UNSUPPORTED_DECLARATION);
+      expect(refusal.supported).toEqual(CLIENT_SUPPORTED_VERSIONS);
+      expect(refusal.path).toBe(path);
+      expect(refusal.message).toContain(UNSUPPORTED_DECLARATION);
+      expect(refusal.message).toContain(PROTOCOL_VERSION);
+    }
+  });
+
+  it('under versionPolicy "advisory" the same state loads and surfaces as a diagnostic instead', () => {
+    writeDeclaring(UNSUPPORTED_DECLARATION);
+    const onDiagnostic = vi.fn();
+    const loaded = loadGguiJson(path, { versionPolicy: 'advisory', onDiagnostic });
+    expect(loaded.protocol).toBe(UNSUPPORTED_DECLARATION);
+    expect(onDiagnostic).toHaveBeenCalledTimes(1);
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'protocol-unsupported',
+        code: UPGRADE_REQUIRED,
+        declared: UNSUPPORTED_DECLARATION,
+        supported: CLIENT_SUPPORTED_VERSIONS,
+        path,
+      }),
+    );
+  });
+
+  it('a declaration inside the set loads with no diagnostic (membership, not currency, is the contract)', () => {
+    writeDeclaring(PROTOCOL_VERSION);
+    const onDiagnostic = vi.fn();
+    const loaded = loadGguiJson(path, { onDiagnostic });
+    expect(loaded.protocol).toBe(PROTOCOL_VERSION);
+    expect(onDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it('safeLoadGguiJson returns the refusal as its error (no throw), same policy default', () => {
+    writeDeclaring(UNSUPPORTED_DECLARATION);
+    const result = safeLoadGguiJson(path);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(GguiJsonProtocolUnsupportedError);
+    }
+  });
+});
 
 describe('ggui.json loader — filesystem round-trip', () => {
   let workDir: string;

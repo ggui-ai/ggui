@@ -57,7 +57,7 @@ if (path) {
 }
 ```
 
-`protocol` MUST match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version installed.
+`protocol` MUST match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version installed. The loader (`loadGguiJson` / `safeLoadGguiJson` on the `./node` subpath) checks the declaration against `CLIENT_SUPPORTED_VERSIONS` — the wire's own predicate — and refuses a non-member with `UPGRADE_REQUIRED` (`GguiJsonProtocolUnsupportedError`, carrying `declared` / `supported` / `current`). Pass `{ versionPolicy: 'advisory', onDiagnostic }` to load anyway and receive the same finding as a diagnostic; there is no third posture. The schema itself validates the field as pattern-only so an old declaration stays readable.
 
 Optional blocks: `storage` (renders / vectors / threads via `memory` or `sqlite`), `theme`, `primitives`, `blueprints`, `mcpMounts`, and `operator`. See the exported Zod schema for the full, authoritative shape.
 

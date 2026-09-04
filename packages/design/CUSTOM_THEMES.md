@@ -21,7 +21,7 @@ The OSS server's manifest schema accepts a file pointer:
 // ggui.json
 {
   "schema": "1",
-  "protocol": "1.1",
+  "protocol": "draft-2026-09-04", // the installed @ggui-ai/protocol PROTOCOL_VERSION — the loader refuses others
   "app": { "slug": "demo", "name": "Demo" },
   "theme": { "file": "./theme.json", "mode": "light" },
 }
@@ -57,21 +57,15 @@ the bundle, add it to the registry. Three steps.
 // packages/design/src/themes/definitions/aurora.ts
 import type { DtcgTheme } from "../types";
 
-const shared = {
-  /* font / spacing / shape / motion */
-} as const;
+const shared = {/* font / spacing / shape / motion */} as const;
 
 const auroraLight: DtcgTheme = {
   $name: "Aurora",
   $description: "Cool blue-green daytime palette.",
   $metadata: { font: "Inter" },
   color: {
-    primary: {
-      /* 50..900 ladder */
-    },
-    neutral: {
-      /* 50..900 ladder */
-    },
+    primary: {/* 50..900 ladder */},
+    neutral: {/* 50..900 ladder */},
     success: { $value: "#…", $type: "color" },
     // …warning, error, info, surface, onSurface, container, outline, …
   },
@@ -81,9 +75,7 @@ const auroraLight: DtcgTheme = {
   motion: shared.motion,
 };
 
-const auroraDark: DtcgTheme = {
-  /* mirror with dark palette */
-};
+const auroraDark: DtcgTheme = {/* mirror with dark palette */};
 
 export const theme = { light: auroraLight, dark: auroraDark } as const;
 ```

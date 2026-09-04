@@ -11,6 +11,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GguiDevError, runDev } from './run-dev.js';
 
+// The installed `@ggui-ai/protocol` PROTOCOL_VERSION. `runDev` loads
+// `ggui.json` through `@ggui-ai/project-config`'s loader, which refuses
+// any declaration outside the supported set (UPGRADE_REQUIRED) — a
+// fictional version here would fail the boot, not exercise it. Moves
+// with the stamp; the loader's message names the fix when it lags.
+const PROTOCOL = 'draft-2026-09-04';
+
 describe('runDev (orchestration)', () => {
   let tmp: string;
   const lines: string[] = [];
@@ -34,7 +41,7 @@ describe('runDev (orchestration)', () => {
       join(tmp, 'ggui.json'),
       JSON.stringify({
         schema: '1',
-        protocol: '1.1',
+        protocol: PROTOCOL,
         app: { slug: 'weather-bot', name: 'Weather Bot' },
       }),
     );
@@ -42,7 +49,7 @@ describe('runDev (orchestration)', () => {
     const result = await runDev({ cwd: tmp, log, serve: false });
 
     expect(result.manifest.app.slug).toBe('weather-bot');
-    expect(result.manifest.protocol).toBe('1.1');
+    expect(result.manifest.protocol).toBe(PROTOCOL);
     expect(result.manifest.blueprints.include).toEqual([]);
     expect(result.manifestPath).toBe(join(tmp, 'ggui.json'));
     expect(result.discovery.uis).toEqual([]);
@@ -59,7 +66,7 @@ describe('runDev (orchestration)', () => {
       join(tmp, 'ggui.json'),
       JSON.stringify({
         schema: '1',
-        protocol: '1.1',
+        protocol: PROTOCOL,
         app: { slug: 'app', name: 'App' },
         blueprints: { include: ['ui/**/ggui.ui.json'] },
       }),
@@ -78,7 +85,7 @@ describe('runDev (orchestration)', () => {
       join(tmp, 'ggui.json'),
       JSON.stringify({
         schema: '1',
-        protocol: '1.1',
+        protocol: PROTOCOL,
         app: { slug: 'app', name: 'App' },
         blueprints: { include: ['ui/**/ggui.ui.json'] },
       }),
@@ -108,7 +115,7 @@ describe('runDev (orchestration)', () => {
       join(tmp, 'ggui.json'),
       JSON.stringify({
         schema: '1',
-        protocol: '1.1',
+        protocol: PROTOCOL,
         app: { slug: 'app', name: 'App' },
         blueprints: { include: ['ui/**/ggui.ui.json'] },
       }),

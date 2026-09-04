@@ -8,14 +8,18 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PROTOCOL_VERSION } from '@ggui-ai/protocol';
 import {
   GguiJsonLoadError,
   resolveAgentPlan,
 } from './serve-fallback.js';
 
+// The real stamp: the loader `ggui serve` uses refuses any declaration
+// outside the supported set (UPGRADE_REQUIRED), so a fictional version
+// here would exercise the refusal, not the fallback matrix.
 const MINIMAL_MANIFEST = {
   schema: '1' as const,
-  protocol: '1.1',
+  protocol: PROTOCOL_VERSION,
   app: { slug: 'fallback-test', name: 'Fallback Test' },
 };
 
@@ -104,7 +108,7 @@ describe('resolveAgentPlan — §10.2a fallback matrix', () => {
     expect(plan.supervision).toBeDefined();
     expect(plan.supervision?.startInput.project.slug).toBe('fallback-test');
     expect(plan.supervision?.startInput.project.name).toBe('Fallback Test');
-    expect(plan.supervision?.startInput.project.protocol).toBe('1.1');
+    expect(plan.supervision?.startInput.project.protocol).toBe(PROTOCOL_VERSION);
     expect(plan.supervision?.startInput.projectRoot).toBe(projectRoot);
     expect(plan.supervision?.startInput.entry).toBe(
       join(projectRoot, 'agent.ts'),

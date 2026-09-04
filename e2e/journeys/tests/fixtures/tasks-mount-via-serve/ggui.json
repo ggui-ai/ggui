@@ -1,6 +1,6 @@
 {
   "schema": "1",
-  "protocol": "1.1",
+  "protocol": "draft-2026-09-04",
   "generation": { "model": "anthropic:claude-haiku-4-5-20251001" },
   "app": {
     "slug": "tasks-mount-via-serve",
