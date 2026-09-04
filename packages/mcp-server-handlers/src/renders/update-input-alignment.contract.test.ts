@@ -182,8 +182,8 @@ describe('ggui_update handler ↔ updateInputSchema alignment (ggui#385)', () =>
 
   it('a malformed payload costs zero store reads', async () => {
     // The store read is the observable: it is the first thing on this
-    // path that costs anything (a round trip, and on a hosted
-    // deployment a billed one), and it is where tenant scoping starts.
+    // path that costs anything — a round trip — and where tenant
+    // scoping starts.
     // Union narrowing has to reject BEFORE it, or a caller who sent
     // `kind:'replace'` with a `patch` has already paid for a lookup
     // that could never have been used.
