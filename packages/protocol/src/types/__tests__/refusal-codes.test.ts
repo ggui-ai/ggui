@@ -34,7 +34,8 @@
  * the path is stable: the kit ships only `dist`, so a source walk could
  * never run for an npm adopter.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -431,10 +432,29 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     const offenders = findCodeLiterals(packagesDir, codes, REGISTRY_FILE);
     expect(offenders).toEqual([]);
   });
+
+  it('the literal walk skips build output (dist and dist.staging-<pid>) but still catches a minted code in src', () => {
+    // Every oss/packages/*/package.json#build stages into `dist.staging-$$`
+    // and swaps it into `dist` when done; in CI that tree coexists with this
+    // suite, and its generated `.d.ts` unions quote every registry code.
+    // Those files are OUTPUT of the registry, not a second source of it —
+    // walking them is a false offence (CI run 33832497812).
+    const root = mkdtempSync(join(tmpdir(), 'refusal-codes-walk-'));
+    mkdirSync(join(root, 'dist.staging-1', 'types'), { recursive: true });
+    mkdirSync(join(root, 'dist'), { recursive: true });
+    mkdirSync(join(root, 'src'), { recursive: true });
+    writeFileSync(join(root, 'dist.staging-1', 'types', 'x.d.ts'), 'export type C = "unsupported_provider";\n');
+    writeFileSync(join(root, 'dist', 'y.d.ts'), "export type C = 'unsupported_provider';\n");
+    writeFileSync(join(root, 'src', 'clean.ts'), 'export const c = codeOf(1);\n');
+    writeFileSync(join(root, 'src', 'mint.ts'), "export const c = 'unsupported_provider';\n");
+    expect(findCodeLiterals(root, ['unsupported_provider'], '')).toEqual([
+      `${join(root, 'src', 'mint.ts')}: unsupported_provider`,
+    ]);
+  });
 });
 
 /**
- * Walk `root` for `.ts` sources (skipping `dist`, `node_modules` and this
+ * Walk `root` for `.ts` sources (skipping `dist*` build output, `node_modules` and this
  * suite's own tests) and report every file quoting one of `codes` as a
  * string literal. Deliberately narrow: it looks for the quoted form, so
  * prose in a docstring naming a code is not an offence — minting the code
@@ -448,7 +468,8 @@ function findCodeLiterals(
   const offenders: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
-      if (entry === 'node_modules' || entry === 'dist' || entry.startsWith('.')) {
+      // `dist*` covers `dist` and the build's `dist.staging-<pid>` — output, never source.
+      if (entry === 'node_modules' || entry.startsWith('dist') || entry.startsWith('.')) {
         continue;
       }
       const full = join(dir, entry);
