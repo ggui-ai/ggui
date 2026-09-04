@@ -57,7 +57,9 @@ if (path) {
 }
 ```
 
-`protocol` MUST match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version installed. The loader (`loadGguiJson` / `safeLoadGguiJson` on the `./node` subpath) checks the declaration against `CLIENT_SUPPORTED_VERSIONS` — the wire's own predicate — and refuses a non-member with `UPGRADE_REQUIRED` (`GguiJsonProtocolUnsupportedError`, carrying `declared` / `supported` / `current`). Pass `{ versionPolicy: 'advisory', onDiagnostic }` to load anyway and receive the same finding as a diagnostic; there is no third posture. The schema itself validates the field as pattern-only so an old declaration stays readable.
+**Contract:** `protocol` MUST be a member of `CLIENT_SUPPORTED_VERSIONS` exported by the installed `@ggui-ai/protocol` — membership, not equality with the current stamp. The loader (`loadGguiJson` / `safeLoadGguiJson` on the `./node` subpath) checks exactly that predicate — the wire's own — and refuses a non-member with `UPGRADE_REQUIRED` (`GguiJsonProtocolUnsupportedError`, carrying `declared` / `supported` / `current`). Pass `{ versionPolicy: 'advisory', onDiagnostic }` to load anyway and receive the same finding as a diagnostic; there is no third posture. The schema itself validates the field as pattern-only so an old declaration stays readable.
+
+**House rule for files shipped as a starting point** (this repo's `samples/`): declare the CURRENT stamp, `PROTOCOL_VERSION` — pinned by the samples test. Today the supported set has one member, so the two rules coincide; when it grows, a supported-but-stale declaration still loads and only the samples pin insists on currency.
 
 Optional blocks: `storage` (renders / vectors / threads via `memory` or `sqlite`), `theme`, `primitives`, `blueprints`, `mcpMounts`, and `operator`. See the exported Zod schema for the full, authoritative shape.
 
