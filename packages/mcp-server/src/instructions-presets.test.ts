@@ -117,6 +117,35 @@ describe('resolveMcpInstructions', () => {
     }
   });
 
+  it('teaches the three-outcome render response (#786) in every protocol preset', () => {
+    // This text ships on InitializeResult.instructions EVERY session,
+    // so it is the most-read description of the render response we
+    // publish. Since #786 the wire carries `outcome` first and the six
+    // identity fields are present IFF something was committed — a
+    // preset that still promises a `sessionId` unconditionally teaches
+    // the agent to read a field a refusal does not carry.
+    for (const key of ['default', 'aggressive', 'always'] as const) {
+      const text = MCP_INSTRUCTIONS_PRESETS[key];
+      expect(text).toMatch(/`outcome`/);
+      expect(text).toMatch(/rendered.*failed.*refused/);
+      // The refused arm's three load-bearing facts.
+      expect(text).toMatch(/only `refusal`/);
+      expect(text).toMatch(/handshake is NOT consumed/);
+      expect(text).toMatch(/`fixBy` is `caller`/);
+    }
+  });
+
+  it('no preset promises the minted sessionId unconditionally (#786)', () => {
+    // The pre-#786 wording ("response carries the minted `sessionId`" /
+    // "Response includes the minted `sessionId`") is true only of a
+    // RENDERED result. Pin the negative so it cannot drift back.
+    for (const key of ['default', 'aggressive', 'always'] as const) {
+      const text = MCP_INSTRUCTIONS_PRESETS[key];
+      expect(text).not.toMatch(/response carries the minted `sessionId`/i);
+      expect(text).not.toMatch(/Response includes the minted `sessionId`/i);
+    }
+  });
+
   it('no preset carries imperative behavior-nudge language', () => {
     // Audit caught us overclaiming earlier: server `instructions` is
     // a "hint" per MCP spec, not enforcement. Imperatives like

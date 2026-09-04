@@ -180,6 +180,7 @@ export {
   type GenerationDeps,
   type GguiRenderHandlerDeps,
   type GguiSessionPostSuccessArgs,
+  type RenderOutput,
 } from "./render.js";
 export {
   applyRecordOp,

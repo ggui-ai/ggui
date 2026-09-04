@@ -940,7 +940,17 @@ type CommittedIdentity = Required<
   >
 >;
 
-type RenderOutput = GguiRenderOutput &
+/**
+ * Internal handler-output type (RENDERED shape). Exported because a
+ * first-party in-process caller that looks the handler up BY NAME out
+ * of a heterogeneous handler array (the console chat route) loses the
+ * declared output type at that seam, and the alternative — restating
+ * the shape at the call site — drifts silently the moment a field
+ * moves. Callers narrow to it with a runtime guard; nothing here is
+ * part of the wire contract (the internal seams below are stripped by
+ * `outputSchema` before serialization).
+ */
+export type RenderOutput = GguiRenderOutput &
   CommittedIdentity & {
     outcome: 'rendered';
     resourceUri: string;

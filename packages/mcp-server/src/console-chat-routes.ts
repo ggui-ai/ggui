@@ -46,8 +46,10 @@
 
 import {
   isHandlerFailure,
+  type RenderOutput,
   type SharedHandler,
 } from "@ggui-ai/mcp-server-handlers";
+import { isRenderedOutput, renderOutputSchema } from "@ggui-ai/protocol";
 import type { Express } from "express";
 import { randomUUID } from "node:crypto";
 import type { ZodRawShape } from "zod";
@@ -79,6 +81,35 @@ interface MountOptions {
   };
   /** Structured logger. */
   readonly logger: Logger;
+}
+
+/**
+ * Narrow the render handler's result to its committed RENDERED shape.
+ *
+ * The handler is looked up BY NAME out of a heterogeneous handler
+ * array, so its declared output type is erased to `unknown` at this
+ * seam and a runtime probe is the only honest way back to a type. The
+ * shape is NOT restated here: the wire half is validated by the
+ * protocol's own `renderOutputSchema` and the arm is decided by the
+ * exported `isRenderedOutput` guard, so the three-outcome rules
+ * (ggui#786) are enforced rather than assumed. Only the two
+ * handler-internal seams the console reads — `shortCode` and
+ * `codeReady`, which `renderOutputSchema` deliberately strips before
+ * the wire — are probed directly, and the predicate returns the
+ * handler's own {@link RenderOutput} so a moved field breaks the build
+ * instead of silently reading `undefined`.
+ */
+function isRenderedConsoleResult(value: unknown): value is RenderOutput {
+  const parsed = renderOutputSchema.safeParse(value);
+  if (!parsed.success || !isRenderedOutput(parsed.data)) return false;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "shortCode" in value &&
+    typeof value.shortCode === "string" &&
+    "codeReady" in value &&
+    typeof value.codeReady === "boolean"
+  );
 }
 
 /**
@@ -173,12 +204,22 @@ export function mountConsoleChatRoutes(opts: MountOptions): void {
           });
           return;
         }
-        const result = raw as {
-          sessionId: string;
-          shortCode: string;
-          codeReady: boolean;
-          cache?: { hit: boolean; llmCallsAvoided: number };
-        };
+        if (!isRenderedConsoleResult(raw)) {
+          // Unreachable by type: the render handler returns either a
+          // HandlerFailure (both the `failed` and `refused` arms, caught
+          // above) or a committed RENDERED result. Reaching here means
+          // the handler's output stopped matching the protocol schema,
+          // which is a bug to surface loudly rather than a wire state to
+          // paper over with optional reads.
+          logger.warn?.("console_chat_render_nonconformant", { threadId });
+          res.status(500).json({
+            error: "render_result_nonconformant",
+            message:
+              "ggui_render returned a result that is neither a failure envelope nor a conformant rendered result.",
+          });
+          return;
+        }
+        const result = raw;
         ui = {
           sessionId: result.sessionId,
           shortCode: result.shortCode,
