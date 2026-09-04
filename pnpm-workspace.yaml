@@ -139,6 +139,15 @@ overrides:
   "brace-expansion@>=5": ^5.0.9
   # fast-uri floor raised 3.1.4 → 3.1.6 (2026-09-03: GHSA-5jgf-p345-68v8 / f65p-4m7j-42xc / fph4-wmhf-6fwf / jqff-g426-hqxp, HIGH, published 2026-09-02; ajv@8 resolver, in the pod + backend prod closures). Same-major.
   "fast-uri@<3.1.6": ^3.1.6
+  # immutable <3.8.4 (GHSA-xvcm-6775-5m9r, HIGH; surfaced by the 2026-09-03
+  # rescan — Amplify codegen devDeps chain: @ardatan/relay-compiler →
+  # appsync-modelgen-plugin → backend-cli; build toolchain, not shipped).
+  "immutable@<3.8.4": ^3.8.4
+  # fflate 0.8.0–0.8.2 (GHSA-px8p-9vwx-vf98, MEDIUM; @smithy/middleware-
+  # compression ← @aws-sdk/client-cloudwatch — cloud Lambda runtime).
+  # Scoped to the 0.8 line: posthog-js's fflate 0.4.9 is outside the
+  # advisory and a 0.x-minor move there would be MAJOR-class.
+  "fflate@>=0.8.0 <0.8.3": ^0.8.3
   "fast-xml-builder@<1.1.7": ^1.1.7
   # Kept in lockstep with the root workspace's block. These two files
   # drifted once — the root had no security overrides at all while this
