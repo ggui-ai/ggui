@@ -20,6 +20,7 @@
  * across three distinct domains.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { assertRenderedResult } from '../_shared/rendered-result.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
@@ -255,12 +256,12 @@ describe('Contacts MCP mounted on createGguiServer — real /mcp wire', () => {
           props: {},
         },
       });
-      // Post-Phase-B render response: structuredContent carries
-      // `{sessionId, action}`.
-      const structured = result.structuredContent as {
-        sessionId: string;
-        action: string;
-      };
+      // Read `outcome` before the identity fields: only a RENDERED
+      // result carries them (ggui#786). The shared assertion narrows
+      // the ORIGINAL object, so the `url` key check below still grades
+      // the real payload rather than a schema-stripped copy.
+      const structured = result.structuredContent;
+      assertRenderedResult(structured);
       expect(structured.sessionId).toBeTruthy();
       // Post-R5 (fix-A 2026-05-26): no dead `url` on structuredContent.
       expect(Object.keys(structured)).not.toContain('url');

@@ -22,6 +22,7 @@ import {
   unwrapStructured,
   type JsonRpcResponse,
 } from './mcp-client.js';
+import { unwrapRenderedResult } from './rendered-result.js';
 
 /** Code identity read off the render's `ai.ggui/render` slice. */
 export interface RenderCodeRef {
@@ -117,30 +118,18 @@ export async function renderKnownContract(
   // propsSpec entries our test doesn't supply), making scenarios
   // non-deterministic. `props` is required on every render; default to
   // `{}` since these contracts declare no propsSpec.
-  const render = unwrapStructured<{
-    sessionId?: unknown;
-    resourceUri?: unknown;
-  }>(
+  // Trust-boundary narrowing lives in ONE place for this package —
+  // `unwrapRenderedResult` validates the untrusted JSON-RPC body
+  // against `renderOutputSchema` and narrows to the rendered arm,
+  // naming the refusal code + fix (or the failure code) when the
+  // outcome is not `rendered` (ggui#786).
+  const { sessionId, resourceUri } = unwrapRenderedResult(
     await callTool(opts.mcpUrl, 'ggui_render', {
       handshakeId: handshake.handshakeId,
       props: opts.props ?? {},
       override: { contract: opts.contract },
     }),
   );
-
-  // Trust-boundary narrowing — the JSON-RPC body is untrusted wire
-  // input; validate the two identity fields instead of casting.
-  const { sessionId, resourceUri } = render;
-  if (
-    typeof sessionId !== 'string' ||
-    sessionId.length === 0 ||
-    typeof resourceUri !== 'string' ||
-    resourceUri.length === 0
-  ) {
-    throw new Error(
-      `ggui_render output missing sessionId/resourceUri: ${JSON.stringify(render).slice(0, 400)}`,
-    );
-  }
 
   return {
     handshakeId: handshake.handshakeId,

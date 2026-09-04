@@ -72,33 +72,21 @@ import {
   type JsonRpcResponse,
 } from '../fixtures/mcp-client.js';
 import { BANNER_CONTRACT, BANNER_INTENT } from '../fixtures/cache-contracts.js';
+import {
+  unwrapRenderedResult,
+  type RenderedResult,
+} from '../fixtures/rendered-result.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 /**
- * Local mirror of `renderOutputSchema` (`oss/packages/protocol/src/
- * schemas/mcp.ts`) — only the fields this scenario reads, kept inline
- * so the wire-scenarios harness stays dependency-free like its sibling
- * fixtures.
- *
- * `outcome` is that schema's discriminant and its one unconditionally
- * required field (SPEC §7.1): `sessionId` and the other identity
- * fields are present IFF `outcome` is `'rendered'` or `'failed'`. A
- * `'refused'` result carries `outcome` + a `refusal` and nothing else.
- * This scenario asserts cache behaviour on committed renders, so
- * `renderOnce` below gates on `outcome` rather than modelling the
- * refusal arm.
+ * The rendered arm of `ggui_render`, as narrowed by the package's ONE
+ * render-result seam. Aliased (not restated) so this scenario cannot
+ * drift from `renderOutputSchema` — see `fixtures/rendered-result.ts`.
  */
-interface RenderOut {
-  outcome?: 'rendered' | 'failed' | 'refused';
-  sessionId: string;
-  resourceUri?: string;
-  action?: string;
-  blueprintId?: string;
-  cache?: { hit?: boolean; kind?: string; reason?: string };
-}
+type RenderOut = RenderedResult;
 
 interface CodeIdentity {
   codeUrl?: string;
@@ -166,15 +154,10 @@ async function renderOnce(opts: {
       : {}),
   });
   const latencyMs = Date.now() - start;
-  const out = unwrapStructured<RenderOut>(resp);
-  // Gate on the discriminant before any assertion reads an identity
-  // field: only `rendered` and `failed` carry them, and a refusal
-  // carries none at all. Every cache assertion below is about a
-  // COMMITTED render, so a non-`rendered` outcome must fail loudly
-  // here rather than surface as an undefined blueprintId.
-  if (out.outcome !== 'rendered') {
-    throw new Error(`ggui_render did not render: ${JSON.stringify(out)}`);
-  }
+  // One seam for the whole package: validates against
+  // `renderOutputSchema`, narrows to the rendered arm, and names the
+  // refusal code + fix (or the failure code) when it is not one.
+  const out = unwrapRenderedResult(resp);
   const code = codeIdentityOf(resp);
   return {
     out,

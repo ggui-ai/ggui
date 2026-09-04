@@ -870,9 +870,12 @@ export interface ChannelNotifier {
  * Input raw-shape.
  *
  * Single shape: `{ handshakeId, props, override? }`.
- * `handshakeId` is REQUIRED — every render consumes a prior
- * `ggui_handshake` record. The handshake captures the intent +
- * blueprintDraft and produces the suggestion the render acts on.
+ * `handshakeId` is REQUIRED — a render that reaches generation
+ * consumes a prior `ggui_handshake` record. The handshake captures the
+ * intent + blueprintDraft and produces the suggestion the render acts
+ * on. A PRE-GENERATION refusal (ggui#786) is the exception: it is
+ * projected before the parse, so it reads no handshake and leaves the
+ * record valid for a retry on the same `handshakeId`.
  *
  * Decision is now expressed by PRESENCE of `override`, not a
  * discriminated union:
@@ -1149,7 +1152,7 @@ export function createGguiRenderHandler(
         // 1. Call shape — the literal JSON the agent must emit.
         "CALL SHAPE: ggui_render({handshakeId, props, override?}). handshakeId comes from a prior ggui_handshake (REQUIRED). OMIT override to ACCEPT — this REUSES the contract the handshake proposed (reuse path — no regeneration). Provide override:{contract?, variance?} to re-aim the proposal (PATCH semantics): override.contract generates fresh from your OWN new contract (STRICT — it must already conform or this call fails); override.variance re-aims the variant (persona/aesthetic/context/seedPrompt) while keeping the agreed contract — a different variance resolves a distinct cached component. VARIANCE is design-shaping signals only — the same STRICT four keys (persona/aesthetic/context/seedPrompt, nothing else); per-user runtime data goes in props/contextSpec, NOT variance. props is REQUIRED — pass values for every propsSpec field the effective contract declares, or {} when it declares none; values are validated against propsSpec at render time, and the key set is CLOSED at every level (top-level props AND the items/objects inside them): a key the contract does not declare — an extra `id`, a renamed field — fails the render. Copy the key set of the handshake's nextStep.example exactly and replace only the values (enum-typed fields take one of the listed values, never \"\"). READ THE RESPONSE'S `outcome` FIRST — it is one of `rendered` | `failed` | `refused`. On `rendered` and `failed` the response reports the final `action`, the `blueprintId` (stable — equal across renders that reused the same component), and a `cache` marker; `failed` adds `error` and CONSUMES the handshake, so recovery starts at a fresh ggui_handshake. `refused` means the call was declined BEFORE any work: the response carries ONLY `refusal` ({code, message, fix, retry}) — no sessionId, no cache, no error — nothing was committed and the handshake is INTACT, so the SAME handshakeId still works once the `fix` is done. Never auto-retry a refusal whose registered `fixBy` is not `caller`: the fix is someone else's to make, and retrying does not perform it.",
         // 2. Prerequisite — handshake first, always.
-        'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — render consumes it. Direct render without a handshakeId fails with handshake_not_found.',
+        'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — a rendered or failed render consumes it; a REFUSED render does not, so the same handshakeId works again once the fix lands. Direct render without a handshakeId fails with handshake_not_found.',
         // 2b. Next step — driven by the response, not blanket-applied.
         "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({sessionId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
         // 3. Recovery shape — what happens on validation failure.

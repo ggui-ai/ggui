@@ -1776,6 +1776,20 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).not.toMatch(/mint a fresh blueprintId/);
   });
 
+  // #786: the PREREQUISITE block said the render consumes the
+  // handshake, full stop — which block 1 and the pre-generation-gate
+  // JSDoc both contradict for the refused arm. An agent that believes
+  // it re-handshakes after a refusal it could have simply retried.
+  it('PREREQUISITE qualifies handshake consumption by outcome (#786)', () => {
+    const d = description();
+    expect(d).toMatch(
+      /a rendered or failed render consumes it; a REFUSED render does not/,
+    );
+    expect(d).toMatch(/the same handshakeId works again once the fix lands/);
+    // The unqualified claim must not survive anywhere in the text.
+    expect(d).not.toMatch(/—\s*render consumes it\./);
+  });
+
   it('keeps blocks 2-6 (PREREQUISITE / NEXT STEP / RECOVERABLE / MUTATION / WIRE SURFACE / HOSTING) verbatim', () => {
     const d = description();
     expect(d).toContain(

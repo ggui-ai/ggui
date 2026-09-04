@@ -8,15 +8,21 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 9 fixtures PASS (see {@link EXPECTED_PASSING}).
- *   - 3 fixtures SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
+ *   - 13 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *     fixtures plus the 4 `registry-completeness` catalog rows, which
+ *     grade the closed refusal-code registry this server embeds from
+ *     `@ggui-ai/protocol` (ggui#786).
+ *   - 9 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
- *     `ui-initialize-response-override`) or the matcher's
- *     `unmatchable-on-ws` for Path-B claims (`props-update`). See
- *     `match-behavior.ts` for the Path-A vs Path-B partition.
+ *     `ui-initialize-response-override`), the matcher's
+ *     `unmatchable-on-ws` for Path-B claims (`props-update`), and the
+ *     6 `refusal-envelope` rows, which need a tool plane this
+ *     live-channel-only server does not have. See `match-behavior.ts`
+ *     for the Path-A vs Path-B partition.
  *   - 0 fixtures FAIL — `KNOWN_FAILURES_AT_v0` is empty.
  */
 import { runConformance } from '@ggui-ai/protocol-conformance';
+import { PRE_GENERATION_REFUSAL_CODES } from '@ggui-ai/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createReferenceConformanceHost } from './conformance-host.js';
@@ -114,6 +120,16 @@ const EXPECTED_PASSING = [
   'app-mismatch',
   'bootstrap-success',
   'host-context-observed-persists',
+  // The `registry-completeness` catalog (ggui#786). These four rows
+  // grade the closed refusal-code REGISTRY — a protocol artifact this
+  // server already embeds via `@ggui-ai/protocol` — not any server
+  // behaviour, so a vendor-neutral implementation can and must grade
+  // them. They pass because `runConformance` below is handed
+  // `PRE_GENERATION_REFUSAL_CODES`.
+  'registry-completeness/after-fix-names-fixby',
+  'registry-completeness/code-equals-key',
+  'registry-completeness/retry-in-closed-set',
+  'registry-completeness/surfaces-non-empty',
   'undeclared-action-rejected',
   'version-match',
   'version-mismatch',
@@ -131,11 +147,34 @@ const EXPECTED_PASSING = [
  *     injection the host adapter throws on by design.
  *   - `props-update-roundtrip`: the assertion is on rendered DOM; the
  *     matcher returns `unmatchable-on-ws` (Path-B).
+ *   - `refusal-envelope/*` (ggui#786): grading these needs a
+ *     `refusalProjector`, i.e. the tool result THIS server would emit
+ *     for a given pre-generation refusal. This server has no MCP tool
+ *     plane at all — it speaks the live channel only (no `tools/call`,
+ *     no `ggui_render`, and `./render.ts` is an in-memory GguiSession
+ *     store, not a tool handler), so there is no projection of its own
+ *     to grade. That is the same class of scope limit as
+ *     `props-update-roundtrip`, not an ungraded obligation: the
+ *     SHIPPING projection is graded against this identical catalog by
+ *     `render-refusal-projection.conformance.test.ts` in
+ *     `@ggui-ai/mcp-server-handlers`, which drives the real
+ *     `ggui_render` handler. Standing up a second projector here would
+ *     have to be built from SPEC §7.1 + `@ggui-ai/protocol` primitives
+ *     — which is exactly what the kit's OWN meta-test already grades,
+ *     so it would re-grade the kit's reference rather than add signal.
+ *     Wire these rows the moment this server grows a tool plane.
+ *     The registry half of #786 IS graded here — see EXPECTED_PASSING.
  */
 const EXPECTED_SKIPPED = [
   'bootstrap-bundle-fetch-failed',
   'bootstrap-meta-missing',
   'props-update-roundtrip',
+  'refusal-envelope/refuse-after-fix-caller',
+  'refusal-envelope/refuse-after-fix-owner-with-balance',
+  'refusal-envelope/refuse-later',
+  'refusal-envelope/refuse-never',
+  'refusal-envelope/refuse-next-period',
+  'refusal-envelope/refuse-non-render-surface',
 ];
 
 /**
@@ -169,6 +208,11 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       // Every fixture waits out the full observation window — keep it
       // short; the reference server's emissions are synchronous.
       observationTimeoutMs: 1500,
+      // Grade the `registry-completeness` catalog (ggui#786) against
+      // the closed registry this server already embeds. Omitting it
+      // would report those four rows SKIPPED — an ungraded obligation
+      // on a protocol artifact a vendor-neutral server does carry.
+      refusalRegistry: PRE_GENERATION_REFUSAL_CODES,
     });
 
     const diagnostic = [
@@ -211,6 +255,7 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       auth: { kind: 'bearer', token: 'reference' },
       host,
       observationTimeoutMs: 1500,
+      refusalRegistry: PRE_GENERATION_REFUSAL_CODES,
     });
 
     expect(result.skipped.map((s) => s.name).sort()).toEqual(EXPECTED_SKIPPED);
