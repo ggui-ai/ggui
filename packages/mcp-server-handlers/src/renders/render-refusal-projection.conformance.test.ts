@@ -72,8 +72,11 @@ async function projectThroughHandler(
     renderStore: new InMemoryGguiSessionStore(),
     preValidationGate: () => parsedRefusal.data,
   });
-  // Deliberately malformed wire input: the projection runs before the
-  // parse, so this call must still produce the envelope.
+  // Deliberately malformed input, dispatched IN-PROCESS — not over the
+  // wire, where the SDK's declared-shape validation would reject `{}`
+  // before any handler ran. The projection runs before the HANDLER's own
+  // parse, so this call must still produce the envelope: the claim under
+  // test is "nothing read, nothing committed", not "nothing validated".
   const out = await handler.handler({}, CTX);
   if (!isHandlerFailure(out)) {
     throw new Error('the shipping handler did not project a refusal envelope');
