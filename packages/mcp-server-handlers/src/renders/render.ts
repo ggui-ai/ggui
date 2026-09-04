@@ -796,9 +796,12 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * wire envelope and projects the refusal onto an `isError: true`
    * tool result with `outcome: 'refused'`, committing nothing and
    * consuming no handshake. **A gate that THROWS instead is a
-   * conformance failure** — the throw lands on the JSON-RPC error path
-   * as an opaque prose message, losing the code, the `fix` and the
-   * retry class, which is exactly the loss this contract removes.
+   * conformance failure** — the SDK catches the throw in the SAME
+   * block that catches its own `InvalidParams`, so it comes back as a
+   * tool RESULT carrying `isError: true` and nothing but the error's
+   * prose message: no `structuredContent`, and the code, the `fix` and
+   * the retry class are gone. That is exactly the loss this contract
+   * removes.
    * (Genuine faults inside a gate — a store that is down — still
    * throw; that path is unchanged. What must not throw is a REFUSAL.)
    *
