@@ -194,7 +194,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
 });
 
 describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
-  it('ships exactly the thirteen render-gate codes (v2 + v5 + v7 + v8 + v9)', () => {
+  it('ships exactly the fourteen render-gate codes (v2 + v5 + v7 + v8 + v9 + v10)', () => {
     expect(codesOn('render-gate')).toEqual(
       [
         'app_canceled',
@@ -207,6 +207,10 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
         // per-issuer one below: one state, one code.
         'app_rate_limited',
         'billing_mode_anomaly',
+        // v10 (#803 leg 1) — the generation gate's fall-through: a
+        // non-playground identity that resolves to NO billing path.
+        // A state name for what RenderForbiddenError used to throw.
+        'billing_path_missing',
         'hard_cap_exceeded',
         'insufficient_credit',
         'issuer_rate_limited',
