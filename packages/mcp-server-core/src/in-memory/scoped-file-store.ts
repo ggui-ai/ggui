@@ -1,11 +1,11 @@
 /**
  * InMemoryScopedFileStore — reference {@link ScopedFileStore} for tests
- * and ephemeral OSS dev runs. One process, one shared `Map`-backed
+ * and ephemeral dev runs. One process, one shared `Map`-backed
  * underlying store, prefix-mounted scope instances.
  *
- * Production OSS binding (filesystem under `~/.ggui/storage/`) lives in
- * `@ggui-ai/server`. The hosted binding (S3) lives in
- * `@ggui-cloud/runtime`. Any binding MUST pass
+ * The production binding (filesystem under `~/.ggui/storage/`) lives in
+ * `@ggui-ai/server`; a deployment may write its own (object storage, a
+ * database). Any binding MUST pass
  * `scopedFileStoreContract` from `../contract-tests/scoped-file-store.js`.
  *
  * TTL is enforced lazily at read time (no timers, so no dangling handles
@@ -214,7 +214,7 @@ class InMemoryScopedFileStoreImpl implements ScopedFileStore {
 }
 
 /**
- * In-memory {@link ScopedFileStoreRegistry} for tests / OSS ephemeral
+ * In-memory {@link ScopedFileStoreRegistry} for tests / ephemeral
  * dev. Backed by a single shared `Map`; scope instances are thin prefix
  * wrappers. Reusing the same scope arguments returns DISTINCT
  * `ScopedFileStore` instances, but they observe the same storage —

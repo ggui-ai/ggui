@@ -1,22 +1,22 @@
 /**
  * Shared handshake-decision core — ONE negotiation pipeline, adapter-injected.
  *
- * Both the OSS server (`@ggui-ai/mcp-server`) and the cloud pod
- * (`@ggui-cloud/ggui-protocol-pod`) drive the same `decideHandshake`
- * function; they differ ONLY in the {@link HandshakeDecisionAdapter} they
- * inject. The adapter abstracts every seam that varies between
- * deployments — the LLM (BYOK provider vs Bedrock), the blueprint pools
- * to search (sqlite/in-memory vs S3 Vectors; one per-app pool vs a
- * per-app + shared-catalog + org fan-out), an optional deployment-specific
- * pre-match (cloud's curated-blueprint tier-0), and an operator-visible
- * warn sink.
+ * Every host drives the same `decideHandshake` function — the server in
+ * `@ggui-ai/mcp-server` and any deployment's own host alike; they differ
+ * ONLY in the {@link HandshakeDecisionAdapter} they inject. The adapter
+ * abstracts every seam that varies between deployments — the LLM (a
+ * per-request provider key, or a deployment's fixed caller), the
+ * blueprint pools to search (a local vector store or a hosted one; one
+ * per-app pool, or a per-app pool plus shared catalogs), an optional
+ * deployment-specific pre-match (a curated catalog consulted first), and
+ * an operator-visible warn sink.
  *
  * ## Decision spine (identical for every deployment)
  *
  *   1. **Pre-match** (optional adapter hook) — a deployment-specific
- *      deterministic match that wins over everything else. Cloud uses it
- *      for the curated-blueprint tier-0 (dataTools ⊆ sourceTools). OSS
- *      omits it. A returned result short-circuits.
+ *      deterministic match that wins over everything else — e.g. a
+ *      curated catalog consulted first (dataTools ⊆ sourceTools). The
+ *      server this package ships omits it. A returned result short-circuits.
  *   2. **Find-similar across pools** — for each declared pool, in order,
  *      run {@link matchBlueprint} (exact-key → cosine gate → judge). An
  *      `exact-key` hit (free, canonical-key equality) in ANY pool wins
@@ -83,21 +83,22 @@ import {
 /**
  * One blueprint pool to search for a reusable match. A pool is a
  * `(registry, scope)` pair — the registry (embedding + vectorStore)
- * backing it, and the tenant/catalog partition to query within it.
+ * backing it, and the scope partition (an app, a shared catalog) to query
+ * within it.
  *
- * Modeling pools as an array is the adapter-first generalization: OSS
- * declares a single per-app pool; cloud declares the per-app pool plus a
- * shared-catalog pool (and may add org/team pools later) — the same core
- * fans out over whatever the deployment provides, no `includeSharedPool`
- * boolean special-case.
+ * Modeling pools as an array is the adapter-first generalization: the
+ * server this package ships declares a single per-app pool; a deployment
+ * may declare the per-app pool plus shared catalogs (and more partitions
+ * later) — the same core fans out over whatever the deployment provides,
+ * no `includeSharedPool` boolean special-case.
  */
 export interface BlueprintPool {
   /** Registry (embedding + vectorStore) backing this pool. */
   readonly registry: BlueprintRegistryDeps;
   /**
-   * Scope / tenant partition to query within the registry. Defaults to
-   * the request's `ctx.appId` (the per-app pool) when omitted. Cloud uses
-   * e.g. `'shared'` for a cross-tenant curated catalog.
+   * Scope partition to query within the registry. Defaults to the
+   * request's `ctx.appId` (the per-app pool) when omitted; a deployment
+   * may use e.g. `'shared'` for a catalog every app can match against.
    */
   readonly scope?: string;
   /**
@@ -113,7 +114,7 @@ export interface BlueprintPool {
 
 /**
  * The deployment-specific seams `decideHandshake` injects. Everything
- * that differs between OSS and cloud lives behind this interface; the
+ * that differs between deployments lives behind this interface; the
  * decision spine in {@link decideHandshake} is deployment-agnostic.
  */
 export interface HandshakeDecisionAdapter {
@@ -121,8 +122,9 @@ export interface HandshakeDecisionAdapter {
    * Resolve the LLM for this request — the find-similar judge AND the
    * synth-repair loop both use it. Returns `undefined` when no LLM is
    * available (e.g. no BYOK creds resolved); the core then returns a
-   * deterministic no-repair create fallback. OSS wraps a per-`ctx` BYOK
-   * resolver; cloud returns its static Bedrock caller.
+   * deterministic no-repair create fallback. The server this package ships
+   * wraps a per-`ctx` provider-key resolver; a deployment may return a
+   * fixed caller.
    */
   resolveLlm(
     ctx: HandlerContext,
@@ -151,8 +153,8 @@ export interface HandshakeDecisionAdapter {
   ) => Promise<'full' | 'exact-only'> | 'full' | 'exact-only';
   /**
    * Optional deployment-specific pre-match, run BEFORE the find-similar
-   * probe so a curated / byte-exact hit wins over everything. Cloud uses
-   * it for the curated-blueprint tier-0. Return a result to short-circuit;
+   * probe so a curated / byte-exact hit wins over everything — e.g. a
+   * deployment with a curated catalog consults it here. Return a result to short-circuit;
    * return `undefined` to fall through to the shared probe.
    */
   preMatch?(input: {
@@ -165,15 +167,16 @@ export interface HandshakeDecisionAdapter {
     | undefined;
   /**
    * Operator-visible sink for swallowed operational errors (pool probe
-   * hiccup, pre-match backend flap). OSS passes `console.warn`; cloud
-   * passes its structured logger. Absent ⇒ silent.
+   * hiccup, pre-match backend flap). The server this package ships passes
+   * `console.warn`; a deployment may pass its structured logger. Absent ⇒
+   * silent.
    */
   warn?(message: string): void;
   /**
    * Optional observer for every blueprint-match OUTCOME (hit or miss),
    * called once per pool probed in the Tier-1 find-similar loop.
    * Non-error, non-blocking — purely for cache-hit-ratio observability.
-   * Absent ⇒ no-op. OSS ships no default observer; a host MAY wire
+   * Absent ⇒ no-op. This package ships no default observer; a host MAY wire
    * this to its own structured logger. Enforced non-blocking: a
    * throwing observer is caught, reported via `warn` if present, and
    * never breaks the handshake.
@@ -522,7 +525,7 @@ export async function decideHandshake(
     }
   }
 
-  // Tier 0 — deployment-specific pre-match (cloud curated blueprint).
+  // Tier 0 — deployment-specific pre-match (e.g. a curated catalog).
   // Runs first so a curated / byte-exact hit wins over find-similar.
   if (adapter.preMatch) {
     const declaredAgentTools = parsedDraft.success

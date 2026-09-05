@@ -26,7 +26,7 @@
  * for the same user. `crossAppUser` is the opt-in cross-app namespace —
  * the agent SDK exposes it as `ctx.crossAppStorage` ONLY when the
  * user has explicitly enabled cross-app data sharing in their config
- * (OSS: `~/.ggui/config.json` `allowCrossAppDataSharing: true`;
+ * (by default: `~/.ggui/config.json` `allowCrossAppDataSharing: true`;
  * hosted: per-user preference flag, default false). The seam itself
  * does NOT enforce the consent gate — that is policy at the agent SDK
  * layer (server.ts builds `GguiCtx`); the registry just mounts the
@@ -97,19 +97,17 @@
  *   Orthogonal: kv is small / hot / tokenish; ScopedFileStore is for
  *   blobs (kilobytes to megabytes).
  *
- * ## OSS default + hosted binding
+ * ## Bindings — the default and your own
  *
- * - OSS default: `LocalScopedFileStoreRegistry` rooted at `~/.ggui/storage/`,
+ * - Default: `LocalScopedFileStoreRegistry` rooted at `~/.ggui/storage/`,
  *   ships with `@ggui-ai/server`. Each scope is one prefix-mounted
  *   instance backed by the local filesystem.
- * - In-memory variant for tests / ephemeral OSS dev runs:
+ * - In-memory variant for tests / ephemeral dev runs:
  *   `InMemoryScopedFileStore` + `InMemoryScopedFileStoreRegistry`
  *   (this package, see `in-memory/scoped-file-store.ts`).
- * - Hosted: `S3ScopedFileStoreRegistry` in `@ggui-cloud/runtime`.
- *   One bucket (`ggui-agent-data-*`), four prefix-mounted scope
- *   instances sharing one S3 client. IAM
- *   conditioning at the bucket level scopes pod role to the four
- *   prefixes.
+ * - Any binding a deployment writes itself (object storage, a
+ *   database): prefix-mounted scope instances behind this same port,
+ *   passing `scopedFileStoreContract` like the two above.
  */
 import type { JsonValue } from '@ggui-ai/protocol';
 
