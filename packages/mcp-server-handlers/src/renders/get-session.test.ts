@@ -12,6 +12,7 @@ import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiGetSessionHandler } from './get-session.js';
 import { GguiSessionNotFoundError } from './errors.js';
+import type { JsonObject } from '@ggui-ai/protocol';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 

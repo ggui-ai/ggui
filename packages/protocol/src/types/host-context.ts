@@ -78,6 +78,14 @@ import type { DeepReadonly } from './readonly';
 export type HostContextDisplayModeIsExtApps =
   z.infer<typeof mcpUiDisplayModeSchema> extends McpUiDisplayMode ? true : never;
 
+/**
+ * Forces the check above to be EVALUATED: a conditional type nobody consumes
+ * is never checked, but a value annotated with it is — if the wire enum ever
+ * drifts from ext-apps' `McpUiDisplayMode`, `true` stops being assignable to
+ * `never` and this line is the compile error.
+ */
+export const HOST_CONTEXT_DISPLAY_MODE_IS_EXT_APPS: HostContextDisplayModeIsExtApps = true;
+
 // =============================================================================
 // Container dimensions (mirror of `McpUiHostContext.containerDimensions`)
 // =============================================================================

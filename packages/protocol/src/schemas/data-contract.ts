@@ -59,6 +59,7 @@ import type {
   DataContract,
   JsonValue,
   JsonSchema,
+  JsonObject,
 } from '../types/data-contract';
 
 /**
@@ -79,6 +80,9 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
     z.record(z.string(), jsonValueSchema),
   ]),
 );
+
+/** A JSON object — the protocol's `JsonObject`, never a bare `Record`. */
+export const jsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
 
 /**
  * {@link JsonSchema} — JSON Schema draft-07 subset. Mirrors the

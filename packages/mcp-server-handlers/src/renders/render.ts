@@ -789,8 +789,10 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   }) => string | undefined;
 
   /**
-   * Pre-validation gate. Fires at the very TOP of the handler, BEFORE
-   * any input parsing or state-changing work.
+   * Pre-validation gate. Fires after the route guard
+   * (`renderInputRouteGuardSchema` — the `infra.model` grammar and nothing
+   * else, ggui#818) and BEFORE the typed input parse or any
+   * state-changing work.
    *
    * RETURN a {@link PreGenerationRefusal} to refuse the render;
    * return `undefined` to let it proceed. Returning a refusal is the
@@ -808,9 +810,9 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * throw; that path is unchanged. What must not throw is a REFUSAL.)
    *
    * Receives the input as it reaches the handler — typed `unknown`
-   * because THIS handler has not parsed it yet, so the gate can read
-   * declared deployment fields (e.g. `infra.model` for provider
-   * derivation) without paying for that parse. It does NOT see keys
+   * because THIS handler has not run its typed parse yet; the route guard
+   * has already proven a present `infra.model` parses, so the gate can
+   * read it for provider derivation without paying for the full parse. It does NOT see keys
    * the SDK already dropped: on the wire path the SDK validates the
    * call against the declared `inputSchema` and strips every
    * undeclared key before any handler runs, so a gate written to

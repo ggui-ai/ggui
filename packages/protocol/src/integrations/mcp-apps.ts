@@ -37,6 +37,7 @@ import { appThemeSchema, type AppTheme } from '../schemas/app-theme.js';
 import { isRecord } from '../validation/is-record.js';
 import type { z } from 'zod';
 import type { gguiSessionSummaryWireSchema } from '../schemas/mcp';
+import type { DeepReadonly } from '../types/readonly';
 
 /**
  * MCP capability name ggui servers advertise in their MCP `initialize`
@@ -821,7 +822,7 @@ export function parseMcpAppAiGguiHostSessionMeta(
  *
  * @public
  */
-export type GguiSessionSummaryWire = Readonly<
+export type GguiSessionSummaryWire = DeepReadonly<
   z.infer<typeof gguiSessionSummaryWireSchema>
 >;
 

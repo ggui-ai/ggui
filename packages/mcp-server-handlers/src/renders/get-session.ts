@@ -150,12 +150,14 @@ function applyHeartbeatOverlay(
  * on its render object, but the ROW carries the base fields, so the wire
  * never fails on that variant (the latent gap #817 part C surfaced); the
  * locator itself is not on this wire (MCP-Apps resources have their own
- * paths). Everything else on the row — themeId, status, hostSession — was
- * never delivered: the transport strip-parses to this shape.
+ * paths). `contextSnapshot` rides when the row has one — the read path a raw
+ * MCP client has for contextSpec values. Everything else on the row —
+ * themeId, status, hostSession — was never delivered: the transport
+ * strip-parses to this shape.
  */
 function projectGguiSession(stored: StoredGguiSession): GguiGetSessionOutput {
-  return {
-    variant: stored.render.type === 'mcpApps' ? 'mcpApps' : 'render',
+  const base = {
+    variant: stored.render.type === 'mcpApps' ? ('mcpApps' as const) : ('render' as const),
     id: stored.id,
     appId: stored.appId,
     eventSequence: stored.eventSequence,
@@ -163,4 +165,6 @@ function projectGguiSession(stored: StoredGguiSession): GguiGetSessionOutput {
     lastActivityAt: stored.lastActivityAt,
     expiresAt: stored.expiresAt,
   };
+  const snapshot = 'contextSnapshot' in stored.render ? stored.render.contextSnapshot : undefined;
+  return snapshot === undefined ? base : { ...base, contextSnapshot: snapshot };
 }

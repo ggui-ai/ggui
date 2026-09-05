@@ -171,7 +171,9 @@ export interface GguiEmitOutput {
 export type GguiGetSessionInput = z.infer<typeof getSessionInputSchema>;
 
 /**
- * Output from ggui_get_session tool — full render snapshot.
+ * `ggui_get_session`'s wire — the projection, never a `GguiSession`: `variant`
+ * + the store row's six base fields, plus `contextSnapshot` when the row has
+ * one. Nothing else on the row travels (the transport strip-parses to this).
  */
 export type GguiGetSessionOutput = Readonly<
   z.infer<typeof gguiGetSessionOutputSchema>

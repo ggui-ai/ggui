@@ -3130,6 +3130,22 @@
  * for any `ggui.json#protocol` is membership in
  * `CLIENT_SUPPORTED_VERSIONS`, enforced by the loader (`UPGRADE_REQUIRED`
  * on a non-member); the two coincide only while the set is a singleton.
+ *   r7. **Tool output shapes are protocol-owned (ggui#817 part C):**
+ *      seven schemas — search / featured / validate / consume's
+ *      host-context projection / list_sessions' summary / runtime_pull's
+ *      page / get_session — registered as `.shape`, types derived and
+ *      wearing `DeepReadonly` at the seam; `ggui_get_session`'s wire is the
+ *      projection (`variant` + six base fields, `contextSnapshot` when the
+ *      row has one), never a `GguiSession` — the alias was a lie the
+ *      strip-parse hid. No `.readonly()` in a wire schema (zod 4 projects
+ *      it as `readOnly`).
+ *   r8. **`infra.model` route grammar (ggui#818):** either wire form —
+ *      canonical `provider:model` or LiteLLM `provider/model`, aliases in
+ *      both — or the handler's route guard fails at zod path `infra.model`
+ *      BEFORE the pre-generation gate (`renderInputRouteGuardSchema`, the
+ *      grammar and nothing else, so `{}` still reaches the gate per r5); the
+ *      full envelope (`renderInputEnvelopeSchema`) parses after the gate.
+ *      Bare model ids are out.
  */
 export const PROTOCOL_VERSION = "draft-2026-09-04";
 

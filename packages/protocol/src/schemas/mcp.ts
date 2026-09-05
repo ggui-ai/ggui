@@ -29,7 +29,7 @@ import {
   blueprintDraftSchema,
   handshakeSuggestionSchema,
 } from './handshake-suggestion';
-import { dataContractSchema } from './data-contract';
+import { dataContractSchema, jsonObjectSchema } from './data-contract';
 import { blueprintVarianceSchema, blueprintSourceSchema } from './blueprint';
 import {
   REFUSAL_RETRIES,
@@ -1483,6 +1483,10 @@ export function isRefusedRenderOutput(
 // mutable JSON; readonly is applied at the seam (`DeepReadonly` on the
 // derived types). Every shape is closed: the transport strip-parses against
 // `.shape`, so the shape IS the wire.
+// Honest exception, pre-existing: three `.readonly()` calls in
+// `schemas/data-contract.ts` (gadget requires/connect, app public env) reach
+// the registered render + handshake inputs through `dataContractSchema` and
+// advertise `readOnly` on tools/list today — ggui#824 removes them.
 // ============================================================================
 
 /** Display modes an MCP Apps host can render a view in (ext-apps vocabulary). */
@@ -1545,6 +1549,13 @@ export const gguiGetSessionOutputSchema = z.object({
   createdAt: z.number().int().nonnegative(),
   lastActivityAt: z.number().int().nonnegative(),
   expiresAt: z.number().int().nonnegative(),
+  /**
+   * The last-known value of every declared contextSpec slot, as
+   * `ggui_runtime_sync_context` wrote it onto the row — the read path a
+   * raw MCP client (no widget-context mirror) has for contextSpec values.
+   * Present iff the row carries one; never an empty placeholder.
+   */
+  contextSnapshot: jsonObjectSchema.optional(),
 });
 
 /** The three sequential gates of `ggui_protocol_validate_blueprint`. */
