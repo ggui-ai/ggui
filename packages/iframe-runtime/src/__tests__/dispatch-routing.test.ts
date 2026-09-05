@@ -47,6 +47,7 @@ import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   __resetAppForTest,
   __resetRelayNoticeForTest,
+  bootSequence,
   channelToolsCall,
   dispatchDrainAck,
   resetRelayLatchForBoot,
@@ -70,6 +71,7 @@ import {
   isRelayIncapableError,
 } from '../relay-incapability.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
+import { connectionStore } from '../connection.js';
 import type { MockTransport, QueueResponseOptions } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
@@ -1544,6 +1546,44 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
     expect(deadTaps()[0]).toMatchObject({ intent: 'save', trigger: 'confirmed-refusal' });
     expect(toast()?.hasAttribute('data-ggui-relay-notice')).toBe(true);
+  });
+
+  it('a failed ui/initialize latches through the ONE writer with trigger boot-failed — the store flips, the notice stands, the next gesture counts (ggui#830)', async () => {
+    // The maximal dead zone: the host refused the mandatory handshake, so
+    // nothing can ever be delivered. Not a mount-time probe the runtime
+    // minted — the host's own answer to `ui/initialize`, the strongest
+    // confirmed outcome there is. Before the fix the SET gate could never
+    // fire (hostCapabilitiesCaptured stays false), so this document had
+    // no notice, no count, and `isConnected === true` forever.
+    __resetAppForTest();
+    const dom = document.implementation.createHTMLDocument('boot-failed');
+    const failing = buildBootHarness({ initResponse: { error: { code: -1, message: 'host refused' } } });
+    const result = await bootSequence({
+      doc: dom,
+      app: failing.app,
+      transport: failing.transport,
+      connectFn: vi.fn() as unknown as Parameters<typeof bootSequence>[0]['connectFn'],
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 50,
+    });
+    expect(result.ok).toBe(false);
+    const edge = relay().at(-1);
+    expect(edge).toMatchObject({ state: 'latched', trigger: 'boot-failed' });
+    expect(connectionStore.getSnapshot()).toBe(false);
+    // Attempt-always: the gesture still dispatches; with no App bound the
+    // outcome is the code-less envelope — undelivered inside a standing
+    // zone, counted.
+    routeDispatch({
+      actionName: 'save',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+    expect(relay().at(-1)?.state).toBe('latched');
+    expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
+    expect(deadTaps()[0]).toMatchObject({ intent: 'save', trigger: 'boot-failed' });
   });
 
   it('the channel router fail-fast while latched emits no relay-dead-tap — one event per user gesture, never per tick', async () => {

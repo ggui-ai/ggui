@@ -945,6 +945,17 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     setStatus(refs, `ui/initialize failed: ${initResult.message}`, 'error');
     retireShellLoadingIndicator(doc);
     emitBootFailure('UI_INITIALIZE_FAILED', initResult.message);
+    // The maximal dead zone (ggui#830): the host refused the handshake
+    // every session begins with, so nothing can be delivered here — the
+    // relay latch sets through its one writer (store false, 'latched'
+    // edge, standing notice) instead of leaving this document with
+    // `isConnected === true`, no explanation and no count. No gesture
+    // is needed for that knowledge, and no gesture is suppressed by it:
+    // every later tap still attempts (attempt-always) and lands as a
+    // counted dead tap. The scope is empty because no bootstrap has
+    // named a session yet; it clears the only way a handshake failure
+    // can — the next boot's close edge.
+    announceRelayIncapability('boot-failed', {});
     return { ok: false, mountedRender };
   }
 
@@ -3067,6 +3078,29 @@ function transitionRelayLatch(
 }
 
 /**
+ * Set the latch AND present it — the three steps every latch-set path
+ * takes, in one place: the transition through the ONE writer (store
+ * flip + `'latched'` edge), a fresh dead zone (unspent cue throttles —
+ * the state belongs to THIS notice, so a second latch-set path never
+ * has to know the clear edge already reset it), and the standing
+ * explanation, marked so the per-gesture cue arms on its dismissal.
+ * Callers: the dispatch outcome gate (a gesture's confirmed relay
+ * failure) and the boot sequence (a refused `ui/initialize`, ggui#830).
+ */
+function announceRelayIncapability(
+  trigger: RelayLatchTrigger,
+  scope: RelayLatchScope,
+): void {
+  transitionRelayLatch(true, trigger, scope);
+  resetRelayCueThrottles();
+  showActionToast(
+    'This host cannot relay actions to the agent — interactive controls will not work here.',
+    'action_required',
+  );
+  markRelayNotice();
+}
+
+/**
  * One {@link RelayDeadTapEvent} per gesture attempted inside a standing
  * dead zone that came back UNDELIVERED (ggui#670 Phase 3). Called from
  * the dispatch outcome branch ONLY — the channel router's fail-fast
@@ -3722,24 +3756,10 @@ export function dispatchSubmitAction(args: {
       // would spam; the two edges carry the full information. A
       // standing latch never reaches here: its undelivered outcomes
       // were counted above, and a delivered one cleared it.
-      transitionRelayLatch(
-        true,
+      announceRelayIncapability(
         confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
         { sessionId, appId },
       );
-      // Establish the flag's invariant where the notice it describes
-      // is created: a freshly-shown notice is undismissed, and its
-      // dead zone starts with an unspent throttle. Today every
-      // re-latch already passes through the clear edge above (which
-      // resets both), so this is the same value arriving by a second
-      // route — kept because the state belongs to THIS notice, and a
-      // future second latch-set path shouldn't have to know that.
-      resetRelayCueThrottles();
-      showActionToast(
-        'This host cannot relay actions to the agent — interactive controls will not work here.',
-        'action_required',
-      );
-      markRelayNotice();
       return;
     }
     showActionToast(`⚠ ${intent} — could not reach the agent`, 'error');

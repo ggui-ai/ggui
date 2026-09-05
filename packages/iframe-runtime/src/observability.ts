@@ -200,15 +200,25 @@ export interface UiFeedbackEvent {
 }
 
 /**
- * The evidence that latched a relay dead zone (ggui#599 cycle-2):
- * `'confirmed-refusal'` — the relay answered a declared refusal code
- * (helper-minted; outranks any positive advertisement), vs
- * `'advert-silent'` — the host never advertised `serverTools` and the
- * attempt failed relay-shaped.
+ * The evidence that latched a relay dead zone:
+ *   - `'confirmed-refusal'` — the relay answered a declared refusal code
+ *     (helper-minted; outranks any positive advertisement) (ggui#599
+ *     cycle-2);
+ *   - `'advert-silent'` — the host never advertised `serverTools` and
+ *     the attempt failed relay-shaped;
+ *   - `'boot-failed'` — the host refused the mandatory `ui/initialize`
+ *     handshake itself, so nothing can ever be delivered in this
+ *     document (ggui#830). Not a probe the runtime minted: the host's
+ *     own answer to the one request every session begins with — the
+ *     strongest confirmed outcome there is. It clears the only way a
+ *     handshake failure can: the next boot's close edge.
+ *
+ * Hosts MUST tolerate a trigger they do not know (an older host
+ * reading a newer renderer): the edge is the fact, the trigger is why.
  *
  * @public
  */
-export type RelayLatchTrigger = 'confirmed-refusal' | 'advert-silent';
+export type RelayLatchTrigger = 'confirmed-refusal' | 'advert-silent' | 'boot-failed';
 
 /**
  * Fired at the two transition edges of the renderer's
@@ -217,7 +227,9 @@ export type RelayLatchTrigger = 'confirmed-refusal' | 'advert-silent';
  *
  *   - `'latched'` — a real user gesture just failed relay-shaped on a
  *     host whose captured capability handshake never advertised
- *     `serverTools`, or the relay answered a declared refusal code.
+ *     `serverTools`, or the relay answered a declared refusal code, or
+ *     the host refused `ui/initialize` itself (`'boot-failed'`,
+ *     ggui#830 — no gesture is needed to know nothing can be delivered).
  *     The runtime now treats relay as confirmed-unavailable: it shows
  *     one persistent explanation, arms the dead-zone cue for every
  *     later gesture, and channel polls fail fast without a transport
