@@ -1406,12 +1406,13 @@ describe('transportRefusalSchema / transportRefusalErrorSchema — the mcp-endpo
     message: 'the app record has no owner claim any more — the app was deprovisioned',
     fix: 'provision the app again; this app id never renders again',
     retry: 'never' as const,
+    appId: 'app_deprov_1',
   };
   const ERROR = { code: -32003 as const, message: 'App not found' as const, data: { refusal: REFUSAL } };
 
-  it('round-trips the projection: code, message, fix, retry — nothing else', () => {
+  it('round-trips the projection: code, message, fix, retry, appId — nothing else', () => {
     expect(transportRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
-    expect(Object.keys(transportRefusalSchema.shape)).toEqual(['code', 'message', 'fix', 'retry']);
+    expect(Object.keys(transportRefusalSchema.shape)).toEqual(['code', 'message', 'fix', 'retry', 'appId']);
   });
 
   it('is strict: the render-only fields and fixBy are refused, not stripped', () => {
@@ -1514,5 +1515,23 @@ describe('ggui_consume and ggui_list_sessions own their wire shapes in the proto
     expect(gguiEmitOutputSchema.parse({ accepted: true })).toEqual({ accepted: true });
     expect(gguiEmitOutputSchema.parse({ accepted: true, seq: 3 })).toEqual({ accepted: true, seq: 3 });
     expect(() => gguiEmitOutputSchema.parse({ accepted: true, seq: -1 })).toThrow();
+  });
+});
+
+describe('transportRefusalSchema carries the app id as data (ggui#870)', () => {
+  const base = {
+    code: 'app_deprovisioned',
+    message: 'the app record has no owner claim — it was deprovisioned',
+    fix: 'provision a new app; this endpoint will not serve again',
+    retry: 'never',
+  } as const;
+
+  it('a refusal without appId is REFUSED by the strict schema — a repair loop must never parse prose for it', () => {
+    expect(transportRefusalSchema.safeParse(base).success).toBe(false);
+  });
+
+  it('a refusal with appId parses and keeps it verbatim', () => {
+    const parsed = transportRefusalSchema.parse({ ...base, appId: 't7faVMIc' });
+    expect(parsed.appId).toBe('t7faVMIc');
   });
 });

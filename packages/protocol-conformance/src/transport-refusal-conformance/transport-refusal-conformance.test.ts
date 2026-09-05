@@ -38,7 +38,7 @@ describe('transport-refusal conformance catalog', () => {
     for (const c of transportRefusalCases) {
       expect(c.name.length).toBeGreaterThan(0);
       expect(c.description.length).toBeGreaterThan(0);
-      expect(Object.keys(c.refusal).sort()).toEqual(['code', 'fix', 'message', 'retry']);
+      expect(Object.keys(c.refusal).sort()).toEqual(['appId', 'code', 'fix', 'message', 'retry']);
     }
     const projecting = transportRefusalCases.filter((c) => c.expect !== null);
     expect(projecting.map((c) => c.refusal.code)).toEqual(['app_deprovisioned']);

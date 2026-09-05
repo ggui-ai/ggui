@@ -1,11 +1,12 @@
 {
   "name": "refuse-render-only-code",
-  "description": "A REGISTERED code whose surfaces exclude mcp-endpoint has no transport envelope: the per-app endpoint's authorization never speaks it, and a projector that types it anyway would put a render-gate state on a surface the registry does not list. The three auth arms (no issuer, foreign issuer, denied subject) stay the bare 403 by the same rule \u2014 naming any of them would say which is true.",
+  "description": "A REGISTERED code whose surfaces exclude mcp-endpoint has no transport envelope: the per-app endpoint's authorization never speaks it, and a projector that types it anyway would put a render-gate state on a surface the registry does not list. The three auth arms (no issuer, foreign issuer, denied subject) stay the bare 403 by the same rule — naming any of them would say which is true.",
   "refusal": {
     "code": "insufficient_credit",
     "message": "the configured allowance for this app is exhausted",
     "fix": "top up the allowance for this app, then retry",
-    "retry": "after-fix"
+    "retry": "after-fix",
+    "appId": "app_live_1"
   },
   "expect": null
 }

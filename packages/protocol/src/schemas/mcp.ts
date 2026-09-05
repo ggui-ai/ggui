@@ -616,7 +616,13 @@ export type PreGenerationRefusal = z.infer<typeof renderRefusalSchema>;
  * from {@link MCP_ENDPOINT_REFUSAL_CODES} — today exactly
  * `app_deprovisioned`, the one refusal with a tenant-side fix and
  * therefore the one that MUST be legible where a deleted app and a bad
- * credential would otherwise look alike.
+ * credential would otherwise look alike. `appId` (ggui#870) is the app
+ * the refused endpoint serves, as DATA — equal to the path's `{appId}`
+ * — so a tenant's repair loop keys on it and never parses prose; it is
+ * the ggui id the bound caller already holds, never the tenant's own
+ * `ownerRef`. The typed refusal answers a correctly bound federated
+ * identity only (identity first): an anonymous request is refused by the
+ * auth adapter before this arm, and learns nothing about the app.
  */
 export const transportRefusalSchema = z.strictObject({
   code: z
@@ -625,6 +631,11 @@ export const transportRefusalSchema = z.strictObject({
       "Registered refusal state on the per-app endpoint. Look the code up in the protocol's refusal registry for its retry class and which party can act.",
     ),
   ...refusalProjectionFields,
+  appId: z
+    .string()
+    .describe(
+      'The app id the refused endpoint serves — equals the {appId} of the endpoint path. Structured here so a repair loop keys on it instead of parsing the message.',
+    ),
 });
 
 /** A refusal on the per-app MCP endpoint, derived from {@link transportRefusalSchema}. */

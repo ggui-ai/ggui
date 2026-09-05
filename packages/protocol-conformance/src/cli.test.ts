@@ -111,6 +111,7 @@ describe('the CLI can grade the pure-function catalogs when handed their inputs 
       fix: 'f',
       retry: 'never',
       handshake: 'intact',
+      appId: 'app_1',
     };
     expect(inputs.refusalProjector?.(refusal)).toMatchObject({
       isError: true,

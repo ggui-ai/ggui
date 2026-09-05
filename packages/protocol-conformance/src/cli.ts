@@ -261,7 +261,8 @@ function isTransportRefusalInput(value: unknown): value is TransportRefusalInput
     typeof value.code === 'string' &&
     typeof value.message === 'string' &&
     typeof value.fix === 'string' &&
-    typeof value.retry === 'string'
+    typeof value.retry === 'string' &&
+    typeof value.appId === 'string'
   );
 }
 

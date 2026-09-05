@@ -39,6 +39,8 @@ export interface TransportRefusalInput {
   readonly fix: string;
   /** Retry class (`after-fix` | `next-period` | `later` | `never`). */
   readonly retry: string;
+  /** The app id the refused endpoint serves — equals the path's `{appId}` (ggui#870). */
+  readonly appId: string;
 }
 
 /** What the endpoint answers: the HTTP status and the JSON-RPC error object. */

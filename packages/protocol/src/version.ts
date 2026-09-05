@@ -6,6 +6,41 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The endpoint-level refusal carries the app as DATA (2026-09-05, wire
+ * field, pre-launch, ggui#870 — the ggui#782 ↔ guuey#708 re-sitting's
+ * D6, guuey#836's blocker). `transportRefusalSchema` — what rides
+ * `error.data.refusal` on a per-app endpoint's typed 403 (ggui#825/#836)
+ * — was strict `{ code, message, fix, retry }` with the app named only
+ * in `message`; a tenant's repair loop cannot parse prose safely.
+ *
+ *   ai1. **`data.refusal.appId: string` — REQUIRED** — the app id the
+ *      refused endpoint serves, equal to the endpoint path's `{appId}`.
+ *      The ggui id the bound caller already holds, never the tenant's
+ *      own `ownerRef`; the tenant maps it to its own id from the
+ *      `gguiAppId` it stored at create. Required, not optional: a field
+ *      a repair loop cannot rely on is a hope, not a contract.
+ *
+ *   ai2. **Who receives the typed face** (the fact from the pod's code,
+ *      ggui#812 identity-first): a correctly bound federated identity
+ *      only — an anonymous request is refused by the auth adapter as
+ *      401 before this arm and learns nothing about the app; a native
+ *      key mismatch gets the bare default-deny 403. SPEC §7.1's
+ *      endpoint paragraph says so now; the anonymous typed face is
+ *      deliberately not a contract (it would trade disclosure).
+ *
+ * Conformance-kit verdict: BREAKING by the letter of VERSION-POLICY §2 —
+ * the kit's `transport-refusal` cases now carry `appId` and the strict
+ * schema refuses a projection without it, so an emitter built against
+ * 0.15.0 fails the 0.16.0 kit. Shipped under §1.4's `draft-` clause in
+ * the 0.16.0 wave; the pod's emitter (cloud, ggui#870's other half)
+ * lands WITH this change, after the tombstone fix for ggui#785/G26.
+ *
+ * Package version — classification MADE here: MAJOR-class change carried
+ * by a MINOR wave under `draft-` (§1.4) for `@ggui-ai/protocol` and
+ * `@ggui-ai/protocol-conformance`. PROTOCOL_VERSION unchanged — no WS
+ * envelope moved.
+ *
+ * --------------------------------------------------------------------
  * Two refusal codes lose the word "tier" (2026-09-05, rename, pre-launch,
  * ggui#802 — #786 review finding F6). A code name ships to npm and, for a
  * render-gate code, reaches every self-hoster's LLM as JSON-Schema enum
