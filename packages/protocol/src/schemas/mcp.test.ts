@@ -1,11 +1,15 @@
+import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
+import { expectTypeOf } from 'vitest';
+import type { z } from 'zod';
 import {
   blueprintValidationResultSchema,
+  mcpUiDisplayModeSchema,
   clientObservationsSchema,
   gguiGetSessionOutputSchema,
   gguiSearchBlueprintsOutputSchema,
   gguiSessionSummaryWireSchema,
   hostContextProjectionSchema,
-  runtimePullEventsPageSchema,
+  gguiListFeaturedBlueprintsOutputSchema,
 } from './mcp.js';
 /**
  * Zod round-trip tests for the canonical handshake / render / update
@@ -1314,9 +1318,30 @@ describe('tool output schemas — protocol owns every wire shape a handler regis
   });
 
   it('ggui_get_session: the wire is the six-field projection, not the GguiSession union', () => {
-    const out = { id: 'render_1', appId: 'app_1', eventSequence: 3, createdAt: 1, lastActivityAt: 2, expiresAt: 3 };
+    const out = { variant: 'render', id: 'render_1', appId: 'app_1', eventSequence: 3, createdAt: 1, lastActivityAt: 2, expiresAt: 3 };
     expect(gguiGetSessionOutputSchema.parse(out)).toEqual(out);
-    expect(Object.keys(gguiGetSessionOutputSchema.shape).sort()).toEqual(['appId', 'createdAt', 'eventSequence', 'expiresAt', 'id', 'lastActivityAt']);
+    // An MCP-Apps mount is a session too: the six base fields come from the
+    // store row, never from the locator-only render — so the wire never
+    // fails on that variant (the latent bug #817 part C surfaced).
+    expect(gguiGetSessionOutputSchema.parse({ ...out, variant: 'mcpApps' }).variant).toBe('mcpApps');
+    expect(() => gguiGetSessionOutputSchema.parse({ ...out, variant: 'iframe' })).toThrow();
+    expect(Object.keys(gguiGetSessionOutputSchema.shape).sort()).toEqual(['appId', 'createdAt', 'eventSequence', 'expiresAt', 'id', 'lastActivityAt', 'variant']);
     expect(() => gguiGetSessionOutputSchema.parse({ ...out, eventSequence: -1 })).toThrow();
+  });
+});
+
+describe('ggui_list_featured_blueprints — the provider row is its own wire statement (#817 part C, oss add)', () => {
+  it('round-trips a BlueprintEntry row and is closed', () => {
+    const out = { blueprints: [{ id: 'bp_1', name: 'Todo', description: 'd', source: 'manifest', updatedAt: '2026-09-05T00:00:00Z', tags: ['a'] }], total: 1 };
+    expect(gguiListFeaturedBlueprintsOutputSchema.parse(out)).toEqual(out);
+    expect(Object.keys(gguiListFeaturedBlueprintsOutputSchema.shape).sort()).toEqual(['blueprints', 'total']);
+    expect(gguiListFeaturedBlueprintsOutputSchema.parse({ ...out, extra: 1 })).toEqual(out);
+  });
+});
+
+describe('mcpUiDisplayModeSchema — the wire enum is ext-apps\' McpUiDisplayMode', () => {
+  it('is assignable to the host SDK type (compile-time; a widening upstream lands here as a type error)', () => {
+    expectTypeOf<z.infer<typeof mcpUiDisplayModeSchema>>().toMatchTypeOf<McpUiDisplayMode>();
+    expect(mcpUiDisplayModeSchema.options).toEqual(['inline', 'fullscreen', 'pip']);
   });
 });
