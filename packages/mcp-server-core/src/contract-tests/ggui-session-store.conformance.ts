@@ -67,8 +67,9 @@ export interface GguiSessionStoreConformanceFactory {
    * Whether the impl implements `list`. Default `'implemented'`.
    *
    * Same graded contract as {@link deletion}: an impl that routes
-   * listing through a different surface (the pod's delegation adapter
-   * serves reads via the runtime store and stubs `list`) declares it
+   * listing through a different surface (an adapter whose server never
+   * registers `ggui_list_sessions` and lists renders through another
+   * client) declares it
    * out of scope, and the suite pins that `list` refuses LOUDLY —
    * a list that resolves `[]` while rows exist is the silent-loss
    * bug class; a thrown `NotImplemented` is a documented boundary.

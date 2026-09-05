@@ -17,7 +17,7 @@
  *
  * Reference implementations:
  *   - `InMemoryBlueprintStore` (this package's `/in-memory` entry) —
- *     OSS single-tenant default + test fixtures. Stores code inline
+ *     OSS single-app default + test fixtures. Stores code inline
  *     via a `Map<codeHash, string>` (no S3); call
  *     {@link InMemoryBlueprintStore.putCode} / `getCode` for the body.
  *   - Hosted deployments bind a database-backed adapter: row metadata

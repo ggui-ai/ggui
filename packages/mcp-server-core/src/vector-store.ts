@@ -57,7 +57,7 @@ export interface VectorStore {
   /**
    * Upsert a vector within a scope. Idempotent on `(scope, entry.key)`.
    *
-   * `scope` is the tenant / index partition — typically `appId`, or the
+   * `scope` is the app / index partition — typically `appId`, or the
    * literal `"shared"` for a global catalog index.
    */
   putVector(scope: string, entry: VectorEntry): Promise<void>;
@@ -70,7 +70,7 @@ export interface VectorStore {
    *
    * Normative semantics:
    * - Results MUST be sorted by `score` descending.
-   * - Vectors from other scopes MUST NOT leak (no cross-tenant contamination).
+   * - Vectors from other scopes MUST NOT leak (no cross-app contamination).
    * - An empty scope returns `[]`, never an error.
    * - Implementations MAY return fewer than `topK` results if the scope
    *   has fewer entries.
@@ -148,8 +148,8 @@ export function isEnumerableVectorStore(
  * point-read and hit-bump used to fall through to `listByScope` on any
  * enumerable backend, and the S3 Vectors `listByScope` is a whole-
  * INDEX walk with `returnData: true` — every app's full float32
- * vectors, deserialized number-by-number on the main thread. On the
- * dev pod that produced 500–970 ms event-loop stalls in a burst on
+ * vectors, deserialized number-by-number on the main thread. On a
+ * hosted deployment's dev environment that produced 500–970 ms event-loop stalls in a burst on
  * every cache-hit render (twice per turn), long enough for nginx to
  * see the upstream reset (`recv() failed (104)`) and answer 502.
  * Consumers doing a keyed read MUST prefer this capability when

@@ -260,7 +260,7 @@ export async function selectVariantWithLlm(
  *
  * Convention: telemetry parsers regex `\bconf=([01](?:\.\d+)?|0?\.\d+)\b`
  * to extract the axis. The format is intentionally narrow + stable
- * so cross-impl consumers (cloud pod, OSS, future adapters) agree
+ * so cross-impl consumers (hosted deployments, this server, future adapters) agree
  * on the on-wire shape without a typed protocol field.
  *
  * Pure / deterministic. Exposed so cloud adapters round-trip

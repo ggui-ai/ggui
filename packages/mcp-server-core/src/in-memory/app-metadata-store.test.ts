@@ -127,7 +127,7 @@ describe('InMemoryAppMetadataStore', () => {
 
     // Slice 2.5 audit fix — defaults.defaultGadgets was
     // previously missing from the constructor signature, so CLI
-    // single-tenant hosts that declared `ggui.json#app.gadgets`
+    // single-app hosts that declared `ggui.json#app.gadgets`
     // silently fell back to STDLIB. These cases lock the wiring.
     it('seeds defaultGadgets onto never-registered apps on get()', async () => {
       const custom = [

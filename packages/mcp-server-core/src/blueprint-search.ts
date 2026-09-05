@@ -54,7 +54,7 @@
  *
  * Reference implementations:
  *   - `InMemoryBlueprintSearch` (this package's `/in-memory` entry) —
- *     OSS single-tenant default + test fixtures. Brute-force linear
+ *     OSS single-app default + test fixtures. Brute-force linear
  *     scan + cosine. Acceptable up to ~10k blueprints per app.
  *   - Database-backed implementations plug in through this same
  *     port (partition-scoped query → cosine in-process is the

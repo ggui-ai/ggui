@@ -1,7 +1,7 @@
 /**
  * InMemoryThemeStore — the ThemeStore reference adapter (OSS
- * single-tenant default + test fixture). Semantics pinned by
- * `theme-store.test.ts`; those pins are the frozen surface cloud's
+ * single-app default + test fixture). Semantics pinned by
+ * `theme-store.test.ts`; those pins are the frozen surface any
  * durable adapter builds against (ggui#598-C).
  */
 import type { StoredTheme, ThemeStore } from '../theme-store.js';

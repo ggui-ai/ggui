@@ -114,8 +114,8 @@ export interface GeneratorRegistry {
    * Look up a generator by slug. Returns `null` when no generator with
    * that slug is registered. Callers MUST handle the `null` case —
    * an absent slug typically reflects a misconfigured operator deploy
-   * (e.g. agent requested `ui-gen-advanced-opus-4-7` against an OSS
-   * pod that didn't install Playwright).
+   * (e.g. agent requested `ui-gen-advanced-opus-4-7` against a
+   * server that didn't install Playwright).
    */
   get(slug: string): UiGenerator | null;
 

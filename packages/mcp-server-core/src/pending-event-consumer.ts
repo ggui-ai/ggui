@@ -35,9 +35,8 @@
  *   - {@link InMemoryPendingEventConsumer} — OSS dev/test path.
  *   - {@link SqlitePendingEventConsumer}   — OSS persistent path.
  *
- * Cloud's `DynamoPendingEventConsumer` (in `cloud/ggui-protocol-pod`)
- * conforms to the same shape via DDB `UpdateItem` with
- * `RETURN_VALUES=ALL_OLD` for atomic per-render fetch-and-clear.
+ * A hosted deployment's durable implementation conforms to the same
+ * shape with an atomic per-render fetch-and-clear on its own store.
  *
  * The consumer is a pending-events surface, NOT the append-only
  * event log on `GguiSessionStore.appendEvent`/`observe`. Those are two
@@ -201,9 +200,9 @@ export interface PendingEventConsumer {
  * 'PendingPipeNotFoundError'`); consumers detect via `instanceof`
  * or `name` check, whichever is convenient.
  *
- * Cloud has its own equivalent in `cloud/ggui-protocol-pod`; OSS
- * handlers compare by `name` field to avoid a peer-dep on the cloud
- * package.
+ * A hosted deployment has its own equivalent; the handlers compare by
+ * the `name` field so no peer dependency on any one implementation is
+ * needed.
  */
 export class PendingPipeNotFoundError extends Error {
   constructor(sessionId: string) {

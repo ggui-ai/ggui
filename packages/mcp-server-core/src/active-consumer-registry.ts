@@ -26,7 +26,7 @@
  *     successful pipe append. If `false`, the response carries
  *     `consumerPresent: false` and the iframe takes the immediate-nudge
  *     fast-path.
- *   - When the seam is absent (cloud pod today; future ephemeral
+ *   - When the seam is absent (no registry injected — e.g. ephemeral
  *     deployments without shared state), submit-action surfaces
  *     `consumerPresent: undefined` → iframe falls back to the 10s timer
  *     path (graceful degradation, today's behavior preserved).
@@ -90,7 +90,7 @@ export interface ActiveConsumerRegistry {
    * waiting for; a stale (or absent) exit on an old render means no
    * consume is coming this turn and the doorbell should ring promptly.
    * In-process timestamps — same single-instance scope as the counts
-   * (see the InMemory impl's multi-pod note).
+   * (see the InMemory impl's multi-replica note).
    */
   msSinceLastExit(sessionId: string): number | undefined;
 }

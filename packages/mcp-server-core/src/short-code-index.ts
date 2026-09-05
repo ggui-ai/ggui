@@ -102,7 +102,7 @@ export interface ShortCodeIndex {
   /**
    * Bulk revoke — drop every binding tied to `sessionId`. Used by
    * render-wide teardown paths (operator-initiated cleanup,
-   * tenant offboarding, test fixtures): a single call drops every URL
+   * app offboarding, test fixtures): a single call drops every URL
    * that was ever minted against the supplied id.
    *
    * Semantics:

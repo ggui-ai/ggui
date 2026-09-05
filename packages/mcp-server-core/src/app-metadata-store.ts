@@ -11,10 +11,10 @@
  *
  * Reference adapters:
  *   - `InMemoryAppMetadataStore` (this package's `/in-memory` entry) — OSS
- *     single-tenant default + test fixtures. Seeds every registered
+ *     single-app default + test fixtures. Seeds every registered
  *     app with `STDLIB_GADGETS`.
- *   - Cloud DDB adapter (`cloud/ggui-protocol-pod/src/ddb.ts`)
- *     applies the default-on-read pattern directly inside `getApp`
+ *   - Database-backed adapters apply the same default-on-read pattern
+ *     directly inside `get()`
  *     so existing rows missing `gadgets` survive.
  */
 
@@ -70,7 +70,7 @@ export interface App {
    * Default theme preset id applied to every new render of this app
    * when the agent doesn't pass an explicit `themeId` on
    * `ggui_render`. Sourced from `ggui.json#theme.preset` for the
-   * OSS CLI single-tenant case; hosted multi-tenant deployments set
+   * single-app `ggui serve` case; multi-app deployments set
    * per-app values on the App row.
    *
    * Sits at layer 2 of the theme-resolution chain (see
@@ -117,9 +117,9 @@ export interface App {
    */
   readonly defaultDisplayMode?: McpUiDisplayMode;
   /**
-   * Per-app generation config. When present, the pod uses this model
+   * Per-app generation config. When present, the server uses this model
    * and key source for every render of this app instead of the global
-   * defaults. Absent ⇒ pod falls back to its default generation policy.
+   * defaults. Absent ⇒ the server falls back to its default generation policy.
    *
    * See {@link AppGeneration} for field semantics.
    */
@@ -203,8 +203,8 @@ export interface ComposeAppInput {
  * Replaces the per-site hand-construction in:
  *   - `InMemoryAppMetadataStore.register()`
  *   - `InMemoryAppMetadataStore.get()` defaults fallback branch
- *   - `dynamoAppMetadataStore.get()` AppRecord → App projection
- *     (cloud/ggui-protocol-pod/src/adapters/dynamo-app-metadata-store.ts)
+ *   - a database-backed adapter's `get()` — stored row → App
+ *     projection
  *
  * Drift-immune: adding a new field to {@link App} forces a matching
  * field on {@link ComposeAppInput} (the composer body destructures

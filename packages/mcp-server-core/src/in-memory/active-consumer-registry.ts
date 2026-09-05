@@ -1,8 +1,9 @@
 /**
  * In-process reference-count `ActiveConsumerRegistry` implementation.
- * Single-instance per server process — fine for OSS (one Node process
- * per MCP server) and for the cloud pod (one pod per render).
- * Multi-pod deployments that need cross-instance consumer awareness
+ * Single-instance per server process — fine for a single-process server
+ * and for a multi-replica deployment whose session affinity keeps one
+ * render's traffic on one replica.
+ * Multi-replica deployments that need cross-instance consumer awareness
  * should wire a Redis-backed implementation against the same
  * interface.
  *

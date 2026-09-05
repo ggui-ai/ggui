@@ -3,7 +3,7 @@
  * publisher→subscriber boundaries. It lets the live-channel
  * server delegate fanout to an injectable implementation: in-process
  * for OSS, Redis pub/sub for hosted deployments (where publisher and
- * subscriber may live on different pods).
+ * subscriber may live on different replicas).
  *
  * ## Protocol & Contract Bar
  *
@@ -16,8 +16,8 @@
  * - Consumer: the subscriber-side glue that forwards frames to concrete
  *   transports. In OSS: the live-channel server (`ggui-session-channel.ts`
  *   in `@ggui-ai/mcp-server`) pumps the async iterator
- *   into each live WebSocket subscriber. In hosted: `bridge-gateway`
- *   pod pumps Redis pub/sub messages into API-Gateway WS connections.
+ *   into each live WebSocket subscriber. In a hosted deployment: a
+ *   gateway replica pumps pub/sub messages into its WebSocket connections.
  *
  * **Obligations:**
  * - Producer MUST call `publish()` at most once per envelope per render.

@@ -72,7 +72,7 @@ export type TokenKind = 'ws' | 'session' | 'console-session';
 export interface WsTokenClaims {
   /** GguiSession id the token is scoped to. */
   readonly sessionId: string;
-  /** App (tenant) id the token is scoped to. */
+  /** App id the token is scoped to. */
   readonly appId: string;
   /** Kind discriminator — distinguishes mint/verify surfaces. */
   readonly kind: TokenKind;
@@ -102,8 +102,7 @@ export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
  *
  * Bounded purely by the original `iat` claim, not server state — the
  * refresh path is stateless. Operators tune the window by overriding
- * `refreshWindowSec` on `refreshWsToken` (or via the cloud
- * pod's `GGUI_WS_TOKEN_REFRESH_WINDOW_SECONDS` env).
+ * `refreshWindowSec` on `refreshWsToken`.
  */
 export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 /**
@@ -321,8 +320,8 @@ export function verifyToken(
 export interface RefreshWsTokenOptions {
   /**
    * TTL of the NEWLY-minted ws envelope (seconds). Defaults to
-   * {@link DEFAULT_WS_TOKEN_TTL_SEC}. Operators tune via the
-   * cloud pod's `GGUI_WS_TOKEN_TTL_SECONDS`.
+   * {@link DEFAULT_WS_TOKEN_TTL_SEC}. Pass the same TTL the mint path
+   * uses so refreshed envelopes match freshly minted ones.
    */
   readonly ttlSec?: number;
   /**

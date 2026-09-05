@@ -1,14 +1,14 @@
 /**
  * InMemoryAppMetadataStore — reference implementation of {@link AppMetadataStore}.
  *
- * Intended for OSS single-tenant deployments and tests. Apps are
+ * Intended for OSS single-app deployments and tests. Apps are
  * registered via {@link register} (or auto-created via {@link getOrCreate})
  * and seeded with `STDLIB_GADGETS` from `@ggui-ai/protocol` so
  * the `ggui_list_gadgets` tool returns a meaningful catalog
  * out of the box.
  *
- * Production multi-tenant bindings (Cloud DDB adapter inside
- * `cloud/ggui-protocol-pod/src/ddb.ts`) apply the same default-on-read
+ * Production multi-app bindings (a database-backed adapter) apply
+ * the same default-on-read
  * pattern directly at the row-projection site so existing rows survive.
  */
 
@@ -126,7 +126,7 @@ export interface InMemoryAppRegisterInput {
 }
 
 /**
- * Construction-time defaults. Single-tenant OSS hosts stamp these
+ * Construction-time defaults. Single-app OSS hosts stamp these
  * once at boot so every appId the handlers see picks up the operator's
  * `ggui.json` values without an explicit `register()` per appId. Per-
  * appId overrides come through {@link InMemoryAppMetadataStore.register}.
@@ -164,13 +164,13 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
    * `defaults.defaultGadgets` / `defaults.defaultPublicEnv`
    * become the per-app default for every `get(appId)` /
    * `getOrCreate(appId)` call that lands on a never-registered app —
-   * single-tenant OSS hosts (one App per process) pass the manifest's
+   * single-app OSS hosts (one App per process) pass the manifest's
    * theme preset + gadgets catalog + public env here so any
    * appId the handlers see picks up the operator's choices without an
    * explicit `register()` per appId.
    *
    * `register(appId, {defaultThemeId, gadgets, publicEnv})`
-   * still overrides per-app for multi-tenant test fixtures that need
+   * still overrides per-app for multi-app test fixtures that need
    * different defaults.
    */
   constructor(defaults: InMemoryAppMetadataStoreDefaults = {}) {
@@ -231,7 +231,7 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
     const existing = this.apps.get(appId);
     if (existing) return existing;
     // When defaults are configured at construction, materialize a
-    // default-bearing App on read for any appId. Single-tenant OSS hosts
+    // default-bearing App on read for any appId. Single-app OSS hosts
     // pass `defaults.*` once at boot and expect every appId the handlers
     // see to pick up the operator's choices without an explicit
     // `register()` per appId.

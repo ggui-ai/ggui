@@ -179,8 +179,8 @@ export interface UiGenerateInput {
    * collapsing to `any`. The same `.d.ts` content also feeds the
    * prompt's per-gadget `Type:` line.
    *
-   * Plain `Record` (not `Map`) so the shape survives the cloud
-   * pod's serialized `UiGenerateInput` boundary. Stdlib
+   * Plain `Record` (not `Map`) so the shape survives a hosted
+   * deployment's serialized `UiGenerateInput` boundary. Stdlib
    * (`@ggui-ai/gadgets`) never appears here — the sandbox VFS
    * carries its types directly.
    *

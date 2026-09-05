@@ -74,7 +74,7 @@ export interface ThemeStore {
 /**
  * The frozen theme-id grammar: lowercase kebab, alnum-bounded, 3–64
  * chars — a user-facing namespace, deliberately narrow (the founder
- * flag on namespace POLICY — reservations, collisions across tenants —
+ * flag on namespace POLICY — reservations, collisions across apps —
  * is a separate ruling; this grammar is the syntactic floor any policy
  * sits on).
  */

@@ -21,20 +21,20 @@
  *
  * Three discriminated kinds, each modeling a distinct caller class:
  *
- *   - `'builder'` — single-tenant OSS. Every authenticated identity
+ *   - `'builder'` — single-app OSS. Every authenticated identity
  *     collapses to this; pairing-bound viewers also resolve to `'builder'`
  *     because OSS has no end-user model.
  *   - `'user'` — end-user authenticated via OIDC / Cognito JWT. Carries
- *     real user/workspace identifiers; consumed by hosted closed-runtime
+ *     real user/workspace identifiers; consumed by a hosted deployment's
  *     first-party surfaces and by future OAuth-Connector traffic on
- *     the user-pod posture (where the caller is a Claude Desktop user
+ *     the kind=user posture (where the caller is a Claude Desktop user
  *     or equivalent end-user, not an agent or app).
  *   - `'app'` — per-app machine caller authenticated via `ggui_sk_*` API
  *     key (or playground bypass). The caller IS an app — there is no
  *     human end-user. Used by agent-builder MCP clients hitting hosted
  *     kind=app deployments and (with the `ggui_user_*` key namespace)
- *     by the user-pod Connector path. Carries `appId` + `apiKeyHash`
- *     so downstream handlers can scope reads/writes by tenant without
+ *     by a kind=user deployment's Connector path. Carries `appId` + `apiKeyHash`
+ *     so downstream handlers can scope reads/writes by app without
  *     re-deriving from headers.
  *
  * Adding a new variant is a protocol-level change — every consumer that
