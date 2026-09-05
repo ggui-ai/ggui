@@ -3,7 +3,7 @@
  *
  *   POST <universalMcpPath>            — DATA PLANE: agent+runtime tools
  *                                        (default `/mcp`)
- *   POST <pathPrefix>/:appId           — data plane, per-tenant variant
+ *   POST <pathPrefix>/:appId           — data plane, per-app variant
  *                                        (opt-in via `perAppRouting`)
  *   POST /control                      — CONTROL PLANE: design-time
  *                                        spec/discovery (anonymous) +
@@ -51,7 +51,7 @@ import type { Logger } from "./logger.js";
 import type { McpService } from "./mcp-mounts.js";
 import { buildWwwAuthenticate, resolveIssuerUrl } from "./oauth.js";
 
-/** Per-tenant URL routing shape — mirrors `CreateGguiServerOptions.perAppRouting`. */
+/** Per-app URL routing shape — mirrors `CreateGguiServerOptions.perAppRouting`. */
 interface PerAppRouting {
   readonly paramName: string;
   readonly paramPattern: string;
@@ -154,9 +154,9 @@ interface MountOptions {
   readonly als: AsyncLocalStorage<HandlerContext>;
   /** Identity → appId resolution rule (SPEC §12.2). */
   readonly appIdFromIdentity: (result: AuthResult) => string;
-  /** Universal endpoint path (default `/mcp`; cloud overrides to `/`). */
+  /** Universal endpoint path (default `/mcp`; a deployment may serve it at `/`). */
   readonly universalMcpPath: string;
-  /** Per-tenant endpoint shape — absent = universal-only deployment. */
+  /** Per-app endpoint shape — absent = universal-only deployment. */
   readonly perAppRouting?: PerAppRouting;
   /** Whether OAuth is enabled (adds `WWW-Authenticate` on 401). */
   readonly oauthEnabled: boolean;
@@ -286,7 +286,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           if (handlerOpts?.anonymous) {
             identity = { identity: { kind: "builder" }, source: "anonymous" };
           } else {
-            // Diagnostic: did a Bearer credential actually reach the pod on
+            // Diagnostic: did a Bearer credential actually reach the server on
             // this request? This splits "the client/transport never sent one"
             // from "we received it but the adapter rejected it" — otherwise
             // indistinguishable in `auth_failed`. Only a short, non-secret
@@ -390,10 +390,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         }
       }
 
-      // Per-tenant URL routing. When `perAppRouting`
+      // Per-app URL routing. When `perAppRouting`
       // is configured AND the request matched the per-app path
       // `/:${paramName}/mcp`, Express populates `req.params[paramName]`
-      // with the validated tenant id. Use it as `ctx.appId` for this
+      // with the validated app id. Use it as `ctx.appId` for this
       // request, overriding `appIdFromIdentity`. The universal `/mcp`
       // route doesn't have the param so it falls through to the
       // identity-based resolution.
@@ -438,11 +438,11 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         // handler should branch on the specific mechanism.
         authSource: identity.source,
         // Identity is the canonical source of two mutually-exclusive
-        // hosted fields: `apiKeyHash` for kind=app, `userId` for kind=user.
-        // Threading them onto HandlerContext here means hosted handlers
-        // (the K8s ggui-protocol pod's billing gate + per-user blueprint
-        // scoping) can read identity directly without a parallel pod-only
-        // context shape; OSS handlers continue to ignore both fields.
+        // fields: `apiKeyHash` for kind=app, `userId` for kind=user.
+        // Threading them onto HandlerContext here means a deployment's own
+        // handlers (per-key metering, per-user scoping) can read identity
+        // directly without a parallel context shape; the handlers this
+        // package ships ignore both fields.
         ...(identity.identity.kind === "app" ? { apiKeyHash: identity.identity.apiKeyHash } : {}),
         ...(identity.identity.kind === "user" ? { userId: identity.identity.userId } : {}),
         // What the credential itself may act on, when the adapter
@@ -534,25 +534,25 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   });
 
   // Universal endpoint — `appId` resolved from the auth identity via
-  // `appIdFromIdentity`. Cloud `mcp.ggui.ai` deployments resolve this
-  // to `User.defaultAppId` via the auth-adapter; OSS deployments fall
-  // through to userId / DEFAULT_BUILDER_APP_ID.
+  // `appIdFromIdentity`. A deployment's auth adapter may resolve it
+  // (e.g. to the user's default app); without one it falls through to
+  // userId / DEFAULT_BUILDER_APP_ID.
   //
-  // Path defaults to `/mcp` (Streamable HTTP convention). Cloud
-  // `mcp.ggui.ai` overrides to `/` so the bare-root URL is the
-  // universal endpoint — domain already says "mcp", no path repeat.
+  // Path defaults to `/mcp` (Streamable HTTP convention). A deployment
+  // whose hostname already says "mcp" may serve it at `/` so the
+  // bare-root URL is the universal endpoint — no path repeat.
   // Exposes audience tags ['agent', 'runtime'] — runtime tools stay
   // routable on the same endpoint but invisible to the agent's
   // `tools/list` via the `_meta.ui.visibility: ['app']` filter.
   app.post(universalMcpPath, agentMcpHandler);
 
-  // Per-tenant endpoint — only mounted when the deployment opts in
+  // Per-app endpoint — only mounted when the deployment opts in
   // via `perAppRouting`. The same handler reads `req.params[paramName]`
   // and uses it as `ctx.appId` for the request.
   //
   // When `pathPrefix` is set, the route mounts at
-  // `${pathPrefix}/:${paramName}` — cloud uses `/apps` so URLs are
-  // `mcp.ggui.ai/apps/<appId>`. The prefix segments per-tenant traffic
+  // `${pathPrefix}/:${paramName}` — e.g. `/apps`, so URLs read
+  // `<host>/apps/<appId>`. The prefix segments per-app traffic
   // from system routes (`/health`, `/oauth/*`, `/.well-known/*`,
   // `/r/*`) so an opaque appId can never shadow a future static path.
   //
