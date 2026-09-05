@@ -15,7 +15,7 @@
  * and ORPHAN all four servers, holding ports 6781/6782/6790/6890 for the next
  * run. `close()` then waits for the ports to actually free.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -293,13 +293,36 @@ async function killGroup(child: ChildProcess): Promise<void> {
 
 async function waitForPortsFree(): Promise<void> {
   const deadline = Date.now() + 15_000;
+  let states: boolean[] = [];
   while (Date.now() < deadline) {
-    const states = await Promise.all(
-      APP_PORTS.map((p) => isAnswering(`http://localhost:${p}`)),
-    );
+    states = await Promise.all(APP_PORTS.map((p) => isAnswering(`http://localhost:${p}`)));
     if (!states.some(Boolean)) return;
     await new Promise((r) => setTimeout(r, 500));
   }
   // Best-effort: don't fail teardown here. A genuine leak surfaces loudly at
-  // the next spawnComposedApp's assertPortsFree().
+  // the next spawnComposedApp's assertPortsFree() — but NAME the survivor
+  // now (ggui#866: :6781 stayed answering ≥3.5 min after a teardown and the
+  // run log had nothing to say about which process held it).
+  const leaked = APP_PORTS.filter((_, i) => states[i]);
+  const holders = leaked.map((port) => `${port}: ${describePortHolder(port)}`);
+  // eslint-disable-next-line no-console -- teardown diagnostics for the run log.
+  console.warn(
+    `[samples-render] teardown: port(s) still answering after 15s — ${holders.join(' · ')}`,
+  );
+}
+
+/** `pid command` of whoever listens on `port`, via lsof; "unknown" if lsof is absent. */
+function describePortHolder(port: number): string {
+  const lsof = spawnSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpc'], {
+    encoding: 'utf8',
+  });
+  if (lsof.error || lsof.status !== 0 || !lsof.stdout) return 'unknown (lsof unavailable)';
+  // -F output: lines like `p1234` then `cnode`; pair them up.
+  const pids: string[] = [];
+  let pid = '';
+  for (const line of lsof.stdout.split('\n')) {
+    if (line.startsWith('p')) pid = line.slice(1);
+    else if (line.startsWith('c') && pid) pids.push(`${pid} ${line.slice(1)}`);
+  }
+  return pids.length ? pids.join(', ') : 'no LISTEN pid found';
 }
