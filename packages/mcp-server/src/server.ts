@@ -2231,12 +2231,11 @@ export interface CreateGguiServerOptions {
    * server error'`. Returning `undefined` (or omitting the option)
    * preserves the default.
    *
-   * Use case: hosted closed-runtime deployments throw domain errors from
-   * tool handlers (e.g. `GguiSessionAccessError` "this render doesn't belong
-   * to you") that should map to HTTP 404 so callers can distinguish
-   * tenancy violations from real server bugs. OSS deployments don't
-   * need this seam — every domain error is a 500 unless they say
-   * otherwise.
+   * Use case: a deployment whose tool handlers throw domain errors
+   * (e.g. an access error — "this render doesn't belong to this app")
+   * that should map to HTTP 404, so callers can distinguish an access
+   * refusal from a real server bug. Without the option every domain
+   * error is a 500.
    *
    * The mapper MUST NOT throw. It runs inside the factory's outer
    * `catch (err)` block; any throw from the mapper itself is treated
