@@ -3192,6 +3192,10 @@
  *      `data`; HTTP 403 on both. `-32000` (the SDK client's
  *      `ConnectionClosed`) is never a code a first-party server chooses.
  *      Supersedes r9's literals; pre-launch, no compatibility arm.
+ *   r12. **`GENERATION_OVERLOADED: -32014`** joins `PLATFORM_ERROR_CODES` —
+ *      the generation queue is saturated (HTTP 503 + `Retry-After`; the
+ *      server is the limit, unlike `-32013`). Additive; the four complete
+ *      mirrors carry it under `check-error-code-mirrors`.
  *
  * FOLLOWER — moves in the SAME commit as this constant, pinned by a
  * gate that fails loud when it lags: the `protocol` field of every

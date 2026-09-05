@@ -546,5 +546,12 @@ export const PLATFORM_ERROR_CODES = {
   APP_LIMIT_EXCEEDED: -32011,
   CONCURRENT_SESSION_LIMIT: -32012,
   RATE_LIMIT_EXCEEDED: -32013,
+  /**
+   * The generation queue is saturated — the server, not the caller, is
+   * the limit (contrast `RATE_LIMIT_EXCEEDED`: the caller slows down). HTTP
+   * 503 with `Retry-After`, which governs the retry; a parsed request's
+   * refusal, so it speaks this table (ggui#836 follow-up).
+   */
+  GENERATION_OVERLOADED: -32014,
   CONTRACT_VIOLATION: -32020,
 } as const;
