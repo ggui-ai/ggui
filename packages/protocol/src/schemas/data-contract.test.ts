@@ -11,7 +11,6 @@ import {
   BUNDLE_SRI_RE,
   LOOPBACK_HOST_RE,
   NPM_PACKAGE_NAME_RE,
-  PUBLIC_ENV_APP_KEY_RE,
   SEMVER_PIN_RE,
   appPublicEnvSchema,
   bundleHostScheme,
@@ -25,6 +24,7 @@ import {
   strictGadgetDescriptorSchema,
   strictGadgetExportSchema,
 } from './data-contract';
+import { PUBLIC_ENV_APP_KEY_RE } from './public-env-key';
 
 describe('PUBLIC_ENV_APP_KEY_RE', () => {
   it('accepts standard public env keys', () => {

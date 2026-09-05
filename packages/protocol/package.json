@@ -78,6 +78,12 @@
       "require": "./dist/integrations/theme-binding.js",
       "default": "./dist/integrations/theme-binding.js"
     },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "import": "./dist/wire.js",
+      "require": "./dist/wire.js",
+      "default": "./dist/wire.js"
+    },
     "./version": {
       "types": "./dist/version.d.ts",
       "import": "./dist/version.js",

@@ -37,24 +37,7 @@ import {
   RENDER_GATE_REFUSAL_CODES,
 } from '../types/refusal-codes';
 
-// ── Shared Sub-Schemas ──
-
-export const viewportSchema = z.object({
-  width: z.number(),
-  height: z.number(),
-});
-
-export const interfaceContextSchema = z.object({
-  viewport: viewportSchema,
-  platform: z.enum(['web', 'mobile', 'desktop']),
-  deviceType: z.enum(['phone', 'tablet', 'desktop']),
-  orientation: z.enum(['portrait', 'landscape']),
-  devicePixelRatio: z.number().optional(),
-  touchPrimary: z.boolean().optional(),
-  shellType: z.enum(['chat', 'fullscreen', 'spatial']).optional(),
-  colorScheme: z.enum(['light', 'dark']).optional(),
-  reducedMotion: z.boolean().optional(),
-}).passthrough();
+import { RUNTIME_TELEMETRY_MAX_EVENTS } from './runtime-telemetry-limits';
 
 // ── Wired Tool Input Shapes ──
 //
@@ -1420,11 +1403,6 @@ export const runtimePullOutputSchema = z.union([
   runtimePullHorizonSchema,
 ]);
 
-/**
- * Per-batch event cap on `ggui_runtime_telemetry` — a bounded
- * fire-and-forget diagnostic channel, never a data plane.
- */
-export const RUNTIME_TELEMETRY_MAX_EVENTS = 40;
 
 /**
  * `ggui_runtime_telemetry` input — the iframe runtime's transport

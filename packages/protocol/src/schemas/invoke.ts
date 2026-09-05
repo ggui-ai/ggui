@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import { interfaceContextSchema } from './mcp';
+import { interfaceContextSchema } from './interface-context';
 
 // ── Content blocks ────────────────────────────────────────────────────
 
