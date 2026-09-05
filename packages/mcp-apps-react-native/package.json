@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/mcp-apps-react-native",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "React Native SDK for ggui — components and hooks for embedding agent-generated UIs in mobile apps.",
   "keywords": [
     "ggui",
@@ -84,7 +84,7 @@
     "url": "https://github.com/ggui-ai/ggui/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "author": "ggui contributors <hello@ggui.ai>"
 }

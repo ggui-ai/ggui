@@ -1,11 +1,11 @@
 {
   "name": "@ggui-ai/protocol",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "sideEffects": [
     "./dist/schemas/sync-check.js",
     "./dist/validation/ajv-runtime.js"
   ],
-  "description": "ggui protocol types \u2014 events, renders, WebSocket, MCP, LLM models",
+  "description": "ggui protocol types — events, renders, WebSocket, MCP, LLM models",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -124,7 +124,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "author": "ggui contributors <hello@ggui.ai>"
 }

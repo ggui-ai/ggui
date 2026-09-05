@@ -3165,7 +3165,7 @@ export const PROTOCOL_VERSION = "draft-2026-09-04";
  * `STDLIB_GADGETS_VERSION` and `agent-server`'s `CLIENT_INFO`), and the
  * `/release:cut` straggler list names it so the bump is mechanical.
  */
-export const GGUI_WAVE_VERSION = "0.13.0";
+export const GGUI_WAVE_VERSION = "0.14.0";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

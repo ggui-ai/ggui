@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/agent-runtime",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Pluggable adapter seam for supervising whatever actually runs an agent — the Claude Agent SDK, OpenAI Agents, the Vercel AI SDK, a plain subprocess, and more. Lets a host swap agent runtimes without hardcoding any framework into its dev loop.",
   "keywords": [
     "ggui",
@@ -55,7 +55,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "author": "ggui contributors <hello@ggui.ai>"
 }

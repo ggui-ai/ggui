@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/live-channel",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Transport-negotiated channel registry for ggui clients. A framework-agnostic library (no React, no iframe assumptions): channels register once with a ChannelRegistry, and each channel picks a WebSocket or polling transport based on what the render bootstrap declares.",
   "keywords": [
     "ggui",
@@ -49,7 +49,7 @@
     "jsdom": "^25.0.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "author": "ggui contributors <hello@ggui.ai>"
 }
