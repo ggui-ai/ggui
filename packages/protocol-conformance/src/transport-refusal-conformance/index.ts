@@ -8,7 +8,7 @@
  * The contract it makes observable: a deprovisioned app answers HTTP 403
  * with `{ code: -32003, message: "App not found", data: { refusal } }` where
  * `refusal` is the registry projection without the render-only fields
- * (`code`, `message`, `fix`, `retry`); an authorization failure that is
+ * (`code`, `message`, `fix`, `retry`, `appId`); an authorization failure that is
  * NOT a registry state answers 403 with `-32007` and no `data` — the untyped
  * arms deliberately indistinguishable among themselves, so a client never
  * learns which one it hit (codes ruled in ggui#836).

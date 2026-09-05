@@ -31,7 +31,9 @@
  * Conformance-kit verdict: BREAKING by the letter of VERSION-POLICY §2 —
  * the kit's `transport-refusal` cases now carry `appId` and the strict
  * schema refuses a projection without it, so an emitter built against
- * 0.15.0 fails the 0.16.0 kit. Shipped under §1.4's `draft-` clause in
+ * 0.15.0 fails the 0.16.0 kit — and, the wire being `z.strictObject`, a
+ * 0.15.0 STRICT reader of the body is failed by a 0.16.0 emitter too
+ * (zero such readers exist today; guuey's is step 3, not started). Shipped under §1.4's `draft-` clause in
  * the 0.16.0 wave; the pod's emitter (cloud, ggui#870's other half)
  * lands WITH this change, after the tombstone fix for ggui#785/G26.
  *

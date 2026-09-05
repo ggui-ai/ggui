@@ -118,11 +118,14 @@ describe('the CLI can grade the pure-function catalogs when handed their inputs 
       hasMeta: false,
       structuredContent: { outcome: 'refused', refusal },
     });
-    expect(inputs.transportRefusalProjector?.(refusal)).toMatchObject({
+    const { handshake: _handshake, ...transportRefusal } = refusal;
+    expect(inputs.transportRefusalProjector?.(transportRefusal)).toMatchObject({
       httpStatus: 403,
       error: { code: -32003 },
     });
-    expect(inputs.transportRefusalProjector?.({ ...refusal, code: 'insufficient_credit' })).toBeNull();
+    expect(
+      inputs.transportRefusalProjector?.({ ...transportRefusal, code: 'insufficient_credit' }),
+    ).toBeNull();
   });
 
   it('a flag left out leaves its catalog input absent — the runner skips it by name', async () => {
