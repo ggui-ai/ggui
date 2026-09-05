@@ -60,6 +60,7 @@ import {
   type SystemGguiSession,
   refusedOutputSchema,
   renderInputEnvelopeSchema,
+  renderInputRouteGuardSchema,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -1241,7 +1242,8 @@ export function createGguiRenderHandler(
     ctx: HandlerContext,
     attempt: RenderAttempt,
   ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput>> {
-    const parsed = z.object(inputSchema).parse(input);
+    // The full envelope: the registered shape plus the route grammar (#818).
+    const parsed = renderInputEnvelopeSchema.parse(input);
     // themeId DOOR (ggui#598 slice 3) — before any store or
     // generation work: a typo'd id refuses here, where it was typed.
     if (parsed.themeId !== undefined) {
@@ -2727,12 +2729,13 @@ export function createGguiRenderHandler(
       // read, nothing committed, no postSuccessHook" true by
       // construction rather than by discipline (SPEC §7.1, refused
       // arm).
-      // The route grammar (ggui#818): a malformed `infra.model` fails THIS
-      // handler's input parse — the protocol's envelope, at zod path
-      // `infra.model` — before the gate can read it. The registered shape
-      // is parser-free (a browser bundle never validates a render input);
-      // the envelope carries the refinement.
-      renderInputEnvelopeSchema.parse(input);
+      // The route GUARD (ggui#818): a malformed `infra.model` fails here — at
+      // zod path `infra.model`, the route grammar and nothing else — before
+      // the gate can read it, while a syntactically empty input still reaches
+      // the gate (#786: a refusal is projected before the handler's parse).
+      // The registered shape is parser-free (a browser bundle never validates
+      // a render input); the full envelope re-parses after the gate.
+      renderInputRouteGuardSchema.parse(input);
 
       if (deps.preValidationGate) {
         const refusal = await deps.preValidationGate(ctx, input);
