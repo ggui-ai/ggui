@@ -293,7 +293,21 @@ export function assertNoBannedEnv(
 }
 
 /** Handle returned by {@link spawnGguiServe}. Tests use it to assert + tear down. */
+/** How the served child left: Node's `exit` event as it reports it. */
+export interface ChildExit {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+}
+
 export interface GguiServeHandle {
+  /**
+   * Resolves when the served child exits. A clean teardown is
+   * `{ code: 0, signal: null }`; a native abort on the exit path
+   * (#855 — `libc++abi … mutex lock failed`) shows as
+   * `{ code: null, signal: 'SIGABRT' }`, and a child that never
+   * drains is SIGKILLed by `close()` after 5 s.
+   */
+  readonly exit: Promise<ChildExit>;
   /** Base URL, e.g. `http://127.0.0.1:54321`. Populated after READY. */
   readonly baseUrl: string;
   /** Absolute path of the temporary CWD the process was spawned with. */
@@ -613,6 +627,9 @@ export async function spawnGguiServe(
     },
   ) as ChildProcessWithoutNullStreams;
 
+  const exit = new Promise<ChildExit>((resolveExit) => {
+    proc.once('exit', (code, signal) => resolveExit({ code, signal }));
+  });
   const watcher = watchBootBeacons(proc, {
     label: 'ggui serve',
     subject: 'ggui serve',
@@ -656,6 +673,7 @@ export async function spawnGguiServe(
     adminToken,
     readyElapsedMs: Date.now() - spawnStartedAt,
     stderr: watcher.stderr,
+    exit,
     stdout: watcher.stdout,
     close,
     signInAsAdmin: (page) => signInAsAdmin(handle, page),
@@ -740,6 +758,9 @@ export async function spawnGguiServeInCwd(
     },
   ) as ChildProcessWithoutNullStreams;
 
+  const exit = new Promise<ChildExit>((resolveExit) => {
+    proc.once('exit', (code, signal) => resolveExit({ code, signal }));
+  });
   const watcher = watchBootBeacons(proc, {
     label: 'ggui serve:cwd',
     subject: 'ggui serve',
@@ -781,6 +802,7 @@ export async function spawnGguiServeInCwd(
     adminToken,
     readyElapsedMs: Date.now() - spawnStartedAt,
     stderr: watcher.stderr,
+    exit,
     stdout: watcher.stdout,
     close,
     signInAsAdmin: (page) => signInAsAdmin(handle, page),

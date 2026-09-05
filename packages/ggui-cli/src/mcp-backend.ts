@@ -567,16 +567,28 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // fallback warning rather than a silent first-lookup degradation.
   // eslint-disable-next-line no-console -- one-shot boot signal, mirrors banner output
   console.warn(`[ggui:embedding] local ${embedding.id} (cache: ${embeddingCacheDir})`);
-  embedding.embed("warmup").catch((err: unknown) => {
-    const reason = err instanceof Error ? err.message : String(err);
-    // No provider swap happens here — the local provider stays bound and
-    // every embed() keeps failing, which search handlers absorb per-call
-    // (semantic branch degrades to zero hits; manifest search unaffected).
-    // eslint-disable-next-line no-console -- one-shot boot signal; local model unavailable
-    console.warn(
-      `[ggui:embedding] semantic search degraded — local model unavailable (manifest/lexical search still active): ${reason}`
-    );
-  });
+  const warmupStartedAt = Date.now();
+  embedding.embed("warmup").then(
+    () => {
+      // One-shot boot signal: the model is loaded and semantic search is
+      // live from here. Harnesses wait on this line before exercising
+      // (or tearing down) the loaded-model path (#855).
+      // eslint-disable-next-line no-console -- one-shot boot signal, mirrors banner output
+      console.warn(
+        `[ggui:embedding] warm — local model loaded in ${Date.now() - warmupStartedAt}ms`
+      );
+    },
+    (err: unknown) => {
+      const reason = err instanceof Error ? err.message : String(err);
+      // No provider swap happens here — the local provider stays bound and
+      // every embed() keeps failing, which search handlers absorb per-call
+      // (semantic branch degrades to zero hits; manifest search unaffected).
+      // eslint-disable-next-line no-console -- one-shot boot signal; local model unavailable
+      console.warn(
+        `[ggui:embedding] semantic search degraded — local model unavailable (manifest/lexical search still active): ${reason}`
+      );
+    }
+  );
   // BYOK provider-key store — same `~/.ggui/credentials.json` that
   // `byok-resolver.ts` reads on every `resolve()`. Threading the store
   // here makes the operator-facing `/ggui/console/llm-keys` admin API

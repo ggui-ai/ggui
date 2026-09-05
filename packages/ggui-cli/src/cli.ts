@@ -1397,7 +1397,14 @@ function readVersion(): string {
 
 main(process.argv).then(
   (code) => {
-    process.exit(code);
+    // Set the code and let the event loop drain — never `process.exit()`
+    // here. Every command closes its own handles before resolving, so the
+    // process ends on its own; a hard exit while the local embedding
+    // model is loaded runs ONNX Runtime's static teardown under its
+    // still-parked worker threads and aborts (`libc++abi … mutex lock
+    // failed`, SIGABRT on every Ctrl-C — #855). The journeys spec
+    // `serve-teardown.spec.ts` pins the clean exit.
+    process.exitCode = code;
   },
   (error: unknown) => {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
