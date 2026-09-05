@@ -3,8 +3,13 @@
  * Fix extensionless ESM imports in tsc output.
  *
  * tsc with moduleResolution:"bundler" emits `from './foo'` instead of `from './foo.js'`.
- * Node's ESM loader requires explicit extensions. This script adds `.js` to all
- * relative imports/exports in .js and .d.ts files under the given directory.
+ * Node's ESM loader requires explicit extensions, and so does a TypeScript
+ * consumer under `moduleResolution: NodeNext` — for DECLARATIONS as much as
+ * for runtime modules: a `dist/index.d.ts` that re-exports `from './x'`
+ * resolves to nothing there (TS2835 / TS2305; ggui#846, found by a NodeNext
+ * consumer of @ggui-ai/protocol 0.14.0). This script adds `.js` to every
+ * relative specifier — `from '…'` and `import('…')` — in every .js and
+ * .d.ts file under the given directory. Pinned by fix-esm-imports.test.mjs.
  *
  * Usage: node scripts/fix-esm-imports.mjs dist/
  */
@@ -17,10 +22,12 @@ if (!dir) {
   process.exit(1);
 }
 
-// Match: from './path' or from '../path' or export * from './path'
-// Also handles re-exports: export { X } from './path'
+// Match: from './path' or from '../path' (imports, re-exports, export *) and
+// the type-position form declarations use, import('./path').T.
 // Captures the quote style and path, skips already-extensioned paths
-const IMPORT_RE = /(from\s+['"])(\.\.?\/[^'"]*?)(['"])/g;
+// A bare '.' or '..' (a directory, no slash) is matched too — tsc emits
+// import('..').T in declarations for types referenced from the barrel.
+const IMPORT_RE = /((?:from\s+|import\()\s*['"])(\.\.?(?:\/[^'"]*?)?)(['"])/g;
 
 function needsExtension(importPath, fromFile) {
   // Already has an extension
@@ -68,7 +75,9 @@ function walk(dirPath) {
     const fullPath = join(dirPath, entry.name);
     if (entry.isDirectory()) {
       fixedCount += walk(fullPath);
-    } else if (entry.name.endsWith(".js")) {
+    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".d.ts")) {
+      // Declarations too — the .js pass alone leaves every .d.ts unresolvable
+      // for a NodeNext consumer (ggui#846).
       if (fixFile(fullPath)) fixedCount++;
     }
   }
