@@ -6,7 +6,7 @@
  * code bodies are kept in a per-instance `Map<codeHash, string>` so
  * cache-hit fetches stay O(1).
  *
- * Tenancy: rows are keyed under `(appId, contractHash)` for list
+ * App scope: rows are keyed under `(appId, contractHash)` for list
  * lookups via a secondary `Map<groupKey, Set<blueprintId>>`. Primary
  * key is `blueprintId`. Production adapters (`DynamoBlueprintStore`)
  * project the same indexes into DDB GSIs.

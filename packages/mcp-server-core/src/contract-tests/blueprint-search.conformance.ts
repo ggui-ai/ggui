@@ -11,7 +11,7 @@
  *   - Exact contractHash short-circuit (score 1.0; no other axes
  *     consulted; siblings under the same hash also return 1.0).
  *   - Empty store returns empty array.
- *   - Cross-app tenancy boundary — app A's search never returns app B.
+ *   - Cross-app boundary — app A's search never returns app B.
  *   - topK is respected — default + per-criteria override.
  *   - generator filter excludes non-matching rows entirely.
  *   - Structural similarity contributes to score when contracts share
@@ -181,7 +181,7 @@ export function runBlueprintSearchConformance(
       });
     });
 
-    describe('cross-app tenancy', () => {
+    describe('cross-app boundary', () => {
       it('never returns blueprints from a different appId', async () => {
         await withSearch(async ({ store, search }) => {
           await store.put(

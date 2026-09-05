@@ -25,7 +25,7 @@
  *     store. Same interface, so consumers cannot tell the difference
  *     between it and the in-memory reference.
  *
- * Tenancy: every read path requires both `appId` and `contractHash`.
+ * App scope: every read path requires both `appId` and `contractHash`.
  * Two apps' contracts may coincidentally hash the same; their
  * blueprints must never cross-pollinate.
  *
@@ -85,7 +85,7 @@ export class BlueprintAlreadyExistsError extends Error {
 /**
  * Persistence seam for {@link Blueprint} rows.
  *
- * Tenancy: scoped per `(appId, contractHash)` on the read path. The
+ * App scope: scoped per `(appId, contractHash)` on the read path. The
  * primary key is `blueprintId`; the lookup index is composite
  * `(appId, contractHash)` — `contractHash` being the 16-char
  * `blueprintKey` value (file docstring, "The `contractHash` domain").
@@ -117,7 +117,7 @@ export interface BlueprintStore {
    * suite documents this expectation; per-row scans are a
    * regression worth surfacing.
    *
-   * @param appId Tenancy scope. Never crossed, even on key collision.
+   * @param appId App scope. Never crossed, even on key collision.
    * @param contractHash The 16-char lowercase-hex
    *   `blueprintKey(contract)` value — see the file docstring, "The
    *   `contractHash` domain". Passing any other digest here is a

@@ -108,7 +108,7 @@ export interface VariantSelectionDecision {
  * The cache MUST NOT cross app boundaries — operators wire one cache
  * per app, or the cache key prefixes on `appId` implicitly via the
  * `contractHash` (which is itself per-app scoped via the
- * {@link BlueprintStore} tenancy lookup). Either is correct.
+ * {@link BlueprintStore} app-scope lookup). Either is correct.
  */
 export interface VariantSelectionCache {
   /**

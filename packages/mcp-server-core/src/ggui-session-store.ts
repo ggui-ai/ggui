@@ -38,7 +38,7 @@ export type { GguiSessionEvent, GguiSessionEventType } from '@ggui-ai/protocol';
  * Server-side persisted shape of a {@link GguiSession}. Wraps the protocol's
  * wire-shape `GguiSession` union (which intentionally narrows
  * `McpAppsGguiSession` to just locator metadata) with the lifecycle +
- * tenancy fields the server owns: `appId`, `userId`, `eventSequence`,
+ * scoping fields the server owns: `appId`, `userId`, `eventSequence`,
  * `createdAt`, `lastActivityAt`, `expiresAt`, `status?`,
  * `endUserIdentity?`, `themeId?`, `hostSession?`, `hostContext?`.
  *
@@ -247,7 +247,7 @@ export interface AppendEventInput {
 export interface CommitGguiSessionInput {
   render: GguiSession;
   /**
-   * Carries the tenancy + identity slice when the row doesn't yet
+   * Carries the scoping + identity slice when the row doesn't yet
    * exist. Required so first-write `commit` calls can mint the row
    * without a separate `create` round-trip.
    */
@@ -424,14 +424,14 @@ export interface GguiSessionStore {
    *
    * **Split-read discipline**: this is a deliberately SEPARATE read
    * path from {@link get}. `get()` backs hot, frequent reads
-   * (`ggui_get_session`, tenancy gates, the render/update/consume
+   * (`ggui_get_session`, app-scope gates, the render/update/consume
    * cycle) and MUST NEVER eagerly load or return authored source —
    * only a caller that specifically needs the original authored text
    * (e.g. a source-export tool) calls this method, and only then does
    * an implementation pay the cost of fetching it.
    *
    * Returns `undefined` for a missing render — this method makes no
-   * tenancy claim of its own; callers MUST resolve + tenancy-check the
+   * scoping claim of its own; callers MUST resolve + app-scope-check the
    * render via {@link get} first and only call this for a render they
    * have already confirmed is visible to the caller.
    */

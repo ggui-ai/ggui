@@ -191,7 +191,7 @@ export function runBlueprintStoreConformance(
         });
       });
 
-      it('excludes rows from a different appId (tenancy boundary)', async () => {
+      it('excludes rows from a different appId (app boundary)', async () => {
         await withStore(async (store) => {
           await store.put(
             makeBlueprint({ blueprintId: 'bp-app1', appId: 'app-1' }),

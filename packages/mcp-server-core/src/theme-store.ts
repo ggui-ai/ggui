@@ -25,7 +25,7 @@
  *
  * ## Frozen semantics (pinned by the in-memory reference tests)
  *
- * - Records key on `(appId, themeId)`; `appId` is the tenancy unit —
+ * - Records key on `(appId, themeId)`; `appId` is the scoping unit —
  *   cross-app reads return null by construction.
  * - `put` upserts; `registeredAt` is first-write, `updatedAt` moves.
  * - `list` is app-scoped, themeId-sorted.
@@ -42,7 +42,7 @@
 
 /** One registered theme, as persisted. */
 export interface StoredTheme {
-  /** Owning app — the tenancy unit. */
+  /** Owning app — the scoping unit. */
   readonly appId: string;
   /** Registered id; obeys {@link isValidThemeId}. */
   readonly themeId: string;
@@ -60,7 +60,7 @@ export interface StoredTheme {
   readonly updatedAt: number;
 }
 
-/** The persistence port. All methods are tenancy-scoped by `appId`. */
+/** The persistence port. All methods are app-scoped by `appId`. */
 export interface ThemeStore {
   get(appId: string, themeId: string): Promise<StoredTheme | null>;
   /** Upsert by `(appId, themeId)` — the record is written verbatim. */

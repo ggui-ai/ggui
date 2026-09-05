@@ -75,7 +75,7 @@ import type {
  */
 export interface BlueprintSearchCriteria {
   /**
-   * Tenancy scope. The search MUST NOT return blueprints whose
+   * App scope. The search MUST NOT return blueprints whose
    * `appId !== this`. Cross-app leakage is a security boundary
    * violation; the conformance suite asserts isolation.
    */
