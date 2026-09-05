@@ -1326,7 +1326,13 @@ describe('tool output schemas — protocol owns every wire shape a handler regis
     // fails on that variant (the latent bug #817 part C surfaced).
     expect(gguiGetSessionOutputSchema.parse({ ...out, variant: 'mcpApps' }).variant).toBe('mcpApps');
     expect(() => gguiGetSessionOutputSchema.parse({ ...out, variant: 'iframe' })).toThrow();
-    expect(Object.keys(gguiGetSessionOutputSchema.shape).sort()).toEqual(['appId', 'createdAt', 'eventSequence', 'expiresAt', 'id', 'lastActivityAt', 'variant']);
+    expect(Object.keys(gguiGetSessionOutputSchema.shape).sort()).toEqual(['appId', 'contextSnapshot', 'createdAt', 'eventSequence', 'expiresAt', 'id', 'lastActivityAt', 'variant']);
+    // contextSpec's last-known values ride the wire when the render has them
+    // (ggui_runtime_sync_context wrote them onto the row) — the read path a raw
+    // MCP client was promised; absent otherwise, and never anything but an object.
+    const withCtx = { ...out, contextSnapshot: { selectedDate: '2026-09-05', draft: { text: 'hi' } } };
+    expect(gguiGetSessionOutputSchema.parse(withCtx)).toEqual(withCtx);
+    expect(() => gguiGetSessionOutputSchema.parse({ ...out, contextSnapshot: 'nope' })).toThrow();
     expect(() => gguiGetSessionOutputSchema.parse({ ...out, eventSequence: -1 })).toThrow();
   });
 });

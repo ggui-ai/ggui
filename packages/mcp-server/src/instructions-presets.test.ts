@@ -161,3 +161,15 @@ describe('resolveMcpInstructions', () => {
     }
   });
 });
+
+describe('the presets say what ggui_get_session returns — never "the session" (#817 audit)', () => {
+  it('no preset promises get_session returns the session; contextSnapshot is named as what travels when the row has it', () => {
+    for (const [name, text] of Object.entries(MCP_INSTRUCTIONS_PRESETS)) {
+      expect(text, name).not.toMatch(/returns the session including/);
+      if (text.includes('contextSnapshot')) {
+        expect(text, name).toMatch(/contextSnapshot/);
+        expect(text, name).toMatch(/ggui_get_session/);
+      }
+    }
+  });
+});

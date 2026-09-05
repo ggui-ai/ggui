@@ -21,6 +21,7 @@ async function seedRender(
     sessionId?: string;
     appId?: string;
     themeId?: string;
+    contextSnapshot?: JsonObject;
   } = {},
 ): Promise<{ sessionId: string }> {
   const sessionId = opts.sessionId ?? 'render-1';
@@ -35,6 +36,7 @@ async function seedRender(
     lastActivityAt: NOW_MS,
     expiresAt: NOW_MS + 60_000,
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
+    ...(opts.contextSnapshot !== undefined ? { contextSnapshot: opts.contextSnapshot } : {}),
   };
   await store.commit({ render, appId });
   return { sessionId };
@@ -91,6 +93,22 @@ describe('createGguiGetSessionHandler', () => {
         'lastActivityAt',
         'variant',
       ]);
+    });
+  });
+
+  describe('contextSnapshot — contextSpec values ride the wire when the row has them (#817 audit)', () => {
+    it('projects the stored contextSnapshot for a component render', async () => {
+      const snapshot: JsonObject = { selectedDate: '2026-09-05', count: 3 };
+      const { sessionId } = await seedRender(renderStore, { contextSnapshot: snapshot });
+      const handler = createGguiGetSessionHandler({ renderStore });
+      const out = await handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' });
+      expect(out.contextSnapshot).toEqual(snapshot);
+    });
+    it('omits it when the row carries none — never an empty placeholder', async () => {
+      const { sessionId } = await seedRender(renderStore);
+      const handler = createGguiGetSessionHandler({ renderStore });
+      const out = await handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' });
+      expect('contextSnapshot' in out).toBe(false);
     });
   });
 
