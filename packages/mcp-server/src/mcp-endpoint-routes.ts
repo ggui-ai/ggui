@@ -514,7 +514,9 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     };
 
   const methodNotAllowed = (_req: Request, res: Response): void => {
-    res.status(405).json({
+    // A 405 names what IS allowed (RFC 9110 §15.5.6); every mount here is
+    // POST-only.
+    res.set("Allow", "POST").status(405).json({
       jsonrpc: "2.0",
       error: {
         code: -32000,
@@ -588,6 +590,12 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     });
     const route = pathPrefix !== undefined ? `${pathPrefix}/:${paramName}` : `/:${paramName}`;
     app.post(route, agentMcpHandler);
+    // The per-app endpoint is POST-only like every other mount: GET (a
+    // client's optional SSE listener) and DELETE (session terminate) read
+    // the transport's 405, never Express's text/html 404 — a 404 says "no
+    // such resource" and a client retries it every turn (ggui#850).
+    app.get(route, methodNotAllowed);
+    app.delete(route, methodNotAllowed);
   }
 
   // /control — the control plane. Hosts every `audience: ['protocol']`

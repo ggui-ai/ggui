@@ -375,6 +375,30 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     });
   });
 
+  // ggui#850 — the per-app endpoint is a POST-only Streamable-HTTP mount
+  // like every other mount here; a client's optional GET-SSE listener
+  // (Google ADK opens one every turn) must read the transport's 405 with
+  // `Allow: POST`, not Express's text/html 404 — a 404 says "no such
+  // resource" and the client logs it as a failure on every turn. An appId
+  // outside the pattern still 404s (absent resource) — that arm is the
+  // `app.param` gate, and it runs for GET/DELETE only once they are mounted.
+  it('GET and DELETE on a per-app endpoint answer the transport 405 with `Allow: POST` (never Express\'s 404); an appId outside the pattern stays a JSON 404 (#850)', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
+    for (const method of ['GET', 'DELETE'] as const) {
+      const res = await fetch(`${fx.url}/apps/beitvdgu`, {
+        method,
+        headers: { accept: 'application/json, text/event-stream' },
+      });
+      expect(res.status, method).toBe(405);
+      expect(res.headers.get('allow'), method).toBe('POST');
+      const body = (await res.json()) as { error?: { message?: string } };
+      expect(body.error?.message, method).toBe('Method not allowed (stateless server).');
+    }
+    const absent = await fetch(`${fx.url}/apps/NOPE`, { method: 'GET' });
+    expect(absent.status).toBe(404);
+    expect(await absent.json()).toEqual({ error: 'not_found' });
+  });
+
   it('no error mapper → the default-deny 403 Forbidden, no `data` key at all', async () => {
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
