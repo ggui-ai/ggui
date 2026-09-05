@@ -85,7 +85,7 @@ export function createGguiGetSessionHandler(
     title: 'Get GguiSession',
     audience: ['agent'],
     description:
-      'Retrieve the GguiSession wire projection — variant (render | mcpApps), id, appId, eventSequence, createdAt, lastActivityAt, expiresAt; nothing else travels. Bumps the GguiSession activity heartbeat on every successful read.',
+      'Retrieve the GguiSession wire projection — variant (render | mcpApps), id, appId, eventSequence, createdAt, lastActivityAt, expiresAt, plus contextSnapshot (the last-known contextSpec values) when the render has one; nothing else travels. Bumps the GguiSession activity heartbeat on every successful read.',
     inputSchema,
     outputSchema,
     async handler(
