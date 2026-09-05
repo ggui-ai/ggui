@@ -19,7 +19,7 @@
  * The schemas live in `@ggui-ai/protocol` (not the handler package)
  * for the same reason all wire-shape schemas do: the protocol package
  * is the source of truth for every MCP wire surface, and consumers
- * (cloud pod handlers, console UI, fixture authors) can import from
+ * (a hosted deployment's handlers, console UI, fixture authors) can import from
  * one place. Handler package wraps these into `SharedHandler`
  * factories.
  */

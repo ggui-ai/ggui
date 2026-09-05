@@ -743,7 +743,7 @@ export interface GadgetDescriptor {
   package: string;
   /**
    * ggui-hosted bundle URL — the preferred distribution path. Same
-   * origin as the iframe in single-tenant OSS deployments (served
+   * origin as the iframe in single-deployment installs (served
    * from `/_ggui/libs/<libId>/bundle.js`) and the ggui marketplace
    * CDN in cloud deployments. CSP `script-src` allowlists only the
    * ggui origin — no per-plugin third-party origins.

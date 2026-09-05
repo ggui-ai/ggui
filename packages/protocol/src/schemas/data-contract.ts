@@ -7,7 +7,7 @@
  * Output-side seams that type-narrow contract on the wire —
  * `renderOutputSchema.contract` and the various `decision` echoes — use
  * `z.custom<DataContract>()` because they trust the shape (it
- * originates from internal pod state).
+ * originates from internal server state).
  *
  * The input seam is different: agents author contract on
  * `story.contract` and the handler MUST plumb them to the generator.

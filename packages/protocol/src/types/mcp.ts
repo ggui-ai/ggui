@@ -372,7 +372,7 @@ export type GguiHandshakeOutput = z.infer<typeof handshakeOutputSchema>;
  *
  * Mirrors `handshakeOutputSchema.serverCapabilities` exactly — exported
  * here as a named TypeScript type so server-side composition layers
- * (the OSS `createGguiServer` resolver, the cloud pod composer) can hand
+ * (the OSS `createGguiServer` resolver, a hosted deployment's composer) can hand
  * one back to the handshake factory without re-deriving the shape from
  * the schema.
  *

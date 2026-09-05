@@ -86,7 +86,7 @@ export * from "./schemas/blueprint";
 export * from "./types/handshake-suggestion";
 export * from "./schemas/handshake-suggestion";
 // Operator-class blueprint tool schemas. Lives alongside the blueprint
-// type schemas so handlers + cloud pod + console + fixtures all import
+// type schemas so handlers + a hosted deployment + console + fixtures all import
 // the wire shape from one place.
 export * from "./schemas/ops-blueprint";
 export * from "./types/contract-inference";

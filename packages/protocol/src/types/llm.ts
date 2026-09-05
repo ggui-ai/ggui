@@ -6,7 +6,7 @@
  *   - `MODEL_REGISTRY` here = LiteLLM-keyed pricing + capability
  *     metadata. Keys are LiteLLM strings (`"gemini/gemini-3.5-flash"`,
  *     `"openai/gpt-5.4-mini"`, …). Read by:
- *       - `cloud/ggui-protocol-pod` pricing-drift test (vendored
+ *       - a hosted deployment's pricing-drift test (vendored
  *         LiteLLM JSON pricing table)
  *       - `oss/misc/benchmark` runner (bench harness; picks model
  *         configs by LiteLLM key)
@@ -40,7 +40,7 @@
  * EXISTS, and `scripts/check-litellm-pricing-drift.ts` compares the
  * snapshot against upstream, never the registry. That gap let this
  * table sit four months stale while production routed to models it did
- * not even list. The pod's `pricing-tables.test.ts` now asserts every
+ * not even list. A hosted deployment's `pricing-tables.test.ts` now asserts every
  * entry's `costs` match the vendored rate (with an explicit, dated
  * PENDING_UPSTREAM allowlist for prices we learn before LiteLLM does).
  * Add a model here and you MUST re-vendor the snapshot in the same
