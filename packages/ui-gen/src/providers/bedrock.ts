@@ -2,13 +2,13 @@
  * Concrete AWS Bedrock `ProviderAdapter` — invokes Anthropic Claude
  * models on Bedrock via the official `@anthropic-ai/bedrock-sdk`
  * package. IAM-based auth (no API key in flight); the AWS credential
- * chain (IRSA pod token / `~/.aws/credentials` / env vars) supplies
+ * chain (a workload-identity token / `~/.aws/credentials` / env vars) supplies
  * SigV4 signatures automatically.
  *
  * ## Why this adapter exists
  *
  * Anyone running a one-shot LLM caller on an AWS-credentialed host
- * (EC2, ECS, Lambda, EKS) can target Bedrock without managing API keys: IAM is
+ * (EC2, ECS, Lambda and the like) can target Bedrock without managing API keys: IAM is
  * the auth boundary, AWS rotates host credentials automatically, and
  * a misconfigured IAM role surfaces as a clear `AccessDeniedException`
  * the SDK funnels through `mapError`. The alternative — parking a
@@ -165,8 +165,8 @@ export function bedrockEndpointFor(model: string): BedrockEndpoint {
  * Constructor options for the Bedrock adapter.
  *
  * `region` is the only required option in the common case — IAM
- * credentials come from the standard AWS chain (IRSA pod token in
- * EKS, instance role on EC2, env vars or shared credentials file
+ * credentials come from the standard AWS chain (a workload-identity token in
+ * a container cluster, instance role on EC2, env vars or shared credentials file
  * locally). Tests pass `clientFactory` to inject a mock SDK client.
  */
 export interface BedrockAdapterOptions {

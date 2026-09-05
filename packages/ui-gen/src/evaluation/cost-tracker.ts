@@ -15,9 +15,8 @@ import { MODEL_REGISTRY, type ModelId } from '@ggui-ai/protocol';
  * This table used to hand-maintain its own per-1K prices, and drifted:
  * on 2026-07-31 four of its six rows were wrong (Haiku 4.5 20% low,
  * gemini-3-flash-preview 5-7x low, gpt-5.4-mini ~3x low, Luna 5x high
- * after OpenAI's cut). Deriving from the registry — which the pod's
- * pricing test now pins against the vendored LiteLLM snapshot — means
- * one place to update and one place that can be wrong.
+ * after OpenAI's cut). Deriving from the registry — whose Anthropic rows
+ * `@ggui-ai/protocol`'s own tests pin — means one place to update and one place that can be wrong.
  *
  * Resolution order mirrors the benchmark harness's
  * `resolveJudgeCostModelId`: exact key, unique `/<model>` suffix, then

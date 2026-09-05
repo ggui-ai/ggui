@@ -18,7 +18,7 @@
  *     mapping, else the deployment default) and the subscribe acks.
  *     Graded as a session-state read-back of the bound `appId` on the
  *     provisioned render (hosts expose it via `readSessionField`), so
- *     a server that acks but binds an undefined tenant — the
+ *     a server that acks but binds an undefined app id — the
  *     corrupt-row failure mode — fails rather than passing on the ack
  *     alone.
  *

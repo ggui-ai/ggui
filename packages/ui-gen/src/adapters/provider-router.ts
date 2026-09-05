@@ -8,7 +8,7 @@
 // the typed `LlmRoute` (slice #43) guarantees `route.model` is
 // wire-canonical at construction time, so there is no LiteLLM prefix
 // to strip at this boundary. `getBedrockModelId` stays — the
-// "anthropic route + bedrock IAM" mixed-mode escape hatch (cloud-pod
+// "anthropic route + bedrock IAM" mixed-mode escape hatch (a hosted deployment's
 // legacy) still needs the wire-canonical anthropic id → cross-region
 // profile id upcast.
 
@@ -18,7 +18,7 @@ import type { LlmRoute } from '@ggui-ai/protocol';
  * Map a wire-canonical Anthropic model id (or already-bedrock id) to
  * the AWS Bedrock cross-region inference profile id. Used by the
  * mixed-mode `anthropic` route + bedrock-IAM fallback path in
- * {@link resolveRoute} (cloud-pod legacy) and the analogous branch in
+ * {@link resolveRoute} (a hosted deployment's legacy) and the analogous branch in
  * `harness/llm-router.ts::AnthropicAgent.resolveModel`.
  *
  * Operators picking the bedrock route explicitly (slice #43 Phase 4)
@@ -41,13 +41,13 @@ export function getBedrockModelId(model: string): string {
     'anthropic/claude-fable-5': 'us.anthropic.claude-fable-5',
   };
   // Normalize the Bedrock dot-form opt-in (e.g. `anthropic.claude-haiku-4-5`,
-  // produced when cloud-pod's `resolvePoolRoute` strips a `bedrock/` opt-in
+  // produced when a route resolver strips a `bedrock/` opt-in
   // prefix) to the Anthropic slash form. Both spellings should resolve to
   // the same cross-region inference profile id — without this, the dot
   // form would skip the BEDROCK_MAP hit, fall through the `^anthropic\/`
   // strip (which is a no-op for the dot form), and re-prepend
   // `us.anthropic.` to produce a double-`anthropic.` id that Bedrock
-  // rejects with 400 (cloud e2e regression 2026-05-25, bedrock-iam.spec).
+  // rejects with 400 (regression seen live on 2026-05-25).
   const normalized = model.replace(/^anthropic\./, 'anthropic/');
   if (BEDROCK_MAP[normalized]) return BEDROCK_MAP[normalized];
   if (normalized.startsWith('us.anthropic.') || normalized.startsWith('arn:')) {
@@ -131,7 +131,7 @@ function clearSiblings(
  *       2. Without `apiKey` AND explicit `env.CLAUDE_CODE_USE_BEDROCK === '1'`
  *          (or no `env.ANTHROPIC_API_KEY`) → mixed-mode bedrock fallback
  *          (model upcast to cross-region profile via `getBedrockModelId`).
- *          Cloud-pod legacy escape hatch; the OSS Phase 4 strict-fail
+ *          A hosted deployment's legacy escape hatch; the Phase 4 strict-fail
  *          prevents end-users from reaching this branch implicitly.
  *       3. Otherwise → direct Anthropic API with whatever
  *          `ANTHROPIC_API_KEY` is already in `env`.
@@ -225,7 +225,8 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         };
       }
       // Mixed-mode legacy: anthropic route + bedrock IAM fallback.
-      // Cloud-pod escape hatch when `ANTHROPIC_API_KEY` isn't seeded.
+      // Escape hatch for a production deployment that authenticates via Bedrock
+      // IAM and never sets `ANTHROPIC_API_KEY`.
       const explicitBedrock = env.CLAUDE_CODE_USE_BEDROCK === '1';
       const noApiKey = !env.ANTHROPIC_API_KEY;
       if (explicitBedrock || noApiKey) {

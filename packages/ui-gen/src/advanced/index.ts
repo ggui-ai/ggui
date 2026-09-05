@@ -27,9 +27,10 @@
  * Missing the dep throws on every `generate()` call (not at factory
  * time) so a config file dropping the registration is observable.
  *
- * Default OSS install does NOT ship Playwright. Cloud operators opt
- * into this generator by deploying `ggui-protocol-pod-advanced`, the
- * pod image variant that bakes Playwright + Chromium.
+ * The default install does NOT ship Playwright. Operators opt into this
+ * generator by installing `playwright-core` + Chromium and registering
+ * `createAdvancedUiGenerator({ playwright })` in the generator registry
+ * they hand to the server.
  */
 export {
   createAdvancedUiGenerator,

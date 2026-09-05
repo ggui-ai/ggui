@@ -24,7 +24,8 @@
  *   });
  *
  * If `playwright` is omitted, the validator throws a clear error
- * pointing the operator at the advanced-pod opt-in. This keeps the
+ * pointing the caller at the `playwright-core` peer dep and the `playwright`
+ * input field. This keeps the
  * default OSS install free of the Chromium binary (~300MB).
  *
  * Classification gate:
@@ -100,7 +101,7 @@ export interface ValidateContractBehaviorInput {
   /**
    * Playwright module. Pass `{ chromium }` from `playwright-core` or
    * `playwright`. Required — when absent the validator throws with a
-   * pointer to the advanced-pod opt-in.
+   * pointer to the `playwright-core` peer dep and this field.
    */
   readonly playwright: PlaywrightModule;
 }

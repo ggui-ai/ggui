@@ -8,7 +8,7 @@
  * future fast-model-backed producer can layer onto the same contract.
  *
  * Keeping producers in a dedicated subpath lets consumers import
- * exactly the bundle they need — hosted pods pulling a Haiku
+ * exactly the bundle they need — hosted deployments pulling a Haiku
  * producer don't pay for the deterministic one, and vice-versa.
  */
 export {

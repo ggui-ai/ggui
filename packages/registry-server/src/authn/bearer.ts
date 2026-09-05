@@ -4,7 +4,7 @@
  * The transport-layer translator between an HTTP `Authorization` header
  * and the registry-core {@link AuthnContext}. Operates only on a
  * constant-time-compared static token configured at server boot —
- * any per-request rotation, multi-tenant key-pinning, or audience
+ * any per-request rotation, multi-publisher key-pinning, or audience
  * checks belong to a reverse proxy in front of this server.
  *
  * Vendor-neutral surface: no string in this module names a specific
@@ -126,7 +126,7 @@ export function createBearerAuthn(options: CreateBearerAuthnOptions): BearerAuth
  * (e.g. `subject: 'alice@team.example'`), or front the registry with
  * a reverse proxy that performs real identity verification and
  * forwards a per-request subject downstream. The OSS bearer surface
- * exists for self-hosted single-publisher convenience — multi-tenant
+ * exists for self-hosted single-publisher convenience — multi-publisher
  * deployments belong behind a real identity provider or a
  * proxy-mediated identity tier.
  */

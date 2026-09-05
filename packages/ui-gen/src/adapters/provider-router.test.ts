@@ -286,8 +286,8 @@ describe('getBedrockModelId — Claude 5-family ids are explicit, pinned entries
 
 describe('getBedrockModelId — Bedrock opt-in dot form', () => {
   it('upcasts the dot-form short id (anthropic.claude-haiku-4-5) to the cross-region profile', () => {
-    // Live-bug regression (cloud e2e 2026-05-25, bedrock-iam.spec): the
-    // cloud-pod's `resolvePoolRoute` accepts a `bedrock/<id>` opt-in
+    // Live-bug regression (2026-05-25): a route resolver that accepts a
+    // `bedrock/<id>` opt-in
     // prefix and strips it before dispatch. For the convenience input
     // `bedrock/anthropic.claude-haiku-4-5`, the stripped form is the
     // dot-shape `anthropic.claude-haiku-4-5`. Pre-fix, this fell through

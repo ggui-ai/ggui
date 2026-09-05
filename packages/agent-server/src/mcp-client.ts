@@ -172,8 +172,8 @@ export async function callMcpResourcesRead(args: {
  * schedule. AMBIGUOUS failures (ECONNRESET / `terminated` mid-body —
  * the request MAY have been delivered) get ONE retry: safe since the
  * pending-event pipe deduplicates on the envelope's `id` for the
- * pipe's lifetime (ggui#405 — enforced by all three implementations:
- * in-memory, sqlite, and the pod's DDB `seenEventIds` set), so a
+ * pipe's lifetime (ggui#405 — enforced by every implementation:
+ * in-memory, sqlite, and any durable store a deployment substitutes), so a
  * replayed delivered gesture is a server-side no-op.
  */
 const PRE_SEND_FAILURE_CODES = new Set([

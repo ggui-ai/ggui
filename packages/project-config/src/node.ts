@@ -15,7 +15,7 @@
  *   upward from `process.cwd()` to find the project-root file.
  * - Any hosting integration that reads the open manifest to
  *   reconstitute an agent. Hosting layers treat `ggui.json` as
- *   input-only; per-tenant overlay config lives outside this package.
+ *   input-only; per-app overlay config lives outside this package.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

@@ -985,7 +985,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // `tools/call` (dispatchSubmitAction, channel-transport router)
   // routes through `app.callServerTool` instead of the legacy raw
   // postMessage pump. Idempotent: re-boot with the same App is a
-  // no-op; a different App throws (the iframe is single-tenant).
+  // no-op; a different App throws (the iframe is single-app).
   setCurrentApp(app);
 
   // Slice-meta resolution — spec-canonical primary, no in-house
@@ -2037,7 +2037,7 @@ function awaitToolResultMeta(
  * App instance even across re-mounts (e.g. an agent fires a second
  * `ggui_render` and the listener re-applies through the published
  * `applyRender`). Keyed by App — not a module boolean — so a fresh App
- * (a re-booted document in tests; production is single-tenant per
+ * (a re-booted document in tests; production is single-app per
  * iframe) always gets its own registration, never a stale latch.
  */
 const persistentToolResultListenerApps = new WeakSet<App>();
@@ -4624,10 +4624,10 @@ async function bootProduction(opts: {
       // DEFAULT-handlers compositions only (a custom `handlers` list
       // drains its own pipe; bridging the channel onto an instance
       // nobody drains would buffer gestures into the void — see the
-      // hoist note in server.ts). The hosted pod IS a custom-handlers
-      // caller: on it, a WS gesture lands on the retained ledger only
+      // hoist note in server.ts). A deployment composing its own `handlers`
+      // IS such a caller: on it, a WS gesture lands on the retained ledger only
       // and never reaches the agent. Any WS action fallback (ggui#599's
-      // open design leg) therefore requires the server/pod bridge
+      // open design leg) therefore requires the server-side bridge
       // FIRST — it is a capability gap on that composition today. The WS pipe otherwise carries
       // streamSpec subscriptions (inbound `ggui_emit` fanout +
       // `props_update` + `render` + `data` + `drain_ack` +

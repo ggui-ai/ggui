@@ -21,9 +21,9 @@
  * (createAgent → run-coding-turn → llm-evaluator → file-agent → …)
  * touches ~5 packages for a devtools-only surface. The OSS ggui server
  * is a single process per CLI invocation — global state has no
- * confusion-cost there. A hosted closed runtime isolates per request
- * via process-pool, so a global per-pool is also safe. If we ever
- * multi-tenant inside one process we'll thread it then.
+ * confusion-cost there. A hosted deployment isolates per request via a
+ * process pool, so a global per-pool is also safe. If we ever serve
+ * several apps inside one process we'll thread it then.
  *
  * **Default = no sink.** When unset, the router emits nothing and
  * spends no CPU formatting events. Passing `null` removes a previously

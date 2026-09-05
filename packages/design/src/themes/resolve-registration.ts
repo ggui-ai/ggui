@@ -1,13 +1,13 @@
 /**
  * resolveRegistrationVariables — the delivery resolver (ggui#598-C,
- * design leg of the pod seam): a validated registration document pair
+ * design leg of the server seam): a validated registration document pair
  * in, emit-ready per-mode CSS variable maps out.
  *
  * Parser-grounded: the maps are extracted from `parseTheme`'s own
  * emission, so a DELIVERED ladder (wire `theme.base`) can never drift
  * from what the same document would paint if it were compiled in —
- * one derivation, two transports. The pod wraps this in its
- * documentHash-keyed LRU; nothing derived is ever persisted (the
+ * one derivation, two transports. A `themeBaseProvider` typically memoizes
+ * this in a documentHash-keyed LRU; nothing derived is ever persisted (the
  * store holds document bytes only — recompute-from-bytes is the rule).
  */
 import type { DtcgTheme } from './types.js';

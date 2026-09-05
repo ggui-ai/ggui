@@ -36,7 +36,7 @@ import type { ActionSpec, HostContextProjection } from '@ggui-ai/protocol';
  * model is no-auth — every caller is the same anonymous identity — so
  * the per-identity mapping a real deployment configures collapses to
  * one deployment-wide constant. The value matches the conformance
- * kit's conventional tenant (`'conformance'`, the appId the kit's
+ * kit's conventional app id (`'conformance'`, the appId the kit's
  * runner stamps on its subscribe frames) because grading by the kit is
  * the only deployment context this package has.
  */

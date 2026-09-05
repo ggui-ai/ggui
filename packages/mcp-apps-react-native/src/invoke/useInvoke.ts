@@ -110,7 +110,7 @@ export interface UseInvokeOptions {
   onError?: (err: InvokeError) => void;
   /**
    * Dev-mode bridge routing — when set, `send()` POSTs to
-   * `{gatewayUrl}/{appId}` instead of `{endpointUrl}/invoke`. The pod
+   * `{gatewayUrl}/{appId}` instead of `{endpointUrl}/invoke`. The gateway
    * routes by `appId`. Mirrors the web hook; see that JSDoc for the
    * full description. When set, `endpointUrl` is optional — the gateway
    * is the transport.

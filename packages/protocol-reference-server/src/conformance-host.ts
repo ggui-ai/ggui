@@ -193,7 +193,7 @@ export function createReferenceConformanceHost({
         // `absent-appid-defaults` fixture reads it back to grade the
         // SPEC §12.2 identity-default resolution (a subscribe that
         // omits `appId` binds the deployment default, never an
-        // undefined tenant).
+        // undefined app id).
         return render.appId;
       }
       throw new Error(

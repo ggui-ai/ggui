@@ -17,7 +17,7 @@
  *     router runs a setInterval that fires `tools/call` against
  *     the parent MCP host (direct, no bridge). Works
  *     for any tool the agent has access to, including third-party
- *     MCP servers the local pod can't subscribe-for.
+ *     MCP servers the local server can't subscribe for.
  *
  * The dispatch decision is per-channel + per-render (each new render
  * brings a potentially-new contract; we re-run the routing). The
@@ -192,7 +192,7 @@ export type ToolsCallInvoker = (args: {
 export interface ChannelTransportRouterOptions {
   /** GguiSession id the router scopes channel_subscribe frames against. */
   readonly sessionId: string;
-  /** App (tenant) id paired with sessionId on the subscribe frame. */
+  /** App id paired with sessionId on the subscribe frame. */
   readonly appId: string;
   /**
    * Allowlist of `source.tool` names this server can subscribe-for

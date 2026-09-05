@@ -147,7 +147,7 @@ export function createSecurityPolicy(
     }
 
     // Origin check — browser-only. Non-browser clients (`curl`, agent
-    // pods, etc.) omit `Origin` and are gated by the token alone.
+    // processes, etc.) omit `Origin` and are gated by the token alone.
     if (origin !== null && !isOriginAllowed(origin, allowedOrigins)) {
       res.writeHead(403, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'origin-not-allowed', origin }));

@@ -90,9 +90,9 @@ export interface ContractValidationResult {
 export interface ContractValidationNoveltyDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectorStore: VectorStore;
-  /** Tenant / partition the nearest-neighbor query runs against. Same
+  /** App / partition the nearest-neighbor query runs against. Same
    * semantics as the `scope` argument on `VectorStore.query` — the
-   * tenant / index partition, typically `appId`. */
+   * app / index partition, typically `appId`. */
   readonly scope: string;
 }
 

@@ -193,7 +193,7 @@ export interface CreateGguiSessionStep {
   /** Opaque render id the host allocates. Downstream steps + the
    *  fixture's `inputEnvelope` reference it by value. */
   readonly sessionId: string;
-  /** Optional app (tenant) id the render scopes to. Defaults to the
+  /** Optional app id the render scopes to. Defaults to the
    *  host's implementation-defined "default app". */
   readonly appId?: string;
   /**

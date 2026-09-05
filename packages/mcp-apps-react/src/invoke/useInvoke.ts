@@ -74,14 +74,14 @@ export interface UseInvokeOptions {
   /**
    * Dev-mode bridge routing — when set, `send()` POSTs to
    * `{gatewayUrl}/{appId}` instead of `{endpointUrl}/invoke`. The
-   * bridge-gateway pod forwards the request (and its SSE response) to
+   * bridge gateway forwards the request (and its SSE response) to
    * whichever `ggui dev` CLI process is holding the matching WebSocket
-   * connection for this `appId`. Source of `gatewayUrl` is
-   * `amplify_outputs.custom.bridgeGatewayUrl` (pod HTTP ingress at
+   * connection for this `appId`. Source of `gatewayUrl` is whatever the
+   * deployment publishes as its bridge gateway's HTTP ingress (e.g.
    * `https://mcp.<apex>/bridge`).
    *
    * When `devBridge` is set, `endpointUrl` is optional — the gateway is
-   * the transport. The pod routes by `appId`.
+   * the transport. The gateway routes by `appId`.
    */
   devBridge?: {
     /** Base URL of the bridge gateway (trailing slash optional). */
@@ -207,9 +207,9 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
         if (options.hostSessionId) headers['X-Ggui-Host-Session-Id'] = options.hostSessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 
-        // Dev-mode bridge: the pod expects POSTs at `{gatewayUrl}/{appId}` —
+        // Dev-mode bridge: the gateway expects POSTs at `{gatewayUrl}/{appId}` —
         // it looks up the `ggui dev` CLI's WS by appId and streams the SSE
-        // response from whatever replies — the pod routes by appId.
+        // response from whatever replies — the gateway routes by appId.
         // Prod path is the standard `{endpointUrl}/invoke`.
         const targetUrl = options.devBridge
           ? `${options.devBridge.gatewayUrl.replace(/\/$/, '')}/${encodeURIComponent(ctx.appId)}`
