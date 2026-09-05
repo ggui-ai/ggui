@@ -39,6 +39,9 @@ export * from './schemas/data-contract';
 export * from './types/gadget';
 export * from './gadgets/stdlib-gadgets';
 export * from './gadgets/resolve-contract-gadgets';
+// The iframe bridge vocabulary (`BRIDGE_EVENTS`) — what the RN WebView bridge
+// and the web runtime agree on; browser data, not a tool schema.
+export * from './iframe-bridge';
 export type { ValidateFunction } from './validation/ajv-runtime';
 export type { AppTheme } from './schemas/app-theme';
 export type { AppDisplayConfig } from './types/app-config';

@@ -96,6 +96,7 @@ describe('@ggui-ai/protocol/wire — the browser entry reaches only what a brows
       'invokeEventSchema',
       'KNOWN_PERMISSION_NAMES',
       'UnknownPermissionNameError',
+      'BRIDGE_EVENTS',
     ]) {
       expect((wire as Record<string, unknown>)[name], name).toBeDefined();
     }
