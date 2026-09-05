@@ -2,9 +2,10 @@
 /**
  * Bundle-size gate for `@ggui-ai/iframe-runtime`.
  *
- * Measures the gzipped size of `dist/iframe-runtime.js` (the iframe runtime
- * artifact) and fails the build when it exceeds the budget recorded in
- * `bundle-size.budget.json` next to this script's package root.
+ * Measures `dist/iframe-runtime.js` (the iframe runtime artifact) and fails
+ * the build when its RAW byte size exceeds the budget recorded in
+ * `bundle-size.budget.json` next to this script's package root. The gzipped
+ * size is printed for the reader and never gated — see "Why raw bytes".
  *
  * Why a separate JSON file rather than a literal in this script: the
  * budget number is the AUTHORITATIVE shape-lock for what we're willing
@@ -30,6 +31,28 @@
  * ship inside; the C7a baseline is much smaller because component-code
  * eval hasn't landed yet. The +20% headroom keeps us honest between
  * intentional ports and accidental growth.
+ *
+ * ─── Why raw bytes, not gzipped (2026-09-05) ───
+ *
+ * Until 2026-09-05 the gated number was Node's `zlib.gzipSync` output, and
+ * the budget note's history is in that unit. That ruler is not portable:
+ * Node's zlib is Chromium's fork, whose match-finder takes a different
+ * SIMD path per CPU architecture, so the SAME bytes compress to different
+ * sizes on different machines. Receipt, monorepo sha 8c18c764d, one
+ * bundle (raw 1179.36 KB on both): 309.66 KB gzipped on macOS/arm64
+ * (Node 25.6.1) — PASS against 310 KB; 310.43 KB on ubuntu-24.04/x86-64
+ * (Node 24, CI run 33938275939) — FAIL. Every local pre-push passed
+ * honestly and every CI run failed honestly, on the same commit. A budget
+ * whose headroom is smaller than its ruler's platform variance is a proxy
+ * for the thing it measures.
+ *
+ * The raw size is deterministic by construction: the same esbuild version
+ * over the same lockfile-pinned inputs emits the same bytes everywhere, so
+ * the same bytes get the same verdict on every machine, and the budget is
+ * a real ratchet again (every growth ratified in its own commit, never
+ * absorbed by whichever platform happened to compress better). Gzipped
+ * size stays in the log because it is what an iframe actually downloads;
+ * read it as ≈ raw × 0.26, ±0.3 % by architecture.
  *
  * ─── Second gate: no package bundled twice ───
  *
@@ -156,12 +179,12 @@ function findDuplicatePackages(
 
 interface BudgetFile {
   /**
-   * Maximum allowed gzipped size of `dist/iframe-runtime.js` in bytes.
-   * Written by the C7a baseline commit; updated only when an
-   * intentional bundle growth is being ratified (e.g. C7b React +
-   * wire port). See script docstring for the rule.
+   * Maximum allowed RAW size of `dist/iframe-runtime.js` in bytes —
+   * the platform-independent ruler (see "Why raw bytes"). Updated only
+   * when an intentional bundle growth is being ratified, in the same
+   * commit as the growth, with the reason in `note`.
    */
-  readonly gzipBytesMax: number;
+  readonly rawBytesMax: number;
   /**
    * Free-form note explaining what slice / commit established this
    * budget. Helps operators reading `git blame` understand why the
@@ -176,11 +199,11 @@ function readBudget(): BudgetFile {
   if (
     parsed === null ||
     typeof parsed !== 'object' ||
-    typeof (parsed as { gzipBytesMax?: unknown }).gzipBytesMax !== 'number' ||
+    typeof (parsed as { rawBytesMax?: unknown }).rawBytesMax !== 'number' ||
     typeof (parsed as { note?: unknown }).note !== 'string'
   ) {
     throw new Error(
-      `[check-bundle-size] ${budgetPath} is malformed; expected { gzipBytesMax: number, note: string }.`,
+      `[check-bundle-size] ${budgetPath} is malformed; expected { rawBytesMax: number, note: string }.`,
     );
   }
   return parsed as BudgetFile;
@@ -297,14 +320,16 @@ try {
 
 const budget = readBudget();
 const raw = readFileSync(bundlePath);
+// Informational only — Node's zlib output varies by CPU architecture;
+// the verdict below is on the raw bytes. See "Why raw bytes".
 const gz = gzipSync(raw);
 const rawKb = (raw.byteLength / 1024).toFixed(2);
 const gzKb = (gz.byteLength / 1024).toFixed(2);
-const budgetKb = (budget.gzipBytesMax / 1024).toFixed(2);
-const pct = Math.round((gz.byteLength / budget.gzipBytesMax) * 100);
+const budgetKb = (budget.rawBytesMax / 1024).toFixed(2);
+const pct = Math.round((raw.byteLength / budget.rawBytesMax) * 100);
 
 console.log(
-  `iframe-runtime bundle — raw ${rawKb} KB · gzipped ${gzKb} KB · budget ${budgetKb} KB (${pct}%)`,
+  `iframe-runtime bundle — raw ${rawKb} KB · budget ${budgetKb} KB raw (${pct}%) · gzipped ${gzKb} KB (Node zlib on this machine; informational, varies by CPU architecture)`,
 );
 console.log(`  budget note: ${budget.note}`);
 
@@ -363,13 +388,13 @@ console.log(
   `  no duplicate packages — every bundled dependency resolves from exactly one install location`,
 );
 
-if (gz.byteLength > budget.gzipBytesMax) {
+if (raw.byteLength > budget.rawBytesMax) {
   console.error(
-    `[check-bundle-size] FAIL — gzipped ${gzKb} KB exceeds budget ${budgetKb} KB. ` +
-      `Either trim the growth or, if intentional (C7b React + wire port), ` +
-      `update bundle-size.budget.json in the same commit and explain why.`,
+    `[check-bundle-size] FAIL — raw ${rawKb} KB exceeds budget ${budgetKb} KB. ` +
+      `Either trim the growth or, if intentional, update ` +
+      `bundle-size.budget.json#rawBytesMax in the same commit and say why in #note.`,
   );
   process.exit(1);
 }
 
-console.log(`[check-bundle-size] PASS — ${gzKb} KB / ${budgetKb} KB`);
+console.log(`[check-bundle-size] PASS — raw ${rawKb} KB / ${budgetKb} KB (gzipped ${gzKb} KB here)`);
