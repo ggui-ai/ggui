@@ -6,6 +6,45 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * SPEC §7.1's refused arm is ONE primitive (2026-09-05, additive,
+ * pre-launch, ggui#803 leg 9). The tool result a render gate answers a
+ * pre-generation refusal with was built by hand in
+ * `@ggui-ai/mcp-server-handlers` (`buildRenderRefusalText` + an inline
+ * `{ outcome: 'refused', refusal }`), the conformance kit carried its
+ * own reference, and the reference server could not project it at all
+ * — so the reference server was not a reference for the refused
+ * envelope, and a third hand-built copy there would only have re-graded
+ * the kit's reference.
+ *
+ *   rr1. **`projectRenderRefusal(refusal): RenderRefusalResult`** (new
+ *      export, `envelopes/render-refusal.ts`) — `isError: true`,
+ *      `content[0].text` = `<code>: <message> <fix>`, `structuredContent`
+ *      = `{ outcome: 'refused', refusal }` typed as **`RefusedRenderOutput`**
+ *      (`z.infer<typeof refusedOutputSchema>`, new export), no `_meta`.
+ *      Pure and synchronous. The four facts have one source.
+ *
+ *   rr2. **Consumers**: `mcp-server-handlers`' `ggui_render` builds the
+ *      refused result here (its local builder, inline object and
+ *      `RenderRefusedOutput` alias are deleted — no shim); the
+ *      reference server supplies the kit's `refusalProjector` from the
+ *      same primitive at the kit's stringly boundary (a code off
+ *      `RENDER_GATE_REFUSAL_CODES` → `null`; anything else parsed by
+ *      `renderRefusalSchema`), so its six `refusal-envelope/*` rows are
+ *      GRADED, not skipped. The kit's own hand-built reference stays as
+ *      the second source that catches the primitive drifting.
+ *
+ * Conformance-kit verdict: no new kit entry — the six `refusal-envelope`
+ * cases already grade exactly these four facts; what changed is that
+ * two implementations now answer them through one function, and the
+ * reference server's exact-set assertion moved the rows from SKIPPED to
+ * PASSING. Bytes on the wire: unchanged.
+ *
+ * Package version — classification MADE here: MINOR for
+ * `@ggui-ai/protocol` (two new exports, additive) and for
+ * `@ggui-ai/mcp-server-handlers` (same result, one source), pre-1.0 and
+ * pre-launch. PROTOCOL_VERSION unchanged — no WS envelope moved.
+ *
+ * --------------------------------------------------------------------
  * Authorization refusals carry JSON-RPC `data` (2026-09-05, additive,
  * pre-launch, ggui#825). `@ggui-ai/mcp-server`'s per-app `authorize`
  * hook refuses by throwing, and the route answered every throw with a

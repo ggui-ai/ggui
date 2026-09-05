@@ -8,21 +8,28 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 13 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
- *     fixtures plus the 4 `registry-completeness` catalog rows, which
+ *   - 19 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *     fixtures, the 4 `registry-completeness` catalog rows, which
  *     grade the closed refusal-code registry this server embeds from
- *     `@ggui-ai/protocol` (ggui#786).
- *   - 9 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
+ *     `@ggui-ai/protocol` (ggui#786), and the 6 `refusal-envelope`
+ *     rows, graded through the protocol's own `projectRenderRefusal`
+ *     (ggui#803 leg 9) — no tool plane needed for a pure projection.
+ *   - 5 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`), the matcher's
  *     `unmatchable-on-ws` for Path-B claims (`props-update`), and the
- *     6 `refusal-envelope` rows, which need a tool plane this
+ *     2 `transport-refusal` rows, which need a per-app endpoint this
  *     live-channel-only server does not have. See `match-behavior.ts`
  *     for the Path-A vs Path-B partition.
  *   - 0 fixtures FAIL — `KNOWN_FAILURES_AT_v0` is empty.
  */
 import { runConformance } from '@ggui-ai/protocol-conformance';
-import { PRE_GENERATION_REFUSAL_CODES } from '@ggui-ai/protocol';
+import {
+  PRE_GENERATION_REFUSAL_CODES,
+  RENDER_GATE_REFUSAL_CODES,
+  projectRenderRefusal,
+  renderRefusalSchema,
+} from '@ggui-ai/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createReferenceConformanceHost } from './conformance-host.js';
@@ -113,6 +120,30 @@ import { ReferenceServer } from './server.js';
  *     proving the default binds a real tenant, never an undefined
  *     one.
  */
+/**
+ * The reference §7.1 projector (ggui#803 leg 9): the protocol primitive at
+ * the kit's stringly boundary. A code off the render-gate surface has no
+ * render envelope — `null`, which is what the per-surface namespace rule
+ * means operationally. Anything else is PARSED into the typed refusal (a
+ * malformed input throws, and the catalog grades a throw as a FAIL on
+ * that case) and projected; nothing read, no handshake consumed, nothing
+ * committed — no `_meta`, no identity fields.
+ */
+const referenceRefusalProjector: NonNullable<
+  Parameters<typeof runConformance>[0]['refusalProjector']
+> = (input) => {
+  const renderGate: readonly string[] = RENDER_GATE_REFUSAL_CODES;
+  if (!renderGate.includes(input.code)) return null;
+  const result = projectRenderRefusal(renderRefusalSchema.parse(input));
+  return {
+    isError: result.isError,
+    text: result.content[0].text,
+    structuredContent: result.structuredContent,
+    hasMeta: false,
+    identityFields: [],
+  };
+};
+
 const EXPECTED_PASSING = [
   'absent-appid-defaults',
   'action-ack-sequence',
@@ -126,6 +157,12 @@ const EXPECTED_PASSING = [
   // behaviour, so a vendor-neutral implementation can and must grade
   // them. They pass because `runConformance` below is handed
   // `PRE_GENERATION_REFUSAL_CODES`.
+  'refusal-envelope/refuse-after-fix-caller',
+  'refusal-envelope/refuse-after-fix-owner-with-balance',
+  'refusal-envelope/refuse-later',
+  'refusal-envelope/refuse-never',
+  'refusal-envelope/refuse-next-period',
+  'refusal-envelope/refuse-non-render-surface',
   'registry-completeness/after-fix-names-fixby',
   'registry-completeness/code-equals-key',
   'registry-completeness/retry-in-closed-set',
@@ -147,23 +184,15 @@ const EXPECTED_PASSING = [
  *     injection the host adapter throws on by design.
  *   - `props-update-roundtrip`: the assertion is on rendered DOM; the
  *     matcher returns `unmatchable-on-ws` (Path-B).
- *   - `refusal-envelope/*` (ggui#786): grading these needs a
- *     `refusalProjector`, i.e. the tool result THIS server would emit
- *     for a given pre-generation refusal. This server has no MCP tool
- *     plane at all — it speaks the live channel only (no `tools/call`,
- *     no `ggui_render`, and `./render.ts` is an in-memory GguiSession
- *     store, not a tool handler), so there is no projection of its own
- *     to grade. That is the same class of scope limit as
- *     `props-update-roundtrip`, not an ungraded obligation: the
- *     SHIPPING projection is graded against this identical catalog by
- *     `render-refusal-projection.conformance.test.ts` in
- *     `@ggui-ai/mcp-server-handlers`, which drives the real
- *     `ggui_render` handler. Standing up a second projector here would
- *     have to be built from SPEC §7.1 + `@ggui-ai/protocol` primitives
- *     — which is exactly what the kit's OWN meta-test already grades,
- *     so it would re-grade the kit's reference rather than add signal.
- *     Wire these rows the moment this server grows a tool plane.
- *     The registry half of #786 IS graded here — see EXPECTED_PASSING.
+ *   - `refusal-envelope/*` (ggui#786) are GRADED here since ggui#803 leg
+ *     9: this server still has no tool plane, but SPEC §7.1's refused
+ *     arm is now ONE protocol primitive (`projectRenderRefusal`), and
+ *     the projector below is that primitive at the kit's stringly
+ *     boundary — so the reference binding for the refused envelope
+ *     lives in the reference server with `@ggui-ai/protocol` + `ws`
+ *     alone (Protocol-#6 intact), and the shipping `ggui_render`
+ *     handler is graded against the same catalog through the same
+ *     primitive by `render-refusal-projection.conformance.test.ts`.
  *   - `transport-refusal/*` (ggui#825): the endpoint-level refusal a
  *     deployment's error mapper types on a per-app endpoint's 403. This
  *     server has no per-app endpoint and no error mapper, so it supplies
@@ -173,12 +202,6 @@ const EXPECTED_SKIPPED = [
   'bootstrap-bundle-fetch-failed',
   'bootstrap-meta-missing',
   'props-update-roundtrip',
-  'refusal-envelope/refuse-after-fix-caller',
-  'refusal-envelope/refuse-after-fix-owner-with-balance',
-  'refusal-envelope/refuse-later',
-  'refusal-envelope/refuse-never',
-  'refusal-envelope/refuse-next-period',
-  'refusal-envelope/refuse-non-render-surface',
   'transport-refusal/refuse-deprovisioned-endpoint',
   'transport-refusal/refuse-render-only-code',
 ];
@@ -219,6 +242,7 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       // would report those four rows SKIPPED — an ungraded obligation
       // on a protocol artifact a vendor-neutral server does carry.
       refusalRegistry: PRE_GENERATION_REFUSAL_CODES,
+      refusalProjector: referenceRefusalProjector,
     });
 
     const diagnostic = [
@@ -262,6 +286,7 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       host,
       observationTimeoutMs: 1500,
       refusalRegistry: PRE_GENERATION_REFUSAL_CODES,
+      refusalProjector: referenceRefusalProjector,
     });
 
     expect(result.skipped.map((s) => s.name).sort()).toEqual(EXPECTED_SKIPPED);

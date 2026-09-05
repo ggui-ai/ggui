@@ -47,7 +47,6 @@
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
-import { z } from 'zod';
 import {
   type AppTheme,
   type BlueprintVariance,
@@ -58,7 +57,8 @@ import {
   type GguiSession,
   type ComponentGguiSession,
   type SystemGguiSession,
-  refusedOutputSchema,
+  projectRenderRefusal,
+  type RefusedRenderOutput,
   renderInputEnvelopeSchema,
   renderInputRouteGuardSchema,
 } from '@ggui-ai/protocol';
@@ -1057,15 +1057,6 @@ type RenderFailureOutput = GguiRenderOutput &
   };
 
 /**
- * Internal handler-output type (REFUSED shape) — the structuredContent
- * of a PRE-GENERATION refusal. Deliberately NOT an intersection with
- * {@link GguiRenderOutput}: nothing read, nothing committed, so a stray
- * `sessionId` here is a type error at the projection site rather than a
- * wire-validation failure later.
- */
-type RenderRefusedOutput = z.infer<typeof refusedOutputSchema>;
-
-/**
  * Per-code recovery guidance folded into the failure envelope's
  * model-visible content text. The seam's `error.message` carries the
  * precise diagnostic; this sentence carries the generic next move.
@@ -1094,21 +1085,6 @@ function buildRenderFailureText(failure: RenderError): string {
     'Do not call ggui_render again with this handshakeId — it is consumed. ' +
     `${RENDER_FAILURE_GUIDANCE[failure.code]}; call ggui_handshake again once resolved.`
   );
-}
-
-/**
- * Model-visible content text for the REFUSED envelope. Pinned format:
- * `<code>: <message> <fix>` — the code LEADS as a courtesy so the model
- * can see the state without parsing structuredContent, but the code on
- * `refusal.code` is the mechanism, not this line.
- *
- * A separate builder from {@link buildRenderFailureText} on purpose:
- * that text says the handshakeId "is consumed", which is FALSE for a
- * refusal — nothing was read, so the same id is valid on a retry. The
- * two texts are contradictory by construction and must never be shared.
- */
-function buildRenderRefusalText(refusal: PreGenerationRefusal): string {
-  return `${refusal.code}: ${refusal.message} ${refusal.fix}`;
 }
 
 /**
@@ -2705,7 +2681,7 @@ export function createGguiRenderHandler(
     async handler(
       input,
       ctx: HandlerContext,
-    ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput | RenderRefusedOutput>> {
+    ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput | RefusedRenderOutput>> {
       // Rendering is handshake-first. The wire input is just
       // {handshakeId, props, override?}; the generator input (intent,
       // context, schema, adapters, forceCreate) flows from the
@@ -2738,9 +2714,13 @@ export function createGguiRenderHandler(
       if (deps.preValidationGate) {
         const refusal = await deps.preValidationGate(ctx, input);
         if (refusal !== undefined) {
-          return handlerFailure<RenderRefusedOutput>(
-            { outcome: 'refused', refusal },
-            buildRenderRefusalText(refusal),
+          // SPEC §7.1's refused arm has ONE source: the protocol primitive
+          // (ggui#803 leg 9) — the same projection the reference server
+          // answers with, graded by the kit through both.
+          const projected = projectRenderRefusal(refusal);
+          return handlerFailure<RefusedRenderOutput>(
+            projected.structuredContent,
+            projected.content[0].text,
           );
         }
       }

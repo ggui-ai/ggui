@@ -100,6 +100,7 @@ export { composeOAuthUserId } from "./types/oauth-user-id.js";
 export * from "./iframe-bridge";
 export * from "./envelope-adapters";
 export * from "./envelopes/builders";
+export * from "./envelopes/render-refusal";
 export * from "./errors/version-mismatch";
 export * from "./errors/unknown-permission-name";
 // Typed `resources/read` failures → JSON-RPC. The single exit for every
