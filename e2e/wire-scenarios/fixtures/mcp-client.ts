@@ -100,24 +100,54 @@ export async function listTools(mcpUrl: string): Promise<JsonRpcResponse> {
  *
  *   - `application/json` → JSON-RPC envelope as a flat object.
  *   - `text/event-stream` → SSE-framed (`event: message\ndata: …`)
- *     with the JSON-RPC envelope in the `data:` line. SDK emits this
- *     when the Accept header advertises both.
+ *     with the JSON-RPC envelope in the first event's `data`. The
+ *     server emits this when the Accept header advertises both, and
+ *     may put a `: keepalive` comment ahead of the frame on a long
+ *     generation — comments and non-data fields are skipped.
  */
 export function parseMcpResponse(text: string): JsonRpcResponse {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
     throw new Error('MCP response: empty body');
   }
-  if (trimmed.startsWith('event:') || trimmed.startsWith('data:')) {
-    const dataLine = trimmed
-      .split('\n')
-      .find((line) => line.startsWith('data:'));
-    if (dataLine === undefined) {
-      throw new Error('MCP response: SSE frame without data: line');
-    }
-    return JSON.parse(dataLine.slice('data:'.length).trim()) as JsonRpcResponse;
+  if (!SSE_FIRST_LINE.test(trimmed)) {
+    return JSON.parse(trimmed) as JsonRpcResponse;
   }
-  return JSON.parse(trimmed) as JsonRpcResponse;
+  const data = firstSseEventData(trimmed);
+  if (data === undefined) {
+    throw new Error('MCP response: SSE frame without data: line');
+  }
+  return JSON.parse(data) as JsonRpcResponse;
+}
+
+/**
+ * A body is SSE when its first line is any SSE construct: a comment
+ * (`: keepalive` — the server emits one ahead of the frame when a
+ * generation runs long; SSE comments start with `:`), or an
+ * `event:` / `data:` / `id:` / `retry:` field.
+ */
+const SSE_FIRST_LINE = /^(?::|event:|data:|id:|retry:)/;
+
+/**
+ * The first event's `data` per the SSE spec (WHATWG §9.2.6): comment
+ * lines are skipped, fields other than `data` are ignored, several
+ * `data:` lines join with `\n`, and a blank line ends the event.
+ * `undefined` when no event carries data.
+ */
+function firstSseEventData(body: string): string | undefined {
+  const dataLines: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    if (line === '') {
+      if (dataLines.length > 0) break;
+      continue;
+    }
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('data:')) {
+      const value = line.slice('data:'.length);
+      dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
+    }
+  }
+  return dataLines.length > 0 ? dataLines.join('\n') : undefined;
 }
 
 /**

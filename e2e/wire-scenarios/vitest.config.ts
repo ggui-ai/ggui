@@ -22,7 +22,9 @@ loadEnv({ path: resolve(import.meta.dirname, '..', '..', '.env.local') });
 
 export default defineConfig({
   test: {
-    include: ['tests/**/*.spec.ts'],
+    // Scenario specs + the fixtures' own unit tests (bare .test.ts = unit;
+    // they run in the same e2e job so a harness defect is caught where it bites).
+    include: ['tests/**/*.spec.ts', 'fixtures/**/*.test.ts'],
     testTimeout: 60_000,
     hookTimeout: 30_000,
     pool: 'forks', // Each scenario file gets its own process — services hold global state.
