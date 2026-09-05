@@ -17,6 +17,7 @@ export * from "./types/live-channel";
 export * from "./types/ui-generator";
 export * from "./types/mcp";
 export * from "./schemas/mcp";
+export * from "./schemas/render-input-envelope";
 export type { DeepReadonly } from "./types/readonly";
 export * from "./schemas/invoke";
 export * from "./schemas/data-contract";

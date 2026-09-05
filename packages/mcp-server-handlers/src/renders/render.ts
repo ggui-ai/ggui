@@ -59,6 +59,7 @@ import {
   type ComponentGguiSession,
   type SystemGguiSession,
   refusedOutputSchema,
+  renderInputEnvelopeSchema,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -2716,7 +2717,7 @@ export function createGguiRenderHandler(
       // tool RESULT with `isError: true` (`MCP error -32602: Input
       // validation error: …`), not as a JSON-RPC error object.
 
-      // Pre-validation gate fires before THIS handler's input parse so
+      // Pre-validation gate fires after the grammar parse above and before the typed shape parse in renderAfterGate so
       // a deployment's own policy checks can decline the render
       // without spending work. It does NOT beat the SDK, which has
       // already checked the call against the declared `inputSchema` —
@@ -2726,6 +2727,13 @@ export function createGguiRenderHandler(
       // read, nothing committed, no postSuccessHook" true by
       // construction rather than by discipline (SPEC §7.1, refused
       // arm).
+      // The route grammar (ggui#818): a malformed `infra.model` fails THIS
+      // handler's input parse — the protocol's envelope, at zod path
+      // `infra.model` — before the gate can read it. The registered shape
+      // is parser-free (a browser bundle never validates a render input);
+      // the envelope carries the refinement.
+      renderInputEnvelopeSchema.parse(input);
+
       if (deps.preValidationGate) {
         const refusal = await deps.preValidationGate(ctx, input);
         if (refusal !== undefined) {

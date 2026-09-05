@@ -378,9 +378,14 @@ export const renderInputShape = {
   /**
    * Typed `infra` envelope. Today carries one field (`model`); future
    * expansion (temperature, max_tokens, provider hints) lands here
-   * additively. `model` MUST be a provider-prefixed id
-   * (`provider/model-name`); a bound generator may also accept
-   * generator-specific prefixes for alternate transports.
+   * additively. `model` MUST parse as a model route in either wire form —
+   * canonical `provider:model` or LiteLLM `provider/model` (aliases resolve
+   * in both). The mechanism is `renderInputEnvelopeSchema`
+   * (`schemas/render-input-envelope.ts`), which the render handler parses
+   * BEFORE its pre-generation gate; this registered shape stays
+   * parser-free by design so a browser bundle never carries the route
+   * tables (ggui#818). A bound generator may also accept generator-specific
+   * prefixes for alternate transports.
    *
    * Strict — extra keys at `infra.*` are not silently dropped, so a
    * typo (`infra.modelId`) surfaces as a clear zod path instead of a
@@ -393,7 +398,7 @@ export const renderInputShape = {
         .min(1)
         .optional()
         .describe(
-          'Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.',
+          'Model route in either wire form — canonical `anthropic:claude-haiku-4-5-20251001` or LiteLLM `anthropic/claude-haiku-4-5` (aliases resolve in both); generator-specific prefixes (e.g. `bedrock/...`) route to that transport. A value that parses in neither form fails the handler input parse at `infra.model`, before any pre-generation gate; `model_not_in_tier` is only ever a well-formed route with no rate row on the effective tier.',
         ),
     })
     .strict()
