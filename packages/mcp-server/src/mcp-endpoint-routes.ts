@@ -405,7 +405,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       // `perAppRouting.authorize` AND the request matched the per-app
       // path, invoke the callback. Throwing refuses before the MCP
       // handler ever sees the request, which is the boundary that
-      // prevents cross-user blueprint reads when pod tools bypass
+      // prevents cross-user blueprint reads when a deployment's own tools bypass
       // AppSync owner-auth via raw DDB. Universal-endpoint requests
       // skip this entirely (no urlAppId). The deployment's `errorMapper`
       // may give the refusal a structured JSON-RPC `data` (bounded to

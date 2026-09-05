@@ -277,10 +277,10 @@ describe('mcp-endpoint-routes — credential scope threading (#498)', () => {
 // stands byte-identical to a deployment with no mapper at all.
 // ---------------------------------------------------------------------------
 
-class TenantGoneError extends Error {
+class AppRetiredError extends Error {
   constructor() {
-    super('tenant gone');
-    this.name = 'TenantGoneError';
+    super('app retired');
+    this.name = 'AppRetiredError';
   }
 }
 
@@ -334,7 +334,7 @@ const perApp = {
   paramPattern: '[a-z0-9]{2,12}',
   pathPrefix: '/apps',
   authorize: async (urlAppId: string): Promise<void> => {
-    if (urlAppId === 'gone') throw new TenantGoneError();
+    if (urlAppId === 'gone') throw new AppRetiredError();
   },
 };
 
@@ -350,12 +350,12 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
       auth: federatedAndAgentAuth(),
       perAppRouting: perApp,
       errorMapper: (err) =>
-        err instanceof TenantGoneError
+        err instanceof AppRetiredError
           ? {
               status: 403,
               code: -32000,
-              message: 'this tenant is no longer served',
-              data: { reason: { code: 'tenant_gone', retry: 'never' }, ids: [1, 'a', null] },
+              message: 'this app is no longer served',
+              data: { reason: { code: 'app_retired', retry: 'never' }, ids: [1, 'a', null] },
             }
           : undefined,
     });
@@ -363,8 +363,8 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     expect(status).toBe(403);
     expect(body.error).toEqual({
       code: -32000,
-      message: 'this tenant is no longer served',
-      data: { reason: { code: 'tenant_gone', retry: 'never' }, ids: [1, 'a', null] },
+      message: 'this app is no longer served',
+      data: { reason: { code: 'app_retired', retry: 'never' }, ids: [1, 'a', null] },
     });
   });
 
@@ -425,7 +425,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     expect(warns.some((w) => w.event === 'error_mapper_failed')).toBe(true);
   });
 
-  it('an authorized tenant is unaffected — the mapper is never consulted on the allow path', async () => {
+  it('an authorized app is unaffected — the mapper is never consulted on the allow path', async () => {
     let consulted = 0;
     fx = await boot({
       auth: federatedAndAgentAuth(),

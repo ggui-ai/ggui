@@ -10,7 +10,7 @@
  * pre-launch, ggui#825). `@ggui-ai/mcp-server`'s per-app `authorize`
  * hook refuses by throwing, and the route answered every throw with a
  * bare `403 {code: -32000, message: "Forbidden"}` — correct in effect,
- * illegible to a client that needs to tell "this tenant is gone" from
+ * illegible to a client that needs to tell "this app is no longer served" from
  * "your credential is wrong".
  *
  *   ar1. **`ErrorMapperResult.data?: JsonValue`** — a deployment's
