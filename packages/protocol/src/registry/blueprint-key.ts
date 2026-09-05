@@ -10,9 +10,10 @@
  * 16-character sha256 prefix — matches the existing `blueprintHash`
  * shape in `cache-trace-sink` and `generation-cache.ts`. Collision
  * probability for 100s-of-thousands of distinct contract is ~10^-6
- * (birthday-bound on 2^64), well below the budget for the OSS
- * single-tenant scope. Hosted multi-tenant deployments scope keys
- * by appId so the bound is per-tenant, never global.
+ * (birthday-bound on 2^64), well below the budget for a single
+ * deployment's key space. A deployment that serves many apps scopes
+ * keys by `appId`, so the bound holds per app, never across the whole
+ * store.
  */
 import { createHash } from 'node:crypto';
 import type { DataContract } from '../types/data-contract.js';

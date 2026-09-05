@@ -7,7 +7,7 @@
  *     persisting the result. Optionally pins as the operator default
  *     for its `(appId, contractHash)` group.
  *   - `ggui_ops_list_blueprints` — enumerate blueprint metadata
- *     (no code body) under tenancy + optional filters. Sorted by
+ *     (no code body) under the caller's app scope + optional filters. Sorted by
  *     `createdAt desc`.
  *   - `ggui_ops_update_blueprint` — toggle the operator-default flag
  *     and/or patch variance tags. Immutable fields (contractHash,
@@ -137,11 +137,11 @@ export const opsGenerateBlueprintOutputSchema = z
  *   - Seeding pre-vetted blueprints at deploy time (fixture corpus,
  *     migration imports).
  *   - Round-tripping export+reimport — operator exports a blueprint
- *     from one tenant and re-registers it in another.
+ *     from one app (or one deployment) and re-registers it in another.
  *   - Reapplying a fixed version of a blueprint after live edits
  *     (manual recovery from a bad generate run).
  *
- * Same tenancy + variance + default-pin semantics as
+ * Same app-scoping + variance + default-pin semantics as
  * `*_generate_*`; the only difference is the LLM/generator dispatch
  * is replaced with a verbatim accept of the operator's
  * `componentCode` string.

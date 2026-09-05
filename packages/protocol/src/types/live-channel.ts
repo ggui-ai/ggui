@@ -28,7 +28,7 @@ import type {
 export interface SubscribePayload {
   sessionId: string;
   /**
-   * App (tenant) identity. OPTIONAL — absent ⇒ the server resolves the
+   * App identity — the `appId` the session belongs to. OPTIONAL — absent ⇒ the server resolves the
    * caller's identity-default app, the same resolution rule the MCP
    * route uses: a token binding (`wsToken` binds `(sessionId, appId)`)
    * wins, then the deployment's identity → appId mapping, then the
