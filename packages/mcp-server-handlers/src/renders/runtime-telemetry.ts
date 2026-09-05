@@ -17,7 +17,7 @@
  * Posture: fire-and-forget diagnostics, NEVER a data plane.
  *   - Stores nothing; emits ONE structured log line per batch.
  *   - `sessionId` is client-claimed — a log tag, never a read key, so
- *     no tenancy gate and no store dependency (nothing to leak).
+ *     no app-scope gate and no store dependency (nothing to leak).
  *   - Bounded by the protocol schema (≤ 40 events/batch, kind ≤ 64
  *     chars, detail ≤ 512) against log flooding; `ctx.appId` (the
  *     PROVED identity on this carrier) tags every line so abuse is

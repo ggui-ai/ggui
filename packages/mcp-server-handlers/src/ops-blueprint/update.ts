@@ -51,14 +51,14 @@ const opsOutputSchema = {
  * authorizer-approved explicit input). The blueprintId itself is
  * technically lookupable across apps because the store's primary
  * key is global, but the update path scopes by resolved identity —
- * row-level tenancy holds even when the authorizer approved the
+ * row-level app scoping holds even when the authorizer approved the
  * caller's effective appId (see {@link GguiOpsUpdateBlueprintDeps.authorizeAppAccess}).
  */
 export class BlueprintAppMismatchError extends Error {
   readonly code = 'blueprint_app_mismatch' as const;
   constructor(blueprintId: string) {
     super(
-      `blueprint_app_mismatch: blueprint ${JSON.stringify(blueprintId)} does not belong to the caller's app. Operators cannot mutate blueprints across tenancy.`,
+      `blueprint_app_mismatch: blueprint ${JSON.stringify(blueprintId)} does not belong to the caller's app. Operators cannot mutate blueprints across apps.`,
     );
     this.name = 'BlueprintAppMismatchError';
   }
@@ -83,7 +83,7 @@ export interface GguiOpsUpdateBlueprintDeps {
    * fails closed with `CrossAppCurationUnavailableError`.
    *
    * Authorizer approval only resolves the EFFECTIVE appId used for
-   * the identity check — it does NOT bypass the row-level tenancy
+   * the identity check — it does NOT bypass the row-level app-scope
    * comparison below (`existing.appId !== appId`). A blueprint that
    * belongs to a THIRD app still throws
    * {@link BlueprintAppMismatchError} even when the authorizer
@@ -161,7 +161,7 @@ export function createGguiOpsUpdateBlueprintHandler(
         throw new BlueprintNotFoundError(parsed.blueprintId);
       }
       if (existing.appId !== appId) {
-        // Tenancy boundary — cross-app updates are a security
+        // App boundary — cross-app updates are a security
         // violation. The blueprint id is global but the mutation
         // scope is per-app.
         throw new BlueprintAppMismatchError(parsed.blueprintId);

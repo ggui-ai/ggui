@@ -11,8 +11,8 @@
  *     from `@ggui-ai/mcp-server-core`) owns the atomic fetch-and-clear
  *     contract. The standalone server uses in-memory / SQLite; a
  *     cloud deployment wraps an atomic-read-and-clear datastore op.
- *   - `renderStore.get(sessionId)` resolves the render, tenancy-checks
- *     via `ctx.appId`, and reads TTL for the activity heartbeat.
+ *   - `renderStore.get(sessionId)` resolves the render, checks the app
+ *     scope via `ctx.appId`, and reads TTL for the activity heartbeat.
  *   - Long-poll is server-side, bounded by the SPEC §7.3 timeout
  *     domain `[0, 25]` seconds. Values outside the bound reject
  *     `INVALID_PARAMS` at the schema layer — there is no silent
@@ -49,7 +49,7 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
-import { isVisibleToCaller } from './tenancy.js';
+import { isVisibleToCaller } from './render-visibility.js';
 
 /** Polling interval inside the long-poll loop. 1.5s balances
  *  perceived latency against read cost on cloud. OSS is in-memory
@@ -198,7 +198,7 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
     title: 'Consume',
     audience: ['agent'],
     description:
-      'Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by sessionId (global UUID); tenancy-checked via ctx.appId. Inline long-poll: `timeout` is an integer in [0, 25] seconds (values outside reject INVALID_PARAMS — host MCP clients abort longer tool calls; pick 5-15s typical, 25 max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_amend`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_amend` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip it. `ggui_amend` repaints the SAME card in place (the default move in this loop); `ggui_update` instead renders the state as a NEW card and advances the history number — reserve it for milestones worth a card in the transcript.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
+      'Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by sessionId (global UUID); app-scoped via ctx.appId. Inline long-poll: `timeout` is an integer in [0, 25] seconds (values outside reject INVALID_PARAMS — host MCP clients abort longer tool calls; pick 5-15s typical, 25 max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_amend`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_amend` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip it. `ggui_amend` repaints the SAME card in place (the default move in this loop); `ggui_update` instead renders the state as a NEW card and advances the history number — reserve it for milestones worth a card in the transcript.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
     inputSchema,
     outputSchema,
     async handler(
@@ -208,10 +208,10 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
       const { sessionId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
       // Register this long-poll on the active-consumer registry IMMEDIATELY
-      // — before the tenancy resolution awaits — so a concurrent
+      // — before the app-scope resolution awaits — so a concurrent
       // `submit-action.ts` append observes `hasActive: true` for the
       // earliest possible window. `exit` is paired in `finally` below so
-      // every termination path (success, timeout, error, tenancy reject)
+      // every termination path (success, timeout, error, app-scope reject)
       // decrements the count exactly once.
       deps.activeConsumerRegistry?.enter(sessionId);
       try {
@@ -233,7 +233,7 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
         );
 
         // The pending-event pipe is keyed by sessionId. The render
-        // lookup above is purely a tenancy gate; pipe reads use
+        // lookup above is purely an app-scope gate; pipe reads use
         // sessionId directly.
         let result = await fetchAndClearSafe(
           deps.pendingEventConsumer,

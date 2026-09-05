@@ -187,7 +187,7 @@ describe('createGguiGetSessionHandler', () => {
       expect(out.id).toBe(sessionId);
     });
 
-    it('does NOT invoke heartbeat when tenancy gate rejects', async () => {
+    it('does NOT invoke heartbeat when app-scope gate rejects', async () => {
       const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
       const calls: number[] = [];
       const handler = createGguiGetSessionHandler({

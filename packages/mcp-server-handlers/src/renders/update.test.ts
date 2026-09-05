@@ -1,6 +1,6 @@
 /**
  * `ggui_update` OSS handler tests — declaration, direct path,
- * propsSpec enforcement, tenancy gate, notifier fan-out.
+ * propsSpec enforcement, app-scope gate, notifier fan-out.
  *
  * Post-Phase-B (flatten-render-identity): the prior
  * `{sessionId, stackItemId}` pair collapsed to a single `{sessionId}`.

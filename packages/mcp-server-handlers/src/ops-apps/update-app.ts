@@ -9,11 +9,11 @@
  *   - `systemPrompt: ''` clears the per-app override.
  *   - `rateLimitPerMinute: 0` clears the limit (unlimited).
  *
- * Tenancy: the handler reads `AppsSource.get` first (which scopes by
+ * Ownership: the handler reads `AppsSource.get` first (which scopes by
  * `ownerSub`), then dispatches the update. Cross-user probes return
  * a uniform "not found" shape so an attacker can't learn whether an
  * `appId` belongs to another owner. Store implementations
- * additionally scope the write itself to the owner, so the tenancy
+ * additionally scope the write itself to the owner, so the ownership
  * guard holds even without the pre-read.
  *
  * Pure over the {@link AppsSource} seam.

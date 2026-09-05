@@ -6,7 +6,7 @@
  * `{sessionId, channel, payload, complete?}`. `SessionStore` →
  * `GguiSessionStore`. `SessionNotFoundError` → `GguiSessionNotFoundError`.
  *
- * Focused on the factory's wrapping concerns: tenancy gate, the
+ * Focused on the factory's wrapping concerns: app-scope gate, the
  * sendEnvelope seam wiring, and the optional observer fan-out.
  * The underlying validation (channel resolution, payload schema,
  * mode derivation, complete-on-non-completable) lives in
@@ -131,7 +131,7 @@ describe('createGguiEmitHandler', () => {
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('sendEnvelope NOT invoked when tenancy gate rejects', async () => {
+    it('sendEnvelope NOT invoked when app-scope gate rejects', async () => {
       const { sessionId } = await seedRender(renderStore);
       const sent: unknown[] = [];
       const handler = createGguiEmitHandler({

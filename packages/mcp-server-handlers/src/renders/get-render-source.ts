@@ -9,12 +9,12 @@
  * Deliberately separate from the control-plane
  * `ggui_ops_get_render_source` (which a signed-in end user calls
  * to read one of their own renders by user identity, not app
- * identity) — two different callers, two different tenancy models,
+ * identity) — two different callers, two different scoping models,
  * two tools.
  *
  * Behavior:
  *   - Resolves render via `renderStore.get(sessionId)`.
- *   - Tenancy gate via `ctx.appId` — cross-app + missing both
+ *   - App-scope gate via `ctx.appId` — cross-app + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}, same
  *     posture as `ggui_get_session` (modeled on it structurally; same
  *     deps shape, minus the heartbeat — reading source once is not an
@@ -23,7 +23,7 @@
  *     {@link buildRenderSourceEnvelope} helper — the SAME function the
  *     control-plane `ggui_ops_get_render_source` uses, so the two
  *     tools' envelope shape can never drift apart even though their
- *     tenancy models differ completely.
+ *     scoping models differ completely.
  */
 
 import { z } from 'zod';
@@ -31,7 +31,7 @@ import { dataContractSchema, getRenderSourceInputShape } from '@ggui-ai/protocol
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
-import { isVisibleToCaller } from './tenancy.js';
+import { isVisibleToCaller } from './render-visibility.js';
 import { buildRenderSourceEnvelope } from './render-source-envelope.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
@@ -79,7 +79,7 @@ export function createGguiGetRenderSourceHandler(
 
       const stored = await deps.renderStore.get(sessionId);
       if (!isVisibleToCaller(stored, ctx)) {
-        // Tenancy + missing both surface uniformly so cross-app
+        // App-scope reject + missing both surface uniformly so cross-app
         // existence is not leaked. `stored` is narrowed to
         // StoredGguiSession past this guard.
         throw new GguiSessionNotFoundError(sessionId);

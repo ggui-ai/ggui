@@ -219,7 +219,7 @@ describe('createGguiSyncContextHandler', () => {
           snapshot: {},
         },
         // Note: handler reads the appId off the wire payload (the
-        // bootstrap-captured appId), NOT off ctx — tenancy gate
+        // bootstrap-captured appId), NOT off ctx — app-scope gate
         // compares wire-appId to render-appId.
         { appId: 'app-1', requestId: 'r1' },
       );

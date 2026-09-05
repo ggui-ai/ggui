@@ -22,7 +22,7 @@
  *      `null` (app not registered — common for OSS sandbox apps that
  *      bypass an explicit register call) the resolution yields
  *      exactly `STDLIB_GADGETS`, so callers always get a meaningful
- *      catalog. This is a permitted-error path, not a tenancy
+ *      catalog. This is a permitted-error path, not an app-scope
  *      escape — `ctx.appId` was already proved by the auth adapter;
  *      the absence of a registry row just means the deployment runs
  *      default-seeded.

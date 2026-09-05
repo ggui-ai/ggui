@@ -10,7 +10,7 @@
  * The store is seeded via `commit({ render, appId, userId })` — exactly
  * the shape the `ggui_render` handler writes after the Task-6 change to
  * stamp `ctx.userId` on every commit — and the real
- * `createGguiGetSessionHandler` is exercised through its tenancy gate.
+ * `createGguiGetSessionHandler` is exercised through its app-scope gate.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ComponentGguiSession, DataContract } from '@ggui-ai/protocol';
@@ -126,7 +126,7 @@ describe('per-user-within-app isolation', () => {
  * `runGenerationIntoGguiSession` → `commitErrorGguiSession` path (driven
  * by a `generator` seam that returns `{ ok: false }`) against the real
  * `InMemoryGguiSessionStore`, then read back through the real
- * `createGguiGetSessionHandler` tenancy gate — so a missing `userId`
+ * `createGguiGetSessionHandler` app-scope gate — so a missing `userId`
  * stamp on the error commit is observable as a leak.
  */
 const FAIL_CONTRACT: DataContract = { propsSpec: { properties: {} } };

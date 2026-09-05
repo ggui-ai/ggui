@@ -1,5 +1,5 @@
 /**
- * Shared render-tenancy predicate (Federation B1, Task 6).
+ * Shared render-visibility predicate (Federation B1, Task 6).
  *
  * Single source of truth for "is this stored render visible to the
  * caller?" — imported by every read gate (`consume`, `get-session`)
@@ -10,7 +10,7 @@ import type { StoredGguiSession } from '@ggui-ai/mcp-server-core';
 
 /**
  * Type-sound positive predicate: `true` when `stored` is visible to the
- * caller. Tenancy = `appId`; within an app, a row stamped with a
+ * caller. Scope = `appId`; within an app, a row stamped with a
  * `userId` is visible only to that same `userId`. Rows without a
  * `userId` (legacy / single-user) stay visible to any ctx in the app
  * (back-compat). Narrows `stored` to non-null in the `true` branch so

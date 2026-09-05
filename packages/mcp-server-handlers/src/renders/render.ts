@@ -155,7 +155,7 @@ import {
   truncateCacheTraceIntent,
 } from './cache-trace-sink.js';
 import { emitPayloadTraceEvent, type PayloadTraceSink } from './payload-trace-sink.js';
-import { isVisibleToCaller } from './tenancy.js';
+import { isVisibleToCaller } from './render-visibility.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
@@ -2299,7 +2299,7 @@ export function createGguiRenderHandler(
       // appends to it. That asymmetry — gestures accepted into a pipe
       // no consumer can ever drain — is issue #365.
       //
-      // The row also carries the tenancy the consume path authorizes
+      // The row also carries the app scope the consume path authorizes
       // against (`appId` + `userId` → `isVisibleToCaller`), so there
       // is no way to honor a keyless consume without it.
       //

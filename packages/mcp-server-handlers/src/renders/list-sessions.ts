@@ -10,7 +10,7 @@
  * `/api/sessions/:id/state`.
  *
  * Scoping:
- *   - ALWAYS scoped to `ctx.appId` — tenancy boundary; cross-app
+ *   - ALWAYS scoped to `ctx.appId` — app boundary; cross-app
  *     existence MUST NOT leak.
  *   - WHEN `ctx.userId` is set, also scoped to that user — prevents
  *     one signed-in user from listing another user's renders even

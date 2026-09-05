@@ -6,7 +6,7 @@
  *
  * Behavior:
  *   - Resolves render via `renderStore.get(sessionId)`.
- *   - Tenancy gate via `ctx.appId` — cross-app + missing both
+ *   - App-scope gate via `ctx.appId` — cross-app + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}.
  *   - Returns the protocol's wire projection (`gguiGetSessionOutputSchema`):
  *     `variant` + the store row's six base fields, for EVERY session (plus
@@ -34,7 +34,7 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, ShapeOutput, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
-import { isVisibleToCaller } from './tenancy.js';
+import { isVisibleToCaller } from './render-visibility.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
 // (`schemas/mcp.ts`).
@@ -105,7 +105,7 @@ export function createGguiGetSessionHandler(
 
       const stored = await deps.renderStore.get(sessionId);
       if (!isVisibleToCaller(stored, ctx)) {
-        // Tenancy (appId + per-user) + missing all surface uniformly so
+        // App scope (appId + per-user) + missing all surface uniformly so
         // cross-app / cross-user existence is not leaked.
         // `stored` is narrowed to StoredGguiSession past this guard.
         throw new GguiSessionNotFoundError(sessionId);

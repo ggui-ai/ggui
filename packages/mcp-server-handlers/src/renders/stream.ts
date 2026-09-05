@@ -88,7 +88,7 @@ export function createGguiEmitHandler(
         .object(inputSchema)
         .parse(rawInput);
 
-      // Tenancy gate. Cross-app + missing surface uniformly as
+      // App-scope gate. Cross-app + missing surface uniformly as
       // GguiSessionNotFoundError so cross-app existence isn't leaked.
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {

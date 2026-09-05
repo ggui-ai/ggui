@@ -3,7 +3,7 @@
  * an app the caller owns (ggui#598-C).
  *
  * Gate order — each wall is a distinct named refusal:
- *   1. tenancy   — the app must be the caller's (uniform not-found).
+ *   1. ownership — the app must be the caller's (uniform not-found).
  *   2. identity  — the frozen id grammar, then collision with any
  *                  built-in theme id (`theme_identity`).
  *   3. coverage  — the injected validator vs the consumed-token
@@ -132,7 +132,7 @@ export function createRegisterThemeHandler(deps: RegisterThemeDeps) {
       const ownerSub = resolveOwnerSub('ggui_ops_register_theme', ctx);
       const parsed = z.object(inputSchema).parse(rawInput);
 
-      // 1. Tenancy — uniform not-found, no existence leak.
+      // 1. Ownership — uniform not-found, no existence leak.
       const app = await deps.apps.get({ appId: parsed.appId, ownerSub });
       if (!app) throw new AppNotFoundError(parsed.appId);
 

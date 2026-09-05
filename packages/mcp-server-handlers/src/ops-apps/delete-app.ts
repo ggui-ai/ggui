@@ -2,7 +2,7 @@
  * `ggui_ops_delete_app` — hard-delete an app record owned by the
  * caller.
  *
- * Tenancy: cross-user probes return the success shape WITHOUT
+ * Ownership: cross-user probes return the success shape WITHOUT
  * touching the row (uniform shape; no existence leak). Idempotent —
  * a second delete of the same id resolves cleanly.
  *

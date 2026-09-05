@@ -26,7 +26,7 @@ import type {
 /**
  * The identity slice a caller must supply — the three fields that
  * cannot be read off the committed row. Everything else on the record
- * (tenancy, props, sequence, timestamps) comes from the row itself, so
+ * (appId, userId, props, sequence, timestamps) comes from the row itself, so
  * the record can never disagree with what was actually persisted.
  */
 export interface RenderIdentityFields {

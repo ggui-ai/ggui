@@ -52,7 +52,7 @@
  *   - Unknown sessionId, cross-app sessionId, and a render deleted
  *     mid-read all surface uniformly as
  *     {@link GguiSessionNotFoundError} — no cross-app existence
- *     leak (tenancy gate: `renderStore.get` + `ctx.appId`).
+ *     leak (app-scope gate: `renderStore.get` + `ctx.appId`).
  *   - Malformed input (empty sessionId, negative cursor, `limit < 1`)
  *     rejects at the zod boundary.
  *
@@ -113,7 +113,7 @@ export interface GguiRuntimePullHandlerDeps {
   /**
    * The same store `ggui_render` commits to and the `/events` route
    * reads from — one ledger, two carriers. The handler needs both
-   * `get` (tenancy gate) and `listEventsSince` (cursor read).
+   * `get` (app-scope gate) and `listEventsSince` (cursor read).
    */
   readonly renderStore: GguiSessionStore;
   /**
@@ -167,7 +167,7 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
         Math.min(parsed.wait ?? 0, RUNTIME_PULL_MAX_WAIT_SECONDS) * 1000;
       const probeIntervalMs = deps.waitProbeIntervalMs ?? 1000;
 
-      // Tenancy gate — cross-app + missing surface uniformly so
+      // App-scope gate — cross-app + missing surface uniformly so
       // cross-app existence is not leaked (same posture as the
       // /events route's wsToken appId check, with ctx.appId as the
       // proved identity on this carrier).

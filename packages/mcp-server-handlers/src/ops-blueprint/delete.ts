@@ -5,7 +5,7 @@
  * the same id returns `{deleted: true}` without throwing, matching
  * `BlueprintStore.delete`'s no-throw contract.
  *
- * ## Tenancy
+ * ## App scope
  *
  * The blueprint id is globally unique, but the delete path scopes
  * by the resolved effective appId (see {@link resolveEffectiveAppId}):
@@ -51,7 +51,7 @@ export interface GguiOpsDeleteBlueprintDeps {
    * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
    * fails closed with `CrossAppCurationUnavailableError`.
    *
-   * This app-level check runs BEFORE the row-level tenancy lookup
+   * This app-level check runs BEFORE the row-level app-scope lookup
    * below: a foreign `appId` INPUT denied by the authorizer surfaces
    * the denial error, while an authorizer-approved effective appId
    * still hits the row-level uniform `{deleted: true}` posture when

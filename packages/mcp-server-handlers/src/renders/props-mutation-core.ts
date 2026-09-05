@@ -201,7 +201,7 @@ export async function runPropsMutation(
         );
       }
 
-      // Tenancy gate. Cross-app + missing surface uniformly as
+      // App-scope gate. Cross-app + missing surface uniformly as
       // GguiSessionNotFoundError so cross-app existence is not leaked.
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
@@ -236,7 +236,7 @@ export async function runPropsMutation(
       const mountResourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${contractSegment}`;
 
       // Devtools payload trace. No-op when no sink is registered.
-      // Fires AFTER the tenancy gate so cross-app probes never leak
+      // Fires AFTER the app-scope gate so cross-app probes never leak
       // into the trace. Payload is the validated wire shape.
       emitPayloadTraceEvent(deps.payloadTraceSink, {
         direction: 'outbound-update',

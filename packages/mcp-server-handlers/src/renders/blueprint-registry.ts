@@ -688,7 +688,7 @@ export async function registerBlueprint(
   // was first minted, and re-writing it would fail the durable store's
   // already-exists guard on every cache hit.
   //
-  // `scope` is the appId at every call site — the registry's tenancy
+  // `scope` is the appId at every call site — the registry's scoping
   // unit and the durable record's are the same thing.
   await writeBlueprintDurably(
     deps.durability,

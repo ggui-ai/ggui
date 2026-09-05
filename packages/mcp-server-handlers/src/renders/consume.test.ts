@@ -10,7 +10,7 @@
  * Covers the wire contract:
  *   - timeout domain [0, 25] — out-of-range rejects (SPEC §7.3
  *     INVALID_PARAMS bound; no silent truncation)
- *   - sessionId → tenancy gate via renderStore.get + appId cmp
+ *   - sessionId → app-scope gate via renderStore.get + appId cmp
  *   - tenancy mismatch + unknown render surface as GguiSessionNotFoundError
  *   - long-poll loop semantics (immediate, with-events, completed,
  *     mid-poll render-disappeared)

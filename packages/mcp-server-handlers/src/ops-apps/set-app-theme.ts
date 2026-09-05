@@ -8,7 +8,7 @@
  * theme another surface would reject: `--ggui-*` CSS-variable keys
  * only, value-level breakout characters forbidden, ≤200 variables.
  *
- * Tenancy: `AppsSource.get` first (scoped by `ownerSub`); cross-user
+ * Ownership: `AppsSource.get` first (scoped by `ownerSub`); cross-user
  * probes return the uniform "not found" shape. The store scopes the
  * write itself to the owner as well.
  *

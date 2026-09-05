@@ -33,7 +33,7 @@
  *   1. Parse the flat shape (strict), then narrow the union — surface
  *      "wrong fields for this kind" before any app-scoped work, so a
  *      malformed call costs zero store reads.
- *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
+ *   2. Load + app-scope-gate the render via `renderStore.get` + `appId` cmp.
  *   3. Apply patch via the shared `applyGguiSessionPatch` helper:
  *      - throws `ContractViolationError{tool:'ggui_update'}` on schema fail
  *   4. Persist the updated render via `renderStore.commit(...)` (upserts
@@ -209,7 +209,7 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
 
 // Wire grammar + the mutation flow live in the shared core (#483):
 // `mutationInputSchema` is the flat raw-shape BOTH tools declare, and
-// `runPropsMutation` is the single validate→resolve→tenancy-gate→
+// `runPropsMutation` is the single validate→resolve→app-scope-gate→
 // patch→persist→ledger→fan flow, parameterized on the tool.
 const inputSchema = mutationInputSchema;
 

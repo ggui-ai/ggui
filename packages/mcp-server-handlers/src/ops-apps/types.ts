@@ -21,7 +21,7 @@ import type { AppTheme } from '@ggui-ai/protocol';
 export interface AppRecord {
   /** Opaque base62 `<8 chars>` — server-minted when the app is provisioned. */
   readonly appId: string;
-  /** FK to the owning user's Cognito sub. Used for tenancy gates. */
+  /** FK to the owning user's Cognito sub. Used for ownership gates. */
   readonly ownerSub: string;
   /** User-editable label. */
   readonly displayName: string;
