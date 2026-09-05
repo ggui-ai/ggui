@@ -155,7 +155,7 @@ async function runValidate(args: readonly string[]): Promise<number> {
  */
 function describeValidTheme(absPath: string, theme: ThemeDocument): string[] {
   const lines: string[] = [];
-  const mark = process.stdout.isTTY ? '[32m✓[0m' : '✓';
+  const mark = process.stdout.isTTY ? '\x1b[32m✓\x1b[0m' : '✓';
   const nameSuffix = theme.$name ? ` (${theme.$name})` : '';
   lines.push(`${mark} Theme valid${nameSuffix}`);
   lines.push(`  file: ${absPath}`);

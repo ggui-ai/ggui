@@ -419,7 +419,7 @@ export function extractCallSignaturesFromDts(
     return {};
   }
 
-  const cacheKey = `${dtsContent} ${[...hookNames].sort().join(',')}`;
+  const cacheKey = `${dtsContent}\u0000${[...hookNames].sort().join(',')}`;
   const cached = callSignatureCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
@@ -470,7 +470,7 @@ export function extractComponentPropsFromDts(
     return {};
   }
 
-  const cacheKey = `${dtsContent} ${[...componentNames].sort().join(',')}`;
+  const cacheKey = `${dtsContent}\u0000${[...componentNames].sort().join(',')}`;
   const cached = componentPropsCache.get(cacheKey);
   if (cached !== undefined) return cached;
 

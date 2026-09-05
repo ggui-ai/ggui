@@ -279,10 +279,10 @@ function computeSignature(
     } catch {
       continue;
     }
-    parts.push(`${e.id} ${key}`);
+    parts.push(`${e.id}\u0000${key}`);
   }
   parts.sort();
-  return createHash('sha256').update(parts.join('')).digest('hex');
+  return createHash('sha256').update(parts.join('\u0001')).digest('hex');
 }
 
 /**
