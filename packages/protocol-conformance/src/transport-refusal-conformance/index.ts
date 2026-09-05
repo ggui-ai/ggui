@@ -6,11 +6,12 @@
  * included).
  *
  * The contract it makes observable: a deprovisioned app answers HTTP 403
- * with `{ code: -32000, message: "Forbidden", data: { refusal } }` where
+ * with `{ code: -32003, message: "App not found", data: { refusal } }` where
  * `refusal` is the registry projection without the render-only fields
  * (`code`, `message`, `fix`, `retry`); an authorization failure that is
- * NOT a registry state answers the same 403 with no `data` — deliberately
- * indistinguishable, so a client never learns which untyped arm it hit.
+ * NOT a registry state answers 403 with `-32001` and no `data` — the untyped
+ * arms deliberately indistinguishable among themselves, so a client never
+ * learns which one it hit (codes ruled in ggui#836).
  *
  * Each case ships as raw JSON under `./cases/`. The kit never imports a
  * concrete server: the adopter supplies the projector, the catalog grades

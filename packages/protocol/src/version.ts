@@ -3185,6 +3185,13 @@
  *      `ggui_consume`; `parsePendingEnvelope` parses a drained row instead
  *      of casting it, so a malformed pipe entry refuses at the seam. The
  *      wire bytes of a well-formed row are unchanged. Additive.
+ *   r11. **Endpoint refusal codes (ggui#836):** the per-app endpoint speaks
+ *      §7.9 Plane-1 rows — the typed deprovisioned arm is `-32003`
+ *      (`APP_NOT_FOUND`, `App not found`) with `data.refusal`; untyped
+ *      authorization failures are `-32001` (`UNAUTHORIZED`) with no
+ *      `data`; HTTP 403 on both. `-32000` (the SDK client's
+ *      `ConnectionClosed`) is never a code a first-party server chooses.
+ *      Supersedes r9's literals; pre-launch, no compatibility arm.
  *
  * FOLLOWER — moves in the SAME commit as this constant, pinned by a
  * gate that fails loud when it lags: the `protocol` field of every

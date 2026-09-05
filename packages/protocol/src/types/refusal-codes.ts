@@ -69,7 +69,7 @@
  *   - `mcp-endpoint` — the per-app MCP endpoint's authorization, on
  *     any JSON-RPC request (`initialize` included). The refusal rides
  *     the JSON-RPC error object's `data.refusal` (HTTP 403, error code
- *     `-32000`, message `Forbidden` — unchanged); only the codes listed
+ *     `-32003` `APP_NOT_FOUND`, message `App not found` — ggui#836); only the codes listed
  *     here are ever typed there, and an authorization failure that is
  *     NOT one of them stays a bare 403 by contract, so a client can
  *     never learn which of the untyped arms it hit.

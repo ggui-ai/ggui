@@ -22,7 +22,7 @@ function referenceProject(refusal: TransportRefusalInput): ProjectedTransportRef
   if (!endpoint.includes(refusal.code)) return null;
   return {
     httpStatus: 403,
-    error: { code: -32000, message: 'Forbidden', data: { refusal } },
+    error: { code: -32003, message: 'App not found', data: { refusal } },
   };
 }
 
@@ -53,7 +53,7 @@ describe('transport-refusal conformance catalog', () => {
   it('a projector that types a render-only code fails exactly that case', () => {
     const overTyping = (refusal: TransportRefusalInput): ProjectedTransportRefusal | null => ({
       httpStatus: 403,
-      error: { code: -32000, message: 'Forbidden', data: { refusal } },
+      error: { code: -32003, message: 'App not found', data: { refusal } },
     });
     const result = runTransportRefusalConformance(overTyping);
     expect(result.failed.map((f) => f.name)).toEqual(['refuse-render-only-code']);
@@ -71,7 +71,7 @@ describe('transport-refusal conformance catalog', () => {
   it('a projector that changes the transport status or code fails the deprovisioned case', () => {
     const wrongCode = (refusal: TransportRefusalInput): ProjectedTransportRefusal | null => {
       const r = referenceProject(refusal);
-      return r === null ? null : { ...r, error: { ...r.error, code: -32001 } };
+      return r === null ? null : { ...r, error: { ...r.error, code: -32000 } };
     };
     expect(runTransportRefusalConformance(wrongCode).failed.map((f) => f.name)).toEqual(['refuse-deprovisioned-endpoint']);
     const wrongStatus = (refusal: TransportRefusalInput): ProjectedTransportRefusal | null => {

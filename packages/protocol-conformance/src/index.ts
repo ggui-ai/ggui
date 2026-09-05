@@ -206,7 +206,7 @@ export type {
 
 // Transport-refusal — the JSON-RPC error a per-app MCP endpoint answers
 // with when it refuses a request for a typed reason (ggui#825): HTTP 403,
-// `-32000` / `Forbidden` unchanged, `data.refusal` carrying the registry
+// `-32003` / `App not found` (ggui#836), `data.refusal` carrying the registry
 // projection without the render-only fields; a code whose surfaces
 // exclude `mcp-endpoint` projects to nothing.
 export {

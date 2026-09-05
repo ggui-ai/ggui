@@ -649,17 +649,21 @@ export type TransportRefusal = z.infer<typeof transportRefusalSchema>;
 
 /**
  * The JSON-RPC error object a per-app MCP endpoint answers with when it
- * refuses a request for a typed reason (ggui#825): HTTP 403, `code`
- * `-32000` and `message` `Forbidden` exactly as an untyped
- * authorization failure — correct in effect — plus `data.refusal`,
- * which makes it legible. `data` is strict: it carries the refusal and
- * nothing else. An authorization failure that is not a registry state
- * answers the same 403 with NO `data` — that asymmetry is the contract,
- * not an omission: naming the untyped arms would say which is true.
+ * refuses a request for a typed reason (ggui#825, codes ruled in
+ * ggui#836): HTTP 403, `code` `-32003` (`APP_NOT_FOUND` — the endpoint
+ * no longer serves this app, the same reading ggui's embed host gives a
+ * proxy 403) and `message` `App not found`, plus `data.refusal`, which
+ * makes it legible. `data` is strict: it carries the refusal and nothing
+ * else. An authorization failure that is not a registry state answers
+ * HTTP 403 with `-32001` (`UNAUTHORIZED`) and NO `data` — the three
+ * untyped arms stay indistinguishable among themselves by contract:
+ * naming any of them would say which is true. A first-party server
+ * never chooses `-32000`: it is the SDK client's `ConnectionClosed`, so
+ * a bare 403 and a dropped socket would share a number.
  */
 export const transportRefusalErrorSchema = z.strictObject({
-  code: z.literal(-32000),
-  message: z.literal('Forbidden'),
+  code: z.literal(-32003),
+  message: z.literal('App not found'),
   data: z.strictObject({ refusal: transportRefusalSchema }),
 });
 
