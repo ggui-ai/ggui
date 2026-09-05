@@ -206,15 +206,19 @@ export interface UiFeedbackEvent {
  *     cycle-2);
  *   - `'advert-silent'` — the host never advertised `serverTools` and
  *     the attempt failed relay-shaped;
- *   - `'boot-failed'` — the host refused the mandatory `ui/initialize`
- *     handshake itself, so nothing can ever be delivered in this
- *     document (ggui#830). Not a probe the runtime minted: the host's
- *     own answer to the one request every session begins with — the
- *     strongest confirmed outcome there is. It clears the only way a
- *     handshake failure can: the next boot's close edge.
+ *   - `'boot-failed'` — the mandatory `ui/initialize` handshake did not
+ *     complete (refused, timed out, or the transport failed), so
+ *     nothing can ever be delivered in this document (ggui#830). Not a
+ *     probe the runtime minted: the outcome of the one request every
+ *     session begins with — the strongest confirmed outcome there is.
+ *     It clears the only way a handshake failure can: the next boot's
+ *     close edge.
  *
- * Hosts MUST tolerate a trigger they do not know (an older host
- * reading a newer renderer): the edge is the fact, the trigger is why.
+ * The union is closed per renderer version; nothing in a host branches
+ * on the trigger (the first-party host passes it through untouched) —
+ * the edge is the fact, the trigger is why. A host that does branch on
+ * it should treat a value it does not know as "latched, reason
+ * unknown", never as "not latched".
  *
  * @public
  */
@@ -248,9 +252,11 @@ export type RelayLatchTrigger = 'confirmed-refusal' | 'advert-silent' | 'boot-fa
  * a latch standing from a prior mount closes it with a `'cleared'`
  * edge before the new session starts.
  *
- * Always emitted via the postMessage-to-parent default — the emission
- * sites live in module-level gesture-dispatch code outside the boot
- * graph, so they never flow through an injected `onObserve` sink.
+ * Always emitted via the postMessage-to-parent default, by rule — the
+ * gesture-dispatch emission sites run outside any given boot call, and
+ * the boot-graph site (the `boot-failed` edge, ggui#830) follows the
+ * same rule — so these edges never flow through an injected
+ * `onObserve` sink and a host reads every edge the same way.
  *
  * @public
  */

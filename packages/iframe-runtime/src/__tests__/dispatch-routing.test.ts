@@ -1562,7 +1562,6 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
       doc: dom,
       app: failing.app,
       transport: failing.transport,
-      connectFn: vi.fn() as unknown as Parameters<typeof bootSequence>[0]['connectFn'],
       notifyParent: vi.fn(),
       toolResultTimeoutMs: 50,
     });
@@ -1570,6 +1569,9 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     const edge = relay().at(-1);
     expect(edge).toMatchObject({ state: 'latched', trigger: 'boot-failed' });
     expect(connectionStore.getSnapshot()).toBe(false);
+    // The standing notice is the user-facing half of the same write.
+    expect(toast()?.hasAttribute('data-ggui-relay-notice')).toBe(true);
+    expect(toast()?.textContent).toMatch(/cannot relay/i);
     // Attempt-always: the gesture still dispatches; with no App bound the
     // outcome is the code-less envelope — undelivered inside a standing
     // zone, counted.
@@ -1584,6 +1586,49 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(relay().at(-1)?.state).toBe('latched');
     expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
     expect(deadTaps()[0]).toMatchObject({ intent: 'save', trigger: 'boot-failed' });
+  });
+
+  it('a boot that fails in a document whose latch already stands passes the close edge first — cleared, then latched, never latched twice (ggui#830 fold)', async () => {
+    // The ONE writer is never called off-edge: every boot runs the close
+    // edge BEFORE it can latch, so a standing latch from a prior mount
+    // ends with a 'cleared' edge and the boot-failed latch is a fresh
+    // zone with a fresh tally — not a second 'latched' stacked on the
+    // first with the prior zone's count erased.
+    await latch();
+    const before = relay().length;
+    __resetAppForTest();
+    const dom = document.implementation.createHTMLDocument('re-boot-failed');
+    const failing = buildBootHarness({ initResponse: { error: { code: -1, message: 'host refused' } } });
+    const result = await bootSequence({
+      doc: dom,
+      app: failing.app,
+      transport: failing.transport,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 50,
+    });
+    expect(result.ok).toBe(false);
+    expect(relay().slice(before).map((e) => e.state)).toEqual(['cleared', 'latched']);
+    expect(relay().at(-1)).toMatchObject({ state: 'latched', trigger: 'boot-failed' });
+  });
+
+  it('two gestures in flight when the zone latches yield ONE latched edge and exactly one dead tap each — the racing gesture counts, the edge does not repeat (ggui#830 fold)', async () => {
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', REFUSAL);
+    transport.queueResponse('tools/call', REFUSAL);
+    for (const intent of ['first', 'second']) {
+      routeDispatch({
+        actionName: intent,
+        data: {},
+        meta: { sessionId: 'sess_1', appId: 'app_1' },
+        dispatchToolName: 'ggui_runtime_submit_action',
+      });
+    }
+    await tick();
+    await tick();
+    await tick();
+    expect(relay().filter((e) => e.state === 'latched')).toHaveLength(1);
+    // The gesture that latched is not a dead tap; the one that raced it is.
+    expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
   });
 
   it('the channel router fail-fast while latched emits no relay-dead-tap — one event per user gesture, never per tick', async () => {

@@ -644,10 +644,12 @@ export interface BootSequenceOptions {
    * entirely (matches the ProtocolError posture; the `<McpAppIframe>`
    * host wrapper decides whether to bind this via its `onObserve`
    * prop). Exception: `relay-incapability` events do NOT flow through
-   * this seam — they originate in module-level gesture-dispatch code
-   * outside the boot graph (it runs independently of any given boot
-   * call) and always ride the postMessage-to-parent default, whether
-   * or not this option is bound.
+   * this seam — by rule they always ride the postMessage-to-parent
+   * default, whether or not this option is bound: most emission sites
+   * are module-level gesture-dispatch code that runs independently of
+   * any given boot call, and the one inside the boot graph (the
+   * `boot-failed` edge, ggui#830) follows the same rule so a host reads
+   * every edge the same way.
    */
   readonly onObserve?: ObservabilityEmitter;
   /**
@@ -940,6 +942,16 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // `applyRender` no-op inside the listener.
   installPersistentToolResultListener(app);
 
+  // Fresh boot ⇒ the relay latch and the connection store start
+  // aligned (ggui#670): a standing latch from a prior mount in a
+  // re-booted document must not outlive the store it was written to.
+  // It runs BEFORE the handshake so that every boot passes the close
+  // edge before it can latch — the boot-failed write below is then
+  // always on-edge (ggui#830 fold): a prior zone ends with its
+  // 'cleared' edge and its summary, never buried under a second
+  // 'latched' with its tally erased.
+  resetRelayLatchForBoot();
+
   const initResult = await connectApp(app, transport);
   if (!initResult.ok) {
     setStatus(refs, `ui/initialize failed: ${initResult.message}`, 'error');
@@ -954,7 +966,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     // every later tap still attempts (attempt-always) and lands as a
     // counted dead tap. The scope is empty because no bootstrap has
     // named a session yet; it clears the only way a handshake failure
-    // can — the next boot's close edge.
+    // can — the next boot's close edge, which this boot itself already
+    // passed above, so this write is on-edge by construction. The
+    // gesture gate's pre-capture rule ("never latch before the host has
+    // been asked") does not apply here: the host HAS been asked — this
+    // is its answer to `ui/initialize`, resolved as failure.
     announceRelayIncapability('boot-failed', {});
     return { ok: false, mountedRender };
   }
@@ -1228,10 +1244,6 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Fresh boot ⇒ not superseded (matters only for test re-runs that
   // reuse the module; a real iframe boots once).
   mountSuperseded = false;
-  // Fresh boot ⇒ the relay latch and the connection store start
-  // aligned (ggui#670): a standing latch from a prior mount in a
-  // re-booted document must not outlive the store it was written to.
-  resetRelayLatchForBoot();
   telemetry?.record(
     'boot.path',
     JSON.stringify({
@@ -3790,12 +3802,15 @@ export function dispatchSubmitAction(args: {
  * landed) as a `JsonValue`. On RPC error we throw — the router
  * catches and silently retries on the next tick.
  *
- * Once a REAL gesture has confirmed this host can't relay (the latch
- * above — set only after {@link dispatchSubmitAction} actually tried
- * and failed on a host with no `serverTools` advertised, with
- * capabilities already captured, AND the failure was relay-shaped —
- * not a well-formed `{ok:false}` result; see `isRelayShapedFailure`),
- * every subsequent poll will fail identically.
+ * Once this document has confirmed it cannot relay (the latch above —
+ * set through the ONE writer on exactly three paths: a REAL gesture
+ * that failed relay-shaped on a host that never advertised
+ * `serverTools`, with capabilities already captured (`advert-silent`);
+ * a declared refusal code answered under a positive advertisement
+ * (`confirmed-refusal`); or the host's own failure of the mandatory
+ * `ui/initialize` handshake, before any gesture (`boot-failed`,
+ * ggui#830) — never a well-formed `{ok:false}` result; see
+ * `isRelayShapedFailure`), every subsequent poll will fail identically.
  *
  * This guard does NOT stop the router's poll loop, and nothing here
  * should ever be written so that it could (ggui#443). It does two
@@ -3821,11 +3836,13 @@ export function dispatchSubmitAction(args: {
  * (ggui's own embed host pre-Task-2 is exactly this case) — silently
  * killing working channel polls forever. That is "absence of a
  * capability blocks an attempt", which the fail-safe constraint
- * forbids. The latch is set only by a FAILED REAL GESTURE — the
- * advert-silent leg, or a confirmed refusal under a positive
- * advertisement (ggui#599 cycle-2) — so testing the latch alone is
- * sufficient: a host that never fails a real gesture never latches,
- * and its channels keep working.
+ * forbids. The latch is set only by a CONFIRMED OUTCOME — a failed
+ * real gesture (the advert-silent leg, or a confirmed refusal under a
+ * positive advertisement, ggui#599 cycle-2) or a failed handshake
+ * (ggui#830), never by an advertisement's absence — so testing the
+ * latch alone is sufficient: a host that answers its handshake and
+ * never fails a real gesture never latches, and its channels keep
+ * working.
  *
  * Extracted to a named export (rather than an inline closure inside
  * `bootProduction`) so unit tests can drive it directly through the
