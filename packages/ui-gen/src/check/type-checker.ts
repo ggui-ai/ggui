@@ -316,10 +316,18 @@ async function loadVfs(): Promise<Map<string, VfsEntry>> {
 /**
  * Try to resolve a relative import within the VFS.
  * Given `containingFile` (e.g. `node_modules/@ggui-ai/design/primitives/index.d.ts`)
- * and `importPath` (e.g. `./Card`), try:
+ * and `importPath` (e.g. `./Card` or, as every published declaration says
+ * since 0.15.0, `./Card.js`), try:
  *   - <resolved>.d.ts
  *   - <resolved>/index.d.ts
  *   - <resolved>.ts
+ * A `.js` / `.mjs` / `.cjs` extension on the specifier is the ESM
+ * convention for "the module that compiles to this file" — TypeScript's
+ * NodeNext maps `./Card.js` to `./Card.d.ts`, and so does this: the
+ * extension is stripped before the candidates are tried. Without that, a
+ * `.js`-suffixed re-export resolved to nothing, the imported names typed
+ * as `any`, and the checker reported zero errors on code it must reject
+ * (ggui 0.15.0 publish-gate, type-checker.test.ts).
  */
 function resolveRelativeInVfs(
   vfs: Map<string, VfsEntry>,
@@ -329,7 +337,9 @@ function resolveRelativeInVfs(
   // Strip leading '/' from containingFile — TS may prepend getCurrentDirectory()
   const normalized = containingFile.startsWith('/') ? containingFile.slice(1) : containingFile;
   const dir = path.posix.dirname(normalized);
-  const resolved = path.posix.normalize(`${dir}/${importPath}`);
+  // `./x.js` (`.mjs`, `.cjs`) names the declaration `./x.d.ts` — strip it.
+  const specifier = importPath.replace(/\.(?:m|c)?js$/, '');
+  const resolved = path.posix.normalize(`${dir}/${specifier}`);
 
   // Try .d.ts extension
   const withDts = `${resolved}.d.ts`;
