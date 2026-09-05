@@ -242,7 +242,7 @@ describe('fixtures catalog', () => {
     // this fixture proves the §12.2 identity-default resolution only
     // if the frame genuinely OMITS appId (subscribe.omitAppId) AND the
     // grade reads the bound app id back (a wire-ack-only grade would
-    // pass a server that acks while binding an undefined tenant — the
+    // pass a server that acks while binding an undefined app id — the
     // corrupt-row failure mode).
     const fixture = allFixtures.find((f) => f.name === 'absent-appid-defaults');
     expect(fixture).toBeDefined();
