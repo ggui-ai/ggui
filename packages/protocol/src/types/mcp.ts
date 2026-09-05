@@ -506,8 +506,17 @@ export type GguiRuntimeTelemetryOutput = z.infer<typeof runtimeTelemetryOutputSc
  * §7.1; see {@link RenderErrorCode}). The slot stays unassigned so a
  * future canonical code can't silently collide with stale consumers.
  *
+ * `-32001` is RETIRED-RESERVED too (ggui#853): `UNAUTHORIZED` lived
+ * there until the 0.16.0 wave, but `-32001` is the MCP SDK client's own
+ * `RequestTimeout` — minted locally, never sent by a server — so a
+ * client reading the number could not tell a server's UNAUTHORIZED
+ * from its own timeout, the class ggui#836 closed for `-32000`
+ * (`ConnectionClosed`). `UNAUTHORIZED` is `-32007`; the slot stays
+ * unassigned. `error-codes-vs-sdk.test.ts` pins that no ggui-chosen
+ * code equals a code the SDK's `ErrorCode` enum owns.
+ *
  * `-32006` is assigned to `MOUNT_UNAVAILABLE`; new canonical codes come
- * at `-32007` onwards.
+ * at `-32008` onwards.
  */
 export const MCP_ERROR_CODES = {
   PARSE_ERROR: -32700,
@@ -515,8 +524,8 @@ export const MCP_ERROR_CODES = {
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
-  // Protocol-specific error codes (-32004 retired-reserved — see above)
-  UNAUTHORIZED: -32001,
+  // Protocol-specific error codes (-32001 and -32004 retired-reserved — see above)
+  UNAUTHORIZED: -32007,
   SESSION_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
   CAPABILITY_DENIED: -32005,

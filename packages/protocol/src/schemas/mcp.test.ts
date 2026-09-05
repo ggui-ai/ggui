@@ -1428,7 +1428,7 @@ describe('transportRefusalSchema / transportRefusalErrorSchema — the mcp-endpo
   it('the JSON-RPC error object pins -32003 APP_NOT_FOUND / "App not found" and a strict data.refusal — never -32000, the SDK client\'s ConnectionClosed (ggui#836)', () => {
     expect(transportRefusalErrorSchema.parse(ERROR)).toEqual(ERROR);
     expect(() => transportRefusalErrorSchema.parse({ ...ERROR, code: -32000 })).toThrow();
-    expect(() => transportRefusalErrorSchema.parse({ ...ERROR, code: -32001 })).toThrow();
+    expect(() => transportRefusalErrorSchema.parse({ ...ERROR, code: -32007 })).toThrow();
     expect(() => transportRefusalErrorSchema.parse({ ...ERROR, message: 'Forbidden' })).toThrow();
     expect(() => transportRefusalErrorSchema.parse({ ...ERROR, data: { refusal: REFUSAL, hint: 'x' } })).toThrow();
     expect(() => transportRefusalErrorSchema.parse({ code: -32000, message: 'Forbidden' })).toThrow();

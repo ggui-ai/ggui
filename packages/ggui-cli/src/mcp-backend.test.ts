@@ -277,7 +277,7 @@ describe('buildMcpServerBackend', () => {
     // branch (`mcp-endpoint-routes.ts`) — pinning the shape here makes a
     // silent rewrite of the auth response visible in CI.
     expect(body.jsonrpc).toBe('2.0');
-    expect(body.error?.code).toBe(-32001); // #836: UNAUTHORIZED — a first-party server never answers -32000 for a refusal
+    expect(body.error?.code).toBe(-32007); // #836: UNAUTHORIZED — a first-party server never answers -32000 for a refusal
     expect(body.error?.message).toBe('No valid credentials');
   });
 

@@ -23,7 +23,7 @@
  *         `AWS_*` / `ANTHROPIC_*` / `COGNITO_*` / proxy-var leakage).
  *   - **`/mcp` strict-auth** — a bearer the adapter does not recognise
  *         is rejected with HTTP 401 and the canonical JSON-RPC error
- *         envelope (`code: -32001` UNAUTHORIZED since #836, `message: "No valid credentials"`).
+ *         envelope (`code: -32007` UNAUTHORIZED since #836, `message: "No valid credentials"`).
  *         This is the load-bearing assertion the earlier slice could
  *         not make under `devAllowAll: true`.
  *
@@ -409,7 +409,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     // could not make under `devAllowAll: true`. With strict auth
     // the wire behaviour is:
     //   - HTTP 401 (the request never reaches the MCP SDK).
-    //   - JSON-RPC envelope: jsonrpc: "2.0", error.code: -32001 (UNAUTHORIZED, #836),
+    //   - JSON-RPC envelope: jsonrpc: "2.0", error.code: -32007 (UNAUTHORIZED, #836),
     //     error.message: "No valid credentials", id: null.
     // If this test ever passes under an arbitrary random bearer,
     // `buildMcpServerBackend` has silently regressed to the old
@@ -435,7 +435,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
       id?: unknown;
     };
     expect(body.jsonrpc).toBe('2.0');
-    expect(body.error?.code).toBe(-32001); // #836: UNAUTHORIZED, never -32000
+    expect(body.error?.code).toBe(-32007); // #836: UNAUTHORIZED, never -32000
     expect(body.error?.message).toBe('No valid credentials');
     expect(body.id).toBeNull();
   });
@@ -464,7 +464,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     const body = (await res.json()) as {
       error?: { code?: number; message?: string };
     };
-    expect(body.error?.code).toBe(-32001); // #836: UNAUTHORIZED, never -32000
+    expect(body.error?.code).toBe(-32007); // #836: UNAUTHORIZED, never -32000
     expect(body.error?.message).toBe('No valid credentials');
   });
 });

@@ -638,7 +638,7 @@ export type TransportRefusal = z.infer<typeof transportRefusalSchema>;
  * proxy 403) and `message` `App not found`, plus `data.refusal`, which
  * makes it legible. `data` is strict: it carries the refusal and nothing
  * else. An authorization failure that is not a registry state answers
- * HTTP 403 with `-32001` (`UNAUTHORIZED`) and NO `data` — the three
+ * HTTP 403 with `-32007` (`UNAUTHORIZED`) and NO `data` — the three
  * untyped arms stay indistinguishable among themselves by contract:
  * naming any of them would say which is true. A first-party server
  * never chooses `-32000`: it is the SDK client's `ConnectionClosed`, so

@@ -107,7 +107,7 @@ describe('mcp-endpoint-routes — reject-federated gate (/control)', () => {
     // ConnectionClosed number); an authorization refusal is UNAUTHORIZED.
     const body = (await res.json()) as { error: { code: number; message: string } };
     expect(body.error).toEqual({
-      code: -32001,
+      code: -32007,
       message: 'federated identities are not permitted on this route',
     });
   });
@@ -403,14 +403,14 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
+    expect(body.error).toEqual({ code: -32007, message: 'Unauthorized' });
   });
 
   it('a mapper that declines (returns undefined) → byte-identical to no mapper', async () => {
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp, errorMapper: () => undefined });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
+    expect(body.error).toEqual({ code: -32007, message: 'Unauthorized' });
   });
 
   it('a refusal is a 401 or a 403 — a mapper answering any other status is ignored, the default-deny 403 stands, and the deviation is logged', async () => {
@@ -423,7 +423,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
+    expect(body.error).toEqual({ code: -32007, message: 'Unauthorized' });
     const deviation = warns.find((w) => w.event === 'per_app_authorize_mapper_out_of_bounds');
     expect(deviation, 'the out-of-bounds mapping must be observable on the route logger').toBeDefined();
     expect(deviation?.fields).toMatchObject({ status: 200 });
@@ -433,11 +433,11 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     fx = await boot({
       auth: federatedAndAgentAuth(),
       perAppRouting: perApp,
-      errorMapper: () => ({ status: 401, code: -32001, message: 'sign in again', data: 'reauth' }),
+      errorMapper: () => ({ status: 401, code: -32007, message: 'sign in again', data: 'reauth' }),
     });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(401);
-    expect(body.error).toEqual({ code: -32001, message: 'sign in again', data: 'reauth' });
+    expect(body.error).toEqual({ code: -32007, message: 'sign in again', data: 'reauth' });
   });
 
   it('a mapper that throws is logged and the default-deny 403 stands', async () => {
@@ -452,7 +452,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
+    expect(body.error).toEqual({ code: -32007, message: 'Unauthorized' });
     expect(warns.some((w) => w.event === 'error_mapper_failed')).toBe(true);
   });
 

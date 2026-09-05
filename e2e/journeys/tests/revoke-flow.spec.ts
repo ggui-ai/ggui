@@ -15,7 +15,7 @@
  *      builder bearer. Asserts the 200 envelope (`{ok: true,
  *      pairingId}`).
  *   4. Repeat `/mcp tools/list` with the same token — now a
- *      canonical 401 JSON-RPC envelope (`code: -32001` UNAUTHORIZED since #836,
+ *      canonical 401 JSON-RPC envelope (`code: -32007` UNAUTHORIZED since #836,
  *      `message: "No valid credentials"`). This is the load-bearing
  *      security claim the §4.3 advisory row names: the minted
  *      token MUST stop authenticating immediately after revoke.
@@ -181,7 +181,7 @@ test.describe.serial('Phase 5 — pair revoke flow', () => {
       id?: unknown;
     };
     expect(postBody.jsonrpc).toBe('2.0');
-    expect(postBody.error?.code).toBe(-32001); // #836: UNAUTHORIZED, never -32000
+    expect(postBody.error?.code).toBe(-32007); // #836: UNAUTHORIZED, never -32000
     expect(postBody.error?.message).toBe('No valid credentials');
 
     // 6. T1 (the revoker) must still work — revoke is scoped to the

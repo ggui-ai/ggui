@@ -6,6 +6,42 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `UNAUTHORIZED` moves from `-32001` to `-32007` (2026-09-05, renumber,
+ * pre-launch, ggui#853; found by ggui-main in the prod skew-gate log).
+ * `-32001` is the MCP SDK client's own `ErrorCode.RequestTimeout`
+ * (`@modelcontextprotocol/sdk` types.js, beside `ConnectionClosed`
+ * -32000) — minted LOCALLY, never sent by a server — so a client reading
+ * the number could not tell a server's UNAUTHORIZED from its own
+ * timeout: the class ggui#836 closed for -32000, on a number ggui had
+ * chosen long before #836 (0.14.0 and earlier).
+ *
+ *   uc1. **`MCP_ERROR_CODES.UNAUTHORIZED = -32007`** — the next free
+ *      canonical slot per this table's own note; `-32001` joins
+ *      `-32004` as retired-reserved. Every mirror moves in this one
+ *      change (SPEC §7.9 + its table, the gated doc mirrors, the
+ *      endpoint routes' tests, the kit's transport-refusal wording, the
+ *      pod's auth arm, the live journeys). HTTP status and message are
+ *      unchanged: 401/403 + the same text.
+ *
+ *   uc2. **The guard #836 lacked** — `types/error-codes-vs-sdk.test.ts`
+ *      pins every ggui-chosen code (`MCP_ERROR_CODES` minus the five
+ *      JSON-RPC standard codes, plus `PLATFORM_ERROR_CODES`) disjoint
+ *      from every code the SDK's `ErrorCode` enum owns, and ggui's
+ *      copies of the standard five equal to the SDK's. It was RED on
+ *      -32001 before uc1 and is what reds the next collision.
+ *
+ * Conformance-kit verdict: no fixture on 0.15.0 pinned `-32001` (the
+ * transport-refusal catalog grades `-32003 + data.refusal` and `null`;
+ * its prose named -32001 and now names -32007) — a renumbered
+ * canonical code with no kit regression; guuey's clients branch on
+ * -32002/-32006 only (ggui#836 record). Bytes on the wire: one number.
+ *
+ * Package version — classification MADE here: MINOR for
+ * `@ggui-ai/protocol` and `@ggui-ai/mcp-server` (a canonical code
+ * renumbered, `draft-` intent per VERSION-POLICY §1.4), pre-1.0 and
+ * pre-launch. PROTOCOL_VERSION unchanged — no WS envelope moved.
+ *
+ * --------------------------------------------------------------------
  * SPEC §7.1's refused arm is ONE primitive (2026-09-05, additive,
  * pre-launch, ggui#803 leg 9). The tool result a render gate answers a
  * pre-generation refusal with was built by hand in
