@@ -103,6 +103,13 @@ describe('mcp-endpoint-routes — reject-federated gate (/control)', () => {
       }),
     });
     expect(res.status).toBe(403);
+    // #836: a first-party server never answers -32000 (the SDK client's own
+    // ConnectionClosed number); an authorization refusal is UNAUTHORIZED.
+    const body = (await res.json()) as { error: { code: number; message: string } };
+    expect(body.error).toEqual({
+      code: -32001,
+      message: 'federated identities are not permitted on this route',
+    });
   });
 
   it('a source=oidc identity still works at /mcp', async () => {
@@ -353,7 +360,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
         err instanceof AppRetiredError
           ? {
               status: 403,
-              code: -32000,
+              code: -32003,
               message: 'this app is no longer served',
               data: { reason: { code: 'app_retired', retry: 'never' }, ids: [1, 'a', null] },
             }
@@ -362,7 +369,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
     expect(body.error).toEqual({
-      code: -32000,
+      code: -32003,
       message: 'this app is no longer served',
       data: { reason: { code: 'app_retired', retry: 'never' }, ids: [1, 'a', null] },
     });
@@ -372,14 +379,14 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
   });
 
   it('a mapper that declines (returns undefined) → byte-identical to no mapper', async () => {
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp, errorMapper: () => undefined });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
   });
 
   it('a refusal is a 401 or a 403 — a mapper answering any other status is ignored, the default-deny 403 stands, and the deviation is logged', async () => {
@@ -392,7 +399,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
     const deviation = warns.find((w) => w.event === 'per_app_authorize_mapper_out_of_bounds');
     expect(deviation, 'the out-of-bounds mapping must be observable on the route logger').toBeDefined();
     expect(deviation?.fields).toMatchObject({ status: 200 });
@@ -421,7 +428,7 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     });
     const { status, body } = await initializeAgainst(fx.url, 'gone');
     expect(status).toBe(403);
-    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    expect(body.error).toEqual({ code: -32001, message: 'Unauthorized' });
     expect(warns.some((w) => w.event === 'error_mapper_failed')).toBe(true);
   });
 

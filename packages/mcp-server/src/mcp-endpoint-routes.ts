@@ -32,7 +32,7 @@
  * rules.
  */
 
-import { isRecord, type JsonValue } from "@ggui-ai/protocol";
+import { MCP_ERROR_CODES, isRecord, type JsonValue } from "@ggui-ai/protocol";
 import type { AuthAdapter, AuthResult } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -322,7 +322,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
             }
             res.status(401).json({
               jsonrpc: "2.0",
-              error: { code: -32000, message: err.message },
+              error: { code: MCP_ERROR_CODES.UNAUTHORIZED, message: err.message },
               id: null,
             });
             return;
@@ -348,7 +348,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         reqLogger.warn("federated_identity_rejected", { route: req.path });
         res.status(403).json({
           jsonrpc: "2.0",
-          error: { code: -32000, message: "federated identities are not permitted on this route" },
+          error: {
+            code: MCP_ERROR_CODES.UNAUTHORIZED,
+            message: "federated identities are not permitted on this route",
+          },
           id: null,
         });
         return;
@@ -377,7 +380,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           res.status(401).json({
             jsonrpc: "2.0",
             error: {
-              code: -32000,
+              code: MCP_ERROR_CODES.UNAUTHORIZED,
               message:
                 `${opsToolName} is an operator tool and needs an authenticated caller. ` +
                 `Present a bearer token this deployment accepts, or complete the OAuth flow ` +
@@ -423,7 +426,12 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           if (mapped?.headers) res.set(mapped.headers);
           res.status(mapped?.status ?? 403).json({
             jsonrpc: "2.0",
-            error: mapped ? jsonRpcError(mapped) : { code: -32000, message: "Forbidden" },
+            // #836: a first-party server never answers -32000 — that is the SDK
+            // client's own ConnectionClosed number, so a refusal and a dropped
+            // socket would read the same. An authorization refusal is UNAUTHORIZED.
+            error: mapped
+              ? jsonRpcError(mapped)
+              : { code: MCP_ERROR_CODES.UNAUTHORIZED, message: "Unauthorized" },
             id: null,
           });
           return;

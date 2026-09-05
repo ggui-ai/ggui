@@ -689,6 +689,9 @@ describe('createGguiServer — OAuth per-app discovery (S4.1, 2026-05-06)', () =
     expect(wwwAuth).toContain(
       'resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/apps/aB3kP9xY"',
     );
+    // #836: the refusal is UNAUTHORIZED (-32001), never -32000.
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32001);
   });
 
   it('emits universal WWW-Authenticate on a universal /mcp 401 even when perAppRouting is configured', async () => {
@@ -714,6 +717,8 @@ describe('createGguiServer — OAuth per-app discovery (S4.1, 2026-05-06)', () =
       'resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource"',
     );
     expect(wwwAuth).not.toContain('/apps/');
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32001);
   });
 });
 
@@ -1153,8 +1158,9 @@ describe('createGguiServer — MCP wire roundtrip', () => {
       );
       // The body stays actionable for agent-class callers.
       const body = (await res.json()) as {
-        error: { message: string };
+        error: { code: number; message: string };
       };
+      expect(body.error.code).toBe(-32001); // #836: UNAUTHORIZED, never -32000
       expect(body.error.message).toContain('operator tool');
       expect(body.error.message).toContain('ggui_ops_test_probe');
     });
