@@ -26,12 +26,11 @@
 
 import { z } from 'zod';
 import { getSessionInputShape, gguiGetSessionOutputSchema } from '@ggui-ai/protocol';
-import type { GguiGetSessionOutput } from '@ggui-ai/protocol';
 import type {
   GguiSessionStore,
   StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import type { HandlerContext, ShapeOutput, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { isVisibleToCaller } from './tenancy.js';
 
@@ -42,6 +41,13 @@ const inputSchema = getSessionInputShape;
 // The wire is the protocol's seven-field projection — registered as its
 // `.shape`, never a copy.
 const outputSchema = gguiGetSessionOutputSchema.shape;
+
+/**
+ * The handler's own output type is the MUTABLE derived shape (the seam rule:
+ * readonly is what consumers hold — `GguiGetSessionOutput` — never what the
+ * handler must satisfy against the transport's bound).
+ */
+type GetSessionWire = ShapeOutput<typeof outputSchema>;
 
 /**
  * Optional return shape from the heartbeat hook. Lets the host
@@ -79,7 +85,7 @@ export interface GguiGetSessionHandlerDeps {
 
 export function createGguiGetSessionHandler(
   deps: GguiGetSessionHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiGetSessionOutput> {
+): SharedHandler<typeof inputSchema, typeof outputSchema, GetSessionWire> {
   return {
     name: 'ggui_get_session',
     title: 'Get GguiSession',
@@ -91,7 +97,7 @@ export function createGguiGetSessionHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiGetSessionOutput> {
+    ): Promise<GetSessionWire> {
       const { sessionId } = z.object(inputSchema).parse(rawInput);
 
       const stored = await deps.renderStore.get(sessionId);
@@ -155,7 +161,7 @@ function applyHeartbeatOverlay(
  * themeId, status, hostSession — was never delivered: the transport
  * strip-parses to this shape.
  */
-function projectGguiSession(stored: StoredGguiSession): GguiGetSessionOutput {
+function projectGguiSession(stored: StoredGguiSession): GetSessionWire {
   const base = {
     variant: stored.render.type === 'mcpApps' ? ('mcpApps' as const) : ('render' as const),
     id: stored.id,

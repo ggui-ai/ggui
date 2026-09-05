@@ -175,7 +175,7 @@ export type GguiGetSessionInput = z.infer<typeof getSessionInputSchema>;
  * + the store row's six base fields, plus `contextSnapshot` when the row has
  * one. Nothing else on the row travels (the transport strip-parses to this).
  */
-export type GguiGetSessionOutput = Readonly<
+export type GguiGetSessionOutput = DeepReadonly<
   z.infer<typeof gguiGetSessionOutputSchema>
 >;
 
