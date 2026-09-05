@@ -47,7 +47,7 @@
  *         loop is empty today.)
  *      l. Record the outcome via reporter + accumulate in result.
  *   3. Fold in the PURE-FUNCTION catalogs (ggui#786) —
- *      `refusal-envelope` and `registry-completeness`. They grade a
+ *      `refusal-envelope`, `registry-completeness` and `transport-refusal`. They grade a
  *      caller-supplied projector / registry rather than the wire, so
  *      they need no transport; when the caller supplies neither, their
  *      rows are reported SKIPPED with that reason so an ungraded
@@ -94,6 +94,12 @@ import {
   runRegistryCompletenessConformance,
   type RefusalRegistryView,
 } from './registry-completeness/index.js';
+import {
+  runTransportRefusalConformance,
+  transportRefusalCases,
+  type ProjectedTransportRefusal,
+  type TransportRefusalInput,
+} from './transport-refusal-conformance/index.js';
 
 // =============================================================================
 // Public API
@@ -144,6 +150,16 @@ export interface RunConformanceConfig {
    * this run; omitted ⇒ reported SKIPPED, same reasoning as above.
    */
   readonly refusalRegistry?: RefusalRegistryView;
+  /**
+   * The deployment's PER-APP ENDPOINT refusal projector (SPEC §7.1's
+   * endpoint-level refusal, ggui#825): given a registry refusal, return
+   * the HTTP status + JSON-RPC error object the endpoint answers with, or
+   * `null` when the code has no transport envelope. Supplied ⇒ the
+   * `transport-refusal` catalog is graded; omitted ⇒ SKIPPED, named.
+   */
+  readonly transportRefusalProjector?: (
+    refusal: TransportRefusalInput,
+  ) => ProjectedTransportRefusal | null;
 }
 
 /**
@@ -155,6 +171,7 @@ export interface RunConformanceConfig {
 export const PURE_FUNCTION_CATALOG_SLUGS = [
   'refusal-envelope',
   'registry-completeness',
+  'transport-refusal',
 ] as const;
 
 /** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
@@ -319,6 +336,29 @@ function runPureFunctionCatalogs(
         expected: mismatch.expected,
         received: mismatch.actual,
         message: 'the projected refusal envelope does not match the catalog case',
+      });
+    }
+  }
+
+  // ── transport-refusal (ggui#825) ──
+  const endpointProjector = config.transportRefusalProjector;
+  if (endpointProjector === undefined) {
+    for (const testCase of transportRefusalCases) {
+      skip(
+        `transport-refusal/${testCase.name}`,
+        'no `transportRefusalProjector` supplied — pass one to runConformance() to grade the endpoint-level refusal (SPEC §7.1, mcp-endpoint surface)',
+      );
+    }
+  } else {
+    const endpoint = runTransportRefusalConformance(endpointProjector);
+    for (const name of endpoint.passed) pass(`transport-refusal/${name}`);
+    for (const mismatch of endpoint.failed) {
+      fail({
+        name: `transport-refusal/${mismatch.name}`,
+        criterion: 'endpoint-level refusal envelope (SPEC §7.1, mcp-endpoint surface)',
+        expected: mismatch.expected,
+        received: mismatch.actual,
+        message: 'the projected endpoint refusal does not match the catalog case',
       });
     }
   }

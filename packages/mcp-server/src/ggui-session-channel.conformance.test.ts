@@ -208,6 +208,13 @@ const EXPECTED_SKIPPED: Readonly<Record<string, string>> = {
   'refusal-envelope/refuse-never': 'refusalProjector',
   'refusal-envelope/refuse-next-period': 'refusalProjector',
   'refusal-envelope/refuse-non-render-surface': 'refusalProjector',
+  // `transport-refusal/*` (ggui#825): the endpoint-level refusal a
+  // DEPLOYMENT's error mapper types on the per-app endpoint's 403. The
+  // first-party OSS server keeps the route generic (a self-hoster's
+  // mapper attaches any `data`), so it supplies no projector — SKIPPED,
+  // named, never silently absent.
+  'transport-refusal/refuse-deprovisioned-endpoint': 'transportRefusalProjector',
+  'transport-refusal/refuse-render-only-code': 'transportRefusalProjector',
   'version-mismatch': 'server-version-override',
 };
 

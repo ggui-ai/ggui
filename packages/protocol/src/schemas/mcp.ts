@@ -32,6 +32,7 @@ import {
 import { dataContractSchema, jsonObjectSchema } from './data-contract';
 import { blueprintVarianceSchema, blueprintSourceSchema } from './blueprint';
 import {
+  MCP_ENDPOINT_REFUSAL_CODES,
   REFUSAL_RETRIES,
   RENDER_GATE_REFUSAL_CODES,
 } from '../types/refusal-codes';
@@ -573,12 +574,16 @@ export type RenderOutcome = z.infer<typeof renderOutcomeSchema>;
  * row names a `fixBy` other than `caller`: the fix belongs to the app's
  * owner, the tenant, or the operator, and retrying does not perform it.
  */
-export const renderRefusalSchema = z.object({
-  code: z
-    .enum(RENDER_GATE_REFUSAL_CODES)
-    .describe(
-      "Registered refusal state. Look the code up in the protocol's refusal registry for its retry class and which party can act; the accompanying `fix` names the one recovery step.",
-    ),
+/**
+ * The refusal projection every surface shares — what a client acts on:
+ * the diagnostic, the one recovery step, and how the call becomes
+ * possible again. Defined ONCE and spread into each surface's envelope
+ * (the render gate's {@link renderRefusalSchema}, the per-app endpoint's
+ * {@link transportRefusalSchema}); the `code` enum is per surface,
+ * derived from the registry. `fixBy` never travels — it is a registry
+ * attribute a client reads by `code`.
+ */
+const refusalProjectionFields = {
   message: z
     .string()
     .describe(
@@ -594,6 +599,15 @@ export const renderRefusalSchema = z.object({
     .describe(
       "How the call becomes possible again. 'after-fix': a named party acts and the same call then succeeds. 'next-period': time restores it at the next period boundary. 'later': transient — retry after a short delay. 'never': no caller action restores it under this identity.",
     ),
+} as const;
+
+export const renderRefusalSchema = z.object({
+  code: z
+    .enum(RENDER_GATE_REFUSAL_CODES)
+    .describe(
+      "Registered refusal state. Look the code up in the protocol's refusal registry for its retry class and which party can act; the accompanying `fix` names the one recovery step.",
+    ),
+  ...refusalProjectionFields,
   handshake: z
     .literal('intact')
     .describe(
@@ -610,6 +624,47 @@ export const renderRefusalSchema = z.object({
 
 /** The refusal marker, derived from {@link renderRefusalSchema}. */
 export type PreGenerationRefusal = z.infer<typeof renderRefusalSchema>;
+
+/**
+ * A refusal typed on the per-app MCP endpoint's authorization
+ * (ggui#825) — the registry projection WITHOUT the render-only fields:
+ * no `handshake` (nothing was handed), no `balanceCentsAtCheck`. Strict:
+ * a render-only field here is a bug, never a wire state. `code` draws
+ * from {@link MCP_ENDPOINT_REFUSAL_CODES} — today exactly
+ * `app_deprovisioned`, the one refusal with a tenant-side fix and
+ * therefore the one that MUST be legible where a deleted app and a bad
+ * credential would otherwise look alike.
+ */
+export const transportRefusalSchema = z.strictObject({
+  code: z
+    .enum(MCP_ENDPOINT_REFUSAL_CODES)
+    .describe(
+      "Registered refusal state on the per-app endpoint. Look the code up in the protocol's refusal registry for its retry class and which party can act.",
+    ),
+  ...refusalProjectionFields,
+});
+
+/** A refusal on the per-app MCP endpoint, derived from {@link transportRefusalSchema}. */
+export type TransportRefusal = z.infer<typeof transportRefusalSchema>;
+
+/**
+ * The JSON-RPC error object a per-app MCP endpoint answers with when it
+ * refuses a request for a typed reason (ggui#825): HTTP 403, `code`
+ * `-32000` and `message` `Forbidden` exactly as an untyped
+ * authorization failure — correct in effect — plus `data.refusal`,
+ * which makes it legible. `data` is strict: it carries the refusal and
+ * nothing else. An authorization failure that is not a registry state
+ * answers the same 403 with NO `data` — that asymmetry is the contract,
+ * not an omission: naming the untyped arms would say which is true.
+ */
+export const transportRefusalErrorSchema = z.strictObject({
+  code: z.literal(-32000),
+  message: z.literal('Forbidden'),
+  data: z.strictObject({ refusal: transportRefusalSchema }),
+});
+
+/** The typed-refusal JSON-RPC error object, derived from {@link transportRefusalErrorSchema}. */
+export type TransportRefusalError = z.infer<typeof transportRefusalErrorSchema>;
 
 /**
  * The COMPLETE structuredContent of a refused tool result — the whole

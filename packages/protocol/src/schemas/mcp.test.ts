@@ -42,6 +42,8 @@ import {
   renderOutcomeSchema,
   renderOutputSchema,
   renderRefusalSchema,
+  transportRefusalErrorSchema,
+  transportRefusalSchema,
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
   runtimePullEventsPageSchema,
@@ -1387,5 +1389,51 @@ describe('renderInputRouteGuardSchema — the pre-gate check is the route gramma
     const r = renderInputRouteGuardSchema.safeParse({ infra: { model: 'claude-haiku-4-5' } });
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0]?.path).toEqual(['infra', 'model']);
+  });
+});
+
+describe('transportRefusalSchema / transportRefusalErrorSchema — the mcp-endpoint refusal (ggui#825)', () => {
+  /** The registry projection minus the two render-only fields — what rides `error.data.refusal`. */
+  const REFUSAL = {
+    code: 'app_deprovisioned' as const,
+    message: 'the app record has no owner claim any more — the app was deprovisioned',
+    fix: 'provision the app again; this app id never renders again',
+    retry: 'never' as const,
+  };
+  const ERROR = { code: -32000 as const, message: 'Forbidden' as const, data: { refusal: REFUSAL } };
+
+  it('round-trips the projection: code, message, fix, retry — nothing else', () => {
+    expect(transportRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+    expect(Object.keys(transportRefusalSchema.shape)).toEqual(['code', 'message', 'fix', 'retry']);
+  });
+
+  it('is strict: the render-only fields and fixBy are refused, not stripped', () => {
+    expect(() => transportRefusalSchema.parse({ ...REFUSAL, handshake: 'intact' })).toThrow();
+    expect(() => transportRefusalSchema.parse({ ...REFUSAL, balanceCentsAtCheck: 0 })).toThrow();
+    expect(() => transportRefusalSchema.parse({ ...REFUSAL, fixBy: 'tenant' })).toThrow();
+  });
+
+  it('closes the namespace to the mcp-endpoint surface — a render-only code is not expressible here', () => {
+    expect(() => transportRefusalSchema.parse({ ...REFUSAL, code: 'insufficient_credit' })).toThrow();
+    expect(() => transportRefusalSchema.parse({ ...REFUSAL, code: 'not_a_registered_code' })).toThrow();
+  });
+
+  it('the JSON-RPC error object pins -32000 / "Forbidden" and a strict data.refusal', () => {
+    expect(transportRefusalErrorSchema.parse(ERROR)).toEqual(ERROR);
+    expect(() => transportRefusalErrorSchema.parse({ ...ERROR, code: -32001 })).toThrow();
+    expect(() => transportRefusalErrorSchema.parse({ ...ERROR, message: 'Unauthorized' })).toThrow();
+    expect(() => transportRefusalErrorSchema.parse({ ...ERROR, data: { refusal: REFUSAL, hint: 'x' } })).toThrow();
+    expect(() => transportRefusalErrorSchema.parse({ code: -32000, message: 'Forbidden' })).toThrow();
+  });
+
+  it('renderRefusalSchema keeps its wire key order — the projection fields are defined once and spread', () => {
+    expect(Object.keys(renderRefusalSchema.shape)).toEqual([
+      'code',
+      'message',
+      'fix',
+      'retry',
+      'handshake',
+      'balanceCentsAtCheck',
+    ]);
   });
 });

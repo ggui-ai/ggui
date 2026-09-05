@@ -41,15 +41,17 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  MCP_ENDPOINT_REFUSAL_CODES,
   PRE_GENERATION_REFUSAL_CODES,
   RENDER_GATE_REFUSAL_CODES,
 } from '../../index.js';
 
-/** The three surfaces a refusal code may be emitted on (registry v6). */
+/** The four surfaces a refusal code may be emitted on (registry v6; v11 adds `mcp-endpoint`). */
 const REFUSAL_SURFACES = [
   'render-gate',
   'owner-api',
   'provisioning-api',
+  'mcp-endpoint',
 ] as const;
 
 /** `retry` is defined from the CALLER's side (registry v2, v4 added `later`). */
@@ -365,7 +367,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
   });
 
   it('marks the rows side-effect-free so a bundler can drop them', () => {
-    // The rows are SERVER-side data — all three surfaces' descriptions
+    // The rows are SERVER-side data — all four surfaces' descriptions
     // and emitters, ~8 KB raw. They ride the root barrel, and the root
     // barrel is bundled into `@ggui-ai/iframe-runtime`, which is
     // size-gated. A browser never reads a refusal ROW: the only thing
@@ -495,3 +497,27 @@ function findCodeLiterals(
   walk(root);
   return offenders.sort();
 }
+
+describe('MCP_ENDPOINT_REFUSAL_CODES — the transport surface (registry v11, ggui#825)', () => {
+  it('is a non-empty tuple, derived exactly from the rows whose surfaces include mcp-endpoint', () => {
+    expect(MCP_ENDPOINT_REFUSAL_CODES).toBeDefined();
+    expect(Array.isArray(MCP_ENDPOINT_REFUSAL_CODES)).toBe(true);
+    expect([...(MCP_ENDPOINT_REFUSAL_CODES ?? [])].sort()).toEqual(codesOn('mcp-endpoint'));
+  });
+
+  it('names exactly app_deprovisioned — the one refusal with a tenant-side fix is the one that MUST be legible at the endpoint', () => {
+    expect([...(MCP_ENDPOINT_REFUSAL_CODES ?? [])]).toEqual(['app_deprovisioned']);
+  });
+
+  it('app_deprovisioned is emitted on both the render gate and the per-app MCP endpoint', () => {
+    const row = refusalRowContract.parse(PRE_GENERATION_REFUSAL_CODES?.app_deprovisioned);
+    expect([...row.surfaces].sort()).toEqual(['mcp-endpoint', 'render-gate']);
+    expect(row.retry).toBe('never');
+  });
+
+  it('no auth-failure state is a registry code — the three auth arms stay a bare 403 by contract', () => {
+    for (const notACode of ['no_issuer', 'foreign_issuer', 'subject_denied', 'forbidden', 'unauthorized']) {
+      expect(PRE_GENERATION_REFUSAL_CODES?.[notACode as keyof typeof PRE_GENERATION_REFUSAL_CODES]).toBeUndefined();
+    }
+  });
+});

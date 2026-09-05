@@ -56,6 +56,8 @@ import refuseNever from './cases/refuse-never.json' with { type: 'json' };
 import refuseNextPeriod from './cases/refuse-next-period.json' with { type: 'json' };
 import refuseNonRenderSurface from './cases/refuse-non-render-surface.json' with { type: 'json' };
 
+import { jsonEqual } from '../json-equal.js';
+
 /**
  * The refusal a deployment's gate returned, as the projector receives
  * it. Authored here rather than imported from `@ggui-ai/protocol`:
@@ -159,24 +161,6 @@ export interface RefusalEnvelopeConformanceResult {
   readonly passed: readonly string[];
   /** Cases the projector graded wrong — empty iff fully conformant. */
   readonly failed: readonly RefusalEnvelopeMismatch[];
-}
-
-/** Structural equality over plain JSON data. */
-function jsonEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
-    return false;
-  }
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-    return a.every((item, index) => jsonEqual(item, b[index]));
-  }
-  const left = a as { readonly [key: string]: unknown };
-  const right = b as { readonly [key: string]: unknown };
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  if (!jsonEqual(leftKeys, rightKeys)) return false;
-  return leftKeys.every((key) => jsonEqual(left[key], right[key]));
 }
 
 function projectionEqual(

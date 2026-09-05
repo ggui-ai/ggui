@@ -1,0 +1,25 @@
+{
+  "name": "refuse-deprovisioned-endpoint",
+  "description": "A deprovisioned app answers EVERY JSON-RPC request on its per-app MCP endpoint (initialize included) with HTTP 403 and a JSON-RPC error whose data.refusal carries the registry projection \u2014 code, message, fix, retry \u2014 so the client reads app_deprovisioned instead of guessing between a deleted app and a bad credential. error.code stays -32000 and error.message stays Forbidden: correct in effect, legible in form.",
+  "refusal": {
+    "code": "app_deprovisioned",
+    "message": "the app record has no owner claim any more \u2014 the app was deprovisioned",
+    "fix": "provision the app again; this app id never renders again",
+    "retry": "never"
+  },
+  "expect": {
+    "httpStatus": 403,
+    "error": {
+      "code": -32000,
+      "message": "Forbidden",
+      "data": {
+        "refusal": {
+          "code": "app_deprovisioned",
+          "message": "the app record has no owner claim any more \u2014 the app was deprovisioned",
+          "fix": "provision the app again; this app id never renders again",
+          "retry": "never"
+        }
+      }
+    }
+  }
+}

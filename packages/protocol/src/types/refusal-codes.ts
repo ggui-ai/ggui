@@ -66,11 +66,19 @@
  *   - `owner-api` — an app owner's own billing mutations.
  *   - `provisioning-api` — a tenant provisioning an app on behalf of
  *     its own users.
+ *   - `mcp-endpoint` — the per-app MCP endpoint's authorization, on
+ *     any JSON-RPC request (`initialize` included). The refusal rides
+ *     the JSON-RPC error object's `data.refusal` (HTTP 403, error code
+ *     `-32000`, message `Forbidden` — unchanged); only the codes listed
+ *     here are ever typed there, and an authorization failure that is
+ *     NOT one of them stays a bare 403 by contract, so a client can
+ *     never learn which of the untyped arms it hit.
  */
 export const REFUSAL_SURFACES = [
   'render-gate',
   'owner-api',
   'provisioning-api',
+  'mcp-endpoint',
 ] as const;
 
 /** One member of {@link REFUSAL_SURFACES}. */
@@ -255,7 +263,7 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
   },
   app_deprovisioned: {
     code: 'app_deprovisioned',
-    surfaces: ['render-gate'],
+    surfaces: ['render-gate', 'mcp-endpoint'],
     retry: 'never',
     emitter:
       "the generation gate's owner-claim check, before any reservation or metering",
@@ -420,25 +428,34 @@ type CodesOnSurface<S extends RefusalSurface> = {
 export type PreGenerationRefusalCode = CodesOnSurface<'render-gate'>;
 
 /**
- * Identity helper that only accepts an EXHAUSTIVE tuple of the
- * render-gate codes: omit one and the parameter type collapses to
- * `never`, so the call site is a compile error. A tuple is needed
- * because the wire enum requires a literal, non-empty tuple — a
- * runtime filter over the rows yields `string[]`, which cannot type an
- * enum. This keeps the tuple derived-CHECKED rather than a second list.
+ * A code that can appear in a per-app MCP endpoint refusal's
+ * `error.data.refusal.code` — i.e. one whose `surfaces` include
+ * `mcp-endpoint` (ggui#825). Derived, so a render-gate-only code is not
+ * expressible on the transport wire.
  */
-const exhaustiveRenderGateCodes = <
-  const T extends readonly PreGenerationRefusalCode[],
->(
-  codes: T &
-    (Exclude<PreGenerationRefusalCode, T[number]> extends never ? unknown : never),
-): T => codes;
+export type McpEndpointRefusalCode = CodesOnSurface<'mcp-endpoint'>;
+
+/**
+ * Identity helper that only accepts an EXHAUSTIVE tuple of one surface's
+ * codes: omit one and the parameter type collapses to `never`, so the
+ * call site is a compile error. A tuple is needed because a wire enum
+ * requires a literal, non-empty tuple — a runtime filter over the rows
+ * yields `string[]`, which cannot type an enum. This keeps every
+ * per-surface tuple derived-CHECKED rather than a second list.
+ */
+const exhaustiveCodesOn =
+  <S extends RefusalSurface>() =>
+  <const T extends readonly CodesOnSurface<S>[]>(
+    codes: T &
+      (Exclude<CodesOnSurface<S>, T[number]> extends never ? unknown : never),
+  ): T =>
+    codes;
 
 /**
  * Every render-gate code, as the literal tuple the wire enum
  * (`renderRefusalSchema.code`) is built from. Order is the registry's.
  */
-export const RENDER_GATE_REFUSAL_CODES = exhaustiveRenderGateCodes([
+export const RENDER_GATE_REFUSAL_CODES = exhaustiveCodesOn<'render-gate'>()([
   'unsupported_provider',
   'insufficient_credit',
   'hard_cap_exceeded',
@@ -452,5 +469,15 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveRenderGateCodes([
   'trial_expired',
   'issuer_rate_limited',
   'app_rate_limited',
+  'app_deprovisioned',
+]);
+
+/**
+ * Every mcp-endpoint code, as the literal tuple the transport wire enum
+ * (`transportRefusalSchema.code`) is built from — the refusals a per-app
+ * MCP endpoint's authorization types on `error.data.refusal`
+ * (ggui#825). Order is the registry's.
+ */
+export const MCP_ENDPOINT_REFUSAL_CODES = exhaustiveCodesOn<'mcp-endpoint'>()([
   'app_deprovisioned',
 ]);

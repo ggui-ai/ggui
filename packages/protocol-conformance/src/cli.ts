@@ -135,12 +135,12 @@ Options:
   --verbose, -v            Print failure details + skip reasons at the end.
   --help, -h               Show this help.
 
-Pure-function catalogs (refusal-envelope, registry-completeness):
+Pure-function catalogs (refusal-envelope, registry-completeness, transport-refusal):
   These grade an in-process function and a data table, not the wire, so
   the CLI cannot supply them over a URL. They appear on every scorecard
   as SKIPPED with the reason — an ungraded obligation stays visible
   rather than vanishing. To GRADE them, call runConformance()
-  programmatically with refusalProjector / refusalRegistry.
+  programmatically with refusalProjector / refusalRegistry / transportRefusalProjector.
 
 Exit codes:
   0  — at least one fixture executed and none failed.

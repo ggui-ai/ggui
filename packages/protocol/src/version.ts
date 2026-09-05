@@ -3167,6 +3167,14 @@
  *      grammar and nothing else, so `{}` still reaches the gate per r5); the
  *      full envelope (`renderInputEnvelopeSchema`) parses after the gate.
  *      Bare model ids are out.
+ *   r9. **Endpoint-level refusal (ggui#825):** registry surface
+ *      `mcp-endpoint` (v11) and the transport envelope — a per-app MCP
+ *      endpoint that refuses a request for a registry state answers HTTP
+ *      403 with `{ code: -32000, message: 'Forbidden', data: { refusal } }`
+ *      (`transportRefusalErrorSchema`; `refusal` = the projection without
+ *      the render-only fields, `MCP_ENDPOINT_REFUSAL_CODES` derived — today
+ *      `app_deprovisioned`). Untyped authorization failures keep the bare
+ *      403 by contract. Additive.
  *
  * FOLLOWER — moves in the SAME commit as this constant, pinned by a
  * gate that fails loud when it lags: the `protocol` field of every

@@ -32,6 +32,11 @@ import {
   registryCompletenessPins,
   type RefusalRegistryView,
 } from './registry-completeness/index.js';
+import {
+  transportRefusalCases,
+  type ProjectedTransportRefusal,
+  type TransportRefusalInput,
+} from './transport-refusal-conformance/index.js';
 
 /**
  * A URL the runner must never dial. Every case below filters the WS
@@ -55,6 +60,15 @@ const ENVELOPE_ROWS = refusalEnvelopeCases.map((c) => `refusal-envelope/${c.name
 const REGISTRY_ROWS = registryCompletenessPins.map(
   (p) => `registry-completeness/${p.name}`,
 );
+const TRANSPORT_ROWS = transportRefusalCases.map((c) => `transport-refusal/${c.name}`);
+
+/** A conformant endpoint projector, built from the catalog's own `expect`. */
+function catalogTransportProjector(
+  refusal: TransportRefusalInput,
+): ProjectedTransportRefusal | null {
+  const match = transportRefusalCases.find((c) => c.refusal.code === refusal.code);
+  return match?.expect ?? null;
+}
 
 /**
  * A conformant projector, built from the catalog's own `expect` — this
@@ -154,11 +168,36 @@ describe('runConformance — pure-function catalog fold', () => {
     expect(result.skipped).toEqual([]);
   });
 
-  it('prints both catalogs on the scorecard, skipped rows included', async () => {
-    const result = await run({ only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS] });
+  it('prints every pure-function catalog on the scorecard, skipped rows included', async () => {
+    const result = await run({ only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS] });
     const scorecard = formatScorecard(result);
     for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
       expect(scorecard).toContain(slug);
     }
+  });
+});
+
+describe('runConformance — transport-refusal catalog fold (ggui#825)', () => {
+  it('reports every transport-refusal row as SKIPPED, naming transportRefusalProjector, when it is not supplied', async () => {
+    const result = await run({ only: TRANSPORT_ROWS });
+    expect(result.passed).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.skipped.map((s) => s.name).sort()).toEqual([...TRANSPORT_ROWS].sort());
+    for (const skipped of result.skipped) {
+      expect(skipped.reason).toMatch(/transportRefusalProjector/);
+    }
+  });
+
+  it('grades the transport-refusal catalog when a projector is supplied', async () => {
+    const result = await run({ only: TRANSPORT_ROWS, transportRefusalProjector: catalogTransportProjector });
+    expect(result.failed).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect([...result.passed].sort()).toEqual([...TRANSPORT_ROWS].sort());
+  });
+
+  it('a bare-403 projector fails the deprovisioned row with the catalog criterion named', async () => {
+    const result = await run({ only: TRANSPORT_ROWS, transportRefusalProjector: () => null });
+    expect(result.failed.map((f) => f.name)).toEqual(['transport-refusal/refuse-deprovisioned-endpoint']);
+    expect(result.failed[0]?.criterion).toMatch(/mcp-endpoint/);
   });
 });

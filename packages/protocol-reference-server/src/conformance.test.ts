@@ -164,6 +164,10 @@ const EXPECTED_PASSING = [
  *     so it would re-grade the kit's reference rather than add signal.
  *     Wire these rows the moment this server grows a tool plane.
  *     The registry half of #786 IS graded here — see EXPECTED_PASSING.
+ *   - `transport-refusal/*` (ggui#825): the endpoint-level refusal a
+ *     deployment's error mapper types on a per-app endpoint's 403. This
+ *     server has no per-app endpoint and no error mapper, so it supplies
+ *     no `transportRefusalProjector` — SKIPPED, named.
  */
 const EXPECTED_SKIPPED = [
   'bootstrap-bundle-fetch-failed',
@@ -175,6 +179,8 @@ const EXPECTED_SKIPPED = [
   'refusal-envelope/refuse-never',
   'refusal-envelope/refuse-next-period',
   'refusal-envelope/refuse-non-render-surface',
+  'transport-refusal/refuse-deprovisioned-endpoint',
+  'transport-refusal/refuse-render-only-code',
 ];
 
 /**

@@ -204,6 +204,23 @@ export type {
   RegistryCompletenessResult,
 } from './registry-completeness/index.js';
 
+// Transport-refusal — the JSON-RPC error a per-app MCP endpoint answers
+// with when it refuses a request for a typed reason (ggui#825): HTTP 403,
+// `-32000` / `Forbidden` unchanged, `data.refusal` carrying the registry
+// projection without the render-only fields; a code whose surfaces
+// exclude `mcp-endpoint` projects to nothing.
+export {
+  runTransportRefusalConformance,
+  transportRefusalCases,
+} from './transport-refusal-conformance/index.js';
+export type {
+  ProjectedTransportRefusal,
+  TransportRefusalConformanceCase,
+  TransportRefusalConformanceResult,
+  TransportRefusalInput,
+  TransportRefusalMismatch,
+} from './transport-refusal-conformance/index.js';
+
 // Resource-read conformance — the kit's first MCP-binding driver, and
 // it binds `resources/read` ONLY (`tools/call` has none). A read of a
 // render locator has exactly two exits: a result whose contents
