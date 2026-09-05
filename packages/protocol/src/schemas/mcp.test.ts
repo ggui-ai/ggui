@@ -1,6 +1,5 @@
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import { expectTypeOf } from 'vitest';
-import type { z } from 'zod';
 import {
   blueprintValidationResultSchema,
   mcpUiDisplayModeSchema,
@@ -1332,7 +1331,7 @@ describe('tool output schemas — protocol owns every wire shape a handler regis
 
 describe('ggui_list_featured_blueprints — the provider row is its own wire statement (#817 part C, oss add)', () => {
   it('round-trips a BlueprintEntry row and is closed', () => {
-    const out = { blueprints: [{ id: 'bp_1', name: 'Todo', description: 'd', source: 'manifest', updatedAt: '2026-09-05T00:00:00Z', tags: ['a'] }], total: 1 };
+    const out = { blueprints: [{ id: 'bp_1', name: 'Todo', description: 'd', source: { kind: "llm", generator: 'x', model: 'x' }, updatedAt: '2026-09-05T00:00:00Z', tags: ['a'] }], total: 1 };
     expect(gguiListFeaturedBlueprintsOutputSchema.parse(out)).toEqual(out);
     expect(Object.keys(gguiListFeaturedBlueprintsOutputSchema.shape).sort()).toEqual(['blueprints', 'total']);
     expect(gguiListFeaturedBlueprintsOutputSchema.parse({ ...out, extra: 1 })).toEqual(out);

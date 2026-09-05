@@ -35,6 +35,8 @@ import type {
 } from '../types/data-contract.js';
 import { appThemeSchema, type AppTheme } from '../schemas/app-theme.js';
 import { isRecord } from '../validation/is-record.js';
+import type { z } from 'zod';
+import type { gguiSessionSummaryWireSchema } from '../schemas/mcp';
 
 /**
  * MCP capability name ggui servers advertise in their MCP `initialize`
@@ -819,16 +821,9 @@ export function parseMcpAppAiGguiHostSessionMeta(
  *
  * @public
  */
-export interface GguiSessionSummaryWire {
-  readonly sessionId: string;
-  readonly hostName?: string;
-  readonly hostSessionId?: string;
-  readonly createdAt: string;
-  readonly lastActivityAt: string;
-  readonly status: string;
-  readonly wsToken?: string;
-  readonly wsTokenExpiresAt?: string;
-}
+export type GguiSessionSummaryWire = Readonly<
+  z.infer<typeof gguiSessionSummaryWireSchema>
+>;
 
 // =============================================================================
 // Inbound — third-party MCP Apps hosted inside a ggui render.

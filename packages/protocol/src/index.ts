@@ -17,6 +17,7 @@ export * from "./types/live-channel";
 export * from "./types/ui-generator";
 export * from "./types/mcp";
 export * from "./schemas/mcp";
+export type { DeepReadonly } from "./types/readonly";
 export * from "./schemas/invoke";
 export * from "./schemas/data-contract";
 // Per-app theme overlay — `AppTheme` + injection-safe `appThemeSchema`

@@ -66,6 +66,17 @@ export type {
 } from '@modelcontextprotocol/ext-apps';
 
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
+import type { z } from 'zod';
+import type { hostContextProjectionSchema, mcpUiDisplayModeSchema } from '../schemas/mcp';
+import type { DeepReadonly } from './readonly';
+
+/**
+ * The wire enum is assignable to ext-apps' `McpUiDisplayMode` — checked at
+ * compile time, so a display mode the host SDK adds is a protocol change
+ * here, never a silent widening.
+ */
+export type HostContextDisplayModeIsExtApps =
+  z.infer<typeof mcpUiDisplayModeSchema> extends McpUiDisplayMode ? true : never;
 
 // =============================================================================
 // Container dimensions (mirror of `McpUiHostContext.containerDimensions`)
@@ -127,22 +138,9 @@ export interface HostContextDeviceCapabilities {
  * `userAgent` + `toolInfo` intentionally EXCLUDED for v1 — easy to add
  * later if a concrete use case appears.
  */
-export interface HostContextProjection {
-  /** Display modes the host can render this view in. Absent ⇒ assume `['inline']`. */
-  readonly availableDisplayModes?: readonly McpUiDisplayMode[];
-  /** Current display mode the host is rendering. Absent ⇒ assume `'inline'`. */
-  readonly currentDisplayMode?: McpUiDisplayMode;
-  /** Iframe container dimensions. Absent ⇒ unknown; use a reasonable default. */
-  readonly containerDimensions?: HostContextContainerDimensions;
-  /** Host platform classification. */
-  readonly platform?: 'web' | 'desktop' | 'mobile';
-  /** Touch / hover input capability. */
-  readonly deviceCapabilities?: HostContextDeviceCapabilities;
-  /** User's BCP-47 locale (e.g., `'en-US'`). */
-  readonly locale?: string;
-  /** User's IANA timezone (e.g., `'America/Los_Angeles'`). */
-  readonly timeZone?: string;
-}
+export type HostContextProjection = DeepReadonly<
+  z.infer<typeof hostContextProjectionSchema>
+>;
 
 // =============================================================================
 // Wire envelope (carried by the `host_context_observed` WebSocketMessage)

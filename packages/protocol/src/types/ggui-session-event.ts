@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import type { runtimePullEventsPageSchema } from '../schemas/mcp';
+import type { DeepReadonly } from './readonly';
 /**
  * GguiSessionEvent ledger — wire-frame replay primitives (R7).
  *
@@ -160,11 +163,9 @@ export function deriveEpochFromEvents(
  *
  * @public
  */
-export interface EventsResponse {
-  readonly events: ReadonlyArray<GguiSessionEvent>;
-  readonly lastSequence: number;
-  readonly hasMore: boolean;
-}
+export type EventsResponse = DeepReadonly<
+  z.infer<typeof runtimePullEventsPageSchema>
+>;
 
 /**
  * 410 Gone response body — `sinceSequence` predates the server's

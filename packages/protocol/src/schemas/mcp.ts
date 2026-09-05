@@ -30,7 +30,7 @@ import {
   handshakeSuggestionSchema,
 } from './handshake-suggestion';
 import { dataContractSchema } from './data-contract';
-import { blueprintVarianceSchema } from './blueprint';
+import { blueprintVarianceSchema, blueprintSourceSchema } from './blueprint';
 import {
   REFUSAL_RETRIES,
   RENDER_GATE_REFUSAL_CODES,
@@ -1469,3 +1469,142 @@ export function isRefusedRenderOutput(
 ): output is { outcome: 'refused'; refusal: PreGenerationRefusal } {
   return output.outcome === 'refused';
 }
+
+// ============================================================================
+// Tool output schemas the protocol owns (#817 part C). A handler registers
+// `<schema>.shape` as its MCP `outputSchema` and derives its output type from
+// the schema — never a parallel interface. No `.readonly()` here: zod 4
+// projects it as `readOnly` into the advertised JSON Schema, and the wire is
+// mutable JSON; readonly is applied at the seam (`DeepReadonly` on the
+// derived types). Every shape is closed: the transport strip-parses against
+// `.shape`, so the shape IS the wire.
+// ============================================================================
+
+/** Display modes an MCP Apps host can render a view in (ext-apps vocabulary). */
+export const mcpUiDisplayModeSchema = z.enum(['inline', 'fullscreen', 'pip']);
+
+/**
+ * The host-context projection the iframe-runtime observes and `ggui_consume`
+ * echoes (`client.hostContext`). Every field optional: a host that never
+ * reports one leaves it absent — absent ⇒ the documented default.
+ */
+export const hostContextProjectionSchema = z.object({
+  availableDisplayModes: z.array(mcpUiDisplayModeSchema).optional(),
+  currentDisplayMode: mcpUiDisplayModeSchema.optional(),
+  containerDimensions: z
+    .object({
+      width: z.number().optional(),
+      maxWidth: z.number().optional(),
+      height: z.number().optional(),
+      maxHeight: z.number().optional(),
+    })
+    .optional(),
+  platform: z.enum(['web', 'desktop', 'mobile']).optional(),
+  deviceCapabilities: z
+    .object({ touch: z.boolean().optional(), hover: z.boolean().optional() })
+    .optional(),
+  locale: z.string().optional(),
+  timeZone: z.string().optional(),
+});
+
+/** `ggui_consume`'s `client` slice — what the runtime observed about its host. */
+export const clientObservationsSchema = z.object({
+  hostContext: hostContextProjectionSchema.optional(),
+});
+
+/** One row of `ggui_list_sessions` — eight closed keys; nothing passes through. */
+export const gguiSessionSummaryWireSchema = z.object({
+  sessionId: z.string(),
+  hostName: z.string().optional(),
+  hostSessionId: z.string().optional(),
+  createdAt: z.string(),
+  lastActivityAt: z.string(),
+  status: z.string(),
+  wsToken: z.string().optional(),
+  wsTokenExpiresAt: z.string().optional(),
+});
+
+/**
+ * `ggui_get_session`'s wire: the store row's six base fields plus the mount
+ * variant — for EVERY session. An MCP-Apps mount is locator-only on the
+ * render object, but its store row carries the base fields, so the
+ * projection reads them from the row and the wire never fails on that
+ * variant. The locator itself is not on this wire (MCP-Apps resources have
+ * their own paths).
+ */
+export const gguiGetSessionOutputSchema = z.object({
+  variant: z.enum(['render', 'mcpApps']),
+  id: z.string(),
+  appId: z.string(),
+  eventSequence: z.number().int().nonnegative(),
+  createdAt: z.number().int().nonnegative(),
+  lastActivityAt: z.number().int().nonnegative(),
+  expiresAt: z.number().int().nonnegative(),
+});
+
+/** The three sequential gates of `ggui_protocol_validate_blueprint`. */
+export const blueprintValidationTierSchema = z.enum(['compile', 'selfCheck', 'runtime']);
+
+export const blueprintValidationIssueSchema = z.object({
+  tier: blueprintValidationTierSchema,
+  code: z.string(),
+  message: z.string(),
+  fix: z.string().optional(),
+});
+
+/** `ggui_protocol_validate_blueprint`'s result envelope: `failedAt` names the tier that stopped, or null. */
+export const blueprintValidationResultSchema = z.object({
+  valid: z.boolean(),
+  failedAt: blueprintValidationTierSchema.nullable(),
+  errors: z.array(blueprintValidationIssueSchema),
+  warnings: z.array(blueprintValidationIssueSchema),
+});
+
+/** A provider row — what `ggui_list_featured_blueprints` returns per blueprint. */
+export const blueprintEntryWireSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  source: blueprintSourceSchema,
+  updatedAt: z.string(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const gguiListFeaturedBlueprintsOutputSchema = z.object({
+  blueprints: z.array(blueprintEntryWireSchema),
+  total: z.number().int().nonnegative(),
+});
+
+/** One `ggui_search_blueprints` hit — a scored row plus the registry-only keys. */
+export const gguiSearchBlueprintsResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  category: z.string(),
+  props: z.array(
+    z.object({ name: z.string(), type: z.string(), required: z.boolean(), description: z.string() }),
+  ),
+  callbacks: z.array(z.string()),
+  featured: z.boolean(),
+  relevance: z.literal('match'),
+  score: z.number(),
+  origin: z.literal('registry').optional(),
+  artifactId: z.string().optional(),
+  version: z.string().optional(),
+  mcpTools: z.array(z.object({ server: z.string().optional(), tool: z.string() })).optional(),
+  scopeVerification: z.enum(['verified', 'unverified']).optional(),
+});
+
+export const gguiSearchBlueprintsOutputSchema = z.object({
+  results: z.array(gguiSearchBlueprintsResultSchema),
+  total: z.number(),
+  query: z.string(),
+  degradedSources: z
+    .array(
+      z.object({
+        source: z.literal('registry'),
+        reason: z.enum(['unreachable', 'timeout', 'invalid_response']),
+      }),
+    )
+    .optional(),
+});

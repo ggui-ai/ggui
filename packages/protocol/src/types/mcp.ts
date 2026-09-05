@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
-import type { GguiSession, GguiSessionStatus } from './render';
+import type { GguiSessionStatus } from './render';
+import type { DeepReadonly } from './readonly';
 import type {
   consumeInputSchema,
   getRenderSourceInputSchema,
@@ -23,6 +24,8 @@ import type {
   amendInputSchema,
   amendOutputSchema,
   declareToolCatalogOutputSchema,
+  gguiGetSessionOutputSchema,
+  gguiSearchBlueprintsOutputSchema,
 } from '../schemas/mcp';
 import type {
   EventsResponse,
@@ -170,7 +173,9 @@ export type GguiGetSessionInput = z.infer<typeof getSessionInputSchema>;
 /**
  * Output from ggui_get_session tool — full render snapshot.
  */
-export type GguiGetSessionOutput = GguiSession;
+export type GguiGetSessionOutput = Readonly<
+  z.infer<typeof gguiGetSessionOutputSchema>
+>;
 
 /**
  * Input for ggui_get_render_source tool — read the generated source of
@@ -281,47 +286,9 @@ export type GguiSearchBlueprintsInput = z.infer<
 /**
  * Output from ggui_search_blueprints tool
  */
-export interface GguiSearchBlueprintsOutput {
-  /** Matching blueprints ordered by relevance */
-  results: Array<{
-    id: string;
-    name: string;
-    description: string;
-    category: string;
-    props: Array<{ name: string; type: string; required: boolean; description: string }>;
-    callbacks: string[];
-    /** Whether this is a featured blueprint (curated by the app developer) */
-    featured: boolean;
-    relevance: 'match';
-    /** Cosine similarity score (0-1). Higher = better match. Agents can use this
-     *  to decide whether to use a blueprint or generate from scratch. */
-    score: number;
-    /** Present only on registry-sourced entries — advisory candidates
-     *  appended after local results, never auto-mounted. */
-    origin?: 'registry';
-    /** Registry artifact id (`@scope/name`) — registry entries only. */
-    artifactId?: string;
-    /** Registry artifact version — registry entries only. */
-    version?: string;
-    /** MCP tool bindings the artifact declares (publisher claims, not
-     *  endorsements by the named server) — registry entries only. */
-    mcpTools?: ReadonlyArray<{ server?: string; tool: string }>;
-    /** Publisher-scope verification label — registry entries only. */
-    scopeVerification?: 'verified' | 'unverified';
-  }>;
-  /** Total matches found */
-  total: number;
-  /** The query that was searched */
-  query: string;
-  /**
-   * Sources consulted but skipped this call (e.g. registry timeout).
-   * Present only when a source degraded; the tool call still succeeds.
-   */
-  degradedSources?: ReadonlyArray<{
-    source: 'registry';
-    reason: 'unreachable' | 'timeout' | 'invalid_response';
-  }>;
-}
+export type GguiSearchBlueprintsOutput = DeepReadonly<
+  z.infer<typeof gguiSearchBlueprintsOutputSchema>
+>;
 
 /**
  * Input for ggui_render_blueprint tool — renders a specific blueprint.
