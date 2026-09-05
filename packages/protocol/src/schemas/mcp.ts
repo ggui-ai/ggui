@@ -7,7 +7,7 @@
  * Two consumption patterns, both anchored here:
  *
  *   - **Wired raw shapes** (`*InputShape`): handlers in
- *     `@ggui-ai/mcp-server-handlers` (and the hosted pod's discover
+ *     `@ggui-ai/mcp-server-handlers` (and a hosted deployment's discover
  *     tool) import the SHAPE directly as their `inputSchema` and
  *     validate with `z.object(shape)` — unknown keys are STRIPPED.
  *     The shape is the one authored copy of the validation rules AND
@@ -60,7 +60,7 @@ export const consumeInputShape = {
     .string()
     .min(1)
     .describe(
-      'Globally-unique sessionId to consume events from. Cross-tenant access surfaces uniformly as session_not_found.',
+      'Globally-unique sessionId to consume events from. Cross-app access surfaces uniformly as session_not_found.',
     ),
   timeout: z
     .number()
@@ -1022,7 +1022,7 @@ export const renderOutputSchema = z.object({
  *     wise). Use when most props stay the same and the agent only
  *     needs to send a small delta — common after a single domain-tool
  *     mutation. RFC 7396 chosen because it has a published spec and
- *     wide library support (GitHub API, Kubernetes strategic-merge).
+ *     wide library support (GitHub API's merge semantics, strategic-merge-patch).
  *
  * Anti-patterns (the discriminated union rejects these structurally,
  * but they're a common author mistake when copy-pasting):
@@ -1336,14 +1336,14 @@ export const gguiSessionEventSchema = z.object({
  * and `limit` is clamped to {@link RUNTIME_PULL_MAX_LIMIT} instead of
  * rejecting above it. Tenancy violations and unknown sessionIds
  * surface uniformly as the `session_not_found` error — existence of
- * other tenants' renders is never leaked.
+ * other apps' renders is never leaked.
  */
 export const runtimePullInputShape = {
   sessionId: z
     .string()
     .min(1)
     .describe(
-      'Active render id — sourced from `_meta["ai.ggui/render"].sessionId` on the iframe boot envelope. Unknown and cross-tenant ids surface uniformly as session_not_found.',
+      'Active render id — sourced from `_meta["ai.ggui/render"].sessionId` on the iframe boot envelope. Unknown and cross-app ids surface uniformly as session_not_found.',
     ),
   sinceSequence: z
     .number()
