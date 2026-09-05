@@ -6,12 +6,9 @@
  * Lambda. Pure over the {@link ConnectorKeysSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
-import type {
-  ConnectorKeySummary,
-  ConnectorKeysSource,
-} from './types.js';
+import type { ConnectorKeysSource } from './types.js';
 
 const inputSchema = {} satisfies Record<string, never>;
 
@@ -30,22 +27,15 @@ const outputSchema = {
   ),
 } as const;
 
-export interface ListConnectorKeysOutput {
-  readonly keys: readonly ConnectorKeySummary[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type ListConnectorKeysOutput = ShapeOutput<typeof outputSchema>;
 
 export interface ListConnectorKeysDeps {
   readonly connectorKeys: ConnectorKeysSource;
 }
 
-export function createListConnectorKeysHandler(
-  deps: ListConnectorKeysDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  ListConnectorKeysOutput
-> {
-  return {
+export function createListConnectorKeysHandler(deps: ListConnectorKeysDeps) {
+  return defineHandler({
     name: 'ggui_ops_list_connector_keys',
     title: 'List connector keys',
     audience: ['ops'],
@@ -62,7 +52,8 @@ export function createListConnectorKeysHandler(
         ctx,
       );
       const keys = await deps.connectorKeys.list(ownerSub);
-      return { keys };
+      // Seam rows are immutable; the wire carries a fresh mutable copy.
+      return { keys: [...keys] };
     },
-  };
+  });
 }

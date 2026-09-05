@@ -48,8 +48,7 @@
 import { z } from 'zod';
 import type { UiRegistry } from '@ggui-ai/ui-registry';
 import { renderBlueprintInputShape } from '@ggui-ai/protocol';
-import type { GguiRenderBlueprintOutput } from '@ggui-ai/protocol';
-import type { SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput } from '../types.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
 // (`schemas/mcp.ts`).
@@ -61,6 +60,8 @@ const outputSchema = {
   code: z.string(),
   contentType: z.string(),
 };
+/** The wire shape — derived from `outputSchema` (#817); the protocol's `GguiRenderBlueprintOutput` is the consumer-facing type. */
+type RenderBlueprintOutput = ShapeOutput<typeof outputSchema>;
 
 /** Deps for {@link createRenderBlueprintHandler}. */
 export interface RenderBlueprintDeps {
@@ -82,8 +83,8 @@ export interface RenderBlueprintDeps {
  */
 export function createRenderBlueprintHandler(
   deps: RenderBlueprintDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRenderBlueprintOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_render_blueprint',
     title: 'Render blueprint',
     audience: ['agent'],
@@ -91,7 +92,7 @@ export function createRenderBlueprintHandler(
       "Render a registered blueprint (ggui.json#blueprints.include → ggui.ui.json) into its compiled JS bundle. Returns inline `code` + `contentType` — the caller mounts it directly. Fails with a clear error when the id is unknown or the registry has no bundle available (source-only dev, compile-failed).",
     inputSchema,
     outputSchema,
-    async handler(rawInput: Record<string, unknown>): Promise<GguiRenderBlueprintOutput> {
+    async handler(rawInput: Record<string, unknown>): Promise<RenderBlueprintOutput> {
       const { blueprintId } = z.object(inputSchema).parse(rawInput);
 
       const entry = await deps.uiRegistry.get(blueprintId);
@@ -118,7 +119,7 @@ export function createRenderBlueprintHandler(
         contentType: bundle.contentType,
       };
     },
-  };
+  });
 }
 
 /**

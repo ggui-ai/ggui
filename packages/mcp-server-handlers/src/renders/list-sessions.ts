@@ -27,12 +27,13 @@
  */
 
 import { z } from 'zod';
+import { gguiSessionSummaryWireSchema } from '@ggui-ai/protocol';
 import type { GguiSessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   GguiSessionStore,
   StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 
 const inputSchema = {
   hostName: z
@@ -60,39 +61,21 @@ const inputSchema = {
     ),
 } as const;
 
-const renderSummaryWireSchema = z
-  .object({
-    sessionId: z.string(),
-    hostName: z.string().optional(),
-    hostSessionId: z.string().optional(),
-    createdAt: z.string(),
-    lastActivityAt: z.string(),
-    status: z.string(),
-    // wsToken + expiresAt are populated iff the deployment wired a
-    // `mintWsToken` seam. Hosts that just want to enumerate renders
-    // (without immediately rehydrating) wire no seam and get the lean
-    // summary; hosts driving a resume flow wire the seam and get a
-    // fresh credential per render so the frontend can immediately
-    // call `/api/sessions/:id/state?wsToken=<>` to mount each iframe.
-    wsToken: z.string().optional(),
-    wsTokenExpiresAt: z.string().optional(),
-  })
-  .passthrough();
-
+// The protocol owns the summary's wire shape (#817): eight closed keys — no
+// `.passthrough()`; the docs and `projectSummary` were always closed at eight.
+// `wsToken` + `wsTokenExpiresAt` are populated iff the deployment wired a
+// `mintWsToken` seam (hosts driving a resume flow); others get the lean summary.
 const outputSchema = {
-  sessions: z.array(renderSummaryWireSchema),
+  sessions: z.array(gguiSessionSummaryWireSchema),
 } as const;
 
 // `GguiSessionSummaryWire` is re-exported below from
-// `@ggui-ai/protocol/integrations/mcp-apps` — single typed source of
-// truth, kept on the protocol so non-handler consumers (sample-agent's
-// `/chat/restore` route, future host SDK helpers) import the same
-// shape rather than redeclaring it.
+// `@ggui-ai/protocol/integrations/mcp-apps` — the protocol's derived type,
+// kept there so non-handler consumers import the same shape.
 export type { GguiSessionSummaryWire };
 
-interface ListSessionsOutput {
-  readonly sessions: readonly GguiSessionSummaryWire[];
-}
+/** The wire shape — derived from the registered schema (#817). */
+type ListSessionsOutput = ShapeOutput<typeof outputSchema>;
 
 /**
  * Seam for the freshly-minted ws-token attached to each listed
@@ -123,10 +106,8 @@ export interface GguiListSessionsHandlerDeps {
 
 const DEFAULT_LIMIT = 50;
 
-export function createGguiListSessionsHandler(
-  deps: GguiListSessionsHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListSessionsOutput> {
-  return {
+export function createGguiListSessionsHandler(deps: GguiListSessionsHandlerDeps) {
+  return defineHandler({
     name: 'ggui_list_sessions',
     title: 'List GguiSessions',
     audience: ['agent'],
@@ -156,7 +137,7 @@ export function createGguiListSessionsHandler(
         ),
       };
     },
-  };
+  });
 }
 
 function projectSummary(

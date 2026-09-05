@@ -16,7 +16,7 @@
  */
 import { appThemeSchema } from '@ggui-ai/protocol';
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { AppNotFoundError } from './types.js';
 import type { AppsSource } from './types.js';
@@ -98,8 +98,8 @@ export function detectBrandShapedOverlay(
 
 export function createSetAppThemeHandler(
   deps: SetAppThemeDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, SetAppThemeOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_set_app_theme',
     title: 'Set app theme',
     audience: ['ops'],
@@ -133,5 +133,5 @@ export function createSetAppThemeHandler(
         updatedAt: written.updatedAt,
       };
     },
-  };
+  });
 }

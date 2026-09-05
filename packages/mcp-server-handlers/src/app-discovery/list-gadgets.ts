@@ -46,10 +46,9 @@ import { z } from 'zod';
 import {
   resolveAppGadgets,
   gadgetDescriptorSchema,
-  type GadgetDescriptor,
 } from '@ggui-ai/protocol';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { AppAccessDeniedError } from './errors.js';
 
 const inputSchema = {
@@ -92,18 +91,11 @@ export interface GguiListGadgetsHandlerDeps {
   readonly appMetadataStore: AppMetadataStore;
 }
 
-export interface GguiListGadgetsOutput {
-  readonly gadgets: readonly GadgetDescriptor[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type GguiListGadgetsOutput = ShapeOutput<typeof outputSchema>;
 
-export function createGguiListGadgetsHandler(
-  deps: GguiListGadgetsHandlerDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  GguiListGadgetsOutput
-> {
-  return {
+export function createGguiListGadgetsHandler(deps: GguiListGadgetsHandlerDeps) {
+  return defineHandler({
     name: 'ggui_list_gadgets',
     title: 'List gadgets',
     audience: ['agent'],
@@ -128,7 +120,9 @@ export function createGguiListGadgetsHandler(
       // get a meaningful catalog. This mirrors the cloud DDB adapter's
       // default-on-read pattern at the row-projection site.
       const gadgets = resolveAppGadgets(app?.gadgets);
-      return { gadgets };
+      // A fresh copy: the resolver may hand back the stdlib singleton, which is
+      // a resolver-internal guard, never a wire fact — the wire is mutable JSON.
+      return { gadgets: [...gadgets] };
     },
-  };
+  });
 }

@@ -33,12 +33,12 @@
  */
 
 import { z } from 'zod';
-import { clientObservationsSchema } from './client-observations.js';
 import {
+  clientObservationsSchema,
   consumeInputShape,
   parsePendingEnvelope,
   type ConsumeEventEntry,
-  type GguiConsumeOutput,
+  type HostContextProjection,
   type PendingEvent,
   type GguiSessionStatus,
 } from '@ggui-ai/protocol';
@@ -47,7 +47,7 @@ import {
   type PendingEventConsumer,
   type GguiSessionStore,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { isVisibleToCaller } from './tenancy.js';
 
@@ -77,8 +77,12 @@ const outputSchema = {
   // handshake exposes. Lets the agent pick up mid-render changes
   // (window resize, user toggling fullscreen, etc.) on its next
   // consume hit without waiting for the next handshake.
-  client: clientObservationsSchema,
+  // The protocol owns the observation schemas (#817); `.optional()` is the
+  // registration's — the client block travels only when the host sent context.
+  client: clientObservationsSchema.optional(),
 } as const;
+/** The wire shape — derived from the registered fields (#817). */
+type ConsumeOutput = ShapeOutput<typeof outputSchema>;
 
 /**
  * Optional observer-notification seam. Cloud uses this to fan a
@@ -198,10 +202,8 @@ interface ConsumeResultRaw {
 
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60; // 1 day
 
-export function createGguiConsumeHandler(
-  deps: GguiConsumeHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiConsumeOutput> {
-  return {
+export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
+  return defineHandler({
     name: 'ggui_consume',
     title: 'Consume',
     audience: ['agent'],
@@ -212,7 +214,7 @@ export function createGguiConsumeHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiConsumeOutput> {
+    ): Promise<ConsumeOutput> {
       const { sessionId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
       // Register this long-poll on the active-consumer registry IMMEDIATELY
@@ -388,16 +390,35 @@ export function createGguiConsumeHandler(
         // mid-render changes without waiting for the next handshake.
         // Wrapper omitted when no projection exists yet.
         return {
-          events,
+          // Each row copied onto the wire as a plain record — the entries are
+          // typed seam values, the wire is mutable JSON.
+          events: events.map((entry) => ({ ...entry })),
           status: result.status ?? ('active' as GguiSessionStatus),
           ...(stored.hostContext !== undefined
-            ? { client: { hostContext: stored.hostContext } }
+            ? { client: { hostContext: projectHostContext(stored.hostContext) } }
             : {}),
         };
       } finally {
         deps.activeConsumerRegistry?.exit(sessionId);
       }
     },
+  });
+}
+
+/**
+ * Copy the stored host-context projection onto the wire: the stored value is
+ * immutable seam state (the protocol types it `DeepReadonly`); the wire is
+ * mutable JSON, so the one array is copied and every present field carried.
+ */
+function projectHostContext(h: HostContextProjection): NonNullable<NonNullable<ConsumeOutput['client']>['hostContext']> {
+  return {
+    ...(h.availableDisplayModes !== undefined ? { availableDisplayModes: [...h.availableDisplayModes] } : {}),
+    ...(h.currentDisplayMode !== undefined ? { currentDisplayMode: h.currentDisplayMode } : {}),
+    ...(h.containerDimensions !== undefined ? { containerDimensions: { ...h.containerDimensions } } : {}),
+    ...(h.platform !== undefined ? { platform: h.platform } : {}),
+    ...(h.deviceCapabilities !== undefined ? { deviceCapabilities: { ...h.deviceCapabilities } } : {}),
+    ...(h.locale !== undefined ? { locale: h.locale } : {}),
+    ...(h.timeZone !== undefined ? { timeZone: h.timeZone } : {}),
   };
 }
 

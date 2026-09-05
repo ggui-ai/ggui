@@ -8,15 +8,13 @@
  * MCP tool surface MUST agree with the provider enum on the stored
  * `GguiUserProviderKey` record.
  */
+import { z } from 'zod';
 
-export type ProviderName = 'anthropic' | 'openai' | 'google' | 'openrouter';
+/** The provider enum — ONE source; the wire schema, the type and the guard all derive from it. */
+export const providerNameSchema = z.enum(['anthropic', 'openai', 'google', 'openrouter']);
+export type ProviderName = z.output<typeof providerNameSchema>;
 
-export const SUPPORTED_PROVIDERS: readonly ProviderName[] = [
-  'anthropic',
-  'openai',
-  'google',
-  'openrouter',
-];
+export const SUPPORTED_PROVIDERS: readonly ProviderName[] = providerNameSchema.options;
 
 export function isProviderName(value: unknown): value is ProviderName {
   return (
@@ -28,21 +26,24 @@ export function isProviderName(value: unknown): value is ProviderName {
 /**
  * Slim metadata shape returned by `list` + `set`. NEVER carries
  * plaintext, NEVER carries the encrypted ciphertext blob.
+ *
+ * Fields: `provider`; `label` — optional human label set by the caller;
+ * `lastFour` — last 4 chars of the plaintext, for re-identification;
+ * `createdAt` — ISO timestamp when this key was set; `lastUsedAt` — ISO
+ * timestamp updated by the resolver on the LLM-call path (best-effort),
+ * surfaced as "last seen" by the list tool and by any UI that shows keys.
+ *
+ * This zod schema IS the wire shape of `ggui_ops_list_provider_keys`; the
+ * type derives from it (#817).
  */
-export interface ProviderKeySummary {
-  provider: ProviderName;
-  /** Optional human label set by the caller. */
-  label?: string;
-  /** Last 4 chars of the plaintext, for re-identification. */
-  lastFour: string;
-  /** ISO timestamp when this key was set. */
-  createdAt?: string;
-  /**
-   * ISO timestamp updated by the resolver on the LLM-call path
-   * (best-effort). Surfaces "last seen" in console + this MCP tool.
-   */
-  lastUsedAt?: string;
-}
+export const providerKeySummarySchema = z.object({
+  provider: providerNameSchema,
+  label: z.string().optional(),
+  lastFour: z.string(),
+  createdAt: z.string().optional(),
+  lastUsedAt: z.string().optional(),
+});
+export type ProviderKeySummary = z.output<typeof providerKeySummarySchema>;
 
 export interface SetProviderKeyInput {
   userId: string;

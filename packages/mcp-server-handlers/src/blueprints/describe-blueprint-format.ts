@@ -8,7 +8,7 @@
  * composing from stale training-data assumptions about the shape.
  */
 import { z } from 'zod';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 const inputSchema = {};
 
@@ -17,12 +17,6 @@ const outputSchema = {
   documentation: z.string(),
   example: z.record(z.string(), z.unknown()),
 };
-
-interface DescribeBlueprintFormatOutput {
-  readonly format: 'AgentBlueprint';
-  readonly documentation: string;
-  readonly example: Record<string, unknown>;
-}
 
 const DOCUMENTATION = `# AgentBlueprint format
 
@@ -131,12 +125,8 @@ export default function Hello(props: Props) {
   },
 };
 
-export function createDescribeBlueprintFormatHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  DescribeBlueprintFormatOutput
-> {
-  return {
+export function createDescribeBlueprintFormatHandler() {
+  return defineHandler({
     name: 'ggui_protocol_describe_blueprint_format',
     title: 'Describe blueprint format',
     audience: ['protocol'],
@@ -151,5 +141,5 @@ export function createDescribeBlueprintFormatHandler(): SharedHandler<
         example: EXAMPLE,
       };
     },
-  };
+  });
 }

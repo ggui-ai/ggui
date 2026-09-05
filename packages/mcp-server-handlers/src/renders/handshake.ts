@@ -77,7 +77,7 @@ import type {
   VariantSelectionContext,
   VariantSelectionDecision,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { buildSalvagedOrDeclined } from './handshake-fallbacks.js';
 import type { GguiLifecycleEmitter } from './lifecycle.js';
 
@@ -624,13 +624,13 @@ interface HandshakeOutput {
  */
 export function createGguiHandshakeHandler(
   deps: GguiHandshakeHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, HandshakeOutput> {
+) {
   const ttlSec = deps.ttlSec ?? HANDSHAKE_RECORD_TTL_SEC;
   const mintHandshakeId = deps.generateHandshakeId ?? (() => randomUUID());
   const nowIso = deps.now ?? (() => new Date().toISOString());
   const defaultGenerator = deps.defaultGenerator ?? DEFAULT_GENERATOR_SLUG;
 
-  return {
+  return defineHandler({
     name: 'ggui_handshake',
     title: 'Handshake',
     audience: ['agent'],
@@ -913,7 +913,7 @@ export function createGguiHandshakeHandler(
         ...(serverCapabilities ? { serverCapabilities } : {}),
       };
     },
-  };
+  });
 }
 
 /**

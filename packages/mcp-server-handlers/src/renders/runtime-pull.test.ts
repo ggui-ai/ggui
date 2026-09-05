@@ -8,11 +8,7 @@ import {
   runtimePullInputShape,
   runtimePullOutputSchema,
 } from '@ggui-ai/protocol';
-import type {
-  ComponentGguiSession,
-  EventsResponse,
-  GguiRuntimePullOutput,
-} from '@ggui-ai/protocol';
+import type { ComponentGguiSession, EventsResponse } from '@ggui-ai/protocol';
 import { createGguiRuntimePullHandler } from './runtime-pull.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
@@ -64,12 +60,20 @@ async function seedRender(
 
 const ctx = { appId: APP, requestId: 'r-pull' } as const;
 
-/** Narrowing helper — fails the test loudly when the wrong arm came back. */
-function expectPage(out: GguiRuntimePullOutput): EventsResponse {
-  if ('reason' in out) {
+/** What the handler puts on the wire: the two protocol arms flattened into one optional-field object. */
+type RuntimePullWire = Awaited<ReturnType<ReturnType<typeof createGguiRuntimePullHandler>['handler']>>;
+
+/**
+ * Narrowing helper — parses the flattened wire result against the protocol's
+ * own union (parity by construction on every call) and fails the test loudly
+ * when the wrong arm came back.
+ */
+function expectPage(out: RuntimePullWire): EventsResponse {
+  const parsed = runtimePullOutputSchema.parse(out);
+  if ('reason' in parsed) {
     throw new Error(`expected a normal page, got horizon arm: ${JSON.stringify(out)}`);
   }
-  return out;
+  return parsed;
 }
 
 describe('createGguiRuntimePullHandler', () => {

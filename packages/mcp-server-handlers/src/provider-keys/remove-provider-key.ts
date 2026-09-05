@@ -14,12 +14,11 @@
  *     `app_not_found`.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {
   AppScopedProviderKeyStore,
   ProviderKeyStore,
-  RemoveResult,
 } from './types.js';
 import { AppScopedKeysUnavailableError, isProviderName } from './types.js';
 
@@ -57,8 +56,8 @@ export interface RemoveProviderKeyDeps {
 
 export function createRemoveProviderKeyHandler(
   deps: RemoveProviderKeyDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, RemoveResult> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_remove_provider_key',
     title: 'Remove provider key',
     audience: ['ops'],
@@ -100,5 +99,5 @@ export function createRemoveProviderKeyHandler(
         provider: parsed.provider,
       });
     },
-  };
+  });
 }

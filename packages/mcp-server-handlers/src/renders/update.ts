@@ -76,7 +76,7 @@ import type {
   RenderIdentityStore,
   TelemetrySink,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
@@ -242,8 +242,8 @@ const outputSchema = updateOutputSchema.shape;
  */
 export function createGguiUpdateHandler(
   deps: GguiUpdateHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiUpdateOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_update',
     title: 'Update',
     _meta: {
@@ -406,5 +406,5 @@ export function createGguiUpdateHandler(
         'ui/resourceUri': output.resourceUri,
       };
     },
-  };
+  });
 }

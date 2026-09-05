@@ -19,7 +19,7 @@
  * Pure over the {@link AppsSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { AppNotFoundError } from './types.js';
 import type { AppRecord, AppsSource } from './types.js';
@@ -82,8 +82,8 @@ export interface UpdateAppDeps {
 
 export function createUpdateAppHandler(
   deps: UpdateAppDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, UpdateAppOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_update_app',
     title: 'Update app',
     audience: ['ops'],
@@ -142,5 +142,5 @@ export function createUpdateAppHandler(
         updatedAt: updated.updatedAt,
       };
     },
-  };
+  });
 }

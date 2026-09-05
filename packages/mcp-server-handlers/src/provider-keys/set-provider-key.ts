@@ -19,12 +19,11 @@
  * `ProviderKeySummary` shape).
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {
   AppScopedProviderKeyStore,
   ProviderKeyStore,
-  ProviderKeySummary,
 } from './types.js';
 import { AppScopedKeysUnavailableError, isProviderName } from './types.js';
 
@@ -73,8 +72,8 @@ export interface SetProviderKeyDeps {
 
 export function createSetProviderKeyHandler(
   deps: SetProviderKeyDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ProviderKeySummary> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_set_provider_key',
     title: 'Set provider key',
     audience: ['ops'],
@@ -120,5 +119,5 @@ export function createSetProviderKeyHandler(
         label: parsed.label,
       });
     },
-  };
+  });
 }

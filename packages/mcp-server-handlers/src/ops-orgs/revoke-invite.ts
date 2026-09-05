@@ -14,7 +14,7 @@
  * Pure over the {@link OrgInvitesSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgInviteRecord, OrgInvitesSource } from './types.js';
 
@@ -45,12 +45,8 @@ export interface RevokeInviteDeps {
 
 export function createRevokeInviteHandler(
   deps: RevokeInviteDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  RevokeInviteOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_revoke_invite',
     title: 'Revoke org invite',
     audience: ['ops'],
@@ -75,5 +71,5 @@ export function createRevokeInviteHandler(
         alreadyRevoked: result.alreadyRevoked,
       };
     },
-  };
+  });
 }

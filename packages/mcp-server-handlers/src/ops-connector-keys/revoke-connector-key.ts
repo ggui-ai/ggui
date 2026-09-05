@@ -10,7 +10,7 @@
  * Pure over the {@link ConnectorKeysSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {
   ConnectorKeySummary,
@@ -44,12 +44,8 @@ export interface RevokeConnectorKeyDeps {
 
 export function createRevokeConnectorKeyHandler(
   deps: RevokeConnectorKeyDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  RevokeConnectorKeyOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_revoke_connector_key',
     title: 'Revoke connector key',
     audience: ['ops'],
@@ -77,5 +73,5 @@ export function createRevokeConnectorKeyHandler(
         alreadyRevoked: result.alreadyRevoked,
       };
     },
-  };
+  });
 }

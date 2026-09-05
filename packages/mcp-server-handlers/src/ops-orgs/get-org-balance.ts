@@ -13,7 +13,7 @@
  * Pure over the {@link OrgsSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgBalanceRecord, OrgsSource } from './types.js';
 
@@ -40,8 +40,8 @@ export interface GetOrgBalanceDeps {
 
 export function createGetOrgBalanceHandler(
   deps: GetOrgBalanceDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, OrgBalanceRecord> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_get_org_balance',
     title: 'Get org balance',
     audience: ['ops'],
@@ -57,5 +57,5 @@ export function createGetOrgBalanceHandler(
       const parsed = z.object(inputSchema).parse(rawInput);
       return deps.orgs.getBalance({ ownerSub, orgId: parsed.orgId });
     },
-  };
+  });
 }

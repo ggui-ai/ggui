@@ -13,7 +13,7 @@
  * Pure over the {@link OrgsSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgsSource } from './types.js';
 
@@ -49,8 +49,8 @@ export interface RenameOrgDeps {
 
 export function createRenameOrgHandler(
   deps: RenameOrgDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, RenameOrgOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_rename_org',
     title: 'Rename org',
     audience: ['ops'],
@@ -75,5 +75,5 @@ export function createRenameOrgHandler(
         updatedAt: renamed.updatedAt,
       };
     },
-  };
+  });
 }

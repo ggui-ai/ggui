@@ -22,7 +22,7 @@ import {
   amendOutputSchema,
   type GguiAmendOutput,
 } from '@ggui-ai/protocol';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import {
   mutationInputSchema,
   runPropsMutation,
@@ -60,12 +60,8 @@ const outputSchema = amendOutputSchema.shape;
  */
 export function createGguiAmendHandler(
   deps: GguiAmendHandlerDeps,
-): SharedHandler<
-  typeof mutationInputSchema,
-  typeof outputSchema,
-  GguiAmendOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_amend',
     title: 'Amend',
     // Deliberately NO `_meta` — see the module docstring. Declaring
@@ -95,5 +91,5 @@ export function createGguiAmendHandler(
     },
     // NO resultMeta — a `_meta`-carrying success result would make
     // hosts mint a per-result view (live-proven), defeating the tool.
-  };
+  });
 }

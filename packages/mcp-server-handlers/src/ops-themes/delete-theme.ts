@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 import type { ThemeStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import { AppNotFoundError, type AppsSource } from '../ops-apps/types.js';
 
@@ -25,10 +25,8 @@ const outputSchema = {
     .describe('True iff a registration existed and was removed.'),
 } as const;
 
-export interface DeleteThemeOutput {
-  readonly themeId: string;
-  readonly deleted: boolean;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type DeleteThemeOutput = ShapeOutput<typeof outputSchema>;
 
 export interface DeleteThemeDeps {
   readonly apps: AppsSource;
@@ -37,8 +35,8 @@ export interface DeleteThemeDeps {
 
 export function createDeleteThemeHandler(
   deps: DeleteThemeDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, DeleteThemeOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_delete_theme',
     title: 'Delete theme',
     audience: ['ops'],
@@ -60,5 +58,5 @@ export function createDeleteThemeHandler(
       );
       return { themeId: parsed.themeId, deleted };
     },
-  };
+  });
 }

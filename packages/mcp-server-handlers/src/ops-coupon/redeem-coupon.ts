@@ -11,7 +11,7 @@
  * Pure over the {@link CouponRedeemSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { CouponRedeemSource, RedeemCouponResult } from './types.js';
 
@@ -39,13 +39,8 @@ const outputSchema = {
   activatedAt: z.string(),
 } as const;
 
-export interface RedeemCouponOutput {
-  readonly couponCode: string;
-  readonly creditCents: number;
-  readonly redeemedByPrincipalType: 'user' | 'org';
-  readonly redeemedByPrincipalId: string;
-  readonly activatedAt: string;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type RedeemCouponOutput = ShapeOutput<typeof outputSchema>;
 
 export interface RedeemCouponDeps {
   readonly coupons: CouponRedeemSource;
@@ -53,12 +48,8 @@ export interface RedeemCouponDeps {
 
 export function createRedeemCouponHandler(
   deps: RedeemCouponDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  RedeemCouponOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_redeem_coupon',
     title: 'Redeem coupon',
     audience: ['ops'],
@@ -87,5 +78,5 @@ export function createRedeemCouponHandler(
         activatedAt: result.activatedAt,
       };
     },
-  };
+  });
 }

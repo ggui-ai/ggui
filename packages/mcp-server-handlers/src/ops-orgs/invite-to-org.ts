@@ -12,7 +12,7 @@
  * Pure over the {@link OrgInvitesSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgInviteRecord, OrgInvitesSource } from './types.js';
 
@@ -64,12 +64,8 @@ export interface InviteToOrgDeps {
 
 export function createInviteToOrgHandler(
   deps: InviteToOrgDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  InviteToOrgOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_invite_to_org',
     title: 'Invite to org',
     audience: ['ops'],
@@ -102,5 +98,5 @@ export function createInviteToOrgHandler(
         reused: result.reused,
       };
     },
-  };
+  });
 }

@@ -9,7 +9,7 @@
  */
 import { z } from 'zod';
 import { RETIRED_CONTRACT_FIELDS } from '@ggui-ai/protocol';
-import type { SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput } from '../types.js';
 
 const inputSchema = {};
 
@@ -24,14 +24,8 @@ const outputSchema = {
   ),
 };
 
-interface DescribeDataContractFormatOutput {
-  readonly format: 'DataContract';
-  readonly documentation: string;
-  readonly examples: ReadonlyArray<{
-    readonly title: string;
-    readonly contract: Record<string, unknown>;
-  }>;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+type DescribeDataContractFormatOutput = ShapeOutput<typeof outputSchema>;
 
 /** The retired-field table, derived from the protocol's own list. */
 function retiredFieldsBlock(): string {
@@ -360,12 +354,8 @@ const EXAMPLES = [
   },
 ];
 
-export function createDescribeDataContractFormatHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  DescribeDataContractFormatOutput
-> {
-  return {
+export function createDescribeDataContractFormatHandler() {
+  return defineHandler({
     name: 'ggui_protocol_describe_data_contract_format',
     title: 'Describe data contract format',
     audience: ['protocol'],
@@ -373,12 +363,13 @@ export function createDescribeDataContractFormatHandler(): SharedHandler<
       "Returns the wire-format spec for the DataContract envelope — the `contract` field inside an AgentBlueprint. Covers PropsSpec / ActionSpec / StreamSpec / AgentCapabilitiesSpec / ClientCapabilitiesSpec sub-shapes, the `defineContract({...} as const)` TypeScript helper, and three worked examples (display-only / collect-form / converse-stream). Call this alongside `ggui_protocol_describe_blueprint_format` when composing a blueprint in a fresh conversation. Then call `ggui_protocol_get_blueprint_boilerplate({ contract })` for a typed scaffold.",
     inputSchema,
     outputSchema,
-    async handler() {
+    async handler(): Promise<DescribeDataContractFormatOutput> {
       return {
         format: 'DataContract' as const,
         documentation: DOCUMENTATION,
-        examples: EXAMPLES,
+        // A fresh copy: the wire is mutable JSON, the module constant is not ours to hand out.
+        examples: [...EXAMPLES],
       };
     },
-  };
+  });
 }

@@ -43,7 +43,6 @@ import type {
   ActionEnvelope,
   ActionEventValue,
   ActionSpec,
-  GguiConsumeOutput,
 } from '@ggui-ai/protocol';
 import { isRecord } from '@ggui-ai/protocol';
 import {
@@ -601,10 +600,13 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
    * call does), and the REAL `createGguiConsumeHandler` draining the
    * SAME consumer instance — the agent's side of the loop.
    */
+  /** What `ggui_consume` puts on the wire — the real handler's own output type (#817). */
+  type ConsumeWire = Awaited<ReturnType<ReturnType<typeof createGguiConsumeHandler>['handler']>>;
+
   async function bootBridged(): Promise<{
     fixture: Fixture;
     consumer: InMemoryPendingEventConsumer;
-    drain: () => Promise<GguiConsumeOutput>;
+    drain: () => Promise<ConsumeWire>;
   }> {
     const consumer = new InMemoryPendingEventConsumer();
     const fixture = await bootSubscribed(ARCHIVE_SPEC, () => ({
@@ -623,7 +625,7 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
           { sessionId: fixture.sessionId, timeout: 0 },
           { appId: APP_ID, requestId: 'bridge-drain' },
         );
-        return out as GguiConsumeOutput;
+        return out;
       },
     };
   }
@@ -646,7 +648,8 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
     expect(entry.uiContext).toEqual({});
     // Server-minted 8-hex correlation id + ISO firedAt (server clock).
     expect(entry.actionId).toMatch(/^[0-9a-f]{8}$/);
-    expect(Number.isFinite(Date.parse(entry.firedAt))).toBe(true);
+    expect(typeof entry.firedAt).toBe('string');
+    expect(Number.isFinite(Date.parse(String(entry.firedAt)))).toBe(true);
     // The pipe entry is the relay-identical consume shape — the
     // operator-facing `tool` hint lives ONLY on the retained ledger
     // copy (see the tool-hint suite above).

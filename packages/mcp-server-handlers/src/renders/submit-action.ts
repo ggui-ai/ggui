@@ -71,7 +71,7 @@ import {
   PendingPipeNotFoundError,
   type ActiveConsumerRegistry,
 } from '@ggui-ai/mcp-server-core';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 // `kind` accepts the closed primary set OR an extension string. Zod
 // can't represent `(string & {})` directly; we use `z.string().min(1)`
@@ -150,7 +150,7 @@ const outputSchema = {
   consumerPresent: z.boolean().optional(),
 } as const;
 
-interface UserActionAccepted {
+type UserActionAccepted = {
   readonly ok: true;
   /**
    * Surfaced for `kind:'dispatch'` when the server has an
@@ -159,13 +159,13 @@ interface UserActionAccepted {
    * registry seam isn't wired.
    */
   readonly consumerPresent?: boolean;
-}
+};
 
-interface UserActionRejected {
+type UserActionRejected = {
   readonly ok: false;
   readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND';
   readonly message: string;
-}
+};
 
 type UserActionOutput = UserActionAccepted | UserActionRejected;
 
@@ -236,8 +236,8 @@ export interface GguiSubmitActionHandlerDeps {
 
 export function createGguiSubmitActionHandler(
   deps: GguiSubmitActionHandlerDeps = {},
-): SharedHandler<typeof inputSchema, typeof outputSchema, UserActionOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_runtime_submit_action',
     title: '[runtime] Submit Action',
     audience: ['runtime'],
@@ -467,5 +467,5 @@ export function createGguiSubmitActionHandler(
 
       return { ok: true };
     },
-  };
+  });
 }

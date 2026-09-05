@@ -12,7 +12,7 @@
  * implementations of both; tests bind in-memory fakes.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { AppNotFoundError } from './types.js';
 import type { AppsSource, UserDefaultAppSource } from './types.js';
@@ -41,12 +41,8 @@ export interface SetDefaultAppDeps {
 
 export function createSetDefaultAppHandler(
   deps: SetDefaultAppDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  SetDefaultAppOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_set_default_app',
     title: 'Set default app',
     audience: ['ops'],
@@ -73,5 +69,5 @@ export function createSetDefaultAppHandler(
       });
       return { defaultAppId: parsed.appId };
     },
-  };
+  });
 }

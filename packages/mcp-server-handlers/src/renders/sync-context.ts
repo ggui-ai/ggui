@@ -66,7 +66,7 @@ import type {
   GguiSessionStore,
   RenderIdentityStore,
 } from '@ggui-ai/mcp-server-core';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
@@ -109,10 +109,10 @@ const outputSchema = {
   message: z.string().optional(),
 } as const;
 
-interface SyncContextAccepted {
+type SyncContextAccepted = {
   readonly ok: true;
-}
-interface SyncContextRejected {
+};
+type SyncContextRejected = {
   readonly ok: false;
   readonly code:
     | 'SESSION_NOT_FOUND'
@@ -120,7 +120,7 @@ interface SyncContextRejected {
     | 'CONTEXT_SCHEMA_VIOLATION'
     | 'CONTEXT_TOO_LARGE';
   readonly message: string;
-}
+};
 type SyncContextOutput = SyncContextAccepted | SyncContextRejected;
 
 export interface CreateGguiSyncContextHandlerDeps {
@@ -146,8 +146,8 @@ export interface CreateGguiSyncContextHandlerDeps {
  */
 export function createGguiSyncContextHandler(
   deps: CreateGguiSyncContextHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, SyncContextOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_runtime_sync_context',
     title: '[runtime] Sync Context',
     audience: ['runtime'],
@@ -265,7 +265,7 @@ export function createGguiSyncContextHandler(
       await refreshRenderIdentity(deps.renderIdentityStore, committed);
       return { ok: true };
     },
-  };
+  });
 }
 
 /**

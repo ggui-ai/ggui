@@ -24,7 +24,7 @@
  * generative path; this is the curated reference path.
  */
 import { z } from 'zod';
-import type { SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput } from '../types.js';
 
 const inputSchema = {
   kind: z
@@ -50,20 +50,10 @@ const outputSchema = {
   ),
 };
 
-interface ExampleBlueprintEntry {
-  readonly title: string;
-  readonly kind: 'display' | 'collect' | 'converse';
-  readonly summary: string;
-  readonly blueprint: {
-    readonly source: string;
-    readonly contract: Record<string, unknown>;
-    readonly fixtureProps?: Record<string, unknown>;
-  };
-}
-
-interface GetExampleBlueprintsOutput {
-  readonly examples: ReadonlyArray<ExampleBlueprintEntry>;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+type GetExampleBlueprintsOutput = ShapeOutput<typeof outputSchema>;
+/** One curated entry — the wire's element type, so the constants below are checked against the schema. */
+type ExampleBlueprintEntry = GetExampleBlueprintsOutput['examples'][number];
 
 const WEATHER_CARD: ExampleBlueprintEntry = {
   title: 'Weather card',
@@ -326,12 +316,8 @@ const ALL_EXAMPLES: ReadonlyArray<ExampleBlueprintEntry> = [
   CHAT_PANEL,
 ];
 
-export function createGetExampleBlueprintsHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  GetExampleBlueprintsOutput
-> {
-  return {
+export function createGetExampleBlueprintsHandler() {
+  return defineHandler({
     name: 'ggui_protocol_get_example_blueprints',
     title: 'Get example blueprints',
     audience: ['protocol'],
@@ -347,5 +333,5 @@ export function createGetExampleBlueprintsHandler(): SharedHandler<
           : ALL_EXAMPLES.filter((ex) => ex.kind === parsed.kind);
       return { examples: [...filtered] };
     },
-  };
+  });
 }

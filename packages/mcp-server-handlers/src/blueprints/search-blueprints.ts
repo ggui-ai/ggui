@@ -61,10 +61,10 @@ import {
   bundleHostScheme,
   DEFAULT_BUNDLE_HOST,
   flatToBlueprintSource,
+  gguiSearchBlueprintsOutputSchema,
   searchBlueprintsInputShape,
-  type GguiSearchBlueprintsOutput,
 } from '@ggui-ai/protocol';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 
 /**
  * Matches the hosted `MIN_SIMILARITY_SCORE`. Below this is noise —
@@ -144,28 +144,13 @@ export interface SearchBlueprintsDeps {
 // (`schemas/mcp.ts`).
 const inputSchema = searchBlueprintsInputShape;
 
-const outputSchema = {
-  // `z.record(z.string(), z.unknown())` — zod v4 dropped the single-arg
-  // form `z.record(z.unknown())` that implicitly defaulted the key type
-  // to `z.string()`. Keeping the explicit two-arg form so schema
-  // construction works under both zod v3 and v4 at runtime, which
-  // matters for the OSS tarball where one package's resolved zod
-  // major may differ from another's in the flattened node_modules tree.
-  results: z.array(z.record(z.string(), z.unknown())),
-  total: z.number().int().nonnegative(),
-  query: z.string(),
-  degradedSources: z
-    .array(
-      z.object({
-        source: z.literal('registry'),
-        reason: z.enum(['unreachable', 'timeout', 'invalid_response']),
-      }),
-    )
-    .optional(),
-};
-
+// The protocol owns this wire shape (#817); registered verbatim so
+// `tools/list` and the transport's validation share one copy.
+const outputSchema = gguiSearchBlueprintsOutputSchema.shape;
+/** The wire shape, mutable at the handler — derived from the registered schema. */
+type SearchBlueprintsOutput = ShapeOutput<typeof outputSchema>;
 /** One row on the merged result, before final serialization. */
-type MergedHit = GguiSearchBlueprintsOutput['results'][number];
+type MergedHit = SearchBlueprintsOutput['results'][number];
 
 /**
  * Build a search-blueprints handler bound to concrete `embedding` +
@@ -176,10 +161,8 @@ type MergedHit = GguiSearchBlueprintsOutput['results'][number];
  * for the semantic source and a `ManifestBlueprintProvider` for the
  * manifest source.
  */
-export function createSearchBlueprintsHandler(
-  deps: SearchBlueprintsDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiSearchBlueprintsOutput> {
-  return {
+export function createSearchBlueprintsHandler(deps: SearchBlueprintsDeps) {
+  return defineHandler({
     name: 'ggui_search_blueprints',
     title: 'Search blueprints',
     audience: ['agent'],
@@ -190,7 +173,7 @@ export function createSearchBlueprintsHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiSearchBlueprintsOutput> {
+    ): Promise<SearchBlueprintsOutput> {
       const { query, limit = 10, tool, server } = z
         .object(inputSchema)
         .parse(rawInput);
@@ -234,7 +217,7 @@ export function createSearchBlueprintsHandler(
         ...(registry.degraded ? { degradedSources: [registry.degraded] } : {}),
       };
     },
-  };
+  });
 }
 
 /**
@@ -350,7 +333,7 @@ function asString(
   return typeof value === 'string' ? value : '';
 }
 
-type DegradedSource = NonNullable<GguiSearchBlueprintsOutput['degradedSources']>[number];
+type DegradedSource = NonNullable<SearchBlueprintsOutput['degradedSources']>[number];
 
 interface RegistrySourceResult {
   readonly hits: MergedHit[];

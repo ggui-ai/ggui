@@ -44,7 +44,7 @@ import type {
   BlueprintSearch,
   BlueprintStore,
 } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 import { normalizePersona } from './persona-normalization.js';
 
@@ -100,12 +100,8 @@ function sortBlueprintsByCreatedAtDesc(
 
 export function createGguiOpsListBlueprintsHandler(
   deps: GguiOpsListBlueprintsDeps,
-): SharedHandler<
-  typeof opsInputSchema,
-  typeof opsOutputSchema,
-  OpsListBlueprintsOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_list_blueprints',
     title: 'List blueprints',
     audience: ['ops'],
@@ -191,5 +187,5 @@ export function createGguiOpsListBlueprintsHandler(
 
       return { blueprints: [...ordered] };
     },
-  };
+  });
 }

@@ -56,7 +56,7 @@ import {
   declareToolCatalogOutputSchema,
   type DeclareToolCatalogOutput,
 } from "@ggui-ai/protocol";
-import type { HandlerContext, SharedHandler } from "../types.js";
+import { defineHandler, type HandlerContext } from "../types.js";
 import type { ToolIdentityCatalogStore } from "./tool-identity-catalog-store.js";
 
 const declareInputSchema = declareToolCatalogInputSchema.shape;
@@ -77,8 +77,8 @@ export interface GguiDeclareToolCatalogDeps {
 
 export function createGguiDeclareToolCatalogHandler(
   deps: GguiDeclareToolCatalogDeps,
-): SharedHandler<typeof declareInputSchema, typeof declareOutputSchema, DeclareToolCatalogOutput> {
-  return {
+) {
+  return defineHandler({
     name: "ggui_runtime_declare_tool_catalog",
     title: "[runtime] Declare Tool Catalog",
     audience: ["runtime"],
@@ -109,5 +109,5 @@ export function createGguiDeclareToolCatalogHandler(
       await deps.catalogStore.set(ctx.appId, parsed.toolCatalog);
       return { saved: true, appId: ctx.appId };
     },
-  };
+  });
 }

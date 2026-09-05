@@ -30,7 +30,7 @@ import {
   type OpsDeleteBlueprintOutput,
 } from '@ggui-ai/protocol';
 import type { BlueprintStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 
 const opsInputSchema = opsDeleteBlueprintInputSchema.shape;
@@ -62,12 +62,8 @@ export interface GguiOpsDeleteBlueprintDeps {
 
 export function createGguiOpsDeleteBlueprintHandler(
   deps: GguiOpsDeleteBlueprintDeps,
-): SharedHandler<
-  typeof opsInputSchema,
-  typeof opsOutputSchema,
-  OpsDeleteBlueprintOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_delete_blueprint',
     title: 'Delete blueprint',
     audience: ['ops'],
@@ -104,5 +100,5 @@ export function createGguiOpsDeleteBlueprintHandler(
       await deps.blueprintStore.delete(parsed.blueprintId);
       return { deleted: true };
     },
-  };
+  });
 }

@@ -16,11 +16,9 @@
  * with a contract: ~100-300ms cold, ~50ms warm.
  */
 import { z } from 'zod';
-import {
-  validateBlueprint,
-  type ValidationResult,
-} from '@ggui-ai/ui-gen/blueprint-validator';
-import type { SharedHandler } from '../types.js';
+import { blueprintValidationResultSchema } from '@ggui-ai/protocol';
+import { validateBlueprint } from '@ggui-ai/ui-gen/blueprint-validator';
+import { defineHandler, type ShapeOutput } from '../types.js';
 
 const inputSchema = {
   source: z
@@ -43,33 +41,14 @@ const inputSchema = {
     ),
 };
 
-const outputSchema = {
-  valid: z.boolean(),
-  failedAt: z.enum(['compile', 'selfCheck', 'runtime']).nullable(),
-  errors: z.array(
-    z.object({
-      tier: z.enum(['compile', 'selfCheck', 'runtime']),
-      code: z.string(),
-      message: z.string(),
-      fix: z.string().optional(),
-    }),
-  ),
-  warnings: z.array(
-    z.object({
-      tier: z.enum(['compile', 'selfCheck', 'runtime']),
-      code: z.string(),
-      message: z.string(),
-      fix: z.string().optional(),
-    }),
-  ),
-};
+// The protocol owns this wire shape (#817) — a protocol-audience tool's
+// output is a protocol statement; registered verbatim.
+const outputSchema = blueprintValidationResultSchema.shape;
+/** The wire shape — derived from the registered schema (#817). */
+type ValidateBlueprintOutput = ShapeOutput<typeof outputSchema>;
 
-export function createValidateBlueprintHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  ValidationResult
-> {
-  return {
+export function createValidateBlueprintHandler() {
+  return defineHandler({
     name: 'ggui_protocol_validate_blueprint',
     title: 'Validate blueprint',
     audience: ['protocol'],
@@ -77,15 +56,23 @@ export function createValidateBlueprintHandler(): SharedHandler<
       'Run the 3-tier sequential gated validator (compile → self-check → runtime probe) over a candidate blueprint. Short-circuits on the first failure — read `failedAt` to know which tier stopped. Compile errors are syntax/imports; self-check errors are missing default-export or contract/source drift; runtime errors are real wiring bugs (action declared but no clickable trigger; useStream subscribed but never read; clientTool not registered). Iterate until `valid: true`, then call `ggui_ops_generate_blueprint` — that path re-runs the same validator and rejects anything that fails.',
     inputSchema,
     outputSchema,
-    async handler(rawInput: Record<string, unknown>) {
+    async handler(rawInput: Record<string, unknown>): Promise<ValidateBlueprintOutput> {
       const parsed = z.object(inputSchema).parse(rawInput);
-      return validateBlueprint({
+      const result = await validateBlueprint({
         blueprint: {
           source: parsed.source,
           contract: parsed.contract,
           fixtureProps: parsed.fixtureProps,
         },
       });
+      // Project the validator's result onto the wire shape as fresh values —
+      // the validator's arrays are its own; the wire is mutable JSON.
+      return {
+        valid: result.valid,
+        failedAt: result.failedAt,
+        errors: result.errors.map((issue) => ({ ...issue })),
+        warnings: result.warnings.map((issue) => ({ ...issue })),
+      };
     },
-  };
+  });
 }

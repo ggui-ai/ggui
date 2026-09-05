@@ -85,11 +85,11 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import { RateLimitedError } from '@ggui-ai/mcp-server-core';
 import {
+  defineHandler,
   handlerFailure,
   isHandlerFailure,
   type HandlerContext,
   type HandlerFailure,
-  type SharedHandler,
 } from '../types.js';
 import {
   consumeHandshakeRecord,
@@ -1226,11 +1226,7 @@ async function fireRenderFailureHook(
 
 export function createGguiRenderHandler(
   deps: GguiRenderHandlerDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  RenderOutput | HandlerFailure<RenderFailureOutput | RenderRefusedOutput>
-> {
+) {
   /**
    * The render attempt proper — everything after `preValidationGate`
    * passed. Split out so the handler can bracket it with the failure
@@ -2655,7 +2651,7 @@ export function createGguiRenderHandler(
     return result;
   }
 
-  return {
+  return defineHandler({
     name: 'ggui_render',
     title: 'Render',
     audience: ['agent'],
@@ -3019,7 +3015,7 @@ export function createGguiRenderHandler(
       };
       return meta;
     },
-  };
+  });
 }
 
 /**

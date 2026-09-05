@@ -24,7 +24,7 @@ import {
   type ShellType,
 } from '@ggui-ai/ui-gen/boilerplate';
 import type { DataContract } from '@ggui-ai/protocol';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 const inputSchema = {
   contract: z
@@ -56,16 +56,8 @@ const outputSchema = {
   source: z.string().describe('TSX source ready to compile + render.'),
 };
 
-interface GetBlueprintBoilerplateOutput {
-  readonly source: string;
-}
-
-export function createGetBlueprintBoilerplateHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  GetBlueprintBoilerplateOutput
-> {
-  return {
+export function createGetBlueprintBoilerplateHandler() {
+  return defineHandler({
     name: 'ggui_protocol_get_blueprint_boilerplate',
     title: 'Get blueprint boilerplate',
     audience: ['protocol'],
@@ -84,5 +76,5 @@ export function createGetBlueprintBoilerplateHandler(): SharedHandler<
       );
       return { source };
     },
-  };
+  });
 }

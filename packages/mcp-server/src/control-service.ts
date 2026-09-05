@@ -46,6 +46,7 @@ import {
   AuthRequiredError,
   type HandlerContext,
   type SharedHandler,
+  type SharedHandlerOutputBound,
 } from "@ggui-ai/mcp-server-handlers";
 import { z, type ZodRawShape, type ZodTypeAny } from "zod";
 import type { McpService } from "./mcp-mounts.js";
@@ -144,7 +145,7 @@ export const SINGLE_CALL_OPS: ReadonlySet<string> = new Set<string>([
  * Return a copy of the handler with the `audience` tag removed.
  * `validateMcpServices` rejects service handlers that carry one.
  */
-export function stripAudience<I extends ZodRawShape, O extends ZodRawShape, D>(
+export function stripAudience<I extends ZodRawShape, O extends ZodRawShape, D extends SharedHandlerOutputBound<O>>(
   h: SharedHandler<I, O, D>
 ): SharedHandler<I, O, D> {
   const { audience: _omit, ...rest } = h;
@@ -173,7 +174,7 @@ export function stripAudience<I extends ZodRawShape, O extends ZodRawShape, D>(
  * `isError` tool result, which is the contract for callers that
  * authenticated but lack what the handler needs.
  */
-export function withAuthGate<I extends ZodRawShape, O extends ZodRawShape, D>(
+export function withAuthGate<I extends ZodRawShape, O extends ZodRawShape, D extends SharedHandlerOutputBound<O>>(
   h: SharedHandler<I, O, D>
 ): SharedHandler<I, O, D> {
   return {
@@ -212,7 +213,7 @@ function optionalize(shape: ZodRawShape): ZodRawShape {
  * confirmation fields) and a real commit response (inner fields)
  * validate against it.
  */
-export function withConfirmGate<I extends ZodRawShape, O extends ZodRawShape, D>(
+export function withConfirmGate<I extends ZodRawShape, O extends ZodRawShape, D extends SharedHandlerOutputBound<O>>(
   h: SharedHandler<I, O, D>
 ): SharedHandler<ZodRawShape, ZodRawShape> {
   const inputSchema: ZodRawShape = {
@@ -234,7 +235,10 @@ export function withConfirmGate<I extends ZodRawShape, O extends ZodRawShape, D>
     description: `${h.description} (State-changing: the first call returns a confirmation prompt; re-call with confirm:true to proceed.)`,
     inputSchema,
     outputSchema,
-    async handler(input: Record<string, unknown>, ctx: HandlerContext): Promise<unknown> {
+    async handler(
+      input: Record<string, unknown>,
+      ctx: HandlerContext
+    ): Promise<object> {
       if (input.confirm !== true) {
         return {
           confirmationRequired: true,

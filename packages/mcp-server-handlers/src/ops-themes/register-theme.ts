@@ -29,7 +29,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { z } from 'zod';
 import { isValidThemeId, type ThemeStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import { AppNotFoundError, type AppsSource } from '../ops-apps/types.js';
 import {
@@ -100,15 +100,8 @@ const outputSchema = {
   }),
 } as const;
 
-export interface RegisterThemeOutput {
-  readonly themeId: string;
-  readonly documentHash: string;
-  readonly updated: boolean;
-  readonly coverage: {
-    readonly inheritMatched: readonly string[];
-    readonly excluded: readonly string[];
-  };
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type RegisterThemeOutput = ShapeOutput<typeof outputSchema>;
 
 export interface RegisterThemeDeps {
   readonly apps: AppsSource;
@@ -123,10 +116,8 @@ export interface RegisterThemeDeps {
 const sha256 = (s: string): string =>
   createHash('sha256').update(s, 'utf8').digest('hex');
 
-export function createRegisterThemeHandler(
-  deps: RegisterThemeDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, RegisterThemeOutput> {
-  return {
+export function createRegisterThemeHandler(deps: RegisterThemeDeps) {
+  return defineHandler({
     name: 'ggui_ops_register_theme',
     title: 'Register theme',
     audience: ['ops'],
@@ -202,10 +193,12 @@ export function createRegisterThemeHandler(
         documentHash,
         updated: existing !== null,
         coverage: {
-          inheritMatched: coverage.inheritMatched,
-          excluded: coverage.excluded,
+          // The validator's arrays are immutable seam values; the wire
+          // carries fresh mutable copies.
+          inheritMatched: [...coverage.inheritMatched],
+          excluded: [...coverage.excluded],
         },
       };
     },
-  };
+  });
 }

@@ -12,9 +12,9 @@
  * `ownerSub` matches.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
-import type { AppRecord, AppsSource } from './types.js';
+import type { AppsSource } from './types.js';
 
 const inputSchema = {} satisfies Record<string, never>;
 
@@ -30,18 +30,15 @@ const outputSchema = {
   ),
 } as const;
 
-export interface ListAppsOutput {
-  readonly apps: readonly AppRecord[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type ListAppsOutput = ShapeOutput<typeof outputSchema>;
 
 export interface ListAppsDeps {
   readonly apps: AppsSource;
 }
 
-export function createListAppsHandler(
-  deps: ListAppsDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListAppsOutput> {
-  return {
+export function createListAppsHandler(deps: ListAppsDeps) {
+  return defineHandler({
     name: 'ggui_ops_list_apps',
     title: 'List apps',
     audience: ['ops'],
@@ -54,8 +51,18 @@ export function createListAppsHandler(
       ctx: HandlerContext,
     ): Promise<ListAppsOutput> {
       const ownerSub = resolveOwnerSub('ggui_ops_list_apps', ctx);
-      const apps = await deps.apps.list(ownerSub);
-      return { apps };
+      const rows = await deps.apps.list(ownerSub);
+      // Project the seam rows onto the wire shape — exactly the fields
+      // `outputSchema` declares, the way the sibling factories already do.
+      return {
+        apps: rows.map((app) => ({
+          appId: app.appId,
+          displayName: app.displayName,
+          ...(app.systemPrompt !== undefined ? { systemPrompt: app.systemPrompt } : {}),
+          createdAt: app.createdAt,
+          updatedAt: app.updatedAt,
+        })),
+      };
     },
-  };
+  });
 }

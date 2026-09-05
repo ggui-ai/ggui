@@ -49,7 +49,7 @@
  */
 
 import { z } from 'zod';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 const inputSchema = {
   envelope: z
@@ -155,8 +155,8 @@ export interface GguiRefreshWsTokenHandlerDeps {
  */
 export function createGguiRefreshWsTokenHandler(
   deps: GguiRefreshWsTokenHandlerDeps = {},
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRefreshWsTokenOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_runtime_refresh_ws_token',
     title: '[runtime] Refresh WS Token',
     audience: ['runtime'],
@@ -213,5 +213,5 @@ export function createGguiRefreshWsTokenHandler(
           'refresh_ws_token: envelope failed HMAC verification (tampered, malformed, or wrong kind). The iframe MUST re-handshake.',
       };
     },
-  };
+  });
 }

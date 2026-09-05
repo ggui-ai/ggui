@@ -8,9 +8,9 @@
  * binds an AppSync-backed implementation, tests bind in-memory state.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
-import type { OrgMembershipRecord, OrgsSource } from './types.js';
+import type { OrgsSource } from './types.js';
 
 const inputSchema = {} satisfies Record<string, never>;
 
@@ -26,18 +26,15 @@ const outputSchema = {
   ),
 } as const;
 
-export interface ListOrgsOutput {
-  readonly orgs: readonly OrgMembershipRecord[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type ListOrgsOutput = ShapeOutput<typeof outputSchema>;
 
 export interface ListOrgsDeps {
   readonly orgs: OrgsSource;
 }
 
-export function createListOrgsHandler(
-  deps: ListOrgsDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListOrgsOutput> {
-  return {
+export function createListOrgsHandler(deps: ListOrgsDeps) {
+  return defineHandler({
     name: 'ggui_ops_list_orgs',
     title: 'List orgs',
     audience: ['ops'],
@@ -51,7 +48,8 @@ export function createListOrgsHandler(
     ): Promise<ListOrgsOutput> {
       const ownerSub = resolveOwnerSub('ggui_ops_list_orgs', ctx);
       const orgs = await deps.orgs.listMemberships(ownerSub);
-      return { orgs };
+      // Seam rows are immutable; the wire carries a fresh mutable copy.
+      return { orgs: [...orgs] };
     },
-  };
+  });
 }

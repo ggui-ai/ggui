@@ -28,7 +28,7 @@ import {
   runtimeTelemetryInputShape,
   type GguiRuntimeTelemetryOutput,
 } from '@ggui-ai/protocol';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 
 const inputSchema = runtimeTelemetryInputShape;
 
@@ -58,8 +58,8 @@ export interface GguiRuntimeTelemetryHandlerDeps {
  */
 export function createGguiRuntimeTelemetryHandler(
   deps: GguiRuntimeTelemetryHandlerDeps = {},
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRuntimeTelemetryOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_runtime_telemetry',
     title: '[runtime] Report Transport Telemetry',
     audience: ['runtime'],
@@ -98,5 +98,5 @@ export function createGguiRuntimeTelemetryHandler(
       }
       return { ok: true };
     },
-  };
+  });
 }

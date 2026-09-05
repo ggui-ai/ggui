@@ -75,7 +75,7 @@ import {
   type BlueprintRegistryDeps,
   type GenerationCredentials,
 } from "../renders/index.js";
-import type { HandlerContext, SharedHandler } from "../types.js";
+import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import {
   GenerationFailedError,
@@ -249,11 +249,11 @@ function resolveGenerator(registry: GeneratorRegistry, slug: string | undefined)
 
 export function createGguiOpsGenerateBlueprintHandler(
   deps: GguiOpsGenerateBlueprintDeps
-): SharedHandler<typeof opsInputSchema, typeof opsOutputSchema, OpsGenerateBlueprintOutput> {
+) {
   const now = deps.now ?? (() => new Date().toISOString());
   const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
 
-  return {
+  return defineHandler({
     name: "ggui_ops_generate_blueprint",
     title: "Generate blueprint",
     audience: ["ops"],
@@ -515,5 +515,5 @@ export function createGguiOpsGenerateBlueprintHandler(
       };
       return output;
     },
-  };
+  });
 }

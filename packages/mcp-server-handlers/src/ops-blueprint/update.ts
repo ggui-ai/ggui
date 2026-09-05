@@ -34,7 +34,7 @@ import type {
   BlueprintStore,
 } from '@ggui-ai/mcp-server-core';
 import { BlueprintNotFoundError } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 import { normalizePersona } from './persona-normalization.js';
 
@@ -131,14 +131,10 @@ function mergeVariance(
 
 export function createGguiOpsUpdateBlueprintHandler(
   deps: GguiOpsUpdateBlueprintDeps,
-): SharedHandler<
-  typeof opsInputSchema,
-  typeof opsOutputSchema,
-  OpsUpdateBlueprintOutput
-> {
+) {
   const now = deps.now ?? (() => new Date().toISOString());
 
-  return {
+  return defineHandler({
     name: 'ggui_ops_update_blueprint',
     title: 'Update blueprint',
     audience: ['ops'],
@@ -205,5 +201,5 @@ export function createGguiOpsUpdateBlueprintHandler(
         updatedAt: now(),
       };
     },
-  };
+  });
 }

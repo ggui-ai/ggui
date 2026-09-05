@@ -21,11 +21,10 @@ import { emitInputShape } from '@ggui-ai/protocol';
 import type {
   ComponentGguiSession,
   GguiEmitInput,
-  GguiEmitOutput,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import {
   handleStream,
@@ -39,7 +38,20 @@ const inputSchema = emitInputShape;
 
 const outputSchema = {
   accepted: z.boolean(),
+  // Declared here because the handler EMITS it (and the protocol's
+  // `GguiEmitOutput` promises it) — the transport strip-parses against
+  // this shape, so an undeclared `seq` never reached the wire (#817).
+  seq: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Session-scoped monotonic outbound sequence assigned to this delivery. Present when the server keeps a stream buffer.',
+    ),
 } as const;
+/** The wire shape — derived from `outputSchema` (#817); the protocol's `GguiEmitOutput` is the consumer-facing type. */
+type EmitOutput = ShapeOutput<typeof outputSchema>;
 
 export interface GguiEmitHandlerDeps {
   readonly renderStore: GguiSessionStore;
@@ -72,8 +84,8 @@ export interface StreamObserverNotifier {
 
 export function createGguiEmitHandler(
   deps: GguiEmitHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiEmitOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_emit',
     title: 'Stream',
     audience: ['agent'],
@@ -84,7 +96,7 @@ export function createGguiEmitHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiEmitOutput> {
+    ): Promise<EmitOutput> {
       const { sessionId, channel, payload, complete } = z
         .object(inputSchema)
         .parse(rawInput);
@@ -139,6 +151,6 @@ export function createGguiEmitHandler(
 
       return out;
     },
-  };
+  });
 }
 

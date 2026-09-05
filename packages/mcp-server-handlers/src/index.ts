@@ -19,14 +19,21 @@ export * from "./renders/index.js";
 export {
   AuthRequiredError,
   HANDLER_FAILURE_MARKER,
+  defineHandler,
   handlerFailure,
   isHandlerFailure,
 } from "./types.js";
 export type {
   AudienceTag,
+  EnvelopedHandlerDefinition,
+  EnvelopeFor,
   HandlerContext,
+  HandlerDefinition,
   HandlerFailure,
+  ShapeOutput,
   SharedHandler,
+  SharedHandlerOutputBound,
+  SharedHandlerOutputData,
   SharedHandlerResult,
 } from "./types.js";
 // Persistent-chat handler family — thread storage and message

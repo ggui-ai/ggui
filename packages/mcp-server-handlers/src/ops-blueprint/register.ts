@@ -55,7 +55,7 @@ import { z } from "zod";
 import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import { registerBlueprint, type BlueprintRegistryDeps } from "../renders/index.js";
-import type { HandlerContext, SharedHandler } from "../types.js";
+import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import type { PutCodeHook } from "./generate.js";
 import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
@@ -145,11 +145,11 @@ export interface GguiOpsRegisterBlueprintDeps {
 
 export function createGguiOpsRegisterBlueprintHandler(
   deps: GguiOpsRegisterBlueprintDeps
-): SharedHandler<typeof opsInputSchema, typeof opsOutputSchema, OpsRegisterBlueprintOutput> {
+) {
   const now = deps.now ?? (() => new Date().toISOString());
   const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
 
-  return {
+  return defineHandler({
     name: "ggui_ops_register_blueprint",
     title: "Register blueprint",
     audience: ["ops"],
@@ -327,5 +327,5 @@ export function createGguiOpsRegisterBlueprintHandler(
         source: USER_SOURCE,
       };
     },
-  };
+  });
 }

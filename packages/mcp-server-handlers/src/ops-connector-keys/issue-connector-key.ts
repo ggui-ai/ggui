@@ -11,7 +11,7 @@
  * Pure over the {@link ConnectorKeysSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {
   ConnectorKeySummary,
@@ -61,17 +61,8 @@ const outputSchema = {
   plaintextKey: z.string(),
 } as const;
 
-export interface IssueConnectorKeyOutput {
-  readonly id: string;
-  readonly apiKeyPrefix: string;
-  readonly name?: string;
-  readonly appId?: string;
-  readonly status: 'active' | 'revoked';
-  readonly createdAt: string;
-  readonly lastUsedAt?: string;
-  readonly expiresAt?: string;
-  readonly plaintextKey: string;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type IssueConnectorKeyOutput = ShapeOutput<typeof outputSchema>;
 
 export interface IssueConnectorKeyDeps {
   readonly connectorKeys: ConnectorKeysSource;
@@ -79,12 +70,8 @@ export interface IssueConnectorKeyDeps {
 
 export function createIssueConnectorKeyHandler(
   deps: IssueConnectorKeyDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  IssueConnectorKeyOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_issue_connector_key',
     title: 'Issue connector key',
     audience: ['ops'],
@@ -122,5 +109,5 @@ export function createIssueConnectorKeyHandler(
         plaintextKey: result.plaintextKey,
       };
     },
-  };
+  });
 }

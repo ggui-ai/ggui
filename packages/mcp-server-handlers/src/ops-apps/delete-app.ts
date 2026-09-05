@@ -31,7 +31,7 @@
  * seams.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { DefaultAppDeleteBlockedError } from './types.js';
 import type { AppsSource, UserDefaultAppSource } from './types.js';
@@ -61,8 +61,8 @@ export interface DeleteAppDeps {
 
 export function createDeleteAppHandler(
   deps: DeleteAppDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, DeleteAppOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_delete_app',
     title: 'Delete app',
     audience: ['ops'],
@@ -97,5 +97,5 @@ export function createDeleteAppHandler(
       await deps.apps.delete({ appId: parsed.appId, ownerSub });
       return { deleted: true };
     },
-  };
+  });
 }

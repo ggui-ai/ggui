@@ -17,7 +17,7 @@
  * ```
  */
 import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
-import type { ZodRawShape, ZodType } from 'zod';
+import type { z, ZodRawShape, ZodType, ZodTypeAny } from 'zod';
 
 /**
  * Per-request context threaded through every shared handler.
@@ -285,6 +285,39 @@ export function isHandlerFailure(
 }
 
 /**
+ * The output a handler over the raw shape `Output` produces: the shape's
+ * own output type. DERIVED from the schema — never hand-written (#817).
+ */
+export type ShapeOutput<Output extends ZodRawShape> = z.output<z.ZodObject<Output>>;
+
+/**
+ * Everything a handler over `Output` may resolve to: its shape output, or
+ * a failure envelope carrying that same shape. This is the bound every
+ * `SharedHandler.OutputData` must satisfy — a hand-written output type
+ * that omits a key the schema declares is a compile error, not a runtime
+ * surprise at the transport's `validateOutputPayload`. Extra keys are the
+ * runtime validator's business, per arm.
+ */
+export type SharedHandlerOutputData<Output extends ZodRawShape> =
+  | ShapeOutput<Output>
+  | HandlerFailure<ShapeOutput<Output>>;
+
+/**
+ * The bound `OutputData` must satisfy, by how much the shape says:
+ *
+ *  - A CONCRETE `Output` (a factory's own raw shape) binds the handler to
+ *    {@link SharedHandlerOutputData} of that shape.
+ *  - The WIDE `ZodRawShape` — the heterogeneous list every deployment
+ *    composes handlers into — makes no shape claim, so the bound is
+ *    `object`: any handler assigns there, and nothing is erased by a
+ *    cast at that boundary (ggui#813/#817). The transport's runtime
+ *    validation against each handler's own schema is the wire's gate.
+ */
+export type SharedHandlerOutputBound<Output extends ZodRawShape> = ZodRawShape extends Output
+  ? object
+  : SharedHandlerOutputData<Output>;
+
+/**
  * Shared tool-handler shape. A hosted server's tool-handler is a
  * `SharedHandler` re-export with a wider `ToolContext` — it can wrap a
  * `SharedHandler` with zero conversion cost. The only difference is
@@ -293,7 +326,7 @@ export function isHandlerFailure(
 export interface SharedHandler<
   Input extends ZodRawShape,
   Output extends ZodRawShape,
-  OutputData = unknown,
+  OutputData extends SharedHandlerOutputBound<Output> = SharedHandlerOutputBound<Output>,
 > {
   /** Canonical tool name shipped to MCP clients (e.g. `"ggui_search_blueprints"`). */
   readonly name: string;
@@ -431,6 +464,98 @@ export interface SharedHandler<
     | Record<string, unknown>
     | undefined
     | Promise<Record<string, unknown> | undefined>;
+}
+
+// ─── defineHandler — build a handler from its schema ─────────────────────────
+
+/** Distributive keyof: for a union, the union of every arm's keys (not the intersection). */
+type KeysOf<T> = T extends unknown ? keyof T : never;
+
+/**
+ * An envelope is admissible for `Output` iff it produces exactly the shape's
+ * keys — the rule the update/amend alignment tests pin by identity at
+ * runtime, stated here at the type level. Resolves to `Envelope` when the
+ * keys agree and to `never` otherwise.
+ */
+export type EnvelopeFor<Output extends ZodRawShape, Envelope extends ZodTypeAny> =
+  [KeysOf<z.output<Envelope>>] extends [keyof Output]
+    ? [keyof Output] extends [KeysOf<z.output<Envelope>>]
+      ? Envelope
+      : never
+    : never;
+
+/**
+ * A handler definition without an envelope: the wire shape IS `outputSchema`.
+ * `OutputData` is INFERRED from the handler's own return type and checked
+ * against {@link SharedHandlerOutputData} of the shape — an infallible handler
+ * is exactly its shape, a fallible one carries exactly its failure arm, and a
+ * missing key is a compile error either way. Nobody hand-writes the type.
+ */
+export type HandlerDefinition<
+  Input extends ZodRawShape,
+  Output extends ZodRawShape,
+  OutputData extends SharedHandlerOutputData<Output> = SharedHandlerOutputData<Output>,
+> = Omit<SharedHandler<Input, Output, OutputData>, 'outputEnvelopeSchema'> & {
+  readonly outputEnvelopeSchema?: undefined;
+};
+
+/**
+ * A handler definition WITH an envelope (the composed schema the transport
+ * validates against — presence rules the raw shape cannot carry, #786). The
+ * envelope must produce the shape's own output (`ZodType<ShapeOutput<Output>>`)
+ * and exactly its keys ({@link EnvelopeFor}); a mismatch makes the property
+ * type unsatisfiable, so the definition fails to type — no runtime check, no
+ * `@ts-expect-error`.
+ */
+export type EnvelopedHandlerDefinition<
+  Input extends ZodRawShape,
+  Output extends ZodRawShape,
+  Envelope extends ZodType<ShapeOutput<Output>>,
+  OutputData extends SharedHandlerOutputData<Output> = SharedHandlerOutputData<Output>,
+> = Omit<SharedHandler<Input, Output, OutputData>, 'outputEnvelopeSchema'> & {
+  readonly outputEnvelopeSchema: [EnvelopeFor<Output, Envelope>] extends [never]
+    ? Envelope & { readonly 'envelope keys must equal outputSchema keys': never }
+    : Envelope;
+};
+
+/**
+ * Define a handler with its output type DERIVED from its schema (#817).
+ *
+ * Nobody hand-writes an `OutputData`: the handler's return type is checked
+ * against {@link SharedHandlerOutputData} of the declared `outputSchema` (a
+ * missing key is a compile error), and when an `outputEnvelopeSchema` is
+ * given it must produce that same shape with exactly the same keys. The
+ * result is a {@link SharedHandler} usable anywhere one is — the
+ * heterogeneous list boundary takes it with no cast.
+ *
+ * Build handlers here rather than as a raw `SharedHandler` literal: the
+ * literal form leaves `OutputData` to be hand-written, and a hand-written
+ * type can drift from the schema the transport enforces. Every handler this
+ * package ships is built this way.
+ */
+export function defineHandler<
+  Input extends ZodRawShape,
+  Output extends ZodRawShape,
+  OutputData extends SharedHandlerOutputData<Output>,
+>(definition: HandlerDefinition<Input, Output, OutputData>): SharedHandler<Input, Output, OutputData>;
+export function defineHandler<
+  Input extends ZodRawShape,
+  Output extends ZodRawShape,
+  Envelope extends ZodType<ShapeOutput<Output>>,
+  OutputData extends SharedHandlerOutputData<Output>,
+>(
+  definition: EnvelopedHandlerDefinition<Input, Output, Envelope, OutputData>,
+): SharedHandler<Input, Output, OutputData>;
+export function defineHandler<
+  Input extends ZodRawShape,
+  Output extends ZodRawShape,
+  OutputData extends SharedHandlerOutputData<Output>,
+>(
+  definition:
+    | HandlerDefinition<Input, Output, OutputData>
+    | EnvelopedHandlerDefinition<Input, Output, ZodType<ShapeOutput<Output>>, OutputData>,
+): SharedHandler<Input, Output, OutputData> {
+  return definition;
 }
 
 /**

@@ -16,7 +16,7 @@
  * `ctx.appId` alone loses every multi-tenant caller.
  */
 import { z } from 'zod';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 /**
  * Read-only seam for the credit-transaction ledger. The pod's
@@ -82,8 +82,8 @@ export interface ListCreditTransactionsOutput {
 
 export function createListCreditTransactionsHandler(
   deps: ListCreditTransactionsDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListCreditTransactionsOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_list_credit_transactions',
     title: 'List credit transactions',
     audience: ['ops'],
@@ -118,5 +118,5 @@ export function createListCreditTransactionsHandler(
           : {}),
       };
     },
-  };
+  });
 }

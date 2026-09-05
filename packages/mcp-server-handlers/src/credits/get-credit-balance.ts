@@ -23,7 +23,7 @@
  * fallback.
  */
 import { z } from 'zod';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 /**
  * Read-only seam for the credit-balance row. A cloud deployment
@@ -79,8 +79,8 @@ export interface GetCreditBalanceOutput {
 
 export function createGetCreditBalanceHandler(
   deps: GetCreditBalanceDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GetCreditBalanceOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_get_credit_balance',
     title: 'Get credit balance',
     audience: ['ops'],
@@ -122,5 +122,5 @@ export function createGetCreditBalanceHandler(
         updatedAt: balance.updatedAt,
       };
     },
-  };
+  });
 }

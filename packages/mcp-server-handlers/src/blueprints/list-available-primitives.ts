@@ -17,7 +17,7 @@
  */
 import { z } from 'zod';
 import { PRIMITIVES_DOCUMENTATION_TS } from '@ggui-ai/ui-gen/tools/get-primitives-ts';
-import type { SharedHandler } from '../types.js';
+import { defineHandler } from '../types.js';
 
 const inputSchema = {};
 
@@ -30,17 +30,8 @@ const outputSchema = {
     .describe('Canonical import specifier — e.g. `@ggui-ai/design/primitives`.'),
 };
 
-interface ListAvailablePrimitivesOutput {
-  readonly documentation: string;
-  readonly importPath: string;
-}
-
-export function createListAvailablePrimitivesHandler(): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  ListAvailablePrimitivesOutput
-> {
-  return {
+export function createListAvailablePrimitivesHandler() {
+  return defineHandler({
     name: 'ggui_protocol_list_available_primitives',
     title: 'List available primitives',
     audience: ['protocol'],
@@ -54,5 +45,5 @@ export function createListAvailablePrimitivesHandler(): SharedHandler<
         importPath: '@ggui-ai/design/primitives',
       };
     },
-  };
+  });
 }

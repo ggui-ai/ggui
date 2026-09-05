@@ -13,13 +13,12 @@
  * at boot) into this factory, so every UI declared in the operator's
  * manifest becomes discoverable through this tool.
  */
-import { z } from 'zod';
-import { listFeaturedBlueprintsInputShape } from '@ggui-ai/protocol';
-import type {
-  BlueprintEntry,
-  BlueprintProvider,
-} from '@ggui-ai/mcp-server-core';
-import type { SharedHandler } from '../types.js';
+import {
+  gguiListFeaturedBlueprintsOutputSchema,
+  listFeaturedBlueprintsInputShape,
+} from '@ggui-ai/protocol';
+import type { BlueprintProvider } from '@ggui-ai/mcp-server-core';
+import { defineHandler, type ShapeOutput } from '../types.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
 // (`schemas/mcp.ts`). Intentionally EMPTY: the pre-launch No-Backcompat
@@ -27,14 +26,12 @@ import type { SharedHandler } from '../types.js';
 // consumer passes them.
 const inputSchema = listFeaturedBlueprintsInputShape;
 
-const outputSchema = {
-  // Two-arg `z.record(z.string(), z.unknown())` — zod v4 dropped the
-  // single-arg form. Keeping the explicit key/value pair so schema
-  // construction works under both zod majors; see
-  // `search-blueprints.ts` for the same rationale.
-  blueprints: z.array(z.record(z.string(), z.unknown())),
-  total: z.number().int().nonnegative(),
-};
+// The protocol owns this wire shape (#817): the provider's row composes the
+// protocol's `blueprintSourceSchema`, so `source` is the object union, never a record.
+const outputSchema = gguiListFeaturedBlueprintsOutputSchema.shape;
+
+/** The wire shape — derived from the registered schema (#817). */
+export type ListFeaturedBlueprintsOutput = ShapeOutput<typeof outputSchema>;
 
 export interface ListFeaturedBlueprintsDeps {
   /**
@@ -45,22 +42,8 @@ export interface ListFeaturedBlueprintsDeps {
   readonly blueprints?: BlueprintProvider;
 }
 
-/**
- * Concrete return shape of {@link createListFeaturedBlueprintsHandler}'s
- * handler. Mirrors {@link outputSchema} without laundering through
- * `z.record(z.unknown())` — `blueprints` entries are `BlueprintEntry`
- * (the provider's canonical row shape) so callers get real field
- * typing instead of `unknown`.
- */
-export interface ListFeaturedBlueprintsOutput {
-  readonly blueprints: BlueprintEntry[];
-  readonly total: number;
-}
-
-export function createListFeaturedBlueprintsHandler(
-  deps: ListFeaturedBlueprintsDeps = {},
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListFeaturedBlueprintsOutput> {
-  return {
+export function createListFeaturedBlueprintsHandler(deps: ListFeaturedBlueprintsDeps = {}) {
+  return defineHandler({
     name: 'ggui_list_featured_blueprints',
     title: 'List featured blueprints',
     audience: ['agent'],
@@ -74,10 +57,19 @@ export function createListFeaturedBlueprintsHandler(
         return { blueprints: [], total: 0 };
       }
       const entries = await provider.list({});
+      // Project the provider rows onto the wire — the registered shape's keys,
+      // as fresh values (`tags` copied; nothing beyond the schema travels).
       return {
-        blueprints: entries.map((entry) => ({ ...entry })),
+        blueprints: entries.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          ...(entry.description !== undefined ? { description: entry.description } : {}),
+          source: entry.source,
+          updatedAt: entry.updatedAt,
+          ...(entry.tags !== undefined ? { tags: [...entry.tags] } : {}),
+        })),
         total: entries.length,
       };
     },
-  };
+  });
 }

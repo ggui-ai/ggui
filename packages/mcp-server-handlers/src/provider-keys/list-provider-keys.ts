@@ -14,35 +14,24 @@
  * auth, which would be a real bug worth surfacing.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
-import type { ProviderKeyStore, ProviderKeySummary } from './types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
+import { providerKeySummarySchema, type ProviderKeyStore } from './types.js';
 
 const inputSchema = {} as const;
 
 const outputSchema = {
-  keys: z.array(
-    z.object({
-      provider: z.enum(['anthropic', 'openai', 'google', 'openrouter']),
-      label: z.string().optional(),
-      lastFour: z.string(),
-      createdAt: z.string().optional(),
-      lastUsedAt: z.string().optional(),
-    }),
-  ),
+  keys: z.array(providerKeySummarySchema),
 } as const;
 
-export interface ListProviderKeysOutput {
-  keys: readonly ProviderKeySummary[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type ListProviderKeysOutput = ShapeOutput<typeof outputSchema>;
 
 export interface ListProviderKeysDeps {
   readonly store: ProviderKeyStore;
 }
 
-export function createListProviderKeysHandler(
-  deps: ListProviderKeysDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListProviderKeysOutput> {
-  return {
+export function createListProviderKeysHandler(deps: ListProviderKeysDeps) {
+  return defineHandler({
     name: 'ggui_ops_list_provider_keys',
     title: 'List provider keys',
     audience: ['ops'],
@@ -60,7 +49,8 @@ export function createListProviderKeysHandler(
         );
       }
       const keys = await deps.store.list(ctx.appId);
-      return { keys };
+      // Store rows are immutable seam values; the wire carries a fresh copy.
+      return { keys: [...keys] };
     },
-  };
+  });
 }

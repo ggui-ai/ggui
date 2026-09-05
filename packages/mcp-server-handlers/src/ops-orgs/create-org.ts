@@ -12,7 +12,7 @@
  * Pure over the {@link OrgsSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgRecord, OrgsSource } from './types.js';
 
@@ -34,13 +34,8 @@ const outputSchema = {
   updatedAt: z.string(),
 } as const;
 
-export interface CreateOrgOutput {
-  readonly orgId: string;
-  readonly name: string;
-  readonly ownerUserId: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type CreateOrgOutput = ShapeOutput<typeof outputSchema>;
 
 export interface CreateOrgDeps {
   readonly orgs: OrgsSource;
@@ -48,8 +43,8 @@ export interface CreateOrgDeps {
 
 export function createCreateOrgHandler(
   deps: CreateOrgDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, CreateOrgOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_create_org',
     title: 'Create org',
     audience: ['ops'],
@@ -75,5 +70,5 @@ export function createCreateOrgHandler(
         updatedAt: row.updatedAt,
       };
     },
-  };
+  });
 }

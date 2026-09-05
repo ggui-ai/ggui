@@ -13,7 +13,7 @@
  * `provisionGguiApp` Lambda which already enforces base62 + retry.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import type { AppRecord, AppsSource } from './types.js';
 
@@ -42,19 +42,8 @@ const outputSchema = {
     ),
 } as const;
 
-export interface CreateAppOutput {
-  readonly appId: string;
-  readonly displayName: string;
-  readonly systemPrompt?: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  /**
-   * Per-app MCP connect URL. Optional: emitted only by deployments
-   * that expose per-app ingress (this handler has no ingress
-   * knowledge, so the default composition never sets it).
-   */
-  readonly connectUrl?: string;
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type CreateAppOutput = ShapeOutput<typeof outputSchema>;
 
 export interface CreateAppDeps {
   readonly apps: AppsSource;
@@ -62,8 +51,8 @@ export interface CreateAppDeps {
 
 export function createCreateAppHandler(
   deps: CreateAppDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, CreateAppOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_create_app',
     title: 'Create app',
     audience: ['ops'],
@@ -93,5 +82,5 @@ export function createCreateAppHandler(
         updatedAt: row.updatedAt,
       };
     },
-  };
+  });
 }

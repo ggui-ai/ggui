@@ -52,7 +52,8 @@ describe('createGguiListGadgetsHandler', () => {
     const appMetadataStore = new InMemoryAppMetadataStore();
     const tool = createGguiListGadgetsHandler({ appMetadataStore });
     const result = await tool.handler({}, makeCtx('unknown-app'));
-    expect(result.gadgets).toBe(STDLIB_GADGETS);
+    // Same catalog by value — the handler hands the wire a fresh copy, never the singleton.
+    expect(result.gadgets).toEqual(STDLIB_GADGETS);
   });
 
   it('accepts an explicit appId matching ctx.appId', async () => {

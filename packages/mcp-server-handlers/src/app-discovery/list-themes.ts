@@ -26,7 +26,7 @@
 
 import { z } from 'zod';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { AppAccessDeniedError } from './errors.js';
 
 const inputSchema = {
@@ -46,14 +46,15 @@ const inputSchema = {
  * `themes` resolver and is responsible for whatever upstream shape
  * produces it.
  */
-const themeEntryWireSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string(),
-    description: z.string(),
-    modes: z.array(z.enum(['light', 'dark'])),
-  })
-  .passthrough();
+// Closed: the wire carries exactly the four documented keys. A catalog
+// entry's undeclared extras (a resolver's `metadata`, say) stay seam-side —
+// declare a key here if agents should see it.
+const themeEntryWireSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  description: z.string(),
+  modes: z.array(z.enum(['light', 'dark'])),
+});
 
 const outputSchema = {
   themes: z.array(themeEntryWireSchema),
@@ -83,18 +84,11 @@ export interface GguiListThemesHandlerDeps {
   readonly themes: () => readonly ThemeCatalogEntry[];
 }
 
-export interface GguiListThemesOutput {
-  readonly themes: readonly ThemeCatalogEntry[];
-}
+/** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
+export type GguiListThemesOutput = ShapeOutput<typeof outputSchema>;
 
-export function createGguiListThemesHandler(
-  deps: GguiListThemesHandlerDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  GguiListThemesOutput
-> {
-  return {
+export function createGguiListThemesHandler(deps: GguiListThemesHandlerDeps) {
+  return defineHandler({
     name: 'ggui_list_themes',
     title: 'List themes',
     audience: ['agent'],
@@ -118,11 +112,20 @@ export function createGguiListThemesHandler(
       // (so the picker UI stays stable) and silently drops ids that
       // appear in the allowlist but aren't registered (defensive
       // against operator typos — agent still sees a working list).
-      if (app?.availableThemeIds && app.availableThemeIds.length > 0) {
-        const allowed = new Set(app.availableThemeIds);
-        return { themes: catalog.filter((t) => allowed.has(t.id)) };
-      }
-      return { themes: catalog };
+      const visible =
+        app?.availableThemeIds && app.availableThemeIds.length > 0
+          ? catalog.filter((t) => new Set(app.availableThemeIds).has(t.id))
+          : catalog;
+      // Project the seam entries onto the wire shape — exactly the four keys
+      // `outputSchema` declares, as fresh mutable values.
+      return {
+        themes: visible.map((t) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          modes: [...t.modes],
+        })),
+      };
     },
-  };
+  });
 }

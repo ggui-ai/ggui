@@ -28,9 +28,8 @@
 
 import { z } from 'zod';
 import { dataContractSchema, getRenderSourceInputShape } from '@ggui-ai/protocol';
-import type { GguiGetRenderSourceOutput } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { isVisibleToCaller } from './tenancy.js';
 import { buildRenderSourceEnvelope } from './render-source-envelope.js';
@@ -54,6 +53,8 @@ const outputSchema = {
       .describe("The render's live prop values, when present — a natural preview-props snapshot."),
   }),
 } as const;
+/** The wire shape — derived from `outputSchema` (#817); the protocol's `GguiGetRenderSourceOutput` is the consumer-facing type. */
+type GetRenderSourceOutput = ShapeOutput<typeof outputSchema>;
 
 export interface GguiGetRenderSourceHandlerDeps {
   readonly renderStore: GguiSessionStore;
@@ -61,8 +62,8 @@ export interface GguiGetRenderSourceHandlerDeps {
 
 export function createGguiGetRenderSourceHandler(
   deps: GguiGetRenderSourceHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiGetRenderSourceOutput> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_get_render_source',
     title: 'Get render source',
     audience: ['agent'],
@@ -73,7 +74,7 @@ export function createGguiGetRenderSourceHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiGetRenderSourceOutput> {
+    ): Promise<GetRenderSourceOutput> {
       const { sessionId } = z.object(inputSchema).parse(rawInput);
 
       const stored = await deps.renderStore.get(sessionId);
@@ -92,5 +93,5 @@ export function createGguiGetRenderSourceHandler(
       const blueprint = buildRenderSourceEnvelope(stored.render, sessionId, authoredSource);
       return { sessionId: stored.id, blueprint };
     },
-  };
+  });
 }

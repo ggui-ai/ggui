@@ -22,7 +22,7 @@
  * Pure over the {@link OrgsSource} seam.
  */
 import { z } from 'zod';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type { OrgsSource } from './types.js';
 
@@ -63,12 +63,8 @@ export interface RemoveOrgMemberDeps {
 
 export function createRemoveOrgMemberHandler(
   deps: RemoveOrgMemberDeps,
-): SharedHandler<
-  typeof inputSchema,
-  typeof outputSchema,
-  RemoveOrgMemberOutput
-> {
-  return {
+) {
+  return defineHandler({
     name: 'ggui_ops_remove_org_member',
     title: 'Remove org member',
     audience: ['ops'],
@@ -93,5 +89,5 @@ export function createRemoveOrgMemberHandler(
         alreadyAbsent: result.alreadyAbsent,
       };
     },
-  };
+  });
 }

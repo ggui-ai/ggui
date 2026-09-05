@@ -72,12 +72,12 @@ import { z } from 'zod';
 import {
   RUNTIME_PULL_MAX_LIMIT,
   RUNTIME_PULL_MAX_WAIT_SECONDS,
-  gguiSessionEventSchema,
+  runtimePullEventsPageSchema,
+  runtimePullHorizonSchema,
   runtimePullInputShape,
-  type GguiRuntimePullOutput,
 } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
@@ -90,18 +90,24 @@ const inputSchema = runtimePullInputShape;
 // `runtimePullOutputSchema` (`@ggui-ai/protocol`). The alignment tests
 // in `runtime-pull.test.ts` pin this shape to the union key-for-key —
 // same posture as `ggui_update`'s input.
+// The protocol owns both arms of this output (`runtimePullOutputSchema` is
+// their union); the MCP tool root must be one object, so the registration
+// flattens the two arms into one optional-field shape. Every field TYPE is
+// the protocol's; only the optionality of the flattening is stated here.
 const outputSchema = {
   /** Normal page only — ledger rows with `seq > sinceSequence`, ascending. */
-  events: z.array(gguiSessionEventSchema).optional(),
+  events: runtimePullEventsPageSchema.shape.events.optional(),
   /** Normal page only — the render's current high-water mark (cursor floor on empty pages). */
-  lastSequence: z.number().int().min(0).optional(),
+  lastSequence: runtimePullEventsPageSchema.shape.lastSequence.optional(),
   /** Normal page only — `true` when `limit` truncated the page; re-pull immediately. */
-  hasMore: z.boolean().optional(),
+  hasMore: runtimePullEventsPageSchema.shape.hasMore.optional(),
   /** Horizon arm only — the cursor fell out of the replayable window (normal result, not an error). */
-  reason: z.literal('REPLAY_HORIZON_PASSED').optional(),
+  reason: runtimePullHorizonSchema.shape.reason.optional(),
   /** Horizon arm only — reset the cursor here after re-mounting from a snapshot. */
-  currentSequence: z.number().int().min(0).optional(),
+  currentSequence: runtimePullHorizonSchema.shape.currentSequence.optional(),
 } as const;
+/** The wire shape — derived from the registered fields (#817). */
+type RuntimePullOutput = ShapeOutput<typeof outputSchema>;
 
 export interface GguiRuntimePullHandlerDeps {
   /**
@@ -126,10 +132,8 @@ export interface GguiRuntimePullHandlerDeps {
  * Build the `ggui_runtime_pull` handler. Registers as app-visible so
  * MCP Apps hosts route iframe-issued `tools/call` to it per spec §401.
  */
-export function createGguiRuntimePullHandler(
-  deps: GguiRuntimePullHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRuntimePullOutput> {
-  return {
+export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
+  return defineHandler({
     name: 'ggui_runtime_pull',
     title: '[runtime] Pull Events',
     audience: ['runtime'],
@@ -147,7 +151,7 @@ export function createGguiRuntimePullHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiRuntimePullOutput> {
+    ): Promise<RuntimePullOutput> {
       const parsed = z.object(inputSchema).parse(rawInput);
       const { sessionId } = parsed;
       const sinceSequence = parsed.sinceSequence ?? 0;
@@ -214,7 +218,8 @@ export function createGguiRuntimePullHandler(
           // after a full hold is a NORMAL result (the client stays
           // subscribed by immediately re-pulling).
           return {
-            events: result.events,
+            // The ledger's rows are the store's (immutable); the wire carries a copy.
+            events: [...result.events],
             lastSequence: result.lastSequence,
             hasMore: result.hasMore,
           };
@@ -225,5 +230,5 @@ export function createGguiRuntimePullHandler(
         });
       }
     },
-  };
+  });
 }
