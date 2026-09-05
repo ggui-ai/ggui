@@ -808,15 +808,24 @@ jobs:
             attempt=$((attempt + 1))
             MISSING=()
             for pkg in "${PACKAGES[@]}"; do
-              code=$(curl -sf -o /dev/null -w "%{http_code}" \
+              # A package counts as replicated only when BOTH the packument
+              # (what `npm view` reads) AND its tarball (what `npm install`
+              # fetches) answer 200. npm replicates the packument first; on
+              # the v0.14.0 cut the packument poll passed and the install
+              # step 404'd on a tarball 35 s later (ggui#834). The tarball
+              # path is the registry's canonical <name>-<version>.tgz.
+              meta=$(curl -sf -o /dev/null -w "%{http_code}" \
                 "https://registry.npmjs.org/@ggui-ai%2F$pkg/$TARGET_VERSION" \
                 || echo "000")
-              if [ "$code" != "200" ]; then
-                MISSING+=("$pkg($code)")
+              tgz=$(curl -sf -o /dev/null -I -w "%{http_code}" \
+                "https://registry.npmjs.org/@ggui-ai/$pkg/-/$pkg-$TARGET_VERSION.tgz" \
+                || echo "000")
+              if [ "$meta" != "200" ] || [ "$tgz" != "200" ]; then
+                MISSING+=("$pkg(packument:$meta tarball:$tgz)")
               fi
             done
             if [ "${#MISSING[@]}" -eq 0 ]; then
-              echo "::notice::All ${#PACKAGES[@]} packages retrievable at @0.x — $TARGET_VERSION (attempt $attempt)"
+              echo "::notice::All ${#PACKAGES[@]} packages retrievable — packument and tarball — at @0.x — $TARGET_VERSION (attempt $attempt)"
               exit 0
             fi
             echo "[attempt $attempt] ${#MISSING[@]} still replicating: ${MISSING[@]:0:5}$([ "${#MISSING[@]}" -gt 5 ] && echo ' …more')"
