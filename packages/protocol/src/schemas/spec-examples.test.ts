@@ -59,3 +59,46 @@ describe.skipIf(!existsSync(SPEC))(
     });
   }
 );
+
+/**
+ * The §7 `GguiRenderOutput` listing ↔ `renderOutputSchema` (ggui#803 leg 4):
+ * the SPEC's type block for the render result names exactly the fields the
+ * schema's shape has — a key added on either side reds this the same push.
+ */
+describe.skipIf(!existsSync(SPEC))(
+  "SPEC §7 GguiRenderOutput listing names exactly the fields renderOutputSchema has (ggui#803 leg 4) — monorepo only",
+  () => {
+    /** Depth-1 field names of the `interface GguiRenderOutput { … }` block — nested object literals are not fields of the result. */
+    function specListingFields(): string[] {
+      const spec = readFileSync(SPEC, "utf8");
+      const start = spec.indexOf("interface GguiRenderOutput");
+      expect(start, "SPEC carries an `interface GguiRenderOutput` listing").toBeGreaterThan(0);
+      const lines = spec.slice(start).split("\n");
+      const fields: string[] = [];
+      let depth = 0;
+      for (const line of lines) {
+        const opens = (line.match(/\{/g) ?? []).length;
+        const closes = (line.match(/\}/g) ?? []).length;
+        const field = /^\s*(?:readonly\s+)?([A-Za-z_]+)\??:/.exec(line);
+        if (depth === 1 && field !== null && !line.trimStart().startsWith("*"))
+          fields.push(field[1]);
+        depth += opens - closes;
+        if (depth <= 0 && fields.length > 0) break;
+      }
+      return fields;
+    }
+
+    it("same field set, both directions", () => {
+      const listed = new Set(specListingFields());
+      const shape = new Set(Object.keys(renderOutputSchema.shape));
+      expect(
+        [...shape].filter((k) => !listed.has(k)),
+        "schema keys missing from the SPEC listing"
+      ).toEqual([]);
+      expect(
+        [...listed].filter((k) => !shape.has(k)),
+        "SPEC fields the schema does not have"
+      ).toEqual([]);
+    });
+  }
+);
