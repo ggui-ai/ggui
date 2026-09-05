@@ -1035,7 +1035,7 @@ export const renderOutputSchema = z.object({
  * partial patches that would break required fields, type-mismatch
  * values, etc. all reject pre-persist.
  *
- * `sessionId` is globally unique; the server tenancy-checks via
+ * `sessionId` is globally unique; the server checks the app scope via
  * `ctx.appId`.
  */
 export const updateInputSchema = z.discriminatedUnion('kind', [
@@ -1334,7 +1334,7 @@ export const gguiSessionEventSchema = z.object({
  * OPTIONAL here (the bridge rung owns its cursor and seeds from 0; the
  * route requires it because a bare browser GET has no cursor owner),
  * and `limit` is clamped to {@link RUNTIME_PULL_MAX_LIMIT} instead of
- * rejecting above it. Tenancy violations and unknown sessionIds
+ * rejecting above it. Cross-app access and unknown sessionIds
  * surface uniformly as the `session_not_found` error — existence of
  * other apps' renders is never leaked.
  */

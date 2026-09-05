@@ -18,7 +18,7 @@
  *     advanced-generator iterative-loop output routinely exceeds
  *     them). The in-memory adapter skips the body store (in-process
  *     `Map<codeHash, string>`).
- *   - **Tenancy.** Scoped per `(appId, contractHash)`. Different apps'
+ *   - **App scope.** Scoped per `(appId, contractHash)`. Different apps'
  *     contract may coincidentally hash the same; their blueprints
  *     must never cross-pollinate. Rows are keyed by `blueprintId`;
  *     lookups go through an indexed `(appId, contractHash)` query.
@@ -131,7 +131,7 @@ export interface Blueprint {
    * key.
    */
   readonly contractHash: string;
-  /** Tenancy scope. Composite secondary key with `contractHash`. */
+  /** App scope. Composite secondary key with `contractHash`. */
   readonly appId: string;
   /**
    * S3 URL (`s3://<bucket>/<key>`) of the generated code body when

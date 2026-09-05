@@ -100,7 +100,7 @@ export type GguiSessionStatus = z.infer<typeof gguiSessionStatusSchema>;
 
 /**
  * Common base for every {@link GguiSession} variant. Carries identity,
- * tenancy, lifecycle, and conversation-scoped context that every
+ * app scope, lifecycle, and conversation-scoped context that every
  * rendered thing has regardless of how its visible bits are
  * produced (LLM-generated component, server-emitted system card,
  * embedded MCP-App iframe).
@@ -116,7 +116,7 @@ export interface GguiSessionBase {
   /** GguiSession identity. The value an iframe's bootstrap meta and every
    *  wire reference (props_update, consume, update) keys by. */
   readonly id: string;
-  /** App identity (tenancy boundary, always per-render). */
+  /** App identity (the app-scope boundary, always per-render). */
   readonly appId: string;
   /** Authenticated end-user (after the auth gate). Absent for anon
    *  flows. */
@@ -198,7 +198,7 @@ export interface GguiSessionBase {
 /**
  * `GguiSession` — the canonical protocol shape for a single rendered UI.
  *
- * Three variants share {@link GguiSessionBase} (identity, tenancy,
+ * Three variants share {@link GguiSessionBase} (identity, app scope,
  * lifecycle); each variant adds its own visible-bits surface:
  *
  *   - {@link ComponentGguiSession} — LLM-generated / native React component.

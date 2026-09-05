@@ -14,7 +14,7 @@ kit grounds the claim empirically rather than by assertion.
 - WebSocket transport matching the ggui live-channel wire.
 - In-memory render store with a consume-buffer event ledger (no persistence).
 - `schemaVersion` handshake with `UPGRADE_REQUIRED` on mismatch.
-- Subscribe tenancy: the subscribe's `appId` must match the GguiSession's
+- Subscribe app scope: the subscribe's `appId` must match the GguiSession's
   bound `appId` or the subscribe is rejected with an `error` frame, code
   `APP_MISMATCH` (an unknown session id still provisions on subscribe,
   binding the subscribe's own `appId`).

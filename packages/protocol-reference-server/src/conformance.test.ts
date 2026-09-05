@@ -94,7 +94,7 @@ import { ReferenceServer } from './server.js';
  *
  *   - `app-mismatch`: the `create-session` directive binds the render
  *     to appId `'conformance-other'`; the runner's subscribe always
- *     carries appId `'conformance'`. SPEC §12.2 makes the tenancy
+ *     carries appId `'conformance'`. SPEC §12.2 makes the app-scope
  *     check a MUST — the subscribe handler rejects with an `error`
  *     frame, code `APP_MISMATCH` (§12.2.3), registering no subscriber
  *     and emitting no ack. Proves the GguiSession-exists-but-different-
@@ -117,7 +117,7 @@ import { ReferenceServer } from './server.js';
  *     `DEPLOYMENT_DEFAULT_APP_ID`. The provision-on-subscribe path
  *     binds the resolved value; the kit grades it by session-state
  *     read-back of the row's `appId` through `readSessionField` —
- *     proving the default binds a real tenant, never an undefined
+ *     proving the default binds a real app id, never an undefined
  *     one.
  */
 /**

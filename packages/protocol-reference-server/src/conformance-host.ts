@@ -28,7 +28,7 @@
  * introspection seam — `session-state` fixtures (stateful obligations
  * with no wire response, e.g. `host-context-observed-persists`) grade
  * by reading the GguiSession field back after the observation window.
- * Readable fields: `hostContext`, `appId` (the tenancy column the
+ * Readable fields: `hostContext`, `appId` (the app-scope column the
  * `absent-appid-defaults` fixture grades identity-default resolution
  * against). Unknown fields throw with a clear message so the kit
  * records an honest SKIP, never a weakened pass.
@@ -189,7 +189,7 @@ export function createReferenceConformanceHost({
         return render.hostContext;
       }
       if (field === 'appId') {
-        // The tenancy column on the live render row — the kit's
+        // The app-scope column on the live render row — the kit's
         // `absent-appid-defaults` fixture reads it back to grade the
         // SPEC §12.2 identity-default resolution (a subscribe that
         // omits `appId` binds the deployment default, never an

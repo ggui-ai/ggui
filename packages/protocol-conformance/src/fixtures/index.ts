@@ -109,7 +109,7 @@ export { consumeBufferFixtures } from './consume-buffer/index.js';
 export { hostContextFixtures } from './host-context/index.js';
 export { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 export { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
-export { subscribeTenancyFixtures } from './subscribe-tenancy/index.js';
+export { subscribeAppScopeFixtures } from './subscribe-app-scope/index.js';
 
 import type { TestCase } from '../types.js';
 import { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
@@ -117,7 +117,7 @@ import { consumeBufferFixtures } from './consume-buffer/index.js';
 import { hostContextFixtures } from './host-context/index.js';
 import { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 import { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
-import { subscribeTenancyFixtures } from './subscribe-tenancy/index.js';
+import { subscribeAppScopeFixtures } from './subscribe-app-scope/index.js';
 
 /**
  * Contract slugs — match the sub-module directory names. The
@@ -131,7 +131,7 @@ export type ContractSlug =
   | 'host-context'
   | 'reserved-channel-authority'
   | 'schema-version-handshake'
-  | 'subscribe-tenancy'
+  | 'subscribe-app-scope'
   | (string & {});
 
 /**
@@ -148,7 +148,7 @@ export const fixturesByContract: Readonly<Record<ContractSlug, readonly TestCase
   'host-context': hostContextFixtures,
   'reserved-channel-authority': reservedChannelAuthorityFixtures,
   'schema-version-handshake': schemaVersionHandshakeFixtures,
-  'subscribe-tenancy': subscribeTenancyFixtures,
+  'subscribe-app-scope': subscribeAppScopeFixtures,
 };
 
 /**

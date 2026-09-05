@@ -1072,8 +1072,8 @@ function slugToCriterion(slug: string): string {
       return 'SPEC §4.4 reserved-channel authority';
     case 'schema-version-handshake':
       return 'Protocol #3 version negotiation';
-    case 'subscribe-tenancy':
-      return 'SPEC §12.2 subscribe tenancy — appId MUST match the bound app (§12.2.3 APP_MISMATCH)';
+    case 'subscribe-app-scope':
+      return 'SPEC §12.2 subscribe app scope — appId MUST match the bound app (§12.2.3 APP_MISMATCH)';
     default:
       return slug;
   }

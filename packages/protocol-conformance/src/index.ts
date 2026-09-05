@@ -79,7 +79,7 @@ export {
   hostContextFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
-  subscribeTenancyFixtures,
+  subscribeAppScopeFixtures,
 } from './fixtures/index.js';
 export type { ContractSlug } from './fixtures/index.js';
 

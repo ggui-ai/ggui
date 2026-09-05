@@ -22,7 +22,7 @@ import {
   hostContextFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
-  subscribeTenancyFixtures,
+  subscribeAppScopeFixtures,
 } from './index.js';
 
 describe('fixtures catalog', () => {
@@ -64,7 +64,7 @@ describe('fixtures catalog', () => {
       'host-context',
       'reserved-channel-authority',
       'schema-version-handshake',
-      'subscribe-tenancy',
+      'subscribe-app-scope',
     ]);
   });
 
@@ -74,7 +74,7 @@ describe('fixtures catalog', () => {
     expect(hostContextFixtures.length).toBe(1);
     expect(reservedChannelAuthorityFixtures.length).toBe(1);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
-    expect(subscribeTenancyFixtures.length).toBe(2);
+    expect(subscribeAppScopeFixtures.length).toBe(2);
   });
 
   it('allFixtures is sorted lexicographically by name (deterministic)', () => {
@@ -143,7 +143,7 @@ describe('fixtures catalog', () => {
     if (dispatch.kind !== 'host_context_observed') return;
     // The envelope's payload names the same render the create-session
     // setup step declares — the runner subscribes under that id and
-    // the server's tenancy guard requires the two to match.
+    // the server's app-scope guard requires the two to match.
     expect(fixture.setup).toEqual([
       { type: 'create-session', sessionId: dispatch.envelope.payload.sessionId },
     ]);
@@ -220,7 +220,7 @@ describe('fixtures catalog', () => {
 
   it('app-mismatch binds the GguiSession to a different appId than the runner subscribes with', () => {
     // The runner's subscribe frame always claims appId 'conformance';
-    // the fixture proves the §12.2 tenancy MUST only if its
+    // the fixture proves the §12.2 app-scope MUST only if its
     // create-session directive binds something else.
     const fixture = allFixtures.find((f) => f.name === 'app-mismatch');
     expect(fixture).toBeDefined();
@@ -237,11 +237,11 @@ describe('fixtures catalog', () => {
     expect(fixture.expectedBehavior).toEqual({ kind: 'error-frame', code: 'APP_MISMATCH' });
   });
 
-  it('absent-appid-defaults omits the runner appId stamp and grades the bound tenant by state read-back', () => {
+  it('absent-appid-defaults omits the runner appId stamp and grades the bound app id by state read-back', () => {
     // The runner's subscribe frame normally claims appId 'conformance';
     // this fixture proves the §12.2 identity-default resolution only
     // if the frame genuinely OMITS appId (subscribe.omitAppId) AND the
-    // grade reads the bound tenant back (a wire-ack-only grade would
+    // grade reads the bound app id back (a wire-ack-only grade would
     // pass a server that acks while binding an undefined tenant — the
     // corrupt-row failure mode).
     const fixture = allFixtures.find((f) => f.name === 'absent-appid-defaults');
@@ -258,7 +258,7 @@ describe('fixtures catalog', () => {
     expect(behavior.kind).toBe('session-state');
     if (!behaviorIs(behavior, 'session-state')) return;
     expect(behavior.field).toBe('appId');
-    // The expected tenant is the conventional 'conformance' default —
+    // The expected app id is the conventional 'conformance' default —
     // the same value the runner stamps when it does NOT omit appId, so
     // the identity-default and the explicit path bind identically.
     expect(behavior.expected).toBe('conformance');

@@ -26,10 +26,10 @@
  * persists NOTHING: a partial write from half-valid input would
  * fabricate state the client never coherently observed.
  *
- * Tenancy note: the first-party handler scopes the write through its
+ * Scoping note: the first-party handler scopes the write through its
  * subscriber binding (`NOT_SUBSCRIBED` / `SESSION_MISMATCH` error
  * frames). The reference server has no auth identity by design
- * (accepts any bearer), so its tenancy scope is the render lookup
+ * (accepts any bearer), so its scope is the render lookup
  * itself — the caller drops frames whose `payload.sessionId` names an
  * unknown render, mirroring the action path's unknown-render posture.
  */

@@ -1,5 +1,5 @@
 /**
- * SPEC §12.2 subscribe tenancy — the subscribe's `appId` MUST match
+ * SPEC §12.2 subscribe app scope — the subscribe's `appId` MUST match
  * the GguiSession's bound `appId` or the subscribe fails with the
  * canonical `error` frame, code `APP_MISMATCH` (§12.2.3).
  *
@@ -19,7 +19,7 @@
  *     resolves the caller's identity-default app and acks. This
  *     server's identity model is no-auth, so the identity-default is
  *     the deployment-level `DEPLOYMENT_DEFAULT_APP_ID` — the
- *     provisioned render is bound to it (a real string tenant, never
+ *     provisioned render is bound to it (a real string app id, never
  *     an undefined one), and the §12.2.3 APP_MISMATCH gate still
  *     applies on the resolved value.
  *
@@ -32,7 +32,7 @@ import { createReferenceConformanceHost } from './conformance-host.js';
 import { DEPLOYMENT_DEFAULT_APP_ID } from './render.js';
 import { ReferenceServer } from './server.js';
 
-describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
+describe('SPEC §12.2 subscribe app scope (APP_MISMATCH)', () => {
   let server: ReferenceServer;
 
   beforeEach(async () => {
@@ -127,7 +127,7 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
     });
     expect(reply).toMatchObject({ type: 'ack', requestId: 'tenancy-4-req' });
     // The provisioned render is bound to the RESOLVED identity-default
-    // — a real string tenant, never an undefined one. (The corrupt-row
+    // — a real string app id, never an undefined one. (The corrupt-row
     // failure mode this locks out: ack + a row whose appId is
     // undefined, unreachable by any later legal subscribe.)
     const provisioned = server.renders.get('tenancy-4');
@@ -135,7 +135,7 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
     expect(provisioned?.appId).toBe(DEPLOYMENT_DEFAULT_APP_ID);
   });
 
-  it('tenancy still gates the resolved default — a render bound elsewhere rejects an appId-less subscribe with APP_MISMATCH', async () => {
+  it('the app-scope gate still applies to the resolved default — a render bound elsewhere rejects an appId-less subscribe with APP_MISMATCH', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     await host.dispatchSetup({
       kind: 'create-session',
@@ -162,7 +162,7 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
 
 /**
  * Open a WS, send one `subscribe` frame, resolve with the FIRST frame
- * the server replies (ack or error), then close. The tenancy contract
+ * the server replies (ack or error), then close. The app-scope contract
  * is a single request/reply exchange, so one frame is the whole
  * observable surface. `appId` is optional, mirroring the wire — omit
  * it to drive the identity-default resolution path.
@@ -176,7 +176,7 @@ async function subscribeOnce(
     const ws = new WebSocket(wsUrl);
     const ceiling = setTimeout(() => {
       ws.close();
-      reject(new Error('subscribe-tenancy test: no reply within 2s'));
+      reject(new Error('subscribe-app-scope test: no reply within 2s'));
     }, 2000);
 
     ws.on('open', () => {

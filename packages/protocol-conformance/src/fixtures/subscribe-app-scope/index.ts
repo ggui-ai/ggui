@@ -1,7 +1,7 @@
 /**
- * `subscribe-tenancy` fixture sub-module.
+ * `subscribe-app-scope` fixture sub-module.
  *
- * Exercises the subscribe-time tenancy contract (SPEC §12.2 subscribe
+ * Exercises the subscribe-time app-scope contract (SPEC §12.2 subscribe
  * payload table + §12.2.3 channel-3 error codes):
  *
  *   - `app-mismatch` — the GguiSession exists but is bound to a
@@ -56,10 +56,10 @@ import appMismatch from './app-mismatch.json' with { type: 'json' };
 
 import type { TestCase } from '../../types.js';
 
-/** All fixtures asserting subscribe-time tenancy (SPEC §12.2 field
+/** All fixtures asserting subscribe-time app scope (SPEC §12.2 field
  *  table — identity-default resolution on absent `appId` — and
  *  §12.2.3 `APP_MISMATCH`). */
-export const subscribeTenancyFixtures: readonly TestCase[] = [
+export const subscribeAppScopeFixtures: readonly TestCase[] = [
   absentAppidDefaults as TestCase,
   appMismatch as TestCase,
 ];

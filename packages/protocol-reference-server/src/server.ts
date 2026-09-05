@@ -1,7 +1,7 @@
 /**
  * `ReferenceServer` — the minimal WS live-channel server this package
  * exports. Honest scope: SPEC §12.2 wire (subscribe incl. the §12.2
- * appId-tenancy MUST → APP_MISMATCH), version handshake, the single
+ * appId app-scope MUST → APP_MISMATCH), version handshake, the single
  * action-routing model (action → consume-buffer append → ack with
  * sequence; undeclared actions AND schema-violating payloads rejected
  * with CONTRACT_VIOLATION per SPEC §4.6 receipt validation), and
@@ -235,7 +235,7 @@ export class ReferenceServer {
       // obligation is purely stateful: persist the validated
       // projection onto the named render (idempotent overwrite). The
       // first-party server scopes the write through its subscriber
-      // binding; this no-auth server's tenancy scope is the render
+      // binding; this no-auth server's scope is the render
       // lookup itself — malformed frames and unknown renders drop,
       // mirroring the action path.
       const parsed = parseHostContextObservedFrame(frame);
@@ -268,7 +268,7 @@ export class ReferenceServer {
     // every caller is the same anonymous identity — so the
     // identity-default collapses to the deployment-level
     // {@link DEPLOYMENT_DEFAULT_APP_ID}; the resolved value flows
-    // through the SAME tenancy gate + provision-on-subscribe path a
+    // through the SAME app-scope gate + provision-on-subscribe path a
     // client-supplied appId takes. A PRESENT-but-non-string `appId` is
     // still a malformed frame and takes the missing-`sessionId`
     // posture: silently dropped, no error frame, no render
@@ -318,7 +318,7 @@ export class ReferenceServer {
       return;
     }
 
-    // SPEC §12.2 tenancy MUST: the subscribe's `appId` MUST match the
+    // SPEC §12.2 app-scope MUST: the subscribe's `appId` MUST match the
     // GguiSession's bound appId or the subscribe fails APP_MISMATCH
     // (§12.2.3). The code is deliberately distinct from
     // SESSION_NOT_FOUND — the GguiSession EXISTS, it is reachable only
