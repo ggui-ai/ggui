@@ -1,3 +1,5 @@
+import { renderInputEnvelopeSchema } from './render-input-envelope.js';
+import { renderInputShape } from './mcp.js';
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import { expectTypeOf } from 'vitest';
 import {
@@ -1342,5 +1344,29 @@ describe('mcpUiDisplayModeSchema — the wire enum is ext-apps\' McpUiDisplayMod
   it('is assignable to the host SDK type (compile-time; a widening upstream lands here as a type error)', () => {
     expectTypeOf<z.infer<typeof mcpUiDisplayModeSchema>>().toMatchTypeOf<McpUiDisplayMode>();
     expect(mcpUiDisplayModeSchema.options).toEqual(['inline', 'fullscreen', 'pip']);
+  });
+});
+
+describe('renderInputEnvelopeSchema — infra.model is a model route in either wire form, or the handler input parse fails at infra.model (#818)', () => {
+  const base = { handshakeId: 'hs_1', props: {} };
+  const modelIssue = (value: unknown): boolean => {
+    const r = renderInputEnvelopeSchema.safeParse(value);
+    return !r.success && r.error.issues.some((i) => i.path.join('.') === 'infra.model');
+  };
+  it('accepts the canonical and LiteLLM forms (aliases resolve in both) and an absent model', () => {
+    for (const model of ['anthropic:claude-haiku-4-5-20251001', 'anthropic/claude-haiku-4-5', 'anthropic:claude-haiku-4-5']) {
+      expect(modelIssue({ ...base, infra: { model } }), model).toBe(false);
+    }
+    expect(modelIssue(base)).toBe(false);
+    expect(modelIssue({ ...base, infra: {} })).toBe(false);
+  });
+  it('rejects a bare model id and a non-route at path infra.model — a contract error, never a policy refusal', () => {
+    for (const model of ['claude-haiku-4-5', 'not a route', 'nope:']) {
+      expect(modelIssue({ ...base, infra: { model } }), model).toBe(true);
+    }
+  });
+  it('the registered shape stays parser-free — a browser bundle never validates a render input', () => {
+    // The SDK validates this shape; the envelope (server-side) carries the grammar.
+    expect(renderInputShape.infra.parse({ model: 'claude-haiku-4-5' })).toEqual({ model: 'claude-haiku-4-5' });
   });
 });
