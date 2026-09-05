@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/protocol",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "sideEffects": [
     "./dist/schemas/sync-check.js",
     "./dist/validation/ajv-runtime.js"
