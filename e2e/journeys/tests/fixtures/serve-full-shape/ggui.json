@@ -1,0 +1,7 @@
+{
+  "schema": "1",
+  "protocol": "draft-2026-09-04",
+  "app": { "slug": "serve-full-shape", "name": "serve teardown — full shape" },
+  "agent": { "entry": "./agent.mjs" },
+  "storage": { "vectors": { "driver": "sqlite", "path": "./ggui-vectors.sqlite" } }
+}

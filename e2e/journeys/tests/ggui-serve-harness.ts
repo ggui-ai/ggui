@@ -374,6 +374,19 @@ export interface GguiServeHandle {
 /** Optional inputs to {@link spawnGguiServe}. Empty object is the same as no options. */
 export interface SpawnGguiServeOptions {
   /**
+   * Spawn shape. `true` (default) passes `--mcp-only` — the MCP server
+   * alone. `false` runs the full shape: MCP + live channel, and the
+   * supervised agent when the fixture's `ggui.json` declares
+   * `agent.entry`. The #855 teardown pin runs both.
+   */
+  readonly mcpOnly?: boolean;
+  /**
+   * Extra CLI arguments appended after the shape flags (e.g.
+   * `['--seed-pool', 'pool']` — relative paths resolve against the
+   * spawned CWD, i.e. inside the copied fixture).
+   */
+  readonly extraArgs?: readonly string[];
+  /**
    * Absolute path to a fixture directory whose contents are copied
    * into the spawned process's CWD before boot. Use this to seed a
    * `ggui.json` + supporting files (blueprints, primitive manifests,
@@ -619,7 +632,14 @@ export async function spawnGguiServe(
   const spawnStartedAt = Date.now();
   const proc: ChildProcessWithoutNullStreams = spawn(
     'node',
-    [GGUI_CLI_DIST, 'serve', '--port', '0', '--mcp-only'],
+    [
+      GGUI_CLI_DIST,
+      'serve',
+      '--port',
+      '0',
+      ...(opts.mcpOnly === false ? [] : ['--mcp-only']),
+      ...(opts.extraArgs ?? []),
+    ],
     {
       cwd: tempCwd,
       stdio: ['pipe', 'pipe', 'pipe'],

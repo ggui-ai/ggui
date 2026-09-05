@@ -27,6 +27,7 @@ import {
   type ThemeLoadIssue,
 } from '@ggui-ai/project-config/node';
 import { resolveAgentPlan, type ResolvedAgentPlan } from './serve-fallback.js';
+import { DRAIN_DEADLINE_MS, armDrainDeadline } from './drain-deadline.js';
 import {
   buildAgentRuntime,
   describeTunnelSession,
@@ -1403,8 +1404,19 @@ main(process.argv).then(
     // model is loaded runs ONNX Runtime's static teardown under its
     // still-parked worker threads and aborts (`libc++abi … mutex lock
     // failed`, SIGABRT on every Ctrl-C — #855). The journeys spec
-    // `serve-teardown.spec.ts` pins the clean exit.
+    // `serve-teardown.spec.ts` pins the clean exit on every serve shape.
     process.exitCode = code;
+    // Bounded: a leaked handle must not turn Ctrl-C into a hang. If the
+    // loop has not drained by the deadline, the live resources are named
+    // on stderr and the process hard-exits with the same code.
+    armDrainDeadline({
+      exitCode: code,
+      deadlineMs: DRAIN_DEADLINE_MS,
+      exit: (c) => process.exit(c),
+      stderr: (line) => process.stderr.write(line),
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      liveResources: () => process.getActiveResourcesInfo(),
+    });
   },
   (error: unknown) => {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);

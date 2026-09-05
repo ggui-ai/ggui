@@ -12,6 +12,7 @@
  * fails the same assertion.
  */
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   DEVTOOL_DIST,
@@ -22,6 +23,15 @@ import {
 } from './ggui-serve-harness';
 
 const WARM_TIMEOUT_MS = 30_000;
+/**
+ * Full serve shape: MCP + live channel + a supervised agent
+ * (`agent.entry`) + sqlite vectors + `--seed-pool` — the composition
+ * the samples-render scenarios run (#866). The fixture is copied into
+ * the spawned CWD, so `--seed-pool pool` resolves inside it.
+ */
+const FULL_SHAPE_FIXTURE = join(__dirname, 'fixtures', 'serve-full-shape');
+const NATIVE_ABORT = /libc\+\+abi|mutex lock failed|Abort trap/;
+const DRAIN_DEADLINE = /did not drain within/;
 
 async function waitForEmbeddingWarm(
   handle: GguiServeHandle,
@@ -43,6 +53,35 @@ async function waitForEmbeddingWarm(
 }
 
 test.describe('ggui serve — teardown (#855)', () => {
+  test('full shape (agent + sqlite vectors + --seed-pool): SIGTERM after READY exits 0 on a drained loop', async () => {
+    test.skip(
+      !existsSync(GGUI_CLI_DIST) || !existsSync(DEVTOOL_DIST),
+      'needs @ggui-ai/cli + @ggui-ai/console dists — run the builds first',
+    );
+    const handle = await spawnGguiServe({
+      fixtureDir: FULL_SHAPE_FIXTURE,
+      mcpOnly: false,
+      extraArgs: ['--seed-pool', 'pool'],
+    });
+    try {
+      const warm = await waitForEmbeddingWarm(handle);
+      test.skip(
+        warm === 'degraded',
+        'local embedding model unavailable — the #855 path needs the loaded model',
+      );
+      expect(handle.stderr()).toMatch(/\[agent\] up pid=/);
+      await handle.close();
+      const exit = await handle.exit;
+      expect(handle.stderr()).not.toMatch(NATIVE_ABORT);
+      // The bounded drain is the fallback, never the path: a drained loop
+      // exits before the deadline and the diagnostic line is never written.
+      expect(handle.stderr()).not.toMatch(DRAIN_DEADLINE);
+      expect(exit).toEqual({ code: 0, signal: null });
+    } finally {
+      await attachServeArtifacts(handle);
+    }
+  });
+
   test('SIGTERM after READY exits 0 with nothing native on stderr', async () => {
     test.skip(
       !existsSync(GGUI_CLI_DIST) || !existsSync(DEVTOOL_DIST),
@@ -60,9 +99,8 @@ test.describe('ggui serve — teardown (#855)', () => {
       );
       await handle.close();
       const exit = await handle.exit;
-      expect(handle.stderr()).not.toMatch(
-        /libc\+\+abi|mutex lock failed|Abort trap/,
-      );
+      expect(handle.stderr()).not.toMatch(NATIVE_ABORT);
+      expect(handle.stderr()).not.toMatch(DRAIN_DEADLINE);
       expect(exit).toEqual({ code: 0, signal: null });
     } finally {
       await attachServeArtifacts(handle);
