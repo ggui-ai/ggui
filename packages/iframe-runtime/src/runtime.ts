@@ -2291,7 +2291,11 @@ async function callServerToolSpec(
  *
  * Unknown codes NEVER confirm — they may be proxy- or server-minted
  * (e.g. `-32603` internal error), and classifying them would misbrand
- * capable mounts. They stay on the per-gesture transient path.
+ * capable mounts. They never CONFIRM (they can latch only through
+ * the advert-silent leg, never on an advertising host); off-latch they
+ * stay on the per-gesture transient path, and inside a standing zone
+ * they count as dead taps like every other undelivered outcome
+ * (ggui#826).
  */
 const CONFIRMED_RELAY_REFUSAL_CODES = new Set([-32601]);
 
@@ -3677,47 +3681,65 @@ export function dispatchSubmitAction(args: {
     // helper-minted refusal code, which outranks any positive
     // advertisement (the advertises-but-refuses host previously got a
     // fresh transient toast per tap, forever). Timeouts and unknown
-    // codes never reach the second leg; the un-classify edge for BOTH
-    // is the same response-arrival clear guard above (attempt-always
-    // preserved — nothing here suppresses dispatch, per the #443
-    // doctrine: the attempt is the self-heal sensor).
+    // codes never reach the second leg — they never CONFIRM (the
+    // advert-silent leg alone can latch on them); inside a standing
+    // zone they are counted like every other undelivered outcome by
+    // the branch below (ggui#826). The un-classify edge for
+    // BOTH legs is the same response-arrival clear guard above
+    // (attempt-always preserved — nothing here suppresses dispatch,
+    // per the #443 doctrine: the attempt is the self-heal sensor).
     const confirmedRefusal = isConfirmedRelayRefusal(resp);
+    if (relayIncapabilityAnnounced && isRelayShapedFailure(resp)) {
+      // A gesture whose undelivered outcome landed inside a standing
+      // dead zone — a dead tap, counted for the host (ggui#670 Phase 3);
+      // an in-flight gesture that raced the latching one counts too.
+      // Counted on the OUTCOME and keyed on the LATCH, never on
+      // advertisement (ggui#826): the advertises-but-refuses host
+      // latches by a confirmed refusal, and its later code-less or
+      // timeout failures are exactly the undelivered gestures the
+      // RelayDeadTapEvent contract promises to count. The eligibility
+      // predicate below is the LATCH-SET rule — a timeout or unknown
+      // code never CONFIRMS; it can latch only through the advert-silent
+      // leg, never on an advertising host — and is the wrong key for
+      // counting. Every outcome that
+      // reaches here while the latch stands is relay-shaped by
+      // construction (the response-arrival guard above cleared on any
+      // well-formed result); the conjunct states the contract instead
+      // of trusting that. The latching gesture is the 'latched' edge
+      // and a gesture that heals the zone is the 'cleared' edge —
+      // neither is a dead tap.
+      emitRelayDeadTap(intent, { sessionId, appId });
+      return;
+    }
     if (
       hostCapabilitiesCaptured() &&
       ((!hostCanRelayToolCalls() && isRelayShapedFailure(resp)) ||
         confirmedRefusal)
     ) {
-      if (!relayIncapabilityAnnounced) {
-        // Transition edge — the paired 'cleared' edge lives at the
-        // response-arrival guard above. NEVER emit off-edge (e.g. per
-        // channel poll tick): the router ticks on an interval and
-        // would spam; the two edges carry the full information.
-        transitionRelayLatch(
-          true,
-          confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
-          { sessionId, appId },
-        );
-        // Establish the flag's invariant where the notice it describes
-        // is created: a freshly-shown notice is undismissed, and its
-        // dead zone starts with an unspent throttle. Today every
-        // re-latch already passes through the clear edge above (which
-        // resets both), so this is the same value arriving by a second
-        // route — kept because the state belongs to THIS notice, and a
-        // future second latch-set path shouldn't have to know that.
-        resetRelayCueThrottles();
-        showActionToast(
-          'This host cannot relay actions to the agent — interactive controls will not work here.',
-          'action_required',
-        );
-        markRelayNotice();
-      } else {
-        // A gesture attempted inside a standing dead zone came back
-        // undelivered — a dead tap, counted for the host (ggui#670
-        // Phase 3). The latching gesture above is the 'latched' edge,
-        // and a gesture that heals the zone is the 'cleared' edge —
-        // neither is a dead tap.
-        emitRelayDeadTap(intent, { sessionId, appId });
-      }
+      // Transition edge — the paired 'cleared' edge lives at the
+      // response-arrival guard above. NEVER emit off-edge (e.g. per
+      // channel poll tick): the router ticks on an interval and
+      // would spam; the two edges carry the full information. A
+      // standing latch never reaches here: its undelivered outcomes
+      // were counted above, and a delivered one cleared it.
+      transitionRelayLatch(
+        true,
+        confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
+        { sessionId, appId },
+      );
+      // Establish the flag's invariant where the notice it describes
+      // is created: a freshly-shown notice is undismissed, and its
+      // dead zone starts with an unspent throttle. Today every
+      // re-latch already passes through the clear edge above (which
+      // resets both), so this is the same value arriving by a second
+      // route — kept because the state belongs to THIS notice, and a
+      // future second latch-set path shouldn't have to know that.
+      resetRelayCueThrottles();
+      showActionToast(
+        'This host cannot relay actions to the agent — interactive controls will not work here.',
+        'action_required',
+      );
+      markRelayNotice();
       return;
     }
     showActionToast(`⚠ ${intent} — could not reach the agent`, 'error');
@@ -3727,8 +3749,8 @@ export function dispatchSubmitAction(args: {
 /**
  * Channel-transport router's `tools/call` invoker (ggui#440) —
  * iframe-polling transport, `tools/call` against the parent MCP host
- * via `app.callServerTool` (spec-canonical) when the App handle is
- * set; falls back to raw postMessage pre-handshake or in tests.
+ * via `app.callServerTool` (spec-canonical); with no App bound the
+ * call answers a code-less error envelope — never a raw postMessage.
  * Direct call (no LLM consent loop). Returns the tool's
  * structuredContent (or `content[0]` if that's where the payload
  * landed) as a `JsonValue`. On RPC error we throw — the router
@@ -3765,10 +3787,11 @@ export function dispatchSubmitAction(args: {
  * (ggui's own embed host pre-Task-2 is exactly this case) — silently
  * killing working channel polls forever. That is "absence of a
  * capability blocks an attempt", which the fail-safe constraint
- * forbids. The latch implies `!hostCanRelayToolCalls()` (it only
- * ever sets inside that guard), so testing it alone is sufficient —
- * a host that never fails a real gesture never latches, and its
- * channels keep working.
+ * forbids. The latch is set only by a FAILED REAL GESTURE — the
+ * advert-silent leg, or a confirmed refusal under a positive
+ * advertisement (ggui#599 cycle-2) — so testing the latch alone is
+ * sufficient: a host that never fails a real gesture never latches,
+ * and its channels keep working.
  *
  * Extracted to a named export (rather than an inline closure inside
  * `bootProduction`) so unit tests can drive it directly through the

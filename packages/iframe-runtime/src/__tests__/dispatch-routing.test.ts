@@ -1512,6 +1512,40 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(deadTaps()).toHaveLength(2);
   });
 
+  it('an UNKNOWN-code failure (-32000) inside a standing zone on an ADVERTISING host is a dead tap — counted on the outcome, keyed on the latch, never on advertisement (ggui#826)', async () => {
+    // The H2 advertises-but-refuses host: serverTools advertised, latched
+    // by a confirmed -32601. A later gesture that fails with a code the
+    // registry does not confirm — here -32000, the ConnectionClosed
+    // collision the registry excludes by ruling; the harness mints it for
+    // a code-less queue entry (mock-transport.ts:142) — is relay-shaped
+    // and never a confirmed refusal. The response-arrival guard cannot
+    // clear on it, so the zone stands; the contract (RelayDeadTapEvent)
+    // promises exactly one dead tap per such gesture.
+    await latch();
+    await attempt('save', { error: { message: 'socket closed' } });
+    expect(relay().at(-1)?.state).toBe('latched');
+    expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
+    expect(deadTaps()[0]).toMatchObject({ intent: 'save', trigger: 'confirmed-refusal', appId: 'app_1' });
+    // The standing notice survives the outcome — before the fix the
+    // transient "could not reach the agent" toast replaced it (and
+    // stripped its mark), so the dead zone lost its explanation.
+    expect(toast()?.textContent).toMatch(/cannot relay/i);
+    expect(toast()?.style.opacity).not.toBe('0');
+    expect(toast()?.hasAttribute('data-ggui-relay-notice')).toBe(true);
+  });
+
+  it('a CODE-LESS failure — the transport itself rejects, the shape a socket drop takes — inside a standing zone on an ADVERTISING host is a dead tap (ggui#826)', async () => {
+    // The production code-less shape: `app.callServerTool` rejects with a
+    // plain Error (no JSON-RPC code) and `callServerToolSpec` turns it into
+    // `{error:{message}}` — relay-shaped, never a confirmed refusal.
+    await latch();
+    await attempt('save', { reject: new Error('socket closed') });
+    expect(relay().at(-1)?.state).toBe('latched');
+    expect(deadTaps().map((t) => t.ordinal)).toEqual([1]);
+    expect(deadTaps()[0]).toMatchObject({ intent: 'save', trigger: 'confirmed-refusal' });
+    expect(toast()?.hasAttribute('data-ggui-relay-notice')).toBe(true);
+  });
+
   it('the channel router fail-fast while latched emits no relay-dead-tap — one event per user gesture, never per tick', async () => {
     await latch();
     await expect(

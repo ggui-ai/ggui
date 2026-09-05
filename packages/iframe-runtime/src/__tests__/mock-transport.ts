@@ -45,6 +45,8 @@ type QueuedReplyFactory = (requestId: number | string) => JSONRPCMessage;
 interface QueuedReply {
   readonly method: string;
   readonly buildReply: QueuedReplyFactory;
+  /** Set when the queued entry rejects the send instead of replying. */
+  readonly rejectWith?: Error;
 }
 
 export interface QueueResponseOptions {
@@ -55,6 +57,14 @@ export interface QueueResponseOptions {
   readonly result?: unknown;
   /** Synthesize an error reply. Default: undefined (use `result`). */
   readonly error?: { readonly code?: number; readonly message: string };
+  /**
+   * The transport's OWN failure: `send()` rejects with this error and
+   * no reply is ever delivered. The SDK surfaces it as the raw throw —
+   * code-less — which is the shape a socket drop or a host-side throw
+   * takes at `callServerToolSpec`'s catch; `error` above can never
+   * produce that (it always carries a JSON-RPC code).
+   */
+  readonly reject?: Error;
 }
 
 export class MockTransport implements Transport {
@@ -111,6 +121,7 @@ export class MockTransport implements Transport {
     if (queued === undefined || queued.length === 0) return;
     const reply = queued.shift();
     if (reply === undefined) return;
+    if (reply.rejectWith !== undefined) throw reply.rejectWith;
     const out = reply.buildReply(bag.id as number | string);
     // Deliver asynchronously to mirror the postMessage hop — the bound
     // App's `request()` awaits via its protocol layer; an immediate
@@ -150,7 +161,7 @@ export class MockTransport implements Transport {
         result: opts.result ?? {},
       } as JSONRPCMessage;
     };
-    list.push({ method, buildReply });
+    list.push({ method, buildReply, ...(opts.reject !== undefined ? { rejectWith: opts.reject } : {}) });
     this.replies.set(method, list);
   }
 

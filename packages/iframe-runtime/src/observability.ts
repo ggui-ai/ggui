@@ -274,9 +274,10 @@ export type RelayIncapabilityEvent =
  * document (pulse, spoken cue, fallback toast); this event makes the
  * attempt COUNTABLE by the host.
  *
- * Contract: exactly one per gesture attempted while latched whose
- * attempt comes back undelivered (relay-shaped failure or a declared
- * refusal); never emitted off-latch, and never from the channel
+ * Contract: exactly one per gesture whose UNDELIVERED outcome
+ * (relay-shaped failure or a declared refusal) lands while the latch
+ * stands — an in-flight gesture that raced the latching one counts;
+ * never emitted off-latch, and never from the channel
  * router's fail-fast ticks. Counted at the outcome, not the tap: the
  * gesture that latched the zone is the `'latched'` edge and the gesture
  * that heals it is the `'cleared'` edge — neither is a dead tap.
