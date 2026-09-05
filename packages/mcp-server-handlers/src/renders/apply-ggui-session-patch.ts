@@ -15,7 +15,7 @@
  *   - input is a single typed render snapshot
  *   - output is the updated render snapshot
  *   - no GguiSessionStore, no DDB, no WebSocket delivery — the caller
- *     (hosted pod / OSS handler) owns the read-modify-write
+ *     (a hosted deployment / this package's `ggui_update` handler) owns the read-modify-write
  *     persistence and any live-delivery side-effects
  *
  * Throws:
@@ -31,7 +31,7 @@ import { assertPropsContract } from './assert-props-contract.js';
 
 /**
  * Minimum shape the helper needs to validate + patch a render. Both
- * `@ggui-ai/protocol`'s `ComponentGguiSession` and the hosted pod's raw DDB
+ * `@ggui-ai/protocol`'s `ComponentGguiSession` and a hosted deployment's raw store
  * projection satisfy this shape, so the helper works for both without
  * either caller needing a cast. The generic `T` carries through so the
  * returned render preserves the caller's concrete type. `props` is

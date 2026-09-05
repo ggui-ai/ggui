@@ -2,7 +2,7 @@
  * `ggui_ops_delete_app` — hard-delete an app record owned by the
  * caller.
  *
- * Tenancy: cross-tenant probes return the success shape WITHOUT
+ * Tenancy: cross-user probes return the success shape WITHOUT
  * touching the row (uniform shape; no existence leak). Idempotent —
  * a second delete of the same id resolves cleanly.
  *
@@ -12,7 +12,7 @@
  *
  * The check runs AFTER the ownership read. `getDefault(ownerSub)`
  * only ever reads the caller's own row, so ordering is not what keeps
- * another tenant's default secret — nothing here could read it under
+ * another owner's default secret — nothing here could read it under
  * any ordering. What ordering buys is SHAPE UNIFORMITY in the one
  * state where the two branches disagree: the caller's own default
  * naming an app the caller does not own. Ownership first answers that
@@ -67,7 +67,7 @@ export function createDeleteAppHandler(
     title: 'Delete app',
     audience: ['ops'],
     description:
-      "Hard-delete an app owned by the calling user. Removes the APP RECORD only — data other stores hold for that app (saved blueprints, per-app provider keys, marketplace installs, issued keys) is not removed by this call, and whether the deployment cleans it up separately is the deployment's own policy. Idempotent — a second delete returns `{deleted: true}`. Cross-tenant probes return the same shape without touching foreign rows (no existence leak). Throws `default_app_delete_blocked` when the target is the caller's default app — set a different default first.",
+      "Hard-delete an app owned by the calling user. Removes the APP RECORD only — data other stores hold for that app (saved blueprints, per-app provider keys, marketplace installs, issued keys) is not removed by this call, and whether the deployment cleans it up separately is the deployment's own policy. Idempotent — a second delete returns `{deleted: true}`. Probes at an app owned by another user return the same shape without touching foreign rows (no existence leak). Throws `default_app_delete_blocked` when the target is the caller's default app — set a different default first.",
     inputSchema,
     outputSchema,
     async handler(
@@ -84,7 +84,7 @@ export function createDeleteAppHandler(
         // Either the row doesn't exist or it lives under a different
         // owner. Either way: return the success shape without
         // touching the store. Uniform across "missing" and
-        // "cross-tenant" prevents id-existence leak.
+        // "cross-user" prevents id-existence leak.
         return { deleted: true };
       }
       // AFTER the ownership read, so a caller whose own default names

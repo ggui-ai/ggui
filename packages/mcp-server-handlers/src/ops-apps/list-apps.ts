@@ -2,12 +2,12 @@
  * `ggui_ops_list_apps` — enumerate the calling user's `GguiApp` rows.
  *
  * Sibling of the console's Apps section (`apps/console/src/.../apps/`)
- * — same data, MCP surface. Pure over the {@link AppsSource} seam; the
- * cloud pod binds an AppSync-backed implementation, tests bind an
+ * — same data, MCP surface. Pure over the {@link AppsSource} seam; a
+ * production deployment binds its own implementation, tests bind an
  * in-memory Map.
  *
  * Identity scope: caller's Cognito sub from `ctx.userId` (or
- * `ctx.appId` in OSS single-tenant mode). Cross-user list is impossible
+ * `ctx.appId` in OSS single-app mode). Cross-user list is impossible
  * by construction — `AppsSource.list` only returns rows whose
  * `ownerSub` matches.
  */

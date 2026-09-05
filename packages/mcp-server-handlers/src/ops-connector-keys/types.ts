@@ -46,9 +46,8 @@ export interface IssueConnectorKeyResult {
 }
 
 /**
- * Read+write seam for `GguiUserApiKey`. Cloud pod implements this
- * against the dedicated `issueGguiUserApiKey` AppSync mutation +
- * `apiKeysByUserId` GSI + raw DDB UpdateItem for revoke; tests use
+ * Read+write seam for `GguiUserApiKey`. A production deployment implements
+ * this against its own key store (issue, list by user, revoke); tests use
  * in-memory state.
  *
  * Invariants:

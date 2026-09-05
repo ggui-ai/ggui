@@ -58,8 +58,8 @@ export interface RemoveResult {
 }
 
 /**
- * BYOK key-store seam. The pod implements this against raw
- * DynamoDB + KMS; tests can implement it against in-memory state.
+ * BYOK key-store seam. A production deployment implements this against its own
+ * durable key store; tests can implement it against in-memory state.
  *
  * Invariants every implementation MUST honor:
  *   - `set` validates the plaintext against the provider's verify

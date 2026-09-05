@@ -8,7 +8,7 @@
  * `UserDefaultAppSource.setDefault` — invariant: `defaultAppId` MUST
  * point at an app the user owns.
  *
- * Pure over two seams. The cloud pod binds AppSync-backed
+ * Pure over two seams. A production deployment binds its own
  * implementations of both; tests bind in-memory fakes.
  */
 import { z } from 'zod';
@@ -47,7 +47,7 @@ export function createSetDefaultAppHandler(
     title: 'Set default app',
     audience: ['ops'],
     description:
-      "Set the calling user's `defaultAppId` — the universal MCP route resolves this on every request to scope the call. Target appId MUST be owned by the caller; cross-tenant targets throw `app_not_found`. Returns the persisted `defaultAppId`.",
+      "Set the calling user's `defaultAppId` — the universal MCP route resolves this on every request to scope the call. Target appId MUST be owned by the caller; targets owned by another user throw `app_not_found`. Returns the persisted `defaultAppId`.",
     inputSchema,
     outputSchema,
     async handler(

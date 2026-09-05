@@ -4,8 +4,8 @@
  * with the caller's role).
  *
  * Sibling of the AppSync `fetchMyOrgs` custom resolver — same data,
- * MCP surface. Pure over the {@link OrgsSource} seam; the cloud pod
- * binds an AppSync-backed implementation, tests bind in-memory state.
+ * MCP surface. Pure over the {@link OrgsSource} seam; a production deployment
+ * binds its own implementation, tests bind in-memory state.
  */
 import { z } from 'zod';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';

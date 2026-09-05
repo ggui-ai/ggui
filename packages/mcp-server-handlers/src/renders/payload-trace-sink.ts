@@ -58,7 +58,7 @@ export interface PayloadTraceEvent {
   readonly direction: PayloadTraceDirection;
   /** Resolved render id. Always populated. */
   readonly sessionId: string;
-  /** Resolved app/tenant id from `HandlerContext`. */
+  /** Resolved app id from `HandlerContext`. */
   readonly appId: string;
   /** Tool name (`'ggui_render'` | `'ggui_update'`). */
   readonly tool: string;

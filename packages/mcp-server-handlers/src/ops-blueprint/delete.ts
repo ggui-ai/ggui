@@ -12,7 +12,7 @@
  * if the row exists AND its `appId` doesn't match, the handler
  * treats it as "not found from the caller's perspective" and
  * returns `{deleted: true}` — a uniform shape that doesn't leak
- * whether the id exists in another tenant. The store's underlying
+ * whether the id exists for another app. The store's underlying
  * delete is NOT invoked in that case. This row-level uniformity is
  * separate from (and downstream of) the app-level authorizer check:
  * a foreign `appId` input the authorizer denies surfaces the denial
@@ -68,7 +68,7 @@ export function createGguiOpsDeleteBlueprintHandler(
     title: 'Delete blueprint',
     audience: ['ops'],
     description:
-      "Remove a blueprint row by id. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-tenant probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
+      "Remove a blueprint row by id. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-app probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -91,9 +91,9 @@ export function createGguiOpsDeleteBlueprintHandler(
         return { deleted: true };
       }
       if (existing.appId !== appId) {
-        // Cross-tenant probe — return the success shape WITHOUT
+        // Cross-app probe — return the success shape WITHOUT
         // actually deleting. Uniform shape across "doesn't exist"
-        // and "exists in another tenant" prevents id-existence
+        // and "exists for another app" prevents id-existence
         // leak across app boundaries.
         return { deleted: true };
       }

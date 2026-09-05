@@ -244,7 +244,7 @@ export async function invalidateGenerationCache(
  * Non-cache rows in the scope are left alone — same shape guard the
  * list path uses. Single-scope clears only: neither OSS backend
  * exposes a "list all scopes" API, and building one would leak
- * multi-tenant state.
+ * multi-app state.
  */
 export async function clearGenerationCache(
   deps: { readonly vectorStore: EnumerableVectorStore },

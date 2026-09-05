@@ -107,7 +107,7 @@ describe('createSearchBlueprintsHandler', () => {
     expect(hit?.name?.startsWith('Cached_')).toBe(true);
   });
 
-  it('scopes queries to the caller appId — cross-tenant data does not leak', async () => {
+  it('scopes queries to the caller appId — cross-app data does not leak', async () => {
     const { embedding, vectors } = makeDeps();
     await seed(embedding, vectors, 'app-b', 'bp_secret', 'weather card');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
@@ -356,7 +356,7 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     const handler = createSearchBlueprintsHandler({ embedding, vectors, blueprints });
     const result = await handler.handler({ query: 'weather' }, ctx);
     expect(result.results.find((r) => r.id === 'weather-local')).toBeDefined();
-    // Cross-tenant semantic entry must NOT leak into app-a's view.
+    // Cross-app semantic entry must NOT leak into app-a's view.
     expect(result.results.find((r) => r.id === 'c_secret-cached')).toBeUndefined();
   });
 });

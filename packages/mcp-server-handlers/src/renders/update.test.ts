@@ -448,7 +448,7 @@ describe('createGguiUpdateHandler', () => {
       ).rejects.toThrow(GguiSessionNotFoundError);
     });
 
-    it('rejects cross-tenant access as GguiSessionNotFoundError (no leak)', async () => {
+    it('rejects cross-app access as GguiSessionNotFoundError (no leak)', async () => {
       const store = new InMemoryGguiSessionStore();
       // Seed a render owned by APP_A.
       const { sessionId } = await seedRender({ store });

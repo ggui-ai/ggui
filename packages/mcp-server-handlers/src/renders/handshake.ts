@@ -185,7 +185,7 @@ export interface HandshakeRecord {
      * (ggui#564 — that field was hardcoded `1`, misreporting the
      * documented semantic cosine). Optional on the TYPE only for the
      * rolling-deploy skew window: a record persisted by a pre-#564
-     * pod lacks it (Redis TTL bounds the window); the render reads
+     * deployment lacks it (the record store's TTL bounds the window); the render reads
      * `?? 1`, preserving prior behavior for exactly those records.
      */
     readonly cosine?: number;

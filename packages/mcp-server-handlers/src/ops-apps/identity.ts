@@ -2,7 +2,7 @@
  * Per-call identity resolution for `ops-apps` handlers. The console
  * surfaces these tools call against `kind: 'user'` identities — the
  * upstream `AuthAdapter` populates `ctx.userId` directly. OSS
- * single-tenant mode (where the auth adapter collapses `appId =
+ * single-app mode (where the auth adapter collapses `appId =
  * workspaceId ?? userId`) leaves `ctx.userId` undefined and the same
  * value sits on `ctx.appId`. Read whichever is set; fail when neither
  * is.

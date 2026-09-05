@@ -80,7 +80,7 @@ describe('createGguiOpsDeleteBlueprintHandler — idempotent', () => {
 });
 
 describe('createGguiOpsDeleteBlueprintHandler — tenancy', () => {
-  it('returns {deleted: true} without removing rows on cross-tenant probe', async () => {
+  it('returns {deleted: true} without removing rows on cross-app probe', async () => {
     const blueprintStore = new InMemoryBlueprintStore();
     await blueprintStore.put(makeSeed({ appId: 'app-1' }));
     const handler = createGguiOpsDeleteBlueprintHandler({ blueprintStore });

@@ -164,7 +164,7 @@ export interface CacheTraceEvent {
   readonly at: number;
   /** Total wall-clock ms — embed + query + (optional top-k probe). */
   readonly durationMs: number;
-  /** Tenant scope the matcher queried — typically `appId`. */
+  /** App scope the matcher queried — typically `appId`. */
   readonly scope: string;
   /**
    * Trimmed intent the matcher used as input. May be truncated to

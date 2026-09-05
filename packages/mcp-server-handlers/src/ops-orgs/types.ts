@@ -143,7 +143,7 @@ export interface OrgsSource {
  *   - `issue` enforces the caller is owner/admin of the org. Members
  *     get rejected with `OrgInviteAccessDeniedError`.
  *   - `revoke` enforces the caller is owner/admin of the org that
- *     owns the invite. Cross-tenant revocations are rejected with
+ *     owns the invite. Cross-org revocations are rejected with
  *     `OrgInviteAccessDeniedError`.
  *   - Both methods anti-double-issue: re-issuing for an existing
  *     `(orgId, email)` pending invite returns the existing row with

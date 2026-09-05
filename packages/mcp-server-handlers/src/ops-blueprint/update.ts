@@ -45,11 +45,11 @@ const opsOutputSchema = {
 } as const;
 
 /**
- * Cross-tenant probe — thrown when an operator tries to update a
+ * Cross-app probe — thrown when an operator tries to update a
  * blueprint whose `appId` doesn't match the effective `appId`
  * resolved by {@link resolveEffectiveAppId} (caller identity, or an
  * authorizer-approved explicit input). The blueprintId itself is
- * technically lookupable across tenants because the store's primary
+ * technically lookupable across apps because the store's primary
  * key is global, but the update path scopes by resolved identity —
  * row-level tenancy holds even when the authorizer approved the
  * caller's effective appId (see {@link GguiOpsUpdateBlueprintDeps.authorizeAppAccess}).

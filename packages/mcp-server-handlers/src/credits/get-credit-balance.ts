@@ -11,13 +11,13 @@
  *
  * Identity scope: credit rows are keyed by USER identity, so the
  * handler reads `ctx.userId` when the host's auth layer resolves a
- * distinct per-user identity (multi-tenant hosts where `ctx.appId`
+ * distinct per-user identity (multi-app hosts where `ctx.appId`
  * names the caller's active app, not the caller), and falls back to
- * `ctx.appId` for single-tenant hosts whose auth adapter folds the
+ * `ctx.appId` for single-app hosts whose auth adapter folds the
  * user into the app slot (`appId = workspaceId ?? userId` — see
  * `packages/mcp-server/src/auth.ts#defaultAppIdFromIdentity`).
  * Reading `ctx.appId` alone silently returns the zero-row fallback
- * for every multi-tenant caller — an app id never keys a credit row.
+ * for every multi-app caller — an app id never keys a credit row.
  * The tool is registered on every deployment kind; callers without a
  * credit account (e.g. agent-builder identities) get the zero-row
  * fallback.
@@ -88,13 +88,13 @@ export function createGetCreditBalanceHandler(
       "Returns the calling user's prepaid Anthropic-pool credit balance. Surfaces balanceCents (current spendable), lifetimeGrantedCents (total received including the $5 welcome credit), and lifetimeSpentCents (cumulative charges). For non-Anthropic providers, configure a BYOK key at console.ggui.ai/keys/providers — credit doesn't apply. Composing blueprints in Claude Desktop bypasses credits entirely.",
     inputSchema,
     outputSchema,
-    // No `allowedFor` — same toolset on every pod kind. Callers
+    // No `allowedFor` — same toolset on every deployment kind. Callers
     // without a credit account get the zero-row fallback below; no
     // separate "tool not registered" UX needed.
     async handler(_input, ctx) {
-      // USER identity first — on multi-tenant hosts `ctx.appId` is the
+      // USER identity first — on multi-app hosts `ctx.appId` is the
       // caller's active app, which never keys a credit row (see the
-      // module docstring). Single-tenant hosts leave `ctx.userId`
+      // module docstring). Single-app hosts leave `ctx.userId`
       // unset and fold the user into the app slot.
       const userId = ctx.userId ?? ctx.appId;
       if (!userId) {

@@ -18,7 +18,7 @@
  * observations land in `warnings`.
  *
  * Structural `GateInput` so both call sites supply it: a `PortableBlueprint`
- * (seed pool) and a pod installed-row view both structurally satisfy it.
+ * (seed pool) and a deployment's installed-row view both structurally satisfy it.
  */
 import type { DataContract } from '@ggui-ai/protocol';
 import { blueprintKey, computeToolCatalogHash } from '@ggui-ai/protocol/blueprint-key';

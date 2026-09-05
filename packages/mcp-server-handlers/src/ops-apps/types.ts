@@ -71,12 +71,12 @@ export interface AppUpdatePatch {
  *   - `create({ ownerSub, displayName })` mints a fresh `appId`
  *     server-side (cloud: base62 + collision retry; in-memory: any
  *     unique string). Argument-supplied appIds are NOT honored — that
- *     would be a tenant-takeover vector.
+ *     would be an app-takeover vector.
  *   - `update`, `delete`, `setTheme` reject when the row's
  *     `ownerSub` doesn't match the caller's. Implementations either
  *     throw `OpsAppsAccessDeniedError` or return `null` from `get`
  *     (the handler maps null → "not found" so the caller doesn't see
- *     existence across tenants).
+ *     existence across owners).
  */
 export interface AppsSource {
   /** Return every `GguiApp` row whose `ownerSub` matches. */
@@ -87,7 +87,7 @@ export interface AppsSource {
   create(args: { ownerSub: string; displayName?: string }): Promise<AppRecord>;
   /**
    * Apply a partial update ({@link AppUpdatePatch}) to the row.
-   * Rejects cross-tenant. Implementations MUST normalize the clearing
+   * Rejects cross-user. Implementations MUST normalize the clearing
    * sentinels (`systemPrompt: ''`, `rateLimitPerMinute: 0`) onto the
    * stored "unset" representation so reads stay single-valued.
    */
@@ -98,7 +98,7 @@ export interface AppsSource {
   }): Promise<AppRecord>;
   /**
    * Hard delete. No-throw idempotent — a second delete of the same id
-   * resolves. Rejects cross-tenant.
+   * resolves. Rejects cross-user.
    *
    * Scope of the obligation, stated because a caller cannot see it:
    * this seam owns the APP RECORD and nothing else. Whatever other
@@ -118,7 +118,7 @@ export interface AppsSource {
   delete(args: { appId: string; ownerSub: string }): Promise<void>;
   /**
    * Replace the app's theme (validated {@link AppTheme}) in a single
-   * conditional write scoped to the owning user. Rejects cross-tenant.
+   * conditional write scoped to the owning user. Rejects cross-user.
    */
   setTheme(args: {
     appId: string;
@@ -145,7 +145,7 @@ export interface UserDefaultAppSource {
 
 /**
  * Uniform "not found" thrown by the ops-apps handlers for missing AND
- * cross-tenant target ids — one shape, no existence leak.
+ * target ids owned by another user — one shape, no existence leak.
  */
 export class AppNotFoundError extends Error {
   readonly code = 'app_not_found' as const;

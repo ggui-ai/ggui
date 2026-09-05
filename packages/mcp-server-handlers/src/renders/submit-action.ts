@@ -216,7 +216,7 @@ export interface GguiSubmitActionHandlerDeps {
    * ledger is append-only retained. The dual-write restores the
    * audit visibility the pre-spec-mig WS `handleInboundAction` path
    * had (operator-side RenderInspector queries, cross-process
-   * replay, hosted multi-pod observability).
+   * replay, hosted multi-replica observability).
    *
    * Absence is tolerated — the handler falls back to queue-only
    * writes. Tests + minimal composers can omit; production OSS +

@@ -46,7 +46,7 @@ export interface GguiEmitHandlerDeps {
    * Caller-supplied envelope sink. Invoked after `handleStream`
    * validates + stamps. OSS hosts wrap an in-process render
    * channel; cloud wraps API Gateway + a stream buffer (with
-   * fanout for cross-pod live tail). Errors propagate to the
+   * fanout for cross-replica live tail). Errors propagate to the
    * tool handler — `handleStream` does not wrap them.
    */
   readonly sendEnvelope: SendEnvelopeFn;
@@ -88,8 +88,8 @@ export function createGguiEmitHandler(
         .object(inputSchema)
         .parse(rawInput);
 
-      // Tenancy gate. Cross-tenant + missing surface uniformly as
-      // GguiSessionNotFoundError so cross-tenant existence isn't leaked.
+      // Tenancy gate. Cross-app + missing surface uniformly as
+      // GguiSessionNotFoundError so cross-app existence isn't leaked.
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
         throw new GguiSessionNotFoundError(sessionId);

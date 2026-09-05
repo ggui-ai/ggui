@@ -186,7 +186,7 @@ describe('createGguiOpsUpdateBlueprintHandler — errors', () => {
     ).rejects.toBeInstanceOf(BlueprintNotFoundError);
   });
 
-  it('throws BlueprintAppMismatchError on cross-tenant update', async () => {
+  it('throws BlueprintAppMismatchError on cross-app update', async () => {
     const blueprintStore = new InMemoryBlueprintStore();
     await blueprintStore.put(makeSeed({ appId: 'app-1' }));
     const handler = createGguiOpsUpdateBlueprintHandler({ blueprintStore });

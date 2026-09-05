@@ -32,8 +32,8 @@ import type { z, ZodRawShape, ZodType, ZodTypeAny } from 'zod';
  */
 export interface HandlerContext {
   /**
-   * Resolved app/tenant id. Upstream auth adapter proves this; handlers
-   * use it to scope every read/write. In single-tenant mode this may
+   * Resolved app id. Upstream auth adapter proves this; handlers
+   * use it to scope every read/write. In single-app mode this may
    * collapse to a single well-known value (e.g. `"local"`); in a
    * hosted runtime it's the authenticated app id.
    */
@@ -63,7 +63,7 @@ export interface HandlerContext {
    * Authenticated user id, when the upstream `AuthAdapter` resolved a
    * `kind: 'user'` identity (today: `ApiKeyAuthAdapter`'s `ggui_user_*`
    * branch and `CognitoAuthAdapter`). Threaded onto the canonical
-   * context so kind=user handlers (cloud pod billing gate, per-user
+   * context so kind=user handlers (a deployment's billing gate, per-user
    * blueprint scoping) can read userId directly without a redundant
    * GSI-by-apiKeyHash lookup.
    *
@@ -387,7 +387,7 @@ export interface SharedHandler<
    *   - `allowedFor: ['app']` — agent-builder MCP-caller-only (e.g.
    *     `ggui_render`, `ggui_handshake`). Used on hosted kind=app deployments.
    *   - `allowedFor: ['user']` — end-user-only (e.g. a future
-   *     `ggui_render` exposed by the user-pod posture to Claude Desktop).
+   *     `ggui_render` exposed by a kind=user deployment to Claude Desktop).
    *   - `allowedFor: ['user', 'builder']` — both Connector users and
    *     builders, but not per-app machine callers.
    *   - omitted — anyone authenticated (today's behavior; safest
@@ -576,8 +576,8 @@ export function defineHandler<
  * `WWW-Authenticate` BEFORE dispatch (so standards hosts
  * auto-negotiate OAuth), and a throw from INSIDE a handler surfaces
  * as an in-band `isError` tool result — the MCP framework converts
- * handler throws at dispatch, so transport error mappers (the pod's
- * `podErrorMapper` 401 arm included) never see this error from tool
+ * handler throws at dispatch, so transport error mappers (a deployment's
+ * domain-error mapper, 401 arm included) never see this error from tool
  * dispatch. The in-band form is the contract for authenticated-but-
  * insufficient callers; the transport 401 is the contract for
  * anonymous ones.

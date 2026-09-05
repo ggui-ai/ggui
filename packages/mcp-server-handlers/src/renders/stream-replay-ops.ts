@@ -23,8 +23,8 @@
  *
  * Why this lives in `@ggui-ai/mcp-server-handlers` (below core in the
  * layering): pure logic with no storage shape assumption, callable by
- * both the OSS `GguiSessionStreamBuffer` adapter and the hosted Lambda/pod
- * DDB adapter. Keeps the replay contract single-source, independent
+ * both the `InMemoryGguiSessionStreamBuffer` adapter and a hosted deployment's
+ * durable-store adapter. Keeps the replay contract single-source, independent
  * of where the buffer physically sits.
  *
  * No back-compat: the hosted rollout of this module is the FIRST
@@ -324,7 +324,7 @@ export function normalizeBufferState(partial: {
 
 // ── Sequenced-record primitive (optimistic concurrency) ─────────────
 //
-// Hosted adapters (Lambda connector fan-out + MCP pod `ggui_emit`)
+// A hosted deployment's adapters (connector fan-out + its `ggui_emit` sink)
 // share a read-apply-write flow. Without a seq fence, concurrent
 // writers to the same render can both read `streamSeq=N`, both
 // compute `N+1`, and both persist — last-writer-wins overwrites a

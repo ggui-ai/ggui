@@ -14,7 +14,7 @@
 /**
  * Thrown by `ggui_ops_generate_blueprint` when the operator supplied
  * a `generator` slug that the bound `GeneratorRegistry` doesn't know
- * about. Typical causes: an OSS pod that didn't install Playwright
+ * about. Typical causes: a server that didn't install Playwright
  * was asked for `ui-gen-advanced-opus-4-7`; a typo in an operator
  * script; a stale CI fixture against a deployment whose registry
  * shrank.

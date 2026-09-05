@@ -210,7 +210,7 @@ export interface GenerationDeps {
   readonly uiGenerator: UiGenerator;
   /**
    * Per-render credential lookup. Receives the handler context so
-   * multi-tenant hosts can route per-`appId`; OSS single-user
+   * multi-app hosts can route per-`appId`; OSS single-user
    * resolves from env + `~/.ggui/credentials.json` and ignores the
    * argument. Must return `null` (not throw) when no credentials
    * are available; the handler maps that to a generation failure.
@@ -779,7 +779,7 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * only the raw carriers and the renderer uses its blob ladder.
    *
    * A FUNCTION dep on purpose: the composition layer (the factory /
-   * the pod) owns the runtime-bundle hash and the shim coverability
+   * a hosted deployment) owns the runtime-bundle hash and the shim coverability
    * table; this handler owns neither.
    */
   readonly mintCodeModuleUrl?: (args: {
@@ -876,8 +876,8 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * Pre-resolved generator escape hatch. When set, the handler uses
    * THIS function in place of the {@link GenerationDeps.uiGenerator} +
    * {@link GenerationDeps.resolveLlm} pipeline. The seam input
-   * intentionally OMITS `llm` + `providerKey` — cloud's pod-side
-   * generator resolves its own credentials from pod-side BYOK / pool
+   * intentionally OMITS `llm` + `providerKey` — a hosted deployment's
+   * generator resolves its own credentials from its own BYOK / pool
    * key state, so the handler skips `resolveLlm` entirely when this
    * seam is set.
    *
@@ -1618,7 +1618,7 @@ export function createGguiRenderHandler(
     // cache / update path); absent ⇒ mint a fresh id. Reuse only
     // counts when the existing render is visible to the caller
     // (same appId, and same userId when the stored row carries one) —
-    // cross-tenant / cross-user id collisions fall back to mint.
+    // cross-app / cross-user id collisions fall back to mint.
     const requestedId = handshakeRecord.target.sessionId;
     let sessionId: string;
     let action: RenderOutput['action'];
@@ -2011,7 +2011,7 @@ export function createGguiRenderHandler(
             // The matcher's measured cosine, persisted on the handshake
             // record (#564 — this was hardcoded 1, misreporting the
             // wire's documented semantic similarity). `?? 1` covers
-            // ONLY records persisted by a pre-#564 pod inside the
+            // ONLY records persisted by a pre-#564 replica inside the
             // rolling-deploy skew window (the record store's TTL
             // bounds it); those were all reported as 1 before, so the
             // fallback preserves their prior behavior, never invents.
@@ -3003,7 +3003,7 @@ export function createGguiRenderHandler(
 /**
  * Default TTL applied to renders the handler mints inline. The
  * authoritative TTL lives on the store impls (InMemory: 1h, Sqlite:
- * 24h, DDB: tenant policy); this constant only fills the
+ * 24h, a hosted store: its own policy); this constant only fills the
  * `GguiSession.expiresAt` field of the wire shape (which the store may
  * overwrite at commit time anyway). 1 hour matches the InMemoryStore
  * default — anything longer would surprise tests that pin TTL
@@ -3405,7 +3405,7 @@ async function runGenerationIntoGguiSession(
   // #460 — resolve the blueprint id BEFORE the commit. Registration
   // was already awaited on this path (it just ran after the commit),
   // so the reorder adds no latency and deletes the get+put backfill —
-  // and with it the backfill's stale-write race against the pod's
+  // and with it the backfill's stale-write race against the server's
   // field-targeted seq advance.
   const producedSource: LlmBlueprintSource = {
     kind: 'llm',

@@ -22,8 +22,8 @@ export interface RedeemCouponResult {
 }
 
 /**
- * Read+write seam for the coupon redeem path. Cloud pod implements
- * this against the `redeemCoupon` AppSync mutation; tests use
+ * Read+write seam for the coupon redeem path. A production deployment implements
+ * this against its own coupon ledger; tests use
  * in-memory state.
  *
  * Invariants every implementation MUST honor:

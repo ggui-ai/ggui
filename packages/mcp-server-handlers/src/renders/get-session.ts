@@ -6,7 +6,7 @@
  *
  * Behavior:
  *   - Resolves render via `renderStore.get(sessionId)`.
- *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
+ *   - Tenancy gate via `ctx.appId` — cross-app + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}.
  *   - Returns the protocol's wire projection (`gguiGetSessionOutputSchema`):
  *     `variant` + the store row's six base fields, for EVERY session (plus
@@ -106,7 +106,7 @@ export function createGguiGetSessionHandler(
       const stored = await deps.renderStore.get(sessionId);
       if (!isVisibleToCaller(stored, ctx)) {
         // Tenancy (appId + per-user) + missing all surface uniformly so
-        // cross-tenant / cross-user existence is not leaked.
+        // cross-app / cross-user existence is not leaked.
         // `stored` is narrowed to StoredGguiSession past this guard.
         throw new GguiSessionNotFoundError(sessionId);
       }

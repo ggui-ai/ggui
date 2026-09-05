@@ -136,7 +136,7 @@ describe('createGguiGetRenderSourceHandler', () => {
   });
 
   describe('tenancy + missing (uniform not-found)', () => {
-    it('throws GguiSessionNotFoundError on cross-tenant access (no leak)', async () => {
+    it('throws GguiSessionNotFoundError on cross-app access (no leak)', async () => {
       const { sessionId } = await seedComponentRender(renderStore, { appId: 'app-1' });
       const handler = createGguiGetRenderSourceHandler({ renderStore });
       await expect(

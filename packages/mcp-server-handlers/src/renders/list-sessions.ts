@@ -10,7 +10,7 @@
  * `/api/sessions/:id/state`.
  *
  * Scoping:
- *   - ALWAYS scoped to `ctx.appId` — tenancy boundary; cross-tenant
+ *   - ALWAYS scoped to `ctx.appId` — tenancy boundary; cross-app
  *     existence MUST NOT leak.
  *   - WHEN `ctx.userId` is set, also scoped to that user — prevents
  *     one signed-in user from listing another user's renders even
@@ -79,7 +79,7 @@ type ListSessionsOutput = ShapeOutput<typeof outputSchema>;
  * Seam for the freshly-minted ws-token attached to each listed
  * render. Implementations sign with the same shared secret the rest
  * of the live-channel auth path uses (OSS: `MCP_BOOTSTRAP_SECRET`;
- * cloud pod: the per-pod KMS-backed equivalent). Returning a token
+ * a hosted deployment: its own key-management equivalent). Returning a token
  * that wouldn't pass the WS upgrade is a deployment bug, not a wire-
  * contract failure — this seam is trusted.
  */

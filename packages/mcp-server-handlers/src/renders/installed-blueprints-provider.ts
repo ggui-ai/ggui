@@ -429,7 +429,7 @@ export function createInstalledBlueprintsProvider(
     // listing hiding a peer-deleted row. Without it, a Tier-1 index
     // hit on this instance keeps re-validating against the lagging
     // listing and serves the uninstalled blueprint until the lag
-    // clears (G4 pod-matcher failure, run 30072993411).
+    // clears (G4 matcher failure on a hosted deployment, run 30072993411).
     const bucket = registeredBindings.get(scope);
     if (bucket) {
       for (const [cKey, binding] of bucket) {
@@ -522,7 +522,7 @@ export function createInstalledBlueprintsProvider(
       const prior = ensured.get(scope);
 
       // Discovery-poisoned scopes short-circuit before re-invoking
-      // the throwing callback. Operator restarts the pod after
+      // the throwing callback. Operator restarts the server after
       // fixing whatever made discovery throw.
       if (prior?.discoveryPoisoned) return;
 

@@ -14,7 +14,7 @@
  *      `appId` defaults to `ctx.appId` resolved by the upstream auth
  *      adapter.
  *   2. When `appId` is supplied explicitly, asserts it matches
- *      `ctx.appId`; cross-tenant requests fail with
+ *      `ctx.appId`; cross-app requests fail with
  *      {@link AppAccessDeniedError}.
  *   3. Reads `app.gadgets` from the bound {@link AppMetadataStore}
  *      and resolves the effective catalog via `resolveAppGadgets`
@@ -58,7 +58,7 @@ const inputSchema = {
     .min(1)
     .optional()
     .describe(
-      'The app id whose gadget catalog to return. Defaults to the caller-resolved app id from the auth header. Cross-tenant requests fail with app_access_denied.',
+      'The app id whose gadget catalog to return. Defaults to the caller-resolved app id from the auth header. Cross-app requests fail with app_access_denied.',
     ),
 } as const;
 

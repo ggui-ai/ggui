@@ -4,7 +4,7 @@
  * This module owns the protocol-neutral SEAM the `ggui_render` handler
  * uses to drive a provisional-preview stream on `_ggui:preview`. The
  * runner + cancellation plumbing land in a follow-up commit; this one
- * pins the surface so downstream callers (hosted pod, OSS dev mode)
+ * pins the surface so downstream callers (a hosted deployment, dev mode)
  * can wire their own emitter + gate without further churn.
  *
  * Key design notes:
@@ -613,7 +613,7 @@ function abortReason(signal: AbortSignal): string {
 
 /**
  * Authoritative-handoff helper. Call from the handler that commits
- * final component code (hosted pod's generation-complete path, any
+ * final component code (a hosted deployment's generation-complete path, any
  * future OSS final-code handler) to tear down the in-flight
  * provisional preview cleanly.
  *
@@ -647,8 +647,8 @@ export async function finalizeProvisionalPreview(
 /**
  * Reference in-memory implementation of
  * {@link ProvisionalPreviewRegistry}. Single-instance scope —
- * suitable for OSS dev, hosted pods, and tests; multi-replica
- * deployments bring their own distributed implementation.
+ * suitable for dev, tests, and each replica of a hosted deployment; sharing
+ * one registry across replicas needs a distributed implementation.
  *
  * Behaviour:
  *   - `register` replaces any existing handle under the same key,

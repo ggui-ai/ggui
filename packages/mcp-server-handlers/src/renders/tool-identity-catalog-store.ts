@@ -24,7 +24,7 @@ export interface ToolIdentityCatalogStore {
 }
 
 /**
- * Reference {@link ToolIdentityCatalogStore} for OSS single-tenant
+ * Reference {@link ToolIdentityCatalogStore} for OSS single-app
  * deployments + tests. One catalog per appId, last-write-wins. Mirrors
  * the in-memory-store pattern used elsewhere in the handler package
  * (e.g. `InMemoryAppMetadataStore`).

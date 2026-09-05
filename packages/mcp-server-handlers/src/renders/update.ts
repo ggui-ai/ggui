@@ -31,7 +31,7 @@
  *
  * Pure render-mutation flow:
  *   1. Parse the flat shape (strict), then narrow the union — surface
- *      "wrong fields for this kind" before any tenant work, so a
+ *      "wrong fields for this kind" before any app-scoped work, so a
  *      malformed call costs zero store reads.
  *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
  *   3. Apply patch via the shared `applyGguiSessionPatch` helper:
@@ -127,7 +127,7 @@ export interface PropsUpdateNotifier {
 
 /** Re-exported for callers that prefer to import the error from this module.
  *  These are the two typed failure shapes `ggui_update` throws:
- *  `GguiSessionNotFoundError` (render missing or cross-tenant) and
+ *  `GguiSessionNotFoundError` (render missing or cross-app) and
  *  `ContractViolationError` (props validation fail). */
 export { GguiSessionNotFoundError, ContractViolationError };
 

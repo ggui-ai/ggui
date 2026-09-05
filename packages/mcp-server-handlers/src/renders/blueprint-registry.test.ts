@@ -348,7 +348,7 @@ describe('findBlueprintExact', () => {
     expect(bp).toBeNull();
   });
 
-  it('isolates scopes (cross-tenant cannot leak)', async () => {
+  it('isolates scopes (cross-app cannot leak)', async () => {
     const deps = makeDeps();
     await registerBlueprint(deps, 'scope-A', {
       kind: 'template',

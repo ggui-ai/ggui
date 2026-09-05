@@ -18,11 +18,11 @@
  * Thrown when a tool that requires a sessionId receives one that
  * doesn't resolve to any live GguiSession for the caller's appId. Three
  * triggers, all surfaced as the same error to avoid leaking cross-
- * tenant existence:
+ * app existence:
  *
  *   1. The sessionId was never minted (typo, fabricated, replay from a
  *      different deployment).
- *   2. The sessionId belongs to a different appId (cross-tenant probe).
+ *   2. The sessionId belongs to a different appId (cross-app probe).
  *   3. The GguiSession was deleted, closed, or its TTL expired.
  *
  * Recovery: call `ggui_handshake` followed by `ggui_render` to mint a

@@ -7,10 +7,10 @@
  */
 
 /**
- * Thrown by `ggui_list_gadgets` (and any future tenant-
+ * Thrown by `ggui_list_gadgets` (and any future app-
  * scoped app-discovery tool) when the caller supplies an explicit
  * `appId` that does NOT match `ctx.appId` resolved by the upstream
- * auth adapter. Cross-tenant probes get a uniform error so the
+ * auth adapter. Cross-app probes get a uniform error so the
  * existence of an alternate `appId` is not leaked.
  *
  * Recovery: omit `appId` to default to `ctx.appId`, or call from a

@@ -9,7 +9,7 @@
  *
  * ## Behavior
  *
- *   1. Validates input shape (`{appId?: string}`). Cross-tenant
+ *   1. Validates input shape (`{appId?: string}`). Cross-app
  *      access protected the same way as `ggui_list_gadgets`.
  *   2. Reads the global theme catalog via the bound `themes` dep
  *      (a `() => readonly ThemeCatalogEntry[]` resolver — keeps the
@@ -35,7 +35,7 @@ const inputSchema = {
     .min(1)
     .optional()
     .describe(
-      'App id whose theme catalog to return. Defaults to the caller-resolved app id from the auth header. Cross-tenant requests fail with app_access_denied.',
+      'App id whose theme catalog to return. Defaults to the caller-resolved app id from the auth header. Cross-app requests fail with app_access_denied.',
     ),
 } as const;
 

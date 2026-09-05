@@ -47,8 +47,8 @@
  *   4. `authoredSource` supplied but byte-identical to
  *      `render.componentCode` — the generator that produced this
  *      render never distinguished authored text from its compiled
- *      output (see `pod-generator.ts`'s sourceCode-falls-back-to-
- *      componentCode note); a value indistinguishable from compiled
+ *      output (typical of a generator whose `sourceCode` falls back to
+ *      `componentCode` when no authored text exists); a value indistinguishable from compiled
  *      output is not authored source.
  */
 import type { DataContract, GguiSession } from '@ggui-ai/protocol';

@@ -14,7 +14,7 @@
  *
  * Behavior:
  *   - Resolves render via `renderStore.get(sessionId)`.
- *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
+ *   - Tenancy gate via `ctx.appId` — cross-app + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}, same
  *     posture as `ggui_get_session` (modeled on it structurally; same
  *     deps shape, minus the heartbeat — reading source once is not an
@@ -79,7 +79,7 @@ export function createGguiGetRenderSourceHandler(
 
       const stored = await deps.renderStore.get(sessionId);
       if (!isVisibleToCaller(stored, ctx)) {
-        // Tenancy + missing both surface uniformly so cross-tenant
+        // Tenancy + missing both surface uniformly so cross-app
         // existence is not leaked. `stored` is narrowed to
         // StoredGguiSession past this guard.
         throw new GguiSessionNotFoundError(sessionId);

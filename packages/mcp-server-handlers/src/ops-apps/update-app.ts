@@ -12,7 +12,7 @@
  * Tenancy: the handler reads `AppsSource.get` first (which scopes by
  * `ownerSub`), then dispatches the update. Cross-user probes return
  * a uniform "not found" shape so an attacker can't learn whether an
- * `appId` exists in another tenant. Store implementations
+ * `appId` belongs to another owner. Store implementations
  * additionally scope the write itself to the owner, so the tenancy
  * guard holds even without the pre-read.
  *
@@ -88,7 +88,7 @@ export function createUpdateAppHandler(
     title: 'Update app',
     audience: ['ops'],
     description:
-      "Partially update an app the caller owns — `displayName`, `systemPrompt`, and/or `rateLimitPerMinute` in one call; at least one field is required. Clearing sentinels: empty-string `systemPrompt` clears the per-app override; `rateLimitPerMinute: 0` clears the limit (unlimited). Cross-tenant targets throw `app_not_found` (uniform shape; no existence leak). Returns the updated row.",
+      "Partially update an app the caller owns — `displayName`, `systemPrompt`, and/or `rateLimitPerMinute` in one call; at least one field is required. Clearing sentinels: empty-string `systemPrompt` clears the per-app override; `rateLimitPerMinute: 0` clears the limit (unlimited). Targets owned by another user throw `app_not_found` (uniform shape; no existence leak). Returns the updated row.",
     inputSchema,
     outputSchema,
     async handler(

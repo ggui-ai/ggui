@@ -104,7 +104,7 @@ export function createSetAppThemeHandler(
     title: 'Set app theme',
     audience: ['ops'],
     description:
-      "Replace the theme on an app the caller owns. The `theme` payload is validated with the protocol's `appThemeSchema` (only `--ggui-*` CSS-variable keys, safe values, ≤200 entries) — the same validator every theme write surface enforces. Cross-tenant targets throw `app_not_found` (uniform shape; no existence leak). Returns the persisted theme.",
+      "Replace the theme on an app the caller owns. The `theme` payload is validated with the protocol's `appThemeSchema` (only `--ggui-*` CSS-variable keys, safe values, ≤200 entries) — the same validator every theme write surface enforces. Targets owned by another user throw `app_not_found` (uniform shape; no existence leak). Returns the persisted theme.",
     inputSchema,
     outputSchema,
     async handler(

@@ -12,17 +12,16 @@
  *
  * Identity scope mirrors get-credit-balance: `ctx.userId` when the
  * host resolves a distinct per-user identity, else `ctx.appId` (the
- * single-tenant fold) — see that module's docstring for why reading
- * `ctx.appId` alone loses every multi-tenant caller.
+ * single-app fold) — see that module's docstring for why reading
+ * `ctx.appId` alone loses every multi-app caller.
  */
 import { z } from 'zod';
 import { defineHandler } from '../types.js';
 
 /**
- * Read-only seam for the credit-transaction ledger. The pod's
- * `DdbCreditStore.listTransactions` (in
- * `mcp-servers/ggui-protocol/src/adapters/credit-store.ts`) implements
- * this directly via raw DDB Query.
+ * Read-only seam for the credit-transaction ledger. A production deployment
+ * implements this against its own ledger store; tests use in-memory
+ * state.
  */
 export interface CreditTransactionSource {
   list(args: {
@@ -91,11 +90,11 @@ export function createListCreditTransactionsHandler(
       "Returns the calling user's credit transaction ledger, newest-first. Each row carries kind ('free_credit' | 'render_charge' | 'topup' | 'refund'), deltaCents (signed — positive for grants/topups, negative for charges), balanceAfterCents (snapshot at time of write), reason (human-readable), and optional relatedSessionId for render_charge rows. Default limit 20, cap 100; pass `cursor` from the previous response's `nextCursor` for paging.",
     inputSchema,
     outputSchema,
-    // No `allowedFor` — same toolset on every pod kind. Callers
+    // No `allowedFor` — same toolset on every deployment kind. Callers
     // without a credit account see an empty ledger.
     async handler(rawInput, ctx) {
       // USER identity first — `ctx.appId` is the active app on
-      // multi-tenant hosts and never keys a ledger row (see
+      // multi-app hosts and never keys a ledger row (see
       // get-credit-balance's module docstring).
       const userId = ctx.userId ?? ctx.appId;
       if (!userId) {

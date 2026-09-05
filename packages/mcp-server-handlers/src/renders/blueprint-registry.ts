@@ -534,7 +534,7 @@ function readVariance(
  * fresh registration would push the bucket past the cap,
  * {@link registerBlueprint} evicts the lowest-`hitCount` entry first;
  * ties broken by oldest `createdAt`. The number is calibrated for an
- * OSS single-tenant `ggui serve` workload — every render is one
+ * OSS single-app `ggui serve` workload — every render is one
  * `template` entry, so 100 templates per scope = ~100 distinct
  * UI shapes the agent has built across its renders, well above any
  * realistic single-app surface and small enough to keep the
@@ -1000,7 +1000,7 @@ export async function recordBlueprintHit(
   // is metadata-only per ggui#540; a query result never carried one),
   // so re-embedding is the only path there. Every in-repo backend is
   // keyed (#527), so the vectorless rungs are the exotic-backend slow
-  // case, not a path OSS or the pod takes.
+  // case, not a path `ggui serve` or a hosted deployment takes.
   const vector = 'vector' in existing ? existing.vector : await reembed(deps, existing.metadata);
   if (!vector) return; // re-embed failed silently — drop the hit-count update
   const nextHitCount =

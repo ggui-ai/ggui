@@ -37,7 +37,7 @@ const outputSchema = {
 } as const;
 
 /**
- * Structured-log sink. Matches the narrow slice of the pod/server
+ * Structured-log sink. Matches the narrow slice of the server
  * logger this handler needs; OSS default falls back to a single-line
  * `console.log` in the same shape the log pipeline already parses.
  */

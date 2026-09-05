@@ -153,7 +153,7 @@ describe('set_provider_key — app scope', () => {
     ).rejects.toBeInstanceOf(AppScopedKeysUnavailableError);
   });
 
-  it('cross-tenant appId answers the uniform app_not_found', async () => {
+  it('cross-app appId answers the uniform app_not_found', async () => {
     const appScopedStore = new InMemoryAppScopedStore({ app_1: 'user-2' });
     const handler = createSetProviderKeyHandler({
       store: new InMemoryProviderKeyStore(),
@@ -226,7 +226,7 @@ describe('remove_provider_key — app scope', () => {
     ).rejects.toBeInstanceOf(AppScopedKeysUnavailableError);
   });
 
-  it('cross-tenant appId answers the uniform app_not_found', async () => {
+  it('cross-app appId answers the uniform app_not_found', async () => {
     const appScopedStore = new InMemoryAppScopedStore({ app_1: 'user-2' });
     await appScopedStore.set({
       ownerSub: 'user-2',

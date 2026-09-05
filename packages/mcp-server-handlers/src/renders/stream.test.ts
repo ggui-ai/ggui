@@ -104,7 +104,7 @@ describe('createGguiEmitHandler', () => {
   });
 
   describe('tenancy + missing', () => {
-    it('cross-tenant render throws GguiSessionNotFoundError (no leak)', async () => {
+    it('cross-app render throws GguiSessionNotFoundError (no leak)', async () => {
       const { sessionId } = await seedRender(renderStore);
       const handler = createGguiEmitHandler({
         renderStore,

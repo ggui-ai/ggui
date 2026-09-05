@@ -24,7 +24,7 @@
  *     enforce propsSpec, return the updated render.
  *
  *   Typed errors (each maps to a distinct enforcement concern):
- *   - `GguiSessionNotFoundError` — render id missing or cross-tenant
+ *   - `GguiSessionNotFoundError` — render id missing or cross-app
  *   - `ChannelNotDeclaredError` — streamSpec or channel missing
  *   - `InvalidCompleteError` — `complete: true` on a non-completable channel
  *   - `ContractViolationError` (from `@ggui-ai/protocol`) — payload shape

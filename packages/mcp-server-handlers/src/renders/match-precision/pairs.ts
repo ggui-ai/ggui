@@ -654,7 +654,7 @@ export const PAIRS: readonly MatchPair[] = [
     // under local bge-small this far miss sits at cosine 0.726 and dies
     // at the judge (decision 'no-match'; run-1's "gate dead" reading was
     // TRUE ONLY IN THAT GEOMETRY); under the production embedder
-    // (Bedrock Titan v2, the pod's `generation-deps` composition) the
+    // (Bedrock Titan v2, the embedder a hosted deployment composes) the
     // same pair lands at cosine 0.143 and the 0.2 gate SKIPS it before
     // any judge call ('match-skip-low-cosine') — the gate is
     // load-bearing live. The MATCHER verdict is a miss either way, so

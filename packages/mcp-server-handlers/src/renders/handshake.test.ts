@@ -574,7 +574,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(second).toBeNull();
     });
 
-    it('scopes records per (appId, handshakeId) — cross-tenant returns null', async () => {
+    it('scopes records per (appId, handshakeId) — cross-app returns null', async () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
       const out = await handler.handler(

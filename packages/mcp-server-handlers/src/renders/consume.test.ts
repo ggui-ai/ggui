@@ -130,7 +130,7 @@ describe('createGguiConsumeHandler', () => {
       expect(result.status).toBe('active');
     });
 
-    it('cross-tenant sessionId throws GguiSessionNotFoundError (no leak)', async () => {
+    it('cross-app sessionId throws GguiSessionNotFoundError (no leak)', async () => {
       await seedRender('render-1', 'app-1');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,

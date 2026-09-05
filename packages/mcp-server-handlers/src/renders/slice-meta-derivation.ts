@@ -224,7 +224,7 @@ export const PRIVATE_BUNDLE_PREFIX = '/bundles/private/';
  * supplied, every descriptor URL containing
  * {@link PRIVATE_BUNDLE_PREFIX} is replaced by `await presign(url)` —
  * the hosted deployment presigns a short-lived object-storage URL via
- * its pod task role. Everything else is untouched: public explicit
+ * its own storage credentials. Everything else is untouched: public explicit
  * URLs, bundleHost-composed URLs (which are public-prefix by
  * construction, see {@link resolveGadgetUrls}), and descriptors with
  * no URLs at all.
@@ -1183,8 +1183,8 @@ export interface RenderSliceMetaDeps {
    * so a private artifact's `bundles/private/…` URLs become
    * short-lived fetchable equivalents (and their origin lands in the
    * CSP allowlist). Injected at the deployment boundary: the hosted
-   * pod supplies an object-storage presigner running on its task
-   * role; leaving it unset (the OSS default) passes URLs through
+   * deployment supplies an object-storage presigner running on its own
+   * credentials; leaving it unset (the OSS default) passes URLs through
    * unchanged — the self-hosted same-origin story needs no presigning.
    *
    * Consumed by the full-envelope projection (`ggui_render`); the
@@ -1205,7 +1205,7 @@ export interface RenderSliceMetaDeps {
    * loopback peers). When unset (or the getter returns `undefined`),
    * the assembly falls back to the ws→http origin flip of the minted
    * trio's `wsUrl` — correct whenever the session API is served on
-   * the WS origin (OSS defaults, the cloud pod's single ingress).
+   * the WS origin (the defaults, or a hosted deployment's single ingress).
    * Operators splitting WS and HTTP across hosts MUST set this (or
    * `publicBaseUrl` upstream), or both URLs will point at the
    * WS-only host.
@@ -1217,8 +1217,8 @@ export interface RenderSliceMetaDeps {
  * Flip a WebSocket URL's origin to its HTTP twin —
  * `wss://host/ws` → `https://host`, `ws://host/ws` → `http://host`.
  * The fallback base for {@link composeSessionApiUrls} when no
- * explicit `sessionApiBaseUrl` is configured (same derivation the
- * cloud pod uses for its oauth issuerUrl). Total: a malformed
+ * explicit `sessionApiBaseUrl` is configured (same derivation
+ * a hosted deployment uses for its oauth issuerUrl). Total: a malformed
  * `wsUrl` returns `undefined` so slice assembly degrades to
  * no-channel-URLs instead of throwing mid-resultMeta.
  */
@@ -1390,8 +1390,8 @@ export function assembleRenderSliceBase(
   // Token-bearing session-API URL pair. Base resolution:
   // explicit `sessionApiBaseUrl` dep (static or request-aware getter)
   // wins; otherwise flip the minted trio's wsUrl origin ws→http (the
-  // session API is served on the WS origin for OSS defaults and the
-  // cloud pod's single ingress). No minted trio ⇒ `{}` — the URLs
+  // session API is served on the WS origin for OSS defaults and for
+  // a hosted deployment's single ingress). No minted trio ⇒ `{}` — the URLs
   // embed the token, so there is nothing honest to stamp.
   const sessionApiBaseRaw =
     typeof deps.sessionApiBaseUrl === 'function'

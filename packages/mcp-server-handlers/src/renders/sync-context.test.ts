@@ -209,7 +209,7 @@ describe('createGguiSyncContextHandler', () => {
       expect(out.code).toBe('SESSION_NOT_FOUND');
     });
 
-    it('rejects cross-tenant snapshot with TENANT_MISMATCH', async () => {
+    it('rejects cross-app snapshot with TENANT_MISMATCH', async () => {
       const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(

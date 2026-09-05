@@ -2,7 +2,7 @@
  * `createGguiConsumeHandler` — long-poll fetch-and-clear for buffered
  * agent-bound events on a render.
  *
- * Lifted from cloud pod's parallel `consume.ts` so OSS gets parity:
+ * Reference implementation shared by every deployment:
  * `ggui_consume` is now real on `@ggui-ai/mcp-server`, completing
  * the FF nextStep → consume hint chain end-to-end.
  *
@@ -215,9 +215,9 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
       // decrements the count exactly once.
       deps.activeConsumerRegistry?.enter(sessionId);
       try {
-        // Resolve render. Cross-tenant (appId) + cross-user + missing
+        // Resolve render. Cross-app (appId) + cross-user + missing
         // all surface uniformly as session_not_found (don't leak whether
-        // the id exists in another tenant / for another user).
+        // the id exists for another app / another user).
         const stored = await deps.renderStore.get(sessionId);
         if (!isVisibleToCaller(stored, ctx)) {
           // `stored` is narrowed to StoredGguiSession past this guard.

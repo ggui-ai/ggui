@@ -81,7 +81,7 @@ describe('createGguiListSessionsHandler', () => {
   });
 
   describe('scoping', () => {
-    it('returns only renders for the caller appId (cross-tenant excluded)', async () => {
+    it('returns only renders for the caller appId (cross-app excluded)', async () => {
       await seedRender(renderStore, { sessionId: 'a', appId: 'app-1' });
       await seedRender(renderStore, { sessionId: 'b', appId: 'app-2' });
       const handler = createGguiListSessionsHandler({ renderStore });

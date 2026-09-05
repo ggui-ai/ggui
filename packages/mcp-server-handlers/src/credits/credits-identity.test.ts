@@ -1,13 +1,13 @@
 /**
  * Identity-derivation pins for the credits handler family.
  *
- * Credit rows are keyed by USER identity. On multi-tenant hosts
+ * Credit rows are keyed by USER identity. On multi-app hosts
  * `ctx.appId` names the caller's active app — never the caller — so a
  * handler that reads `ctx.appId` alone silently returns the zero-row
  * fallback for every such caller (the live 2026-08-15 finding behind
  * ggui#512: a $5.00 account quoted as $0.00). These tests pin the
  * derivation: `ctx.userId` wins when present, `ctx.appId` is the
- * single-tenant fallback, and both-absent throws.
+ * single-app fallback, and both-absent throws.
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -43,7 +43,7 @@ describe('credits family — caller identity derivation (ggui#512)', () => {
       expect(out.balanceCents).toBe(500);
     });
 
-    it('falls back to ctx.appId for single-tenant hosts (no userId)', async () => {
+    it('falls back to ctx.appId for single-app hosts (no userId)', async () => {
       const getBalance = vi.fn().mockResolvedValue(BALANCE);
       const tool = createGetCreditBalanceHandler({
         creditBalance: { getBalance },
@@ -79,7 +79,7 @@ describe('credits family — caller identity derivation (ggui#512)', () => {
       );
     });
 
-    it('falls back to ctx.appId for single-tenant hosts (no userId)', async () => {
+    it('falls back to ctx.appId for single-app hosts (no userId)', async () => {
       const list = vi.fn().mockResolvedValue({ transactions: [] });
       const tool = createListCreditTransactionsHandler({
         creditTransactions: { list },

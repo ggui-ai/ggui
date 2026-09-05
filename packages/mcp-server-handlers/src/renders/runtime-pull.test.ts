@@ -19,7 +19,7 @@ import { GguiSessionNotFoundError } from './errors.js';
  *   - declaration meta (name, audience, `_meta.ui.visibility: ['app']`
  *     — without it MCP Apps hosts reject iframe-issued tools/call and
  *     the terminal rung goes dark);
- *   - uniform-404 tenancy (unknown = cross-tenant = deleted mid-read);
+ *   - uniform-404 tenancy (unknown = cross-app = deleted mid-read);
  *   - cursor paging + hasMore + empty-page lastSequence advance;
  *   - limit clamp at RUNTIME_PULL_MAX_LIMIT (clamped, not rejected);
  *   - replay horizon in BOTH directions as a NORMAL result arm;
@@ -113,7 +113,7 @@ describe('createGguiRuntimePullHandler', () => {
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('cross-tenant read is byte-identical to never-existed (no existence leak)', async () => {
+    it('cross-app read is byte-identical to never-existed (no existence leak)', async () => {
       await seedRender(store, { eventCount: 2 });
       const h = createGguiRuntimePullHandler({ renderStore: store });
       const crossTenant = await h

@@ -43,8 +43,8 @@
  * the credential field itself is now `wsToken` everywhere internally.
  *
  * Stateless on the server side: validation is HMAC + claim arithmetic
- * only, no per-envelope state lookup. The cloud pod's
- * `runtime-refresh-ws-token.ts` composes this with the same
+ * only, no per-envelope state lookup. A hosted deployment's tool
+ * wrapper composes this with the same
  * `MCP_BOOTSTRAP_SECRET` the render handler signs against.
  */
 
@@ -124,7 +124,7 @@ export type GguiRefreshWsTokenOutput = RefreshAccepted | RefreshRejected;
  * `@ggui-ai/mcp-server-core` (same HMAC secret as the render minter).
  *
  * Defined here (not imported from `mcp-server-core`) to keep the
- * handler package free of an extra dep — the cloud pod composes the
+ * handler package free of an extra dep — a hosted deployment composes the
  * seam in its own tool wrapper, and the OSS factory composes one too.
  */
 export interface WsTokenRefreshSeam {

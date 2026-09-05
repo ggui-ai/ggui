@@ -49,9 +49,9 @@
  *     snapshot and reset the cursor to `currentSequence`.
  *
  * **Failure modes:**
- *   - Unknown sessionId, cross-tenant sessionId, and a render deleted
+ *   - Unknown sessionId, cross-app sessionId, and a render deleted
  *     mid-read all surface uniformly as
- *     {@link GguiSessionNotFoundError} — no cross-tenant existence
+ *     {@link GguiSessionNotFoundError} — no cross-app existence
  *     leak (tenancy gate: `renderStore.get` + `ctx.appId`).
  *   - Malformed input (empty sessionId, negative cursor, `limit < 1`)
  *     rejects at the zod boundary.
@@ -120,8 +120,8 @@ export interface GguiRuntimePullHandlerDeps {
    * Subscription-mode hold probe cadence, in ms. During a `wait` hold
    * the handler re-reads the ledger at this interval — deliberately a
    * store poll rather than an in-process wake seam, because the
-   * update that ends the hold may land on a DIFFERENT pod (the store
-   * is the only cross-pod truth this package may assume). Defaults to
+   * update that ends the hold may land on a DIFFERENT replica (the store
+   * is the only cross-replica truth this package may assume). Defaults to
    * 1000. Test hook: inject a small value for deterministic hold
    * tests without fake timers.
    */
@@ -167,8 +167,8 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
         Math.min(parsed.wait ?? 0, RUNTIME_PULL_MAX_WAIT_SECONDS) * 1000;
       const probeIntervalMs = deps.waitProbeIntervalMs ?? 1000;
 
-      // Tenancy gate — cross-tenant + missing surface uniformly so
-      // cross-tenant existence is not leaked (same posture as the
+      // Tenancy gate — cross-app + missing surface uniformly so
+      // cross-app existence is not leaked (same posture as the
       // /events route's wsToken appId check, with ctx.appId as the
       // proved identity on this carrier).
       const stored = await deps.renderStore.get(sessionId);
@@ -180,8 +180,8 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
       // Hold loop: one immediate read, then — empty page + time left —
       // probe the store at `probeIntervalMs` until an event lands or
       // the hold elapses. The probe is a STORE read on purpose: the
-      // event that ends this hold may be committed by another pod, and
-      // the store is the only cross-pod truth available here. Horizon
+      // event that ends this hold may be committed by another replica, and
+      // the store is the only cross-replica truth available here. Horizon
       // results and non-empty pages return immediately regardless of
       // remaining hold budget.
       for (;;) {

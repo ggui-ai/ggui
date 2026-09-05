@@ -15,7 +15,7 @@
  *      app's primary screens land in the registry before any agent
  *      touches the system.
  *   2. Export/reimport round-trip — operator exports a blueprint from
- *      tenant A and registers it into tenant B without re-running the
+ *      app A and registers it into app B without re-running the
  *      LLM.
  *   3. Manual recovery — after a bad generate run, reapply a known-good
  *      version from version control.

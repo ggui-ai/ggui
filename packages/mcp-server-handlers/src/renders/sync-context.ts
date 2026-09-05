@@ -192,7 +192,7 @@ export function createGguiSyncContextHandler(
           message: `render "${sessionId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
         };
       }
-      // Tenant gate. Without this, a malicious iframe (or a buggy
+      // App-scope gate. Without this, a malicious iframe (or a buggy
       // bootstrap that captured a stale appId) could write context
       // onto a render it doesn't own. Match the appId carried on
       // the bootstrap against the render's appId; mismatch = drop.
