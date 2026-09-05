@@ -85,14 +85,30 @@ EOF
 
   # Kill this branch's background boot legs before a failing exit so a broken
   # boot never orphans servers holding 6781/6790 for the next run.
+  # `kill $(jobs -p)` reached only each leg's subshell/npm — never the
+  # `node … serve` grandchild — so a failed boot left ggui serve holding
+  # :6781 and the retry's preflight refused (ggui#873 / #866's real
+  # mechanism). Walk each job's tree instead. The legs stay in THIS script's
+  # process group on purpose: the harness's normal teardown SIGTERMs that
+  # group, and that path is unchanged.
+  kill_tree() {
+    local p="$1" c
+    for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done
+    kill -TERM "$p" 2>/dev/null || true
+  }
   die_boot() {
     echo "[boot] $1" >&2
-    # Word-splitting the PID list is the point here:
-    # shellcheck disable=SC2046
-    kill $(jobs -p) 2>/dev/null || true
+    for j in $(jobs -p); do kill_tree "$j"; done
+    sleep 1
+    for j in $(jobs -p); do
+      for c in $(pgrep -P "$j" 2>/dev/null); do kill -KILL "$c" 2>/dev/null || true; done
+      kill -KILL "$j" 2>/dev/null || true
+    done
     exit 1
   }
 
+  # guuey dev --serve >=0.17.0 answers readiness on /readyz (0.16.x: /healthz —
+  # a probe rename in a 0.x minor, ggui#873); the cells pin 0.17.0 exact.
   # Boot order (spec §1): ggui serve FIRST on 6781 — exactly where the guuey
   # CLI's injected `ggui` mcpServer default points (the composed guuey.json
   # declares no `ggui` entry on purpose; `guuey dev` injects
@@ -126,11 +142,11 @@ EOF
         npx guuey dev --serve --port "$AGENT_PORT" ) &
 
   for _ in $(seq 1 120); do
-    curl -sf "http://localhost:$AGENT_PORT/healthz" >/dev/null 2>&1 && break
+    curl -sf "http://localhost:$AGENT_PORT/readyz" >/dev/null 2>&1 && break
     sleep 1
   done
-  curl -sf "http://localhost:$AGENT_PORT/healthz" >/dev/null 2>&1 \
-    || die_boot "guuey dev --serve did not answer /healthz on :$AGENT_PORT"
+  curl -sf "http://localhost:$AGENT_PORT/readyz" >/dev/null 2>&1 \
+    || die_boot "guuey dev --serve did not answer /readyz on :$AGENT_PORT (@guuey/cli >=0.17.0 probe; 0.16.x served /healthz)"
 
   # Web half in the FOREGROUND on the harness's web port (6890 — also the
   # vite config's own default; pinned explicitly so a stray PORT/CI env var
