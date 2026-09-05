@@ -273,11 +273,11 @@ describe('buildMcpServerBackend', () => {
       jsonrpc?: string;
       error?: { code?: number; message?: string };
     };
-    // JSON-RPC envelope on the 401 matches `/mcp`'s `auth_failed`
-    // branch in `server.ts` — pinning the shape here makes a silent
-    // rewrite of the auth response visible in CI.
+    // JSON-RPC envelope on the 401 matches the route's `auth_failed`
+    // branch (`mcp-endpoint-routes.ts`) — pinning the shape here makes a
+    // silent rewrite of the auth response visible in CI.
     expect(body.jsonrpc).toBe('2.0');
-    expect(body.error?.code).toBe(-32000);
+    expect(body.error?.code).toBe(-32001); // #836: UNAUTHORIZED — a first-party server never answers -32000 for a refusal
     expect(body.error?.message).toBe('No valid credentials');
   });
 
