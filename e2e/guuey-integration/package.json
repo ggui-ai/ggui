@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/e2e-guuey-integration",
   "version": "0.0.0",
-  "description": "Standing keyless interop proof for the ggui × guuey render channel (ggui#429): ggui's card surfaces consumed through guuey's published SDK (@guuey/threads + @guuey/mcp-apps-host at EXACT pins) with zero hosted infrastructure. The matrix: live mount via a real in-process ggui server over the real MCP wire, persist→rehydrate equivalence through guuey's extracted ThreadStore, the provider-raw ui:// channel on both arms, the locator-placeholder invariant for persisted ggui renders (bootstrap-free rows, wsToken never persists — guuey#122/ggui#430), and rehydrate-by-refetch minting fresh credentials. The @guuey/* pins are exact because the suite tests ggui HEAD against the versions guuey actually shipped; the pins are dev-side test harness only — no published @ggui-ai/* package depends on anything above MCP.",
+  "description": "Standing keyless interop proof for the ggui \u00d7 guuey render channel (ggui#429): ggui's card surfaces consumed through guuey's published SDK (@guuey/threads + @guuey/mcp-apps-host at EXACT pins) with zero hosted infrastructure. The matrix: live mount via a real in-process ggui server over the real MCP wire, persist\u2192rehydrate equivalence through guuey's extracted ThreadStore, the provider-raw ui:// channel on both arms, the locator-placeholder invariant for persisted ggui renders (bootstrap-free rows, wsToken never persists \u2014 guuey#122/ggui#430), and rehydrate-by-refetch minting fresh credentials. The @guuey/* pins are exact because the suite tests ggui HEAD against the versions guuey actually shipped; the pins are dev-side test harness only \u2014 no published @ggui-ai/* package depends on anything above MCP.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,10 +13,10 @@
     "@ggui-ai/mcp-server": "workspace:*",
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "@guuey/mcp-apps-host": "0.16.14",
-    "@guuey/threads": "0.16.14",
+    "@guuey/mcp-apps-host": "0.17.0",
+    "@guuey/threads": "0.17.0",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@silverprotocol/core": "0.5.4",
+    "@silverprotocol/core": "0.6.1",
     "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
