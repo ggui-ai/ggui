@@ -1,0 +1,9 @@
+{
+  "hard_cap_exceeded": {
+    "code": "hard_cap_exceeded",
+    "surfaces": ["render-gate"],
+    "retry": "next-period",
+    "emitter": "the cap check",
+    "description": "the period ceiling was reached"
+  }
+}

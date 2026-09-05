@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/protocol-conformance",
   "version": "0.15.0",
-  "description": "Conformance test kit for the ggui protocol. Drives a behavioral fixture catalog against a live implementation over WebSocket, a resources/read catalog against a live MCP server, and eight pure-function catalogs (schema, registration, resolution, binding, props-schema, host-helper, refusal-envelope, registry-completeness) for the gadget, tool-binding, schema-precise-render, host-helper and pre-generation-refusal obligations, reporting a scorecard-style pass / fail / skip. MCP builders adopt this kit to prove their implementation is protocol-conformant.",
+  "description": "Conformance test kit for the ggui protocol. Drives a behavioral fixture catalog against a live implementation over WebSocket, a resources/read catalog against a live MCP server, and nine pure-function catalogs (schema, registration, resolution, binding, props-schema, host-helper, refusal-envelope, registry-completeness, transport-refusal) for the gadget, tool-binding, schema-precise-render, host-helper and pre-generation-refusal obligations, reporting a scorecard-style pass / fail / skip. MCP builders adopt this kit to prove their implementation is protocol-conformant.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -75,6 +75,11 @@
       "types": "./dist/registry-completeness/index.d.ts",
       "import": "./dist/registry-completeness/index.js",
       "default": "./dist/registry-completeness/index.js"
+    },
+    "./transport-refusal-conformance": {
+      "types": "./dist/transport-refusal-conformance/index.d.ts",
+      "import": "./dist/transport-refusal-conformance/index.js",
+      "default": "./dist/transport-refusal-conformance/index.js"
     }
   },
   "scripts": {

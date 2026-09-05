@@ -323,7 +323,7 @@ function runPureFunctionCatalogs(
     for (const testCase of refusalEnvelopeCases) {
       skip(
         `refusal-envelope/${testCase.name}`,
-        'no `refusalProjector` supplied — pass one to runConformance() to grade SPEC §7.1\u2019s refused arm',
+        'no `refusalProjector` supplied — pass one to runConformance(), or `--projector <module>` on the CLI, to grade SPEC §7.1\u2019s refused arm',
       );
     }
   } else {
@@ -346,7 +346,7 @@ function runPureFunctionCatalogs(
     for (const testCase of transportRefusalCases) {
       skip(
         `transport-refusal/${testCase.name}`,
-        'no `transportRefusalProjector` supplied — pass one to runConformance() to grade the endpoint-level refusal (SPEC §7.1, mcp-endpoint surface)',
+        'no `transportRefusalProjector` supplied — pass one to runConformance(), or `--transport-projector <module>` on the CLI, to grade the endpoint-level refusal (SPEC §7.1, mcp-endpoint surface)',
       );
     }
   } else {
@@ -369,7 +369,7 @@ function runPureFunctionCatalogs(
     for (const pin of registryCompletenessPins) {
       skip(
         `registry-completeness/${pin.name}`,
-        'no `refusalRegistry` supplied — pass the deployment\u2019s refusal-code registry to runConformance() to grade it',
+        'no `refusalRegistry` supplied — pass the deployment\u2019s refusal-code registry to runConformance(), or `--registry <file.json>` on the CLI, to grade it',
       );
     }
   } else {

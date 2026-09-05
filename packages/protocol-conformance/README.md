@@ -172,6 +172,13 @@ npx @ggui-ai/protocol-conformance --url ws://localhost:3000/ws --auth bearer:$TO
 
 The CLI exits `0` only when at least one fixture executed and none failed; `1` on any fixture failure; `2` on invocation errors **or** when every fixture skipped (a zero-executed run never reads as success in CI).
 
+The three pure-function catalogs (`refusal-envelope`, `registry-completeness`, `transport-refusal`) grade an in-process function and a data table, not the wire, so a URL alone cannot reach them. The CLI hands them their inputs by flag — `--registry <file.json>` (the deployment's refusal registry, a JSON object keyed by code), `--projector <module>` (an ES module whose `project(refusal)` — named or default export — returns the SPEC §7.1 tool result, or `null` for a code with no render envelope) and `--transport-projector <module>` (same shape, returning the endpoint's `{ httpStatus, error }` or `null`). A flag left out leaves its catalog on the scorecard as SKIPPED with the flag named. Catalog rows count as executed fixtures, so a run given a catalog flag can exit 0 while every wire fixture is SKIPPED — read the scorecard for the wire signal. Minimal spec-correct samples of each input live in the repository at [`src/cli-samples/`](https://github.com/ggui-ai/ggui/tree/main/packages/protocol-conformance/src/cli-samples) (not in the npm tarball); the test suite pins that they pass their catalogs.
+
+```
+npx @ggui-ai/protocol-conformance --url ws://localhost:3000/ws --auth bearer:$TOKEN \
+  --registry ./refusal-registry.json --projector ./project.mjs --transport-projector ./endpoint.mjs
+```
+
 To grade setup-dependent fixtures (and any `session-state` fixture), pass a `host` implementing the `ConformanceHost` adapter — `dispatchSetup` / `dispatchTeardown` for the directive vocabulary, plus the optional `readSessionField(sessionId, field)` introspection seam. Fixtures whose requirements the host doesn't meet skip with a precise reason; they never silently pass.
 
 ## License
