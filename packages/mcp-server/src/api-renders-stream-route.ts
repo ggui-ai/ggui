@@ -72,7 +72,7 @@ class SseSink implements SubscriberSink {
   /**
    * Invoked exactly once, from `end()`, BEFORE the response closes —
    * the route assigns its teardown (clear heartbeat + detach) here so
-   * a channel-initiated `end` (pod shutdown, expiry probe) tears the
+   * a channel-initiated `end` (server shutdown, expiry probe) tears the
    * subscriber down through the same single path as a client close.
    */
   onEnd: (() => void) | undefined;
@@ -264,7 +264,7 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
     const sink = new SseSink(res, logger);
 
     // Single idempotent teardown shared by every exit path: client
-    // close, channel-initiated sink.end (pod shutdown / expiry probe),
+    // close, channel-initiated sink.end (server shutdown / expiry probe),
     // attach failure.
     let detachFn: (() => void) | null = null;
     let torn = false;

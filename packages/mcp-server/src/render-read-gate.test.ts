@@ -80,7 +80,7 @@ describe("renderReadAllowed", () => {
     ).toBe(true);
   });
 
-  it("allows single-tenant builder/anonymous flows (same default app)", () => {
+  it("allows single-app builder/anonymous flows (same default app)", () => {
     expect(
       renderReadAllowed({ appId: "builder" }, ctx({ appId: "builder", authSource: "anonymous" }))
     ).toBe(true);

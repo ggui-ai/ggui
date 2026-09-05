@@ -82,7 +82,7 @@ export function resolveHashedRuntimeBundleUrl(
  * `bundleFile` (default: the workspace's built bundle — the same file
  * `createGguiServer` hashes, so both derive the same value), or
  * `undefined` when the bundle is unreadable. Deployments that compose
- * their own render handler (the cloud pod's `handlers: tools` shape)
+ * their own render handler (a production deployment's `handlers:` shape)
  * use this to build a `createCodeModuleUrlMinter` that stamps the SAME
  * `<rt>` the co-resident factory's variant route serves (ggui#522
  * slice 2) — re-deriving the scheme by hand is how the codeUrl binding

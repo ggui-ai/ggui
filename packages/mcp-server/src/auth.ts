@@ -64,10 +64,10 @@ export async function resolveIdentity(
  * Derive a stable `appId` from an auth result.
  *
  * In OSS single-user mode every identity collapses to `{kind:'builder'}`
- * which doesn't carry a tenant id. We fold these into a single
+ * which doesn't carry an app id. We fold these into a single
  * well-known value (`DEFAULT_BUILDER_APP_ID`) so blueprint / vector
- * scoping still works. Multi-tenant bindings (a hosted closed runtime)
- * override this by passing `appIdFromIdentity` on `createGguiServer`.
+ * scoping still works. A multi-app production deployment overrides
+ * this by passing `appIdFromIdentity` on `createGguiServer`.
  */
 export const DEFAULT_BUILDER_APP_ID = 'builder';
 
@@ -85,9 +85,9 @@ export function defaultAppIdFromIdentity(result: AuthResult): string {
     );
   }
   // `kind: 'app'` carries the appId directly — surfaced by API-key /
-  // OAuth-bearer adapters (e.g. an ApiKeyAuthAdapter on a hosted
-  // multi-tenant deployment). Falling through to DEFAULT_BUILDER_APP_ID
-  // here would discard the very tenant id the adapter just proved.
+  // OAuth-bearer adapters (e.g. an API-key adapter proving an app-scoped
+  // bearer on a multi-app deployment). Falling through to DEFAULT_BUILDER_APP_ID
+  // here would discard the very app id the adapter just proved.
   if (result.identity.kind === 'app') {
     return result.identity.appId;
   }

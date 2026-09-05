@@ -14,7 +14,7 @@
  * Owns the per-render subscriber counter that drives the
  * `onFirstSubscriber` / `onLastSubscriberGone` 0↔1 transition hooks —
  * no other module reads it. The hooks fire for SSE attaches too:
- * hosted cross-pod pubsub scoping keys on "does this pod hold any
+ * hosted cross-replica pubsub scoping keys on "does this replica hold any
  * subscriber for this render", regardless of transport.
  */
 

@@ -150,8 +150,8 @@ export function mountConsoleBlueprintRoutes(opts: MountOptions): void {
         }
 
         // Same default appId the CLI's pairing-authenticated /mcp
-        // ingress resolves for single-tenant OSS — the render is
-        // scoped to the same tenant.
+        // ingress resolves for single-app OSS — the render is
+        // scoped to the same app.
         const appId = DEFAULT_BUILDER_APP_ID;
         // Phase B: a render IS the addressable unit; the prior
         // (sessionId, stackItemId) pair collapses to a single

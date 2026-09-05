@@ -216,7 +216,7 @@ export interface GguiSessionChannelOptions {
    */
   readonly auth: AuthAdapter;
   /**
-   * Maps resolved identity → tenant appId for subscribes that omit
+   * Maps resolved identity → the appId for subscribes that omit
    * `payload.appId` (SPEC §12.2 identity-default resolution). Defaults
    * to `defaultAppIdFromIdentity` — same mapping the `/mcp` endpoint
    * uses. Token-bound subscribes (wsToken / console cookie) never
@@ -406,12 +406,12 @@ export interface GguiSessionChannelOptions {
    * render connects to this server instance).
    *
    * Hosted deployments use this to lazily SUBSCRIBE to the per-render
-   * cross-pod broadcast channel (e.g. Redis pub/sub); OSS has no use
+   * cross-replica broadcast channel (e.g. Redis pub/sub); OSS has no use
    * for it (in-process broadcasts already route via
    * {@link GguiSessionChannelServer.sendPropsUpdate}). Bounding pubsub
-   * fan-in to only renders a pod actually holds connections for is a
+   * fan-in to only renders a replica actually holds connections for is a
    * correctness requirement, not an optimization — without it every
-   * pod receives every other pod's broadcast for every active render.
+   * replica receives every other replica's broadcast for every active render.
    *
    * Best-effort: a thrown callback is logged and swallowed.
    * `register()` MUST NOT fail because of a hook error or the
@@ -864,18 +864,18 @@ export function createGguiSessionChannelServer(
       // Close code 1012 ("Service Restart", RFC 6455 + IANA registry)
       // signals to clients that the server is restarting and they
       // should reconnect immediately rather than treat the close as
-      // permanent. The pod's K8s rolling update fits this exactly:
-      // a new pod is already accepting connections behind the same
+      // permanent. A rolling update of the deployment fits this exactly:
+      // a new replica is already accepting connections behind the same
       // load balancer; iframe-runtime + console viewer should
       // reconnect on next message instead of blinking "disconnected".
       // Code 1001 (used previously) means "endpoint going away" with
-      // no reconnect hint — semantically inaccurate for the pod-roll
+      // no reconnect hint — semantically inaccurate for the rolling-update
       // case and the wrong signal for client reconnect logic.
       const sessionIds = new Set<string>();
       for (const sub of wsSubscribers) {
         sessionIds.add(sub.sessionId);
         // Transport-neutral shutdown: WS maps to close(1012), SSE ends
-        // the response so EventSource auto-reconnects to the new pod —
+        // the response so EventSource auto-reconnects to the new replica —
         // exactly the 1012 semantics. `sink.end` is best-effort by
         // contract (never throws on an already-closing transport).
         sub.sink.end("service_restart");

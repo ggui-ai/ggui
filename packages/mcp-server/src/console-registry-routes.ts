@@ -26,7 +26,7 @@
  * Scope: read-only on `/registry` (authoring happens on disk and the
  * server re-reads on boot; zero-config is an honest empty shape).
  * The cache/registry surfaces are scoped to `DEFAULT_BUILDER_APP_ID`
- * because the OSS server is single-tenant by construction — same
+ * because the OSS server is single-app by construction — same
  * scope the render handler writes to, so list/invalidate/clear see
  * what the real cache writes.
  *

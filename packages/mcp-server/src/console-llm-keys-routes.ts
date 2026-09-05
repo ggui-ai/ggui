@@ -4,7 +4,7 @@
  *   - `gateMode: 'admin-token'` (default — OSS-personal):
  *     gate accepts the admin bearer. Single global keyset; the
  *     /settings UI lets the operator paste keys for everyone.
- *   - `gateMode: 'auth-adapter'` (multi-tenant): gate
+ *   - `gateMode: 'auth-adapter'` (multi-app): gate
  *     calls the server's `AuthAdapter`. Each user's keys are
  *     scoped by `scopeFromRequest` (default: `userId`/`appId`).
  *
@@ -133,7 +133,7 @@ export function mountConsoleLlmKeysRoutes(opts: MountOptions): void {
   //   admin-token → same shape as /keys (Bearer admin OR
   //                 ggui_console_admin cookie).
   //   auth-adapter → calls `resolveIdentity(auth, req)`. `kind:'builder'`
-  //                  is rejected with 401 — the multi-tenant posture
+  //                  is rejected with 401 — the multi-app posture
   //                  is meaningless without a real per-caller id.
   app.use("/ggui/console/llm-keys", (req, res, next) => {
     if (gateMode === "admin-token") {
@@ -142,15 +142,15 @@ export function mountConsoleLlmKeysRoutes(opts: MountOptions): void {
       res.status(401).json({ error: "admin_auth_required" });
       return;
     }
-    // 'auth-adapter' — the multi-tenant gate.
+    // 'auth-adapter' — the multi-app gate.
     resolveIdentity(auth, req)
       .then((identity) => {
         if (identity.identity.kind === "builder") {
           applyDevtoolSecurityHeaders(res);
           res.status(401).json({
-            error: "tenant_required",
+            error: "user_or_app_identity_required",
             message:
-              "Multi-tenant /llm-keys requires an end-user or app identity. " +
+              "Multi-app /llm-keys requires an end-user or app identity. " +
               'The configured AuthAdapter resolved kind:"builder" — pair a ' +
               'real user/app bearer or use providerKeysGate:"admin-token".',
           });

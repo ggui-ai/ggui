@@ -74,7 +74,7 @@ export {
   resolveRuntimeBundleHash,
 } from './runtime-bundle-hash.js';
 // Strict-CSP module-variant delivery (ggui#522 slice 2). The minter is
-// exported for the same composed-handler deployments: a pod that binds
+// exported for the same composed-handler deployments: a deployment that binds
 // `codeStore`/`codeBaseUrl` on its own render tool builds the minter
 // from `resolveRuntimeBundleHash()` so its `codeModuleUrl`s name the
 // exact variant family the co-resident factory routes serve.

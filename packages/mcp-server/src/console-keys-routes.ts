@@ -56,7 +56,7 @@ export function mountConsoleKeysRoutes(opts: MountOptions): void {
 
   const requestHasAdminAuth = (req: Request): boolean => {
     // Header path — `Authorization: Bearer <token>`. Constant-time
-    // compare not needed: this is single-tenant local-host with a
+    // compare not needed: this is single-operator local-host with a
     // local network attacker model; the token also has 72 bits of
     // entropy, so a timing-side-channel attack would still need
     // ~2^36 attempts on average to materialize. Skip the cost.
@@ -87,7 +87,7 @@ export function mountConsoleKeysRoutes(opts: MountOptions): void {
   // For zero-config local-host, trust-proxy is OFF and req.secure
   // reflects the literal socket. Operators behind a tunnel with
   // TLS termination at the edge get the cookie WITHOUT Secure
-  // (intended — the in-pod request is plaintext HTTP). Browsers
+  // (intended — the request reaching the server is plaintext HTTP). Browsers
   // still scope it to the origin via SameSite, which is the
   // primary CSRF protection here; Secure is a defense-in-depth
   // attribute, not load-bearing for this token.

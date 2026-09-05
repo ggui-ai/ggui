@@ -37,7 +37,7 @@ import type { Blueprint, DataContract } from "@ggui-ai/protocol";
 import { createGguiServer, type GguiServer } from "./server.js";
 
 const RESOURCE_URI = "ui://ggui/render";
-/** The universal-MCP single-tenant identity every dev-mode read attributes to. */
+/** The universal-MCP single-app identity every dev-mode read attributes to. */
 const BUILDER_APP_ID = "builder";
 const CONTRACT_KEY = "0123456789abcdef";
 const BLUEPRINT_ID = "bp_00000000-0000-4000-8000-000000000007";

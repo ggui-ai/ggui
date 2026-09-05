@@ -4,7 +4,7 @@
  * Pin the per-`Identity.kind` semantics of `defaultAppIdFromIdentity`
  * and `defaultThreadOwnerFromIdentity` so future widening of the
  * `Identity` union (e.g. a fourth caller class) cannot silently fall
- * through to the builder default and erase the tenant id.
+ * through to the builder default and erase the app id.
  *
  * Two regressions these tests catch by construction:
  *

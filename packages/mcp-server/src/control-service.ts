@@ -4,7 +4,7 @@
  * ggui serves exactly TWO MCP surfaces:
  *
  *   - **Data plane** — the agent routes (`universalMcpPath`, plus the
- *     per-tenant `${pathPrefix}/:appId` variant when configured). Carries
+ *     per-app `${pathPrefix}/:appId` variant when configured). Carries
  *     the `agent` + `runtime` audiences: the tools an agent calls while a
  *     session is running.
  *   - **Control plane** — this service. Carries the `protocol` + `ops`
@@ -114,7 +114,7 @@ export function filterHandlersByAudience(
  * ruling (ggui#525, 2026-08-16). The argument that it is safe on the
  * first call: the save is idempotent under the name-collapse rule (same
  * slug ⇒ one row, a repeat is a no-op), it writes only to the CALLER's
- * own library (no cross-tenant or account-wide effect), and its caller
+ * own library (no cross-app or account-wide effect), and its caller
  * is the console helper agent auto-saving after a render — the
  * "confirm" it performed was an agent self-confirm with no human in
  * the loop, which bought no safety and cost one extra tool round trip
@@ -161,7 +161,7 @@ export function stripAudience<I extends ZodRawShape, O extends ZodRawShape, D ex
  * credential — or presented one the adapter rejected. An un-gated ops
  * handler would then run against that synthetic rather than refusing,
  * which is how a caller with no account would read and write a phantom
- * shared tenant.
+ * shared app.
  *
  * The gate is on `ctx.authSource`, not on which identity FIELDS are
  * populated: every deployment tier proves identity differently

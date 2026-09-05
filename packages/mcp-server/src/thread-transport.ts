@@ -120,7 +120,7 @@ export function defaultThreadOwnerFromIdentity(result: AuthResult): string {
     return `user_${result.identity.workspaceId ?? result.identity.userId}`;
   }
   // `kind: 'app'` is a per-app machine caller (e.g. an agent-builder
-  // API key hitting a hosted multi-tenant deployment). Threads owned
+  // API key hitting a hosted multi-app deployment). Threads owned
   // by an app should be scoped to that app, NOT pooled into the
   // default builder bucket — the latter would let two apps see each
   // other's threads.

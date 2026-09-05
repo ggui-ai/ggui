@@ -22,7 +22,7 @@ export interface RenderReadRowView {
    * first time.
    *
    * Absent stays a legitimate state: builder and anonymous
-   * single-tenant flows mint rows with no subject, and those still
+   * single-app flows mint rows with no subject, and those still
    * pass rung 4.
    */
   readonly userId?: string;
@@ -39,9 +39,9 @@ export interface RenderReadRowView {
  *     that subject. The row's subject is its `userId`, written at
  *     commit; see {@link RenderReadRowView.userId} for why this rung
  *     only starts binding now.
- *  4. Everything else same-app passes: app credentials (tenant trust —
+ *  4. Everything else same-app passes: app credentials (app trust —
  *     the app is obligated to enforce its own user-ownership before
- *     fetching on a user's behalf), builder/anonymous single-tenant
+ *     fetching on a user's behalf), builder/anonymous single-app
  *     flows, and rows with no subject.
  *
  * Deny is surfaced by the CALLER byte-identically to a missing row —

@@ -14,16 +14,17 @@
  *                          401 otherwise (with `WWW-Authenticate` when
  *                          OAuth is enabled).
  *
- * Why live and health are separate: K8s livenessProbe + readinessProbe
- * have distinct semantics. Liveness asks "is the process alive?" and
- * a failure tells the kubelet to RESTART the pod. Readiness asks "is
- * the pod ready to receive traffic?" and a failure tells the service
+ * Why live and health are separate: an orchestrator's liveness and
+ * readiness probes have distinct semantics. Liveness asks "is the process alive?" and
+ * a failure tells the orchestrator to RESTART the container. Readiness
+ * asks "is the replica ready to receive traffic?" and a failure tells the service
  * to STOP ROUTING. Tying both probes to a single endpoint that gates
  * on dependency health (Redis, DDB, RAG) means a transient upstream
- * blip kills the pod entirely instead of just removing it from
+ * blip kills the replica entirely instead of just removing it from
  * rotation.
  *
- * Self-hoster wiring (K8s):
+ * Self-hoster wiring (probe-spec shape; any orchestrator with separate
+ * liveness and readiness probes works the same way):
  *
  *   livenessProbe:  { httpGet: { path: '/ggui/live',   port } }
  *   readinessProbe: { httpGet: { path: '/ggui/health', port } }
@@ -38,7 +39,7 @@ import type { Logger } from "./logger.js";
 import { buildWwwAuthenticate, resolveIssuerUrl } from "./oauth.js";
 
 /**
- * 1s per-check timeout — a hung dependency must not block the K8s
+ * 1s per-check timeout — a hung dependency must not block the orchestrator's
  * readiness probe (/ggui/health), which itself runs on a short period.
  * A timeout is treated as a failed check; the dependency is degraded
  * either way.

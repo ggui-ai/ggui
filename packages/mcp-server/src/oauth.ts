@@ -51,13 +51,13 @@
  * Auth codes + DCR clients live in-memory ({@link InMemoryOAuthStorage}).
  * For multi-replica deployments (2+ processes behind one load
  * balancer), either:
- *   - Use nginx-ingress sticky sessions so the same pod handles both
- *     `/oauth/authorize` and `/oauth/token` (current sandbox posture).
+ *   - Use sticky sessions at your load balancer / reverse proxy so the
+ *     same replica handles both `/oauth/authorize` and `/oauth/token`.
  *   - Plug a Redis-backed {@link OAuthStorage} via the
  *     `oauth.storage` config option (production posture).
  *
  * DCR clients are short-lived in practice — Claude Desktop registers
- * once per install + caches the `client_id`. A pod restart drops all
+ * once per install + caches the `client_id`. A server restart drops all
  * registrations; clients re-register transparently on next failure.
  */
 

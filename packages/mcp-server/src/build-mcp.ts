@@ -80,7 +80,7 @@ export interface BuildMcpServerOptions {
   /**
    * Live-channel origins for the static shell's CSP declaration —
    * forwarded to `installMcpAppsOutbound`. Deployments that set no
-   * `publicBaseUrl` (the cloud pod) pass their `wsUrl` + its ws→http
+   * `publicBaseUrl` (a hosted deployment) pass their `wsUrl` + its ws→http
    * origin flip here so the mounted iframe's `connect-src` covers the
    * SSE / HTTP-polling session API and the WebSocket; otherwise
    * cross-origin hosts CSP-block every network rung of the failover

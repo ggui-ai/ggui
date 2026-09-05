@@ -22,7 +22,7 @@
  * routes use — operator-only since the value persists to ggui.json,
  * which the OSS server treats as trusted manifest input. End-users
  * who paired into a render don't get to mutate the project's
- * theme. Multi-tenant deployments may relax this in a follow-up by
+ * theme. Multi-app deployments may relax this in a follow-up by
  * scoping overrides per user (overrides become server state, not
  * file state).
  */

@@ -802,7 +802,7 @@ export function registerGguiRenderResource(
    * the resource cross-origin hosts (claude.ai) mount and derive the
    * frame CSP from, so origins declared only on per-render resources
    * never reach the frame. Without these, deployments that set no
-   * `publicBaseUrl` (the cloud pod — it feeds Origin/Host enforcement)
+   * `publicBaseUrl` (a hosted deployment's posture — the value feeds Origin/Host enforcement)
    * declare only the runtime-CDN origin and every SSE / HTTP-polling /
    * WS rung of the failover ladder is CSP-blocked in the mounted
    * iframe — observed live on claude.ai (#471 round 11: frame booted
@@ -995,7 +995,7 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 export interface SelfContainedShellInputs {
   /** GguiSession id whose visible-bits surface is being inlined. */
   readonly sessionId: string;
-  /** App / tenant id the render is scoped to. */
+  /** App id the render is scoped to. */
   readonly appId: string;
   /**
    * Content-addressable URL the iframe fetches the compiled ES module
@@ -1636,7 +1636,7 @@ export interface GguiRenderResourceTemplateOptions {
    * deployment that also keeps no durable record, or `NOT_MOUNTABLE`
    * where the row is the caller's own and simply has no component yet.
    * Deployments serving
-   * more than one tenant from one registry scope are the reason the
+   * more than one app from one registry scope are the reason the
    * option exists at all: the fallback discloses whether a blueprint
    * key exists under that scope, so leave it unset if that is not
    * acceptable.
@@ -1708,9 +1708,9 @@ export interface GguiRenderResourceTemplateOptions {
    * Per-request handler-context accessor — the SAME AsyncLocalStorage
    * read the tool path uses. The per-session resource handler gates
    * reads on it (render-read-gate.ts). Absent ⇒ the handler fails
-   * closed for rows scoped to any app other than the single-tenant
+   * closed for rows scoped to any app other than the single-app
    * default (compose paths that cannot thread a context keep working
-   * for OSS single-tenant flows only).
+   * for OSS single-app flows only).
    */
   readonly getContext?: () => HandlerContext | undefined;
   /**
@@ -1895,7 +1895,7 @@ export function registerGguiRenderResourceTemplate(
   const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{sessionId}`, {
     // No list-callback — the resource set is unbounded per render
     // count, and `resources/list` would leak render ids across
-    // tenants. Hosts discover specific URIs via per-call `_meta.ui.
+    // apps. Hosts discover specific URIs via per-call `_meta.ui.
     // resourceUri` instead.
     list: undefined,
   });
@@ -2447,7 +2447,7 @@ export function registerGguiRenderResourceTemplate(
     // (wsUrl + wsToken) instead of failing as undeliverable —
     // parity with the `/r/<shortCode>` path. (See the gate after the
     // mint.) This matters for deployments that wire `mintWsToken` but no
-    // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
+    // `codeStore`/`codeBaseUrl` (e.g. a hosted deployment): the agent-server
     // inlines THIS resource, so without live-mode every render on such a
     // deployment would resolve fine and then be reported as having no
     // way to be delivered.
@@ -2503,7 +2503,7 @@ export function registerGguiRenderResourceTemplate(
     // when the mint above produced a token (both URLs embed it); base
     // = publicBaseUrl when configured, else the ws→http origin flip
     // of the minted wsUrl (session API served on the WS origin — OSS
-    // defaults + the cloud pod's single ingress).
+    // defaults + a hosted deployment's single ingress).
     let sessionApiUrls: SessionApiUrls | undefined;
     if (wsToken !== undefined) {
       const base =

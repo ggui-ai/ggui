@@ -158,7 +158,7 @@ export interface SubscribeDeps {
   readonly bootstrap?: GguiSessionChannelBootstrap;
   /** Console cookie plumbing — see `GguiSessionChannelOptions.cookieAuth`. */
   readonly cookieAuth?: GguiSessionChannelCookieAuth;
-  /** Identity → tenant appId mapping — see `GguiSessionChannelOptions.appIdFromIdentity`. */
+  /** Identity → appId mapping — see `GguiSessionChannelOptions.appIdFromIdentity`. */
   readonly appIdFromIdentity?: (result: AuthResult) => string;
   /** Version-handshake policy — see `GguiSessionChannelOptions.versionPolicy`. */
   readonly versionPolicy?: "advisory" | "reject";
@@ -515,7 +515,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // appId mapping (`appIdFromIdentity`, defaulting to
     // `defaultAppIdFromIdentity`). The resolved value then flows
     // through the EXISTING tenancy gate + provisioning below — never
-    // an `undefined` tenant on a stored row.
+    // an `undefined` appId on a stored row.
     const effectiveAppId: string =
       payload.appId ??
       tokenBoundAppId ??

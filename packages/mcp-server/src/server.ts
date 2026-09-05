@@ -701,10 +701,10 @@ export function defaultHandlers(deps: {
     readonly kvStore: KeyValueStore;
     /**
      * Optional render store. When bound, `ggui_handshake` validates
-     * the wire render id against this store (existence + tenant
+     * the wire render id against this store (existence + app
      * ownership) before negotiating. This server sets it to the same
      * store the render-commit handler uses so the handshake catches
-     * unknown / cross-tenant ids at the earliest boundary; deployments
+     * unknown / cross-app ids at the earliest boundary; deployments
      * that omit it validate at render-commit time instead.
      */
     readonly renderStore?: GguiSessionStore;
@@ -1145,7 +1145,7 @@ export function defaultHandlers(deps: {
    *   - `ggui_ops_delete_blueprint`
    *
    * Absent = the ops tools are not registered (operator UX falls
-   * back to whatever surface the cloud pod exposes, or the deployment
+   * back to whatever authorship surface the deployment itself exposes, or it
    * runs without operator authorship). The register/list/update/delete
    * quartet registers even when `generate` deps are absent — read-only
    * and non-LLM operations on an existing store can be useful for
@@ -1165,7 +1165,7 @@ export function defaultHandlers(deps: {
   // Single shared active-consumer registry. consume.ts enters at the top
   // of its long-poll, submit-action.ts queries `hasActive` after a
   // successful append; both MUST see the same instance for the fast-path
-  // signal to flow. In-process only (Map-backed) — multi-pod cloud
+  // signal to flow. In-process only (Map-backed) — multi-replica
   // deployments override via a shared-state implementation.
   const activeConsumerRegistry = new InMemoryActiveConsumerRegistry();
 
@@ -1667,7 +1667,7 @@ export function defaultHandlers(deps: {
   // for the family's registration rules. The server-level
   // `deps.appMetadataStore` + `deps.telemetry` are offered as the
   // bundle's fallbacks; render already gets the server-level store at
-  // :1398. Cloud pods that pass their own handler list pick the same
+  // :1398. Hosted deployments that pass their own handler list pick the same
   // family up through `buildOpsBundleHandlers`.
   if (deps.opsBlueprint) {
     handlers.push(
@@ -1919,7 +1919,7 @@ export interface CreateGguiServerOptions {
    * store. The CLI binds an `InMemoryAppMetadataStore` seeded from
    * `ggui.json#theme.preset` (so every appId picks up the operator's
    * chosen default theme without an explicit `register()`); hosted
-   * deployments bind a multi-tenant adapter.
+   * deployments bind a multi-app adapter.
    *
    * Absent ⇒ `defaultHandlers` constructs a fresh
    * `InMemoryAppMetadataStore` per request site that needs one (no
@@ -1942,7 +1942,7 @@ export interface CreateGguiServerOptions {
    * Absent ⇒ `createGguiServer` constructs a single shared
    * `InMemoryToolIdentityCatalogStore` and threads it into both sides
    * (mirrors the `appMetadataStore` default). Hosted deployments bind a
-   * multi-tenant adapter.
+   * multi-app adapter.
    */
   readonly toolIdentityCatalogStore?: ToolIdentityCatalogStore;
 
@@ -2150,7 +2150,7 @@ export interface CreateGguiServerOptions {
   readonly onThemeConfigChange?: (next: ThemeConfig | null) => void;
 
   /**
-   * Map a resolved identity to the `appId` used by handlers for tenant
+   * Map a resolved identity to the `appId` used by handlers for app
    * scoping. Defaults to `defaultAppIdFromIdentity` — single-user
    * `'builder'` for builder-kind identities, `userId`/`workspaceId`
    * for user-kind.
@@ -2170,13 +2170,13 @@ export interface CreateGguiServerOptions {
   readonly universalMcpPath?: string;
 
   /**
-   * Per-tenant URL routing. When set, the factory
+   * Per-app URL routing. When set, the factory
    * additionally mounts `${pathPrefix}/:${paramName}`
    * alongside the universal path. The shared handler reads
    * `req.params[paramName]` and uses it as `ctx.appId`, overriding
    * `appIdFromIdentity` for that request.
    *
-   * A multi-tenant deployment passes e.g. `{paramName: 'appId',
+   * A multi-app deployment passes e.g. `{paramName: 'appId',
    * paramPattern: '[A-Za-z0-9]{8}', pathPrefix: '/apps'}` so URLs
    * like `example.com/apps/aB3kP9xY` route to a session scoped to
    * that specific app. The `/apps/` prefix segments the
@@ -2198,7 +2198,7 @@ export interface CreateGguiServerOptions {
    * resolves but before session work begins, the handler invokes it
    * with the URL-supplied appId + identity. Throw to deny — the
    * handler converts to a 403 response and skips MCP processing.
-   * Multi-tenant deployments use this to verify the resolved identity
+   * Multi-app deployments use this to verify the resolved identity
    * owns the URL-addressed app — this is the boundary that prevents
    * cross-user blueprint reads when downstream stores don't enforce
    * ownership themselves. Deployments that opt in to per-app routing
@@ -2277,7 +2277,7 @@ export interface CreateGguiServerOptions {
    *     `~/.ggui/credentials.json`.
    *   - `'auth-adapter'`: scope is derived from the authenticated
    *     identity — `userId` for `kind: 'user'`, `appId` for `kind: 'app'`,
-   *     and `'global'` for `kind: 'builder'` (which under multi-tenant
+   *     and `'global'` for `kind: 'builder'` (which under multi-app
    *     is rejected at the gate before this fires anyway).
    *
    * Operators with composite scopes (`${appId}:${userId}` for per-app-
@@ -2295,7 +2295,7 @@ export interface CreateGguiServerOptions {
    *     accepts the admin bearer (Authorization header or
    *     `ggui_console_admin` cookie). Single global keyset; the
    *     /settings UI lets the operator paste keys that everyone uses.
-   *   - `'auth-adapter'` (multi-tenant posture): the gate calls the
+   *   - `'auth-adapter'` (multi-app posture): the gate calls the
    *     server's configured `AuthAdapter` (same path as `/mcp`). Each
    *     authenticated end-user manages their OWN keys, scoped by
    *     {@link providerKeyScope} (default: `userId` / `appId`).
@@ -2423,7 +2423,7 @@ export interface CreateGguiServerOptions {
    * Hook fired when the local subscriber count for `sessionId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
    * `createGguiSessionChannelServer`. Used by cloud adapters for per-render
-   * cross-pod pubsub channel scoping; OSS callers leave this undefined.
+   * cross-replica pubsub channel scoping; single-replica servers leave this undefined.
    *
    * Only consulted when `renderChannel` is enabled. See
    * `GguiSessionChannelOptions.onFirstSubscriber` for the full contract.
@@ -3502,7 +3502,7 @@ export interface CreateGguiServerOptions {
    * surfaces. Each domain is independently optional —
    * `buildOpsBundleHandlers` registers a domain's tools only when its
    * seam is bound here. OSS deployments leave these undefined (the
-   * smaller surface); cloud pods bind their own adapters.
+   * smaller surface); hosted deployments bind their own adapters.
    *
    * Mirrors `creditBalance` + `creditTransactions`'s pattern — the
    * shared-handler layer is the same code path everywhere, and the
@@ -3569,11 +3569,11 @@ export interface CreateGguiServerOptions {
    *
    * Use this when an embedder wires a stateful external dependency
    * (e.g. a pubsub subscriber connection, a vector-store reachability
-   * probe, a worker-pool health view) and wants its K8s readinessProbe
-   * to take the pod OUT OF SERVICE when that dependency fails. The
-   * sibling `/ggui/live` endpoint is unaffected — that is the K8s
-   * livenessProbe target and stays 200 regardless of readiness, so a
-   * transient upstream blip removes the pod from rotation without
+   * probe, a worker-pool health view) and wants its readiness probe
+   * to take the replica OUT OF SERVICE when that dependency fails. The
+   * sibling `/ggui/live` endpoint is unaffected — that is the
+   * liveness-probe target and stays 200 regardless of readiness, so a
+   * transient upstream blip removes the replica from rotation without
    * restarting the process. Wire the two probes separately:
    *
    *     livenessProbe:  { httpGet: { path: '/ggui/live',   port } }
@@ -4211,7 +4211,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // `defaultHandlers` below) AND the handshake negotiator's READ-side
   // `toolIdentityCatalog` resolver. Default to a single in-memory store
   // (mirrors the `appMetadataStore` default); hosted deployments inject a
-  // multi-tenant adapter via `opts.toolIdentityCatalogStore`.
+  // multi-app adapter via `opts.toolIdentityCatalogStore`.
   const toolIdentityCatalogStore: ToolIdentityCatalogStore =
     opts.toolIdentityCatalogStore ?? new InMemoryToolIdentityCatalogStore();
 
@@ -4784,7 +4784,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // coupon / blueprints). Built on EVERY path — they hang off their own
   // explicit options, so a deployment that supplies a custom base
   // handler list still gets the domains it wired. A name already claimed
-  // by the base list wins: that's how the cloud pod ships its own
+  // by the base list wins: that's how a hosted deployment ships its own
   // `ggui_ops_create_app` while still picking up the rest of the family,
   // and it is what keeps the blueprint family single-registered when the
   // default handler set already built it from the same bundle.
@@ -4971,8 +4971,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // and threaded onto OAuthConfig so the OAuth handlers stay
   // deployment-agnostic. Operator-supplied validators on
   // `opts.oauth.validateResource` win — overrides cover advanced
-  // deployments (e.g. multi-tenant pods that accept resources for
-  // sibling pods on the same domain).
+  // deployments (e.g. multi-app deployments that accept resources for
+  // sibling servers co-hosted on the same domain).
   const oauthConfig: OAuthConfig = {
     ...baseOauthConfig,
     validateResource:
@@ -5017,7 +5017,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
   // Liveness / readiness / authenticated-probe routes — see
   // `./health-routes.ts` for the probe taxonomy (live vs health vs
-  // auth-check) and the K8s wiring guidance.
+  // auth-check) and the orchestrator wiring guidance.
   mountHealthRoutes({
     app,
     info,
@@ -5091,8 +5091,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Live-channel origins for the static shell's CSP declaration:
     // the WS endpoint + its http-origin flip (the session-API base the
     // sseUrl/pollingUrl stamps derive from when `publicBaseUrl` is
-    // unset — the cloud pod's posture, see compose.ts's Origin/Host
-    // ruling). Cross-origin hosts (claude.ai) build the frame CSP from
+    // unset — the posture of a deployment that deliberately leaves it
+    // unset because it also feeds Origin/Host enforcement + OAuth).
+    // Cross-origin hosts (claude.ai) build the frame CSP from
     // the STATIC shell resource they mount; per-render declarations
     // never reach it, so without these entries every network rung of
     // the failover ladder (WS, SSE, HTTP polling) is `connect-src`-
@@ -5139,7 +5140,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // resource handler can rehydrate a render-evicted
             // locator from the registered blueprint instead of
             // failing the read. `defaultAppIdFallback` bounds the
-            // registry lookup to the OSS single-tenant identity.
+            // registry lookup to the OSS single-app identity.
             //
             // Leaving it undefined does not soften the response —
             // there is no placeholder shell to fall back to any more.
@@ -5147,7 +5148,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // fail typed instead. The reason to leave it undefined is
             // that the lookup answers "a blueprint with this key
             // exists under this scope" to whoever asks, which a
-            // deployment serving several tenants from one scope may
+            // deployment serving several users from one scope may
             // not want, and which it could not scope correctly anyway
             // (a missing render carries no way to derive whose it
             // was).

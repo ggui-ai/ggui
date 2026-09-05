@@ -30,7 +30,7 @@
  * serve` instance; adding bearer auth here would block the
  * dev-page-is-usable claim without meaningful security gain.
  *
- * The render invocation uses `DEFAULT_BUILDER_APP_ID` for tenant
+ * The render invocation uses `DEFAULT_BUILDER_APP_ID` for app
  * scope — same well-known value the `/mcp` endpoint collapses to
  * in OSS single-user mode. Matches blueprint + vector scoping
  * applied by the generator / cache seams.

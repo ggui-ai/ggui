@@ -41,7 +41,7 @@ interface MountOptions {
   /** Universal MCP endpoint path — the default RFC 9728 resource. */
   readonly universalMcpPath: string;
   /**
-   * Per-tenant URL routing shape. When configured, a second
+   * Per-app URL routing shape. When configured, a second
    * well-known endpoint mounts under the same path prefix the
    * per-app `/mcp` handler lives on.
    */
