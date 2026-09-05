@@ -1538,10 +1538,6 @@ export function isRefusedRenderOutput(
 // mutable JSON; readonly is applied at the seam (`DeepReadonly` on the
 // derived types). Every shape is closed: the transport strip-parses against
 // `.shape`, so the shape IS the wire.
-// Honest exception, pre-existing: three `.readonly()` calls in
-// `schemas/data-contract.ts` (gadget requires/connect, app public env) reach
-// the registered render + handshake inputs through `dataContractSchema` and
-// advertise `readOnly` on tools/list today — ggui#824 removes them.
 // ============================================================================
 
 /** Display modes an MCP Apps host can render a view in (ext-apps vocabulary). */

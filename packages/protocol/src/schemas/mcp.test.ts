@@ -60,6 +60,8 @@ import type {
   GguiSessionEvent,
   ReplayHorizonPassedError,
 } from '../types/ggui-session-event';
+import { zodToJsonSchema } from '../validation/zod-to-json-schema';
+import { gadgetDescriptorSchema } from './data-contract';
 
 describe('renderCacheMarkerSchema', () => {
   it('round-trips a hit marker (full-template)', () => {
@@ -1435,5 +1437,29 @@ describe('transportRefusalSchema / transportRefusalErrorSchema — the mcp-endpo
       'handshake',
       'balanceCentsAtCheck',
     ]);
+  });
+});
+
+describe('the advertised JSON Schema carries no readOnly — readonly is seam-side, never wire-side (ggui#824)', () => {
+  // `schema-compat.ts` feeds each tool's registered shape through this exact
+  // converter for `tools/list`; zod 4 projects `.readonly()` as `readOnly: true`,
+  // which then reaches every host and every host's LLM as JSON-Schema metadata.
+  it('ggui_render input (renderInputShape)', () => {
+    const json = JSON.stringify(zodToJsonSchema(renderInputShape));
+    expect(json).not.toContain('"readOnly"');
+  });
+
+  it('ggui_handshake input (handshakeInputSchema)', () => {
+    const json = JSON.stringify(zodToJsonSchema(handshakeInputSchema));
+    expect(json).not.toContain('"readOnly"');
+  });
+
+  it('ggui_list_gadgets output — the gadget descriptor itself (connect, requires)', () => {
+    // The descriptor is registered directly as that tool's wire entry
+    // (`app-discovery/list-gadgets.ts`); its two readonly arrays are the
+    // leak the #817 seam rule forbids: readonly belongs on the derived
+    // type (`DeepReadonly`), never on the schema a host's LLM reads.
+    const json = JSON.stringify(zodToJsonSchema({ gadgets: gadgetDescriptorSchema.array() }));
+    expect(json).not.toContain('"readOnly"');
   });
 });

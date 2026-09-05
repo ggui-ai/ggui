@@ -280,9 +280,7 @@ export const PUBLIC_ENV_APP_KEY_RE = /^GGUI_PUBLIC_APP_[A-Z0-9_]+$/;
  * that declare a `requires` key must have a corresponding App-side
  * publicEnv value at render time (gate: `assertPublicEnvSatisfied`).
  */
-export const gadgetRequiresSchema = z
-  .array(z.string().regex(PUBLIC_ENV_APP_KEY_RE))
-  .readonly();
+export const gadgetRequiresSchema = z.array(z.string().regex(PUBLIC_ENV_APP_KEY_RE));
 
 /**
  * SRI hash format for gadget bundles. Registry install writes
@@ -474,7 +472,7 @@ const basePackageFieldsShape = {
   bundleSri: z.string().regex(BUNDLE_SRI_RE).optional(),
   styleUrl: z.url().optional(),
   // CSP `connect-src` feed — full URL shape on every entry.
-  connect: z.array(z.url()).readonly().optional(),
+  connect: z.array(z.url()).optional(),
   // Shared `gadgetRequiresSchema`.
   requires: gadgetRequiresSchema.optional(),
   // HTTPS URL of the package's `.d.ts`. The handler fetches it at
@@ -704,9 +702,7 @@ export const clientCapabilitiesSpecSchema = z
  *   - Defensive re-validation in the iframe-runtime slice-meta
  *     extractors (`parseMetaFromGlobal`, `parseMetaFromToolResult`).
  */
-export const appPublicEnvSchema = z
-  .record(z.string().regex(PUBLIC_ENV_APP_KEY_RE), z.string())
-  .readonly();
+export const appPublicEnvSchema = z.record(z.string().regex(PUBLIC_ENV_APP_KEY_RE), z.string());
 
 /**
  * {@link DataContract} — the unified four-spec contract surface
