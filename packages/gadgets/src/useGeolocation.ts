@@ -27,7 +27,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /** Coordinates returned by the hook. Pure JSON for easy contextSpec
  *  threading. */

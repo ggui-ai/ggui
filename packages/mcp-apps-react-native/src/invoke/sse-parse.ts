@@ -11,7 +11,7 @@
  * and Expo SDK 50+ polyfills it for older runtimes. If consumers target an
  * older setup they must polyfill `TextDecoder` in their entry file.
  */
-import { invokeEventSchema, type InvokeEvent } from '@ggui-ai/protocol';
+import { invokeEventSchema, type InvokeEvent } from '@ggui-ai/protocol/wire';
 
 const DECODER = new TextDecoder();
 const FRAME_SEP = '\n\n';

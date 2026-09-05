@@ -57,7 +57,7 @@ import type {
   JsonValue,
   StreamEnvelope,
   StreamSpec,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
   ChannelPollDegradedEvent,

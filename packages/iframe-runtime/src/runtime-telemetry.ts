@@ -30,7 +30,7 @@
  *     symptoms it reports).
  */
 import type { ChannelLogger } from '@ggui-ai/live-channel';
-import { RUNTIME_TELEMETRY_MAX_EVENTS } from '@ggui-ai/protocol';
+import { RUNTIME_TELEMETRY_MAX_EVENTS } from '@ggui-ai/protocol/wire';
 
 const FIRST_FLUSH_DELAY_MS = 4_000;
 const FLUSH_THROTTLE_MS = 8_000;

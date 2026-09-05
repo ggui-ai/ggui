@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
-import type { AdapterPermissions, PermissionStatus, InterfaceContext, AppDisplayConfig, EndUserIdentity } from '@ggui-ai/protocol';
+import type { AdapterPermissions, PermissionStatus, InterfaceContext, AppDisplayConfig, EndUserIdentity } from '@ggui-ai/protocol/wire';
 import {
   detectInterfaceContext,
   defaultInterfaceContext,
   KNOWN_PERMISSION_NAMES,
   UnknownPermissionNameError,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import { GguiContext, type AdapterRegistry, type GguiContextValue } from '../context/GguiContext';
 
 const KNOWN_PERMISSION_NAMES_SET: ReadonlySet<string> = new Set(KNOWN_PERMISSION_NAMES);

@@ -15,7 +15,7 @@ import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type {
   ChannelErrorPayload,
   ChannelPayloadFrame,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 import type { ChannelTransportRouter } from '../channel-transport.js';
 

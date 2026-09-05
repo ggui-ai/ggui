@@ -33,7 +33,7 @@ import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type {
   PropsUpdatePayload,
   GguiSession,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import type { GguiSessionSeedInput } from '../types.js';
 
 import { validateInboundPropsPayload } from '../validation.js';

@@ -7,7 +7,7 @@
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import type { DrainAckPayload } from '@ggui-ai/protocol';
+import type { DrainAckPayload } from '@ggui-ai/protocol/wire';
 
 export interface DrainAckHandlerDeps {
   readonly dispatch: (payload: DrainAckPayload) => void;

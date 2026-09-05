@@ -20,7 +20,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export interface ClipboardWriteOptions {
   /** Text to write. Supplied at hook-call time; read when `start()`

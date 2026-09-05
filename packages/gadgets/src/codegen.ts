@@ -17,7 +17,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { GadgetDescriptor } from '@ggui-ai/protocol';
+import type { GadgetDescriptor } from '@ggui-ai/protocol/wire';
 
 /**
  * Emit `descriptor.json` for registry consumption.

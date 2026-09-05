@@ -16,7 +16,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 function mapReadError(err: unknown): GadgetError {
   if (err instanceof Error) {

@@ -12,7 +12,7 @@
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import type { GguiSession, StreamEnvelope } from '@ggui-ai/protocol';
+import type { GguiSession, StreamEnvelope } from '@ggui-ai/protocol/wire';
 import type { GguiSessionSeedInput } from '../types.js';
 
 import {

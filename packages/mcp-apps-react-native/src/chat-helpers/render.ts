@@ -1,4 +1,4 @@
-import type { ContentBlock } from '@ggui-ai/protocol';
+import type { ContentBlock } from '@ggui-ai/protocol/wire';
 
 /**
  * Pull a durable render payload out of a `tool_result` block's

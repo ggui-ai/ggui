@@ -61,8 +61,13 @@ export type {
   InterfaceContext,
   DeviceCategory,
   EndUserIdentity,
-} from '@ggui-ai/protocol';
-export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
+export { detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol/wire';
+// `BRIDGE_EVENTS` lives in the protocol's iframe-bridge module, which the
+// browser entry does not carry yet (ggui#819 follow-up: it should — the
+// WebView bridge is browser data). Until then, this one name comes from
+// the root barrel.
+export { BRIDGE_EVENTS } from '@ggui-ai/protocol';
 
 // Invoke protocol message block types — re-exported at root so facade
 // consumers can pull them from the same import path as useInvoke.
@@ -73,7 +78,7 @@ export type {
   ToolUseBlock,
   ToolResultBlock,
   InvokeTurn,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 // ProtocolError typed union — the canonical shape for every failure
 // the renderer classifies outward. `<McpAppIframe onError>` surfaces

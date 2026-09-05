@@ -15,7 +15,7 @@
 // runtime forwards `nextStep` as event metadata; the agent owns the
 // call.
 
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract } from '@ggui-ai/protocol/wire';
 import type {
   ContractTypeMap,
   InferActionNames,
@@ -26,7 +26,7 @@ import type {
   ActionPayload,
   StreamNames,
   StreamPayloadOf,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import { useAction } from './useAction';
 import { useStream, type StreamResult } from './useStream';
 

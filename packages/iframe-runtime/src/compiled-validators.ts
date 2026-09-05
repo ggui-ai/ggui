@@ -12,7 +12,7 @@
  * {@link CompiledValidatorSet}.
  */
 import type { CompiledContractValidators } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { ValidateFunction } from '@ggui-ai/protocol';
+import type { ValidateFunction } from '@ggui-ai/protocol/wire';
 import { loadModule } from '@ggui-ai/design/module-loader';
 
 /**

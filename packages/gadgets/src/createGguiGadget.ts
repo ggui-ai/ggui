@@ -66,7 +66,7 @@ import {
   type GadgetHook,
   type GadgetHookExport,
   type JsonValue,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /**
  * Author input to {@link createGguiGadget}. A `createGguiGadget` call

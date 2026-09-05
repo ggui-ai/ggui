@@ -45,7 +45,7 @@ import {
   type GadgetDescriptor,
   type GadgetExport,
   type JsonValue,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import { WrapperConformanceError } from './createGguiGadget.js';
 
 /**

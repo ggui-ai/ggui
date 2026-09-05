@@ -23,8 +23,8 @@ export type {
   AppDisplayConfig,
   InterfaceContext,
   EndUserIdentity,
-} from '@ggui-ai/protocol';
-export { detectInterfaceContext } from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
+export { detectInterfaceContext } from '@ggui-ai/protocol/wire';
 
 // Invoke protocol message block types — re-exported at root so facade
 // consumers can pull them from the same import path as useInvoke.
@@ -35,7 +35,7 @@ export type {
   ToolUseBlock,
   ToolResultBlock,
   InvokeTurn,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 // ProtocolError typed union — the canonical shape for every failure
 // the renderer classifies outward. `<AppRenderer onError>` (from

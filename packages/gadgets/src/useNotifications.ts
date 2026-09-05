@@ -18,7 +18,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export interface NotificationOptions_ {
   readonly title: string;

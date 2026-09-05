@@ -46,8 +46,8 @@ import type { Context, ReactElement, ReactNode } from 'react';
 import type {
   ContextSpec,
   JsonSchema,
-} from '@ggui-ai/protocol';
-import { DEFAULT_CONTEXT_DEBOUNCE_MS } from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
+import { DEFAULT_CONTEXT_DEBOUNCE_MS } from '@ggui-ai/protocol/wire';
 import { validateContextValue } from './validation.js';
 import type { GguiContextRegistry } from './globals.js';
 

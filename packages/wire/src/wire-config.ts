@@ -21,8 +21,8 @@ import type {
   JsonValue,
   StreamEnvelope,
   ValidationResult,
-} from '@ggui-ai/protocol';
-import { RESERVED_CHANNEL_PREFIX } from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
+import { RESERVED_CHANNEL_PREFIX } from '@ggui-ai/protocol/wire';
 import {
   buildActionEnvelope,
   ClientContractViolationError,

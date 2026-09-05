@@ -17,7 +17,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export interface CameraOptions {
   /** Prefer front ('user') or rear ('environment') camera. Optional. */

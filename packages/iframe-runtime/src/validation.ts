@@ -35,14 +35,14 @@ import type {
   ReservedChannelValidator,
   StreamSpec,
   ValidationResult,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import {
   isKnownReservedChannel,
   validateActionEnvelope,
   validateContextData,
   validatePropsData,
   validateStreamData,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import type { CompiledValidatorSet } from './compiled-validators.js';
 
 // =============================================================================

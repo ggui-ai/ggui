@@ -57,7 +57,7 @@ import type {
   InvokeErrorCode,
   InvokeTurn,
   ToolUseBlock,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import { useGguiContext } from '../components/GguiProvider';
 import { parseSseStream } from './sse-parse';
 

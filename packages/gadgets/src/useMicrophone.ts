@@ -17,7 +17,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export interface MicrophoneOptions {
   /** MIME type for the recorder. Defaults to whatever the browser supports. */

@@ -43,7 +43,7 @@
  */
 import { CLIENT_SUPPORTED_VERSIONS, UPGRADE_REQUIRED } from '@ggui-ai/protocol/version';
 import { UpgradeRequiredError } from '@ggui-ai/protocol/errors/version-mismatch';
-import type { AckPayload } from '@ggui-ai/protocol';
+import type { AckPayload } from '@ggui-ai/protocol/wire';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {

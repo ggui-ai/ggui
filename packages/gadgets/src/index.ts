@@ -38,7 +38,7 @@ export type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export {
   createGguiGadget,

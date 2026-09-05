@@ -19,7 +19,7 @@ import type {
   GadgetError,
   GadgetStatus,
   GadgetHook,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 export interface FilePickerOptions {
   /** Allow multi-select. Default: false. */

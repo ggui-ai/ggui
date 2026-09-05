@@ -55,7 +55,7 @@ import type {
   EventsResponse,
   GguiRuntimePullInput,
   GguiSessionEvent,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import { unwrapCallToolResult } from './call-tool-unwrap.js';
 
 const DEFAULT_EVENTS_POLL_INTERVAL_MS = 2000;

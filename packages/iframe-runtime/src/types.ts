@@ -19,7 +19,7 @@ import type {
   HostContextProjection,
   ComponentGguiSession,
   SystemGguiSession,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /**
  * The four server-assigned ledger fields on every wire-delivered

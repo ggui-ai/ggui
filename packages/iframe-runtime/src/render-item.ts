@@ -39,7 +39,7 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { AppTheme, GguiSession } from '@ggui-ai/protocol';
+import type { AppTheme, GguiSession } from '@ggui-ai/protocol/wire';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';

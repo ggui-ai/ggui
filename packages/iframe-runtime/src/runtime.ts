@@ -35,7 +35,7 @@ import type {
   JsonValue,
   JsonObject,
   GguiSession,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import {
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
@@ -62,7 +62,7 @@ import type {
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
 } from './types.js';
-import { projectHostContext } from '@ggui-ai/protocol';
+import { projectHostContext } from '@ggui-ai/protocol/wire';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 // Type-only contract on `@modelcontextprotocol/sdk` — no runtime
 // import (the esbuild bundle carries no sdk code). Declared as a

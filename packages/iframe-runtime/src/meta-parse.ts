@@ -50,7 +50,7 @@
  * At least one mode MUST be present. Half-live (wsUrl without wsToken)
  * is structurally rejected by the combiner.
  */
-import { PUBLIC_ENV_APP_KEY_RE } from '@ggui-ai/protocol';
+import { PUBLIC_ENV_APP_KEY_RE } from '@ggui-ai/protocol/wire';
 import type {
   McpAppAiGguiRenderMeta,
   McpAppContextSlot,

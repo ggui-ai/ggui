@@ -1,4 +1,4 @@
-import type { ContentBlock, InvokeTurn } from '@ggui-ai/protocol';
+import type { ContentBlock, InvokeTurn } from '@ggui-ai/protocol/wire';
 import type { ConversationMessage } from '../invoke/useInvoke';
 import { extractRenderFromToolResult } from './render';
 

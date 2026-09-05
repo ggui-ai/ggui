@@ -5,7 +5,7 @@
  * `InvokeEvent`s as they arrive. Buffers partial frames across chunk
  * boundaries — chunks from `fetch` do NOT align with `\n\n` separators.
  */
-import { invokeEventSchema, type InvokeEvent } from '@ggui-ai/protocol';
+import { invokeEventSchema, type InvokeEvent } from '@ggui-ai/protocol/wire';
 
 const DECODER = new TextDecoder();
 const FRAME_SEP = '\n\n';

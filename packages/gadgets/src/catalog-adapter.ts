@@ -49,7 +49,7 @@
  * care which environment is feeding it.
  */
 
-import type { GadgetDescriptor } from '@ggui-ai/protocol';
+import type { GadgetDescriptor } from '@ggui-ai/protocol/wire';
 
 /**
  * Per-deployment source of registered gadget descriptors.

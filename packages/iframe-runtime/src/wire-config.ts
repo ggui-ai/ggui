@@ -16,7 +16,7 @@
  * ProtocolError dual-emission policy, and the tools/call-vs-WS
  * dispatch transport.
  */
-import type { ActionEnvelope, GguiSession } from '@ggui-ai/protocol';
+import type { ActionEnvelope, GguiSession } from '@ggui-ai/protocol/wire';
 import type { GguiSessionSeedInput } from './types.js';
 import {
   ClientContractViolationError,

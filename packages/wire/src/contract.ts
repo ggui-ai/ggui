@@ -45,7 +45,7 @@ import {
   type ReservedChannelValidator,
   type StreamSpec,
   type ValidationResult,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /** Which boundary the violation was detected at. */
 export type ClientContractDirection =

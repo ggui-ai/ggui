@@ -41,7 +41,7 @@ import { createRoot } from 'react-dom/client';
 // Schema-derived (ggui#613 residual 2): the delivered-base option type
 // comes from the wire schema, never a hand mirror — future base fields
 // can't silently diverge here again.
-import type { AppTheme } from '@ggui-ai/protocol';
+import type { AppTheme } from '@ggui-ai/protocol/wire';
 import {
   stripMarkers,
   rewriteImports,

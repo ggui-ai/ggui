@@ -32,7 +32,7 @@
  */
 import React, { createElement, Fragment, useEffect, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { StreamEnvelope } from '@ggui-ai/protocol';
+import type { StreamEnvelope } from '@ggui-ai/protocol/wire';
 
 /**
  * Spec-canonical A2UI preview channel name (from

@@ -65,7 +65,7 @@ import {
   projectHostContext,
   type HostContextObservedPayload,
   type HostContextProjection,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 // =============================================================================
 // Send seam

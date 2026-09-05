@@ -40,7 +40,7 @@ import type {
   InferAgentToolNames,
   InferGadgetNames,
   InferStreamNames,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /**
  * Exhaustive contract-completeness manifest for the code a generator

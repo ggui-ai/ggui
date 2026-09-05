@@ -6,7 +6,7 @@ import type {
   InferStreamNames,
   InferStreamPayload,
   StreamChannelMode,
-} from '@ggui-ai/protocol';
+} from '@ggui-ai/protocol/wire';
 
 /**
  * One delivery on a stream channel, forwarded to a `subscribe`

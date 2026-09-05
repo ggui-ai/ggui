@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AdapterPermissions, PermissionStatus, InterfaceContext, EndUserIdentity, AppDisplayConfig } from '@ggui-ai/protocol';
+import type { AdapterPermissions, PermissionStatus, InterfaceContext, EndUserIdentity, AppDisplayConfig } from '@ggui-ai/protocol/wire';
 
 /**
  * Open interface — host runtime registry of **client/device adapter

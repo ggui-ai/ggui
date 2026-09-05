@@ -24,8 +24,8 @@
  */
 import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Dimensions, PixelRatio } from 'react-native';
-import type { AdapterPermissions, PermissionStatus, InterfaceContext, EndUserIdentity, AppDisplayConfig } from '@ggui-ai/protocol';
-import { KNOWN_PERMISSION_NAMES, UnknownPermissionNameError } from '@ggui-ai/protocol';
+import type { AdapterPermissions, PermissionStatus, InterfaceContext, EndUserIdentity, AppDisplayConfig } from '@ggui-ai/protocol/wire';
+import { KNOWN_PERMISSION_NAMES, UnknownPermissionNameError } from '@ggui-ai/protocol/wire';
 import { GguiContext, type AdapterRegistry, type GguiContextValue } from '../context/GguiContext';
 
 const KNOWN_PERMISSION_NAMES_SET: ReadonlySet<string> = new Set(KNOWN_PERMISSION_NAMES);

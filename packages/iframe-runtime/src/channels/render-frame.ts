@@ -19,7 +19,7 @@
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import type { RenderPayload, GguiSession } from '@ggui-ai/protocol';
+import type { RenderPayload, GguiSession } from '@ggui-ai/protocol/wire';
 
 import type { ChannelTransportRouter } from '../channel-transport.js';
 import { setConnectedStatus, type StatusRefs } from '../status-dom.js';
