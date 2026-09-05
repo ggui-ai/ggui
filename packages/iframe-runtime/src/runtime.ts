@@ -2442,6 +2442,20 @@ function classifySubmitActionResponse(
  * carries a result envelope, so neither is evidence the relay worked.
  */
 function isRelayShapedFailure(resp: JsonRpcResponse | null): boolean {
+  // "Relay-shaped" IS "undelivered" on this leg, by construction — not
+  // by hope (ggui#832, ruled from the hosts' source): every JSON-RPC
+  // error the iframe sees here is host- or transport-minted. The MCP
+  // SDK server turns a tool handler's throw into an `isError` RESULT and
+  // mints JSON-RPC codes only for its own gate; the guuey view-host
+  // answers a rejecting relay with an in-band unavailable RESULT, never
+  // an error; ggui's embed host proxies over HTTP and mints its OWN
+  // codes for a failed proxy. So a server-side outcome always arrives
+  // as a `CallToolResult` (`ok:true` and `ok:false` alike clear the
+  // latch), and an error envelope always means the call did not round
+  // trip. A third-party host that forwarded a server's JSON-RPC error
+  // verbatim would be indistinguishable by code — that is the
+  // host-helper conformance catalog's business (H3 / R1), not this
+  // predicate's.
   // Null-tolerant on `error`, matching `classifySubmitActionResponse`'s
   // own check: an `{error:null, result:{...}}` envelope classifies as
   // success there, so it must also read as NOT relay-shaped-failure
