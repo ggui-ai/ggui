@@ -27,7 +27,7 @@
  */
 
 import { z } from 'zod';
-import { gguiSessionSummaryWireSchema } from '@ggui-ai/protocol';
+import { gguiListSessionsOutputSchema } from '@ggui-ai/protocol';
 import type { GguiSessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   GguiSessionStore,
@@ -65,9 +65,7 @@ const inputSchema = {
 // `.passthrough()`; the docs and `projectSummary` were always closed at eight.
 // `wsToken` + `wsTokenExpiresAt` are populated iff the deployment wired a
 // `mintWsToken` seam (hosts driving a resume flow); others get the lean summary.
-const outputSchema = {
-  sessions: z.array(gguiSessionSummaryWireSchema),
-} as const;
+const outputSchema = gguiListSessionsOutputSchema.shape;
 
 // `GguiSessionSummaryWire` is re-exported below from
 // `@ggui-ai/protocol/integrations/mcp-apps` — the protocol's derived type,

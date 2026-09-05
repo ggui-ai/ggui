@@ -44,6 +44,11 @@ import {
   renderRefusalSchema,
   transportRefusalErrorSchema,
   transportRefusalSchema,
+  consumeEventEntrySchema,
+  gguiConsumeOutputSchema,
+  gguiEmitOutputSchema,
+  gguiListSessionsOutputSchema,
+  gguiSessionStatusSchema,
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
   runtimePullEventsPageSchema,
@@ -1461,5 +1466,52 @@ describe('the advertised JSON Schema carries no readOnly — readonly is seam-si
     // type (`DeepReadonly`), never on the schema a host's LLM reads.
     const json = JSON.stringify(zodToJsonSchema({ gadgets: gadgetDescriptorSchema.array() }));
     expect(json).not.toContain('"readOnly"');
+  });
+});
+
+describe('ggui_consume and ggui_list_sessions own their wire shapes in the protocol (ggui#817 part C2)', () => {
+  const ENTRY = {
+    type: 'action' as const,
+    sessionId: 'render_1',
+    intent: 'submit',
+    actionData: { value: 'X' },
+    uiContext: { draft: 'hello' },
+    actionId: 'act_1',
+    firedAt: '2026-09-05T00:00:00.000Z',
+  };
+
+  it('consumeEventEntrySchema round-trips a drained row; actionData may be null', () => {
+    expect(consumeEventEntrySchema.parse(ENTRY)).toEqual(ENTRY);
+    expect(consumeEventEntrySchema.parse({ ...ENTRY, actionData: null })).toEqual({ ...ENTRY, actionData: null });
+  });
+
+  it('a drained row is closed on the wire — an unknown key is stripped, a missing actionId is refused', () => {
+    expect(consumeEventEntrySchema.parse({ ...ENTRY, extra: 1 })).toEqual(ENTRY);
+    const { actionId: _dropped, ...noId } = ENTRY;
+    expect(() => consumeEventEntrySchema.parse(noId)).toThrow();
+    expect(() => consumeEventEntrySchema.parse({ ...ENTRY, type: 'stream' })).toThrow();
+  });
+
+  it('gguiSessionStatusSchema is the closed pair the consume loop exits on', () => {
+    expect(gguiSessionStatusSchema.options).toEqual(['active', 'expired']);
+    expect(() => gguiSessionStatusSchema.parse('closed')).toThrow();
+  });
+
+  it('gguiConsumeOutputSchema: events (entries), status (enum), client (optional observations) — nothing else', () => {
+    expect(Object.keys(gguiConsumeOutputSchema.shape)).toEqual(['events', 'status', 'client']);
+    expect(gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'expired' })).toEqual({ events: [ENTRY], status: 'expired' });
+    expect(() => gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'draining' })).toThrow();
+  });
+
+  it('gguiListSessionsOutputSchema wraps the closed summary rows', () => {
+    expect(Object.keys(gguiListSessionsOutputSchema.shape)).toEqual(['sessions']);
+    expect(gguiListSessionsOutputSchema.parse({ sessions: [] })).toEqual({ sessions: [] });
+  });
+
+  it('gguiEmitOutputSchema: accepted, and seq when the server keeps a stream buffer', () => {
+    expect(Object.keys(gguiEmitOutputSchema.shape)).toEqual(['accepted', 'seq']);
+    expect(gguiEmitOutputSchema.parse({ accepted: true })).toEqual({ accepted: true });
+    expect(gguiEmitOutputSchema.parse({ accepted: true, seq: 3 })).toEqual({ accepted: true, seq: 3 });
+    expect(() => gguiEmitOutputSchema.parse({ accepted: true, seq: -1 })).toThrow();
   });
 });

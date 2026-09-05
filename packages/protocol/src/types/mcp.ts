@@ -1,6 +1,5 @@
 import type { z } from 'zod';
 import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
-import type { GguiSessionStatus } from './render';
 import type { DeepReadonly } from './readonly';
 import type {
   consumeInputSchema,
@@ -26,6 +25,10 @@ import type {
   declareToolCatalogOutputSchema,
   gguiGetSessionOutputSchema,
   gguiSearchBlueprintsOutputSchema,
+  consumeEventEntrySchema,
+  gguiConsumeOutputSchema,
+  gguiEmitOutputSchema,
+  gguiListSessionsOutputSchema,
 } from '../schemas/mcp';
 import type {
   EventsResponse,
@@ -149,18 +152,10 @@ export interface GguiEmitInput<TPayload = JsonValue> {
  * any subscriber is currently connected is a separate concern and does
  * NOT affect this flag. No-subscriber is not an error.
  */
-export interface GguiEmitOutput {
-  /** True when the server accepted the delivery at the boundary. */
-  accepted: boolean;
+export type GguiEmitOutput = DeepReadonly<z.infer<typeof gguiEmitOutputSchema>>;
 
-  /**
-   * GguiSession-scoped monotonic outbound sequence assigned to this
-   * delivery. Omitted on implementations without a
-   * `GguiSessionStreamBuffer` (hosted cloud today); required on OSS
-   * `@ggui-ai/mcp-server`.
-   */
-  seq?: number;
-}
+/** `ggui_list_sessions`' wire, derived from {@link gguiListSessionsOutputSchema} (ggui#817 part C2). */
+export type GguiListSessionsOutput = DeepReadonly<z.infer<typeof gguiListSessionsOutputSchema>>;
 
 
 
@@ -223,32 +218,7 @@ export interface GguiGetRenderSourceOutput {
  * seam) — consume reads from a separate render-scoped pipe whose entries
  * originate at `submit_action`.
  */
-export interface ConsumeEventEntry {
-  /** Stable discriminator — always the literal `'action'`. */
-  readonly type: 'action';
-  /** GguiSession the gesture targeted. */
-  readonly sessionId: string;
-  /** Which `actionSpec[*]` entry the iframe dispatched against. */
-  readonly intent: string;
-  /**
-   * Typed payload satisfying `actionSpec[intent].schema`. `null` for
-   * no-payload gestures (bare button click).
-   */
-  readonly actionData: JsonValue | null;
-  /**
-   * Snapshot of the contract's `contextSpec` slot values at the moment
-   * the user fired the gesture. Empty object `{}` when the contract
-   * has no `contextSpec` or no slots have been mirrored yet.
-   */
-  readonly uiContext: JsonObject;
-  /**
-   * 8-hex FNV-1a correlation id of the gesture — matches the iframe-
-   * runtime's outstanding-toast key and the server's `drain_ack` frame.
-   */
-  readonly actionId: string;
-  /** ISO 8601 UTC timestamp of the gesture (iframe-local clock). */
-  readonly firedAt: string;
-}
+export type ConsumeEventEntry = Readonly<z.infer<typeof consumeEventEntrySchema>>;
 
 /**
  * Output from `ggui_consume` — buffered consume-entries.
@@ -259,23 +229,7 @@ export interface ConsumeEventEntry {
  * single source of truth — both the action and the local UI state are
  * atomic on a single entry.
  */
-export interface GguiConsumeOutput {
-  /** Buffered consume-entries (cleared after return). */
-  events: ConsumeEventEntry[];
-  /** GguiSession status — `'expired'` means the GguiSession's TTL elapsed and
-   *  no more events will arrive; the agent's long-poll loop terminates. */
-  status: GguiSessionStatus;
-  /**
-   * Client-side observations echoed back to the agent. Same shape
-   * `ggui_handshake` exposes. Lets the agent pick up mid-render
-   * changes (window resize, fullscreen toggle, etc.) without waiting
-   * for the next handshake. Absent ⇒ no client observations yet.
-   *
-   */
-  client?: {
-    readonly hostContext?: import('./host-context.js').HostContextProjection;
-  };
-}
+export type GguiConsumeOutput = DeepReadonly<z.infer<typeof gguiConsumeOutputSchema>>;
 
 /**
  * Input for ggui_search_blueprints tool — semantic search over

@@ -1,67 +1,25 @@
-/**
- * Adapter tests — storage-side helpers for PendingEvent envelopes.
- *
- * `PendingEvent.envelope` carries the per-gesture {@link ConsumeEventEntry}
- * row written by `submit_action`'s `kind:"dispatch"` branch.
- * The only adapter left is {@link parsePendingEnvelope}, a shape-neutral
- * reader for stored envelope values (object or JSON-string).
- */
-import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { ConsumeEventEntry, PendingEvent } from './types/mcp.js';
-import { parsePendingEnvelope } from './envelope-adapters.js';
+import { describe, expect, it } from 'vitest';
 
-const sampleEntry: ConsumeEventEntry = {
-  type: 'action',
-  sessionId: 'render_abc',
-  intent: 'submit',
-  actionData: { x: 42 },
-  uiContext: {},
-  actionId: '12345678',
-  firedAt: '2026-04-19T00:00:00.000Z',
-};
+import { parsePendingEnvelope } from './envelope-adapters';
 
-describe('parsePendingEnvelope', () => {
-  it('returns object input unchanged', () => {
-    expect(parsePendingEnvelope(sampleEntry)).toBe(sampleEntry);
+describe('parsePendingEnvelope — a drained row is parsed, never cast (ggui#817 part C2)', () => {
+  const ENTRY = {
+    type: 'action',
+    sessionId: 'render_1',
+    intent: 'submit',
+    actionData: null,
+    uiContext: {},
+    actionId: 'act_1',
+    firedAt: '2026-09-05T00:00:00.000Z',
+  };
+
+  it('returns a well-formed entry unchanged', () => {
+    expect(parsePendingEnvelope(JSON.stringify(ENTRY))).toEqual(ENTRY);
   });
 
-  it('parses JSON-stringified input (AppSync a.json() read path)', () => {
-    expect(parsePendingEnvelope(JSON.stringify(sampleEntry))).toEqual(sampleEntry);
-  });
-});
-
-describe('GguiConsumeOutput canonical-surface lock', () => {
-  it('events are ConsumeEventEntry[] — pipe shape written by submit_action', () => {
-    type Output = import('./types/mcp.js').GguiConsumeOutput;
-    expectTypeOf<Output['events'][number]>().toEqualTypeOf<ConsumeEventEntry>();
-    expectTypeOf<Output['events'][number]>().toHaveProperty('intent');
-    expectTypeOf<Output['events'][number]>().toHaveProperty('actionData');
-    expectTypeOf<Output['events'][number]>().toHaveProperty('uiContext');
-    expectTypeOf<Output['events'][number]>().toHaveProperty('actionId');
-    expectTypeOf<Output['events'][number]>().toHaveProperty('firedAt');
-    expect(true).toBe(true);
-  });
-});
-
-describe('PendingEvent structural lock', () => {
-  it('canonical shape: id + envelope + sequence + createdAt', () => {
-    const row: PendingEvent = {
-      id: 'evt_abc',
-      envelope: sampleEntry,
-      sequence: 7,
-      createdAt: '2026-04-19T00:00:00.000Z',
-    };
-    expect(row.envelope).toBeDefined();
-    expectTypeOf<PendingEvent['envelope']>().toEqualTypeOf<
-      ConsumeEventEntry | string
-    >();
-    expectTypeOf<PendingEvent['sequence']>().toEqualTypeOf<number>();
-  });
-
-  it('PendingEvent keys are canonical four', () => {
-    type PendingEventKeys = keyof PendingEvent;
-    expectTypeOf<PendingEventKeys>().toEqualTypeOf<
-      'id' | 'envelope' | 'sequence' | 'createdAt'
-    >();
+  it('refuses a malformed row at the seam instead of shipping it to the agent', () => {
+    const { actionId: _dropped, ...noId } = ENTRY;
+    expect(() => parsePendingEnvelope(JSON.stringify(noId))).toThrow();
+    expect(() => parsePendingEnvelope(JSON.stringify({ ...ENTRY, type: 'stream' }))).toThrow();
   });
 });

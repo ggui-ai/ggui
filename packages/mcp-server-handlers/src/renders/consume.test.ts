@@ -33,8 +33,27 @@ import {
   type ObserverNotifier,
 } from './consume.js';
 import { GguiSessionNotFoundError } from './errors.js';
+import { zodToJsonSchema } from '@ggui-ai/protocol';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
+
+
+/**
+ * A well-formed drained row, as `ggui_runtime_submit_action` writes it —
+ * the seam now parses every row against `consumeEventEntrySchema`
+ * (ggui#817 part C2), so a fixture must be the real shape.
+ */
+function entryJson(overrides: { intent?: string; actionData?: unknown } = {}): string {
+  return JSON.stringify({
+    type: 'action',
+    sessionId: 'render-1',
+    intent: overrides.intent ?? 'submit',
+    actionData: overrides.actionData ?? null,
+    uiContext: {},
+    actionId: 'act-1',
+    firedAt: '2026-04-19T00:00:00.000Z',
+  });
+}
 
 describe('createGguiConsumeHandler', () => {
   let renderStore: InMemoryGguiSessionStore;
@@ -75,6 +94,18 @@ describe('createGguiConsumeHandler', () => {
       expect(handler.name).toBe('ggui_consume');
       expect(handler.audience).toEqual(['agent']);
     });
+
+    it('tools/list carries the entry vocabulary and the status enum — not a free-form record and a free string (ggui#817 part C2)', () => {
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+      });
+      const json = JSON.stringify(zodToJsonSchema(handler.outputSchema));
+      for (const key of ['actionId', 'firedAt', 'intent', 'uiContext', 'actionData']) {
+        expect(json, key).toContain(`"${key}"`);
+      }
+      expect(json).toContain('"expired"');
+    });
   });
 
   describe('sessionId resolution', () => {
@@ -82,10 +113,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({
-          type: 'submit',
-          payload: { foo: 'bar' },
-        }),
+        envelope: entryJson({ intent: 'submit', actionData: { foo: 'bar' } }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -98,7 +126,7 @@ describe('createGguiConsumeHandler', () => {
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events).toHaveLength(1);
-      expect(result.events[0].type).toBe('submit');
+      expect(result.events[0].intent).toBe('submit');
       expect(result.status).toBe('active');
     });
 
@@ -135,7 +163,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'click' }),
+        envelope: entryJson({ intent: 'click' }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -199,7 +227,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit' }),
+        envelope: entryJson({ intent: 'submit' }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -226,7 +254,7 @@ describe('createGguiConsumeHandler', () => {
       setTimeout(() => {
         void consumer.append('render-1', {
           id: 'evt-late',
-          envelope: JSON.stringify({ type: 'submit' }),
+          envelope: entryJson({ intent: 'submit' }),
           sequence: 1,
           createdAt: new Date().toISOString(),
         });
@@ -236,7 +264,7 @@ describe('createGguiConsumeHandler', () => {
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events.length).toBeGreaterThan(0);
-      expect(result.events[0].type).toBe('submit');
+      expect(result.events[0].intent).toBe('submit');
     });
 
     it('long-poll short-circuits when status flips to expired', async () => {
@@ -360,7 +388,7 @@ describe('createGguiConsumeHandler', () => {
       // Now seed an event and consume — should fire.
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit' }),
+        envelope: entryJson({ intent: 'submit' }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -373,14 +401,14 @@ describe('createGguiConsumeHandler', () => {
       expect(calls[0].appId).toBe('app-1');
       expect(calls[0].tool).toBe('ggui_consume');
       expect(calls[0].result.eventCount).toBe(1);
-      expect(calls[0].result.eventTypes).toEqual(['submit']);
+      expect(calls[0].result.eventTypes).toEqual(['action']);
     });
 
     it('handler works without observer (OSS default)', async () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit' }),
+        envelope: entryJson({ intent: 'submit' }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -401,13 +429,13 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
       await consumer.append('render-1', {
         id: 'evt-2',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 2,
         createdAt: new Date().toISOString(),
       });
@@ -455,7 +483,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -484,7 +512,7 @@ describe('createGguiConsumeHandler', () => {
       const stale = new Date(Date.now() - 3_000).toISOString();
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: stale,
       });
@@ -514,7 +542,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -538,7 +566,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -603,7 +631,7 @@ describe('createGguiConsumeHandler', () => {
       // Drop an event so the long-poll resolves promptly.
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: JSON.stringify({ type: 'submit', payload: {} }),
+        envelope: entryJson({ intent: 'submit', actionData: {} }),
         sequence: 1,
         createdAt: new Date().toISOString(),
       });
@@ -689,7 +717,7 @@ describe('createGguiConsumeHandler', () => {
       setTimeout(() => {
         void consumer.append('render-1', {
           id: 'evt-late',
-          envelope: JSON.stringify({ type: 'submit' }),
+          envelope: entryJson({ intent: 'submit' }),
           sequence: 1,
           createdAt: new Date().toISOString(),
         });
@@ -699,7 +727,8 @@ describe('createGguiConsumeHandler', () => {
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events.length).toBeGreaterThan(0);
-      expect(result.events[0].type).toBe('submit');
+      expect(result.events[0].intent).toBe('submit');
     });
   });
 });
+

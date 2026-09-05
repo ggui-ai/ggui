@@ -17,7 +17,7 @@
  */
 
 import { z } from 'zod';
-import { emitInputShape } from '@ggui-ai/protocol';
+import { emitInputShape, gguiEmitOutputSchema } from '@ggui-ai/protocol';
 import type {
   ComponentGguiSession,
   GguiEmitInput,
@@ -36,20 +36,7 @@ import {
 // (`schemas/mcp.ts`).
 const inputSchema = emitInputShape;
 
-const outputSchema = {
-  accepted: z.boolean(),
-  // Declared here because the handler EMITS it (and the protocol's
-  // `GguiEmitOutput` promises it) — the transport strip-parses against
-  // this shape, so an undeclared `seq` never reached the wire (#817).
-  seq: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe(
-      'Session-scoped monotonic outbound sequence assigned to this delivery. Present when the server keeps a stream buffer.',
-    ),
-} as const;
+const outputSchema = gguiEmitOutputSchema.shape;
 /** The wire shape — derived from `outputSchema` (#817); the protocol's `GguiEmitOutput` is the consumer-facing type. */
 type EmitOutput = ShapeOutput<typeof outputSchema>;
 

@@ -12,7 +12,9 @@ import type {
 import type { EndUserIdentity } from './auth';
 import type { HostContextProjection } from './host-context';
 import type { AppTheme } from '../schemas/app-theme';
-import type { RenderErrorCode } from '../schemas/mcp';
+import type { z } from 'zod';
+
+import type { RenderErrorCode, gguiSessionStatusSchema } from '../schemas/mcp';
 // MCP Apps inbound variant lives behind a boundary subpath to keep core
 // render typing opt-in. The import IS legitimate — the design lock
 // explicitly treats the `GguiSession` union as core's one concession to MCP
@@ -94,7 +96,7 @@ export type AdapterPermissions = {
  * in the earlier handshake collapse. The companion `ggui_close` tool
  * that wrote it was removed in the same slice.
  */
-export type GguiSessionStatus = 'active' | 'expired';
+export type GguiSessionStatus = z.infer<typeof gguiSessionStatusSchema>;
 
 /**
  * Common base for every {@link GguiSession} variant. Carries identity,

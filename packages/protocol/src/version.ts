@@ -3175,6 +3175,16 @@
  *      the render-only fields, `MCP_ENDPOINT_REFUSAL_CODES` derived — today
  *      `app_deprovisioned`). Untyped authorization failures keep the bare
  *      403 by contract. Additive.
+ *   r10. **Consume / list_sessions / emit own their wire shapes (ggui#817
+ *      part C2):** `consumeEventEntrySchema` (the drained row, closed),
+ *      `gguiSessionStatusSchema` (`active` | `expired`), `gguiConsumeOutputSchema`,
+ *      `gguiListSessionsOutputSchema`, `gguiEmitOutputSchema`; the types
+ *      derive (`ConsumeEventEntry`, `GguiConsumeOutput`, `GguiEmitOutput`,
+ *      `GguiListSessionsOutput`, `GguiSessionStatus`). `tools/list` now
+ *      advertises the entry vocabulary and the status enum for
+ *      `ggui_consume`; `parsePendingEnvelope` parses a drained row instead
+ *      of casting it, so a malformed pipe entry refuses at the seam. The
+ *      wire bytes of a well-formed row are unchanged. Additive.
  *
  * FOLLOWER — moves in the SAME commit as this constant, pinned by a
  * gate that fails loud when it lags: the `protocol` field of every

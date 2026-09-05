@@ -34,7 +34,7 @@
 
 import { z } from 'zod';
 import {
-  clientObservationsSchema,
+  gguiConsumeOutputSchema,
   consumeInputShape,
   parsePendingEnvelope,
   type ConsumeEventEntry,
@@ -70,17 +70,7 @@ const POLL_INTERVAL_MS = 1500;
  */
 const inputSchema = consumeInputShape;
 
-const outputSchema = {
-  events: z.array(z.record(z.string(), z.unknown())),
-  status: z.string(),
-  // same `client.hostContext` surface
-  // handshake exposes. Lets the agent pick up mid-render changes
-  // (window resize, user toggling fullscreen, etc.) on its next
-  // consume hit without waiting for the next handshake.
-  // The protocol owns the observation schemas (#817); `.optional()` is the
-  // registration's — the client block travels only when the host sent context.
-  client: clientObservationsSchema.optional(),
-} as const;
+const outputSchema = gguiConsumeOutputSchema.shape;
 /** The wire shape — derived from the registered fields (#817). */
 type ConsumeOutput = ShapeOutput<typeof outputSchema>;
 
@@ -393,7 +383,7 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
           // Each row copied onto the wire as a plain record — the entries are
           // typed seam values, the wire is mutable JSON.
           events: events.map((entry) => ({ ...entry })),
-          status: result.status ?? ('active' as GguiSessionStatus),
+          status: result.status,
           ...(stored.hostContext !== undefined
             ? { client: { hostContext: projectHostContext(stored.hostContext) } }
             : {}),

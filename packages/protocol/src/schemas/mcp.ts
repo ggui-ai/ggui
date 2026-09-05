@@ -29,7 +29,7 @@ import {
   blueprintDraftSchema,
   handshakeSuggestionSchema,
 } from './handshake-suggestion';
-import { dataContractSchema, jsonObjectSchema } from './data-contract';
+import { dataContractSchema, jsonObjectSchema, jsonValueSchema } from './data-contract';
 import { blueprintVarianceSchema, blueprintSourceSchema } from './blueprint';
 import {
   MCP_ENDPOINT_REFUSAL_CODES,
@@ -1582,6 +1582,65 @@ export const gguiSessionSummaryWireSchema = z.object({
   status: z.string(),
   wsToken: z.string().optional(),
   wsTokenExpiresAt: z.string().optional(),
+});
+
+/**
+ * The two states a GguiSession is in on the wire — the pair the consume
+ * loop exits on (`expired`). Owned here (ggui#817 part C2); the type is
+ * derived, never a second list.
+ */
+export const gguiSessionStatusSchema = z.enum(['active', 'expired']);
+
+/**
+ * One drained row of `ggui_consume` — a user action that reached the
+ * pipe (ggui#817 part C2). Closed on the wire: an unknown key is
+ * stripped at the transport, a missing key refuses the row at the seam
+ * (`parsePendingEnvelope`), so a malformed pipe entry never ships to an
+ * agent typed as a good one.
+ */
+export const consumeEventEntrySchema = z.object({
+  type: z.literal('action'),
+  sessionId: z.string().min(1),
+  intent: z.string(),
+  actionData: jsonValueSchema.nullable(),
+  uiContext: jsonObjectSchema,
+  actionId: z.string(),
+  firedAt: z.string(),
+});
+
+/**
+ * `ggui_consume`'s output — the drained rows, the session's state, and the
+ * client's observations when the host sent any (ggui#817 part C2). The
+ * handler registers `.shape`; `tools/list` therefore advertises the entry
+ * vocabulary and the status enum instead of a free-form record and a free
+ * string.
+ */
+export const gguiConsumeOutputSchema = z.object({
+  events: z.array(consumeEventEntrySchema),
+  status: gguiSessionStatusSchema,
+  client: clientObservationsSchema.optional(),
+});
+
+/** `ggui_list_sessions`' output — the closed summary rows (ggui#817 part C2). */
+export const gguiListSessionsOutputSchema = z.object({
+  sessions: z.array(gguiSessionSummaryWireSchema),
+});
+
+/**
+ * `ggui_emit`'s output (ggui#817 part C2): `accepted` at the boundary, and
+ * `seq` when the server keeps a stream buffer — seq-aware implementations
+ * stamp and return it so replay cursors can be built from the ack.
+ */
+export const gguiEmitOutputSchema = z.object({
+  accepted: z.boolean(),
+  seq: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Session-scoped monotonic outbound sequence assigned to this delivery. Present when the server keeps a stream buffer.',
+    ),
 });
 
 /**

@@ -11,6 +11,7 @@
  * JSON strings, depending on how the deployment's storage layer
  * serializes rows.
  */
+import { consumeEventEntrySchema } from './schemas/mcp';
 import type { ConsumeEventEntry } from './types/mcp';
 
 /**
@@ -26,5 +27,7 @@ export function parsePendingEnvelope(
   stored: ConsumeEventEntry | string,
 ): ConsumeEventEntry {
   if (typeof stored !== 'string') return stored;
-  return JSON.parse(stored) as ConsumeEventEntry;
+  // Parsed, never cast (ggui#817 part C2): a malformed pipe entry refuses
+  // here, at the seam, instead of shipping to the agent typed as good.
+  return consumeEventEntrySchema.parse(JSON.parse(stored));
 }
