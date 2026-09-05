@@ -63,9 +63,7 @@ describe('createGguiGetSessionHandler', () => {
         { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
-if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
-      }
+      expect(out.variant).toBe('render');
       expect(out.id).toBe(sessionId);
       expect(out.appId).toBe('app-1');
       expect(typeof out.eventSequence).toBe('number');
@@ -81,10 +79,18 @@ if (out.type === 'mcpApps') {
         { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
-      if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
-      }
-      expect(out.themeId).toBe('indigo');
+      expect(out.variant).toBe('render');
+      // themeId never travelled: the transport strip-parses to the wire shape.
+      // The wire is the seven-field projection and nothing else.
+      expect(Object.keys(out).sort()).toEqual([
+        'appId',
+        'createdAt',
+        'eventSequence',
+        'expiresAt',
+        'id',
+        'lastActivityAt',
+        'variant',
+      ]);
     });
   });
 
@@ -141,9 +147,7 @@ if (out.type === 'mcpApps') {
         { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
-      if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
-      }
+      expect(out.variant).toBe('render');
       expect(out.lastActivityAt).toBe(9_999_999);
       expect(out.expiresAt).toBe(10_000_000);
     });

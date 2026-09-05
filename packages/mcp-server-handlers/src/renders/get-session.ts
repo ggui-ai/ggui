@@ -8,10 +8,10 @@
  *   - Resolves render via `renderStore.get(sessionId)`.
  *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}.
- *   - Returns the wire-shape `GguiSession` payload directly (the
- *     {@link StoredGguiSession} wrapper's lifecycle fields are already
- *     embedded on the render via `GguiSessionBase` for component / system
- *     variants; the MCP-Apps variant is locator-only).
+ *   - Returns the protocol's wire projection (`gguiGetSessionOutputSchema`):
+ *     `variant` + the store row's six base fields, for EVERY session —
+ *     an MCP-Apps mount is locator-only on its render object, but the
+ *     row carries the base fields, so the wire never fails on it.
  *   - Optional heartbeat hook — when set, the handler invokes
  *     `heartbeat(sessionId)` on every successful read so cloud's
  *     activity-bump-on-get behavior is preserved without forcing
@@ -19,13 +19,14 @@
  *
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `ggui_get_session` which projected a vessel-shape `SessionView`
- * (ISO timestamps + stack array). The wire response is now the
- * `GguiSession` shape with epoch-ms timestamps + flat (no stack).
+ * (ISO timestamps + stack array). The wire response is the seven-field
+ * projection with epoch-ms timestamps + flat (no stack); nothing else on
+ * the row travels (#817 part C).
  */
 
 import { z } from 'zod';
-import { getSessionInputShape } from '@ggui-ai/protocol';
-import type { GguiSession, GguiGetSessionOutput } from '@ggui-ai/protocol';
+import { getSessionInputShape, gguiGetSessionOutputSchema } from '@ggui-ai/protocol';
+import type { GguiGetSessionOutput } from '@ggui-ai/protocol';
 import type {
   GguiSessionStore,
   StoredGguiSession,
@@ -38,17 +39,9 @@ import { isVisibleToCaller } from './tenancy.js';
 // (`schemas/mcp.ts`).
 const inputSchema = getSessionInputShape;
 
-const outputSchema = {
-  // `GguiSession` is a discriminated union; downstream typing comes from
-  // the typed `GguiGetSessionOutput` return shape — the raw record-
-  // shaped zod schema here is just for runtime validation framing.
-  id: z.string(),
-  appId: z.string(),
-  eventSequence: z.number().int().nonnegative(),
-  createdAt: z.number().int().nonnegative(),
-  lastActivityAt: z.number().int().nonnegative(),
-  expiresAt: z.number().int().nonnegative(),
-} as const;
+// The wire is the protocol's seven-field projection — registered as its
+// `.shape`, never a copy.
+const outputSchema = gguiGetSessionOutputSchema.shape;
 
 /**
  * Optional return shape from the heartbeat hook. Lets the host
@@ -92,7 +85,7 @@ export function createGguiGetSessionHandler(
     title: 'Get GguiSession',
     audience: ['agent'],
     description:
-      'Retrieve full GguiSession state — id, appId, eventSequence, GguiSession variant. Bumps the GguiSession activity heartbeat on every successful read.',
+      'Retrieve the GguiSession wire projection — variant (render | mcpApps), id, appId, eventSequence, createdAt, lastActivityAt, expiresAt; nothing else travels. Bumps the GguiSession activity heartbeat on every successful read.',
     inputSchema,
     outputSchema,
     async handler(
@@ -152,41 +145,22 @@ function applyHeartbeatOverlay(
 }
 
 /**
- * Project the {@link StoredGguiSession} into the wire-shape `GguiSession`.
- *
- * Component / system variants extend `GguiSessionBase` which already
- * carries the lifecycle fields; we overlay the store's authoritative
- * `eventSequence` / `lastActivityAt` / `expiresAt` so a freshly-
- * minted render that hasn't been re-read since commit still surfaces
- * the latest values the store knows about.
- *
- * The MCP-Apps variant is locator-only (no `GguiSessionBase` fields by
- * design); we surface it verbatim — clients reading `ui://ggui/render`
- * mounts have separate paths for MCP-Apps resources.
+ * Project a stored session onto the wire: `variant` plus the store row's
+ * six base fields — for EVERY session. An MCP-Apps mount is locator-only
+ * on its render object, but the ROW carries the base fields, so the wire
+ * never fails on that variant (the latent gap #817 part C surfaced); the
+ * locator itself is not on this wire (MCP-Apps resources have their own
+ * paths). Everything else on the row — themeId, status, hostSession — was
+ * never delivered: the transport strip-parses to this shape.
  */
-function projectGguiSession(stored: StoredGguiSession): GguiSession {
-  const r = stored.render;
-  if (r.type === 'mcpApps') {
-    return r;
-  }
+function projectGguiSession(stored: StoredGguiSession): GguiGetSessionOutput {
   return {
-    ...r,
+    variant: stored.render.type === 'mcpApps' ? 'mcpApps' : 'render',
     id: stored.id,
     appId: stored.appId,
     eventSequence: stored.eventSequence,
     createdAt: stored.createdAt,
     lastActivityAt: stored.lastActivityAt,
     expiresAt: stored.expiresAt,
-    ...(stored.status !== undefined ? { status: stored.status } : {}),
-    ...(stored.endUserIdentity !== undefined
-      ? { endUserIdentity: stored.endUserIdentity }
-      : {}),
-    ...(stored.themeId !== undefined ? { themeId: stored.themeId } : {}),
-    ...(stored.hostSession !== undefined
-      ? { hostSession: stored.hostSession }
-      : {}),
-    ...(stored.hostContext !== undefined
-      ? { hostContext: stored.hostContext }
-      : {}),
   };
 }
