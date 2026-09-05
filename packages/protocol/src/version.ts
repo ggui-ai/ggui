@@ -3223,6 +3223,30 @@ export const PROTOCOL_VERSION = "draft-2026-09-04";
  * `package.json#version` (the same parity pattern as
  * `STDLIB_GADGETS_VERSION` and `agent-server`'s `CLIENT_INFO`), and the
  * `/release:cut` straggler list names it so the bump is mechanical.
+ *
+ * Wave classifications (protocol seat; the kit is the arbiter,
+ * docs/protocol/VERSION-POLICY.md §1–2):
+ *
+ *   - **0.15.0 — MINOR** (ruled 2026-09-05). Every `@ggui-ai/protocol`
+ *     landing since the 0.14.0 cut (`f3cf6c906`) is additive under
+ *     §1.2: the `@ggui-ai/protocol/wire` browser entry (ggui#819), the
+ *     `GENERATION_OVERLOADED: -32014` canonical code and SPEC §7.9's
+ *     Plane 0 (ggui#840), `ErrorMapperResult.data` (ggui#825), the
+ *     endpoint-level refusal — `403 {code: -32003, data.refusal}` for
+ *     `app_deprovisioned` (ggui#836), the `ggui_consume` /
+ *     `ggui_list_sessions` / `ggui_emit` output schemas (ggui#817 C2),
+ *     and the `.readonly()` removal from the gadget wire schema
+ *     (ggui#824). The one non-additive-looking line — the untyped
+ *     authorization refusal moving from `-32000` to `-32001
+ *     UNAUTHORIZED` (ggui#836) — is not a fixture regression: no
+ *     fixture on 0.14.0 pinned `-32000` (it was the SDK's default
+ *     courtesy code, never a first-party choice; ggui#840's Plane-0
+ *     ruling), and the transport-refusal catalog now states `-32001`.
+ *     §1.4 (`draft-`: semver describes intent) applies on top. A
+ *     0.14.1 is legitimate ONLY as a founder-ruled hotfix branch off
+ *     `f3cf6c906` carrying ggui#846 alone (a declaration-emit fix —
+ *     PATCH under §1.3); it cannot be cut from main, whose delta since
+ *     0.14.0 is minor-class.
  */
 export const GGUI_WAVE_VERSION = "0.15.0";
 
