@@ -20,6 +20,7 @@ import { expectTypeOf } from 'vitest';
 import { z } from 'zod';
 import {
   defineHandler,
+  type EnvelopeFor,
   type HandlerDefinition,
   type HandlerFailure,
   type SharedHandler,
@@ -127,6 +128,17 @@ type DefinitionWith<E extends z.ZodType<ShapeOutput<typeof outputSchema>>> = {
 expectTypeOf<DefinitionWith<typeof envelope>>().toMatchTypeOf<DefinitionFor<typeof envelope>>();
 // … a rogue key → the property type is unsatisfiable, the definition does not type.
 expectTypeOf<DefinitionWith<typeof mismatchedEnvelope>>().not.toMatchTypeOf<DefinitionFor<typeof mismatchedEnvelope>>();
+
+// Both mismatch directions, pinned on the operator itself. The EXTRA-key case
+// above is the one a strip-parsing transport hides at runtime (the key is
+// dropped, nothing fails) — the type is its only receipt. The MISSING-key case
+// is caught twice: the envelope no longer produces the shape's output (rule 1),
+// and its keys differ (rule 3). Exact keys are the identity.
+const missingKeyEnvelope = z.object({ id: z.string() });
+expectTypeOf(missingKeyEnvelope).not.toMatchTypeOf<z.ZodType<ShapeOutput<typeof outputSchema>>>();
+expectTypeOf<EnvelopeFor<typeof outputSchema, typeof envelope>>().toEqualTypeOf<typeof envelope>();
+expectTypeOf<EnvelopeFor<typeof outputSchema, typeof mismatchedEnvelope>>().toBeNever();
+expectTypeOf<EnvelopeFor<typeof outputSchema, typeof missingKeyEnvelope>>().toBeNever();
 
 // ── 4. the heterogeneous list boundary makes no shape claim ─────────────────
 // A handler whose OutputData is an INTERFACE (no implicit index signature)
