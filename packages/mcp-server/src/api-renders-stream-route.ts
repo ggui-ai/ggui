@@ -175,7 +175,7 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
       res.status(401).type("text/plain").send("wsToken invalid");
       return;
     }
-    // Tenancy gate: the wsToken's claimed sessionId MUST match the
+    // Binding gate: the wsToken's claimed sessionId MUST match the
     // URL's sessionId.
     if (verify.claims.sessionId !== sessionId) {
       res.status(401).type("text/plain").send("wsToken scope mismatch");
@@ -235,7 +235,7 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
       res.status(404).type("text/plain").send("render not found");
       return;
     }
-    // Tenancy gate (round 2): the wsToken's appId MUST match the
+    // App-scope gate (round 2): the wsToken's appId MUST match the
     // render's appId.
     if (verify.claims.appId !== stored.appId) {
       res.status(401).type("text/plain").send("wsToken scope mismatch");

@@ -148,7 +148,7 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
   }
 
   /**
-   * Tenancy guard for client-emitted observation messages
+   * Binding guard for client-emitted observation messages
    * (`host_context_observed` today). Returns `false`
    * AND emits the appropriate error frame when:
    *
@@ -156,7 +156,7 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
    *   - payload.sessionId doesn't match the subscriber binding
    *     (SESSION_MISMATCH)
    *
-   * Subscriber binding is the authoritative tenancy scope. The wire
+   * Subscriber binding is the authoritative scope. The wire
    * payload's sessionId is belt-and-suspenders so the error message
    * can be specific; appId narrows transparently via the binding.
    */

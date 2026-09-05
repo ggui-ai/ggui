@@ -514,7 +514,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // cookie binds the same pair), else the deployment's identity →
     // appId mapping (`appIdFromIdentity`, defaulting to
     // `defaultAppIdFromIdentity`). The resolved value then flows
-    // through the EXISTING tenancy gate + provisioning below — never
+    // through the EXISTING app-scope gate + provisioning below — never
     // an `undefined` appId on a stored row.
     const effectiveAppId: string =
       payload.appId ??

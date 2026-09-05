@@ -3222,7 +3222,7 @@ export function resetRelayLatchForBoot(): void {
  * Module-level handle to the CURRENT boot's telemetry sink so
  * module-scope paths (the doorbell emitter below) can report without
  * threading the sink through every call chain. Per-iframe
- * single-tenancy makes a single slot correct — same justification as
+ * single-app scope makes a single slot correct — same justification as
  * `getCurrentApp()`.
  */
 let currentTelemetrySink: TelemetrySink | null = null;

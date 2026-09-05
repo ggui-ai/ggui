@@ -178,7 +178,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       res.status(401).type("text/plain").send("wsToken invalid");
       return;
     }
-    // Tenancy gate: the wsToken's claimed sessionId MUST match the
+    // Binding gate: the wsToken's claimed sessionId MUST match the
     // URL's sessionId. A wsToken minted for render A MUST NOT read
     // render B's state.
     if (verify.claims.sessionId !== sessionId) {
@@ -203,7 +203,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       res.status(404).type("text/plain").send("render not found");
       return;
     }
-    // Tenancy gate (round 2): the wsToken's appId MUST match the
+    // App-scope gate (round 2): the wsToken's appId MUST match the
     // render's appId. Closes the case where a render is created
     // under a different appId than the token was minted for.
     if (verify.claims.appId !== stored.appId) {
@@ -449,7 +449,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       res.status(404).type("text/plain").send("render not found");
       return;
     }
-    // Tenancy gate (round 2): the wsToken's appId MUST match the
+    // App-scope gate (round 2): the wsToken's appId MUST match the
     // render's appId. We need the render record to check — fetch
     // it. listEventsSince validated the render exists.
     const stored = await renderStore.get(sessionId);

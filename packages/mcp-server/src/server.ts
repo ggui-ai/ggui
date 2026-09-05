@@ -1427,7 +1427,7 @@ export function defaultHandlers(deps: {
     );
   }
   // ggui_consume registers whenever render is bound (it shares the
-  // GguiSessionStore for sessionId resolution + tenancy checks).
+  // GguiSessionStore for sessionId resolution + app-scope/ownership checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
@@ -1698,7 +1698,7 @@ export interface OpsBundleDeps {
   readonly knownThemeIds?: readonly string[];
   /**
    * Runtime theme registration tools (ggui#598-C). Sources for the
-   * three `ggui_ops_*_theme*` handlers: the app tenancy source, the
+   * three `ggui_ops_*_theme*` handlers: the app-ownership source, the
    * `ThemeStore`, the coverage validator + consumed-token manifest,
    * and the built-in theme-id list (registration refuses collisions).
    */
@@ -5310,8 +5310,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   }
 
   // R6 /state snapshot + R7 /events cursor-replay reads — see
-  // `./api-renders-routes.ts` for the wsToken auth posture, tenancy
-  // gates, and response taxonomy. Mounted only when MCP Apps is on,
+  // `./api-renders-routes.ts` for the wsToken auth posture, binding +
+  // app-scope gates, and response taxonomy. Mounted only when MCP Apps is on,
   // a render store is resolved, and a token secret exists (the same
   // preconditions the credential minter needs).
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
