@@ -46,6 +46,7 @@ import { z } from 'zod';
 import {
   resolveAppGadgets,
   gadgetDescriptorSchema,
+  type GadgetDescriptor,
 } from '@ggui-ai/protocol';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
@@ -94,6 +95,21 @@ export interface GguiListGadgetsHandlerDeps {
 /** The wire shape — derived from `outputSchema`, the one source of truth (#817). */
 export type GguiListGadgetsOutput = ShapeOutput<typeof outputSchema>;
 
+/**
+ * One descriptor as the wire carries it: the seam type (`GadgetDescriptor`)
+ * keeps `connect` / `requires` readonly for every consumer; the advertised
+ * output schema is mutable JSON (ggui#824). Copying the two arrays is the
+ * whole projection — no field is renamed, dropped or invented.
+ */
+function toWireGadget(g: GadgetDescriptor): GguiListGadgetsOutput['gadgets'][number] {
+  const { connect, requires, ...rest } = g;
+  return {
+    ...rest,
+    ...(connect === undefined ? {} : { connect: [...connect] }),
+    ...(requires === undefined ? {} : { requires: [...requires] }),
+  };
+}
+
 export function createGguiListGadgetsHandler(deps: GguiListGadgetsHandlerDeps) {
   return defineHandler({
     name: 'ggui_list_gadgets',
@@ -120,9 +136,11 @@ export function createGguiListGadgetsHandler(deps: GguiListGadgetsHandlerDeps) {
       // get a meaningful catalog. This mirrors the cloud DDB adapter's
       // default-on-read pattern at the row-projection site.
       const gadgets = resolveAppGadgets(app?.gadgets);
-      // A fresh copy: the resolver may hand back the stdlib singleton, which is
-      // a resolver-internal guard, never a wire fact — the wire is mutable JSON.
-      return { gadgets: [...gadgets] };
+      // Projected onto the wire row by row: the resolver may hand back the
+      // stdlib singleton (a resolver-internal guard, never a wire fact), and
+      // the seam type keeps its arrays readonly while the wire is mutable
+      // JSON (ggui#824) — so the two readonly arrays are copied, not cast.
+      return { gadgets: gadgets.map(toWireGadget) };
     },
   });
 }
