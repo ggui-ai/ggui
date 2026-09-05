@@ -194,7 +194,7 @@ overrides:
   # for why the family moves together (agent-client/threads 0.4.0 both
   # exact-pin host 0.4.0, and agent-client value-imports an export 0.3.1
   # does not have).
-  "@guuey/mcp-apps-host": 0.17.0
+  "@guuey/mcp-apps-host": 0.18.1
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   "@a2a-js/sdk": 0.3.14
   "@adobe/css-tools": 4.5.0
@@ -319,8 +319,8 @@ overrides:
   "@esbuild/win32-x64@0.27.x": 0.27.7
   "@esbuild/win32-x64@0.28.x": 0.28.2
   "@google-cloud/storage": 7.21.0
-  "@guuey/mcp-apps-host@0.17.x": 0.17.0
-  "@guuey/threads": 0.17.0
+  "@guuey/mcp-apps-host@0.18.x": 0.18.1
+  "@guuey/threads": 0.18.1
   "@hono/node-server": 2.1.0
   "@huggingface/jinja": 0.5.9
   "@joshwooding/vite-plugin-react-docgen-typescript": 0.7.0

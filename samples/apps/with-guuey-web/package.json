@@ -12,16 +12,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ggui-ai/design": "^0.14.0",
-    "@guuey/agent-client": "0.17.0",
-    "@guuey/mcp-apps-host": "0.17.0",
+    "@ggui-ai/design": "^0.15.0",
+    "@guuey/agent-client": "0.18.1",
+    "@guuey/mcp-apps-host": "0.18.1",
     "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@ggui-ai/agent-server": "^0.14.0",
+    "@ggui-ai/agent-server": "^0.15.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

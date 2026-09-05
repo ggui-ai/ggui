@@ -56,7 +56,7 @@ overrides:
   '@opentelemetry/core@<2.8.0': ^2.8.0
   adm-zip@<0.6.0: ^0.6.0
   immutable@<3.8.3: ^3.8.3
-  '@guuey/mcp-apps-host': 0.17.0
+  '@guuey/mcp-apps-host': 0.18.1
   '@a2a-js/sdk': 0.3.14
   '@adobe/css-tools': 4.5.0
   '@anthropic-ai/bedrock-sdk': 0.33.3
@@ -180,8 +180,8 @@ overrides:
   '@esbuild/win32-x64@0.27.x': 0.27.7
   '@esbuild/win32-x64@0.28.x': 0.28.2
   '@google-cloud/storage': 7.21.0
-  '@guuey/mcp-apps-host@0.17.x': 0.17.0
-  '@guuey/threads': 0.17.0
+  '@guuey/mcp-apps-host@0.18.x': 0.18.1
+  '@guuey/threads': 0.18.1
   '@hono/node-server': 2.1.0
   '@huggingface/jinja': 0.5.9
   '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0
@@ -399,11 +399,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/protocol
       '@guuey/mcp-apps-host':
-        specifier: 0.17.0
-        version: 0.17.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+        specifier: 0.18.1
+        version: 0.18.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@guuey/threads':
-        specifier: 0.17.0
-        version: 0.17.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
+        specifier: 0.18.1
+        version: 0.18.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -3123,8 +3123,8 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@ggui-ai/protocol@0.14.0':
-    resolution: {integrity: sha512-2OB5jMEzUWGhvAE06vp6/cysQOSyHIi1Q5ZW+DE8YlA9gIjdYVvL1k7o9Fhnw1nyEJAvsK1vPd50QkjjRepRDA==}
+  '@ggui-ai/protocol@0.15.0':
+    resolution: {integrity: sha512-MpB3qCAz+7o8jRaU7M6i3F1GOCQdVkHUvJrEFHN2Ma0U5y8/5Jl9YbaE+S7SBWqN129GKstxQf2Tn6n0nI0Syg==}
     engines: {node: '>=22.0.0'}
 
   '@google-cloud/opentelemetry-cloud-monitoring-exporter@0.21.0':
@@ -3250,16 +3250,16 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@guuey/mcp-apps-host@0.17.0':
-    resolution: {integrity: sha512-BSoYxNu3lDnfE1IS93zmW6huuT31Ehnocq2wke+l8Y2V3dd4KRVigzPT/ThhGuO+mdznySrmzsh3LmNJ8gGgLg==}
+  '@guuey/mcp-apps-host@0.18.1':
+    resolution: {integrity: sha512-bb3iW1PkY14FCHQxIdcZobjaF0drGFCDxCOFeyasrD0Le+QgnfNaef1LnzPDdG4o3yDhRIq8bmCm1t9sEmyBXA==}
     peerDependencies:
       react: ^19.2.8
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@guuey/threads@0.17.0':
-    resolution: {integrity: sha512-waXKNxEIhWVnGRFqYnlyAb5BHnJd6aEedB5B3zu5Xp+cd6PxcWZOoZ2shd+zCzsFdGMhFj8VMFBVrzsAY9qsPg==}
+  '@guuey/threads@0.18.1':
+    resolution: {integrity: sha512-oo2DPktbeXYZDNSuMb+FmXOYIFCc6MXq5ZUqHcRT+Tkt/AekCB5z6PleJy/GbyzKK+Qo3qezc/MT36ZmpLvZQg==}
     peerDependencies:
       vitest: ^3.2.7
     peerDependenciesMeta:
@@ -11093,7 +11093,7 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@ggui-ai/protocol@0.14.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ggui-ai/protocol@0.15.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       ajv: 8.20.0
@@ -11314,9 +11314,9 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@guuey/mcp-apps-host@0.17.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
+  '@guuey/mcp-apps-host@0.18.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
     dependencies:
-      '@ggui-ai/protocol': 0.14.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@ggui-ai/protocol': 0.15.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@silverprotocol/core': 0.6.1
     optionalDependencies:
@@ -11326,9 +11326,9 @@ snapshots:
       - react-dom
       - zod
 
-  '@guuey/threads@0.17.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
+  '@guuey/threads@0.18.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
     dependencies:
-      '@guuey/mcp-apps-host': 0.17.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+      '@guuey/mcp-apps-host': 0.18.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@silverprotocol/core': 0.6.1
     optionalDependencies:
       vitest: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
@@ -11873,7 +11873,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.2(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       mariadb: 3.5.4
     transitivePeerDependencies:
       - better-sqlite3
@@ -11926,7 +11926,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.2(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       pg: 8.19.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
