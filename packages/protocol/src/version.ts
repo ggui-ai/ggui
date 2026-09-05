@@ -6,6 +6,36 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Authorization refusals carry JSON-RPC `data` (2026-09-05, additive,
+ * pre-launch, ggui#825). `@ggui-ai/mcp-server`'s per-app `authorize`
+ * hook refuses by throwing, and the route answered every throw with a
+ * bare `403 {code: -32000, message: "Forbidden"}` — correct in effect,
+ * illegible to a client that needs to tell "this tenant is gone" from
+ * "your credential is wrong".
+ *
+ *   ar1. **`ErrorMapperResult.data?: JsonValue`** — a deployment's
+ *      `errorMapper` may attach JSON-RPC 2.0 error `data` (any JSON
+ *      value) to a mapped result; serialized verbatim on `error.data`,
+ *      omitted when absent. Applies to every mapped error, not only
+ *      authorization refusals.
+ *
+ *   ar2. **The per-app authorization refusal consults the mapper**,
+ *      bounded to 401 / 403: a mapper answering any other status, or
+ *      throwing, is ignored and logged (`per_app_authorize_mapper_out_
+ *      of_bounds` / `error_mapper_failed` on the route logger) and the
+ *      default-deny 403 stands byte-identical to a deployment with no
+ *      mapper. The allow path never consults the mapper.
+ *
+ * Conformance-kit verdict: no kit entry required — an optional field on
+ * an operator-side hook result, no MCP tool name/shape touched; the
+ * shape of any `data.refusal` a deployment chooses to attach is that
+ * deployment's declaration, not this package's.
+ *
+ * Package version — classification MADE here: MINOR for
+ * `@ggui-ai/mcp-server` (new optional field on `ErrorMapperResult` +
+ * the authorization refusal path consults `errorMapper`), pre-1.0 and
+ * pre-launch. PROTOCOL_VERSION unchanged — no WS envelope moved.
+ * --------------------------------------------------------------------
  * Authored source rides blueprint reuse (2026-08-14, additive,
  * pre-launch). Cache-reuse renders (a repeated prompt semantic-matches
  * a cached blueprint) previously committed without authored

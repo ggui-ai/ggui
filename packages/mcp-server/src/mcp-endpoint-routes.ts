@@ -32,7 +32,7 @@
  * rules.
  */
 
-import { isRecord } from "@ggui-ai/protocol";
+import { isRecord, type JsonValue } from "@ggui-ai/protocol";
 import type { AuthAdapter, AuthResult } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -74,6 +74,54 @@ export interface ErrorMapperResult {
   readonly message: string;
   /** Response headers to set before the JSON body is written. */
   readonly headers?: Readonly<Record<string, string>>;
+  /**
+   * JSON-RPC 2.0 error `data` — any JSON value the deployment wants the
+   * client to read alongside `code` / `message` (a structured reason, a
+   * retry hint). Serialized verbatim on `error.data`; omitted from the
+   * body when absent, so a mapper that never sets it changes nothing.
+   */
+  readonly data?: JsonValue;
+}
+
+/** The JSON-RPC error object a mapped result becomes on the wire. */
+function jsonRpcError(mapped: ErrorMapperResult): { code: number; message: string; data?: JsonValue } {
+  return {
+    code: mapped.code,
+    message: mapped.message,
+    ...(mapped.data !== undefined ? { data: mapped.data } : {}),
+  };
+}
+
+/** The two statuses an authorization refusal may carry — a mapper is bounded to them. */
+const AUTHORIZATION_REFUSAL_STATUSES: ReadonlySet<number> = new Set([401, 403]);
+
+/**
+ * A deployment's error mapper may attach JSON-RPC `data` (and its own
+ * `code` / `message` / headers) to a per-app authorization refusal, so a
+ * client can read a structured reason instead of parsing prose. The
+ * refusal stays a 401 or a 403: a mapper answering any other status, or
+ * throwing, is ignored and logged, and the default-deny 403 stands
+ * byte-identical to a deployment with no mapper at all.
+ */
+function mapAuthorizationRefusal(
+  err: unknown,
+  errorMapper: ((err: unknown) => ErrorMapperResult | undefined) | undefined,
+  log: Logger,
+): ErrorMapperResult | undefined {
+  if (!errorMapper) return undefined;
+  let mapped: ErrorMapperResult | undefined;
+  try {
+    mapped = errorMapper(err);
+  } catch (mapperErr) {
+    log.warn("error_mapper_failed", { error: String(mapperErr) });
+    return undefined;
+  }
+  if (mapped === undefined) return undefined;
+  if (!AUTHORIZATION_REFUSAL_STATUSES.has(mapped.status)) {
+    log.warn("per_app_authorize_mapper_out_of_bounds", { status: mapped.status });
+    return undefined;
+  }
+  return mapped;
 }
 
 interface MountOptions {
@@ -355,11 +403,14 @@ export function mountMcpEndpoints(opts: MountOptions): void {
 
       // Per-app authorize hook — when the deployment configured
       // `perAppRouting.authorize` AND the request matched the per-app
-      // path, invoke the callback. Throwing collapses to a 403 before
-      // the MCP handler ever sees the request, which is the boundary
-      // that prevents cross-user blueprint reads when pod tools bypass
+      // path, invoke the callback. Throwing refuses before the MCP
+      // handler ever sees the request, which is the boundary that
+      // prevents cross-user blueprint reads when pod tools bypass
       // AppSync owner-auth via raw DDB. Universal-endpoint requests
-      // skip this entirely (no urlAppId).
+      // skip this entirely (no urlAppId). The deployment's `errorMapper`
+      // may give the refusal a structured JSON-RPC `data` (bounded to
+      // 401 / 403, see `mapAuthorizationRefusal`); otherwise — and for
+      // every mapping outside those bounds — the default-deny 403 stands.
       if (hasUrlAppId && perAppRouting?.authorize) {
         try {
           await perAppRouting.authorize(urlAppId, identity);
@@ -368,9 +419,11 @@ export function mountMcpEndpoints(opts: MountOptions): void {
             urlAppId,
             reason: err instanceof Error ? err.message : String(err),
           });
-          res.status(403).json({
+          const mapped = mapAuthorizationRefusal(err, errorMapper, reqLogger);
+          if (mapped?.headers) res.set(mapped.headers);
+          res.status(mapped?.status ?? 403).json({
             jsonrpc: "2.0",
-            error: { code: -32000, message: "Forbidden" },
+            error: mapped ? jsonRpcError(mapped) : { code: -32000, message: "Forbidden" },
             id: null,
           });
           return;
@@ -438,7 +491,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
             if (mapped.headers) res.set(mapped.headers);
             res.status(mapped.status).json({
               jsonrpc: "2.0",
-              error: { code: mapped.code, message: mapped.message },
+              error: jsonRpcError(mapped),
               id: null,
             });
           } else {

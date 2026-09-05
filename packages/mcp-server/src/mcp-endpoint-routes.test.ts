@@ -25,6 +25,7 @@ import type { Server as HttpServer } from 'node:http';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
+import type { Logger } from './logger.js';
 import { createGguiServer, type GguiServer } from './server.js';
 
 interface BootedFixture {
@@ -263,5 +264,179 @@ describe('mcp-endpoint-routes — credential scope threading (#498)', () => {
     const run = await echoScopeOverTheWire(undefined);
     fx = run.fx;
     expect(run.echoed).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-app authorization refusals carry the deployment's JSON-RPC `data`
+// (ggui#825). The per-app `authorize` hook refuses by throwing; the route
+// answers a JSON-RPC error over HTTP. A deployment's `errorMapper` may
+// attach JSON-RPC 2.0 `data` (a structured reason the client can read
+// without parsing prose) to that refusal — bounded to 401 / 403. Anything
+// else the mapper answers is ignored, logged, and the default-deny 403
+// stands byte-identical to a deployment with no mapper at all.
+// ---------------------------------------------------------------------------
+
+class TenantGoneError extends Error {
+  constructor() {
+    super('tenant gone');
+    this.name = 'TenantGoneError';
+  }
+}
+
+function capturingLogger(): {
+  logger: Logger;
+  warns: Array<{ event: string; fields: Record<string, unknown> | undefined }>;
+} {
+  const warns: Array<{ event: string; fields: Record<string, unknown> | undefined }> = [];
+  const logger: Logger = {
+    info: () => undefined,
+    warn: (event, fields) => {
+      warns.push({ event, fields });
+    },
+    error: () => undefined,
+    debug: () => undefined,
+    child: () => logger,
+  };
+  return { logger, warns };
+}
+
+const INITIALIZE = {
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'route-test', version: '0' },
+  },
+};
+
+async function initializeAgainst(url: string, appId: string): Promise<{ status: number; body: { error?: Record<string, unknown> } }> {
+  const res = await fetch(`${url}/apps/${appId}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${AGENT_TOKEN}`,
+    },
+    body: JSON.stringify(INITIALIZE),
+  });
+  // A refusal is a JSON body; an accepted initialize streams SSE — only
+  // parse what the server declared as JSON.
+  const text = await res.text();
+  const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
+  return { status: res.status, body: isJson ? (JSON.parse(text) as { error?: Record<string, unknown> }) : {} };
+}
+
+const perApp = {
+  paramName: 'appId',
+  paramPattern: '[a-z0-9]{2,12}',
+  pathPrefix: '/apps',
+  authorize: async (urlAppId: string): Promise<void> => {
+    if (urlAppId === 'gone') throw new TenantGoneError();
+  },
+};
+
+describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC data (#825)', () => {
+  let fx: BootedFixture;
+
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  it("a deployment's error mapper may attach JSON-RPC `data` to an authorization refusal — the body carries it verbatim, status as mapped", async () => {
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      perAppRouting: perApp,
+      errorMapper: (err) =>
+        err instanceof TenantGoneError
+          ? {
+              status: 403,
+              code: -32000,
+              message: 'this tenant is no longer served',
+              data: { reason: { code: 'tenant_gone', retry: 'never' }, ids: [1, 'a', null] },
+            }
+          : undefined,
+    });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(403);
+    expect(body.error).toEqual({
+      code: -32000,
+      message: 'this tenant is no longer served',
+      data: { reason: { code: 'tenant_gone', retry: 'never' }, ids: [1, 'a', null] },
+    });
+  });
+
+  it('no error mapper → the default-deny 403 Forbidden, no `data` key at all', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(403);
+    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+  });
+
+  it('a mapper that declines (returns undefined) → byte-identical to no mapper', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp, errorMapper: () => undefined });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(403);
+    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+  });
+
+  it('a refusal is a 401 or a 403 — a mapper answering any other status is ignored, the default-deny 403 stands, and the deviation is logged', async () => {
+    const { logger, warns } = capturingLogger();
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      logger,
+      perAppRouting: perApp,
+      errorMapper: () => ({ status: 200, code: 0, message: 'welcome', data: { ok: true } }),
+    });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(403);
+    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    const deviation = warns.find((w) => w.event === 'per_app_authorize_mapper_out_of_bounds');
+    expect(deviation, 'the out-of-bounds mapping must be observable on the route logger').toBeDefined();
+    expect(deviation?.fields).toMatchObject({ status: 200 });
+  });
+
+  it('a mapper may answer 401 (the other refusal status) with its own code/message/data', async () => {
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      perAppRouting: perApp,
+      errorMapper: () => ({ status: 401, code: -32001, message: 'sign in again', data: 'reauth' }),
+    });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(401);
+    expect(body.error).toEqual({ code: -32001, message: 'sign in again', data: 'reauth' });
+  });
+
+  it('a mapper that throws is logged and the default-deny 403 stands', async () => {
+    const { logger, warns } = capturingLogger();
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      logger,
+      perAppRouting: perApp,
+      errorMapper: () => {
+        throw new Error('mapper exploded');
+      },
+    });
+    const { status, body } = await initializeAgainst(fx.url, 'gone');
+    expect(status).toBe(403);
+    expect(body.error).toEqual({ code: -32000, message: 'Forbidden' });
+    expect(warns.some((w) => w.event === 'error_mapper_failed')).toBe(true);
+  });
+
+  it('an authorized tenant is unaffected — the mapper is never consulted on the allow path', async () => {
+    let consulted = 0;
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      perAppRouting: perApp,
+      errorMapper: () => {
+        consulted += 1;
+        return undefined;
+      },
+    });
+    const { status } = await initializeAgainst(fx.url, 'fine');
+    expect(status).toBe(200);
+    expect(consulted).toBe(0);
   });
 });
