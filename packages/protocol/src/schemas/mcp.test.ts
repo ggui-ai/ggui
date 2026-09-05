@@ -1,4 +1,4 @@
-import { renderInputEnvelopeSchema } from './render-input-envelope.js';
+import { renderInputEnvelopeSchema, renderInputRouteGuardSchema } from './render-input-envelope.js';
 import { renderInputShape } from './mcp.js';
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import { expectTypeOf } from 'vitest';
@@ -1368,5 +1368,18 @@ describe('renderInputEnvelopeSchema — infra.model is a model route in either w
   it('the registered shape stays parser-free — a browser bundle never validates a render input', () => {
     // The SDK validates this shape; the envelope (server-side) carries the grammar.
     expect(renderInputShape.infra.parse({ model: 'claude-haiku-4-5' })).toEqual({ model: 'claude-haiku-4-5' });
+  });
+});
+
+describe('renderInputRouteGuardSchema — the pre-gate check is the route grammar and NOTHING else (#818 × #786)', () => {
+  it('lets a syntactically empty input through — the gate must still see it (#786: a refusal is projected before the handler parse)', () => {
+    expect(renderInputRouteGuardSchema.safeParse({}).success).toBe(true);
+    expect(renderInputRouteGuardSchema.safeParse({ infra: {} }).success).toBe(true);
+    expect(renderInputRouteGuardSchema.safeParse({ props: {}, infra: { model: 'anthropic/claude-haiku-4-5', extra: 1 } }).success).toBe(true);
+  });
+  it('stops a malformed route at path infra.model before the gate', () => {
+    const r = renderInputRouteGuardSchema.safeParse({ infra: { model: 'claude-haiku-4-5' } });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0]?.path).toEqual(['infra', 'model']);
   });
 });
