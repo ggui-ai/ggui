@@ -179,14 +179,14 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     description:
       'The app reached the hard ceiling this deployment set for the current period. Nothing the caller or the owner does lifts it before the period rolls over.',
   },
-  model_not_in_tier: {
-    code: 'model_not_in_tier',
+  model_not_allowed: {
+    code: 'model_not_allowed',
     surfaces: ['render-gate'],
     retry: 'after-fix',
     fixBy: 'caller',
     emitter: "a deployment's generation gate, model arm",
     description:
-      'The requested model is not among those the app is allowed to use. The caller picks an allowed model and retries — the one render-gate state an agent may act on itself.',
+      'The requested model is not one this app is allowed to use on this deployment. The caller picks a model the app is allowed to use and retries with the same handshakeId — the one render-gate state an agent may act on itself.',
   },
   managed_default_cap_exceeded: {
     code: 'managed_default_cap_exceeded',
@@ -327,14 +327,14 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     description:
       'A plan-management action was called on an app that has no plan. The owner starts a plan first.',
   },
-  already_on_tier: {
-    code: 'already_on_tier',
+  subscription_unchanged: {
+    code: 'subscription_unchanged',
     surfaces: ['owner-api'],
     retry: 'after-fix',
     fixBy: 'owner',
     emitter: "a deployment's owner billing mutations",
     description:
-      'The plan requested is the one the app is already on. The owner picks a different plan.',
+      'The subscription requested is the one the app already holds, so there is nothing to change. The owner picks a different one.',
   },
   managed_app_no_checkout: {
     code: 'managed_app_no_checkout',
@@ -459,7 +459,7 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveCodesOn<'render-gate'>()([
   'unsupported_provider',
   'insufficient_credit',
   'hard_cap_exceeded',
-  'model_not_in_tier',
+  'model_not_allowed',
   'managed_default_cap_exceeded',
   'app_policy_missing',
   'billing_mode_anomaly',

@@ -217,7 +217,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
         'insufficient_credit',
         'issuer_rate_limited',
         'managed_default_cap_exceeded',
-        'model_not_in_tier',
+        'model_not_allowed',
         'trial_exhausted',
         'trial_expired',
         'unsupported_provider',
@@ -242,7 +242,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
   it('ships exactly the nine owner-api codes (v4, as the landed mirror emits them)', () => {
     expect(codesOn('owner-api')).toEqual(
       [
-        'already_on_tier',
+        'subscription_unchanged',
         'card_update_unavailable',
         'checkout_unavailable',
         'managed_app_no_card_update',
@@ -301,9 +301,9 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
     expect(row.fixBy).toBe('operator');
   });
 
-  it('`model_not_in_tier` is the one render-gate code an agent MAY act on itself', () => {
+  it('`model_not_allowed` is the one render-gate code an agent MAY act on itself', () => {
     const row = refusalRowContract.parse(
-      PRE_GENERATION_REFUSAL_CODES?.model_not_in_tier,
+      PRE_GENERATION_REFUSAL_CODES?.model_not_allowed,
     );
     expect(row.surfaces).toContain('render-gate');
     expect(row.retry).toBe('after-fix');
@@ -399,7 +399,7 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     }
   });
 
-  it("bans plan-tier vocabulary outside the three grandfathered code names", () => {
+  it("bans plan-tier vocabulary from every code name — no grandfathered exemptions (ggui#802)", () => {
     // OSS purity, TYPE-LITERAL class — the one CLAUDE.md calls out by
     // name ("`keySource: 'platform'` carries tier semantics"). A refusal
     // code is not only prose: the render-gate subset is a `z.enum`, so
@@ -409,8 +409,8 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     // "plan" for exactly that reason.
     //
     // The two names below already ride LIVE wires minted before this
-    // registry existed — `already_on_tier` is thrown by the owner
-    // checkout mutation and read by the console, and `model_not_in_tier`
+    // registry existed — `subscription_unchanged` is thrown by the owner
+    // checkout mutation and read by the console, and `model_not_allowed`
     // is emitted by a deployment's generation gate and documented in the
     // federated-billing policy. Renaming one is a coordinated change
     // across the emitting surface and its consumers, not a
@@ -418,15 +418,11 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     // banned everywhere else: a NEW code, a description or an emitter
     // that reaches for it fails here rather than at review.
     //
-    // v9 shrank this list by one: `tier_unrecognized` left the registry
-    // entirely, so it no longer needs an exemption. `already_on_tier`
-    // stays — its row is owner-api and is untouched by v9.
-    const grandfathered = ['model_not_in_tier', 'already_on_tier'];
-    const stripped = grandfathered.reduce(
-      (src, name) => src.split(name).join(''),
-      registrySource(),
-    );
-    expect(stripped).not.toMatch(/tier/i);
+    // ggui#802 (2026-09-05) retired the last two grandfathered names —
+    // `model_not_in_tier` → `model_not_allowed`, `already_on_tier` →
+    // `subscription_unchanged` — so the pin is now absolute: no code
+    // name, description or emitter in this file may carry the word.
+    expect(registrySource()).not.toMatch(/tier/i);
   });
 
   it('no registry code appears as a string literal outside the registry file within oss/packages', () => {

@@ -382,7 +382,7 @@ export const renderInputShape = {
         .min(1)
         .optional()
         .describe(
-          'Model route in either wire form — canonical `anthropic:claude-haiku-4-5-20251001` or LiteLLM `anthropic/claude-haiku-4-5` (aliases resolve in both); generator-specific prefixes (e.g. `bedrock/...`) route to that transport. A value that parses in neither form fails the handler input parse at `infra.model`, before any pre-generation gate; `model_not_in_tier` is only ever a well-formed route with no rate row on the effective tier.',
+          'Model route in either wire form — canonical `anthropic:claude-haiku-4-5-20251001` or LiteLLM `anthropic/claude-haiku-4-5` (aliases resolve in both); generator-specific prefixes (e.g. `bedrock/...`) route to that transport. A value that parses in neither form fails the handler input parse at `infra.model`, before any pre-generation gate; `model_not_allowed` is only ever a well-formed route with no rate row on the effective tier.',
         ),
     })
     .strict()

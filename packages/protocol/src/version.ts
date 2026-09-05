@@ -6,6 +6,47 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Two refusal codes lose the word "tier" (2026-09-05, rename, pre-launch,
+ * ggui#802 — #786 review finding F6). A code name ships to npm and, for a
+ * render-gate code, reaches every self-hoster's LLM as JSON-Schema enum
+ * metadata on `tools/list`; "tier" names a plan ladder a self-hoster does
+ * not have (docs/principles/oss-purity.md, the type-literal class). Ruled
+ * by a three-lens judge panel under the registry's naming rules:
+ *
+ *   rt1. **`model_not_in_tier` → `model_not_allowed`** (render-gate,
+ *      after-fix, fixBy caller) — the state the row's own description,
+ *      the kit case's `fix` and SPEC §7.9 already name ("not among those
+ *      the app is allowed to use"); subject-first like the rest of the
+ *      registry; true on a deployment with one allow-list per app and no
+ *      prices. Not `model_not_available`: `*_unavailable` is this
+ *      registry's `later` / operator class, the wrong retry class for the
+ *      one code an agent may act on itself.
+ *
+ *   rt2. **`already_on_tier` → `subscription_unchanged`** (owner-api,
+ *      after-fix, fixBy owner) — the owner-api noun the registry already
+ *      uses (`subscription_exists`, `no_subscription`); the state is
+ *      "requested == held", no ladder word.
+ *
+ *   rt3. `tier_unrecognized` is NOT a registry code (deleted from the
+ *      wire at registry v9): a backend allowance state read by the
+ *      console, whose column is literally `tier`. Unchanged.
+ *
+ * Conformance-kit verdict: BREAKING by the letter of VERSION-POLICY §2 —
+ * the kit's `refuse-after-fix-caller` case pinned the old name, so an
+ * emitter built against 0.15.0 fails the 0.16.0 kit's `renderRefusalSchema`
+ * enum. Shipped under §1.4's `draft-` clause (semver describes intent
+ * pre-v1) in the 0.16.0 wave, with the changelog's Unreleased section
+ * naming the move; every mirror moves in one change (the kit case, SPEC,
+ * the docs, the console's copy, the backend's owner-api refusals, the pod's
+ * emitter, cs macros). The registry's purity pin now allows NO code name to
+ * carry plan-tier vocabulary — the grandfather list is gone.
+ *
+ * Package version — classification MADE here: MAJOR-class change carried
+ * by a MINOR wave under `draft-` (§1.4) for `@ggui-ai/protocol` and
+ * `@ggui-ai/protocol-conformance`, pre-1.0 and pre-launch.
+ * PROTOCOL_VERSION unchanged — no WS envelope moved.
+ *
+ * --------------------------------------------------------------------
  * `UNAUTHORIZED` moves from `-32001` to `-32007` (2026-09-05, renumber,
  * pre-launch, ggui#853; found by ggui-main in the prod skew-gate log).
  * `-32001` is the MCP SDK client's own `ErrorCode.RequestTimeout`

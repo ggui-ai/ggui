@@ -8,7 +8,7 @@ import { renderInputShape } from './mcp';
  * either wire form (canonical `provider:model` or LiteLLM `provider/model`;
  * aliases resolve in both). The render handler parses this BEFORE its
  * pre-generation gate, so a malformed route is a contract error at zod path
- * `infra.model` — never a policy refusal (`model_not_in_tier` is reserved
+ * `infra.model` — never a policy refusal (`model_not_allowed` is reserved
  * for a well-formed route with no rate row on the effective tier).
  *
  * Kept OUT of the registered shape on purpose: `@ggui-ai/iframe-runtime`

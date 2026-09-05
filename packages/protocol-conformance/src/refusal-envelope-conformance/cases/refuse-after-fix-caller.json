@@ -2,7 +2,7 @@
   "name": "refuse-after-fix-caller",
   "description": "An after-fix refusal the CALLER can act on itself: the projector emits an isError result whose text leads with the code, carries outcome 'refused' plus the refusal and nothing else, and exposes no _meta. This is the only fixBy class an agent may retry on its own.",
   "refusal": {
-    "code": "model_not_in_tier",
+    "code": "model_not_allowed",
     "message": "the requested model is not among those this app may use",
     "fix": "pick a model the app is allowed to use and call again with the same handshakeId",
     "retry": "after-fix",
@@ -10,11 +10,11 @@
   },
   "expect": {
     "isError": true,
-    "text": "model_not_in_tier: the requested model is not among those this app may use pick a model the app is allowed to use and call again with the same handshakeId",
+    "text": "model_not_allowed: the requested model is not among those this app may use pick a model the app is allowed to use and call again with the same handshakeId",
     "structuredContent": {
       "outcome": "refused",
       "refusal": {
-        "code": "model_not_in_tier",
+        "code": "model_not_allowed",
         "message": "the requested model is not among those this app may use",
         "fix": "pick a model the app is allowed to use and call again with the same handshakeId",
         "retry": "after-fix",
