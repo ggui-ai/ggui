@@ -1,3 +1,12 @@
+import {
+  blueprintValidationResultSchema,
+  clientObservationsSchema,
+  gguiGetSessionOutputSchema,
+  gguiSearchBlueprintsOutputSchema,
+  gguiSessionSummaryWireSchema,
+  hostContextProjectionSchema,
+  runtimePullEventsPageSchema,
+} from './mcp.js';
 /**
  * Zod round-trip tests for the canonical handshake / render / update
  * tool triad.
@@ -1245,5 +1254,69 @@ describe('ggui_runtime_pull — bridge-pull rung schemas', () => {
       const inferredHorizon: ReplayHorizonPassedError = runtimePullHorizonSchema.parse(routeHorizon);
       expect(inferredHorizon).toEqual(routeHorizon);
     });
+  });
+});
+
+describe('tool output schemas — protocol owns every wire shape a handler registers (#817 part C)', () => {
+  it('ggui_search_blueprints: the closed result row round-trips a registry hit and a degraded source', () => {
+    const out = {
+      results: [
+        {
+          id: 'bp_1', name: 'Todo list', description: 'd', category: 'productivity',
+          props: [{ name: 'items', type: 'array', required: true, description: 'rows' }],
+          callbacks: ['onToggle'], featured: false, relevance: 'match', score: 0.91,
+          origin: 'registry', artifactId: '@acme/todo', version: '1.2.0',
+          mcpTools: [{ server: 'acme', tool: 'todo_list' }], scopeVerification: 'verified',
+        },
+      ],
+      total: 1, query: 'todo',
+      degradedSources: [{ source: 'registry', reason: 'timeout' }],
+    };
+    expect(gguiSearchBlueprintsOutputSchema.parse(out)).toEqual(out);
+    expect(Object.keys(gguiSearchBlueprintsOutputSchema.shape).sort()).toEqual(['degradedSources', 'query', 'results', 'total']);
+  });
+
+  it('ggui_protocol_validate_blueprint: the three-tier result round-trips, failedAt is a tier or null', () => {
+    const out = {
+      valid: false, failedAt: 'compile',
+      errors: [{ tier: 'compile', code: 'TS2304', message: 'x', fix: 'import it' }],
+      warnings: [{ tier: 'selfCheck', code: 'W1', message: 'y' }],
+    };
+    expect(blueprintValidationResultSchema.parse(out)).toEqual(out);
+    expect(blueprintValidationResultSchema.parse({ valid: true, failedAt: null, errors: [], warnings: [] }).failedAt).toBeNull();
+    expect(() => blueprintValidationResultSchema.parse({ ...out, failedAt: 'lint' })).toThrow();
+  });
+
+  it('ggui_consume: the host-context projection and its wrapper live on the protocol', () => {
+    const hc = {
+      availableDisplayModes: ['inline', 'fullscreen'], currentDisplayMode: 'inline',
+      containerDimensions: { width: 320, maxWidth: 640, height: 200, maxHeight: 400 },
+      platform: 'web', deviceCapabilities: { touch: false, hover: true }, locale: 'en-US', timeZone: 'Asia/Seoul',
+    };
+    expect(hostContextProjectionSchema.parse(hc)).toEqual(hc);
+    expect(clientObservationsSchema.parse({ hostContext: hc })).toEqual({ hostContext: hc });
+    expect(clientObservationsSchema.parse({})).toEqual({});
+    expect(() => hostContextProjectionSchema.parse({ currentDisplayMode: 'popup' })).toThrow();
+  });
+
+  it('ggui_list_sessions: the summary is eight closed keys — an unknown key is STRIPPED, never passed through', () => {
+    const summary = {
+      sessionId: 'render_1', hostName: 'claude', hostSessionId: 'h1', createdAt: '2026-09-05T00:00:00Z',
+      lastActivityAt: '2026-09-05T00:01:00Z', status: 'active', wsToken: 't', wsTokenExpiresAt: '2026-09-05T01:00:00Z',
+    };
+    expect(gguiSessionSummaryWireSchema.parse(summary)).toEqual(summary);
+    expect(Object.keys(gguiSessionSummaryWireSchema.shape)).toHaveLength(8);
+    expect(gguiSessionSummaryWireSchema.parse({ ...summary, extra: 1 })).toEqual(summary);
+  });
+
+  it('ggui_runtime_pull: the page arm is the EventsResponse — mutable events on the wire', () => {
+    expect(Object.keys(runtimePullEventsPageSchema.shape).sort()).toEqual(['events', 'hasMore', 'lastSequence']);
+  });
+
+  it('ggui_get_session: the wire is the six-field projection, not the GguiSession union', () => {
+    const out = { id: 'render_1', appId: 'app_1', eventSequence: 3, createdAt: 1, lastActivityAt: 2, expiresAt: 3 };
+    expect(gguiGetSessionOutputSchema.parse(out)).toEqual(out);
+    expect(Object.keys(gguiGetSessionOutputSchema.shape).sort()).toEqual(['appId', 'createdAt', 'eventSequence', 'expiresAt', 'id', 'lastActivityAt']);
+    expect(() => gguiGetSessionOutputSchema.parse({ ...out, eventSequence: -1 })).toThrow();
   });
 });
