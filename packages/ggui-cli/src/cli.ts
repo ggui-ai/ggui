@@ -757,7 +757,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         devAllowAll: parsed.devAllowAll,
         withholdResultMeta: parsed.withholdResultMeta,
         publicDemo: parsed.publicDemo,
-        multiTenant: parsed.multiTenant,
+        multiUser: parsed.multiUser,
         oauth: parsed.oauth,
         browserOrigins,
         ...(parsed.publicBaseUrl !== undefined
@@ -776,7 +776,7 @@ async function runServeCommand(args: string[]): Promise<number> {
           port: effectivePort,
           devAllowAll: parsed.devAllowAll,
           publicDemo: parsed.publicDemo,
-          multiTenant: parsed.multiTenant,
+          multiUser: parsed.multiUser,
           oauth: parsed.oauth,
           ...(parsed.publicBaseUrl !== undefined
             ? { publicBaseUrl: parsed.publicBaseUrl }

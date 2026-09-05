@@ -77,10 +77,10 @@ export function planDeploySteps(input: DeployInput): DeployStep[] {
 /**
  * Resolve the `GGUI_MCP_URL` value `ggui deploy` wires into `.env.local`.
  *
- * The per-app cloud pod serves the MCP transport at the BARE per-app endpoint
+ * The hosted per-app server serves the MCP transport at the BARE per-app endpoint
  * `<base>/apps/<appId>` (the `connectUrl` the backend advertises) — NOT a
  * `/mcp` sub-path. The `/mcp` suffix is the LOCAL `ggui serve` convention;
- * appending it here produced a URL the per-app pod 404s, so the agent (which
+ * appending it here produced a URL the per-app server 404s, so the agent (which
  * reads GGUI_MCP_URL verbatim) could never connect to a deployed app.
  *
  *   - `connectUrl` present (a create-app ran this session) → use it VERBATIM —
@@ -397,7 +397,7 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
           break;
         }
         // No prior value → resolve the deployment-correct BARE per-app URL
-        // (see resolveDeployMcpUrl: the per-app pod serves MCP at the bare
+        // (see resolveDeployMcpUrl: the per-app server serves MCP at the bare
         // endpoint, never `/mcp`). The fallback to the production default only
         // fires when create-app didn't run this session — a first deploy always
         // has connectUrl, so it never reaches the fallback in practice.

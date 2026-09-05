@@ -84,7 +84,7 @@ describe('runServe + createGguiServer (end-to-end)', () => {
         withholdResultMeta: false,
         oauth: false,
         publicDemo: false,
-        multiTenant: false,
+        multiUser: false,
         browserOrigins: [],
       },
       backendFactory: () => toBackend(server),

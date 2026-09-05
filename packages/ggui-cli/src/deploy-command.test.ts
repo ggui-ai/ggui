@@ -12,7 +12,7 @@ import {
 
 describe('resolveDeployMcpUrl', () => {
   it('uses the connectUrl VERBATIM — the bare per-app endpoint, no /mcp suffix', () => {
-    // The per-app cloud pod serves MCP at the bare endpoint; a /mcp suffix 404s.
+    // The hosted per-app server serves MCP at the bare endpoint; a /mcp suffix 404s.
     expect(resolveDeployMcpUrl('https://ggui-main.mcp.sandbox.ggui.ai/apps/abc123', 'abc123')).toBe(
       'https://ggui-main.mcp.sandbox.ggui.ai/apps/abc123',
     );
@@ -25,7 +25,7 @@ describe('resolveDeployMcpUrl', () => {
     expect(resolveDeployMcpUrl(undefined, 'app_1')).toBe('https://mcp.ggui.ai/apps/app_1');
   });
 
-  it('NEVER appends /mcp (regression: the per-app pod serves MCP at the bare root)', () => {
+  it('NEVER appends /mcp (regression: the hosted per-app server serves MCP at the bare root)', () => {
     expect(resolveDeployMcpUrl('https://mcp.ggui.ai/apps/x', 'x')).not.toMatch(/\/mcp$/);
     expect(resolveDeployMcpUrl(undefined, 'x')).not.toMatch(/\/mcp$/);
   });

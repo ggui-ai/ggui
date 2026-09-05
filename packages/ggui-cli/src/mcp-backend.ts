@@ -196,7 +196,7 @@ export interface BuildMcpServerBackendOptions {
    * {@link probeGenerationBinding} — env (`ANTHROPIC_API_KEY` etc.)
    * first, then `~/.ggui/credentials.json`. Programmatic hosts
    * embedding `buildMcpServerBackend` directly supply their own
-   * `GenerationDeps` bundle (real BYOK in a hosted multi-tenant
+   * `GenerationDeps` bundle (real BYOK in a hosted multi-user
    * setting, a test double, etc.).
    */
   readonly generation?: GenerationDeps;
@@ -281,20 +281,20 @@ export interface BuildMcpServerBackendOptions {
   readonly publicDemo?: boolean;
 
   /**
-   * Multi-tenant posture. Switches the `/ggui/console/llm-keys` gate
+   * Multi-user posture. Switches the `/ggui/console/llm-keys` gate
    * from admin-token to auth-adapter — each authenticated end-user
    * manages their OWN provider keys (scope = `userId` for `kind:'user'`
    * identities, `appId` for `kind:'app'`). `kind:'builder'` identities
-   * are rejected at the gate; multi-tenant is meaningless without a
+   * are rejected at the gate; multi-user is meaningless without a
    * real per-caller id.
    *
    * Strict-auth shape — every bearer must clear the `AuthAdapter`
    * (pairing-minted, OIDC, Cognito, or whatever the embedding host
    * binds). Mutually exclusive with `devAllowAll` and `publicDemo`;
    * the CLI rejects combinations at parse time. Surface =
-   * `--multi-tenant` CLI flag.
+   * `--multi-user` CLI flag.
    */
-  readonly multiTenant?: boolean;
+  readonly multiUser?: boolean;
 
   /**
    * Public base URL that replaces `http://<host>:<port>` when
@@ -673,7 +673,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   }
 
   // Per-app metadata store seeded from `ggui.json#theme.preset` (when
-  // the manifest declares a preset variant). Single-tenant OSS: any
+  // the manifest declares a preset variant). Single-app: any
   // appId the handlers see picks up this default theme via
   // `InMemoryAppMetadataStore.get`'s defaults fall-through. File-mode
   // themes don't have a registry id to surface here — agents pick from
@@ -839,12 +839,12 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       : {}),
     ...(resolvedMcpInstructions !== undefined ? { mcpInstructions: resolvedMcpInstructions } : {}),
     ...(resolvedWithhold ? { withholdResultMeta: true } : {}),
-    // `--multi-tenant` flips the `/ggui/console/llm-keys` gate from
+    // `--multi-user` flips the `/ggui/console/llm-keys` gate from
     // admin-token to auth-adapter. Default scope derivation in the
     // server picks up `userId` / `appId` from the resolved identity;
     // operators with composite scopes pass their own `providerKeyScope`
     // by composing `createGguiServer` directly.
-    ...(opts.multiTenant ? { providerKeysGate: "auth-adapter" as const } : {}),
+    ...(opts.multiUser ? { providerKeysGate: "auth-adapter" as const } : {}),
     // Gate OAuth login routes on publicBaseUrl. Without it the
     // redirect_uri can't be composed; the admin transport still mounts
     // so operators can paste credentials in advance.

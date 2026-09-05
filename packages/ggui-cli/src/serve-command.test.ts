@@ -51,7 +51,7 @@ describe('parseServeFlags', () => {
       devAllowAll: false,
       withholdResultMeta: false,
       publicDemo: false,
-      multiTenant: false,
+      multiUser: false,
       oauth: false,
       seedPools: [],
       browserOrigins: [],
@@ -78,9 +78,14 @@ describe('parseServeFlags', () => {
     expect(parseServeFlags([]).publicDemo).toBe(false);
   });
 
-  it('parses --multi-tenant', () => {
-    expect(parseServeFlags(['--multi-tenant']).multiTenant).toBe(true);
-    expect(parseServeFlags([]).multiTenant).toBe(false);
+  it('parses --multi-user', () => {
+    expect(parseServeFlags(['--multi-user']).multiUser).toBe(true);
+    expect(parseServeFlags([]).multiUser).toBe(false);
+  });
+  it('the old name --multi-tenant is gone — no alias, the parser refuses it as unknown', () => {
+    const result = parseServeFlags(['--multi-tenant']);
+    expect(result.error).toBeDefined();
+    expect(result.error).toMatch(/--multi-tenant/);
   });
 
   it('parses --ephemeral', () => {
@@ -97,13 +102,13 @@ describe('parseServeFlags', () => {
     expect(result.error).toMatch(/mutually exclusive/);
   });
 
-  it('rejects --multi-tenant + --dev-allow-all combo', () => {
-    const result = parseServeFlags(['--multi-tenant', '--dev-allow-all']);
+  it('rejects --multi-user + --dev-allow-all combo', () => {
+    const result = parseServeFlags(['--multi-user', '--dev-allow-all']);
     expect(result.error).toMatch(/incompatible/);
   });
 
-  it('rejects --multi-tenant + --public-demo combo', () => {
-    const result = parseServeFlags(['--multi-tenant', '--public-demo']);
+  it('rejects --multi-user + --public-demo combo', () => {
+    const result = parseServeFlags(['--multi-user', '--public-demo']);
     expect(result.error).toMatch(/incompatible/);
   });
 
@@ -490,7 +495,7 @@ describe('runServe', () => {
     withholdResultMeta: false,
     oauth: false,
     publicDemo: false,
-    multiTenant: false,
+    multiUser: false,
     browserOrigins: [],
   };
 
@@ -647,7 +652,7 @@ describe('runServe — agent supervision', () => {
     withholdResultMeta: false,
     oauth: false,
     publicDemo: false,
-    multiTenant: false,
+    multiUser: false,
     browserOrigins: [],
   };
   const AGENT_RUNNING: AgentStatus = {

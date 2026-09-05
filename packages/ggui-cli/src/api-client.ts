@@ -257,7 +257,7 @@ export interface AppsCreateResponse {
   appId: string;
   /**
    * The app's MCP endpoint, used VERBATIM as `GGUI_MCP_URL` — `<base>/apps/<appId>`,
-   * with NO `/mcp` suffix. The per-app cloud pod serves the MCP transport at this
+   * with NO `/mcp` suffix. The hosted per-app server serves the MCP transport at this
    * bare path; appending `/mcp` (a local `ggui serve` convention) 404s. Carries
    * the deployment-correct host (prod `mcp.ggui.ai`, sandbox `<env>.mcp.sandbox…`),
    * so prefer it over any reconstructed/hardcoded URL. See `resolveDeployMcpUrl`.

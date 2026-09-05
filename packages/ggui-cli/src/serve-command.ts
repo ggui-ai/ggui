@@ -129,7 +129,7 @@ export interface ParsedServeFlags {
    */
   publicDemo: boolean;
   /**
-   * Multi-tenant posture. Switches the `/ggui/console/llm-keys` gate
+   * Multi-user posture. Switches the `/ggui/console/llm-keys` gate
    * from admin-token to auth-adapter — each authenticated end-user
    * manages their OWN provider keys (scope = `userId` for `kind:'user'`
    * identities, `appId` for `kind:'app'`). `kind:'builder'` identities
@@ -138,14 +138,14 @@ export interface ParsedServeFlags {
    * Strict-auth shape — every bearer must clear the `AuthAdapter`.
    * Mutually exclusive with {@link devAllowAll} and {@link publicDemo};
    * those modes collapse every identity to `kind:'builder'` which the
-   * multi-tenant gate rejects, so the combination would produce a
-   * server that's wired multi-tenant but can't authenticate anyone.
+   * multi-user gate rejects, so the combination would produce a
+   * server that's wired multi-user but can't authenticate anyone.
    *
    * Use case: a single `ggui serve` instance fronting many users (a
    * shared dev box, a small team server) where each user pastes their
    * own LLM key via /settings using their paired bearer.
    */
-  multiTenant: boolean;
+  multiUser: boolean;
   /**
    * Server-level MCP instructions preset (the string injected into
    * the LLM's system prompt above the tool catalog). Operator-tunable
@@ -265,7 +265,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     devAllowAll: false,
     withholdResultMeta: false,
     publicDemo: false,
-    multiTenant: false,
+    multiUser: false,
     oauth: false,
     seedPools: [],
     browserOrigins: [],
@@ -311,8 +311,8 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
       out.publicDemo = true;
       continue;
     }
-    if (arg === '--multi-tenant') {
-      out.multiTenant = true;
+    if (arg === '--multi-user') {
+      out.multiUser = true;
       continue;
     }
     if (arg === '--oauth') {
@@ -422,14 +422,14 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
         'public demo (rate-limited, "PUBLIC DEMO" copy). Pick one.',
     };
   }
-  if (out.multiTenant && (out.devAllowAll || out.publicDemo)) {
+  if (out.multiUser && (out.devAllowAll || out.publicDemo)) {
     return {
       ...out,
       error:
-        '--multi-tenant is incompatible with --dev-allow-all and --public-demo. ' +
-        'Multi-tenant requires real per-user identities (kind:"user" / kind:"app"); ' +
+        '--multi-user is incompatible with --dev-allow-all and --public-demo. ' +
+        'Multi-user requires real per-user identities (kind:"user" / kind:"app"); ' +
         'the any-bearer modes collapse every caller to kind:"builder" which the ' +
-        'multi-tenant gate rejects. Drop the other flag and pair with real bearers.',
+        'multi-user gate rejects. Drop the other flag and pair with real bearers.',
     };
   }
   return out;
@@ -506,13 +506,13 @@ export interface ServeBannerInputs {
    */
   readonly publicDemo?: boolean;
   /**
-   * When true, the auth section adds a "MULTI-TENANT" line below the
+   * When true, the auth section adds a "MULTI-USER" line below the
    * strict-auth blurb explaining that each user manages their own LLM
    * keys via /settings under their paired bearer. Set by
-   * `--multi-tenant`. Mutually exclusive with `devAllowAll` and
+   * `--multi-user`. Mutually exclusive with `devAllowAll` and
    * `publicDemo` at parse time.
    */
-  readonly multiTenant?: boolean;
+  readonly multiUser?: boolean;
   /**
    * Public base URL displayed under the local URLs when set via
    * `--public-base-url`. Reminds the operator which URL their tunnel
@@ -639,10 +639,10 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
       `        Override the adapter via GguiServer({ auth }) in code for`,
       `        custom deployments (OIDC, Cognito, etc.).`,
     );
-    if (input.multiTenant) {
+    if (input.multiUser) {
       lines.push(
         ``,
-        `  multi-tenant: each authenticated user manages their OWN LLM`,
+        `  multi-user: each authenticated user manages their OWN LLM`,
         `        keys at /settings — the gate uses the request's bearer`,
         `        (Authorization: Bearer their-paired-token), NOT the`,
         `        admin token. Per-user scope is auto-derived from the`,
@@ -650,7 +650,7 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
         `        Note: ggui_render generation still resolves BYOK at the`,
         `        operator scope (env + credentials-file 'global'). Per-`,
         `        user generation-time BYOK is a follow-up — for now,`,
-        `        multi-tenant lets each user MANAGE their key plane`,
+        `        multi-user lets each user MANAGE their key plane`,
         `        without granting them the operator's admin token.`,
       );
     }
@@ -943,7 +943,7 @@ export async function runServe(opts: RunServeOptions): Promise<number> {
     agent: opts.agentStatus,
     devAllowAll: opts.flags.devAllowAll,
     publicDemo: opts.flags.publicDemo,
-    multiTenant: opts.flags.multiTenant,
+    multiUser: opts.flags.multiUser,
     oauth: opts.flags.oauth,
     ...(opts.flags.publicBaseUrl !== undefined
       ? { publicBaseUrl: opts.flags.publicBaseUrl }
@@ -1061,7 +1061,7 @@ Options:
                          ggui_render (30 generations / 10 min) and a
                          "PUBLIC DEMO — operator pays" banner. Mutually
                          exclusive with --dev-allow-all.
-  --multi-tenant         Multi-tenant posture: switches the /settings LLM-
+  --multi-user         Multi-user posture: switches the /settings LLM-
                          keys gate from admin-token to auth-adapter so
                          each authenticated end-user manages their OWN
                          key plane (scope = userId/appId). kind:'builder'
@@ -1204,5 +1204,5 @@ Current limits:
     bearer you can use with MCP. Embed @ggui-ai/mcp-server in your
     own entrypoint to inject a different AuthAdapter (OIDC, Cognito,
     etc.) for production.
-  - Single-tenant: every request scopes to one \`builder\` app id.
+  - Single-user: every request scopes to one \`builder\` app id.
 `;

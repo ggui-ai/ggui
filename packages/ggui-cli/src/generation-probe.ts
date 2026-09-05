@@ -14,7 +14,7 @@
  *      re-runs the resolver for the chosen provider with
  *      `userScope: ctx.appId`, so per-end-user keys stored at the
  *      caller's identity scope flip in at request time without a
- *      server restart. Multi-tenant `ggui serve` lives off this
+ *      server restart. Multi-user `ggui serve` lives off this
  *      seam: each authenticated user manages their OWN provider
  *      key via `/settings`, the resolver picks it up on the next
  *      `ggui_render`.
@@ -203,7 +203,7 @@ export interface GenerationBinding {
    * `true` when the boot scan resolved a key at the operator's
    * `'global'` scope (env or credentials-file). `false` means
    * generation will fall back to either the per-end-user key
-   * (multi-tenant) or the {@link GenerationDeps.onNoCredentials}
+   * (multi-user) or the {@link GenerationDeps.onNoCredentials}
    * card on first call.
    */
   readonly bootResolved: boolean;
@@ -274,7 +274,7 @@ export async function probeGenerationBinding(
   ): Promise<{ selection: LlmSelection; providerKey: ProviderKeyRef } | null> => {
     // Per-call BYOK with `userScope: ctx.appId` — env + global
     // (operator) checked first, then the caller's identity scope
-    // (end-user). Multi-tenant + Anthropic-OAuth flows store
+    // (end-user). Multi-user + Anthropic-OAuth flows store
     // user-supplied bundles under `userId` here.
     const resolution = await opts.resolver.resolve(defaultProvider, {
       userScope: ctx.appId,

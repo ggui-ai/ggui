@@ -36,7 +36,7 @@ export interface PushRecord {
     /** Tool-identity catalog hash at export — feeds the import gate's re-key check. */
     readonly toolIdentityCatalogHash?: string;
   };
-  /** Compiled ESM JS, ready for the pod to evaluate directly (no pod-side esbuild). */
+  /** Compiled ESM JS, ready for the hosted server to evaluate directly (no server-side esbuild). */
   readonly compiledBytes: string;
 }
 

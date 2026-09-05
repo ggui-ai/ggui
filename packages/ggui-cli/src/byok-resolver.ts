@@ -29,7 +29,7 @@
  *   2. **`~/.ggui/credentials.json`** — operator-persistent personal
  *      store. Backed by `PlaintextFileProviderKeyStore` from
  *      `@ggui-ai/mcp-server-core/plaintext` at the **global** app
- *      scope. Single-user, single-tenant; multi-app or multi-user
+ *      scope. Single-user, single-app; multi-app or multi-user
  *      deployments swap in a different `ProviderKeyStore` binding at
  *      composition time and bypass this resolver entirely.
  *
@@ -223,7 +223,7 @@ export function createByokResolver(
 
       // Step 3: credentials file at the end-user's identity scope.
       // Only consulted when the operator opted out of paying (no
-      // global key). The /settings UI under --multi-tenant writes
+      // global key). The /settings UI under --multi-user writes
       // here.
       if (
         resolveOpts?.userScope &&
