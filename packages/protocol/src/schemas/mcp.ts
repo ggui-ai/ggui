@@ -1540,6 +1540,8 @@ export const gguiSessionSummaryWireSchema = z.object({
  * projection reads them from the row and the wire never fails on that
  * variant. The locator itself is not on this wire (MCP-Apps resources have
  * their own paths).
+ * `contextSnapshot` rides when a component (`render`) mount's row has one —
+ * never on an mcpApps mount.
  */
 export const gguiGetSessionOutputSchema = z.object({
   variant: z.enum(['render', 'mcpApps']),
@@ -1553,7 +1555,8 @@ export const gguiGetSessionOutputSchema = z.object({
    * The last-known value of every declared contextSpec slot, as
    * `ggui_runtime_sync_context` wrote it onto the row — the read path a
    * raw MCP client (no widget-context mirror) has for contextSpec values.
-   * Present iff the row carries one; never an empty placeholder.
+   * Present iff the row carries one — component (`render`) mounts only; an
+   * mcpApps mount never carries one; never an empty placeholder.
    */
   contextSnapshot: jsonObjectSchema.optional(),
 });

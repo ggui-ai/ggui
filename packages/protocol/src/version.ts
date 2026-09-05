@@ -3121,15 +3121,6 @@
  *      reference and against the shipping projector in
  *      `@ggui-ai/mcp-server-handlers`) and `registry-completeness`
  *      (the registry's structural pins, bound to the LIVE registry).
- *
- * FOLLOWER — moves in the SAME commit as this constant, pinned by a
- * gate that fails loud when it lags: the `protocol` field of every
- * shipped `samples/gguis/<name>/ggui.json` (the `@ggui-ai/project-config`
- * samples test). That pin is a HOUSE rule — shipped samples declare the
- * CURRENT stamp, because a new project starts from them. The CONTRACT
- * for any `ggui.json#protocol` is membership in
- * `CLIENT_SUPPORTED_VERSIONS`, enforced by the loader (`UPGRADE_REQUIRED`
- * on a non-member); the two coincide only while the set is a singleton.
  *   r7. **Tool output shapes are protocol-owned (ggui#817 part C):**
  *      seven schemas — search / featured / validate / consume's
  *      host-context projection / list_sessions' summary / runtime_pull's
@@ -3146,6 +3137,15 @@
  *      grammar and nothing else, so `{}` still reaches the gate per r5); the
  *      full envelope (`renderInputEnvelopeSchema`) parses after the gate.
  *      Bare model ids are out.
+ *
+ * FOLLOWER — moves in the SAME commit as this constant, pinned by a
+ * gate that fails loud when it lags: the `protocol` field of every
+ * shipped `samples/gguis/<name>/ggui.json` (the `@ggui-ai/project-config`
+ * samples test). That pin is a HOUSE rule — shipped samples declare the
+ * CURRENT stamp, because a new project starts from them. The CONTRACT
+ * for any `ggui.json#protocol` is membership in
+ * `CLIENT_SUPPORTED_VERSIONS`, enforced by the loader (`UPGRADE_REQUIRED`
+ * on a non-member); the two coincide only while the set is a singleton.
  */
 export const PROTOCOL_VERSION = "draft-2026-09-04";
 

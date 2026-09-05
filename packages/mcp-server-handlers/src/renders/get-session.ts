@@ -9,7 +9,8 @@
  *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}.
  *   - Returns the protocol's wire projection (`gguiGetSessionOutputSchema`):
- *     `variant` + the store row's six base fields, for EVERY session —
+ *     `variant` + the store row's six base fields, for EVERY session (plus
+ *     `contextSnapshot` when a component render's row has one) —
  *     an MCP-Apps mount is locator-only on its render object, but the
  *     row carries the base fields, so the wire never fails on it.
  *   - Optional heartbeat hook — when set, the handler invokes
@@ -20,7 +21,8 @@
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `ggui_get_session` which projected a vessel-shape `SessionView`
  * (ISO timestamps + stack array). The wire response is the seven-field
- * projection with epoch-ms timestamps + flat (no stack); nothing else on
+ * projection with epoch-ms timestamps + flat (no stack), plus
+ * `contextSnapshot` when a component render's row has one; nothing else on
  * the row travels (#817 part C).
  */
 
@@ -38,8 +40,9 @@ import { isVisibleToCaller } from './tenancy.js';
 // (`schemas/mcp.ts`).
 const inputSchema = getSessionInputShape;
 
-// The wire is the protocol's seven-field projection — registered as its
-// `.shape`, never a copy.
+// The wire is the protocol's projection (seven base keys, `contextSnapshot`
+// when a component render's row has one) — registered as its `.shape`,
+// never a copy.
 const outputSchema = gguiGetSessionOutputSchema.shape;
 
 /**
@@ -156,8 +159,9 @@ function applyHeartbeatOverlay(
  * on its render object, but the ROW carries the base fields, so the wire
  * never fails on that variant (the latent gap #817 part C surfaced); the
  * locator itself is not on this wire (MCP-Apps resources have their own
- * paths). `contextSnapshot` rides when the row has one — the read path a raw
- * MCP client has for contextSpec values. Everything else on the row —
+ * paths). `contextSnapshot` rides when the row has one — component (`render`)
+ * mounts only; an mcpApps mount never carries one — the read path a raw MCP
+ * client has for contextSpec values. Everything else on the row —
  * themeId, status, hostSession — was never delivered: the transport
  * strip-parses to this shape.
  */
