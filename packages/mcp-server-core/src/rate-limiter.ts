@@ -111,34 +111,3 @@ export interface RateLimiter {
    */
   check(input: RateLimitCheckInput): Promise<RateLimitDecision>;
 }
-
-/**
- * Thrown by handlers when their configured {@link RateLimiter}
- * returns `allowed: false`. Carries the full decision so transport
- * layers can project it into HTTP headers / error payloads without
- * a second check.
- *
- * Kept in `@ggui-ai/mcp-server-core` (not in a handler package) so
- * every handler that wires rate limiting throws the same typed
- * error — transport-layer error-mapping branches on one class, not
- * string matching.
- */
-export class RateLimitedError extends Error {
-  readonly code = 'rate_limited';
-  readonly decision: RateLimitDecision;
-  readonly key: string;
-  constructor(key: string, decision: RateLimitDecision) {
-    // The MESSAGE is agent-visible: on the MCP tools/call path the
-    // SDK projects a thrown handler error into an in-result isError
-    // tool error verbatim. Bucket keys carry identity material
-    // (appId + apiKeyHash), so the key stays OFF the message — it
-    // rides the typed `key` field for transports and logs that want
-    // it.
-    super(
-      `Rate limit exceeded — retry after ${decision.retryAfterMs ?? 0}ms.`,
-    );
-    this.name = 'RateLimitedError';
-    this.key = key;
-    this.decision = decision;
-  }
-}
