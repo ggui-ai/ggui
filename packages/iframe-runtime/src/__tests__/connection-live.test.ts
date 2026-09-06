@@ -19,7 +19,7 @@ import {
   __resetAppForTest,
   __resetRelayNoticeForTest,
 } from '../runtime.js';
-import { connectionStore } from '../connection.js';
+import { connectionSource } from '../connection.js';
 import { __resetHostCapabilitiesForTest, setHostCapabilities } from '../host-capabilities.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
@@ -59,24 +59,24 @@ async function dispatchOnce(): Promise<void> {
 
 describe('connection store follows the relay latch (ggui#670)', () => {
   it('starts connected, flips to false on a confirmed refusal, and back to true on the next well-formed result', async () => {
-    expect(connectionStore.getSnapshot()).toBe(true);
+    expect(connectionSource.getSnapshot()).toBe(true);
     setHostCapabilities({ serverTools: {} });
     transport.queueResponse('tools/call', { error: { code: -32601, message: 'method not supported' } });
     await dispatchOnce();
-    expect(connectionStore.getSnapshot()).toBe(false);
+    expect(connectionSource.getSnapshot()).toBe(false);
 
     transport.queueResponse('tools/call', { result: { structuredContent: { ok: true, consumerPresent: true } } });
     await dispatchOnce();
-    expect(connectionStore.getSnapshot()).toBe(true);
+    expect(connectionSource.getSnapshot()).toBe(true);
   });
 
   it('__resetRelayNoticeForTest resets the store with the latch — lifetimes aligned', async () => {
     setHostCapabilities({ serverTools: {} });
     transport.queueResponse('tools/call', { error: { code: -32601, message: 'method not supported' } });
     await dispatchOnce();
-    expect(connectionStore.getSnapshot()).toBe(false);
+    expect(connectionSource.getSnapshot()).toBe(false);
     __resetRelayNoticeForTest();
-    expect(connectionStore.getSnapshot()).toBe(true);
+    expect(connectionSource.getSnapshot()).toBe(true);
   });
 });
 

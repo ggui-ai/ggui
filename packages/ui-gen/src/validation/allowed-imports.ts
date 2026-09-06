@@ -22,6 +22,8 @@
  * any base (`<base>/...`) is allowed too. Per-contract gadget packages
  * are dynamic — pass them to {@link isAllowedImport}.
  */
+import { FORBIDDEN_IMPORT_SPECIFIERS } from '@ggui-ai/design/rendering';
+
 export const ALLOWED_IMPORT_BASES = [
   'react',
   'react-dom',
@@ -33,12 +35,16 @@ export const ALLOWED_IMPORT_BASES = [
 /**
  * True if `specifier` is a package generated component code may import:
  * one of {@link ALLOWED_IMPORT_BASES} (or a subpath of one), or a
- * contract-declared gadget package.
+ * contract-declared gadget package — and never one of the design package's
+ * `FORBIDDEN_IMPORT_SPECIFIERS` (ggui#843: `@ggui-ai/wire/internal` is the
+ * writer side of the wire; the load-time rewriter refuses it from the same
+ * list, so the two gates cannot drift apart).
  */
 export function isAllowedImport(
   specifier: string,
   gadgetPackages?: ReadonlySet<string>,
 ): boolean {
+  if (FORBIDDEN_IMPORT_SPECIFIERS.includes(specifier)) return false;
   for (const base of ALLOWED_IMPORT_BASES) {
     if (specifier === base || specifier.startsWith(`${base}/`)) return true;
   }
@@ -50,5 +56,5 @@ export function isAllowedImport(
  * generation LLM.
  */
 export function describeAllowedImports(): string {
-  return 'react, @ggui-ai/design, @ggui-ai/wire, @ggui-ai/gadgets, or a gadget package declared on the contract';
+  return 'react, @ggui-ai/design, @ggui-ai/wire, @ggui-ai/gadgets, or a gadget package declared on the contract — never @ggui-ai/wire/internal (the writer side of the wire; components read useRender().isConnected)';
 }

@@ -21,6 +21,8 @@ export {
   buildStaticShimModules,
   findBareImportSpecifiers,
   ASSET_SHIM_FOR_SPECIFIER,
+  FORBIDDEN_IMPORT_SPECIFIERS,
+  ForbiddenImportSpecifierError,
 } from './rewrite-imports';
 export type {
   RewriteOptions,

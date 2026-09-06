@@ -796,6 +796,29 @@ function rewriteImportmap(code: string, opts: ImportmapOptions): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Bare specifiers generated component code may NOT import (ggui#843).
+ * `@ggui-ai/wire/internal` is the writer side of the connection store — a
+ * deployment's runtime claims it, once, at boot; a component that imported
+ * it could write the connection state it reads. The rewriter refuses the
+ * whole module before any rewriting, with the specifier named, so the
+ * failure is a typed refusal at the seam — never a silent map to the root
+ * barrel and never an escape to the browser as a bare import.
+ */
+export const FORBIDDEN_IMPORT_SPECIFIERS: readonly string[] = ['@ggui-ai/wire/internal'];
+
+/** Generated code imported a specifier the rewriter refuses; `specifier` names it. */
+export class ForbiddenImportSpecifierError extends Error {
+  readonly specifier: string;
+  constructor(specifier: string) {
+    super(
+      `import rewriter: generated component code imported '${specifier}', which is not available to components — it is the writer side of the wire; components read \`useRender().isConnected\` and never write it`,
+    );
+    this.name = 'ForbiddenImportSpecifierError';
+    this.specifier = specifier;
+  }
+}
+
+/**
  * Rewrite bare import specifiers in compiled ESM code.
  *
  * @param code - Compiled ESM code with bare `import` specifiers
@@ -803,6 +826,10 @@ function rewriteImportmap(code: string, opts: ImportmapOptions): string {
  * @returns Code with specifiers replaced according to the chosen mode
  */
 export function rewriteImports(code: string, options: RewriteOptions): string {
+  const bare = findBareImportSpecifiers(code);
+  for (const specifier of FORBIDDEN_IMPORT_SPECIFIERS) {
+    if (bare.includes(specifier)) throw new ForbiddenImportSpecifierError(specifier);
+  }
   switch (options.mode) {
     case 'data-url':
       return rewriteDataUrl(code, options);

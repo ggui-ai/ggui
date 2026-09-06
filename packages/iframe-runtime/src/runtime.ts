@@ -27,7 +27,7 @@
 // FIRST import on purpose — declares zod jitless before any
 // schema-defining dependency initializes (see zod-jitless.ts).
 import './zod-jitless.js';
-import { connectionStore } from './connection.js';
+import { runtimeConnectionWriter } from './connection.js';
 
 import type { ReactNode } from 'react';
 import type {
@@ -3076,7 +3076,7 @@ function transitionRelayLatch(
   scope: RelayLatchScope = {},
 ): void {
   relayIncapabilityAnnounced = next;
-  connectionStore.set(!next);
+  runtimeConnectionWriter().set(!next);
   if (next && trigger !== undefined) {
     relayLatchedAt = Date.now();
     relayDeadTaps = 0;
@@ -3206,6 +3206,10 @@ function isRelayNoticeVisible(): boolean {
  * @internal — exported for unit tests.
  */
 export function resetRelayLatchForBoot(): void {
+  // The runtime's claim on the document's connection writer is taken HERE,
+  // eagerly, before any transition (ggui#843): a second runtime in this
+  // document fails at boot naming itself, never continuing unclaimed.
+  runtimeConnectionWriter();
   if (typeof document !== 'undefined') {
     const el = document.getElementById(ACTION_TOAST_ID);
     if (el !== null && el.hasAttribute(RELAY_NOTICE_ATTR)) el.remove();
@@ -3214,7 +3218,7 @@ export function resetRelayLatchForBoot(): void {
   if (relayIncapabilityAnnounced) {
     transitionRelayLatch(false);
   } else {
-    connectionStore.set(true);
+    runtimeConnectionWriter().set(true);
   }
 }
 
@@ -3319,7 +3323,7 @@ function resetRelayCueThrottles(): void {
 /** @internal — exported for unit tests to reset module state. */
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
-  connectionStore.set(true);
+  runtimeConnectionWriter().set(true);
   relayLatchedAt = undefined;
   relayDeadTaps = 0;
   relayLatchTrigger = undefined;

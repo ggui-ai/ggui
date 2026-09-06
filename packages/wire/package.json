@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/wire",
   "version": "0.15.0",
-  "description": "ggui wire — runtime hooks for generated component ↔ agent communication",
+  "description": "ggui wire \u2014 runtime hooks for generated component \u2194 agent communication",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -36,6 +36,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js",
+      "default": "./dist/internal.js"
     },
     "./package.json": "./package.json"
   },

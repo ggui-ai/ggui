@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { useWireContext } from './context';
-import { connectionStore } from './connection-store';
+import { connectionSource } from './connection-store';
 
 export interface GguiSessionInfo {
   sessionId: string;
@@ -15,9 +15,9 @@ export function useRender(): GguiSessionInfo {
   // config field is not consulted. Presentational truth only —
   // readers MUST NOT suppress dispatch on `false`.
   const isConnected = useSyncExternalStore(
-    connectionStore.subscribe,
-    connectionStore.getSnapshot,
-    connectionStore.getSnapshot,
+    connectionSource.subscribe,
+    connectionSource.getSnapshot,
+    connectionSource.getSnapshot,
   );
   return { sessionId: render.sessionId, isConnected };
 }

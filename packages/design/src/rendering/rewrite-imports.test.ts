@@ -6,6 +6,7 @@ import {
   ASSET_SHIM_FOR_SPECIFIER,
 } from './rewrite-imports';
 import { hoistImports } from './module-loader';
+import { ForbiddenImportSpecifierError } from './rewrite-imports';
 
 describe('rewriteImports — data-url mode', () => {
   const opts = { mode: 'data-url' as const };
@@ -529,5 +530,43 @@ describe('rewriteImports — asset-url mode + static shims (ggui#522 slice 2)', 
     expect(shims.gadgets).toContain('export const useGeolocation=');
     expect(shims.gadgets).toContain('export const getPublicEnv=');
     expect(shims.gadgets).toContain('"@ggui-ai/gadgets"');
+  });
+});
+
+describe('rewriteImports refuses the writer side of the wire (ggui#843)', () => {
+  const forms = [
+    `import { claimConnectionWriter } from '@ggui-ai/wire/internal';`,
+    `import { claimConnectionWriter } from "@ggui-ai/wire/internal";`,
+    `import"@ggui-ai/wire/internal";`,
+    `const w = 1; export { w }; import * as internal from '@ggui-ai/wire/internal';`,
+  ];
+
+  it.each(forms)('throws ForbiddenImportSpecifierError naming the specifier, in data-url mode: %s', (code) => {
+    let thrown: unknown;
+    try {
+      rewriteImports(code, { mode: 'data-url' });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(ForbiddenImportSpecifierError);
+    if (thrown instanceof ForbiddenImportSpecifierError) {
+      expect(thrown.specifier).toBe('@ggui-ai/wire/internal');
+      expect(thrown.name).toBe('ForbiddenImportSpecifierError');
+      expect(thrown.message).toContain('@ggui-ai/wire/internal');
+    }
+  });
+
+  it('never resolves it and never maps it to the barrel — the root specifier still rewrites next to it', () => {
+    expect(() =>
+      rewriteImports(`import { useRender } from '@ggui-ai/wire';\nimport { claimConnectionWriter } from '@ggui-ai/wire/internal';`, { mode: 'data-url' }),
+    ).toThrow(ForbiddenImportSpecifierError);
+    const ok = rewriteImports(`import { useRender } from '@ggui-ai/wire';`, { mode: 'data-url' });
+    expect(ok).not.toContain("'@ggui-ai/wire'");
+  });
+
+  it('a specifier that merely CONTAINS the text is not the internal entry', () => {
+    expect(() =>
+      rewriteImports(`const s = "@ggui-ai/wire/internal"; import { useRender } from '@ggui-ai/wire';`, { mode: 'data-url' }),
+    ).not.toThrow();
   });
 });

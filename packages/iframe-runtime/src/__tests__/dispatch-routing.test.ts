@@ -71,7 +71,7 @@ import {
   isRelayIncapableError,
 } from '../relay-incapability.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
-import { connectionStore } from '../connection.js';
+import { connectionSource } from '../connection.js';
 import type { MockTransport, QueueResponseOptions } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
@@ -1568,7 +1568,7 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(result.ok).toBe(false);
     const edge = relay().at(-1);
     expect(edge).toMatchObject({ state: 'latched', trigger: 'boot-failed' });
-    expect(connectionStore.getSnapshot()).toBe(false);
+    expect(connectionSource.getSnapshot()).toBe(false);
     // The standing notice is the user-facing half of the same write.
     expect(toast()?.hasAttribute('data-ggui-relay-notice')).toBe(true);
     expect(toast()?.textContent).toMatch(/cannot relay/i);

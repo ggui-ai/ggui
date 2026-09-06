@@ -54,6 +54,10 @@ describe('the rendered prompt surface (WIRE_DOCUMENTATION) is frozen — the wir
     // connection status" is the taught useRender docstring.
     expect(doc).not.toContain('ConnectionStore');
     expect(doc).not.toContain('connection?:');
+    // ggui#843: the read view is not a taught hook either — the prompt
+    // teaches `useRender().isConnected`, never the store behind it.
+    expect(doc).not.toContain('ConnectionSource');
+    expect(doc).not.toContain('connectionSource');
     const provider = doc.slice(doc.indexOf('### GguiWireProvider'), doc.indexOf('## Internal: WireConfig'));
     expect((provider.match(/^\| [a-zA-Z]+ \| `/gm) ?? []).length).toBe(2);
   });
