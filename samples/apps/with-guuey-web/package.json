@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@ggui-ai/design": "^0.15.0",
-    "@guuey/agent-client": "0.18.1",
-    "@guuey/mcp-apps-host": "0.18.1",
+    "@guuey/agent-client": "0.18.2",
+    "@guuey/mcp-apps-host": "0.18.2",
     "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",
