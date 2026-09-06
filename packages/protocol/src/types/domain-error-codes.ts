@@ -31,7 +31,12 @@ export const DOMAIN_ERROR_RECOVERIES = ['retry-same-id', 're-mint', 'later'] as 
 /** One member of {@link DOMAIN_ERROR_RECOVERIES}. */
 export type DomainErrorRecovery = (typeof DOMAIN_ERROR_RECOVERIES)[number];
 
-/** A data-plane `tools/call` name a Plane-2 slug may be emitted on. */
+/**
+ * A data-plane `tools/call` name a Plane-2 slug may be emitted on. The
+ * template admits any `ggui_*` name at the type level; the registry's own
+ * suite narrows every row's `tools` to the data-plane set (no `ggui_ops_*`,
+ * no `ggui_protocol_*`).
+ */
 export type DataPlaneToolName = `ggui_${string}`;
 
 /** Fields every row carries. */

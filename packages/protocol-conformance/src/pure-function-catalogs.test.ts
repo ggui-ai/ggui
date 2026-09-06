@@ -42,6 +42,7 @@ import {
   type RawToolCallResult,
   type ToolCallScenario,
 } from './domain-error-conformance/index.js';
+import * as kit from './index.js';
 
 /**
  * A URL the runner must never dial. Every case below filters the WS
@@ -265,5 +266,41 @@ describe('runConformance — domain-error catalog fold (ggui#880)', () => {
     expect(result.skipped.length).toBe(1);
     expect(result.skipped[0]?.reason).toContain('ggui_emit');
     expect(result.passed.length).toBe(DOMAIN_ROWS.length - 1);
+  });
+});
+
+describe('runConformance — domain-error catalog: `only` gates the DRIVE, and the root barrel carries the catalog (ggui#880)', () => {
+  it('does not invoke a supplied driver when `only` selects no domain-error row — a live driver is real calls', async () => {
+    let calls = 0;
+    const result = await run({
+      only: [ENVELOPE_ROWS[0]!],
+      refusalProjector: catalogProjector,
+      toolCallDriver: (scenario) => {
+        calls += 1;
+        return catalogToolCallDriver(scenario);
+      },
+    });
+    expect(result.passed).toEqual([ENVELOPE_ROWS[0]]);
+    expect(calls).toBe(0);
+  });
+
+  it('drives only the selected rows', async () => {
+    const seen: string[] = [];
+    const one = DOMAIN_ROWS[2]!;
+    const result = await run({
+      only: [one],
+      toolCallDriver: (scenario) => {
+        seen.push(scenario.tool);
+        return catalogToolCallDriver(scenario);
+      },
+    });
+    expect(result.passed).toEqual([one]);
+    expect(seen.length).toBe(1);
+  });
+
+  it('exports the catalog from the root barrel like every sibling catalog', () => {
+    expect(typeof kit.runDomainErrorConformance).toBe('function');
+    expect(typeof kit.isRawToolCallResult).toBe('function');
+    expect(kit.domainErrorCases.length).toBe(6);
   });
 });

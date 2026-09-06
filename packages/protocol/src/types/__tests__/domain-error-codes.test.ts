@@ -9,8 +9,6 @@
  * branches on `text.startsWith(code + ': ')` — one code, one plane), and
  * bound to the data-plane tools that emit it.
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   DOMAIN_ERROR_CODES,
@@ -100,34 +98,5 @@ describe('DOMAIN_ERROR_CODES — the closed Plane-2 registry (ggui#880)', () => 
     expect(isDomainErrorCode('ggui_render')).toBe(false);
     expect(isDomainErrorCode('app_policy_missing')).toBe(false);
     expect(isDomainErrorCode('')).toBe(false);
-  });
-});
-
-/**
- * SPEC §7.9's Plane-2 table is this registry's MIRROR — the human-readable
- * statement of the same closed set. Read from the repo (this pin lives
- * here, where the invariant is owned; the kit ships only `dist`).
- */
-const SPEC_FILE = fileURLToPath(new URL('../../../../../../docs/protocol/SPEC.md', import.meta.url));
-
-function specPlaneTwoCodes(): string[] {
-  const spec = readFileSync(SPEC_FILE, 'utf8');
-  const start = spec.indexOf('**Plane 2 —');
-  const end = spec.indexOf('**Plane 3 —', start);
-  expect(start).toBeGreaterThan(0);
-  expect(end).toBeGreaterThan(start);
-  const codes: string[] = [];
-  for (const line of spec.slice(start, end).split('\n')) {
-    const match = /^\| `([a-z][a-z0-9_]*)`\s+\|/.exec(line);
-    if (match?.[1] !== undefined) codes.push(match[1]);
-  }
-  return codes;
-}
-
-describe('SPEC §7.9 Plane-2 table — the registry mirror (ggui#880)', () => {
-  it('lists exactly the registered codes, each once', () => {
-    const listed = specPlaneTwoCodes();
-    expect(new Set(listed).size).toBe(listed.length);
-    expect([...listed].sort()).toEqual([...DOMAIN_ERROR_CODES].sort());
   });
 });

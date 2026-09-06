@@ -286,3 +286,23 @@ export {
   formatSkips,
 } from './reporter.js';
 export type { DefaultReporterOptions } from './reporter.js';
+
+// ── domain-error (SPEC §7.9 Plane 2 on the tools/call wire, ggui#880) ──
+export {
+  domainErrorCases,
+  isRawToolCallResult,
+  runDomainErrorConformance,
+} from './domain-error-conformance/index.js';
+export type {
+  DomainErrorConformanceCase,
+  DomainErrorConformanceResult,
+  DomainErrorCriterion,
+  DomainErrorMismatch,
+  DomainErrorSkip,
+  RawToolCallResult,
+  RunDomainErrorConformanceOptions,
+  ToolCallArgs,
+  ToolCallContent,
+  ToolCallDriver,
+  ToolCallScenario,
+} from './domain-error-conformance/index.js';

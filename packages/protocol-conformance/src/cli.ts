@@ -457,11 +457,11 @@ Options:
 
 Pure-function catalogs (refusal-envelope, registry-completeness, transport-refusal):
   These grade an in-process function and a data table, not the wire, so
-  a URL alone cannot reach them: the three flags above hand them their
+  a URL alone cannot reach them: the four flags above hand them their
   inputs. A flag left out leaves its catalog on the scorecard as SKIPPED
   with the flag named — an ungraded obligation stays visible rather
   than vanishing. File and module paths resolve against the working
-  directory. A projector must be synchronous; one that throws, returns
+  directory. A projector is synchronous and a tools/call driver may be async; one that throws, returns
   undefined, or returns a non-projection is graded as a FAIL on that
   case (exit 1) and the remaining cases are still graded — never a
   crash. Catalog rows count as executed fixtures: a run given a

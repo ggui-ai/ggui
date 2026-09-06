@@ -301,7 +301,7 @@ export interface StreamChannelEntry {
    * `CTR_SCHEMA_INCOMPAT` linter additionally checks that the feed
    * tool's declared return schema is a subset of this schema — see
    * the docstring on {@link ActionEntry.schema} for the schema-subset
-   * algorithm and the `SCHEMA_MISMATCH_ERROR` failure surface.
+   * algorithm and the `schema_mismatch_error` failure surface.
    */
   schema: JsonSchema;
   /** Example payload (used for documentation and smoke testing). Typed as {@link JsonValue}. */
@@ -396,7 +396,7 @@ export interface ActionEntry {
    * advisory — the agent owns the actual tool call on its next turn
    * and is responsible for shaping the payload as the tool expects.
    * For tools registered on THIS server, the F4 schema-compat checker
-   * surfaces a `SCHEMA_MISMATCH_ERROR` at render-time / blueprint-
+   * surfaces a `schema_mismatch_error` at render-time / blueprint-
    * registration-time so authors get fail-loud feedback.
    *
    * The canonical algorithm lives in

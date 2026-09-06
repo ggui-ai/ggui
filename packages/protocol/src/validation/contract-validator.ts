@@ -1121,7 +1121,12 @@ export class ContractViolationError extends DomainError<'contract_violation'> {
     }
   }
 
-  /** Structured payload for MCP error response `data` field. */
+  /**
+   * Structured recovery payload carrying the same slug (`error:
+   * 'contract_violation'`). It rides the live channel's error frame; on
+   * `tools/call` it does not travel — the slug leads the result text there
+   * (SPEC §7.9 Plane 2, ggui#880) and the detail carries the same facts.
+   */
   toErrorData(): {
     error: 'contract_violation';
     tool: string;

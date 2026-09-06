@@ -166,13 +166,19 @@ function grade(
  * that throws fails THAT case (`driver-threw`) and the rest are still
  * graded; a driver that returns `null` skips that case with the tool named.
  */
+export interface RunDomainErrorConformanceOptions {
+  /** The cases to drive — the whole catalog by default. A live driver is real calls, so a runner selecting rows passes only those. */
+  readonly cases?: readonly DomainErrorConformanceCase[];
+}
+
 export async function runDomainErrorConformance(
   driver: ToolCallDriver,
+  options: RunDomainErrorConformanceOptions = {},
 ): Promise<DomainErrorConformanceResult> {
   const passed: string[] = [];
   const failed: DomainErrorMismatch[] = [];
   const skipped: DomainErrorSkip[] = [];
-  for (const testCase of domainErrorCases) {
+  for (const testCase of options.cases ?? domainErrorCases) {
     let result: RawToolCallResult | null;
     try {
       result = await driver(testCase.scenario);

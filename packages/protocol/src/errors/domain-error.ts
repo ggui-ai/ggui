@@ -90,15 +90,24 @@ export class DomainError<C extends DomainErrorCode = DomainErrorCode> extends Er
 
 /**
  * Whether `err` is a domain error — by marker and shape, never by
- * `instanceof`, so a copy from another bundle or realm still qualifies and
- * a plain `Error` that merely carries a `code` does not.
+ * `instanceof` (not even `instanceof Error`, which is realm-bound), so an
+ * instance from another bundle copy or realm still qualifies and a plain
+ * `Error` that merely carries a `code` does not.
  */
 export function isDomainError(err: unknown): err is DomainError {
-  if (!(err instanceof Error)) return false;
+  // Structural on purpose: `instanceof Error` is realm-bound, and an
+  // error thrown in another realm or bundle copy is still a domain error.
+  if (typeof err !== 'object' || err === null) return false;
   if (Reflect.get(err, DOMAIN_ERROR_MARKER) !== true) return false;
   const code = Reflect.get(err, 'code');
   const detail = Reflect.get(err, 'detail');
-  return typeof code === 'string' && isDomainErrorCode(code) && typeof detail === 'string';
+  const message = Reflect.get(err, 'message');
+  return (
+    typeof code === 'string' &&
+    isDomainErrorCode(code) &&
+    typeof detail === 'string' &&
+    typeof message === 'string'
+  );
 }
 
 /** A parsed Plane-2 wire text. */
@@ -117,6 +126,6 @@ export function parseDomainErrorText(text: string): ParsedDomainErrorText | null
   if (separator <= 0) return null;
   const code = text.slice(0, separator);
   const detail = text.slice(separator + 2);
-  if (!isDomainErrorCode(code) || detail.length === 0) return null;
+  if (!isDomainErrorCode(code) || detail.trim().length === 0) return null;
   return { code, detail };
 }

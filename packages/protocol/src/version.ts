@@ -6,7 +6,8 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
- * Plane-2 slugs lead the wire text (2026-09-06, MINOR, ggui#880). SPEC
+ * Plane-2 slugs lead the wire text (2026-09-06, wire-text, pre-launch,
+ * ggui#880 — MINOR). SPEC
  * §7.9 promised "the `code` field on each class is the wire literal"
  * while the MCP SDK ships every thrown handler error to the agent as
  * `{content: [{type: 'text', text: error.message}], isError: true}` and

@@ -82,6 +82,17 @@ describe('isDomainError — marker-based, cross-realm safe', () => {
     expect(isDomainError(foreign)).toBe(true);
   });
 
+  it('is true for a marker-carrying object from another realm — no `Error` prototype in common', () => {
+    const foreignRealm = {
+      [DOMAIN_ERROR_MARKER]: true as const,
+      name: 'SessionGone',
+      message: 'session_not_found: elsewhere',
+      code: 'session_not_found',
+      detail: 'elsewhere',
+    };
+    expect(isDomainError(foreignRealm)).toBe(true);
+  });
+
   it('is false for a plain Error that merely carries a `code`, and for non-errors', () => {
     expect(isDomainError(Object.assign(new Error('x'), { code: 'session_not_found' }))).toBe(false);
     expect(isDomainError({ code: 'session_not_found', message: 'session_not_found: x' })).toBe(false);
@@ -103,6 +114,7 @@ describe('parseDomainErrorText — the reader side of the grammar', () => {
     expect(parseDomainErrorText('ggui_render: handshakeId "h" not found')).toBeNull();
     expect(parseDomainErrorText('not_a_code: x')).toBeNull();
     expect(parseDomainErrorText('session_not_found:')).toBeNull();
+    expect(parseDomainErrorText('session_not_found:   ')).toBeNull();
     expect(parseDomainErrorText('session_not_found')).toBeNull();
   });
 });

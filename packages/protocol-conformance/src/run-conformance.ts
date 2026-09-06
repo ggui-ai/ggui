@@ -175,8 +175,10 @@ export interface RunConformanceConfig {
 }
 
 /**
- * Row-name prefixes for the PURE-FUNCTION catalogs the runner folds
- * into a run. Prefixed so a catalog row can never collide with a
+ * Row-name prefixes for the catalogs the runner folds into a run beside
+ * the WebSocket fixtures: three grade an in-process function or a data
+ * table; `domain-error` (ggui#880) drives live `tools/call` scenarios
+ * through an adopter-supplied driver. Prefixed so a catalog row can never collide with a
  * WebSocket fixture name, and so the reporter can group them without a
  * second registry of names.
  */
@@ -386,7 +388,12 @@ async function runPureFunctionCatalogs(
       );
     }
   } else {
-    const graded = await runDomainErrorConformance(toolCallDriver);
+    // A live driver is real calls: drive only the rows `only` selects.
+    const selected = domainErrorCases.filter((testCase) => wanted(`domain-error/${testCase.name}`));
+    const graded =
+      selected.length === 0
+        ? { passed: [], failed: [], skipped: [] }
+        : await runDomainErrorConformance(toolCallDriver, { cases: selected });
     for (const name of graded.passed) pass(`domain-error/${name}`);
     for (const skipped of graded.skipped) skip(`domain-error/${skipped.name}`, skipped.reason);
     for (const mismatch of graded.failed) {
