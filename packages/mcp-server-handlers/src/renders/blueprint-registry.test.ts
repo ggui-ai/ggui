@@ -220,7 +220,7 @@ describe('registerBlueprint', () => {
   // union explicitly.
   it('round-trips each BlueprintSource arm through metadata', async () => {
     const sources: readonly BlueprintSource[] = [
-      { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+      { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
       { kind: 'user' },
       { kind: 'curated' },
     ];

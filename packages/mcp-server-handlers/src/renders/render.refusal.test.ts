@@ -75,8 +75,8 @@ async function fakeGenerator(input: {
     response: { sessionId: input.request.sessionId, componentCode: COLD_CODE },
     metadata: {
       provider: 'anthropic',
-      generator: 'fake-generator',
-      model: 'fake',
+      generator: 'ui-gen-fake',
+      model: 'anthropic/fake',
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: 0,
@@ -145,7 +145,7 @@ function buildHarness(
       uiGenerator: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
-        model: 'fake',
+        model: 'anthropic/claude-haiku-4-5',
         generate: fakeGenerator,
       },
       resolveLlm: () => null,
@@ -403,7 +403,7 @@ function buildFailureHarness(opts: {
       uiGenerator: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
-        model: 'fake',
+        model: 'anthropic/claude-haiku-4-5',
         generate: fakeGenerator,
       },
       resolveLlm: () => null,

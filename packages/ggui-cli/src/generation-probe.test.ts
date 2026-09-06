@@ -381,9 +381,9 @@ describe('resolveConfiguredRoute', () => {
 describe('describeGenerationBinding', () => {
   const stubGen = {
     uiGenerator: {
-      slug: 'ui-gen-default-test',
+      slug: 'ui-gen-probe' as const,
       tier: 'default' as const,
-      model: 'test',
+      model: 'anthropic/claude-haiku-4-5' as const,
       generate: async () => ({
         ok: false as const,
         error: { code: 'PRODUCTION_FAILED' as const, message: 'n/a' },

@@ -4,7 +4,7 @@ import type {
   GeneratorRegistry,
   UiGenerateInput,
   UiGenerateResult,
-  UiGenerator,
+  UiGenerator, GenerationMetadata
 } from "@ggui-ai/mcp-server-core";
 import {
   InMemoryAppMetadataStore,
@@ -12,6 +12,7 @@ import {
   createInMemoryGeneratorRegistry,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { Blueprint, DataContract, UIGenerationResponse } from "@ggui-ai/protocol";
+import type { GeneratorId } from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   InMemoryBlueprintIndex,
@@ -37,7 +38,7 @@ import { createGguiOpsGenerateBlueprintHandler } from "./generate.js";
  */
 function makeMockGenerator(
   opts: {
-    slug?: string;
+    slug?: GeneratorId;
     componentCode?: string;
     validatorScore?: number;
     fail?: boolean;
@@ -46,9 +47,9 @@ function makeMockGenerator(
 ): UiGenerator {
   const componentCode = opts.componentCode ?? "export default function Foo() { return null; }";
   return {
-    slug: opts.slug ?? "ui-gen-default-haiku-4-5",
+    slug: opts.slug ?? "ui-gen-default",
     tier: "default",
-    model: "haiku-4-5",
+    model: "anthropic/claude-haiku-4-5",
     async generate(_input: UiGenerateInput): Promise<UiGenerateResult> {
       if (opts.throws) {
         throw new Error("mock generator threw");
@@ -66,10 +67,10 @@ function makeMockGenerator(
         sessionId: "render_mock",
         componentCode,
       };
-      const metadata = {
-        provider: "anthropic" as const,
-        generator: opts.slug ?? "ui-gen-default-haiku-4-5",
-        model: "claude-haiku-4-5-20251001",
+      const metadata: GenerationMetadata = {
+        provider: "anthropic",
+        generator: opts.slug ?? "ui-gen-default",
+        model: "anthropic/claude-haiku-4-5",
         inputTokens: 100,
         outputTokens: 200,
         latencyMs: 50,
@@ -164,8 +165,8 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     // metadata claim (generator slug + model id).
     expect(result.source).toEqual({
       kind: "llm",
-      generator: "ui-gen-default-haiku-4-5",
-      model: "claude-haiku-4-5-20251001",
+      generator: "ui-gen-default",
+      model: "anthropic/claude-haiku-4-5",
     });
     expect(result.codeHash).toBeDefined();
     expect(result.codeHash?.length).toBe(32);
@@ -173,7 +174,7 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
 
   it("dispatches through an explicit generator slug", async () => {
     const advancedGen = makeMockGenerator({
-      slug: "ui-gen-advanced-opus-4-7",
+      slug: "ui-gen-advanced",
       componentCode: "export default function Bar() { return null; }",
       validatorScore: 0.92,
     });
@@ -186,14 +187,14 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const result = await handler.handler(
       {
         contract: emptyContract(),
-        generator: "ui-gen-advanced-opus-4-7",
+        generator: "ui-gen-advanced",
       },
       makeCtx("app-1")
     );
     expect(result.source).toEqual({
       kind: "llm",
-      generator: "ui-gen-advanced-opus-4-7",
-      model: "claude-haiku-4-5-20251001",
+      generator: "ui-gen-advanced",
+      model: "anthropic/claude-haiku-4-5",
     });
     expect(result.validatorScore).toBe(0.92);
   });
@@ -210,8 +211,8 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     // engine-generated.
     expect(persisted?.source).toEqual({
       kind: "llm",
-      generator: "ui-gen-default-haiku-4-5",
-      model: "claude-haiku-4-5-20251001",
+      generator: "ui-gen-default",
+      model: "anthropic/claude-haiku-4-5",
     });
     expect(persisted?.contractHash).toBe(blueprintKey(emptyContract()));
   });
@@ -336,7 +337,7 @@ describe("createGguiOpsGenerateBlueprintHandler — error paths", () => {
       handler.handler(
         {
           contract: emptyContract(),
-          generator: "ui-gen-nonexistent-gpt-99",
+          generator: "ui-gen-nonexistent",
         },
         makeCtx("app-1")
       )
@@ -392,8 +393,8 @@ describe("createGguiOpsGenerateBlueprintHandler — persona near-dup", () => {
       appId: "app-1",
       source: {
         kind: "llm",
-        generator: "ui-gen-default-haiku-4-5",
-        model: "claude-haiku-4-5",
+        generator: "ui-gen-default",
+        model: "anthropic/claude-haiku-4-5",
       },
       variance: { persona: "minimalist" },
       createdAt: "2026-05-12T00:00:00.000Z",
@@ -439,8 +440,8 @@ describe("createGguiOpsGenerateBlueprintHandler — persona near-dup", () => {
       appId: "app-1",
       source: {
         kind: "llm",
-        generator: "ui-gen-default-haiku-4-5",
-        model: "claude-haiku-4-5",
+        generator: "ui-gen-default",
+        model: "anthropic/claude-haiku-4-5",
       },
       variance: { persona: "minimalist" },
       createdAt: "2026-05-12T00:00:00.000Z",
@@ -585,9 +586,9 @@ describe("createGguiOpsGenerateBlueprintHandler — appMetadataStore gadget gate
     const generator = vi.fn();
     const registry = createInMemoryGeneratorRegistry({
       default: {
-        slug: "ui-gen-default-haiku-4-5",
+        slug: "ui-gen-default",
         tier: "default",
-        model: "haiku-4-5",
+        model: "anthropic/claude-haiku-4-5",
         generate: generator,
       },
     });

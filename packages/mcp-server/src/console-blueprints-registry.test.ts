@@ -164,8 +164,8 @@ describe('GET /ggui/console/blueprints/registry', () => {
         componentCode: 'export default () => null;',
         source: {
           kind: 'llm',
-          generator: 'ui-gen-default-haiku-4-5',
-          model: 'claude-haiku-4-5',
+          generator: 'ui-gen-default',
+          model: 'anthropic/claude-haiku-4-5',
         },
       },
     );
@@ -192,8 +192,8 @@ describe('GET /ggui/console/blueprints/registry', () => {
     // minted with full engine provenance.
     expect(entry.source).toEqual({
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     });
   });
 
@@ -206,7 +206,7 @@ describe('GET /ggui/console/blueprints/registry', () => {
     const rows = [
       {
         label: 'llm',
-        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+        source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
       },
       { label: 'user', source: { kind: 'user' } },
       { label: 'curated', source: { kind: 'curated' } },
@@ -242,8 +242,8 @@ describe('GET /ggui/console/blueprints/registry', () => {
     expect(byKind.get('llm')?.intent).toBe('llm blueprint');
     expect(byKind.get('llm')?.source).toEqual({
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     });
     expect(byKind.get('user')?.intent).toBe('user blueprint');
     // The install-bridge lifecycle marker rides through the projection.

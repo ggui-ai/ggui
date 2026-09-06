@@ -37,6 +37,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { DomainError } from '@ggui-ai/protocol';
+import type { GeneratorId } from '@ggui-ai/protocol';
 import { z } from 'zod';
 import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
@@ -400,7 +401,7 @@ export interface GguiHandshakeHandlerDeps {
   /**
    * Default generator slug used when the negotiator doesn't bind one
    * (the `origin: 'agent'` fallback path). Defaults to
-   * `'ui-gen-default-haiku-4-5'`.
+   * `'ui-gen-default'`.
    */
   readonly defaultGenerator?: string;
   /**
@@ -446,7 +447,7 @@ export interface GguiHandshakeHandlerDeps {
 export const HANDSHAKE_RECORD_TTL_SEC = 600;
 
 /** Default generator slug — matches the `GeneratorRegistry` default. */
-export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default-haiku-4-5';
+export const DEFAULT_GENERATOR_SLUG: GeneratorId = 'ui-gen-default';
 
 /**
  * Compose the KV key for a given (appId, handshakeId) pair. Exported

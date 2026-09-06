@@ -126,7 +126,7 @@ describe('installToCache', () => {
       contract: otherContract,
       intent: 'cold-gen greeter',
       componentCode: 'synth-code',
-      source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+      source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
     });
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(2);

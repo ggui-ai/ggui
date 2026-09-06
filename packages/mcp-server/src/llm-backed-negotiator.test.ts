@@ -32,8 +32,8 @@ function bp(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint 
     codeHash: overrides.codeHash,
     source: overrides.source ?? {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},
@@ -61,8 +61,8 @@ describe('buildVariantSelectionUserMessage', () => {
       blueprintId: 'a',
       source: {
         kind: 'llm',
-        generator: 'ui-gen-default-haiku-4-5',
-        model: 'claude-haiku-4-5',
+        generator: 'ui-gen-default',
+        model: 'anthropic/claude-haiku-4-5',
       },
       validatorScore: 0.92,
       variance: { persona: 'minimalist', seedPrompt: 'clean form' },
@@ -85,8 +85,8 @@ describe('buildVariantSelectionUserMessage', () => {
     expect(message).toContain('"blueprintId": "b"');
     // Provenance union projected verbatim — llm arm with engine
     // fields, user arm bare.
-    expect(message).toContain('"generator": "ui-gen-default-haiku-4-5"');
-    expect(message).toContain('"model": "claude-haiku-4-5"');
+    expect(message).toContain('"generator": "ui-gen-default"');
+    expect(message).toContain('"model": "anthropic/claude-haiku-4-5"');
     expect(message).toContain('"kind": "user"');
     expect(message).toContain('"validatorScore": 0.92');
     expect(message).toContain('"isOperatorDefault": true');

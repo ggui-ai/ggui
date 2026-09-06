@@ -274,7 +274,7 @@ function mkRunResult(overrides: Partial<BenchmarkRunResult> = {}): BenchmarkRunR
     evaluation,
     estimatedCostUsd: 0.01,
     timestamp: '2026-06-11T00:00:00Z',
-    generator: 'ui-gen-default-haiku-4-5',
+    generator: 'ui-gen-default',
     ...overrides,
   };
 }

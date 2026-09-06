@@ -235,7 +235,7 @@ describe('createInstalledBlueprintsProvider', () => {
         contract: COUNTER_CONTRACT,
         intent: 'synth-cached counter',
         componentCode: 'synth-component-code',
-        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+        source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
       });
 
       const provider = createInstalledBlueprintsProvider({
@@ -439,7 +439,7 @@ describe('createInstalledBlueprintsProvider', () => {
         contract: COUNTER_CONTRACT,
         componentCode: 'synth code',
         intent: 'synth-cached counter',
-        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+        source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
       });
 
       const provider = createInstalledBlueprintsProvider({

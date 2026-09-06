@@ -74,9 +74,9 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     fixture = await bootOssServer({
       generation: {
         uiGenerator: {
-          slug: 'ui-gen-default-haiku-4-5',
+          slug: 'ui-gen-default',
           tier: 'default',
-          model: 'claude-haiku-4-5',
+          model: 'anthropic/claude-haiku-4-5',
           generate: async (input) => {
             calls.count += 1;
             return {
@@ -88,8 +88,8 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
               },
               metadata: {
                 provider: 'anthropic',
-                generator: 'ui-gen-default-haiku-4-5',
-                model: 'claude-opus-4-7',
+                generator: 'ui-gen-default',
+                model: 'anthropic/claude-opus-4-7',
                 inputTokens: 10,
                 outputTokens: 20,
                 latencyMs: 42,

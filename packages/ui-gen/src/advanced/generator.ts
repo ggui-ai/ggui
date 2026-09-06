@@ -1,9 +1,9 @@
 /**
- * Advanced UI generator factory (`ui-gen-advanced-opus-4-7`).
+ * Advanced UI generator factory (`ui-gen-advanced`).
  *
  * See `./index.ts` for the design narrative. This file owns the
  * iterative two-stage loop and the {@link UiGenerator} adapter that
- * registers under the slug `ui-gen-advanced-opus-4-7`.
+ * registers under the slug `ui-gen-advanced`.
  *
  * Loop structure (max 3 iterations, threshold 0.8, always-persist):
  *
@@ -26,10 +26,10 @@
  * spinning up Chromium for code we already know is broken) AND when
  * the contract has no `actionSpec` entries (no behaviour to verify).
  *
- * Generator identity is baked in — slug `ui-gen-advanced-opus-4-7`,
- * tier `advanced`, model `opus-4-7`. Operators can NOT override slug
- * via this factory; build a different factory if you want a different
- * tier/model pairing.
+ * Generator identity is baked in — slug `ui-gen-advanced`, tier
+ * `advanced`; the declared model is `ADVANCED_GENERATOR_MODEL` and is not
+ * part of the slug (ggui#923). Operators can NOT override the slug via
+ * this factory; build a different factory for a different tier.
  */
 import type {
   GenerationMetadata,
@@ -39,6 +39,7 @@ import type {
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
 import type { DataContract, JsonObject } from '@ggui-ai/protocol';
+import type { ModelRef } from '@ggui-ai/protocol';
 import type {
   BehaviorFailure,
   PlaywrightModule,
@@ -61,9 +62,9 @@ import {
 } from './feedback.js';
 
 /** Generator identity — slug, tier, and model. */
-export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced-opus-4-7' as const;
+export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced' as const;
 export const ADVANCED_GENERATOR_TIER: GeneratorTier = 'advanced';
-export const ADVANCED_GENERATOR_MODEL = 'opus-4-7' as const;
+export const ADVANCED_GENERATOR_MODEL: ModelRef = 'anthropic/claude-opus-4-7';
 
 /**
  * Re-exported under a friendlier name for callers wiring deploys.
@@ -162,7 +163,7 @@ const DEFAULT_SLOW_TIMEOUT_MS = 5000;
 
 /**
  * Create the advanced generator. Returns a {@link UiGenerator}
- * registrable under the slug `ui-gen-advanced-opus-4-7`.
+ * registrable under the slug `ui-gen-advanced`.
  *
  * @example
  * import { chromium } from 'playwright-core';
@@ -189,7 +190,7 @@ export function createAdvancedUiGenerator(
     options.innerGenerator ??
     createUiGenerator({
       tier: 'advanced',
-      model: 'opus-4-7',
+      model: ADVANCED_GENERATOR_MODEL,
       ...(options.maxAttempts !== undefined
         ? { maxAttempts: options.maxAttempts }
         : {}),

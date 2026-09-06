@@ -125,8 +125,8 @@ describe('buildCacheReuseResult', () => {
     const code = 'export default () => null;';
     const source = {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     } as const;
     const result = buildCacheReuseResult(
       {

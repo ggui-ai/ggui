@@ -1,5 +1,5 @@
 /**
- * Advanced UI generator — `ui-gen-advanced-opus-4-7`.
+ * Advanced UI generator — `ui-gen-advanced`.
  *
  * Iterative two-stage validator-feedback loop. Sibling to the default
  * generator at `@ggui-ai/ui-gen/create-ui-generator.ts`. The default

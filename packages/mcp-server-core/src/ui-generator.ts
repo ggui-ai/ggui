@@ -16,6 +16,8 @@ import type {
   GenerationError,
   LlmProvider,
   LlmRoute,
+  GeneratorId,
+  ModelRef,
 } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
 
@@ -224,8 +226,9 @@ export interface GenerationMetadata {
    * engine-generated result that cannot name its engine is not a real
    * state.
    */
-  generator: string;
-  model: string;
+  generator: GeneratorId;
+  /** The model the LLM call ran on — `provider/model` of the route (`ModelRef`, ggui#924). */
+  model: ModelRef;
   inputTokens: number;
   outputTokens: number;
   latencyMs: number;
@@ -267,9 +270,12 @@ export type UiGenerateResult =
  * Identity fields — required:
  *
  *   - `slug` is the registry key and the stable handle stored on each
- *     {@link Blueprint} row. Pattern `ui-gen-<tier>-<model>`.
- *   - `tier` + `model` are the slug's parsed components, surfaced
- *     directly so callers don't re-parse on every access.
+ *     {@link Blueprint} row. Pattern `ui-gen-<tier>`.
+ *   - `tier` is the slug's parsed component, surfaced directly so
+ *     callers don't re-parse on every access.
+ *   - `model` is the generator's own declared field — it is NOT part of
+ *     the slug (ggui#923), so a tier can move to a newer model without
+ *     changing the identity stored on any row.
  *
  * The slug, tier, and model an implementation declares describe its
  * declared identity (which model the operator stood it up for). The
@@ -278,11 +284,11 @@ export type UiGenerateResult =
  * identity is the registry-level handle, not a runtime constraint.
  */
 export interface UiGenerator {
-  /** Stable registry key, e.g. `ui-gen-default-haiku-4-5`. */
-  readonly slug: string;
+  /** Stable registry key, e.g. `ui-gen-default` — the protocol's {@link GeneratorId}. */
+  readonly slug: GeneratorId;
   /** Quality / cost tier — `'default'` or `'advanced'` at v1. */
   readonly tier: GeneratorTier;
-  /** Canonical model identifier this generator was registered for. */
-  readonly model: string;
+  /** The model this generator was registered for — a registry key (`anthropic/…`), never part of the slug. */
+  readonly model: ModelRef;
   generate(input: UiGenerateInput): Promise<UiGenerateResult>;
 }

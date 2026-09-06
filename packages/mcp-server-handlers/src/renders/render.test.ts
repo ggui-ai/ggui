@@ -168,8 +168,8 @@ function fakeGenerator(componentCode: string, sourceCode?: string) {
     },
     metadata: {
       provider: 'anthropic',
-      generator: 'fake-generator',
-      model: 'fake',
+      generator: 'ui-gen-fake',
+      model: 'anthropic/fake',
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: 0,
@@ -306,7 +306,7 @@ function buildHandler(opts: {
       uiGenerator: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
-        model: 'fake',
+        model: 'anthropic/claude-haiku-4-5',
         generate: fakeGenerator(opts.coldCode, opts.coldSourceCode),
       },
       resolveLlm: () => null,
@@ -387,7 +387,7 @@ async function buildAcceptCacheHarness(extraOpts: {
       contract: CONTRACT,
       intent: 'a test card',
       componentCode: STORED_CODE,
-      source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+      source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
     },
     { mintId: () => storedUuid },
   );
@@ -463,7 +463,7 @@ async function buildAcceptCacheHarnessFor(
       contract,
       intent: 'a test card',
       componentCode: STORED_CODE,
-      source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+      source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
     },
     { mintId: () => storedUuid },
   );
@@ -724,8 +724,8 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     // The cold-gen mint stamps full engine provenance from the
     // generator's own metadata claim (flat-encoded in storage).
     expect(entries[0].metadata['sourceKind']).toBe('llm');
-    expect(entries[0].metadata['sourceGenerator']).toBe('fake-generator');
-    expect(entries[0].metadata['sourceModel']).toBe('fake');
+    expect(entries[0].metadata['sourceGenerator']).toBe('ui-gen-fake');
+    expect(entries[0].metadata['sourceModel']).toBe('anthropic/fake');
   });
 
   // Retention knob (spec §4 re-cut): operators align render-row
@@ -837,7 +837,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
 
     const cold = await buildColdGenHarness({ postSuccessHook });
     await cold.harness.handler.handler({ handshakeId: cold.handshakeId, props: {} }, CTX);
-    expect(seen.at(-1)).toEqual({ model: 'fake' });
+    expect(seen.at(-1)).toEqual({ model: 'anthropic/fake' });
 
     const cache = await buildAcceptCacheHarness({ postSuccessHook });
     await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
@@ -956,7 +956,7 @@ describe('createGguiRenderHandler — authored source rides cache-reuse', () => 
         intent: 'a test card',
         componentCode: STORED_CODE,
         sourceCode: STORED_SOURCE,
-        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+        source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
       },
       { mintId: () => storedUuid },
     );
@@ -1239,7 +1239,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
           contract: opts.contract,
           intent: 'a test card',
           componentCode: opts.perAppRow.componentCode,
-          source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+          source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
         },
         { mintId: () => opts.uuid },
       );
@@ -1281,7 +1281,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator(COLD_CODE),
         },
         resolveLlm: () => null,
@@ -1433,7 +1433,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator(COLD_CODE),
         },
         resolveLlm: () => null,
@@ -1566,7 +1566,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
         contract: CONTRACT,
         intent: 'a test card',
         componentCode: STORED_CODE,
-        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+        source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
         variance: PERSONA_VARIANCE,
       },
       { mintId: () => personaUuid },
@@ -1647,7 +1647,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
         contract: CONTRACT,
         intent: 'a test card',
         componentCode: STORED_CODE,
-        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+        source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
       },
       { mintId: () => storedUuid },
     );
@@ -1950,7 +1950,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator(COLD_CODE),
         },
         resolveLlm: () => null,
@@ -1994,7 +1994,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator(COLD_CODE),
         },
         resolveLlm,

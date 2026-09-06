@@ -33,7 +33,7 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
     displayName: 'Kanban Board',
     intent: 'Track tasks in columns',
     data: {},
-    source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
+    source: { kind: 'llm', generator: 'ui-gen-a', model: 'anthropic/claude-haiku-4-5' },
   };
 
   it('accepts plain ScreenBlueprint values as seeds', async () => {
@@ -47,8 +47,8 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
     const list = await p.list({});
     expect(list[0]?.source).toEqual({
       kind: 'llm',
-      generator: 'gen-a',
-      model: 'model-1',
+      generator: 'ui-gen-a',
+      model: 'anthropic/claude-haiku-4-5',
     });
     expect(list[0]?.source).not.toBe(kanban.source);
   });

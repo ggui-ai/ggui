@@ -602,8 +602,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
           codeHash: 'code_hash_abc',
           source: {
             kind: 'llm',
-            generator: 'ui-gen-default-haiku-4-5',
-            model: 'claude-haiku-4-5',
+            generator: 'ui-gen-default',
+            model: 'anthropic/claude-haiku-4-5',
           },
           variance: {},
         },
@@ -669,8 +669,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         appId: 'app-1',
         source: {
           kind: 'llm',
-          generator: 'ui-gen-default-haiku-4-5',
-          model: 'claude-haiku-4-5',
+          generator: 'ui-gen-default',
+          model: 'anthropic/claude-haiku-4-5',
         },
         variance: { persona: 'data-dense' },
         createdAt: '2026-05-12T00:00:00.000Z',
@@ -716,8 +716,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
           contractHash: 'hash_x',
           source: {
             kind: 'llm',
-            generator: 'ui-gen-default-haiku-4-5',
-            model: 'claude-haiku-4-5',
+            generator: 'ui-gen-default',
+            model: 'anthropic/claude-haiku-4-5',
           },
           variance: {},
         },
@@ -859,8 +859,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
             codeHash: 'code_hash_abc',
             source: {
               kind: 'llm',
-              generator: 'ui-gen-default-haiku-4-5',
-              model: 'claude-haiku-4-5',
+              generator: 'ui-gen-default',
+              model: 'anthropic/claude-haiku-4-5',
             },
             variance: {},
           },
@@ -1081,8 +1081,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
           contractHash: 'hash_x',
           source: {
             kind: 'llm',
-            generator: 'ui-gen-advanced-opus-4-7',
-            model: 'claude-opus-4-7',
+            generator: 'ui-gen-advanced',
+            model: 'anthropic/claude-opus-4-7',
           },
           variance: { persona: 'minimalist' },
           // Confidence encoded onto selectedReason per the MVB-6
@@ -1116,8 +1116,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(attrs['selectionConfidence']).toBe(0.87);
       // Cache origin ⇒ provenance flattened through the shared codec.
       expect(attrs['sourceKind']).toBe('llm');
-      expect(attrs['sourceGenerator']).toBe('ui-gen-advanced-opus-4-7');
-      expect(attrs['sourceModel']).toBe('claude-opus-4-7');
+      expect(attrs['sourceGenerator']).toBe('ui-gen-advanced');
+      expect(attrs['sourceModel']).toBe('anthropic/claude-opus-4-7');
     });
 
     it('absent telemetrySink is a noop (no throw)', async () => {

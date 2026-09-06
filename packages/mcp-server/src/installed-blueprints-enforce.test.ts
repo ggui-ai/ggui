@@ -46,9 +46,9 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
           // Minimal generation deps; the enforcement runs irrespective
           // of generator wiring.
           uiGenerator: {
-            slug: "ui-gen-default-haiku-4-5",
+            slug: "ui-gen-default",
             tier: "default",
-            model: "claude-haiku-4-5",
+            model: "anthropic/claude-haiku-4-5",
             generate: async () => ({
               ok: false as const,
               error: { code: "PRODUCTION_FAILED" as const, message: "unused" },
@@ -83,9 +83,9 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
         index,
         generation: {
           uiGenerator: {
-            slug: "ui-gen-default-haiku-4-5",
+            slug: "ui-gen-default",
             tier: "default",
-            model: "claude-haiku-4-5",
+            model: "anthropic/claude-haiku-4-5",
             generate: async () => ({
               ok: false as const,
               error: { code: "PRODUCTION_FAILED" as const, message: "unused" },
@@ -120,9 +120,9 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
         index: serverIndex,
         generation: {
           uiGenerator: {
-            slug: "ui-gen-default-haiku-4-5",
+            slug: "ui-gen-default",
             tier: "default",
-            model: "claude-haiku-4-5",
+            model: "anthropic/claude-haiku-4-5",
             generate: async () => ({
               ok: false as const,
               error: { code: "PRODUCTION_FAILED" as const, message: "unused" },
@@ -156,9 +156,9 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
         index,
         generation: {
           uiGenerator: {
-            slug: "ui-gen-default-haiku-4-5",
+            slug: "ui-gen-default",
             tier: "default",
-            model: "claude-haiku-4-5",
+            model: "anthropic/claude-haiku-4-5",
             generate: async () => ({
               ok: false as const,
               error: { code: "PRODUCTION_FAILED" as const, message: "unused" },

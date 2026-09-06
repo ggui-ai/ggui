@@ -69,7 +69,7 @@ export function blueprintProviderContract(
         await seed(p, [
           blueprint('a', 'A', { source: { kind: 'curated' } }),
           blueprint('b', 'B', {
-            source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
+            source: { kind: 'llm', generator: 'ui-gen-a', model: 'anthropic/claude-haiku-4-5' },
           }),
         ]);
         const curated = await p.list({ sourceKind: 'curated' });
@@ -82,14 +82,14 @@ export function blueprintProviderContract(
         const p = await makeProvider();
         await seed(p, [
           blueprint('a', 'A', {
-            source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
+            source: { kind: 'llm', generator: 'ui-gen-a', model: 'anthropic/claude-haiku-4-5' },
           }),
           blueprint('b', 'B', {
-            source: { kind: 'llm', generator: 'gen-b', model: 'model-1' },
+            source: { kind: 'llm', generator: 'ui-gen-b', model: 'anthropic/claude-haiku-4-5' },
           }),
           blueprint('c', 'C', { source: { kind: 'user' } }),
         ]);
-        const genA = await p.list({ generator: 'gen-a' });
+        const genA = await p.list({ generator: 'ui-gen-a' });
         expect(genA.map((r) => r.id)).toEqual(['a']);
         const genUnknown = await p.list({ generator: 'gen-x' });
         expect(genUnknown).toEqual([]);

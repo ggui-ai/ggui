@@ -37,8 +37,8 @@ function bp(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint 
     codeHash: overrides.codeHash,
     source: overrides.source ?? {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},

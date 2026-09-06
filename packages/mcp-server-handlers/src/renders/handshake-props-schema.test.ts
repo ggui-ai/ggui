@@ -182,8 +182,8 @@ describe('ggui_render — persisted-schema AUTHORITY', () => {
       },
       metadata: {
         provider: 'anthropic',
-        generator: 'fake-generator',
-        model: 'fake',
+        generator: 'ui-gen-fake',
+        model: 'anthropic/fake',
         inputTokens: 0,
         outputTokens: 0,
         latencyMs: 0,
@@ -270,7 +270,7 @@ describe('ggui_render — persisted-schema AUTHORITY', () => {
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator,
         },
         resolveLlm: () => null,
@@ -374,7 +374,7 @@ describe('ggui_render — persisted-schema AUTHORITY', () => {
         uiGenerator: {
           slug: 'ui-gen-default-fake',
           tier: 'default',
-          model: 'fake',
+          model: 'anthropic/claude-haiku-4-5',
           generate: fakeGenerator,
         },
         resolveLlm: () => null,

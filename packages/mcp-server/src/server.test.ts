@@ -2332,9 +2332,9 @@ describe('createGguiServer — opsBlueprint bundle (explicit-wins factory option
 
   it('threads a deployment-supplied opsBlueprint bundle end to end: registers all five tools and lets the deployment authorizer deny a cross-app call', async () => {
     const generator: UiGenerator = {
-      slug: 'ui-gen-default-haiku-4-5',
+      slug: 'ui-gen-default',
       tier: 'default',
-      model: 'haiku-4-5',
+      model: 'anthropic/claude-haiku-4-5',
       async generate() {
         throw new Error('not exercised by this test');
       },
@@ -2423,9 +2423,9 @@ describe('createGguiServer — opsBlueprint bundle (explicit-wins factory option
   // state), so anything on /control here came from the bundle alone.
   it('explicit handlers array + opsBlueprint bundle — the family still materializes on /control (live-probe regression lock)', async () => {
     const generator: UiGenerator = {
-      slug: 'ui-gen-default-haiku-4-5',
+      slug: 'ui-gen-default',
       tier: 'default',
-      model: 'haiku-4-5',
+      model: 'anthropic/claude-haiku-4-5',
       async generate() {
         throw new Error('not exercised by this test');
       },

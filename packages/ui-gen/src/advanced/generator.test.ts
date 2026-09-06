@@ -1,5 +1,5 @@
 /**
- * Tests for the advanced generator (`ui-gen-advanced-opus-4-7`).
+ * Tests for the advanced generator (`ui-gen-advanced`).
  *
  * Strategy: stub the inner generator so we drive the iterative loop
  * deterministically. The fast-stage runRenderCheck and slow-stage
@@ -119,8 +119,8 @@ function makeStubResult(opts: {
     },
     metadata: {
       provider: 'anthropic',
-      generator: 'stub-default',
-      model: 'claude-opus-4-7',
+      generator: 'ui-gen-stub',
+      model: 'anthropic/claude-opus-4-7',
       inputTokens: 100,
       outputTokens: 50,
       latencyMs: 1000,
@@ -133,9 +133,9 @@ function makeStubResult(opts: {
 function makeStubGenerator(results: UiGenerateResult[]): UiGenerator {
   let i = 0;
   return {
-    slug: 'stub-default',
+    slug: 'ui-gen-stub',
     tier: 'default',
-    model: 'stub',
+    model: 'anthropic/claude-haiku-4-5',
     generate: async () => {
       const r = results[Math.min(i, results.length - 1)]!;
       i++;
@@ -151,11 +151,11 @@ describe('createAdvancedUiGenerator — identity', () => {
       innerGenerator: makeStubGenerator([]),
     });
     expect(gen.slug).toBe(ADVANCED_GENERATOR_SLUG);
-    expect(gen.slug).toBe('ui-gen-advanced-opus-4-7');
+    expect(gen.slug).toBe('ui-gen-advanced');
     expect(gen.tier).toBe(ADVANCED_GENERATOR_TIER);
     expect(gen.tier).toBe('advanced');
     expect(gen.model).toBe(ADVANCED_GENERATOR_MODEL);
-    expect(gen.model).toBe('opus-4-7');
+    expect(gen.model).toBe('anthropic/claude-opus-4-7');
   });
 });
 
@@ -220,8 +220,8 @@ describe('createAdvancedUiGenerator — producer failure pass-through', () => {
       },
       metadata: {
         provider: 'anthropic',
-        generator: 'stub-default',
-        model: 'opus-4-7',
+        generator: 'ui-gen-stub',
+        model: 'anthropic/claude-opus-4-7',
         inputTokens: 0,
         outputTokens: 0,
         latencyMs: 100,
@@ -436,9 +436,9 @@ describe('createAdvancedUiGenerator — feedback accumulates across iterations',
     // Stub inner so we can inspect the prompts it receives.
     const calls: string[] = [];
     const inner: UiGenerator = {
-      slug: 'stub-inspect',
+      slug: 'ui-gen-inspect',
       tier: 'default',
-      model: 'stub',
+      model: 'anthropic/claude-haiku-4-5',
       generate: async (input) => {
         calls.push(input.request.prompt);
         return makeStubResult({

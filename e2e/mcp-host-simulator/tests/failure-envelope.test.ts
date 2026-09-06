@@ -49,9 +49,9 @@ describe('host-simulator: ggui_render failure envelope against OSS createGguiSer
         // production failure, driving the handler down the
         // `handlerFailure` (in-result failure envelope) path.
         uiGenerator: {
-          slug: 'ui-gen-default-haiku-4-5',
+          slug: 'ui-gen-default',
           tier: 'default',
-          model: 'claude-haiku-4-5-20251001',
+          model: 'anthropic/claude-haiku-4-5',
           generate: async () => ({
             ok: false as const,
             error: {

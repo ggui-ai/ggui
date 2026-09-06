@@ -1,8 +1,11 @@
 /**
  * GeneratorRegistry — the registered-generator seam.
  *
- * One {@link UiGenerator} per (tier × model), addressable by a stable slug
- * `ui-gen-{tier}-{model}`. The registry is the operator-facing surface
+ * One {@link UiGenerator} per tier, addressable by a stable slug
+ * `ui-gen-{tier}`. The model a generator runs is its own field
+ * (`UiGenerator.model`) and never part of the identity (ggui#923), so a
+ * tier can move to a newer model without changing any key. The registry
+ * is the operator-facing surface
  * for declaring which generators are available on a given deployment.
  * {@link Blueprint} rows are keyed by the producing generator's slug;
  * the `ggui_ops_generate_blueprint` tool accepts the slug as a
@@ -11,19 +14,21 @@
  *
  * The single-generator path (every render routes to one factory-built
  * generator) is the default: the registry holds one entry whose slug
- * is `ui-gen-default-haiku-4-5` and the OSS render handler reads from
+ * is `ui-gen-default` and the OSS render handler reads from
  * `generation.uiGenerator` directly. This interface is the seam that
  * multi-generator dispatch builds on.
  *
- * Slug grammar (parser is liberal — extension-friendly):
+ * Slug grammar:
  *
- *   `ui-gen-<tier>-<model>` where tier is `default` | `advanced` | a
- *   future operator-defined value, and model is the canonical-model
- *   identifier the generator targets (e.g. `haiku-4-5`, `opus-4-7`,
- *   `sonnet-4-6`, `gemini-3-flash`, `gpt-5-codex`). The model segment
- *   carries everything after `ui-gen-<tier>-`, so dashes inside the
- *   model name are preserved (`haiku-4-5` parses as one model token).
+ *   `ui-gen-<tier>` where tier is `default` | `advanced` | a future
+ *   operator-defined value — exactly one `[a-z0-9]+` token. The grammar
+ *   is the protocol's (`GENERATOR_ID_PATTERN` / `isGeneratorId`, ggui#924);
+ *   this module only splits and joins. Nothing about the model is in the
+ *   slug: the model is the `model` field on the generator and on every
+ *   blueprint row it produces.
  */
+import { isGeneratorId } from '@ggui-ai/protocol';
+import type { GeneratorId } from '@ggui-ai/protocol';
 import type { UiGenerator, GeneratorTier } from './ui-generator.js';
 
 /**
@@ -31,11 +36,10 @@ import type { UiGenerator, GeneratorTier } from './ui-generator.js';
  */
 export interface GeneratorSlugParts {
   readonly tier: GeneratorTier;
-  readonly model: string;
 }
 
 /**
- * Validate a slug string against the `ui-gen-<tier>-<model>` grammar.
+ * Validate a slug string against the `ui-gen-<tier>` grammar.
  * Returns `true` iff the slug is syntactically well-formed; this does
  * not check whether a generator with that slug is actually registered.
  */
@@ -44,31 +48,19 @@ export function isValidGeneratorSlug(slug: string): boolean {
 }
 
 /**
- * Split a slug into `{tier, model}`. Returns `null` for any input that
- * doesn't match the grammar. The model segment captures everything
- * after the second dash, so `ui-gen-default-haiku-4-5` parses cleanly
- * with `tier='default'`, `model='haiku-4-5'`.
+ * Split a slug into `{tier}`. Returns `null` for any input that doesn't
+ * match the grammar — including a slug with a dash after the tier: the
+ * identity carries no model segment (ggui#923).
  *
  * Rules:
  *   - prefix MUST be `ui-gen-`
  *   - tier MUST be at least one character, no dashes, no whitespace
- *   - model MUST be at least one character (dashes allowed inside)
  *   - no leading / trailing whitespace
  */
 export function parseGeneratorSlug(slug: string): GeneratorSlugParts | null {
   if (typeof slug !== 'string') return null;
-  if (slug !== slug.trim()) return null;
-  if (!slug.startsWith('ui-gen-')) return null;
-  const rest = slug.slice('ui-gen-'.length);
-  // Disallow leading dash on the rest (no empty tier).
-  if (rest.length === 0 || rest.startsWith('-')) return null;
-  const dashIdx = rest.indexOf('-');
-  if (dashIdx <= 0) return null;
-  const tier = rest.slice(0, dashIdx);
-  const model = rest.slice(dashIdx + 1);
-  if (tier.length === 0 || model.length === 0) return null;
-  if (/\s/.test(tier) || /\s/.test(model)) return null;
-  return { tier, model };
+  if (!isGeneratorId(slug)) return null;
+  return { tier: slug.slice('ui-gen-'.length) };
 }
 
 /**
@@ -76,18 +68,14 @@ export function parseGeneratorSlug(slug: string): GeneratorSlugParts | null {
  * Throws on invalid input so callers can't accidentally register a
  * generator under a malformed slug.
  */
-export function formatGeneratorSlug(parts: GeneratorSlugParts): string {
-  if (!parts.tier || /\s|-/.test(parts.tier)) {
+export function formatGeneratorSlug(parts: GeneratorSlugParts): GeneratorId {
+  const slug = `ui-gen-${parts.tier}`;
+  if (!parts.tier || !isGeneratorId(slug)) {
     throw new Error(
-      `formatGeneratorSlug: tier must be a non-empty dashless / whitespace-free identifier, got ${JSON.stringify(parts.tier)}`,
+      `formatGeneratorSlug: tier must be a non-empty [a-z0-9]+ token (no dashes, no whitespace), got ${JSON.stringify(parts.tier)}`,
     );
   }
-  if (!parts.model || /\s/.test(parts.model)) {
-    throw new Error(
-      `formatGeneratorSlug: model must be a non-empty whitespace-free identifier, got ${JSON.stringify(parts.model)}`,
-    );
-  }
-  return `ui-gen-${parts.tier}-${parts.model}`;
+  return slug;
 }
 
 /**
@@ -114,7 +102,7 @@ export interface GeneratorRegistry {
    * Look up a generator by slug. Returns `null` when no generator with
    * that slug is registered. Callers MUST handle the `null` case —
    * an absent slug typically reflects a misconfigured operator deploy
-   * (e.g. agent requested `ui-gen-advanced-opus-4-7` against a
+   * (e.g. agent requested `ui-gen-advanced` against a
    * server that didn't install Playwright).
    */
   get(slug: string): UiGenerator | null;

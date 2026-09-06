@@ -3375,8 +3375,8 @@ export interface CreateGguiServerOptions {
 
   /**
    * Optional multi-generator registry. When present, exposes named
-   * generators (e.g. `ui-gen-default-haiku-4-5`,
-   * `ui-gen-advanced-opus-4-7`) for consumers such as the blueprint
+   * generators (e.g. `ui-gen-default`, `ui-gen-advanced`) for
+   * consumers such as the blueprint
    * matcher, `ggui_ops_generate_blueprint`, the LLM-driven variant
    * selector, the console blueprint UI, and the benchmark framework.
    *

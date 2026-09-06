@@ -21,8 +21,8 @@ function makeSeed(opts: { blueprintId?: string; appId?: string } = {}): Blueprin
     appId: opts.appId ?? 'app-1',
     source: {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     variance: {},
     createdAt: '2026-05-12T00:00:00.000Z',

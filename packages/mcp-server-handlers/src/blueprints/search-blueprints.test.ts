@@ -78,8 +78,8 @@ describe('createSearchBlueprintsHandler', () => {
     // Seed two blueprints — one close to the query text, one orthogonal.
     await seed(embedding, vectors, 'app-a', 'bp_weather', 'weather card', {
       sourceKind: 'llm',
-      sourceGenerator: 'ui-gen-default-haiku-4-5',
-      sourceModel: 'claude-haiku-4-5',
+      sourceGenerator: 'ui-gen-default',
+      sourceModel: 'anthropic/claude-haiku-4-5',
     });
     await seed(embedding, vectors, 'app-a', 'bp_kanban', 'kanban board');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });

@@ -12,7 +12,7 @@ import type { LLMCaller, ToolSchema } from '../llm-caller.js';
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
-/** Default bench model — matches the `ui-gen-default-haiku-4-5` slug. */
+/** Default bench model — the model the `ui-gen-default` seed generator declares. */
 export const DEFAULT_MODEL = 'claude-haiku-4-5';
 
 /** Haiku 4.5 token pricing (USD per token) for the cost report. */

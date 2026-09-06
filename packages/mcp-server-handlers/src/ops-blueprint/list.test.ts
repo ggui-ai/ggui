@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Blueprint, DataContract } from '@ggui-ai/protocol';
+import type { Blueprint, DataContract, GeneratorId } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   InMemoryBlueprintStore,
@@ -20,8 +20,8 @@ function makeBlueprint(opts: {
   blueprintId: string;
   appId?: string;
   contract?: DataContract;
-  /** llm-arm engine slug shorthand; `source` wins when both are set. */
-  generator?: string;
+  /** llm-arm engine identity shorthand; `source` wins when both are set. */
+  generator?: GeneratorId;
   source?: Blueprint['source'];
   persona?: string;
   createdAt?: string;
@@ -33,8 +33,8 @@ function makeBlueprint(opts: {
     appId: opts.appId ?? 'app-1',
     source: opts.source ?? {
       kind: 'llm',
-      generator: opts.generator ?? 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: opts.generator ?? 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     variance: opts.persona !== undefined ? { persona: opts.persona } : {},
     createdAt: opts.createdAt ?? '2026-05-12T00:00:00.000Z',
@@ -120,14 +120,14 @@ describe('createGguiOpsListBlueprintsHandler — indexed list path', () => {
       makeBlueprint({
         blueprintId: 'haiku',
         contract: c1,
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
       }),
     );
     await deps.blueprintStore.put(
       makeBlueprint({
         blueprintId: 'opus',
         contract: c1,
-        generator: 'ui-gen-advanced-opus-4-7',
+        generator: 'ui-gen-advanced',
       }),
     );
 
@@ -135,7 +135,7 @@ describe('createGguiOpsListBlueprintsHandler — indexed list path', () => {
     const result = await handler.handler(
       {
         contractHash: blueprintKey(c1),
-        generator: 'ui-gen-advanced-opus-4-7',
+        generator: 'ui-gen-advanced',
       },
       makeCtx('app-1'),
     );
@@ -156,7 +156,7 @@ describe('createGguiOpsListBlueprintsHandler — indexed list path', () => {
       makeBlueprint({
         blueprintId: 'engine-made',
         contract: c1,
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
       }),
     );
 
@@ -164,7 +164,7 @@ describe('createGguiOpsListBlueprintsHandler — indexed list path', () => {
     const result = await handler.handler(
       {
         contractHash: blueprintKey(c1),
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
       },
       makeCtx('app-1'),
     );

@@ -40,7 +40,7 @@ function fakeGenerator(impl: () => Promise<UiGenerateResult>): UiGenerator {
   return {
     slug: 'ui-gen-default-test',
     tier: 'default',
-    model: 'test',
+    model: 'anthropic/claude-haiku-4-5',
     generate: impl,
   };
 }
@@ -111,7 +111,7 @@ describe('withBrowserCompile', () => {
       metadata: {
         provider: 'anthropic',
         generator: 'ui-gen-default-test',
-        model: 'claude-opus-4-7',
+        model: 'anthropic/claude-opus-4-7',
         inputTokens: 10,
         outputTokens: 20,
         latencyMs: 42,
@@ -161,7 +161,7 @@ describe('withBrowserCompile', () => {
       metadata: {
         provider: 'anthropic',
         generator: 'ui-gen-default-test',
-        model: 'claude-opus-4-7',
+        model: 'anthropic/claude-opus-4-7',
         inputTokens: 10,
         outputTokens: 20,
         latencyMs: 1,

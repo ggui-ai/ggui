@@ -32,8 +32,8 @@ function makeSeed(opts: {
     appId: opts.appId ?? 'app-1',
     source: {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     codeHash: 'codehash_abc',
     variance: {

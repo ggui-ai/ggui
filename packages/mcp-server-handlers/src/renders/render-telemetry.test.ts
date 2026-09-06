@@ -88,8 +88,8 @@ const fakeGenerator =
     response: { sessionId: input.request.sessionId, componentCode },
     metadata: {
       provider: 'anthropic',
-      generator: 'fake-generator',
-      model: 'fake',
+      generator: 'ui-gen-fake',
+      model: 'anthropic/fake',
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: 0,
@@ -157,7 +157,7 @@ async function buildHarness(opts: {
       uiGenerator: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
-        model: 'fake',
+        model: 'anthropic/claude-haiku-4-5',
         generate: fakeGenerator('export default function T(){return null}'),
       },
       resolveLlm: () => null,

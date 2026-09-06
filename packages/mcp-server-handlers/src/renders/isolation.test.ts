@@ -188,7 +188,7 @@ async function renderFailingFor(
       uiGenerator: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
-        model: 'fake',
+        model: 'anthropic/claude-haiku-4-5',
         generate: failingGenerator,
       },
       resolveLlm: () => null,

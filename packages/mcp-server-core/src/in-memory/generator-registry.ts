@@ -3,7 +3,7 @@
  *
  * Seam between {@link UiGenerator} implementations and the
  * `createGguiServer` composition. Operators register one or more named
- * generators (`ui-gen-default-haiku-4-5`, `ui-gen-advanced-opus-4-7`,
+ * generators (`ui-gen-default`, `ui-gen-advanced`,
  * etc.); the render handler today still reads `generation.uiGenerator`
  * directly, but the blueprint matcher and the
  * `ggui_ops_generate_blueprint` tool dispatch via this registry.

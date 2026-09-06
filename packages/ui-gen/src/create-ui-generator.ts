@@ -35,7 +35,10 @@ import type {
   GadgetDescriptor,
   GenerationError,
   JsonObject,
+  GeneratorId,
+  ModelRef,
 } from '@ggui-ai/protocol';
+import { isGeneratorId, modelRefOfRoute } from '@ggui-ai/protocol';
 import type { GadgetCatalogAdapter } from '@ggui-ai/gadgets';
 import type {
   GenerationMetadata,
@@ -65,7 +68,7 @@ import type { AgentConfig } from './harness/llm-router.js';
 
 /** The slug for the OSS default seed generator. */
 const DEFAULT_TIER: GeneratorTier = 'default';
-const DEFAULT_MODEL = 'haiku-4-5';
+const DEFAULT_MODEL: ModelRef = 'anthropic/claude-haiku-4-5';
 
 export interface CreateUiGeneratorOptions {
   /**
@@ -86,24 +89,25 @@ export interface CreateUiGeneratorOptions {
   /** Quality config controlling eval tiers + improvement behavior. */
   readonly qualityConfig?: QualityConfig;
   /**
-   * Generator identity — registry key + parsed components.
+   * Generator identity — registry key + declared model.
    *
-   * The tier + model determine the {@link UiGenerator.slug} the
-   * factory bakes onto the returned generator. Defaults to
-   * `{tier: 'default', model: 'haiku-4-5'}` → slug
-   * `ui-gen-default-haiku-4-5`, the OSS seed.
+   * The tier alone determines the {@link UiGenerator.slug} the factory
+   * bakes onto the returned generator (`ui-gen-<tier>`); `model` is the
+   * generator's declared model field and is never part of the slug
+   * (ggui#923). Defaults to tier `'default'` → slug `ui-gen-default`,
+   * the OSS seed, with the factory's default model.
    *
    * The actual model used per request still comes from
    * `UiGenerateInput.llm.model` (operators may override via BYOK).
    * The identity here is the registry-level handle, not a runtime
    * model constraint.
    *
-   * Mutually-exclusive shortcut: pass `slug` instead and the factory
-   * parses it for you. The slug + tier/model overloads conflict; the
-   * factory throws if both are supplied.
+   * Mutually-exclusive shortcut: pass `slug` instead of `tier` and the
+   * factory parses the tier from it; `model` may accompany either form.
+   * The factory throws if `slug` and `tier` are both supplied.
    */
   readonly tier?: GeneratorTier;
-  readonly model?: string;
+  readonly model?: ModelRef;
   readonly slug?: string;
   /**
    * Per-deployment gadget descriptor source. Wired once at factory
@@ -321,7 +325,7 @@ export function createUiGenerator(
         const metadata: GenerationMetadata = {
           provider: input.llm.provider,
           generator: identity.slug,
-          model: input.llm.model,
+          model: modelRefOfRoute(input.llm),
           inputTokens: result.tokens.input,
           outputTokens: result.tokens.output,
           latencyMs: Date.now() - startedAt,
@@ -362,7 +366,7 @@ export function createUiGenerator(
           metadata: {
             provider: input.llm.provider,
             generator: identity.slug,
-            model: input.llm.model,
+            model: modelRefOfRoute(input.llm),
             inputTokens: 0,
             outputTokens: 0,
             latencyMs: Date.now() - startedAt,
@@ -381,29 +385,29 @@ export function createUiGenerator(
 }
 
 function resolveIdentity(opts: CreateUiGeneratorOptions): {
-  slug: string;
+  slug: GeneratorId;
   tier: GeneratorTier;
-  model: string;
+  model: ModelRef;
 } {
   const hasSlug = typeof opts.slug === 'string' && opts.slug.length > 0;
-  const hasTierOrModel = opts.tier !== undefined || opts.model !== undefined;
-  if (hasSlug && hasTierOrModel) {
+  if (hasSlug && opts.tier !== undefined) {
     throw new Error(
-      'createUiGenerator: pass either { slug } or { tier, model } — not both.',
+      'createUiGenerator: pass either { slug } or { tier } — not both.',
     );
   }
+  const model = opts.model ?? DEFAULT_MODEL;
   if (hasSlug) {
-    const parsed = parseGeneratorSlug(opts.slug!);
-    if (!parsed) {
+    const slug = opts.slug!;
+    const parsed = parseGeneratorSlug(slug);
+    if (!parsed || !isGeneratorId(slug)) {
       throw new Error(
-        `createUiGenerator: slug ${JSON.stringify(opts.slug)} is not a valid ui-gen-<tier>-<model> identifier.`,
+        `createUiGenerator: slug ${JSON.stringify(slug)} is not a valid ui-gen-<tier> identifier.`,
       );
     }
-    return { slug: opts.slug!, tier: parsed.tier, model: parsed.model };
+    return { slug, tier: parsed.tier, model };
   }
   const tier = opts.tier ?? DEFAULT_TIER;
-  const model = opts.model ?? DEFAULT_MODEL;
-  const slug = formatGeneratorSlug({ tier, model });
+  const slug = formatGeneratorSlug({ tier });
   if (!isValidGeneratorSlug(slug)) {
     // Unreachable: formatGeneratorSlug throws on malformed components,
     // so a slug it returns must parse. Defensive check kept to surface
@@ -442,7 +446,7 @@ function mapRendering(
 
 function failWithoutMetadata(
   input: UiGenerateInput,
-  generatorSlug: string,
+  generatorSlug: GeneratorId,
   startedAt: number,
   error: GenerationError,
 ): UiGenerateResult {
@@ -452,7 +456,7 @@ function failWithoutMetadata(
     metadata: {
       provider: input.llm.provider,
       generator: generatorSlug,
-      model: input.llm.model,
+      model: modelRefOfRoute(input.llm),
       inputTokens: 0,
       outputTokens: 0,
       latencyMs: Date.now() - startedAt,

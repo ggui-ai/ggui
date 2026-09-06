@@ -26,7 +26,7 @@ const rec2 = toPortableBlueprint({
   contract: { propsSpec: { properties: { y: { schema: { type: 'number' } } } } },
   componentCode: 'export default () => 42;',
   variance: {},
-  source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+  source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
 });
 
 /**
@@ -100,8 +100,8 @@ describe('pool artifact codec', () => {
     expect(byHash.get(rec2.contractHash)?.componentCode).toBe(rec2.componentCode);
     expect(byHash.get(rec2.contractHash)?.source).toEqual({
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     });
   });
 

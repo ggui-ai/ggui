@@ -59,8 +59,8 @@ function makeBlueprint(
     codeHash: overrides.codeHash,
     source: overrides.source ?? {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},
@@ -337,8 +337,8 @@ export function runBlueprintSearchConformance(
               variance: { persona: 'minimalist' },
               source: {
                 kind: 'llm',
-                generator: 'ui-gen-default-haiku-4-5',
-                model: 'claude-haiku-4-5',
+                generator: 'ui-gen-default',
+                model: 'anthropic/claude-haiku-4-5',
               },
             }),
           );
@@ -348,15 +348,15 @@ export function runBlueprintSearchConformance(
               variance: { persona: 'minimalist' },
               source: {
                 kind: 'llm',
-                generator: 'ui-gen-advanced-opus-4-7',
-                model: 'claude-opus-4-7',
+                generator: 'ui-gen-advanced',
+                model: 'anthropic/claude-opus-4-7',
               },
             }),
           );
           const result = await search.search({
             appId: 'app-1',
             variance: { persona: 'minimalist' },
-            generator: 'ui-gen-default-haiku-4-5',
+            generator: 'ui-gen-default',
           });
           expect(result).toHaveLength(1);
           expect(result[0]!.blueprint.blueprintId).toBe('bp-haiku');
@@ -375,7 +375,7 @@ export function runBlueprintSearchConformance(
           const result = await search.search({
             appId: 'app-1',
             variance: { persona: 'minimalist' },
-            generator: 'ui-gen-default-haiku-4-5',
+            generator: 'ui-gen-default',
           });
           expect(result).toHaveLength(0);
         });

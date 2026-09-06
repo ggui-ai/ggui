@@ -104,9 +104,9 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
       index,
       generation: {
         uiGenerator: {
-          slug: "ui-gen-default-haiku-4-5",
+          slug: "ui-gen-default",
           tier: "default",
-          model: "claude-haiku-4-5",
+          model: "anthropic/claude-haiku-4-5",
           generate: async () => {
             generatorCalls.count += 1;
             return {
@@ -118,8 +118,8 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
               },
               metadata: {
                 provider: "anthropic",
-                generator: "ui-gen-default-haiku-4-5",
-                model: "claude-opus-4-7",
+                generator: "ui-gen-default",
+                model: "anthropic/claude-opus-4-7",
                 inputTokens: 0,
                 outputTokens: 0,
                 latencyMs: 0,
