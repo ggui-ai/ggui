@@ -829,6 +829,21 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(seen.at(-1)).toBe(false);
   });
 
+  it('passes generation to postSuccessHook — the generator\'s model on cold gen, null on blueprint reuse (ggui#884)', async () => {
+    const seen: Array<{ readonly model: string } | null> = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
+      seen.push(a.generation);
+    };
+
+    const cold = await buildColdGenHarness({ postSuccessHook });
+    await cold.harness.handler.handler({ handshakeId: cold.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toEqual({ model: 'fake' });
+
+    const cache = await buildAcceptCacheHarness({ postSuccessHook });
+    await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toBeNull();
+  });
+
   it('threads the matcher cosine onto the committed cacheHit.similarity — and falls back to 1 only for skew-era records (#564)', async () => {
     // Record persisted WITH the matcher cosine (post-#564 pod).
     const withCosine = await buildAcceptCacheHarnessFor(CONTRACT, {
@@ -1898,6 +1913,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     behavior:
       | { readonly kind: 'result'; readonly error: import('@ggui-ai/protocol').GenerationError }
       | { readonly kind: 'throw'; readonly message: string },
+    extra: { readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'] } = {},
   ): Promise<{
     readonly handler: ReturnType<typeof createGguiRenderHandler>;
     readonly renderStore: InMemoryGguiSessionStore;
@@ -1917,6 +1933,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     );
     const notified: Array<{ sessionId: string; error?: string }> = [];
     const handler = createGguiRenderHandler({
+      ...(extra.postSuccessHook ? { postSuccessHook: extra.postSuccessHook } : {}),
       handshakeStore,
       renderStore,
       channelNotifier: {
@@ -2033,6 +2050,17 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     expect(parsed.nextStep).toBeUndefined();
     // Internal seams still ride the pre-parse data for in-process readers.
     expect(out.data.codeReady).toBe(false);
+  });
+
+  it('passes generation: null to postSuccessHook when the generation failed — no interface, no model to price (ggui#884)', async () => {
+    const seen: Array<{ readonly model: string } | null> = [];
+    const { handler, handshakeId } = await buildFailingHarness(
+      { kind: 'result', error: { code: 'PRODUCTION_FAILED', message: 'provider 500' } },
+      { postSuccessHook: async (a) => { seen.push(a.generation); } },
+    );
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    expect(seen).toEqual([null]);
   });
 
   it('content text follows the pinned guidance format', async () => {

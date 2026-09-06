@@ -428,6 +428,14 @@ export interface GguiSessionPostSuccessArgs {
    */
   readonly cacheHit: boolean;
   /**
+   * The model a generation ran for this render, as the generator reported
+   * it (`UiGenerateResult.metadata.model`) — the route that actually ran.
+   * `null` when no model ran: a blueprint reuse, or a generation that
+   * failed before producing an interface. A hook that prices or audits by
+   * model reads it here instead of re-deriving the route (ggui#884).
+   */
+  readonly generation: { readonly model: string } | null;
+  /**
    * Identity of the stored component that served this render — the
    * same value the wire output's `blueprintId` carries (empty string
    * on the genuinely-no-component branches, §9.1
@@ -1853,6 +1861,9 @@ export function createGguiRenderHandler(
     // which surface `blueprintId: ''` per spec §9.1 present-on-
     // materialisation.
     let resolvedBlueprintId: string | undefined;
+    // ggui#884 — the model a generation ran, for the post-success hook; null
+    // until a generation produces an interface (reuse and failure leave it).
+    let generationRan: { readonly model: string } | null = null;
 
     // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
     // the MCP Apps protocol probe diagnostic system card.
@@ -2295,6 +2306,11 @@ export function createGguiRenderHandler(
           },
         );
         generatedCodeReady = outcome.ok;
+        // A component materialised with an LLM source ⇒ a model ran; the
+        // no-component branches carry no source and leave it null.
+        if (outcome.ok && outcome.source !== undefined) {
+          generationRan = { model: outcome.source.model };
+        }
         if (!outcome.ok) {
           generationFailure = outcome.failure;
         }
@@ -2535,6 +2551,7 @@ export function createGguiRenderHandler(
           action,
           codeReady: false,
           cacheHit: false,
+          generation: null,
           // Mirrors the failure envelope above: no component
           // materialised ⇒ empty-sentinel id; the variant axis is
           // still the one the attempt keyed on.
@@ -2648,6 +2665,7 @@ export function createGguiRenderHandler(
         // `cacheMarker ?? { hit: false, … }`, set on BOTH the
         // blueprint-reuse and cold-gen branches above.
         cacheHit: result.cache.hit,
+        generation: generationRan,
         // Same values the wire result carries — see the `result`
         // assembly above for the per-branch semantics.
         blueprintId: result.blueprintId,
