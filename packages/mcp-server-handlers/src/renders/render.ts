@@ -61,6 +61,8 @@ import {
   type RefusedRenderOutput,
   renderInputEnvelopeSchema,
   renderInputRouteGuardSchema,
+  PRE_GENERATION_REFUSAL_CODES,
+  renderRefusalSchema,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -83,7 +85,7 @@ import type {
   UiGenerateInput,
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
-import { RateLimitedError } from '@ggui-ai/mcp-server-core';
+import type { RateLimitDecision } from '@ggui-ai/mcp-server-core';
 import {
   defineHandler,
   handlerFailure,
@@ -541,11 +543,11 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
 
   /**
    * Admission-control seam. When present, every `ggui_render` call is
-   * gated through `rateLimiter.check({key, cost: 1})` BEFORE the
-   * handler's state-changing work begins. Denials throw
-   * `RateLimitedError`; the transport layer projects the carried
-   * {@link import('@ggui-ai/mcp-server-core').RateLimitDecision} to
-   * HTTP 429 + `Retry-After` / `X-RateLimit-*` headers.
+   * gated through `rateLimiter.check({key, cost: 1})` right after the
+   * pre-validation gate, BEFORE any store read. A denial is projected as
+   * the registry's `app_rate_limited` refusal — `outcome: 'refused'`,
+   * `retry: 'later'` carrying the decision's `retryAfterMs`, handshake
+   * intact — never thrown (SPEC §7.1; ggui#886).
    *
    * Key composition: `ggui_render:<appId>:<apiKeyHash|userId|anon>`.
    * The key carries the isolation units the seam knows about — the
@@ -1181,6 +1183,29 @@ export async function assertKnownThemeId(
   });
 }
 
+
+/**
+ * The per-app render-rate cap's denial as the registry's refusal
+ * (ggui#886): `app_rate_limited`, retry `later`, handshake intact. The
+ * bucket key carries identity material (app + credential hash) and stays
+ * OFF the message; the decision's `retryAfterMs` is the agent's cue.
+ */
+function rateCapRefusal(decision: RateLimitDecision): PreGenerationRefusal {
+  const retryAfterMs = decision.retryAfterMs ?? 0;
+  const wait = retryAfterMs > 0 ? ` for another ${retryAfterMs}ms` : '';
+  // The code comes from the registry (the protocol's pin forbids a code as
+  // a string literal outside it); the registry's rows are typed uniformly,
+  // so the wire enum's own parse narrows it to a render-gate code.
+  const code = renderRefusalSchema.shape.code.parse(PRE_GENERATION_REFUSAL_CODES.app_rate_limited.code);
+  return {
+    code,
+    message: `this app is rendering faster than the rate this deployment allows it — the per-app render-rate cap denied the call${wait}`,
+    fix: `wait${retryAfterMs > 0 ? ` ${retryAfterMs}ms` : ''}, then retry the same call with the same handshakeId`,
+    retry: 'later',
+    handshake: 'intact',
+  };
+}
+
 /**
  * Run the failure hook without letting its own failure replace the
  * render's: the hook's throw is reported (one-shot warn — the handler has
@@ -1386,17 +1411,6 @@ export function createGguiRenderHandler(
 
     // Admission check. Fires BEFORE state changes — a rate-limited
     // caller should get 429 without the server doing any real work.
-    if (deps.rateLimiter) {
-      const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? ctx.userId ?? "anon"}`;
-      const decision = await deps.rateLimiter.check({
-        key: limiterKey,
-        cost: 1,
-      });
-      if (!decision.allowed) {
-        throw new RateLimitedError(limiterKey, decision);
-      }
-    }
-
     // Single deterministic contract gate — the SAME `validateContract`
     // the handshake backstop runs (retired fields, inner-schema
     // validity, cross-references, name invariants, schema-compat). On
@@ -2718,6 +2732,24 @@ export function createGguiRenderHandler(
           // (ggui#803 leg 9) — the same projection the reference server
           // answers with, graded by the kit through both.
           const projected = projectRenderRefusal(refusal);
+          return handlerFailure<RefusedRenderOutput>(
+            projected.structuredContent,
+            projected.content[0].text,
+          );
+        }
+      }
+
+      // Admission control (ggui#886): the per-app render-rate cap is a
+      // render-gate REFUSAL — `app_rate_limited`, retry 'later', handshake
+      // intact — projected exactly like a gate's, before any store read.
+      // A throw here would be a §7.1 conformance failure (the SDK would
+      // return prose with no code, no fix, no retry class). The bucket
+      // key carries identity material and stays off the message.
+      if (deps.rateLimiter) {
+        const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? ctx.userId ?? 'anon'}`;
+        const decision = await deps.rateLimiter.check({ key: limiterKey, cost: 1 });
+        if (!decision.allowed) {
+          const projected = projectRenderRefusal(rateCapRefusal(decision));
           return handlerFailure<RefusedRenderOutput>(
             projected.structuredContent,
             projected.content[0].text,

@@ -829,8 +829,9 @@ export function defaultHandlers(deps: {
      * Optional admission-control limiter. When present, `ggui_render`
      * gates every call through `rateLimiter.check({key:
      * 'ggui_render:<appId>:<apiKeyHash|anon>', cost:1})` before doing
-     * any work; denial surfaces as a `RateLimitedError`. Omitted =
-     * unlimited (the `NoopRateLimiter` server default).
+     * any work; a denial is the registry's `app_rate_limited` refusal
+     * (`outcome: 'refused'`, retry 'later', handshake intact — ggui#886).
+     * Omitted = unlimited (the `NoopRateLimiter` server default).
      */
     readonly rateLimiter?: RateLimiter;
     /**
@@ -2917,12 +2918,12 @@ export interface CreateGguiServerOptions {
   /**
    * Admission-control limiter applied at the highest-cost handler
    * ingress — today just `ggui_render`. Defaults to
-   * {@link NoopRateLimiter} (always allows). A denial throws
-   * `RateLimitedError`; on the MCP `tools/call` path the SDK surfaces
-   * it as an in-result `isError` tool error (the agent sees the
-   * retry hint and backs off — same in-result posture as the render
-   * failure envelope). When the error escapes to the HTTP layer
-   * instead, deployments map it to `429` via their `errorMapper`.
+   * {@link NoopRateLimiter} (always allows). A denial is projected as
+   * the registry's `app_rate_limited` refusal — `outcome: 'refused'`,
+   * `retry: 'later'` with the decision's `retryAfterMs`, handshake
+   * intact — the same in-result posture as every render-gate refusal
+   * (SPEC §7.1; ggui#886). Nothing is thrown, so nothing reaches an
+   * HTTP `errorMapper` from this seam.
    *
    * For real policy (per-app or per-identity windows), bind a
    * `FixedWindowRateLimiter` over a durable

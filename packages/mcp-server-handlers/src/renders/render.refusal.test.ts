@@ -38,6 +38,7 @@ import {
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
   EmbeddingProvider,
+  RateLimiter,
   UiGenerateResult,
 } from '@ggui-ai/mcp-server-core';
 import { renderOutputSchema } from '@ggui-ai/protocol';
@@ -127,6 +128,7 @@ const REFUSAL = {
  */
 function buildHarness(
   gate: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['preValidationGate'],
+  extra: { readonly rateLimiter?: RateLimiter } = {},
 ) {
   const handshakeStore = new InMemoryKeyValueStore();
   const renderStore = new InMemoryGguiSessionStore();
@@ -138,6 +140,7 @@ function buildHarness(
     renderStore,
     postSuccessHook,
     ...(gate ? { preValidationGate: gate } : {}),
+    ...(extra.rateLimiter ? { rateLimiter: extra.rateLimiter } : {}),
     generation: {
       uiGenerator: {
         slug: 'ui-gen-default-fake',
@@ -581,5 +584,58 @@ describe('ggui_render — postFailureHook (#804): every failure after the gate p
     });
     await expect(h.handler.handler({ handshakeId: 'hs-any', props: {} }, CTX)).rejects.toThrow('gate exploded');
     expect(postFailureHook).not.toHaveBeenCalled();
+  });
+});
+
+describe('ggui_render — the per-app render-rate cap denies as a REFUSAL, never a throw (ggui#886)', () => {
+  const denying: RateLimiter = {
+    check: async () => ({ allowed: false, remaining: 0, resetAt: Date.now() + 1500, retryAfterMs: 1500 }),
+  };
+  const allowing: RateLimiter = { check: async () => ({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 }) };
+
+  it("projects `app_rate_limited` (retry 'later', handshake intact) with the bucket key OFF the message; reads no handshake, commits nothing", async () => {
+    const h = buildHarness(undefined, { rateLimiter: denying });
+    await seedAgentHandshake(h.handshakeStore, 'hs-cap');
+    const out = await h.handler.handler({ handshakeId: 'hs-cap', props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+    expect(out.data.outcome).toBe('refused');
+    if (out.data.outcome !== 'refused') return;
+    expect(out.data.refusal.code).toBe('app_rate_limited');
+    expect(out.data.refusal.retry).toBe('later');
+    expect(out.data.refusal.handshake).toBe('intact');
+    expect(out.data.refusal.message).toContain('1500');
+    expect(out.data.refusal.message).not.toContain(APP_ID);
+    expect(out.data.refusal.message).not.toContain('ggui_render:');
+    expect(out.errorText.startsWith('app_rate_limited: ')).toBe(true);
+    expect(h.handshakeGet).not.toHaveBeenCalled();
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.postSuccessHook).not.toHaveBeenCalled();
+  });
+
+  it('the handshake IS intact — the same handshakeId renders once the cap allows', async () => {
+    let allowed = false;
+    const flipping: RateLimiter = {
+      check: async () =>
+        allowed
+          ? { allowed: true, remaining: 9, resetAt: Date.now() + 60_000 }
+          : { allowed: false, remaining: 0, resetAt: Date.now() + 10, retryAfterMs: 10 },
+    };
+    const h = buildHarness(undefined, { rateLimiter: flipping });
+    await seedAgentHandshake(h.handshakeStore, 'hs-cap-2');
+    const denied = await h.handler.handler({ handshakeId: 'hs-cap-2', props: {} }, CTX);
+    expect(isHandlerFailure(denied)).toBe(true);
+    allowed = true;
+    const rendered = await h.handler.handler({ handshakeId: 'hs-cap-2', props: {} }, CTX);
+    expect(isHandlerFailure(rendered)).toBe(false);
+    if (isHandlerFailure(rendered)) return;
+    expect(rendered.outcome).toBe('rendered');
+  });
+
+  it('an allowing limiter is invisible', async () => {
+    const h = buildHarness(undefined, { rateLimiter: allowing });
+    await seedAgentHandshake(h.handshakeStore, 'hs-cap-3');
+    const out = await h.handler.handler({ handshakeId: 'hs-cap-3', props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(false);
   });
 });
