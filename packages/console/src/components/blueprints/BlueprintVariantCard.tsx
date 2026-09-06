@@ -50,10 +50,14 @@ function toneForScore(score: number): 'live' | 'draft' | 'signal' {
 }
 
 /** Badge label for a variant's provenance. `llm`-sourced rows carry the
- *  engine's generator slug; `user` / `curated` rows have no engine
- *  provenance, so the kind itself is the truthful label. */
+ *  engine's generator identity AND the model it ran as its `ModelRef`
+ *  (`<prefix>/<model>`, the registry's spelling, rendered verbatim —
+ *  ggui#923: the identity no longer names the model, so the record's own
+ *  ref is shown beside it);
+ *  `user` / `curated` rows have no engine provenance, so the kind itself
+ *  is the truthful label. */
 function sourceLabel(source: BlueprintSource): string {
-  return source.kind === 'llm' ? source.generator : source.kind;
+  return source.kind === 'llm' ? `${source.generator} · ${source.model}` : source.kind;
 }
 
 export function BlueprintVariantCard({

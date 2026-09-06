@@ -29,12 +29,12 @@
 import type { ChangeEvent, ReactElement } from 'react';
 import type { BlueprintSource } from '@ggui-ai/protocol';
 
-/** Available generator slugs surfaced in the select. Pre-launch v1 ships
- *  two; the slug parser is liberal so future generators slot in here. */
-export const KNOWN_GENERATOR_SLUGS = [
-  'ui-gen-default-haiku-4-5',
-  'ui-gen-advanced-opus-4-7',
-] as const;
+/** Available generator identities surfaced in the select. Two ship; the
+ *  slug parser is liberal so future generators slot in here. Identities
+ *  name the ENGINE, never the model (ggui#923): the model a blueprint was
+ *  produced with is its own field (`source.model`), shown beside the
+ *  generator wherever the generator is shown. */
+export const KNOWN_GENERATOR_SLUGS = ['ui-gen-default', 'ui-gen-advanced'] as const;
 
 export type KnownGeneratorSlug = (typeof KNOWN_GENERATOR_SLUGS)[number];
 

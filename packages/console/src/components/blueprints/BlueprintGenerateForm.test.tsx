@@ -40,7 +40,7 @@ describe('BlueprintGenerateForm', () => {
       target: { value: 'glass card with rounded corners' },
     });
     fireEvent.change(screen.getByLabelText(/^generator$/i), {
-      target: { value: 'ui-gen-advanced-opus-4-7' },
+      target: { value: 'ui-gen-advanced' },
     });
     fireEvent.click(
       screen.getByLabelText(/pin as operator default for this contract/i),
@@ -55,7 +55,7 @@ describe('BlueprintGenerateForm', () => {
       contract: mockContract,
       persona: 'minimalist',
       seedPrompt: 'glass card with rounded corners',
-      generator: 'ui-gen-advanced-opus-4-7',
+      generator: 'ui-gen-advanced',
       setAsOperatorDefault: true,
     });
   });

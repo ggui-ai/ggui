@@ -48,11 +48,11 @@ describe('BlueprintFilterBar — emission', () => {
       />,
     );
     fireEvent.change(screen.getByLabelText(/filter by generator/i), {
-      target: { value: 'ui-gen-advanced-opus-4-7' },
+      target: { value: 'ui-gen-advanced' },
     });
     expect(onChange).toHaveBeenCalledWith({
       persona: '',
-      generator: 'ui-gen-advanced-opus-4-7',
+      generator: 'ui-gen-advanced',
       draftsOnly: false,
     });
   });
@@ -78,8 +78,8 @@ describe('blueprintMatchesFilters', () => {
   const baseBlueprint = {
     source: {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     } as const,
     variance: { persona: 'minimalist' as string | undefined },
     validatorScore: undefined as number | undefined,
@@ -115,7 +115,7 @@ describe('blueprintMatchesFilters', () => {
     expect(
       blueprintMatchesFilters(baseBlueprint, {
         persona: '',
-        generator: 'ui-gen-advanced-opus-4-7',
+        generator: 'ui-gen-advanced',
         draftsOnly: false,
       }),
     ).toBe(false);
@@ -132,7 +132,7 @@ describe('blueprintMatchesFilters', () => {
     expect(
       blueprintMatchesFilters(userSourced, {
         persona: '',
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
         draftsOnly: false,
       }),
     ).toBe(false);

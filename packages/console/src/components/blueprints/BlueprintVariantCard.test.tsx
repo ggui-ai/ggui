@@ -23,8 +23,8 @@ function makeBlueprint(overrides: Partial<Blueprint> = {}): Blueprint {
     appId: 'app-test',
     source: {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     variance: {},
     createdAt: '2026-05-12T00:00:00Z',
@@ -39,8 +39,8 @@ describe('BlueprintVariantCard — badges', () => {
     const blueprint = makeBlueprint({
       source: {
         kind: 'llm',
-        generator: 'ui-gen-advanced-opus-4-7',
-        model: 'claude-opus-4-7',
+        generator: 'ui-gen-advanced',
+        model: 'anthropic/claude-opus-4-7',
       },
       validatorScore: 0.87,
       createdBy: 'operator',
@@ -58,7 +58,9 @@ describe('BlueprintVariantCard — badges', () => {
       </ul>,
     );
     expect(screen.getByText(/persona: minimalist/i)).toBeTruthy();
-    expect(screen.getByText(/ui-gen-advanced-opus-4-7/)).toBeTruthy();
+    // ggui#923: the identity names the engine only — the model is shown beside it.
+    // The model is a ModelRef in the registry's spelling and renders verbatim — the prefix IS part of the identity.
+    expect(screen.getByText(/ui-gen-advanced · anthropic\/claude-opus-4-7/)).toBeTruthy();
     expect(screen.getByText(/score 0\.87/)).toBeTruthy();
     expect(screen.getByText(/by operator/i)).toBeTruthy();
   });

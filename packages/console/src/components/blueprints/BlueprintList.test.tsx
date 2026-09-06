@@ -29,8 +29,8 @@ function makeBlueprint(overrides: Partial<Blueprint> = {}): Blueprint {
     appId: 'app-test',
     source: {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     },
     variance: {},
     createdAt: '2026-05-12T00:00:00Z',
