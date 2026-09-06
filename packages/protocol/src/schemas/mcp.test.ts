@@ -146,13 +146,13 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           context: { domain: 'email' },
           seedPrompt: 'compact triage view',
         },
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
       },
       forceCreate: false,
     });
     expect(parsed.intent).toBe('show inbox');
     expect(parsed.blueprintDraft.variance?.persona).toBe('minimalist');
-    expect(parsed.blueprintDraft.generator).toBe('ui-gen-default-haiku-4-5');
+    expect(parsed.blueprintDraft.generator).toBe('ui-gen-default');
   });
 
   it('rejects an input with an empty intent', () => {
@@ -197,8 +197,8 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           codeHash: 'code_hash_abc',
           source: {
             kind: 'llm' as const,
-            generator: 'ui-gen-default-haiku-4-5',
-            model: 'claude-haiku-4-5',
+            generator: 'ui-gen-default',
+            model: 'anthropic/claude-haiku-4-5',
           },
           variance: {},
         },
@@ -262,8 +262,8 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           codeHash: 'code_1',
           source: {
             kind: 'llm' as const,
-            generator: 'ui-gen-default-haiku-4-5',
-            model: 'claude-haiku-4-5',
+            generator: 'ui-gen-default',
+            model: 'anthropic/claude-haiku-4-5',
           },
           variance: {},
         },
@@ -1350,7 +1350,7 @@ describe('tool output schemas — protocol owns every wire shape a handler regis
 
 describe('ggui_list_featured_blueprints — the provider row is its own wire statement (#817 part C, oss add)', () => {
   it('round-trips a BlueprintEntry row and is closed', () => {
-    const out = { blueprints: [{ id: 'bp_1', name: 'Todo', description: 'd', source: { kind: "llm", generator: 'x', model: 'x' }, updatedAt: '2026-09-05T00:00:00Z', tags: ['a'] }], total: 1 };
+    const out = { blueprints: [{ id: 'bp_1', name: 'Todo', description: 'd', source: { kind: "llm", generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' }, updatedAt: '2026-09-05T00:00:00Z', tags: ['a'] }], total: 1 };
     expect(gguiListFeaturedBlueprintsOutputSchema.parse(out)).toEqual(out);
     expect(Object.keys(gguiListFeaturedBlueprintsOutputSchema.shape).sort()).toEqual(['blueprints', 'total']);
     expect(gguiListFeaturedBlueprintsOutputSchema.parse({ ...out, extra: 1 })).toEqual(out);
@@ -1384,7 +1384,7 @@ describe('renderInputEnvelopeSchema — infra.model is a model route in either w
   });
   it('the registered shape stays parser-free — a browser bundle never validates a render input', () => {
     // The SDK validates this shape; the envelope (server-side) carries the grammar.
-    expect(renderInputShape.infra.parse({ model: 'claude-haiku-4-5' })).toEqual({ model: 'claude-haiku-4-5' });
+    expect(renderInputShape.infra.parse({ model: 'anthropic/claude-haiku-4-5' })).toEqual({ model: 'anthropic/claude-haiku-4-5' });
   });
 });
 

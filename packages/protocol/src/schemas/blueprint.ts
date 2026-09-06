@@ -16,21 +16,33 @@ import type {
   LlmBlueprintSource,
   UserBlueprintSource,
 } from '../types/blueprint-source';
+import { isGeneratorId } from '../types/blueprint-source';
+import { MODEL_REF_PREFIXES, isModelRef } from '../types/llm-route';
 import { dataContractSchema, jsonValueSchema } from './data-contract.js';
 
 /**
  * Zod mirror of {@link LlmBlueprintSource} — the engine-generated arm.
  * Both provenance fields are REQUIRED: every generation mint site has
  * them in scope, and an engine-generated artifact that cannot name its
- * engine + model is not a real state.
+ * engine + model is not a real state. Since ggui#924 the identity is
+ * de-modeled (`ui-gen-<tier>`) and the model is the run's `ModelRef`.
  */
 export const llmBlueprintSourceSchema: z.ZodType<LlmBlueprintSource> = z
   .object({
     kind: z.literal('llm'),
-    generator: z.string().min(1),
-    model: z.string().min(1),
+    // ggui#924: the de-modeled identity and the run's `ModelRef` — a
+    // modeled id, a bare model name or a second spelling is refused here,
+    // naming the field. Template literals (not `z.custom`) so the fields
+    // keep their literal types AND render to JSON Schema as `pattern` —
+    // this schema is embedded in tool inputs that `tools/list` renders.
+    generator: z.templateLiteral(['ui-gen-', z.string()]).refine(isGeneratorId, {
+      error: 'generator is the de-modeled identity `ui-gen-<tier>` — one tier token, no model segment (e.g. `ui-gen-default`)',
+    }),
+    model: z.templateLiteral([z.enum(MODEL_REF_PREFIXES), '/', z.string()]).refine(isModelRef, {
+      error: 'model is the run route in the registry spelling `<prefix>/<model>` (e.g. `anthropic/claude-haiku-4-5`)',
+    }),
   })
-  .strict() as z.ZodType<LlmBlueprintSource>;
+  .strict();
 
 /** Zod mirror of {@link UserBlueprintSource} — no engine claim exists. */
 export const userBlueprintSourceSchema: z.ZodType<UserBlueprintSource> = z

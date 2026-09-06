@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { GENERATOR_ID_PATTERN, isGeneratorId } from '../blueprint-source';
+import { isModelId, MODEL_IDS } from '../llm';
 import {
   BLUEPRINT_SOURCE_KINDS,
   FLAT_BLUEPRINT_SOURCE_KEYS,
@@ -11,17 +13,17 @@ import {
 describe('parseBlueprintSource', () => {
   it('parses the llm arm with required generator + model', () => {
     expect(
-      parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default', model: 'm-1' }),
-    ).toEqual({ kind: 'llm', generator: 'ui-gen-default', model: 'm-1' });
+      parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' }),
+    ).toEqual({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' });
   });
 
   it('rejects an llm arm missing generator or model — not a real state', () => {
     expect(parseBlueprintSource({ kind: 'llm' })).toBeNull();
-    expect(parseBlueprintSource({ kind: 'llm', generator: 'g' })).toBeNull();
-    expect(parseBlueprintSource({ kind: 'llm', model: 'm' })).toBeNull();
-    expect(parseBlueprintSource({ kind: 'llm', generator: '', model: 'm' })).toBeNull();
-    expect(parseBlueprintSource({ kind: 'llm', generator: 'g', model: '' })).toBeNull();
-    expect(parseBlueprintSource({ kind: 'llm', generator: 42, model: 'm' })).toBeNull();
+    expect(parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default' })).toBeNull();
+    expect(parseBlueprintSource({ kind: 'llm', model: 'anthropic/claude-haiku-4-5' })).toBeNull();
+    expect(parseBlueprintSource({ kind: 'llm', generator: '', model: 'anthropic/claude-haiku-4-5' })).toBeNull();
+    expect(parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default', model: '' })).toBeNull();
+    expect(parseBlueprintSource({ kind: 'llm', generator: 42, model: 'anthropic/claude-haiku-4-5' })).toBeNull();
   });
 
   it('parses the user and curated arms', () => {
@@ -59,7 +61,7 @@ describe('parseBlueprintSource', () => {
 describe('isBlueprintSource', () => {
   it('mirrors parseBlueprintSource', () => {
     expect(isBlueprintSource({ kind: 'user' })).toBe(true);
-    expect(isBlueprintSource({ kind: 'llm', generator: 'g', model: 'm' })).toBe(true);
+    expect(isBlueprintSource({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' })).toBe(true);
     expect(isBlueprintSource({ kind: 'llm' })).toBe(false);
     expect(isBlueprintSource('curated')).toBe(false);
   });
@@ -68,8 +70,8 @@ describe('isBlueprintSource', () => {
 describe('flat-provenance codec (blueprintSourceToFlat / flatToBlueprintSource)', () => {
   it('flattens the llm arm to the full sourceKind/sourceGenerator/sourceModel triple', () => {
     expect(
-      blueprintSourceToFlat({ kind: 'llm', generator: 'ui-gen-default', model: 'm-1' }),
-    ).toEqual({ sourceKind: 'llm', sourceGenerator: 'ui-gen-default', sourceModel: 'm-1' });
+      blueprintSourceToFlat({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' }),
+    ).toEqual({ sourceKind: 'llm', sourceGenerator: 'ui-gen-default', sourceModel: 'anthropic/claude-haiku-4-5' });
   });
 
   it('flattens non-llm arms to the bare sourceKind — no vestigial scalars', () => {
@@ -79,7 +81,7 @@ describe('flat-provenance codec (blueprintSourceToFlat / flatToBlueprintSource)'
 
   it('round-trips every arm through the flat encoding', () => {
     const arms = [
-      { kind: 'llm', generator: 'g', model: 'm' },
+      { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
       { kind: 'user' },
       { kind: 'curated' },
     ] as const;
@@ -94,11 +96,11 @@ describe('flat-provenance codec (blueprintSourceToFlat / flatToBlueprintSource)'
     const row: Record<string, unknown> = {
       blueprintId: 'bp-1',
       sourceKind: 'llm',
-      sourceGenerator: 'g',
-      sourceModel: 'm',
+      sourceGenerator: 'ui-gen-default',
+      sourceModel: 'anthropic/claude-haiku-4-5',
       score: 3,
     };
-    expect(flatToBlueprintSource(row)).toEqual({ kind: 'llm', generator: 'g', model: 'm' });
+    expect(flatToBlueprintSource(row)).toEqual({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' });
   });
 
   it('sheds vestigial sourceGenerator/sourceModel on non-llm rows (canonical rebuild)', () => {
@@ -123,5 +125,32 @@ describe('flat-provenance codec (blueprintSourceToFlat / flatToBlueprintSource)'
       generator: 'sourceGenerator',
       model: 'sourceModel',
     });
+  });
+});
+
+describe('LlmBlueprintSource — the de-modeled generator identity and the registry model (ggui#924)', () => {
+  it('accepts a one-token tier identity with a registry model id', () => {
+    expect(parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' })).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
+    });
+    expect(isGeneratorId('ui-gen-advanced')).toBe(true);
+    expect(isGeneratorId('ui-gen-fast')).toBe(true);
+    expect(GENERATOR_ID_PATTERN.test('ui-gen-default')).toBe(true);
+  });
+
+  it('refuses a modeled identity — the model segment is a field now, never part of the id', () => {
+    expect(parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'anthropic/claude-haiku-4-5' })).toBeNull();
+    expect(isGeneratorId('ui-gen-advanced-opus-4-7')).toBe(false);
+    expect(isGeneratorId('ui-gen-')).toBe(false);
+    expect(isGeneratorId('gen-default')).toBe(false);
+  });
+
+  it('refuses a model that is not a registry id — bare names included', () => {
+    expect(parseBlueprintSource({ kind: 'llm', generator: 'ui-gen-advanced', model: 'claude-opus-4-7' })).toBeNull();
+    expect(isModelId('claude-opus-4-7')).toBe(false);
+    expect(isModelId('anthropic/claude-opus-4-7')).toBe(true);
+    expect(MODEL_IDS).toContain('anthropic/claude-haiku-4-5');
   });
 });

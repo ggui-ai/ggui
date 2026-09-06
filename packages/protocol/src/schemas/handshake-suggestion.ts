@@ -8,6 +8,7 @@
  * `z.ZodType<T>` so any drift fails compile.
  */
 import { z } from 'zod';
+import { GENERATOR_ID_PATTERN } from '../types/blueprint-source';
 import type {
   BlueprintDraft,
   BlueprintMeta,
@@ -67,7 +68,15 @@ export const blueprintDraftObjectSchema = z
       // rejection message) that `blueprintMeta.variance` projects on the
       // way back out (ggui#523 item 1 — the mirror-of-a-mirror is gone).
       variance: blueprintVarianceSchema.optional(),
-      generator: z.string().optional(),
+      generator: z
+        .string()
+        .regex(GENERATOR_ID_PATTERN, {
+          error: 'generator is an identity `ui-gen-<tier>` — one tier token, no model segment (ggui#924)',
+        })
+        .optional()
+        .describe(
+          'Generator identity hint — `ui-gen-default` or `ui-gen-advanced` (one tier token, no model segment). The deployment picks the model and reports it on `source.model`.',
+        ),
     },
     {
       error: (issue) =>

@@ -18,7 +18,7 @@ const src: PortableBlueprintSource = {
   contract,
   componentCode: 'export default function C(){return null}',
   variance: { persona: 'minimal' },
-  source: { kind: 'llm', generator: 'ui-gen-default', model: 'test-model-1' },
+  source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
 };
 
 describe('toPortableBlueprint', () => {
@@ -32,7 +32,7 @@ describe('toPortableBlueprint', () => {
     expect(p.source).toEqual({
       kind: 'llm',
       generator: 'ui-gen-default',
-      model: 'test-model-1',
+      model: 'anthropic/claude-haiku-4-5',
     });
     expect(p.generatorProtocolVersion).toBe(PROTOCOL_VERSION);
   });

@@ -475,6 +475,14 @@ export interface ModelConfig extends ModelConfigBase {
  */
 export const MODEL_REGISTRY: Readonly<Record<ModelId, ModelConfig>> = MODEL_ROWS;
 
+/** Whether `value` is a registry model id — provider-qualified, e.g. `anthropic/claude-haiku-4-5`. */
+export function isModelId(value: string): value is ModelId {
+  return Object.hasOwn(MODEL_ROWS, value);
+}
+
+/** Every registry model id, in registry order (ggui#924: the blueprint record's `model` is one of these). */
+export const MODEL_IDS: readonly ModelId[] = Object.keys(MODEL_ROWS).filter(isModelId);
+
 /**
  * The curated "current lineup" — derived once from the rows' `lineup`
  * fact, in registry order. Pickers render this up front and put the

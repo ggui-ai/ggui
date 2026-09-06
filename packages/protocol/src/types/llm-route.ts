@@ -430,13 +430,46 @@ export function parseLlmRoute(serialized: string): LlmRoute | null {
  * (enterprise Vertex). We don't have a Vertex variant in this slice;
  * `vertex_ai/` parsing falls through to `null` until Vertex lands.
  */
-const LITELLM_PROVIDER_PREFIX_MAP: Record<string, LlmProvider> = {
+/**
+ * The prefixes a {@link ModelRef} may start with — the LiteLLM spellings,
+ * and the model registry's. The single source: the prefix→provider map
+ * below is keyed by it (exhaustive by type), and the JSON-Schema-facing
+ * `pattern` in `llmBlueprintSourceSchema` is built from it.
+ */
+export const MODEL_REF_PREFIXES = ['anthropic', 'gemini', 'openai', 'bedrock', 'openrouter'] as const;
+export type ModelRefPrefix = (typeof MODEL_REF_PREFIXES)[number];
+
+const LITELLM_PROVIDER_PREFIX_MAP: Record<ModelRefPrefix, LlmProvider> = {
   anthropic: 'anthropic',
   gemini: 'google',
   openai: 'openai',
   bedrock: 'bedrock',
   openrouter: 'openrouter',
 };
+
+/**
+ * Provider → its ONE LiteLLM prefix. Exhaustive by type: adding a
+ * provider to `MODELS` without a prefix here is a compile error, which
+ * is what makes {@link modelRefOfRoute} total.
+ */
+const PROVIDER_TO_LITELLM_PREFIX: Record<LlmProvider, ModelRefPrefix> = {
+  anthropic: 'anthropic',
+  google: 'gemini',
+  openai: 'openai',
+  bedrock: 'bedrock',
+  openrouter: 'openrouter',
+};
+
+const MODEL_REF_PREFIX_LIST: readonly string[] = MODEL_REF_PREFIXES;
+
+/** Whether `s` is one of {@link MODEL_REF_PREFIXES}. */
+export function isModelRefPrefix(s: string): s is ModelRefPrefix {
+  return MODEL_REF_PREFIX_LIST.includes(s);
+}
+
+function liteLlmPrefixProvider(prefix: string): LlmProvider | undefined {
+  return isModelRefPrefix(prefix) ? LITELLM_PROVIDER_PREFIX_MAP[prefix] : undefined;
+}
 
 /**
  * LiteLLM canonical → wire-canonical model mappings for providers
@@ -482,7 +515,7 @@ export function parseLiteLlmString(s: string): LlmRoute | null {
   const firstSlash = s.indexOf('/');
   if (firstSlash <= 0) return null;
   const prefix = s.substring(0, firstSlash);
-  const provider = LITELLM_PROVIDER_PREFIX_MAP[prefix];
+  const provider = liteLlmPrefixProvider(prefix);
   if (!provider) return null;
   // For OpenRouter the model is everything after the first slash
   // (which itself includes a `<author>/<model>` sub-path); for
@@ -528,24 +561,12 @@ function getWireToLitellm(): Partial<Record<LlmProvider, Record<string, string>>
  * For models without an explicit LITELLM_TO_WIRE mapping (Gemini,
  * OpenAI, OpenRouter), serialization uses the wire model as-is.
  */
-export function toLiteLlmString(route: LlmRoute): string {
-  const prefix = providerLiteLlmPrefix(route.provider);
-  const inverseMap = getWireToLitellm()[route.provider];
-  const modelForLitellm = inverseMap?.[route.model] ?? route.model;
-  return `${prefix}/${modelForLitellm}`;
+export function toLiteLlmString(route: LlmRoute): ModelRef {
+  return modelRefOfRoute(route);
 }
 
-function providerLiteLlmPrefix(provider: LlmProvider): string {
-  // Find the LiteLLM prefix that maps to this provider. There's at
-  // most one prefix per provider in LITELLM_PROVIDER_PREFIX_MAP today.
-  for (const [prefix, p] of Object.entries(LITELLM_PROVIDER_PREFIX_MAP)) {
-    if (p === provider) return prefix;
-  }
-  // Defensive: every provider in MODELS should have a LiteLLM prefix.
-  // If not, fall through to the provider's own name (degrades gracefully
-  // for observability — the trace just won't match LiteLLM's exact
-  // wording, but it still names the provider).
-  return provider;
+function providerLiteLlmPrefix(provider: LlmProvider): ModelRefPrefix {
+  return PROVIDER_TO_LITELLM_PREFIX[provider];
 }
 
 // ============================================================================
@@ -564,4 +585,61 @@ function providerLiteLlmPrefix(provider: LlmProvider): string {
  */
 export function parseAnyLlmRoute(s: string): LlmRoute | null {
   return parseLlmRoute(s) ?? parseLiteLlmString(s);
+}
+
+
+// ============================================================================
+// Model reference — `<prefix>/<model>` in the registry's spelling (ggui#924)
+// ============================================================================
+
+/**
+ * A route rendered as ONE string in the model registry's spelling —
+ * the LiteLLM form `<prefix>/<model>` (#818: one model-id vocabulary,
+ * two separators). Every registry id (`ModelId`, e.g.
+ * `anthropic/claude-haiku-4-5`, `gemini/gemini-3.5-flash`) is the ref
+ * of the route it names, so `ModelId ⊂ ModelRef`; a bedrock inference
+ * profile or an unlisted OpenRouter model is a `ModelRef` the registry
+ * does not list. Where a wire model has a LiteLLM alias
+ * (`claude-haiku-4-5-20251001` ↔ `claude-haiku-4-5`) the ref is the
+ * ALIAS — the dated wire id is not a ref spelling.
+ *
+ * Split at the FIRST `/`: prefixes contain no slash, so
+ * `openrouter/anthropic/claude-3.5-sonnet` is unambiguous.
+ *
+ * Used where a record must say which model a run used and readers must
+ * recover the route: `LlmBlueprintSource.model`.
+ */
+export type ModelRef = `${ModelRefPrefix}/${string}`;
+
+/**
+ * The one composer of a {@link ModelRef}: render the route the run used,
+ * inverting the LiteLLM alias map so a resolved `{anthropic,
+ * claude-haiku-4-5-20251001}` renders as `anthropic/claude-haiku-4-5` —
+ * the registry id. Total: every `LlmRoute` has a ref. Feed it the ROUTE
+ * the call used; the ref is the same whether the route was configured
+ * as the alias or already resolved.
+ */
+export function modelRefOfRoute(route: LlmRoute): ModelRef {
+  const inverseMap = getWireToLitellm()[route.provider];
+  const model = inverseMap?.[route.model] ?? route.model;
+  return `${providerLiteLlmPrefix(route.provider)}/${model}`;
+}
+
+/**
+ * Recover the route from a {@link ModelRef}. `null` unless `s` is a
+ * LiteLLM-form string that parses ({@link parseLiteLlmString}) AND is
+ * the spelling {@link modelRefOfRoute} produces for that route — a ref
+ * has one spelling, so the dated wire id of an aliased model and a
+ * wrong prefix are refused here even though the lenient wire parsers
+ * accept them.
+ */
+export function parseModelRef(s: string): LlmRoute | null {
+  const route = parseLiteLlmString(s);
+  if (route === null) return null;
+  return modelRefOfRoute(route) === s ? route : null;
+}
+
+/** Whether `s` is a {@link ModelRef} — see {@link parseModelRef}. */
+export function isModelRef(s: string): s is ModelRef {
+  return parseModelRef(s) !== null;
 }

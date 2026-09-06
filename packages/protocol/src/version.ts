@@ -6,6 +6,28 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Blueprint provenance de-modeled (2026-09-06, wire-tightening, pre-launch,
+ * ggui#924 — MINOR; half of ggui#923, one WITH publication across six
+ * lanes). `LlmBlueprintSource.generator` is the identity `ui-gen-<tier>`
+ * (one tier token — `ui-gen-default` / `ui-gen-advanced` / an operator
+ * tier; `GENERATOR_ID_PATTERN`, `isGeneratorId`) and `model` is the run's route
+ * in the registry's spelling (`ModelRef` = `<prefix>/<model>`, composed only
+ * by `modelRefOfRoute`, recovered by `parseModelRef`; registry `ModelId`s
+ * are the subset — a self-hoster's bedrock/OpenRouter route is a ref the
+ * registry does not list; `MODEL_IDS`, `isModelId` narrow to the subset).
+ * Before: both were `string`, and the identity embedded the model
+ * (`ui-gen-default-haiku-4-5`) — a model retirement (Haiku 4.5,
+ * 2026-10-15) would rename the identity against every stored record.
+ * `parseBlueprintSource` and `llmBlueprintSourceSchema` refuse a modeled
+ * identity and a bare model name; the handshake draft's `generator` hint
+ * and the operator tools' `generator` inputs take the same grammar. No
+ * alias, no dual-read (pre-launch): a row written before the rename reads
+ * as no provenance; stores reseed. Not breaking under VERSION-POLICY §2
+ * (no kit fixture asserts a modeled id or a bare model); MINOR under §1.2
+ * as a schema tightening on the 0.16.0 draft wave. Post-launch this would
+ * be a MAJOR with a migration doc and a dual-read shim — the reason it
+ * ships now.
+ * --------------------------------------------------------------------
  * Five phantom numeric codes retired-reserved + the emitter census
  * (2026-09-06, wire-code, pre-launch, ggui#910 — PATCH). `CAPABILITY_DENIED`
  * (-32005), `GENERATION_QUOTA_EXCEEDED` (-32010), `APP_LIMIT_EXCEEDED`
@@ -26,6 +48,7 @@
  * phantom cannot be declared again silently. Pinned by
  * `types/__tests__/retired-error-codes.test.ts` (eight retired numbers).
  * Not breaking under VERSION-POLICY §2; PATCH under §1.3.
+ * --------------------------------------------------------------------
  *
  * --------------------------------------------------------------------
  * `-32013 RATE_LIMIT_EXCEEDED` retired-reserved (2026-09-06, wire-code,

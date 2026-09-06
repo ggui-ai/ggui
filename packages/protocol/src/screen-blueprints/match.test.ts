@@ -8,7 +8,7 @@ const bp = (partial: Partial<MatchableBlueprint> & Pick<MatchableBlueprint, "blu
   ...partial,
 });
 
-const LLM = { kind: "llm", generator: "ui-gen-default", model: "test-model-1" } as const;
+const LLM = { kind: "llm", generator: "ui-gen-default", model: "anthropic/claude-haiku-4-5" } as const;
 
 describe("matchBlueprint — subset matching", () => {
   it("returns null when no candidate matches", () => {

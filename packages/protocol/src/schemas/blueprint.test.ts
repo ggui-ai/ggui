@@ -5,6 +5,7 @@
 // downstream consumer inherits the same rule.
 
 import { describe, it, expect } from 'vitest';
+import { llmBlueprintSourceSchema } from './blueprint';
 import { blueprintSourceSchema, blueprintVarianceSchema } from './blueprint';
 
 describe('blueprintVarianceSchema', () => {
@@ -28,8 +29,8 @@ describe('blueprintSourceSchema — zod mirror of parseBlueprintSource', () => {
   it('parses all three arms', () => {
     const llm = {
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     };
     expect(blueprintSourceSchema.parse(llm)).toEqual(llm);
     expect(blueprintSourceSchema.parse({ kind: 'user' })).toEqual({
@@ -58,5 +59,17 @@ describe('blueprintSourceSchema — zod mirror of parseBlueprintSource', () => {
     expect(() =>
       blueprintSourceSchema.parse({ kind: 'user', generator: 'g' }),
     ).toThrow();
+  });
+});
+
+describe('llmBlueprintSourceSchema — mirrors the tightened source (ggui#924)', () => {
+  it('parses the de-modeled identity + a registry model, and refuses a modeled id or a bare model name', () => {
+    expect(llmBlueprintSourceSchema.parse({ kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' })).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
+    });
+    expect(llmBlueprintSourceSchema.safeParse({ kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'anthropic/claude-haiku-4-5' }).success).toBe(false);
+    expect(llmBlueprintSourceSchema.safeParse({ kind: 'llm', generator: 'ui-gen-advanced', model: 'claude-opus-4-7' }).success).toBe(false);
   });
 });

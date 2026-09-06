@@ -31,14 +31,14 @@ describe('blueprintMetaSchema — optional source (cache-only provenance)', () =
       blueprintId: 'bp_11111111-1111-1111-1111-111111111111',
       source: {
         kind: 'llm',
-        generator: 'ui-gen-default-haiku-4-5',
-        model: 'claude-haiku-4-5',
+        generator: 'ui-gen-default',
+        model: 'anthropic/claude-haiku-4-5',
       },
     });
     expect(parsed.source).toEqual({
       kind: 'llm',
-      generator: 'ui-gen-default-haiku-4-5',
-      model: 'claude-haiku-4-5',
+      generator: 'ui-gen-default',
+      model: 'anthropic/claude-haiku-4-5',
     });
   });
 
@@ -51,7 +51,7 @@ describe('blueprintMetaSchema — optional source (cache-only provenance)', () =
     expect(() =>
       blueprintMetaSchema.parse({
         ...baseMeta,
-        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5' },
+        source: { kind: 'llm', generator: 'ui-gen-default' },
       }),
     ).toThrow();
   });

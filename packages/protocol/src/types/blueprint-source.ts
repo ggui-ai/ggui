@@ -11,7 +11,7 @@
  *
  *   - `llm` — engine-generated. `generator` is the slug of the
  *     {@link UiGenerator} that produced the component code; `model` is
- *     the LLM model id the engine called. Both REQUIRED: every
+ *     the route the engine called, as a `ModelRef`. Both REQUIRED: every
  *     generation mint site has them in scope, and an engine-generated
  *     artifact without them is not a real state.
  *   - `user` — developer-registered / hand-authored. Covers
@@ -32,6 +32,7 @@
  */
 
 import { isRecord } from "../validation/is-record.js";
+import { isModelRef, type ModelRef } from "./llm-route";
 
 /** Closed list of `BlueprintSource` discriminants. */
 export const BLUEPRINT_SOURCE_KINDS = ["llm", "user", "curated"] as const;
@@ -39,17 +40,41 @@ export const BLUEPRINT_SOURCE_KINDS = ["llm", "user", "curated"] as const;
 /** Discriminant of {@link BlueprintSource}. */
 export type BlueprintSourceKind = (typeof BLUEPRINT_SOURCE_KINDS)[number];
 
+/**
+ * The de-modeled generator identity (ggui#924): `ui-gen-` + ONE tier token
+ * — `ui-gen-default`, `ui-gen-advanced`, or an operator-defined tier. No
+ * model segment: the model is its own field, so a model retirement never
+ * renames an identity or re-keys a stored record. The template admits any
+ * `ui-gen-*` at the type level; {@link isGeneratorId} is the grammar.
+ */
+export const GENERATOR_ID_PATTERN = /^ui-gen-[a-z0-9]+$/;
+
+/** A generator identity — see {@link GENERATOR_ID_PATTERN}. */
+export type GeneratorId = `ui-gen-${string}`;
+
+/** Whether `value` is a generator identity: one tier token, no model segment. */
+export function isGeneratorId(value: string): value is GeneratorId {
+  return GENERATOR_ID_PATTERN.test(value);
+}
+
 /** Engine-generated — full engine provenance is mandatory. */
 export interface LlmBlueprintSource {
   readonly kind: "llm";
   /**
-   * Slug of the generator that produced the component code (e.g.
-   * `'ui-gen-default-haiku-4-5'`). The server's `GeneratorRegistry` is
-   * the authority for which slugs exist on a given deployment.
+   * The generator identity that produced the component code (e.g.
+   * `'ui-gen-default'`), de-modeled — see {@link GENERATOR_ID_PATTERN}.
+   * The server's `GeneratorRegistry` is the authority for which
+   * identities exist on a given deployment.
    */
-  readonly generator: string;
-  /** Model id of the LLM call the generator made. */
-  readonly model: string;
+  readonly generator: GeneratorId;
+  /**
+   * The route the generator's LLM call used, rendered in the registry's
+   * spelling (`<prefix>/<model>`; {@link ModelRef}, composed only by
+   * `modelRefOfRoute`). Registry ids (`'anthropic/claude-haiku-4-5'`) are
+   * the subset the registry lists; a self-hoster's bedrock or OpenRouter
+   * route is a ref too. One spelling per route: a dated wire id is refused.
+   */
+  readonly model: ModelRef;
 }
 
 /** Developer-registered / hand-authored — no engine provenance exists. */
@@ -84,8 +109,11 @@ export function parseBlueprintSource(value: unknown): BlueprintSource | null {
     case "llm": {
       const generator = v["generator"];
       const model = v["model"];
-      if (typeof generator !== "string" || generator.length === 0) return null;
-      if (typeof model !== "string" || model.length === 0) return null;
+      // ggui#924: a modeled identity (`ui-gen-default-haiku-4-5`) or a
+      // non-route model (a bare `claude-…`, a dated API name) is not a
+      // provenance — null.
+      if (typeof generator !== "string" || !isGeneratorId(generator)) return null;
+      if (typeof model !== "string" || !isModelRef(model)) return null;
       return { kind: "llm", generator, model };
     }
     case "user":

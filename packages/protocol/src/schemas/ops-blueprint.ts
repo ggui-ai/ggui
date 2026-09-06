@@ -24,6 +24,7 @@
  * factories.
  */
 import { z } from 'zod';
+import { GENERATOR_ID_PATTERN } from '../types/blueprint-source';
 import {
   dataContractSchema,
   jsonValueSchema,
@@ -62,10 +63,12 @@ export const opsGenerateBlueprintInputSchema = z
     contract: dataContractSchema,
     generator: z
       .string()
-      .min(1)
+      .regex(GENERATOR_ID_PATTERN, {
+        error: 'generator is an identity `ui-gen-<tier>` — one tier token, no model segment (ggui#924)',
+      })
       .optional()
       .describe(
-        'Generator slug (e.g. `ui-gen-default-haiku-4-5`). When omitted, dispatches through `GeneratorRegistry.defaultGenerator()`.',
+        'Generator identity (e.g. `ui-gen-default`; the model is chosen by the deployment and reported on `source.model`). When omitted, dispatches through `GeneratorRegistry.defaultGenerator()`.',
       ),
     persona: z
       .string()
@@ -261,10 +264,12 @@ export const opsListBlueprintsInputSchema = z
       ),
     generator: z
       .string()
-      .min(1)
+      .regex(GENERATOR_ID_PATTERN, {
+        error: 'generator is an identity `ui-gen-<tier>` — one tier token, no model segment (ggui#924)',
+      })
       .optional()
       .describe(
-        'Filter to engine-generated blueprints (`source.kind === "llm"`) whose `source.generator` equals this slug. `user`-sourced rows never match (they carry no engine provenance).',
+        'Filter to engine-generated blueprints (`source.kind === "llm"`) whose `source.generator` equals this identity (`ui-gen-<tier>`, e.g. `ui-gen-advanced`). `user`-sourced rows never match (they carry no engine provenance).',
       ),
     persona: z
       .string()

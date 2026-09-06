@@ -89,12 +89,12 @@ export interface BlueprintDraft {
     readonly seedPrompt?: string;
   };
   /**
-   * Generator slug hint (e.g. `'ui-gen-advanced-opus-4-7'`). The
+   * Generator identity hint (e.g. `'ui-gen-advanced'` — de-modeled, ggui#924). The
    * server resolves the effective generator as:
    *
    *   1. Operator app-pin (`App.pinnedGenerator`) — wins if set.
    *   2. This hint — if registered in the GeneratorRegistry.
-   *   3. Registry default (`ui-gen-default-haiku-4-5`).
+   *   3. Registry default (`ui-gen-default`).
    *
    * Hint-only; unknown slugs fall through to the registry default.
    */
