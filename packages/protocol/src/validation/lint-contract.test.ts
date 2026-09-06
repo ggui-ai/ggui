@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isDomainError, parseDomainErrorText } from '../errors/domain-error';
 import type { DataContract } from '../types/data-contract';
 import {
   ContractValidationError,
@@ -226,5 +227,26 @@ describe('lintContract — graded, returns errors + warnings', () => {
     expect(
       result.errors.some((e) => e.code === 'CTR_REF_NEXT_STEP'),
     ).toBe(false);
+  });
+});
+
+describe('ContractValidationError — a Plane-2 DomainError (ggui#880)', () => {
+  it('leads its message with the registered slug and keeps phase + issues', () => {
+    const err = new ContractValidationError('references', [
+      {
+        code: 'CTR_REF_UNRESOLVED',
+        severity: 'error',
+        phase: 'references',
+        message: 'nextStep names an undeclared tool',
+        path: 'actionSpec.save',
+      },
+    ]);
+    expect(isDomainError(err)).toBe(true);
+    expect(err.code).toBe('contract_validation_failed');
+    expect(err.message.startsWith("contract_validation_failed: Contract validation failed at phase 'references':")).toBe(true);
+    expect(err.name).toBe('ContractValidationError');
+    expect(parseDomainErrorText(err.message)?.code).toBe('contract_validation_failed');
+    expect(err.phase).toBe('references');
+    expect(err.issues.length).toBe(1);
   });
 });

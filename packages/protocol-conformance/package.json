@@ -71,6 +71,11 @@
       "import": "./dist/refusal-envelope-conformance/index.js",
       "default": "./dist/refusal-envelope-conformance/index.js"
     },
+    "./domain-error-conformance": {
+      "types": "./dist/domain-error-conformance/index.d.ts",
+      "import": "./dist/domain-error-conformance/index.js",
+      "default": "./dist/domain-error-conformance/index.js"
+    },
     "./registry-completeness": {
       "types": "./dist/registry-completeness/index.d.ts",
       "import": "./dist/registry-completeness/index.js",

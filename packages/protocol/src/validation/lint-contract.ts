@@ -31,6 +31,7 @@
  * present a complete checklist.
  */
 
+import { DomainError } from '../errors/domain-error';
 import { ZodError } from 'zod';
 import type { DataContract } from '../types/data-contract';
 import { dataContractSchema } from '../schemas/data-contract';
@@ -125,15 +126,16 @@ export interface ContractLintResult {
  * surface as a single rolled-up zod failure; reference / schema-compat
  * errors carry one issue per violation.
  */
-export class ContractValidationError extends Error {
-  readonly code = 'contract_validation_failed' as const;
+export class ContractValidationError extends DomainError<'contract_validation_failed'> {
   readonly phase: ContractLintPhase;
   readonly issues: readonly ContractIssue[];
 
   constructor(phase: ContractLintPhase, issues: readonly ContractIssue[]) {
     const summary = issues.map((i) => `[${i.code}] ${i.message}`).join(' | ');
-    super(`Contract validation failed at phase '${phase}': ${summary}`);
-    this.name = 'ContractValidationError';
+    // Plane 2 (SPEC §7.9, ggui#880): the base composes the wire text
+    // `contract_validation_failed: <detail>`; the detail names the phase
+    // and every issue. `code` and `name` come from the base.
+    super('contract_validation_failed', `Contract validation failed at phase '${phase}': ${summary}`);
     this.phase = phase;
     this.issues = issues;
   }

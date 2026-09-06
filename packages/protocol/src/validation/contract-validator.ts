@@ -1,4 +1,5 @@
 import type { PropsSpec, StreamSpec, ActionSpec, ContextSpec, JsonSchema, JsonObject, DataContract } from '../types/data-contract';
+import { DomainError } from '../errors/domain-error';
 import { deriveContextDefault } from '../types/data-contract';
 import type { ActionEnvelope } from '../types/events';
 import type { CompiledContractValidators } from '../integrations/mcp-apps';
@@ -1083,7 +1084,7 @@ function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'gg
   return 'Fix your data to match the contract, or call ggui_render to create a new UI for this data shape.';
 }
 
-export class ContractViolationError extends Error {
+export class ContractViolationError extends DomainError<'contract_violation'> {
   readonly violations: ContractViolation[];
   readonly tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event';
   readonly hint: string;
@@ -1108,8 +1109,10 @@ export class ContractViolationError extends Error {
     propsSchemaHash?: string;
   }) {
     const formattedViolations = formatViolations(opts.violations);
-    super(`Contract violation in ${opts.tool}:\n${formattedViolations}`);
-    this.name = 'ContractViolationError';
+    // Plane 2 (SPEC §7.9, ggui#880): the base composes the wire text
+    // `contract_violation: <detail>`; the detail keeps the tool + the
+    // formatted violations. `name` is the class name, set by the base.
+    super('contract_violation', `Contract violation in ${opts.tool}:\n${formattedViolations}`);
     this.violations = opts.violations;
     this.tool = opts.tool;
     this.hint = opts.hint ?? defaultHintFor(opts.tool);

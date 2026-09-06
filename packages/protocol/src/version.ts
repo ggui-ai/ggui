@@ -6,6 +6,65 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Plane-2 slugs lead the wire text (2026-09-06, MINOR, ggui#880). SPEC
+ * §7.9 promised "the `code` field on each class is the wire literal"
+ * while the MCP SDK ships every thrown handler error to the agent as
+ * `{content: [{type: 'text', text: error.message}], isError: true}` and
+ * nothing else — executed against the built server: `session_not_found`
+ * and `handshake_not_found` reached neither a field nor the text, and
+ * descriptions, presets and the SPEC taught agents to branch on them.
+ *
+ *   de1. **`DomainError` base** (`errors/domain-error.ts`) — the ONLY
+ *      composer of a Plane-2 error's `message`: `${code}: ${detail}`.
+ *      Refuses an empty detail and a detail that begins with any
+ *      registered domain OR refusal code + `': '`
+ *      (`DomainErrorDetailCollisionError`, a `TypeError` the emitter's
+ *      own suite sees — never the wire); a tool-name prefix is prose.
+ *      `isDomainError` detects by `Symbol.for('ai.ggui.domainError')`
+ *      marker + shape, never `instanceof`; `parseDomainErrorText` is
+ *      the reader side.
+ *   de2. **`DOMAIN_ERROR_CODES` registry** (`types/domain-error-codes.ts`)
+ *      — the CLOSED Plane-2 set, fifteen rows from the executed census,
+ *      each with the data-plane `tools` that emit it, a `recovery` class
+ *      (`retry-same-id` | `re-mint` | `later`), an `emitter` and a
+ *      self-hoster `description`. Pinned disjoint from
+ *      `PRE_GENERATION_REFUSAL_CODES` (one code, one plane). SPEC §7.9's
+ *      Plane-2 table is its mirror (pinned from the registry's own suite):
+ *      the four phantom classes the table listed (`ContractRequiredError`,
+ *      `ContractHashMismatchError`, `UnknownActionToolError`,
+ *      `EventNotAllowedError`) are gone; `cross_reference_unresolved` /
+ *      `contract_schema_invalid` are not wire codes (no caller throws
+ *      them — the lint gate throws `contract_validation_failed`).
+ *   de3. **The two protocol-owned emitters extend the base** —
+ *      `ContractViolationError` (`contract_violation`; `toErrorData()`
+ *      keeps its `{error, tool, violations, hint, propsSchemaHash?}`
+ *      shape) and `ContractValidationError` (`contract_validation_failed`,
+ *      phase + issues kept). Consumers detecting them by `instanceof`
+ *      are unchanged; their message now leads with the slug.
+ *   de4. **The wire plane is the MCP spec's** — a Plane-2 failure is a
+ *      tool RESULT with `isError: true`, never a JSON-RPC error frame;
+ *      no `structuredContent` (the SDK client validates it against the
+ *      tool's `outputSchema` whenever present, so a typed envelope would
+ *      demote every success field to optional — refused). SPEC §7.9.1:
+ *      `SESSION_NOT_FOUND` (-32002) is the live-channel / runtime Plane-1
+ *      code; on `tools/call` the same state is `session_not_found`.
+ *   de5. **The conformance kit's first `tools/call` driver** — catalog
+ *      `domain-error`: six no-setup scenarios (unknown `handshakeId` on
+ *      `ggui_render`; unknown `sessionId` on `ggui_consume` /
+ *      `ggui_get_session` / `ggui_update` / `ggui_amend` / `ggui_emit`)
+ *      graded on the raw result via `runConformance({ toolCallDriver })`
+ *      / `--tool-call-driver <module>`. Before this wave every first-party
+ *      server failed all six on `slug-leads`.
+ *
+ * Conformance-kit verdict: not breaking under VERSION-POLICY §2 — no
+ * prior fixture asserts Plane-2 text; the leading slug is additive to
+ * prose and the new catalog is an addition. MINOR under §1.2 (new
+ * exported base, registry and kit catalog); rides the 0.16.0 wave. The
+ * adoption of the base by the handler / core / mcp-server classes lands
+ * WITH this entry (oss's half of ggui#880); until both are on a server,
+ * that server fails the catalog — which is the point.
+ *
+ * --------------------------------------------------------------------
  * The pending-event row is a schema (2026-09-06, store-boundary, pre-launch,
  * ggui#839 — the #817 C2 follower; cite `3f3d86b86`). The consume pipe's
  * stored row — what `submit_action` / the WS ingress append and

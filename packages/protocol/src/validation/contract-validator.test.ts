@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isDomainError, parseDomainErrorText } from '../errors/domain-error';
 import {
   validateActionData,
   validateContractStructure,
@@ -789,5 +790,21 @@ describe('computeContractBundle', () => {
       },
     });
     expect(a?.contractHash).not.toBe(b?.contractHash);
+  });
+});
+
+describe('ContractViolationError — a Plane-2 DomainError (ggui#880)', () => {
+  it('leads its message with the registered slug, carries the code, and round-trips through the reader', () => {
+    const err = new ContractViolationError({
+      tool: 'ggui_render',
+      violations: [{ field: 'title', message: 'is required', keyword: 'required' }],
+    });
+    expect(isDomainError(err)).toBe(true);
+    expect(err.code).toBe('contract_violation');
+    expect(err.message.startsWith('contract_violation: Contract violation in ggui_render:')).toBe(true);
+    expect(err.name).toBe('ContractViolationError');
+    expect(parseDomainErrorText(err.message)?.code).toBe('contract_violation');
+    expect(err.toErrorData().error).toBe('contract_violation');
+    expect(err.tool).toBe('ggui_render');
   });
 });
