@@ -39,6 +39,10 @@
  *   - `retryAfterMs` is set ONLY when `allowed === false`. Implies
  *     "the request, AS CHECKED, would succeed after waiting this
  *     long"; callers MUST re-check, not blindly retry in-flight.
+ *   - `scope` names the party whose cap bound; meaningful ONLY when
+ *     `allowed === false`. Absent = the denying bucket's own cap (read by
+ *     the render gate as the app's); a limiter that denies on any other
+ *     bucket MUST set it (see {@link RateLimitScope}).
  *
  * **Key conventions (caller-owned):** the interface does not mandate
  * key shape. In practice OSS wiring uses
@@ -46,7 +50,9 @@
  * `ggui_render:app_x:3f2a…` / `ggui_render:local:anon`) — the key
  * carries both isolation units, so a binding can enforce per-app
  * policy (aggregate on the middle segment) or per-API-key policy
- * (bucket on the full key) without the handler changing shape.
+ * (bucket on the full key) without the handler changing shape. The key
+ * has no issuer segment — an issuer cap is the limiter's own resolution
+ * from the app segment, reported back through `scope`.
  *
  * **OSS reference adapters (this slice):**
  *   - `NoopRateLimiter` — always allows. The shipped default for
@@ -82,6 +88,18 @@ export interface RateLimitCheckInput {
 }
 
 /**
+ * Which party's cap a denial bound. `'app'` — the app's own cap.
+ * `'issuer'` — the cap on the issuing identity behind the credential,
+ * shared by every app it issues for. The key carries no issuer
+ * segment: a limiter that enforces an issuer cap resolves that identity
+ * itself (from the key's app segment, or from what its own binding
+ * knows) and reports the party it bound here. The render gate picks the
+ * refusal row from it, so the refusal names the party that is over the
+ * rate.
+ */
+export type RateLimitScope = 'app' | 'issuer';
+
+/**
  * Decision returned by {@link RateLimiter.check}.
  *
  * Fields are populated on every return (including denials) so callers
@@ -99,6 +117,13 @@ export interface RateLimitDecision {
   readonly resetAt: number;
   /** Wait ceiling for a retry. Set ONLY when `allowed === false`. */
   readonly retryAfterMs?: number;
+  /**
+   * The party whose cap bound. Meaningful ONLY when `allowed === false`.
+   * Absent on a denial = the denying bucket's own cap, read by the render
+   * gate as the app's; a limiter that denies on any other bucket MUST set
+   * `scope`. See {@link RateLimitScope}.
+   */
+  readonly scope?: RateLimitScope;
 }
 
 export interface RateLimiter {

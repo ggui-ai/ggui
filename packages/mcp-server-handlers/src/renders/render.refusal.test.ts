@@ -593,7 +593,7 @@ describe('ggui_render — the per-app render-rate cap denies as a REFUSAL, never
   };
   const allowing: RateLimiter = { check: async () => ({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 }) };
 
-  it("projects `app_rate_limited` (retry 'later', handshake intact) with the bucket key OFF the message; reads no handshake, commits nothing", async () => {
+  it("an UNSCOPED denial projects `app_rate_limited` — the default arm of ggui#891 — (retry 'later', handshake intact) with the bucket key OFF the message; reads no handshake, commits nothing", async () => {
     const h = buildHarness(undefined, { rateLimiter: denying });
     await seedAgentHandshake(h.handshakeStore, 'hs-cap');
     const out = await h.handler.handler({ handshakeId: 'hs-cap', props: {} }, CTX);
@@ -611,6 +611,45 @@ describe('ggui_render — the per-app render-rate cap denies as a REFUSAL, never
     expect(h.handshakeGet).not.toHaveBeenCalled();
     expect(h.commit).not.toHaveBeenCalled();
     expect(h.postSuccessHook).not.toHaveBeenCalled();
+  });
+
+  it("a decision scoped `'issuer'` projects `issuer_rate_limited` — the party named is the issuing identity, not the app (ggui#891)", async () => {
+    const issuerDenying: RateLimiter = {
+      check: async () => ({ allowed: false, remaining: 0, resetAt: Date.now() + 2500, retryAfterMs: 2500, scope: 'issuer' }),
+    };
+    const h = buildHarness(undefined, { rateLimiter: issuerDenying });
+    await seedAgentHandshake(h.handshakeStore, 'hs-issuer');
+    const out = await h.handler.handler({ handshakeId: 'hs-issuer', props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+    expect(out.data.outcome).toBe('refused');
+    if (out.data.outcome !== 'refused') return;
+    expect(out.data.refusal.code).toBe('issuer_rate_limited');
+    expect(out.data.refusal.retry).toBe('later');
+    expect(out.data.refusal.handshake).toBe('intact');
+    expect(out.data.refusal.message).toContain('issuing identity');
+    expect(out.data.refusal.message).not.toContain('this app');
+    expect(out.data.refusal.message).toContain('2500');
+    expect(out.data.refusal.message).not.toContain(APP_ID);
+    expect(out.data.refusal.message).not.toContain('ggui_render:');
+    expect(out.errorText.startsWith('issuer_rate_limited: ')).toBe(true);
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it("a decision scoped `'app'` explicitly projects `app_rate_limited`, the same row an unscoped decision does (ggui#891)", async () => {
+    const appDenying: RateLimiter = {
+      check: async () => ({ allowed: false, remaining: 0, resetAt: Date.now() + 1500, retryAfterMs: 1500, scope: 'app' }),
+    };
+    const h = buildHarness(undefined, { rateLimiter: appDenying });
+    await seedAgentHandshake(h.handshakeStore, 'hs-app-scope');
+    const out = await h.handler.handler({ handshakeId: 'hs-app-scope', props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+    expect(out.data.outcome).toBe('refused');
+    if (out.data.outcome !== 'refused') return;
+    expect(out.data.refusal.code).toBe('app_rate_limited');
+    expect(out.data.refusal.message).toContain('this app');
+    expect(out.errorText.startsWith('app_rate_limited: ')).toBe(true);
   });
 
   it('the handshake IS intact — the same handshakeId renders once the cap allows', async () => {

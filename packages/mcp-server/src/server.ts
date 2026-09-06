@@ -829,7 +829,7 @@ export function defaultHandlers(deps: {
      * Optional admission-control limiter. When present, `ggui_render`
      * gates every call through `rateLimiter.check({key:
      * 'ggui_render:<appId>:<apiKeyHash|anon>', cost:1})` before doing
-     * any work; a denial is the registry's `app_rate_limited` refusal
+     * any work; a denial is the registry's `app_rate_limited` refusal (`issuer_rate_limited` when the decision is scoped `'issuer'`, ggui#891)
      * (`outcome: 'refused'`, retry 'later', handshake intact — ggui#886).
      * Omitted = unlimited (the `NoopRateLimiter` server default).
      */
@@ -2919,7 +2919,7 @@ export interface CreateGguiServerOptions {
    * Admission-control limiter applied at the highest-cost handler
    * ingress — today just `ggui_render`. Defaults to
    * {@link NoopRateLimiter} (always allows). A denial is projected as
-   * the registry's `app_rate_limited` refusal — `outcome: 'refused'`,
+   * the registry's `app_rate_limited` refusal (`issuer_rate_limited` when the decision is scoped `'issuer'`, ggui#891) — `outcome: 'refused'`,
    * `retry: 'later'` with the decision's `retryAfterMs`, handshake
    * intact — the same in-result posture as every render-gate refusal
    * (SPEC §7.1; ggui#886). Nothing is thrown, so nothing reaches an

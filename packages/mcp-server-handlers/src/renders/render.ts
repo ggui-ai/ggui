@@ -553,7 +553,7 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * Admission-control seam. When present, every `ggui_render` call is
    * gated through `rateLimiter.check({key, cost: 1})` right after the
    * pre-validation gate, BEFORE any store read. A denial is projected as
-   * the registry's `app_rate_limited` refusal — `outcome: 'refused'`,
+   * the registry's `app_rate_limited` refusal (`issuer_rate_limited` when the decision is scoped `'issuer'`, ggui#891) — `outcome: 'refused'`,
    * `retry: 'later'` carrying the decision's `retryAfterMs`, handshake
    * intact — never thrown (SPEC §7.1; ggui#886).
    *
@@ -1194,19 +1194,33 @@ export async function assertKnownThemeId(
 
 /**
  * The per-app render-rate cap's denial as the registry's refusal
- * (ggui#886): `app_rate_limited`, retry `later`, handshake intact. The
+ * (ggui#886): `app_rate_limited` — or `issuer_rate_limited` when the
+ * decision is scoped `'issuer'` (ggui#891) — retry `later`, handshake intact. The
  * bucket key carries identity material (app + credential hash) and stays
  * OFF the message; the decision's `retryAfterMs` is the agent's cue.
  */
 function rateCapRefusal(decision: RateLimitDecision): PreGenerationRefusal {
   const retryAfterMs = decision.retryAfterMs ?? 0;
   const wait = retryAfterMs > 0 ? ` for another ${retryAfterMs}ms` : '';
+  const fix = `wait${retryAfterMs > 0 ? ` ${retryAfterMs}ms` : ''}, then retry the same call with the same handshakeId`;
   // The code is a plain read of the registry's literal-typed row (ggui#889):
-  // it satisfies the render-gate enum by type — no parse, no literal.
+  // it satisfies the render-gate enum by type — no parse, no literal. The
+  // row follows the decision's scope (ggui#891): an issuer-cap denial names
+  // the issuing identity, never the app — the wrong party misleads whoever
+  // reads the refusal (the wait and the retry are the same either way).
+  if (decision.scope === 'issuer') {
+    return {
+      code: PRE_GENERATION_REFUSAL_ROWS.issuer_rate_limited.code,
+      message: `calls under this issuing identity are arriving faster than the rate this deployment allows — the per-issuer render-rate cap denied the call${wait}`,
+      fix,
+      retry: 'later',
+      handshake: 'intact',
+    };
+  }
   return {
     code: PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.code,
     message: `this app is rendering faster than the rate this deployment allows it — the per-app render-rate cap denied the call${wait}`,
-    fix: `wait${retryAfterMs > 0 ? ` ${retryAfterMs}ms` : ''}, then retry the same call with the same handshakeId`,
+    fix,
     retry: 'later',
     handshake: 'intact',
   };
@@ -2770,7 +2784,8 @@ export function createGguiRenderHandler(
       }
 
       // Admission control (ggui#886): the per-app render-rate cap is a
-      // render-gate REFUSAL — `app_rate_limited`, retry 'later', handshake
+      // render-gate REFUSAL — `app_rate_limited` (or `issuer_rate_limited` by the
+      // decision's scope, ggui#891), retry 'later', handshake
       // intact — projected exactly like a gate's, before any store read.
       // A throw here would be a §7.1 conformance failure (the SDK would
       // return prose with no code, no fix, no retry class). The bucket
