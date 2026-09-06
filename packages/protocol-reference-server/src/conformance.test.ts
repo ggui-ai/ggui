@@ -14,12 +14,14 @@
  *     `@ggui-ai/protocol` (ggui#786), and the 6 `refusal-envelope`
  *     rows, graded through the protocol's own `projectRenderRefusal`
  *     (ggui#803 leg 9) — no tool plane needed for a pure projection.
- *   - 5 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
+ *   - 11 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`), the matcher's
- *     `unmatchable-on-ws` for Path-B claims (`props-update`), and the
+ *     `unmatchable-on-ws` for Path-B claims (`props-update`), the
  *     2 `transport-refusal` rows, which need a per-app endpoint this
- *     live-channel-only server does not have. See `match-behavior.ts`
+ *     live-channel-only server does not have, and the 6 `domain-error`
+ *     rows (ggui#880), which need a `tools/call` plane this server does
+ *     not have either. See `match-behavior.ts`
  *     for the Path-A vs Path-B partition.
  *   - 0 fixtures FAIL — `KNOWN_FAILURES_AT_v0` is empty.
  */
@@ -197,10 +199,27 @@ const EXPECTED_PASSING = [
  *     deployment's error mapper types on a per-app endpoint's 403. This
  *     server has no per-app endpoint and no error mapper, so it supplies
  *     no `transportRefusalProjector` — SKIPPED, named.
+ *   - `domain-error/*` (ggui#880): the kit's first `tools/call` driver —
+ *     six no-setup scenarios (an unknown `handshakeId` on `ggui_render`,
+ *     an unknown `sessionId` on `ggui_consume` / `ggui_get_session` /
+ *     `ggui_update` / `ggui_amend` / `ggui_emit`) graded on the raw tool
+ *     result's leading slug. This server serves `resources/read` and the
+ *     live channel; it registers no render tools and has no `tools/call`
+ *     plane to drive, so it supplies no `toolCallDriver` — SKIPPED, named.
+ *     The catalog is graded where the tools live: the first-party server's
+ *     `mcp-server/src/domain-error.conformance.test.ts` (6/6). A future
+ *     tool plane on this server binds the driver and moves these six to
+ *     {@link EXPECTED_PASSING} — this pin is what forces that decision.
  */
 const EXPECTED_SKIPPED = [
   'bootstrap-bundle-fetch-failed',
   'bootstrap-meta-missing',
+  'domain-error/amend-unknown-session',
+  'domain-error/consume-unknown-session',
+  'domain-error/emit-unknown-session',
+  'domain-error/get-session-unknown-session',
+  'domain-error/render-unknown-handshake',
+  'domain-error/update-unknown-session',
   'props-update-roundtrip',
   'transport-refusal/refuse-deprovisioned-endpoint',
   'transport-refusal/refuse-render-only-code',
