@@ -505,11 +505,10 @@ export const MCP_ERROR_CODES = {
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
-  // Protocol-specific error codes (-32001 and -32004 retired-reserved — see above)
+  // Protocol-specific error codes (-32001, -32004 and -32005 retired-reserved — see above)
   UNAUTHORIZED: -32007,
   SESSION_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
-  CAPABILITY_DENIED: -32005,
   /**
    * A `resources/read` identified the resource but cannot return a
    * mount for it — the component behind it is gone, the server keeps no
@@ -530,11 +529,14 @@ export const MCP_ERROR_CODES = {
 /**
  * Platform-specific error codes (-32010 range).
  * These are ggui platform extensions, not part of the core protocol.
+ * `-32010`..`-32013` and `-32020` are retired-reserved (SPEC §7.9,
+ * ggui#910 / ggui#890): declared once, emitted by nothing first-party —
+ * quota, app-limit and concurrency states are refusals or
+ * implementation-range codes, and a contract violation is the Plane-2
+ * `contract_violation` result or the live channel's `CONTRACT_VIOLATION`
+ * frame code, never a JSON-RPC number.
  */
 export const PLATFORM_ERROR_CODES = {
-  GENERATION_QUOTA_EXCEEDED: -32010,
-  APP_LIMIT_EXCEEDED: -32011,
-  CONCURRENT_SESSION_LIMIT: -32012,
   /**
    * The generation queue is saturated — the server, not the caller, is
    * the limit (contrast a caller-side rate cap, which is a render-gate
@@ -545,5 +547,4 @@ export const PLATFORM_ERROR_CODES = {
    * refusal, so it speaks this table (ggui#836 follow-up).
    */
   GENERATION_OVERLOADED: -32014,
-  CONTRACT_VIOLATION: -32020,
 } as const;

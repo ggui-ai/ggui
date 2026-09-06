@@ -17,6 +17,11 @@ const RETIRED: ReadonlyArray<{ readonly number: number; readonly name: string; r
   { number: -32001, name: 'UNAUTHORIZED (moved to -32007)', issue: 'ggui#853' },
   { number: -32004, name: 'PRODUCTION_FAILED', issue: 'phantom, never emitted' },
   { number: -32013, name: 'RATE_LIMIT_EXCEEDED', issue: 'ggui#890' },
+  { number: -32005, name: 'CAPABILITY_DENIED', issue: 'ggui#910' },
+  { number: -32010, name: 'GENERATION_QUOTA_EXCEEDED', issue: 'ggui#910' },
+  { number: -32011, name: 'APP_LIMIT_EXCEEDED', issue: 'ggui#910' },
+  { number: -32012, name: 'CONCURRENT_SESSION_LIMIT', issue: 'ggui#910' },
+  { number: -32020, name: 'CONTRACT_VIOLATION (numeric; the string codes on other surfaces stay)', issue: 'ggui#910' },
 ];
 
 const PACKAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -25,7 +30,10 @@ describe('retired-reserved JSON-RPC numbers (SPEC §7.9)', () => {
   it('no canonical or platform constant declares a retired number', () => {
     const declared = new Set<number>([...Object.values(MCP_ERROR_CODES), ...Object.values(PLATFORM_ERROR_CODES)]);
     for (const r of RETIRED) expect(declared.has(r.number), `${r.number} ${r.name}`).toBe(false);
-    expect(Object.keys(PLATFORM_ERROR_CODES)).not.toContain('RATE_LIMIT_EXCEEDED');
+    for (const name of ['RATE_LIMIT_EXCEEDED', 'GENERATION_QUOTA_EXCEEDED', 'APP_LIMIT_EXCEEDED', 'CONCURRENT_SESSION_LIMIT', 'CONTRACT_VIOLATION']) {
+      expect(Object.keys(PLATFORM_ERROR_CODES)).not.toContain(name);
+    }
+    expect(Object.keys(MCP_ERROR_CODES)).not.toContain('CAPABILITY_DENIED');
   });
 
   it('no tracked source under oss/packages emits a retired number as a literal (comments and the ledger excepted)', () => {

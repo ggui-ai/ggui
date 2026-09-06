@@ -6,6 +6,28 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Five phantom numeric codes retired-reserved + the emitter census
+ * (2026-09-06, wire-code, pre-launch, ggui#910 — PATCH). `CAPABILITY_DENIED`
+ * (-32005), `GENERATION_QUOTA_EXCEEDED` (-32010), `APP_LIMIT_EXCEEDED`
+ * (-32011), `CONCURRENT_SESSION_LIMIT` (-32012) and the numeric
+ * `CONTRACT_VIOLATION` (-32020 — the census found it once the gate
+ * existed; the live `CONTRACT_VIOLATION` is a string on the channel and
+ * the Plane-3 render error, and tools/call has Plane-2
+ * `contract_violation`) were declared,
+ * SPEC-fenced and mirrored into four tables, and emitted by nothing
+ * first-party — a census by constant and by number over oss/packages,
+ * cloud and backend. The constants leave; the numbers stay reserved
+ * (SPEC §7.9); an unauthorised key is a bare 403 carrying -32007; quota,
+ * app-limit and concurrency states are refusals or implementation-range
+ * codes. Cheap only before launch: after the `draft-` rule flips each
+ * removal would be a MAJOR with a migration doc. The mirrors gate now
+ * also asserts the inverse — every declared non-standard code has a
+ * first-party emitter (one `git grep` per code; seeded self-test) — so a
+ * phantom cannot be declared again silently. Pinned by
+ * `types/__tests__/retired-error-codes.test.ts` (eight retired numbers).
+ * Not breaking under VERSION-POLICY §2; PATCH under §1.3.
+ *
+ * --------------------------------------------------------------------
  * `-32013 RATE_LIMIT_EXCEEDED` retired-reserved (2026-09-06, wire-code,
  * pre-launch, ggui#890 — PATCH). After ggui#886 (the per-app cap denies as
  * the registry's `app_rate_limited` refusal) and the `RateLimitedError`
