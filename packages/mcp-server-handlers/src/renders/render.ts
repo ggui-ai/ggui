@@ -62,8 +62,7 @@ import {
   type RefusedRenderOutput,
   renderInputEnvelopeSchema,
   renderInputRouteGuardSchema,
-  PRE_GENERATION_REFUSAL_CODES,
-  renderRefusalSchema,
+  PRE_GENERATION_REFUSAL_ROWS,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -1202,12 +1201,10 @@ export async function assertKnownThemeId(
 function rateCapRefusal(decision: RateLimitDecision): PreGenerationRefusal {
   const retryAfterMs = decision.retryAfterMs ?? 0;
   const wait = retryAfterMs > 0 ? ` for another ${retryAfterMs}ms` : '';
-  // The code comes from the registry (the protocol's pin forbids a code as
-  // a string literal outside it); the registry's rows are typed uniformly,
-  // so the wire enum's own parse narrows it to a render-gate code.
-  const code = renderRefusalSchema.shape.code.parse(PRE_GENERATION_REFUSAL_CODES.app_rate_limited.code);
+  // The code is a plain read of the registry's literal-typed row (ggui#889):
+  // it satisfies the render-gate enum by type — no parse, no literal.
   return {
-    code,
+    code: PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.code,
     message: `this app is rendering faster than the rate this deployment allows it — the per-app render-rate cap denied the call${wait}`,
     fix: `wait${retryAfterMs > 0 ? ` ${retryAfterMs}ms` : ''}, then retry the same call with the same handshakeId`,
     retry: 'later',
