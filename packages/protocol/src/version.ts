@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `-32013 RATE_LIMIT_EXCEEDED` retired-reserved (2026-09-06, wire-code,
+ * pre-launch, ggui#890 — PATCH). After ggui#886 (the per-app cap denies as
+ * the registry's `app_rate_limited` refusal) and the `RateLimitedError`
+ * deletion, no first-party implementation emits the number: the reference
+ * server refuses in-band, the hosted transport's only 429 is a per-IP
+ * backstop with no JSON-RPC body. The constant leaves
+ * `PLATFORM_ERROR_CODES` and SPEC §7.9's platform fence; the number stays
+ * reserved (the `-32001` / `-32004` convention) so no future canonical code
+ * reuses it. Not breaking under VERSION-POLICY §2 — no kit fixture asserts
+ * it; PATCH under §1.3. Pinned by `types/__tests__/retired-error-codes.test.ts`
+ * (no constant declares a retired number; no tracked source emits one) and
+ * by the mirrors gate, which reds the docs tables' rows until they leave
+ * in the same publication.
+ *
+ * --------------------------------------------------------------------
  * The registries export their literal-typed rows (2026-09-06, types-only,
  * pre-launch, ggui#889 — PATCH). `PRE_GENERATION_REFUSAL_CODES` and
  * `DOMAIN_ERROR_REGISTRY` are the normalized views (`Record<Code, Row>`),

@@ -535,10 +535,12 @@ export const PLATFORM_ERROR_CODES = {
   GENERATION_QUOTA_EXCEEDED: -32010,
   APP_LIMIT_EXCEEDED: -32011,
   CONCURRENT_SESSION_LIMIT: -32012,
-  RATE_LIMIT_EXCEEDED: -32013,
   /**
    * The generation queue is saturated — the server, not the caller, is
-   * the limit (contrast `RATE_LIMIT_EXCEEDED`: the caller slows down). HTTP
+   * the limit (contrast a caller-side rate cap, which is a render-gate
+   * REFUSAL — `app_rate_limited` / `issuer_rate_limited`, SPEC §7.1 — the
+   * caller slows down; its former numeric `-32013` is retired-reserved,
+   * SPEC §7.9, ggui#890). HTTP
    * 503 with `Retry-After`, which governs the retry; a parsed request's
    * refusal, so it speaks this table (ggui#836 follow-up).
    */
