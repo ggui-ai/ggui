@@ -79,9 +79,12 @@ const PRESET_FACTS: ReadonlyArray<PresetFact> = [
       // T4 — the retry rule is by `retry` class; `fixBy` scopes only `after-fix`
       'an `after-fix` refusal is yours to retry only when its `fixBy` is `caller`',
       'a `later` refusal retries after the delay it names',
-      // T2 — missing vs unknown handshakeId; the observable wire text is `not found`
+      // T2 — missing vs unknown handshakeId; since #880 the slug LEADS the wire
+      // text (`HandshakeNotFoundError` is a `DomainError`), so the literal is
+      // observable and pinned on both surfaces beside `not found`
       'call without `handshakeId` is rejected at input validation (-32602)',
       'not found',
+      '`handshake_not_found`',
       // T6 — what consumes the handshake and what leaves it intact
       'a `rendered` or `failed` render consumes the handshake; a `refused` render or a recoverable validation error leaves it intact',
       // A13 — nextStep only with a non-empty actionSpec
