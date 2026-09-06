@@ -1,0 +1,9 @@
+{
+  "name": "amend-unknown-session",
+  "description": "An in-place amend on an unknown sessionId: `session_not_found` leads the text; nothing was mutated.",
+  "scenario": {
+    "tool": "ggui_amend",
+    "args": { "sessionId": "render_does_not_exist", "kind": "replace", "props": {} }
+  },
+  "expect": { "code": "session_not_found" }
+}

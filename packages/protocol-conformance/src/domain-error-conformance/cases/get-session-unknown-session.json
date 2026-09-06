@@ -1,0 +1,6 @@
+{
+  "name": "get-session-unknown-session",
+  "description": "The projection read on an unknown sessionId: `session_not_found` leads the text; no JSON-RPC error frame, no structuredContent.",
+  "scenario": { "tool": "ggui_get_session", "args": { "sessionId": "render_does_not_exist" } },
+  "expect": { "code": "session_not_found" }
+}

@@ -19,7 +19,7 @@ A fifth surface — the **Path-B browser-host driver** for DOM-level claims (`bo
 
 **The behavioral fixture catalog is WebSocket-only.** The canonical ggui live-channel transport is WS (see SPEC §12 Transport Bindings). `TransportConfig` is shaped as an extensibly-closed union so later live-channel transports (HTTP long-poll) can be added without breaking the public API.
 
-The MCP surface is graded separately, by catalog rather than by transport config — see `resource-read-conformance` below. Its cases are deliberately NOT registered in `fixturesByContract`: everything in that map is driven over a WebSocket, so an MCP case there would be a permanent skip on every WS run, which is the false gate the kit's exact skip-set pinning exists to prevent. `resources/read` is the only MCP method bound today; `tools/call` has no driver yet.
+The MCP surface is graded separately, by catalog rather than by transport config — see `resource-read-conformance` below. Its cases are deliberately NOT registered in `fixturesByContract`: everything in that map is driven over a WebSocket, so an MCP case there would be a permanent skip on every WS run, which is the false gate the kit's exact skip-set pinning exists to prevent. `resources/read` and — since ggui#880 — one `tools/call` catalog (`domain-error`, SPEC §7.9 Plane 2) are the MCP methods bound today.
 
 ## Path-A vs Path-B matchability
 
@@ -115,6 +115,14 @@ Throwing from the driver means "I cannot express this scenario" and the case **s
 The catalog grades all four failure classes (`NOT_FOUND` on `-32002`; `BLUEPRINT_UNRESOLVABLE` / `NOT_SUPPORTED` / `NOT_MOUNTABLE` on `-32006`), the mount half on both a live row and a re-minted one, and the disclosure obligation: a read refused for lack of entitlement and a read of a locator that never existed must be **byte-identical**, on a server that keeps durable records, on one that keeps none, on the two half-wired shapes in between, and on one whose blueprint registry matches the probed key.
 
 It deliberately does **not** grade: the order in which a substrate-less server answers (`NOT_SUPPORTED` describes the deployment, so answering it immediately is correct); `detail` wording on any code; the `NOT_FOUND` message literal (its _constancy_ is what is normative); internal-error message text; the number a URI naming no locator receives (that belongs to the transport binding — only the negative is graded, that it must not be one of the four); and the shell's markup (success is graded on the projected render meta, never on DOM shape).
+
+## Domain-error conformance — the `tools/call` binding (SPEC §7.9 Plane 2, ggui#880)
+
+The kit's first `tools/call` driver. A Plane-2 failure — a missing session or handshake, props that do not satisfy the contract, an undeclared channel — is a tool-execution error, so it is a tool RESULT with `isError: true` (never a JSON-RPC error frame) whose `content[0].text` LEADS with the registered slug: `<code>: <detail>`. No `structuredContent`, no `_meta`. A raw MCP agent branches on `text.startsWith(code + ': ')` for a code in `@ggui-ai/protocol`'s `DOMAIN_ERROR_CODES` and on nothing else.
+
+Vendor-neutral like `resources/read`: the kit imports no server. The adopter supplies a **driver** — `toolCallDriver` on `runConformance()`, or `--tool-call-driver <module>` on the CLI (an ES module exporting `drive(scenario)` or a default) — that performs ONE `tools/call` against the deployment and returns the raw result the MCP client received, or `null` when the tool is not bound there (that case is SKIPPED, named). The kit owns the scenarios and every assertion. Six no-setup cases under `src/domain-error-conformance/cases/`: an unknown `handshakeId` on `ggui_render` (`handshake_not_found`) and an unknown `sessionId` on `ggui_consume` / `ggui_get_session` / `ggui_update` / `ggui_amend` / `ggui_emit` (`session_not_found`). Each is graded on the raw result — `isError`, `content-text`, `slug-leads`, `no-structuredContent`, `no-meta` — and reported as `domain-error/<case>`; a driver that throws fails that case only.
+
+The catalog exists for one receipt: before the slug led the text, every first-party server failed every case on `slug-leads` (executed, ggui#880). `src/cli-samples/tool-call-driver.mjs` is a spec-correct sample of what the flag imports.
 
 ## Conformance status
 

@@ -100,6 +100,11 @@ import {
   type ProjectedTransportRefusal,
   type TransportRefusalInput,
 } from './transport-refusal-conformance/index.js';
+import {
+  domainErrorCases,
+  runDomainErrorConformance,
+  type ToolCallDriver,
+} from './domain-error-conformance/index.js';
 
 // =============================================================================
 // Public API
@@ -160,6 +165,13 @@ export interface RunConformanceConfig {
   readonly transportRefusalProjector?: (
     refusal: TransportRefusalInput,
   ) => ProjectedTransportRefusal | null;
+  /**
+   * Performs one `tools/call` against the deployment and returns the raw
+   * result (or `null` when the tool is not bound). Supplied ⇒ the
+   * `domain-error` catalog (SPEC §7.9 Plane 2 on the wire, ggui#880) is
+   * graded; omitted ⇒ SKIPPED, named.
+   */
+  readonly toolCallDriver?: ToolCallDriver;
 }
 
 /**
@@ -172,6 +184,7 @@ export const PURE_FUNCTION_CATALOG_SLUGS = [
   'refusal-envelope',
   'registry-completeness',
   'transport-refusal',
+  'domain-error',
 ] as const;
 
 /** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
@@ -254,7 +267,7 @@ export async function runConformance(
     }
   }
 
-  runPureFunctionCatalogs(config, reporter, { passed, failed, skipped });
+  await runPureFunctionCatalogs(config, reporter, { passed, failed, skipped });
 
   const result: ConformanceResult = {
     passed,
@@ -292,11 +305,11 @@ interface VerdictBuckets {
  * absent input produces a SKIP row naming what to supply rather than
  * nothing at all.
  */
-function runPureFunctionCatalogs(
+async function runPureFunctionCatalogs(
   config: RunConformanceConfig,
   reporter: ConformanceReporter,
   buckets: VerdictBuckets,
-): void {
+): Promise<void> {
   const only = config.only;
   const wanted = (name: string): boolean =>
     only === undefined || only.length === 0 || only.includes(name);
@@ -359,6 +372,30 @@ function runPureFunctionCatalogs(
         expected: mismatch.expected,
         received: mismatch.actual,
         message: 'the projected endpoint refusal does not match the catalog case',
+      });
+    }
+  }
+
+  // ── domain-error (ggui#880) ──
+  const toolCallDriver = config.toolCallDriver;
+  if (toolCallDriver === undefined) {
+    for (const testCase of domainErrorCases) {
+      skip(
+        `domain-error/${testCase.name}`,
+        'no `toolCallDriver` supplied — pass one to runConformance(), or `--tool-call-driver <module>` on the CLI, to grade SPEC §7.9\u2019s Plane-2 wire text',
+      );
+    }
+  } else {
+    const graded = await runDomainErrorConformance(toolCallDriver);
+    for (const name of graded.passed) pass(`domain-error/${name}`);
+    for (const skipped of graded.skipped) skip(`domain-error/${skipped.name}`, skipped.reason);
+    for (const mismatch of graded.failed) {
+      fail({
+        name: `domain-error/${mismatch.name}`,
+        criterion: `Plane-2 wire text (SPEC §7.9): ${mismatch.criterion}`,
+        expected: mismatch.expected,
+        received: mismatch.actual,
+        message: 'the raw tools/call result does not carry the registered slug as the leading token of its text',
       });
     }
   }

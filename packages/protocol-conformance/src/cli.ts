@@ -19,7 +19,9 @@
  * The three PURE-FUNCTION catalogs (refusal-envelope,
  * registry-completeness, transport-refusal) grade an in-process
  * function and a data table, not the wire: `--registry <file.json>`,
- * `--projector <module>` and `--transport-projector <module>` hand
+ * `--projector <module>`, `--transport-projector <module>` and
+ * `--tool-call-driver <module>` (the domain-error catalog, the kit's
+ * first tools/call driver, ggui#880) hand
  * them their inputs (ggui#803 leg 3). A flag left out leaves its
  * catalog SKIPPED with the flag named, never silently absent. Catalog
  * rows count as executed fixtures, so a run given a catalog flag can
@@ -51,6 +53,11 @@ import type {
   RefusalRegistryRow,
   RefusalRegistryView,
 } from './registry-completeness/index.js';
+import {
+  isRawToolCallResult,
+  type RawToolCallResult,
+  type ToolCallScenario,
+} from './domain-error-conformance/index.js';
 import { createDefaultReporter, formatFailures, formatSkips } from './reporter.js';
 import {
   runConformance,
@@ -78,6 +85,8 @@ interface ParsedArgs {
   readonly projector?: string;
   /** Path to an ES module exporting the endpoint-level refusal projector. */
   readonly transportProjector?: string;
+  /** Path to an ES module exporting a `tools/call` driver (SPEC §7.9 Plane 2, ggui#880). */
+  readonly toolCallDriver?: string;
   readonly verbose: boolean;
   readonly help: boolean;
 }
@@ -89,6 +98,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let timeoutMs: number | undefined;
   let registry: string | undefined;
   let projector: string | undefined;
+  let toolCallDriver: string | undefined;
   let transportProjector: string | undefined;
   let verbose = false;
   let help = false;
@@ -126,6 +136,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case '--transport-projector':
         transportProjector = next();
         break;
+      case '--tool-call-driver':
+        toolCallDriver = next();
+        break;
       case '--verbose':
       case '-v':
         verbose = true;
@@ -139,7 +152,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     }
   }
 
-  return { url, auth, only, timeoutMs, registry, projector, transportProjector, verbose, help };
+  return { url, auth, only, timeoutMs, registry, projector, transportProjector, toolCallDriver, verbose, help };
 }
 
 /** The message of a thrown value, without pretending every throw is an Error. */
@@ -168,7 +181,7 @@ function parseAuth(spec: string): AuthConfig {
 /** The three optional inputs a CLI run can hand the pure-function catalogs. */
 export type CatalogInputs = Pick<
   RunConformanceConfig,
-  'refusalRegistry' | 'refusalProjector' | 'transportRefusalProjector'
+  'refusalRegistry' | 'refusalProjector' | 'transportRefusalProjector' | 'toolCallDriver'
 >;
 
 /** The flag values that name where each catalog input comes from. */
@@ -176,6 +189,7 @@ export interface CatalogInputPaths {
   readonly registry?: string | undefined;
   readonly projector?: string | undefined;
   readonly transportProjector?: string | undefined;
+  readonly toolCallDriver?: string | undefined;
 }
 
 function isRecord(value: unknown): value is { readonly [key: string]: unknown } {
@@ -318,7 +332,40 @@ async function loadProjector<I, O>(
 }
 
 /**
- * Resolve the `--registry` / `--projector` / `--transport-projector`
+ * Like {@link loadProjector} for a `tools/call` DRIVER: the export is
+ * `drive` (or the default export), it may be async, and `null` means
+ * "the tool is not bound on this deployment" (the catalog SKIPS that
+ * case, named). Every other value is held to the raw-result shape.
+ */
+async function loadDriver<I, O>(
+  flag: string,
+  path: string,
+  guard: (value: unknown) => value is O,
+): Promise<(input: I) => Promise<O | null>> {
+  const href = pathToFileURL(resolve(path)).href;
+  let mod: { readonly drive?: unknown; readonly default?: unknown };
+  try {
+    mod = await import(/* @vite-ignore */ href);
+  } catch (err) {
+    throw new Error(`${flag} ${path} could not be imported: ${errorMessage(err)}`);
+  }
+  const candidate: unknown = mod.drive ?? mod.default;
+  if (typeof candidate !== 'function') {
+    throw new Error(`${flag} ${path} must export \`drive\` (or a default export) as a function`);
+  }
+  return async (input: I): Promise<O | null> => {
+    const out: unknown = await candidate(input);
+    if (out === null) return null;
+    if (!guard(out)) {
+      throw new Error(`${flag} ${path} returned a value that is not a raw tools/call result: ${JSON.stringify(out)}`);
+    }
+    return out;
+  };
+}
+
+/**
+ * Resolve the `--registry` / `--projector` / `--transport-projector` /
+ * `--tool-call-driver`
  * flags into the runner's catalog inputs. A flag that is absent yields
  * no input, and the runner reports that catalog SKIPPED with the flag
  * named. Every failure names the flag and the path.
@@ -328,6 +375,7 @@ export async function loadCatalogInputs(paths: CatalogInputPaths): Promise<Catal
     refusalRegistry?: RefusalRegistryView;
     refusalProjector?: RunConformanceConfig['refusalProjector'];
     transportRefusalProjector?: RunConformanceConfig['transportRefusalProjector'];
+    toolCallDriver?: RunConformanceConfig['toolCallDriver'];
   } = {};
   if (paths.registry !== undefined) {
     let text: string;
@@ -350,6 +398,13 @@ export async function loadCatalogInputs(paths: CatalogInputPaths): Promise<Catal
       TransportRefusalInput,
       ProjectedTransportRefusal
     >('--transport-projector', paths.transportProjector, isProjectedTransportRefusal);
+  }
+  if (paths.toolCallDriver !== undefined) {
+    inputs.toolCallDriver = await loadDriver<ToolCallScenario, RawToolCallResult>(
+      '--tool-call-driver',
+      paths.toolCallDriver,
+      isRawToolCallResult,
+    );
   }
   return inputs;
 }
@@ -392,6 +447,11 @@ Options:
                            { httpStatus, error } for a refusal, or null when
                            the code has no transport envelope (grades
                            transport-refusal).
+  --tool-call-driver <module>
+                           ES module exporting drive(scenario) (or default):
+                           performs ONE tools/call and returns the raw result
+                           (null = tool not bound). Grades the domain-error
+                           catalog — SPEC §7.9 Plane 2 on the wire (ggui#880).
   --verbose, -v            Print failure details + skip reasons at the end.
   --help, -h               Show this help.
 

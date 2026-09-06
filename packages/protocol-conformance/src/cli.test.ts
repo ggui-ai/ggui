@@ -98,6 +98,28 @@ describe('the CLI can grade the pure-function catalogs when handed their inputs 
     expect(USAGE).toContain('--transport-projector <module>');
   });
 
+  it('parses --tool-call-driver and --help names it beside the domain-error catalog (ggui#880)', () => {
+    const parsed = parseArgs(['--url', 'http://localhost:3000', '--auth', 'bearer:t', '--tool-call-driver', './driver.mjs']);
+    expect(parsed.toolCallDriver).toBe('./driver.mjs');
+    expect(USAGE).toContain('--tool-call-driver <module>');
+    expect(USAGE).toContain('domain-error');
+  });
+
+  it('imports a tools/call driver module into the run config; a bad export fails by flag name (ggui#880)', async () => {
+    const inputs = await loadCatalogInputs({ toolCallDriver: sample('tool-call-driver.mjs') });
+    const result = await inputs.toolCallDriver?.({
+      tool: 'ggui_render',
+      args: { handshakeId: 'h_does_not_exist', props: {} },
+    });
+    expect(result).toMatchObject({ isError: true });
+    expect(result?.content[0]?.text?.startsWith('handshake_not_found: ')).toBe(true);
+    await expect(loadCatalogInputs({ toolCallDriver: sample('bad-export.mjs') })).rejects.toThrow(
+      /--tool-call-driver/,
+    );
+    const absent = await loadCatalogInputs({});
+    expect(absent.toolCallDriver).toBeUndefined();
+  });
+
   it('loads a JSON registry and imports projector modules into the run config', async () => {
     const inputs = await loadCatalogInputs({
       registry: sample('registry.json'),
@@ -138,12 +160,17 @@ describe('the CLI can grade the pure-function catalogs when handed their inputs 
     const result = await runConformance({
       serverUrl: 'ws://127.0.0.1:9/ws',
       auth: { kind: 'bearer', token: 'x' },
-      only: ['refusal-envelope/refuse-never', 'transport-refusal/refuse-render-only-code'],
+      only: [
+        'refusal-envelope/refuse-never',
+        'transport-refusal/refuse-render-only-code',
+        'domain-error/render-unknown-handshake',
+      ],
       observationTimeoutMs: 10,
     });
     const reasons = result.skipped.map((s) => s.reason);
     expect(reasons.some((r) => r.includes('--projector <module>'))).toBe(true);
     expect(reasons.some((r) => r.includes('--transport-projector <module>'))).toBe(true);
+    expect(reasons.some((r) => r.includes('--tool-call-driver <module>'))).toBe(true);
   });
 
   it('refuses a registry file that is not an object of rows, loudly', async () => {

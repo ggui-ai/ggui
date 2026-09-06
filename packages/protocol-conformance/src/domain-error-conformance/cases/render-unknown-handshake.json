@@ -1,0 +1,6 @@
+{
+  "name": "render-unknown-handshake",
+  "description": "A handshakeId nothing minted: the render fails as not found — `handshake_not_found` leads the text. No handshake is consumed, nothing is committed; the caller re-handshakes.",
+  "scenario": { "tool": "ggui_render", "args": { "handshakeId": "h_does_not_exist", "props": {} } },
+  "expect": { "code": "handshake_not_found" }
+}

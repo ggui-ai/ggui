@@ -1,0 +1,9 @@
+{
+  "name": "consume-unknown-session",
+  "description": "A sessionId no session this caller can reach carries: `session_not_found` leads the text of the consume result — the same slug for never-minted, expired, closed and cross-app ids.",
+  "scenario": {
+    "tool": "ggui_consume",
+    "args": { "sessionId": "render_does_not_exist", "timeout": 0 }
+  },
+  "expect": { "code": "session_not_found" }
+}

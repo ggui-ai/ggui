@@ -1,0 +1,9 @@
+{
+  "name": "emit-unknown-session",
+  "description": "A stream emit on an unknown sessionId: `session_not_found` leads the text before any channel is checked.",
+  "scenario": {
+    "tool": "ggui_emit",
+    "args": { "sessionId": "render_does_not_exist", "channel": "x", "payload": {} }
+  },
+  "expect": { "code": "session_not_found" }
+}

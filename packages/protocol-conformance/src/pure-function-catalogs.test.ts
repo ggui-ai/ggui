@@ -37,6 +37,11 @@ import {
   type ProjectedTransportRefusal,
   type TransportRefusalInput,
 } from './transport-refusal-conformance/index.js';
+import {
+  domainErrorCases,
+  type RawToolCallResult,
+  type ToolCallScenario,
+} from './domain-error-conformance/index.js';
 
 /**
  * A URL the runner must never dial. Every case below filters the WS
@@ -61,6 +66,20 @@ const REGISTRY_ROWS = registryCompletenessPins.map(
   (p) => `registry-completeness/${p.name}`,
 );
 const TRANSPORT_ROWS = transportRefusalCases.map((c) => `transport-refusal/${c.name}`);
+/** Row names the domain-error catalog contributes (ggui#880). */
+const DOMAIN_ROWS = domainErrorCases.map((c) => `domain-error/${c.name}`);
+
+/** A conformant tools/call driver, built from the catalog's own cases. */
+function catalogToolCallDriver(scenario: ToolCallScenario): RawToolCallResult | null {
+  const match = domainErrorCases.find(
+    (c) =>
+      c.scenario.tool === scenario.tool &&
+      JSON.stringify(c.scenario.args) === JSON.stringify(scenario.args),
+  );
+  return match === undefined
+    ? null
+    : { isError: true, content: [{ type: 'text', text: `${match.expect.code}: the id resolves to nothing` }] };
+}
 
 /** A conformant endpoint projector, built from the catalog's own `expect`. */
 function catalogTransportProjector(
@@ -169,7 +188,9 @@ describe('runConformance — pure-function catalog fold', () => {
   });
 
   it('prints every pure-function catalog on the scorecard, skipped rows included', async () => {
-    const result = await run({ only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS] });
+    const result = await run({
+      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS],
+    });
     const scorecard = formatScorecard(result);
     for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
       expect(scorecard).toContain(slug);
@@ -199,5 +220,50 @@ describe('runConformance — transport-refusal catalog fold (ggui#825)', () => {
     const result = await run({ only: TRANSPORT_ROWS, transportRefusalProjector: () => null });
     expect(result.failed.map((f) => f.name)).toEqual(['transport-refusal/refuse-deprovisioned-endpoint']);
     expect(result.failed[0]?.criterion).toMatch(/mcp-endpoint/);
+  });
+});
+
+describe('runConformance — domain-error catalog fold (ggui#880)', () => {
+  it('reports every domain-error row as SKIPPED, naming toolCallDriver, when it is not supplied', async () => {
+    const result = await run({ only: DOMAIN_ROWS });
+    expect(result.passed).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.skipped.map((s) => s.name)).toEqual(DOMAIN_ROWS);
+    for (const skipped of result.skipped) {
+      expect(skipped.reason).toMatch(/toolCallDriver/);
+    }
+  });
+
+  it('grades the domain-error catalog when a driver is supplied', async () => {
+    const result = await run({ only: DOMAIN_ROWS, toolCallDriver: catalogToolCallDriver });
+    expect(result.failed).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect(result.passed).toEqual(DOMAIN_ROWS);
+  });
+
+  it("a prose-only driver — today's wire — fails every row with `slug-leads` named in the criterion", async () => {
+    const result = await run({
+      only: DOMAIN_ROWS,
+      toolCallDriver: (scenario) => ({
+        isError: true,
+        content: [{ type: 'text', text: `${scenario.tool}: not found` }],
+      }),
+    });
+    expect(result.passed).toEqual([]);
+    expect(result.failed.map((f) => f.name)).toEqual(DOMAIN_ROWS);
+    for (const failure of result.failed) {
+      expect(failure.criterion).toMatch(/slug-leads/);
+      expect(failure.criterion).toMatch(/7\.9/);
+    }
+  });
+
+  it('a driver that returns null skips the row with the tool named', async () => {
+    const result = await run({
+      only: DOMAIN_ROWS,
+      toolCallDriver: (scenario) => (scenario.tool === 'ggui_emit' ? null : catalogToolCallDriver(scenario)),
+    });
+    expect(result.skipped.length).toBe(1);
+    expect(result.skipped[0]?.reason).toContain('ggui_emit');
+    expect(result.passed.length).toBe(DOMAIN_ROWS.length - 1);
   });
 });
