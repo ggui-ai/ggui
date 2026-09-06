@@ -69,7 +69,7 @@ export const consumeInputShape = {
     .max(25)
     .optional()
     .describe(
-      'Inline long-poll seconds, integer in [0, 25]. 0 = immediate. Values outside the bound reject INVALID_PARAMS. Returns on first event OR timeout; re-call on empty to keep waiting — longer waits are your loop, not a bigger timeout.',
+      'Inline long-poll seconds, integer in [0, 25]. 0 = immediate. Values outside the bound reject INVALID_PARAMS. Returns on first event OR timeout; on empty you may re-call once, then end your turn — a later gesture arrives as a new user message carrying its own consume directive.',
     ),
 } as const;
 
@@ -263,7 +263,7 @@ export const handshakeInputSchema = z.object({
  * `'declined'` cover every legal outcome.
  */
 export const handshakeOutputSchema = z.object({
-  handshakeId: z.string().describe('Stable id — pass to ggui_render / ggui_update'),
+  handshakeId: z.string().describe('Stable id — pass to ggui_render'),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   /**
    * The handshake suggestion — see `handshakeSuggestionSchema`. The

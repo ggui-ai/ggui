@@ -1765,9 +1765,9 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).toMatch(/READ THE RESPONSE'S `outcome` FIRST/);
     expect(d).toMatch(/`rendered` \| `failed` \| `refused`/);
     expect(d).toMatch(/`failed` adds `error` and CONSUMES the handshake/);
-    expect(d).toMatch(/carries ONLY `refusal`/);
+    expect(d).toMatch(/carries only `refusal`/);
     expect(d).toMatch(/handshake is INTACT/);
-    expect(d).toMatch(/Never auto-retry a refusal whose registered `fixBy` is not `caller`/);
+    expect(d).toMatch(/an `after-fix` refusal is yours to retry only when its `fixBy` is `caller`/);
   });
 
   it('no longer frames blueprintId as provisional/minted-at-handshake', () => {
@@ -1783,7 +1783,7 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
   it('PREREQUISITE qualifies handshake consumption by outcome (#786)', () => {
     const d = description();
     expect(d).toMatch(
-      /a rendered or failed render consumes it; a REFUSED render does not/,
+      /a `rendered` or `failed` render consumes the handshake; a `refused` render or a recoverable validation error leaves it intact/,
     );
     expect(d).toMatch(/the same handshakeId works again once the fix lands/);
     // The unqualified claim must not survive anywhere in the text.
