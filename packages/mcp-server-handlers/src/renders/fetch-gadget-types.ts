@@ -32,6 +32,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { DomainError } from '@ggui-ai/protocol';
 import type { GadgetDescriptor } from '@ggui-ai/protocol';
 import { STDLIB_GADGETS_PACKAGE } from '@ggui-ai/protocol';
 
@@ -40,8 +41,7 @@ import { STDLIB_GADGETS_PACKAGE } from '@ggui-ai/protocol';
  * verification. Carries the offending package + reason so the render
  * handler can surface an actionable error to the agent.
  */
-export class GadgetTypesFetchError extends Error {
-  readonly code = 'gadget_types_fetch_failed' as const;
+export class GadgetTypesFetchError extends DomainError<'gadget_types_fetch_failed'> {
   readonly failures: ReadonlyArray<{
     readonly package: string;
     readonly typesUrl: string;
@@ -58,11 +58,11 @@ export class GadgetTypesFetchError extends Error {
       (f) => `  - ${f.package} (${f.typesUrl}): ${f.reason}`,
     );
     super(
-      `gadget_types_fetch_failed: could not load the .d.ts for ${failures.length} registered gadget(s):\n${lines.join(
+      'gadget_types_fetch_failed',
+      `could not load the .d.ts for ${failures.length} registered gadget(s):\n${lines.join(
         '\n',
       )}\n\nThe code-gen sandbox needs each wrapper's declaration file to typecheck generated component code. Verify the typesUrl is reachable and the typesSri matches.`,
     );
-    this.name = 'GadgetTypesFetchError';
     this.failures = failures;
   }
 }

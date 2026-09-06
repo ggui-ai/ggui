@@ -5,6 +5,7 @@
  * bucket (`tool-not-found`, `schema-mismatch`).
  */
 import { describe, expect, it } from 'vitest';
+import { isDomainError } from '@ggui-ai/protocol';
 import { z } from 'zod';
 import type { JsonSchema } from '@ggui-ai/protocol';
 import {
@@ -139,7 +140,8 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
       const compatErr = err as SchemaCompatError;
       expect(compatErr.report.compatible).toBe(false);
       expect(compatErr.report.findings[0]?.reason).toBe('schema-mismatch');
-      expect(compatErr.message).toContain('SCHEMA_MISMATCH_ERROR');
+      expect(compatErr.message.startsWith('schema_mismatch_error: ')).toBe(true);
+      expect(isDomainError(compatErr)).toBe(true);
       expect(compatErr.message).toContain('test:action-reject');
     }
   });
@@ -365,7 +367,7 @@ describe('SchemaCompatError — message formatting', () => {
       expect(err).toBeInstanceOf(SchemaCompatError);
       const message = (err as SchemaCompatError).message;
       expect(message).toContain('test:ctx');
-      expect(message).toContain('SCHEMA_MISMATCH_ERROR');
+      expect(message.startsWith('schema_mismatch_error: ')).toBe(true);
       expect(message).toContain('createTask');
       expect(message).toContain('feed');
       expect(message).toContain('ghost_tool');

@@ -199,6 +199,20 @@ const EXPECTED_PASSING = [
  *     the reason names the input that would grade them.
  */
 const EXPECTED_SKIPPED: Readonly<Record<string, string>> = {
+  // `domain-error/*` (ggui#880): the kit's `tools/call` driver catalog —
+  // a Plane-2 failure's raw result must lead with the registered slug.
+  // This harness serves the LIVE CHANNEL only (a bare http server with
+  // the WS upgrade; no `/mcp`), so it supplies no `toolCallDriver` — the
+  // wrong subject to drive `tools/call` from. The family is graded
+  // against the shipping OSS server, Streamable HTTP end to end, by
+  // `domain-error.conformance.test.ts` in this package. Pinned here as
+  // skipped so the absence is named, never silent.
+  'domain-error/amend-unknown-session': 'toolCallDriver',
+  'domain-error/consume-unknown-session': 'toolCallDriver',
+  'domain-error/emit-unknown-session': 'toolCallDriver',
+  'domain-error/get-session-unknown-session': 'toolCallDriver',
+  'domain-error/render-unknown-handshake': 'toolCallDriver',
+  'domain-error/update-unknown-session': 'toolCallDriver',
   'bootstrap-bundle-fetch-failed': 'renderer-url-override',
   'bootstrap-meta-missing': 'ui-initialize-response-override',
   'props-update-roundtrip': 'Path-B',

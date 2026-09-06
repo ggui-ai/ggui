@@ -39,6 +39,7 @@
  * retrieves, and enumerates.
  */
 import { randomUUID } from 'node:crypto';
+import { DomainError } from '@ggui-ai/protocol';
 import type {
   BlueprintIndex,
   EmbeddingProvider,
@@ -194,15 +195,14 @@ export type ContractValidator = (
  *   - BlueprintRejectedError (this) — contract structure trips a fail-closed
  *                                     validator finding at registration time
  */
-export class BlueprintRejectedError extends Error {
-  readonly code = 'blueprint_rejected' as const;
+export class BlueprintRejectedError extends DomainError<'blueprint_rejected'> {
   readonly findings: readonly ContractValidationFinding[];
   constructor(findings: readonly ContractValidationFinding[]) {
     const summary = findings.map((f) => `[${f.kind}] ${f.hint}`).join(' | ');
     super(
+      'blueprint_rejected',
       `registerBlueprint: contract rejected by structural validator. ${summary}`,
     );
-    this.name = 'BlueprintRejectedError';
     this.findings = findings;
   }
 }

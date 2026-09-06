@@ -222,3 +222,22 @@ describe('AppMetadataGadgetCatalog', () => {
     await expect(catalog.list('app1')).resolves.toHaveLength(STDLIB_GADGETS.length + 1);
   });
 });
+
+// ── ggui#880 — the catalog's integrity error is a DomainError over the registry
+
+import { isDomainError, parseDomainErrorText } from '@ggui-ai/protocol';
+
+describe('GadgetCatalogIntegrityError is a DomainError (ggui#880)', () => {
+  it('carries `gadget_catalog_integrity`, composes `<code>: <detail>` with the app named, and parses back', () => {
+    const err = new GadgetCatalogIntegrityError('app-1', [
+      { code: 'schema', path: 'gadgets[0].package', message: 'expected string' },
+    ]);
+    expect(isDomainError(err)).toBe(true);
+    if (!isDomainError(err)) return;
+    expect(err.code).toBe('gadget_catalog_integrity');
+    expect(err.name).toBe('GadgetCatalogIntegrityError');
+    expect(err.detail).toContain('app-1');
+    expect(err.message).toBe(`gadget_catalog_integrity: ${err.detail}`);
+    expect(parseDomainErrorText(err.message)).toEqual({ code: 'gadget_catalog_integrity', detail: err.detail });
+  });
+});

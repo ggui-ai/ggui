@@ -48,6 +48,7 @@ import {
   type GadgetDescriptor,
   type DataContract,
 } from '@ggui-ai/protocol';
+import { DomainError } from '@ggui-ai/protocol';
 import { levenshtein } from '../ops-blueprint/persona-normalization.js';
 
 /**
@@ -79,8 +80,7 @@ export interface PublicEnvViolation {
  * The error carries every missing-key tuple so authoring tools can
  * surface one fix per row.
  */
-export class GadgetPublicEnvMissingError extends Error {
-  readonly code = 'gadget_public_env_missing' as const;
+export class GadgetPublicEnvMissingError extends DomainError<'gadget_public_env_missing'> {
   readonly violations: ReadonlyArray<PublicEnvViolation>;
 
   constructor(violations: ReadonlyArray<PublicEnvViolation>) {
@@ -90,11 +90,11 @@ export class GadgetPublicEnvMissingError extends Error {
       return `  - \`${v.package}\` export \`${v.hook}\` requires public env key \`${v.missingKey}\` which is not set on App.publicEnv${tail}`;
     });
     super(
-      `gadget_public_env_missing: contract declares wrappers whose 'requires' keys are not present on App.publicEnv:\n${lines.join(
+      'gadget_public_env_missing',
+      `contract declares wrappers whose 'requires' keys are not present on App.publicEnv:\n${lines.join(
         '\n',
       )}\n\nSet the missing key(s) on ggui.json#app.publicEnv (OSS) or via the App-config write path (cloud), or drop the wrapper binding from the contract.`,
     );
-    this.name = 'GadgetPublicEnvMissingError';
     this.violations = violations;
   }
 }

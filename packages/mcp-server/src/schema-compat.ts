@@ -33,6 +33,7 @@
  * loudly at registration time.
  */
 import type { ZodRawShape } from 'zod';
+import { DomainError } from '@ggui-ai/protocol';
 import {
   isSchemaSubset,
   zodToJsonSchema,
@@ -148,11 +149,10 @@ export interface GguiSessionContractShape {
  * finding. Carries the full {@link SchemaCompatReport} so callers
  * can log / surface the detail beyond the `message` string.
  */
-export class SchemaCompatError extends Error {
+export class SchemaCompatError extends DomainError<'schema_mismatch_error'> {
   readonly report: SchemaCompatReport;
   constructor(report: SchemaCompatReport, context: string) {
-    super(formatReport(report, context));
-    this.name = 'SchemaCompatError';
+    super('schema_mismatch_error', formatReport(report, context));
     this.report = report;
   }
 }
@@ -287,7 +287,7 @@ export function hasErrorFinding(report: SchemaCompatReport): boolean {
  */
 function formatReport(report: SchemaCompatReport, context: string): string {
   if (report.compatible) {
-    return `${context}: SCHEMA_MISMATCH_ERROR (no findings — internal error)`;
+    return `${context} — no findings (internal error)`;
   }
   const sorted = [...report.findings].sort((a, b) =>
     a.specName < b.specName ? -1 : a.specName > b.specName ? 1 : 0,
@@ -306,7 +306,7 @@ function formatReport(report: SchemaCompatReport, context: string): string {
     return `- ${f.kind} "${f.specName}" (tool "${f.toolName}") — schema mismatch${suffix}`;
   });
   return [
-    `${context}: SCHEMA_MISMATCH_ERROR — ${report.findings.length} finding${report.findings.length > 1 ? 's' : ''}`,
+    `${context} — ${report.findings.length} finding${report.findings.length > 1 ? 's' : ''}`,
     ...lines,
   ].join('\n');
 }

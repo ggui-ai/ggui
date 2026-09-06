@@ -14,6 +14,7 @@
  * "GguiSession not found".
  */
 
+import { DomainError } from '@ggui-ai/protocol';
 /**
  * Thrown when a tool that requires a sessionId receives one that
  * doesn't resolve to any live GguiSession for the caller's appId. Three
@@ -29,14 +30,13 @@
  * fresh sessionId, then thread it through subsequent `ggui_update` /
  * `ggui_consume` calls.
  */
-export class GguiSessionNotFoundError extends Error {
-  readonly code = 'session_not_found' as const;
-  constructor(public readonly sessionId: string, message?: string) {
+export class GguiSessionNotFoundError extends DomainError<'session_not_found'> {
+  constructor(public readonly sessionId: string, detail?: string) {
     super(
-      message ??
+      'session_not_found',
+      detail ??
         `GguiSession "${sessionId}" not found. Either it was never minted, expired (TTL), was closed, or belongs to a different appId. Recovery: call ggui_handshake then ggui_render to mint a fresh sessionId.`,
     );
-    this.name = 'GguiSessionNotFoundError';
   }
 }
 
@@ -50,7 +50,7 @@ export class GguiSessionNotFoundError extends Error {
  * emissions. Callers who want a GguiSession without live-channel affordances
  * simply don't call the tool.
  */
-export class ChannelNotDeclaredError extends Error {
+export class ChannelNotDeclaredError extends DomainError<'channel_not_declared'> {
   readonly channel: string;
   readonly declaredChannels: ReadonlyArray<string>;
   readonly sessionId: string | undefined;
@@ -61,9 +61,9 @@ export class ChannelNotDeclaredError extends Error {
     sessionId?: string,
   ) {
     super(
+      'channel_not_declared',
       `Channel '${channel}' is not declared on the GguiSession's streamSpec. Declared channels: [${declaredChannels.join(', ') || '(none — no streamSpec on this GguiSession)'}]`,
     );
-    this.name = 'ChannelNotDeclaredError';
     this.channel = channel;
     this.declaredChannels = declaredChannels;
     if (sessionId !== undefined) {
@@ -82,14 +82,14 @@ export class ChannelNotDeclaredError extends Error {
  * expectations (receivers render 'channel closed' state only for
  * channels they know can close).
  */
-export class InvalidCompleteError extends Error {
+export class InvalidCompleteError extends DomainError<'invalid_complete'> {
   readonly channel: string;
 
   constructor(channel: string) {
     super(
+      'invalid_complete',
       `Channel '${channel}' was not declared with complete: true on its streamSpec. Declare completability on the spec, or drop complete from the emission.`,
     );
-    this.name = 'InvalidCompleteError';
     this.channel = channel;
   }
 }

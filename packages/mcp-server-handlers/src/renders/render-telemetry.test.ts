@@ -277,12 +277,12 @@ describe('ggui_render telemetry', () => {
     const { handler, events, handshakeId } = await buildHarness({
       contract: EMPTY_CONTRACT,
       checkRenderContracts: () => {
-        throw new Error('SCHEMA_MISMATCH_ERROR — test seam');
+        throw new Error('schema_mismatch_error: test seam');
       },
     });
     await expect(
       handler.handler({ handshakeId, props: {} }, CTX),
-    ).rejects.toThrow(/SCHEMA_MISMATCH_ERROR/);
+    ).rejects.toThrow(/^schema_mismatch_error: /);
 
     const violation = events.find(
       (e) => e.name === 'render.contract_violation',

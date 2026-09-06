@@ -62,6 +62,7 @@ import {
   type DataContract,
   type GadgetDescriptor,
 } from "@ggui-ai/protocol";
+import { DomainError } from "@ggui-ai/protocol";
 import { levenshtein } from "../ops-blueprint/persona-normalization.js";
 
 // Re-export the canonical resolver. The previous
@@ -131,8 +132,7 @@ function renderSecondaryTail(packageMismatches: readonly PackageMismatchEntry[])
  * `ggui.json#app.gadgets` (or via the operator's registration tool),
  * or drop the reference from the contract.
  */
-export class GadgetNotRegisteredError extends Error {
-  readonly code = "gadget_not_registered" as const;
+export class GadgetNotRegisteredError extends DomainError<'gadget_not_registered'> {
   readonly unregistered: readonly UnregisteredHookEntry[];
   /**
    * Lower-priority misses on the same render. Present only when this
@@ -153,11 +153,11 @@ export class GadgetNotRegisteredError extends Error {
     });
     const secondaryTail = secondary ? renderSecondaryTail(secondary.packageMismatches) : "";
     super(
-      `gadget_not_registered: contract.clientCapabilities.gadgets references exports not present in App.gadgets:\n${lines.join(
+      "gadget_not_registered",
+      `contract.clientCapabilities.gadgets references exports not present in App.gadgets:\n${lines.join(
         "\n"
       )}\n\nRegister the missing gadget(s) on this app (ggui.json#app.gadgets or the operator tool), or drop the reference from the contract.${secondaryTail}`
     );
-    this.name = "GadgetNotRegisteredError";
     this.unregistered = unregistered;
     if (secondary && secondary.packageMismatches.length > 0) {
       this.secondary = secondary;
@@ -183,8 +183,7 @@ export class GadgetNotRegisteredError extends Error {
  * Recovery: point the contract reference at the registered package,
  * or register the requested package on this app.
  */
-export class GadgetPackageMismatchError extends Error {
-  readonly code = "gadget_package_mismatch" as const;
+export class GadgetPackageMismatchError extends DomainError<'gadget_package_mismatch'> {
   readonly mismatches: readonly PackageMismatchEntry[];
   constructor(mismatches: readonly PackageMismatchEntry[]) {
     const lines = mismatches.map(
@@ -194,11 +193,11 @@ export class GadgetPackageMismatchError extends Error {
         )}`
     );
     super(
-      `gadget_package_mismatch: contract.clientCapabilities.gadgets references exports registered under a different package:\n${lines.join(
+      "gadget_package_mismatch",
+      `contract.clientCapabilities.gadgets references exports registered under a different package:\n${lines.join(
         "\n"
       )}\n\nPoint the contract reference at the registered package, or register the requested package on this app.`
     );
-    this.name = "GadgetPackageMismatchError";
     this.mismatches = mismatches;
   }
 }

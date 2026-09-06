@@ -182,7 +182,7 @@ function fakeGenerator(componentCode: string, sourceCode?: string) {
  * Schema-compat seam stub replicating the real cross-MCP escape hatch
  * (`@ggui-ai/mcp-server/schema-compat.ts`): a `nextStep` declared in
  * `agentCapabilities.tools` is exempt from the ggui-registry check; an
- * undeclared one throws the live `SCHEMA_MISMATCH_ERROR`. Used to prove
+ * undeclared one throws the live `schema_mismatch_error`. Used to prove
  * the cache path lands `agentCapabilities` so the `declared` set is
  * populated (vs. empty → false-positive throw).
  */
@@ -195,7 +195,7 @@ function makeSchemaCompatStub(): NonNullable<
       const tool = entry?.nextStep;
       if (typeof tool === 'string' && tool.length > 0 && !declared.has(tool)) {
         throw new Error(
-          `SCHEMA_MISMATCH_ERROR — action "${name}" references tool "${tool}" which is not registered`,
+          `schema_mismatch_error: action "${name}" references tool "${tool}" which is not registered`,
         );
       }
     }

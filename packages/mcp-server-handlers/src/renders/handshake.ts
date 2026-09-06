@@ -36,6 +36,7 @@
  * (cache | agent | synth) plus an ALWAYS-PRESENT `blueprintMeta`.
  */
 import { randomUUID } from 'node:crypto';
+import { DomainError } from '@ggui-ai/protocol';
 import { z } from 'zod';
 import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
@@ -1180,13 +1181,12 @@ function placeholderForSchema(
  * Typed error thrown by `ggui_render` when the supplied handshakeId
  * doesn't resolve (unknown, already-consumed, or TTL-expired).
  */
-export class HandshakeNotFoundError extends Error {
-  readonly code = 'handshake_not_found' as const;
+export class HandshakeNotFoundError extends DomainError<'handshake_not_found'> {
   constructor(public readonly handshakeId: string) {
     super(
-      `ggui_render: handshakeId "${handshakeId}" not found. Handshake records are SINGLE-USE (consumed on render) and expire after ${HANDSHAKE_RECORD_TTL_SEC / 60} minutes. To recover: call ggui_handshake({intent, blueprintDraft}) again to mint a fresh handshakeId, then render with the new pair. Each render-emission requires its own handshake; do not cache handshakeIds across calls.`,
+      'handshake_not_found',
+      `handshakeId "${handshakeId}" not found. Handshake records are SINGLE-USE (consumed on render) and expire after ${HANDSHAKE_RECORD_TTL_SEC / 60} minutes. To recover: call ggui_handshake({intent, blueprintDraft}) again to mint a fresh handshakeId, then render with the new pair. Each render-emission requires its own handshake; do not cache handshakeIds across calls.`,
     );
-    this.name = 'HandshakeNotFoundError';
   }
 }
 

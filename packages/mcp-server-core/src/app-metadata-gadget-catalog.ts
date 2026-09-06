@@ -54,6 +54,7 @@ import {
   strictGadgetDescriptorSchema,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
+import { DomainError } from '@ggui-ai/protocol';
 import type { AppMetadataStore } from './app-metadata-store.js';
 
 /**
@@ -81,8 +82,7 @@ export interface GadgetCatalogViolation {
  * corruption into an observable error at the catalog boundary instead
  * of an opaque generation failure downstream.
  */
-export class GadgetCatalogIntegrityError extends Error {
-  readonly code = 'gadget_catalog_integrity' as const;
+export class GadgetCatalogIntegrityError extends DomainError<'gadget_catalog_integrity'> {
   readonly appId: string;
   readonly violations: readonly GadgetCatalogViolation[];
   constructor(appId: string, violations: readonly GadgetCatalogViolation[]) {
@@ -90,11 +90,11 @@ export class GadgetCatalogIntegrityError extends Error {
       (v) => `  - [${v.code}] ${v.path}: ${v.message}`,
     );
     super(
-      `gadget_catalog_integrity: App.gadgets for app \`${appId}\` failed catalog validation:\n${lines.join(
+      'gadget_catalog_integrity',
+      `App.gadgets for app \`${appId}\` failed catalog validation:\n${lines.join(
         '\n',
       )}`,
     );
-    this.name = 'GadgetCatalogIntegrityError';
     this.appId = appId;
     this.violations = violations;
   }

@@ -21,10 +21,10 @@
  * genuinely needs both registers one under an aliased export name.
  */
 import { listContractGadgets, type DataContract } from '@ggui-ai/protocol';
+import { DomainError } from '@ggui-ai/protocol';
 
-export class DuplicateGadgetHookError extends Error {
+export class DuplicateGadgetHookError extends DomainError<'duplicate_gadget_hook'> {
   /** SPEC §7.9 Plane-2 slug — the wire literal consumers match on. */
-  readonly code = 'duplicate_gadget_hook' as const;
   readonly duplicates: ReadonlyArray<{
     package: string;
     firstSeenPackage: string;
@@ -42,9 +42,9 @@ export class DuplicateGadgetHookError extends Error {
         `  - export '${d.hook}' from '${d.package}' (already declared by '${d.firstSeenPackage}')`,
     );
     super(
-      `duplicate_gadget_hook: contract declares the same gadget export name under multiple packages. Each export name MUST mount once.\n${lines.join('\n')}`,
+      'duplicate_gadget_hook',
+      `contract declares the same gadget export name under multiple packages. Each export name MUST mount once.\n${lines.join('\n')}`,
     );
-    this.name = 'DuplicateGadgetHookError';
     this.duplicates = duplicates;
   }
 }

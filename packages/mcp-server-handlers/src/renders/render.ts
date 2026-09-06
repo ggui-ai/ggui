@@ -47,6 +47,7 @@
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
+import { DomainError } from '@ggui-ai/protocol';
 import {
   type AppTheme,
   type BlueprintVariance,
@@ -1206,6 +1207,20 @@ function rateCapRefusal(decision: RateLimitDecision): PreGenerationRefusal {
   };
 }
 
+
+/**
+ * `override.contract` failed the contract gate (ggui#880): the caller
+ * committed to its own contract (STRICT — the server does not repair an
+ * override), and it did not conform. Recovery: drop the override and
+ * re-handshake with that draft (which repairs it), or fix the contract.
+ * Plane-2 domain error over the registry — the slug leads the wire text.
+ */
+export class OverrideContractInvalidError extends DomainError<'override_contract_invalid'> {
+  constructor(detail: string) {
+    super('override_contract_invalid', detail);
+  }
+}
+
 /**
  * Run the failure hook without letting its own failure replace the
  * render's: the hook's throw is reported (one-shot warn — the handler has
@@ -1439,8 +1454,8 @@ export function createGguiRenderHandler(
       });
       if (acceptanceClassification === 'override') {
         const detail = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `override_contract_invalid: your override.contract failed validation — ${detail} override.contract COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and render WITHOUT override (accept the proposal) — do NOT retry override with the same contract.`,
+        throw new OverrideContractInvalidError(
+          `your override.contract failed validation — ${detail} override.contract COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and render WITHOUT override (accept the proposal) — do NOT retry override with the same contract.`,
         );
       }
       throw err;
@@ -2659,7 +2674,7 @@ export function createGguiRenderHandler(
         // 2b. Next step — driven by the response, not blanket-applied.
         "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({sessionId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
         // 3. Recovery shape — what happens on validation failure.
-        "RECOVERABLE FAILURES: cross_reference_unresolved / contract_schema_invalid / schema_mismatch_error / contract_violation (props — a missing required prop included) all preserve the handshake — fix your input and retry on the SAME handshakeId. cross_reference_unresolved fires when an `actionSpec[name].nextStep` or `streamSpec[channel].source.tool` names a tool that's not declared in `agentCapabilities.tools` — every referenced tool MUST appear in agentCapabilities.tools (catalog discoverability; same-MCP and cross-MCP both go here). contract_schema_invalid fires when an inner JSON Schema is malformed (e.g. `propsSpec.properties.X.schema` missing `type`). schema_mismatch_error fires when an actionSpec entry's `schema` is not a subset of the named tool's registered inputSchema, OR a streamSpec channel's `schema` doesn't accept the tool's return shape — adjust the action/channel schema to match the tool, or omit `nextStep` if the agent will compose the call from a different toolset entirely. Only handshake_not_found forces a re-handshake.",
+        "RECOVERABLE FAILURES: contract_validation_failed / schema_mismatch_error / contract_violation (props — a missing required prop included) / override_contract_invalid all preserve the handshake — fix your input and retry on the SAME handshakeId. contract_validation_failed fires when the contract gate rejects the draft: a malformed inner JSON Schema (e.g. `propsSpec.properties.X.schema` missing `type`), or an `actionSpec[name].nextStep` / `streamSpec[channel].source.tool` naming a tool not declared in `agentCapabilities.tools` — every referenced tool MUST appear in agentCapabilities.tools (catalog discoverability; same-MCP and cross-MCP both go here). override_contract_invalid is the same gate on an `override.contract` (STRICT — drop the override and re-handshake with that draft, which repairs it). schema_mismatch_error fires when an actionSpec entry's `schema` is not a subset of the named tool's registered inputSchema, OR a streamSpec channel's `schema` doesn't accept the tool's return shape — adjust the action/channel schema to match the tool, or omit `nextStep` if the agent will compose the call from a different toolset entirely. Only handshake_not_found forces a re-handshake.",
         // 4. Mutation rule — never re-render.
         'MUTATION: ggui_update mutates props on a delivered UI. NEVER re-render to mutate — re-rendering destroys scroll position, focus, and uncommitted input.',
         // 5. Wire surface — DataContract overview.
