@@ -21,15 +21,16 @@
  * agent's long-poll loop terminates on the next consume.
  */
 
-import type { GguiSessionStatus } from '@ggui-ai/protocol';
+import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
   type PendingEventConsumeResult,
   type PendingEventConsumer,
+  parsePendingEventRow,
   PendingPipeNotFoundError,
 } from '../pending-event-consumer.js';
 
 interface PipeEntry {
-  events: Array<Record<string, unknown>>;
+  events: Array<PendingEvent>;
   status: GguiSessionStatus;
   lastActivityAt: number;
   expiresAt: number;
@@ -66,21 +67,18 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
     });
   }
 
-  async append(
-    sessionId: string,
-    event: Record<string, unknown>,
-  ): Promise<void> {
+  async append(sessionId: string, event: PendingEvent): Promise<void> {
+    // Validated before it is stored (ggui#839) — the struct then holds only
+    // rows that passed, which is why the drain parses nothing.
+    parsePendingEventRow(sessionId, event);
     return this.withMutex(sessionId, async () => {
       const entry = this.pipes.get(sessionId);
       if (!entry) {
         throw new PendingPipeNotFoundError(sessionId);
       }
       // Per-id idempotency (ggui#405) — see the interface contract.
-      const id = typeof event.id === 'string' && event.id.length > 0 ? event.id : null;
-      if (id !== null) {
-        if (entry.seenEventIds.has(id)) return;
-        entry.seenEventIds.add(id);
-      }
+      if (entry.seenEventIds.has(event.id)) return;
+      entry.seenEventIds.add(event.id);
       entry.events.push(event);
       entry.lastActivityAt = Date.now();
     });

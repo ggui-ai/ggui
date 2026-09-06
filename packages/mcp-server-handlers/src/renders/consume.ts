@@ -20,9 +20,9 @@
  *     longer re-call `ggui_consume` (the documented loop).
  *
  * Output schema mirrors the cloud handler verbatim:
- * `{events: ConsumeEventEntry[], status: GguiSessionStatus}`. Each row is
- * normalized to canonical `PendingEvent` then unwrapped to its
- * `envelope` payload via `parsePendingEnvelope` so SDK consumers
+ * `{events: ConsumeEventEntry[], status: GguiSessionStatus}`. Each drained
+ * row is the protocol's `PendingEvent`, validated at the store boundary
+ * (ggui#839), and is unwrapped to its `envelope` entry so SDK consumers
  * read the per-gesture entry shape directly.
  *
  * Post-Phase-B (flatten-render-identity): collapsed from the prior
@@ -36,18 +36,24 @@ import { z } from 'zod';
 import {
   gguiConsumeOutputSchema,
   consumeInputShape,
-  parsePendingEnvelope,
   type ConsumeEventEntry,
   type HostContextProjection,
-  type PendingEvent,
   type GguiSessionStatus,
 } from '@ggui-ai/protocol';
 import {
   type ActiveConsumerRegistry,
+  type PendingEventConsumeResult,
   type PendingEventConsumer,
   type GguiSessionStore,
+  isPendingEventMalformedError,
 } from '@ggui-ai/mcp-server-core';
-import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
+import {
+  defineHandler,
+  handlerFailure,
+  type HandlerContext,
+  type HandlerFailure,
+  type ShapeOutput,
+} from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { isVisibleToCaller } from './render-visibility.js';
 
@@ -72,7 +78,7 @@ const inputSchema = consumeInputShape;
 
 const outputSchema = gguiConsumeOutputSchema.shape;
 /** The wire shape — derived from the registered fields (#817). */
-type ConsumeOutput = ShapeOutput<typeof outputSchema>;
+export type ConsumeOutput = ShapeOutput<typeof outputSchema>;
 
 /**
  * Optional observer-notification seam. Cloud uses this to fan a
@@ -185,11 +191,6 @@ export interface GguiConsumeHandlerDeps {
  */
 const CONSUME_SLOW_THRESHOLD_MS = 2000;
 
-interface ConsumeResultRaw {
-  readonly events: ReadonlyArray<Record<string, unknown>>;
-  readonly status: GguiSessionStatus;
-}
-
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60; // 1 day
 
 export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
@@ -204,7 +205,7 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<ConsumeOutput> {
+    ): Promise<ConsumeOutput | HandlerFailure<ConsumeOutput>> {
       const { sessionId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
       // Register this long-poll on the active-consumer registry IMMEDIATELY
@@ -235,11 +236,13 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
         // The pending-event pipe is keyed by sessionId. The render
         // lookup above is purely an app-scope gate; pipe reads use
         // sessionId directly.
-        let result = await fetchAndClearSafe(
-          deps.pendingEventConsumer,
-          sessionId,
-          ttlMs,
-        );
+        let result: PendingEventConsumeResult;
+        try {
+          result = await fetchAndClearSafe(
+            deps.pendingEventConsumer,
+            sessionId,
+            ttlMs,
+          );
 
         // Long-poll loop — only engages when the first read returned
         // nothing AND the pipe is still active. Expired pipes
@@ -293,17 +296,31 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
             }
           }
         }
+        } catch (err) {
+          // A transactional store refused the drain because a stored row is
+          // not a PendingEvent (ggui#839). Nothing was drained, so nothing is
+          // acknowledged; the agent gets a typed failure naming the session
+          // and the row, never a JSON-RPC error — and the real status.
+          if (isPendingEventMalformedError(err)) {
+            return handlerFailure<ConsumeOutput>(
+              { events: [], status: sessionStatusOf(stored) },
+              `ggui_consume refused for session ${sessionId}: the pending-event pipe holds a row${
+                err.rowId === undefined ? '' : ` (${err.rowId})`
+              } that is not a PendingEvent — ${err.issues
+                .map((issue) => `${issue.path.map(String).join('.') || '(row)'}: ${issue.message}`)
+                .join('; ')}. Nothing was drained or acknowledged; this server's producers cannot have written it. An operator removes the row.`,
+            );
+          }
+          throw err;
+        }
 
-        // Normalize each row to canonical PendingEvent shape, then emit
-        // the stored ConsumeEventEntry directly — the pipe IS the source
-        // of truth for the {intent, actionData, uiContext, ...} shape
-        // (see submit-action.ts kind:'dispatch' branch).
-        const parsed: PendingEvent[] = result.events.map((raw) =>
-          normalizeEvent(raw),
-        );
-        const events: ConsumeEventEntry[] = parsed.map((pe) =>
-          parsePendingEnvelope(pe.envelope),
-        );
+        // Each drained row is the protocol's PendingEvent, parsed at the
+        // store boundary (ggui#839); emit its stored ConsumeEventEntry
+        // directly — the pipe IS the source of truth for the {intent,
+        // actionData, uiContext, ...} shape (see submit-action.ts
+        // kind:'dispatch' branch).
+        const parsed = result.events;
+        const events: ConsumeEventEntry[] = parsed.map((pe) => pe.envelope);
 
         // drain_ack fan-out + slow-consume telemetry. One frame per
         // drained event so the iframe-runtime can match by `eventId`
@@ -424,7 +441,7 @@ async function fetchAndClearSafe(
   consumer: PendingEventConsumer,
   sessionId: string,
   ttlMs: number,
-): Promise<ConsumeResultRaw> {
+): Promise<PendingEventConsumeResult> {
   try {
     const r = await consumer.consumeAndClear(sessionId, ttlMs);
     return { events: r.events, status: r.status };
@@ -442,18 +459,9 @@ async function fetchAndClearSafe(
   }
 }
 
-/** Coerce raw row into canonical {@link PendingEvent} shape. */
-function normalizeEvent(raw: Record<string, unknown>): PendingEvent {
-  const envelope = raw.envelope as PendingEvent['envelope'];
-  return {
-    id: typeof raw.id === 'string' ? raw.id : '',
-    envelope,
-    sequence: typeof raw.sequence === 'number' ? raw.sequence : 0,
-    createdAt:
-      typeof raw.createdAt === 'string'
-        ? raw.createdAt
-        : new Date().toISOString(),
-  };
+/** The render row's lifecycle status as the store reports it on read — what a refused drain carries. */
+function sessionStatusOf(stored: { readonly status?: GguiSessionStatus }): GguiSessionStatus {
+  return stored.status ?? 'active';
 }
 
 /** Resolve the activity-bump TTL from the render row, falling back

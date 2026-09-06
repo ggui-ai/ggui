@@ -44,23 +44,27 @@
  * (queue semantics) while the event log is append-only retained.
  */
 
-import type { GguiSessionStatus } from '@ggui-ai/protocol';
+import {
+  type GguiSessionStatus,
+  type PendingEvent,
+  pendingEventSchema,
+} from '@ggui-ai/protocol';
 
 /**
  * Result envelope from a single `consumeAndClear` call.
  *
- * `events` is whatever was buffered at clear time. The handler
- * coerces each entry to a canonical `PendingEvent` shape downstream;
- * this interface keeps the row shape opaque so adapters that
- * marshal differently (DDB unmarshall, JSON column read, in-memory
- * struct) stay free to do so.
+ * `events` are the rows buffered at clear time, each the protocol's
+ * `PendingEvent` (ggui#839). The contract on this boundary: `consumeAndClear`
+ * MUST NOT return a row that fails `pendingEventSchema`, and MUST NOT drop a
+ * well-formed row because a sibling failed. Each adapter meets it in the
+ * form its store allows — see the MUST list on {@link PendingEventConsumer}.
  *
  * `status` carries the pipe's lifecycle phase. The handler's long-
  * poll loop terminates on `'expired'` (TTL elapsed) — the pipe
  * surfaces the same status the underlying render reports.
  */
 export interface PendingEventConsumeResult {
-  readonly events: ReadonlyArray<Record<string, unknown>>;
+  readonly events: ReadonlyArray<PendingEvent>;
   readonly status: GguiSessionStatus;
 }
 
@@ -81,6 +85,22 @@ export interface PendingEventConsumeResult {
  *   - Report `events: []` + a stable `status` when the pipe
  *     exists but has nothing buffered. This is the long-poll's
  *     baseline check.
+ *   - Validate every appended row through {@link parsePendingEventRow}
+ *     before storing it (ggui#839) — a row that fails refuses the append
+ *     with {@link PendingEventMalformedError}: the producer's own
+ *     violation, surfaced to the producer; nothing is stored.
+ *   - Never return a drained row that fails `pendingEventSchema`, and
+ *     never drop a well-formed row because a sibling failed. The form
+ *     follows the store: a TRANSACTIONAL drain (sqlite) parses inside the
+ *     transaction and refuses the drain whole — rollback, nothing cleared,
+ *     `PendingEventMalformedError` thrown, so the failure stays visible on
+ *     every consume of that session; a DESTRUCTIVE drain (DynamoDB, where
+ *     read and clear are one write) quarantines PER ROW — the malformed row
+ *     is logged as `pending_event_malformed` (sessionId, id, issues, the raw
+ *     row) and the well-formed siblings are delivered; the in-memory
+ *     adapter holds the typed struct it validated on append and parses
+ *     nothing on drain. The published contract-tests suite
+ *     (`runPendingEventStoreBoundaryConformance`) is the observable form.
  *
  * Implementations MAY emit additional metadata via the result by
  * extending `PendingEventConsumeResult`; downstream handlers
@@ -109,15 +129,14 @@ export interface PendingEventConsumer {
    * appends per-`sessionId` so concurrent producers don't lose
    * events; ordering within a single render is FIFO.
    *
-   * IDEMPOTENCY (ggui#405): when `event.id` is a non-empty string,
-   * append MUST be idempotent per `(sessionId, event.id)` for the
-   * pipe's LIFETIME — a duplicate append is a silent no-op, including
+   * IDEMPOTENCY (ggui#405): `event.id` is a non-empty string (the
+   * protocol's `pendingEventSchema`), and append MUST be idempotent per
+   * `(sessionId, event.id)` for the pipe's LIFETIME — a duplicate append is a silent no-op, including
    * after the original entry was drained by `consumeAndClear`. This is
    * what makes transport-level retries of `ggui_runtime_submit_action`
    * safe: a relay that lost the RESPONSE (but whose request was
    * delivered) can replay without double-firing the user's gesture.
-   * Events WITHOUT an `id` are appended unconditionally. NOTE: the WS
-   * ingress DOES pass an id today — but mints it server-side per call
+   * NOTE: the WS ingress DOES pass an id today — but mints it server-side per call
    * (`randomBytes(4)`, action-ingress.ts), so for WS-ingressed entries
    * this idempotency is structurally satisfied and semantically inert:
    * a re-fired gesture gets a fresh id and a fresh row. Gesture-stable
@@ -126,10 +145,7 @@ export interface PendingEventConsumer {
    *
    * @throws when the pipe row doesn't exist.
    */
-  append(
-    sessionId: string,
-    event: Record<string, unknown>,
-  ): Promise<void>;
+  append(sessionId: string, event: PendingEvent): Promise<void>;
 
   /**
    * Open a pipe for `sessionId` so subsequent `append` /
@@ -211,3 +227,73 @@ export class PendingPipeNotFoundError extends Error {
   }
 }
 
+/** One reason a stored row failed `pendingEventSchema` — the failing path and the schema's message. */
+export interface PendingEventIssue {
+  readonly path: ReadonlyArray<PropertyKey>;
+  readonly message: string;
+}
+
+/**
+ * A row that fails the protocol's `pendingEventSchema` (ggui#839). Thrown by
+ * `append` before anything is stored — the producer's own violation — and
+ * by a TRANSACTIONAL drain (`consumeAndClear` on sqlite), which refuses the
+ * drain whole and rolls back: nothing cleared, so the failure stays visible
+ * on every consume of that session. A DESTRUCTIVE drain (DynamoDB) never
+ * throws it on drain — it quarantines the row and logs
+ * `pending_event_malformed`. Carries `sessionId`, the row's `id` when it was
+ * readable, and the schema's issues. Detect by `name`, like
+ * {@link PendingPipeNotFoundError}.
+ */
+export class PendingEventMalformedError extends Error {
+  readonly sessionId: string;
+  /** The row's `id`, when the malformed row carried a readable one. */
+  readonly rowId: string | undefined;
+  readonly issues: ReadonlyArray<PendingEventIssue>;
+  constructor(
+    sessionId: string,
+    issues: ReadonlyArray<PendingEventIssue>,
+    rowId?: string,
+  ) {
+    super(
+      `pending-event row${rowId === undefined ? '' : ` ${rowId}`} for session ${sessionId} fails pendingEventSchema: ${issues
+        .map((issue) => `${issue.path.map(String).join('.') || '(row)'}: ${issue.message}`)
+        .join('; ')}`,
+    );
+    this.name = 'PendingEventMalformedError';
+    this.sessionId = sessionId;
+    this.rowId = rowId;
+    this.issues = issues;
+  }
+}
+
+/**
+ * `name`-detection of {@link PendingEventMalformedError}, like the
+ * `PendingPipeNotFoundError` pattern: a structurally identical class from
+ * another copy of this package matches too.
+ */
+export function isPendingEventMalformedError(err: unknown): err is PendingEventMalformedError {
+  return err instanceof Error && err.name === 'PendingEventMalformedError';
+}
+
+/** The row's `id` when the unparsed row is an object carrying a non-empty string there. */
+function readableRowId(row: unknown): string | undefined {
+  if (typeof row !== 'object' || row === null || !('id' in row)) return undefined;
+  return typeof row.id === 'string' && row.id.length > 0 ? row.id : undefined;
+}
+
+/**
+ * Parse one row at the store boundary: every adapter calls this on each
+ * row it accepts on `append` (before storing it), and an adapter that reads
+ * rows back from a serialization (a JSON column, an unmarshalled item) calls
+ * it again on each drained row. The row arrives as whatever the producer or
+ * the store handed over and leaves as the protocol's `PendingEvent` — or
+ * throws {@link PendingEventMalformedError}, naming the row when its `id`
+ * was readable.
+ */
+export function parsePendingEventRow(sessionId: string, row: unknown): PendingEvent {
+  const parsed = pendingEventSchema.safeParse(row);
+  if (!parsed.success) {
+    throw new PendingEventMalformedError(sessionId, parsed.error.issues, readableRowId(row));
+  }
+  return parsed.data;
+}

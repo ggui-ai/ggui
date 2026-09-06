@@ -6,6 +6,51 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The pending-event row is a schema (2026-09-06, store-boundary, pre-launch,
+ * ggui#839 — the #817 C2 follower; cite `3f3d86b86`). The consume pipe's
+ * stored row — what `submit_action` / the WS ingress append and
+ * `PendingEventConsumer.consumeAndClear` drains — was a hand-written
+ * interface the adapters typed as `Record<string, unknown>` and the consume
+ * handler coerced with defaults; nothing validated it. A store-boundary
+ * contract (producers ↔ adapters ↔ the consume handler), never wire:
+ * `ggui_consume` returns the entries, never the wrapper.
+ *
+ *   pe1. **`pendingEventSchema` + `PendingEvent` derived** —
+ *      `{ id: string.min(1), envelope: consumeEventEntrySchema, createdAt:
+ *      string }`; `createdAt` stays a string (the relay copies a client
+ *      `firedAt` the ingress accepts as a diagnostic).
+ *   pe2. **`sequence` deleted** — zero writers (both producers append
+ *      `{id, envelope, createdAt}`; sqlite's `seq` never joined the row;
+ *      the pod stores the literal), zero readers (the only read was the
+ *      handler's own default-to-0), named in neither SPEC nor the kit.
+ *   pe3. **`id` required and non-empty** — the drain_ack key and the
+ *      idempotency key per `(sessionId, id)`; the id-less append branches
+ *      (core docstring, in-memory, sqlite, the pod's `ddb.ts`) deleted in
+ *      the same publication.
+ *   pe4. **No string envelope arm** — every writer passes the object; a
+ *      store that serializes the whole row. `parsePendingEnvelope`
+ *      collapsed into the row parse (`envelope-adapters.ts` deleted).
+ *   pe5. **`PendingEventMalformedError` + the per-adapter failure mode** —
+ *      `consumeAndClear` MUST NOT return a row that fails the schema and
+ *      MUST NOT drop a well-formed row because a sibling failed: a
+ *      transactional drain (sqlite) refuses whole and rolls back; a
+ *      destructive drain (DynamoDB) quarantines per row with a
+ *      `pending_event_malformed` structured log; in-memory holds the typed
+ *      struct it validated on append. `append` refuses a malformed row
+ *      before storing it. The consume handler maps the error to a
+ *      `HandlerFailure` carrying `{ events: [], status }`, never a JSON-RPC
+ *      error, and the parse runs before any `drain_ack` fires.
+ *
+ * Conformance-kit verdict: not breaking under VERSION-POLICY §2 — the kit
+ * never names the wrapper (`git grep PendingEvent -- oss/packages/protocol-conformance`
+ * = 0); its only `sequence` is the `action-ack-sequence` fixture's WS ack
+ * `payload.sequence`, the ledger's `appendEvent` seq, never the pipe row's
+ * deleted field. The observable
+ * violation is `@ggui-ai/mcp-server-core`'s published contract-tests suite
+ * (a seeded malformed row is refused or quarantined per form). PATCH-class
+ * under §1.3 for `@ggui-ai/protocol`; rides the 0.16.0 wave.
+ *
+ * --------------------------------------------------------------------
  * The endpoint-level refusal carries the app as DATA (2026-09-05, wire
  * field, pre-launch, ggui#870 — the ggui#782 ↔ guuey#708 re-sitting's
  * D6, guuey#836's blocker). `transportRefusalSchema` — what rides
@@ -3335,9 +3380,10 @@
  *      derive (`ConsumeEventEntry`, `GguiConsumeOutput`, `GguiEmitOutput`,
  *      `GguiListSessionsOutput`, `GguiSessionStatus`). `tools/list` now
  *      advertises the entry vocabulary and the status enum for
- *      `ggui_consume`; `parsePendingEnvelope` parses a drained row instead
- *      of casting it, so a malformed pipe entry refuses at the seam. The
- *      wire bytes of a well-formed row are unchanged. Additive.
+ *      `ggui_consume`; `parsePendingEnvelope` parsed a drained row instead
+ *      of casting it, so a malformed pipe entry refused at the seam
+ *      (follower: collapsed into `pendingEventSchema`'s row parse, pe4
+ *      above). The wire bytes of a well-formed row are unchanged. Additive.
  *   r11. **Endpoint refusal codes (ggui#836):** the per-app endpoint speaks
  *      §7.9 Plane-1 rows — the typed deprovisioned arm is `-32003`
  *      (`APP_NOT_FOUND`, `App not found`) with `data.refusal`; untyped

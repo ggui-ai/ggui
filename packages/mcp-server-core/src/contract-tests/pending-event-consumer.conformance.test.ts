@@ -10,7 +10,11 @@
  */
 import { InMemoryPendingEventConsumer } from '../in-memory/pending-event-consumer.js';
 import { SqlitePendingEventConsumer } from '../sqlite/pending-event-consumer.js';
-import { runPendingEventConsumerConformance } from './pending-event-consumer.conformance.js';
+import Database from 'better-sqlite3';
+import {
+  runPendingEventConsumerConformance,
+  runPendingEventStoreBoundaryConformance,
+} from './pending-event-consumer.conformance.js';
 
 runPendingEventConsumerConformance('InMemoryPendingEventConsumer', {
   create: async () => {
@@ -31,3 +35,30 @@ runPendingEventConsumerConformance('SqlitePendingEventConsumer', {
     };
   },
 });
+
+
+runPendingEventStoreBoundaryConformance('SqlitePendingEventConsumer', {
+  create: async () => {
+    const db = new Database(':memory:');
+    const consumer = new SqlitePendingEventConsumer({ db });
+    return {
+      consumer,
+      seed: (sessionId: string) => consumer.markCreated(sessionId),
+      writeRawRow: (sessionId: string, row: unknown) => {
+        const next = db
+          .prepare<unknown[], { n: number }>(
+            'SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM pending_events WHERE render_id = ?',
+          )
+          .get(sessionId);
+        db.prepare(
+          'INSERT INTO pending_events (render_id, seq, event_json, enqueued_at) VALUES (?, ?, ?, ?)',
+        ).run(sessionId, next?.n ?? 1, JSON.stringify(row), Date.now());
+      },
+      removeRawRow: (sessionId: string, id: string) => {
+        db.prepare(
+          "DELETE FROM pending_events WHERE render_id = ? AND json_extract(event_json, '$.id') = ?",
+        ).run(sessionId, id);
+      },
+    };
+  },
+}, 'refuse');

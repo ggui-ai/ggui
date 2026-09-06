@@ -49,10 +49,12 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
-import type { GguiSessionStatus } from '@ggui-ai/protocol';
+import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
   type PendingEventConsumeResult,
   type PendingEventConsumer,
+  parsePendingEventRow,
+  PendingEventMalformedError,
   PendingPipeNotFoundError,
 } from '../pending-event-consumer.js';
 
@@ -181,19 +183,17 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
       const t = this.now();
       this.stmts.updateActivity.run(t, t + ttlMs, sessionId);
       return {
-        events: eventRows.map((row) =>
-          parseEventJson(row.event_json),
-        ) as ReadonlyArray<Record<string, unknown>>,
+        events: eventRows.map((row) => parseEventRow(sessionId, row.event_json)),
         status: pipe.status,
       };
     });
     return txn();
   }
 
-  async append(
-    sessionId: string,
-    event: Record<string, unknown>,
-  ): Promise<void> {
+  async append(sessionId: string, event: PendingEvent): Promise<void> {
+    // The producer's row is validated before anything is stored (ggui#839):
+    // the type erases `.min(1)`, so an empty `id` compiles — it must not land.
+    parsePendingEventRow(sessionId, event);
     const txn = this.db.transaction(() => {
       const pipe = this.stmts.getPipe.get(sessionId);
       if (!pipe) {
@@ -202,11 +202,8 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
       // Per-id idempotency (ggui#405) — the seen-ledger insert and the
       // event insert share this transaction, so a duplicate can never
       // slip between the check and the write.
-      const id = typeof event.id === 'string' && event.id.length > 0 ? event.id : null;
-      if (id !== null) {
-        const marked = this.stmts.markEventSeen.run(sessionId, id);
-        if (marked.changes === 0) return; // duplicate — silent no-op
-      }
+      const marked = this.stmts.markEventSeen.run(sessionId, event.id);
+      if (marked.changes === 0) return; // duplicate — silent no-op
       const seqRow = this.stmts.nextSeq.get(sessionId);
       const seq = seqRow?.next_seq ?? 1;
       const t = this.now();
@@ -234,15 +231,26 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
   }
 }
 
-function parseEventJson(json: string): Record<string, unknown> {
+/**
+ * Read one `event_json` column at the store boundary (ggui#839). This is a
+ * TRANSACTIONAL drain: text that is not JSON, or JSON that is not a
+ * `PendingEvent`, throws `PendingEventMalformedError` inside the drain
+ * transaction, so it rolls back — nothing cleared, siblings preserved, and
+ * the failure visible on every consume until the row is gone.
+ */
+function parseEventRow(sessionId: string, json: string): PendingEvent {
+  let value: unknown;
   try {
-    const parsed = JSON.parse(json) as unknown;
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
+    value = JSON.parse(json);
+  } catch (err) {
+    throw new PendingEventMalformedError(sessionId, [
+      {
+        path: [],
+        message: `event_json is not JSON: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    ]);
   }
+  return parsePendingEventRow(sessionId, value);
 }
 
 const SCHEMA_SQL = `

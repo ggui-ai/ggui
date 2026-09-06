@@ -26,6 +26,7 @@ import type {
   gguiGetSessionOutputSchema,
   gguiSearchBlueprintsOutputSchema,
   consumeEventEntrySchema,
+  pendingEventSchema,
   gguiConsumeOutputSchema,
   gguiEmitOutputSchema,
   gguiListSessionsOutputSchema,
@@ -47,35 +48,15 @@ export type { GguiSessionStatus } from './render';
 export type Screen = 'mobile' | 'tablet' | 'desktop' | 'universal';
 
 /**
- * Pending action stored server-side for agent consumption.
+ * One stored row of the consume pipe — a user action awaiting the agent's
+ * `ggui_consume`. Derived from {@link pendingEventSchema} (ggui#839): the
+ * shape a producer appends and a store drains, on every store.
  *
- * `envelope` is the canonical {@link ConsumeEventEntry} row. `sequence`
- * is the render-scoped monotonic assigned at ingestion; it sits on the
- * row wrapper so consumers can detect gaps without parsing the payload.
- *
- * **Storage note**: the envelope is stored as either a JSON object or
- * a JSON-stringified object, depending on how the deployment's storage
- * layer serializes rows. Consume readers MUST accept both — see
- * {@link parsePendingEnvelope}.
+ * `envelope` is the canonical {@link ConsumeEventEntry} — always the
+ * object. `id` is the drain_ack key and the idempotency key per
+ * `(sessionId, id)`. `createdAt` is when the row was appended.
  */
-export interface PendingEvent {
-  /** Stable row id — UUID assigned at ingestion. */
-  id: string;
-  /**
-   * Canonical {@link ConsumeEventEntry} row payload. JSON object or
-   * stringified JSON on the wire (both shapes round-trip through the
-   * consume helpers).
-   */
-  envelope: ConsumeEventEntry | string;
-  /**
-   * GguiSession-scoped monotonic sequence assigned at ingestion. Mirrors
-   * `GguiSession.eventSequence` at the moment this row was appended so
-   * consumers can detect gaps without reading render state.
-   */
-  sequence: number;
-  /** ISO datetime when the row was appended. */
-  createdAt: string;
-}
+export type PendingEvent = Readonly<z.infer<typeof pendingEventSchema>>;
 
 /**
  * Input for ggui_consume tool — long-poll for buffered events on a

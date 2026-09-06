@@ -1588,9 +1588,9 @@ export const gguiSessionStatusSchema = z.enum(['active', 'expired']);
 /**
  * One drained row of `ggui_consume` — a user action that reached the
  * pipe (ggui#817 part C2). Closed on the wire: an unknown key is
- * stripped at the transport, a missing key refuses the row at the seam
- * (`parsePendingEnvelope`), so a malformed pipe entry never ships to an
- * agent typed as a good one.
+ * stripped at the transport, a missing key refuses the row at the store
+ * boundary (`pendingEventSchema`, ggui#839), so a malformed pipe entry
+ * never ships to an agent typed as a good one.
  */
 export const consumeEventEntrySchema = z.object({
   type: z.literal('action'),
@@ -1600,6 +1600,26 @@ export const consumeEventEntrySchema = z.object({
   uiContext: jsonObjectSchema,
   actionId: z.string(),
   firedAt: z.string(),
+});
+
+/**
+ * One stored row of the consume pipe — what a producer appends and
+ * `consumeAndClear` drains, the same shape on every store (ggui#839; a
+ * store-boundary contract, never wire — `ggui_consume` returns the
+ * entries, never the wrapper). `id` is the drain_ack key and the
+ * idempotency key per `(sessionId, id)`; `envelope` is the
+ * {@link consumeEventEntrySchema} entry, always the object (every writer
+ * passes one; a store that serializes the row serializes the whole row);
+ * `createdAt` is when the row was appended — a string, never `.datetime()`:
+ * the relay copies the client's `firedAt`, which the ingress accepts as a
+ * diagnostic. `PendingEventConsumer` adapters validate every row through
+ * this schema on append and, when rows come back from a serialization, on
+ * drain — a malformed row never reaches an agent typed as a good entry.
+ */
+export const pendingEventSchema = z.object({
+  id: z.string().min(1),
+  envelope: consumeEventEntrySchema,
+  createdAt: z.string(),
 });
 
 /**

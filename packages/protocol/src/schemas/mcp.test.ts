@@ -2,6 +2,7 @@ import { renderInputEnvelopeSchema, renderInputRouteGuardSchema } from './render
 import { renderInputShape } from './mcp.js';
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import { expectTypeOf } from 'vitest';
+import type { PendingEvent } from '../types/mcp.js';
 import {
   blueprintValidationResultSchema,
   mcpUiDisplayModeSchema,
@@ -45,6 +46,7 @@ import {
   transportRefusalErrorSchema,
   transportRefusalSchema,
   consumeEventEntrySchema,
+  pendingEventSchema,
   gguiConsumeOutputSchema,
   gguiEmitOutputSchema,
   gguiListSessionsOutputSchema,
@@ -1533,5 +1535,40 @@ describe('transportRefusalSchema carries the app id as data (ggui#870)', () => {
   it('a refusal with appId parses and keeps it verbatim', () => {
     const parsed = transportRefusalSchema.parse({ ...base, appId: 't7faVMIc' });
     expect(parsed.appId).toBe('t7faVMIc');
+  });
+});
+
+describe('pendingEventSchema — the drained row is parsed at the store boundary (ggui#839)', () => {
+  const ENTRY = {
+    type: 'action',
+    sessionId: 'render_1',
+    intent: 'submit',
+    actionData: null,
+    uiContext: {},
+    actionId: 'act_1',
+    firedAt: '2026-09-05T00:00:00.000Z',
+  };
+  const ROW = { id: 'act_1', envelope: ENTRY, createdAt: '2026-09-05T00:00:00.000Z' };
+
+  it('parses a row whose envelope is the object', () => {
+    expect(pendingEventSchema.parse(ROW)).toEqual(ROW);
+  });
+
+  it('refuses a stringified envelope — no writer stringifies the entry, so the row admits the object only', () => {
+    expect(() => pendingEventSchema.parse({ ...ROW, envelope: JSON.stringify(ENTRY) })).toThrow();
+  });
+
+  it('refuses a row with no createdAt, an empty id, or a malformed object envelope', () => {
+    const { createdAt: _dropped, ...noCreatedAt } = ROW;
+    expect(() => pendingEventSchema.parse(noCreatedAt)).toThrow();
+    expect(() => pendingEventSchema.parse({ ...ROW, id: '' })).toThrow();
+    expect(() =>
+      pendingEventSchema.parse({ ...ROW, envelope: { ...ENTRY, type: 'stream' } }),
+    ).toThrow();
+  });
+
+  it('carries no sequence — nothing writes one and nothing reads one; an old row\'s key strips', () => {
+    expectTypeOf<PendingEvent>().not.toHaveProperty('sequence');
+    expect(pendingEventSchema.parse({ ...ROW, sequence: 7 })).toEqual(ROW);
   });
 });

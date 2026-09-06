@@ -51,6 +51,7 @@ import {
   InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiConsumeHandler } from '@ggui-ai/mcp-server-handlers/renders';
+import { isHandlerFailure, type HandlerFailure } from '@ggui-ai/mcp-server-handlers';
 import type { Logger } from './logger.js';
 import { DEFAULT_BUILDER_APP_ID } from './auth.js';
 import {
@@ -600,8 +601,11 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
    * call does), and the REAL `createGguiConsumeHandler` draining the
    * SAME consumer instance — the agent's side of the loop.
    */
-  /** What `ggui_consume` puts on the wire — the real handler's own output type (#817). */
-  type ConsumeWire = Awaited<ReturnType<ReturnType<typeof createGguiConsumeHandler>['handler']>>;
+  /** What `ggui_consume` puts on the wire on success — the real handler's own output type (#817); a HandlerFailure (ggui#839) is the test's failure. */
+  type ConsumeWire = Exclude<
+    Awaited<ReturnType<ReturnType<typeof createGguiConsumeHandler>['handler']>>,
+    HandlerFailure<unknown>
+  >;
 
   async function bootBridged(): Promise<{
     fixture: Fixture;
@@ -625,6 +629,7 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
           { sessionId: fixture.sessionId, timeout: 0 },
           { appId: APP_ID, requestId: 'bridge-drain' },
         );
+        if (isHandlerFailure(out)) throw new Error(`unexpected HandlerFailure: ${out.errorText}`);
         return out;
       },
     };

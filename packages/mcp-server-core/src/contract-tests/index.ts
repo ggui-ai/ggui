@@ -57,7 +57,11 @@ export { scopedFileStoreContract } from './scoped-file-store.js';
 // test suites alongside the basic contract to widen the drift net.
 export { runGguiSessionStoreConformance } from './ggui-session-store.conformance.js';
 export type { GguiSessionStoreConformanceFactory } from './ggui-session-store.conformance.js';
-export { runPendingEventConsumerConformance } from './pending-event-consumer.conformance.js';
+export { runPendingEventConsumerConformance,
+  runPendingEventStoreBoundaryConformance,
+  type PendingEventStoreBoundaryFactory,
+  type PendingEventStoreBoundaryForm,
+} from './pending-event-consumer.conformance.js';
 export type { PendingEventConsumerConformanceFactory } from './pending-event-consumer.conformance.js';
 
 // Content-addressed code-body seam. Every implementation that removes

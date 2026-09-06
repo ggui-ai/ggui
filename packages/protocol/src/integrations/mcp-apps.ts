@@ -1501,6 +1501,29 @@ export function isGguiSubmitActionInput(
 }
 
 /**
+ * The `dispatch` member of {@link GguiSubmitActionInput} — the one kind
+ * whose payload the pipe stores. Derived here, never restated in a
+ * consumer (ggui#839): `env.kind === 'dispatch'` alone cannot narrow the
+ * union, because the forward-compat extension member (`kind: string` with a
+ * `Record<string, unknown>` payload) also admits the literal at the type level.
+ */
+export type GguiSubmitDispatchInput = Extract<
+  GguiSubmitActionInput,
+  { readonly kind: 'dispatch' }
+>;
+
+/**
+ * Narrow a guarded envelope to its `dispatch` member. Sound because
+ * {@link isGguiSubmitActionInput}'s closed-set `switch` validates the
+ * `'dispatch'` payload before any extension kind can carry that literal.
+ */
+export function isGguiSubmitDispatchInput(
+  env: GguiSubmitActionInput,
+): env is GguiSubmitDispatchInput {
+  return env.kind === 'dispatch';
+}
+
+/**
  * `content[0]._meta["ai.ggui/userAction"]` — a PURE DOORBELL.
  *
  * Spec-canonical extension point: MCP Apps closes `params._meta` via

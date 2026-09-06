@@ -98,7 +98,6 @@ export * from "./types/app-config";
 // same id from one definition.
 export { composeOAuthUserId } from "./types/oauth-user-id.js";
 export * from "./iframe-bridge";
-export * from "./envelope-adapters";
 export * from "./envelopes/builders";
 export * from "./envelopes/render-refusal";
 export * from "./errors/version-mismatch";

@@ -6,22 +6,40 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryPendingEventConsumer } from './pending-event-consumer.js';
 import { PendingPipeNotFoundError } from '../pending-event-consumer.js';
+import type { PendingEvent } from '@ggui-ai/protocol';
+
+/** A well-formed pipe row — `id` doubles as the intent so tests can tell rows apart. */
+function row(id: string): PendingEvent {
+  return {
+    id,
+    envelope: {
+      type: 'action',
+      sessionId: 'render-1',
+      intent: id,
+      actionData: null,
+      uiContext: {},
+      actionId: id,
+      firedAt: '2026-09-05T00:00:00.000Z',
+    },
+    createdAt: '2026-09-05T00:00:00.000Z',
+  };
+}
 
 describe('InMemoryPendingEventConsumer', () => {
   describe('lifecycle hooks', () => {
     it('markCreated registers a render — subsequent appends + consumes work', async () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
-      await c.append('render-1', { id: 'evt-1', type: 'foo' });
+      await c.append('render-1', row('evt-1'));
       const result = await c.consumeAndClear('render-1', 60_000);
-      expect(result.events).toEqual([{ id: 'evt-1', type: 'foo' }]);
+      expect(result.events).toEqual([row('evt-1')]);
       expect(result.status).toBe('active');
     });
 
     it('markCreated is idempotent — calling twice does NOT reset', async () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
-      await c.append('render-1', { id: 'evt-1' });
+      await c.append('render-1', row('evt-1'));
       c.markCreated('render-1'); // no-op
       const result = await c.consumeAndClear('render-1', 60_000);
       expect(result.events).toHaveLength(1);
@@ -33,10 +51,10 @@ describe('InMemoryPendingEventConsumer', () => {
     it('returns events present at clear time, then leaves the buffer empty', async () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
-      await c.append('render-1', { id: 'a' });
-      await c.append('render-1', { id: 'b' });
+      await c.append('render-1', row('a'));
+      await c.append('render-1', row('b'));
       const first = await c.consumeAndClear('render-1', 60_000);
-      expect(first.events).toEqual([{ id: 'a' }, { id: 'b' }]);
+      expect(first.events).toEqual([row('a'), row('b')]);
       const second = await c.consumeAndClear('render-1', 60_000);
       expect(second.events).toEqual([]);
     });
@@ -61,7 +79,7 @@ describe('InMemoryPendingEventConsumer', () => {
       c.markCreated('render-1');
       // Seed 5 events.
       for (let i = 0; i < 5; i++) {
-        await c.append('render-1', { id: `evt-${i}` });
+        await c.append('render-1', row(`evt-${i}`));
       }
       // Two concurrent consumers race for the buffer.
       const [a, b] = await Promise.all([
@@ -80,16 +98,16 @@ describe('InMemoryPendingEventConsumer', () => {
     it('throws PendingPipeNotFoundError when render never registered', async () => {
       const c = new InMemoryPendingEventConsumer();
       await expect(
-        c.append('never', { id: 'evt-1' }),
+        c.append('never', row('evt-1')),
       ).rejects.toBeInstanceOf(PendingPipeNotFoundError);
     });
 
     it('FIFO ordering — sequential appends preserve order on consume', async () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
-      await c.append('render-1', { id: 'first' });
-      await c.append('render-1', { id: 'second' });
-      await c.append('render-1', { id: 'third' });
+      await c.append('render-1', row('first'));
+      await c.append('render-1', row('second'));
+      await c.append('render-1', row('third'));
       const result = await c.consumeAndClear('render-1', 60_000);
       expect(result.events.map((e) => e.id)).toEqual([
         'first',
@@ -101,12 +119,12 @@ describe('InMemoryPendingEventConsumer', () => {
     it('events appended after a consume land in the next consume', async () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
-      await c.append('render-1', { id: 'before' });
+      await c.append('render-1', row('before'));
       const first = await c.consumeAndClear('render-1', 60_000);
-      expect(first.events).toEqual([{ id: 'before' }]);
-      await c.append('render-1', { id: 'after' });
+      expect(first.events).toEqual([row('before')]);
+      await c.append('render-1', row('after'));
       const second = await c.consumeAndClear('render-1', 60_000);
-      expect(second.events).toEqual([{ id: 'after' }]);
+      expect(second.events).toEqual([row('after')]);
     });
   });
 
@@ -115,8 +133,8 @@ describe('InMemoryPendingEventConsumer', () => {
       const c = new InMemoryPendingEventConsumer();
       c.markCreated('render-1');
       expect(c.pendingCount('render-1')).toBe(0);
-      await c.append('render-1', { id: 'a' });
-      await c.append('render-1', { id: 'b' });
+      await c.append('render-1', row('a'));
+      await c.append('render-1', row('b'));
       expect(c.pendingCount('render-1')).toBe(2);
       // Repeated calls don't drain.
       expect(c.pendingCount('render-1')).toBe(2);
@@ -137,25 +155,41 @@ describe('append idempotency (ggui#405)', () => {
   it('a duplicate id is a silent no-op — even AFTER the original drained', async () => {
     const pipe = new DedupePipe();
     pipe.markCreated('s1');
-    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
-    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
+    await pipe.append('s1', row('act-1'));
+    await pipe.append('s1', row('act-1'));
     const first = await pipe.consumeAndClear('s1', 60_000);
     expect(first.events).toHaveLength(1);
 
     // Post-drain replay (relay retry after a lost response): still a no-op.
-    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
+    await pipe.append('s1', row('act-1'));
     const second = await pipe.consumeAndClear('s1', 60_000);
     expect(second.events).toHaveLength(0);
   });
 
-  it('distinct ids and id-less events append normally', async () => {
+  it('distinct ids append normally — the row type admits no id-less entry', async () => {
     const pipe = new DedupePipe();
     pipe.markCreated('s2');
-    await pipe.append('s2', { id: 'a' });
-    await pipe.append('s2', { id: 'b' });
-    await pipe.append('s2', { note: 'no id' });
-    await pipe.append('s2', { note: 'no id' }); // id-less: unconditional
+    await pipe.append('s2', row('a'));
+    await pipe.append('s2', row('b'));
     const res = await pipe.consumeAndClear('s2', 60_000);
-    expect(res.events).toHaveLength(4);
+    expect(res.events).toHaveLength(2);
+  });
+});
+
+// ── ggui#839 — the malformed-row error is detected by name, like PendingPipeNotFoundError
+
+import {
+  isPendingEventMalformedError,
+  PendingEventMalformedError,
+} from '../pending-event-consumer.js';
+
+describe('isPendingEventMalformedError (ggui#839)', () => {
+  it('matches the class and any Error carrying its name — a structurally identical copy from another bundle counts', () => {
+    expect(isPendingEventMalformedError(new PendingEventMalformedError('s', [], 'r'))).toBe(true);
+    const foreign = new Error('x');
+    foreign.name = 'PendingEventMalformedError';
+    expect(isPendingEventMalformedError(foreign)).toBe(true);
+    expect(isPendingEventMalformedError(new Error('x'))).toBe(false);
+    expect(isPendingEventMalformedError('PendingEventMalformedError')).toBe(false);
   });
 });

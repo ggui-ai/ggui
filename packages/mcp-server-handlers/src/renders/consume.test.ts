@@ -11,31 +11,42 @@
  *   - timeout domain [0, 25] — out-of-range rejects (SPEC §7.3
  *     INVALID_PARAMS bound; no silent truncation)
  *   - sessionId → app-scope gate via renderStore.get + appId cmp
- *   - tenancy mismatch + unknown render surface as GguiSessionNotFoundError
+ *   - app-scope mismatch + unknown render surface as GguiSessionNotFoundError
  *   - long-poll loop semantics (immediate, with-events, completed,
  *     mid-poll render-disappeared)
- *   - normalize raw rows to ConsumeEventEntry via parsePendingEnvelope
+ *   - each drained row is the protocol's PendingEvent (validated at the store
+ *     boundary, ggui#839); its `envelope` is emitted directly; a refused drain
+ *     is a HandlerFailure carrying {events: [], status}
  *   - observer notifier fan-out (only fires when events present)
  *   - drain_ack + activeConsumerRegistry + slow-consume telemetry
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import type { ComponentGguiSession } from '@ggui-ai/protocol';
+import type { ComponentGguiSession, ConsumeEventEntry, JsonValue } from '@ggui-ai/protocol';
 import {
   InMemoryActiveConsumerRegistry,
   InMemoryPendingEventConsumer,
   InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import { PendingEventMalformedError, type PendingEventConsumer } from '@ggui-ai/mcp-server-core';
+import { isHandlerFailure, type HandlerFailure } from '../types.js';
 import {
   createGguiConsumeHandler,
   type ConsumeLogger,
   type DrainAckNotifier,
   type ObserverNotifier,
+  type ConsumeOutput,
 } from './consume.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { zodToJsonSchema } from '@ggui-ai/protocol';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
+
+/** Narrow a consume result to its success shape — a HandlerFailure here is the test's failure. */
+function ok(out: ConsumeOutput | HandlerFailure<ConsumeOutput>): ConsumeOutput {
+  if (isHandlerFailure(out)) throw new Error(`unexpected HandlerFailure: ${out.errorText}`);
+  return out;
+}
 
 
 /**
@@ -43,8 +54,8 @@ const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
  * the seam now parses every row against `consumeEventEntrySchema`
  * (ggui#817 part C2), so a fixture must be the real shape.
  */
-function entryJson(overrides: { intent?: string; actionData?: unknown } = {}): string {
-  return JSON.stringify({
+function entry(overrides: { intent?: string; actionData?: JsonValue } = {}): ConsumeEventEntry {
+  return {
     type: 'action',
     sessionId: 'render-1',
     intent: overrides.intent ?? 'submit',
@@ -52,7 +63,7 @@ function entryJson(overrides: { intent?: string; actionData?: unknown } = {}): s
     uiContext: {},
     actionId: 'act-1',
     firedAt: '2026-04-19T00:00:00.000Z',
-  });
+  };
 }
 
 describe('createGguiConsumeHandler', () => {
@@ -113,18 +124,17 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: { foo: 'bar' } }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: { foo: 'bar' } }),
         createdAt: new Date().toISOString(),
       });
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events).toHaveLength(1);
       expect(result.events[0].intent).toBe('submit');
       expect(result.status).toBe('active');
@@ -163,8 +173,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'click' }),
-        sequence: 1,
+        envelope: entry({ intent: 'click' }),
         createdAt: new Date().toISOString(),
       });
       const handler = createGguiConsumeHandler({
@@ -172,10 +181,10 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const start = Date.now();
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       // No long-poll wait when timeout=0.
       expect(Date.now() - start).toBeLessThan(500);
       expect(result.events).toHaveLength(1);
@@ -187,10 +196,10 @@ describe('createGguiConsumeHandler', () => {
         pendingEventConsumer: consumer,
         renderStore,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events).toEqual([]);
       expect(result.status).toBe('active');
     });
@@ -227,18 +236,17 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit' }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit' }),
         createdAt: new Date().toISOString(),
       });
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 25 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events).toHaveLength(1);
     });
   });
@@ -254,15 +262,14 @@ describe('createGguiConsumeHandler', () => {
       setTimeout(() => {
         void consumer.append('render-1', {
           id: 'evt-late',
-          envelope: entryJson({ intent: 'submit' }),
-          sequence: 1,
+          envelope: entry({ intent: 'submit' }),
           createdAt: new Date().toISOString(),
         });
       }, 200);
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events.length).toBeGreaterThan(0);
       expect(result.events[0].intent).toBe('submit');
     });
@@ -275,10 +282,10 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const start = Date.now();
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       // First fetchAndClearSafe sees status=expired → no long-poll wait.
       expect(Date.now() - start).toBeLessThan(500);
       expect(result.events).toEqual([]);
@@ -295,10 +302,10 @@ describe('createGguiConsumeHandler', () => {
       setTimeout(() => {
         consumer.markDeleted('render-1');
       }, 200);
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 3 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       // PendingPipeNotFoundError mid-poll is converted to expired status.
       expect(result.status).toBe('expired');
       expect(result.events).toEqual([]);
@@ -319,48 +326,20 @@ describe('createGguiConsumeHandler', () => {
           actionId: 'evt-obj',
           firedAt: '2026-04-19T00:00:00.000Z',
         },
-        sequence: 1,
         createdAt: new Date().toISOString(),
       });
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events[0].intent).toBe('choose');
       expect(result.events[0].actionData).toEqual({ value: 'X' });
     });
 
-    it('stringified-JSON envelope round-trips correctly', async () => {
-      await seedRender('render-1', 'app-1');
-      await consumer.append('render-1', {
-        id: 'evt-str',
-        envelope: JSON.stringify({
-          type: 'action',
-          sessionId: 'render-1',
-          intent: 'submit',
-          actionData: { v: 1 },
-          uiContext: {},
-          actionId: 'evt-str',
-          firedAt: '2026-04-19T00:00:00.000Z',
-        }),
-        sequence: 1,
-        createdAt: new Date().toISOString(),
-      });
-      const handler = createGguiConsumeHandler({
-        pendingEventConsumer: consumer,
-        renderStore,
-      });
-      const result = await handler.handler(
-        { sessionId: 'render-1', timeout: 0 },
-        { appId: 'app-1', requestId: 'r1' },
-      );
-      expect(result.events[0].intent).toBe('submit');
-      expect(result.events[0].actionData).toEqual({ v: 1 });
-    });
   });
 
   describe('observer notifier seam', () => {
@@ -388,8 +367,7 @@ describe('createGguiConsumeHandler', () => {
       // Now seed an event and consume — should fire.
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit' }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit' }),
         createdAt: new Date().toISOString(),
       });
       await handler.handler(
@@ -408,18 +386,17 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit' }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit' }),
         createdAt: new Date().toISOString(),
       });
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events).toHaveLength(1);
     });
   });
@@ -429,14 +406,12 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       await consumer.append('render-1', {
         id: 'evt-2',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 2,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       const sendDrainAck = vi.fn();
@@ -483,8 +458,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       const drainAckNotifier: DrainAckNotifier = {
@@ -497,10 +471,10 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
         drainAckNotifier,
       });
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events).toHaveLength(1);
     });
   });
@@ -512,8 +486,7 @@ describe('createGguiConsumeHandler', () => {
       const stale = new Date(Date.now() - 3_000).toISOString();
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: stale,
       });
       const info = vi.fn();
@@ -542,8 +515,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       const info = vi.fn();
@@ -566,8 +538,7 @@ describe('createGguiConsumeHandler', () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       const registry = new InMemoryActiveConsumerRegistry();
@@ -631,8 +602,7 @@ describe('createGguiConsumeHandler', () => {
       // Drop an event so the long-poll resolves promptly.
       await consumer.append('render-1', {
         id: 'evt-1',
-        envelope: entryJson({ intent: 'submit', actionData: {} }),
-        sequence: 1,
+        envelope: entry({ intent: 'submit', actionData: {} }),
         createdAt: new Date().toISOString(),
       });
       await promise;
@@ -669,7 +639,7 @@ describe('createGguiConsumeHandler', () => {
       // Abort mid-wait — the sleepUntilAbort race resolves immediately
       // rather than waiting out the 1.5s poll tick.
       controller.abort();
-      const result = await promise;
+      const result = ok(await promise);
       const elapsed = Date.now() - start;
       // (a) Returns PROMPTLY — far below the 25_000ms deadline AND below
       //     a single 1.5s poll tick (the mid-sleep abort short-circuit).
@@ -696,10 +666,10 @@ describe('createGguiConsumeHandler', () => {
       const controller = new AbortController();
       controller.abort();
       const start = Date.now();
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 25 },
         { appId: 'app-1', requestId: 'r1', signal: controller.signal },
-      );
+      ));
       expect(Date.now() - start).toBeLessThan(500);
       expect(result.events).toEqual([]);
       expect(result.status).toBe('active');
@@ -717,18 +687,84 @@ describe('createGguiConsumeHandler', () => {
       setTimeout(() => {
         void consumer.append('render-1', {
           id: 'evt-late',
-          envelope: entryJson({ intent: 'submit' }),
-          sequence: 1,
+          envelope: entry({ intent: 'submit' }),
           createdAt: new Date().toISOString(),
         });
       }, 200);
-      const result = await handler.handler(
+      const result = ok(await handler.handler(
         { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
-      );
+      ));
       expect(result.events.length).toBeGreaterThan(0);
       expect(result.events[0].intent).toBe('submit');
     });
   });
 });
 
+describe('a malformed stored row is a HandlerFailure, never a thrown error (ggui#839)', () => {
+  async function seeded(expiresAt: number): Promise<InMemoryGguiSessionStore> {
+    const renderStore = new InMemoryGguiSessionStore();
+    const render: ComponentGguiSession = {
+      id: 'render-1',
+      appId: 'app-1',
+      type: 'component',
+      componentCode: '',
+      contentType: 'application/javascript+react',
+      eventSequence: 0,
+      createdAt: NOW_MS,
+      lastActivityAt: NOW_MS,
+      expiresAt,
+    };
+    await renderStore.commit({ render, appId: 'app-1' });
+    return renderStore;
+  }
+  function refusingConsumer(rowId: string | undefined): PendingEventConsumer {
+    return {
+      consumeAndClear: async (sessionId) => {
+        throw new PendingEventMalformedError(
+          sessionId,
+          [{ path: ['envelope', 'intent'], message: 'expected string, received number' }],
+          rowId,
+        );
+      },
+      append: async () => undefined,
+    };
+  }
+
+  it('maps the refusal to { events: [], status } naming the session and the row, and fires no drain_ack', async () => {
+    const renderStore = await seeded(Date.now() + 60_000);
+    const sendDrainAck = vi.fn();
+    const handler = createGguiConsumeHandler({
+      pendingEventConsumer: refusingConsumer('row-9'),
+      renderStore,
+      drainAckNotifier: { sendDrainAck },
+    });
+    const out = await handler.handler(
+      { sessionId: 'render-1', timeout: 0 },
+      { appId: 'app-1', requestId: 'r1' },
+    );
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+    expect(out.data).toEqual({ events: [], status: 'active' });
+    expect(out.errorText).toContain('render-1');
+    expect(out.errorText).toContain('row-9');
+    expect(out.errorText).toContain('expected string, received number');
+    expect(sendDrainAck).not.toHaveBeenCalled();
+  });
+
+  it('carries the real status — expired when the render row has lapsed (the store reports it on read)', async () => {
+    const renderStore = await seeded(Date.now() + 60_000);
+    await renderStore.update('render-1', { expiresAt: Date.now() - 1 });
+    const handler = createGguiConsumeHandler({
+      pendingEventConsumer: refusingConsumer(undefined),
+      renderStore,
+    });
+    const out = await handler.handler(
+      { sessionId: 'render-1', timeout: 0 },
+      { appId: 'app-1', requestId: 'r1' },
+    );
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+    expect(out.data).toEqual({ events: [], status: 'expired' });
+  });
+});

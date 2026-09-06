@@ -81,6 +81,7 @@ export {
   type DrainAckNotifier,
   type GguiConsumeHandlerDeps,
   type ObserverNotifier,
+  type ConsumeOutput,
 } from "./consume.js";
 export {
   canonicalizeToolIdentity,

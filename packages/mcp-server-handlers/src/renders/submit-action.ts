@@ -62,10 +62,12 @@
  * ...}` input. Every render IS the addressable scope.
  */
 import { z } from 'zod';
+import type { ConsumeEventEntry } from '@ggui-ai/protocol';
 import {
   SUBMIT_ACTION_KINDS,
   isGguiSubmitActionInput,
   type GguiSubmitActionInput,
+  isGguiSubmitDispatchInput,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   PendingPipeNotFoundError,
@@ -168,6 +170,7 @@ type UserActionRejected = {
 };
 
 type UserActionOutput = UserActionAccepted | UserActionRejected;
+
 
 /**
  * Optional deps for the submit_action handler. Wires the pending-events
@@ -279,8 +282,9 @@ export function createGguiSubmitActionHandler(
           message: `action envelope rejected: kind '${observedKind}' payload shape mismatch (see SubmitActionEnvelope for canonical per-kind schemas)`,
         };
       }
-      // After both guards `parsed.data` narrows to GguiSubmitActionInput.
-      const env = parsed.data as GguiSubmitActionInput;
+      // After both guards `parsed.data` IS a GguiSubmitActionInput — an
+      // annotation, never a cast (ggui#839): the guard is the proof.
+      const env: GguiSubmitActionInput = parsed.data;
 
       // Dispatch envelopes land on the sessionId-keyed pending-events
       // pipe. The agent's `ggui_consume` long-poll drains it. `openLink`
@@ -291,7 +295,7 @@ export function createGguiSubmitActionHandler(
       // `{ok:false, code:'PIPE_NOT_FOUND'}` so the iframe-runtime's
       // dispatch closure observes a non-success outcome and falls
       // through to `ui/message` — the consent-gated chat-shortcut.
-      if (env.kind === 'dispatch') {
+      if (isGguiSubmitDispatchInput(env)) {
         if (!deps.pendingEventConsumer) {
           return {
             ok: false,
@@ -306,16 +310,15 @@ export function createGguiSubmitActionHandler(
         // them through the pipe so the agent reads `{actionData, uiContext}`
         // on each drained event instead of a separate top-level
         // contextSnapshot on the consume output.
-        const dispatchPayload = env.payload as {
-          intent: string;
-          actionData: unknown;
-          uiContext: Record<string, unknown>;
-        };
-        const actionEnvelope = {
-          type: 'action' as const,
+        // `isGguiSubmitDispatchInput` narrowed `env.payload` to the guard's
+        // `{intent, actionData, uiContext}` — JSON-typed by the protocol,
+        // so the entry below IS a ConsumeEventEntry without a cast.
+        const dispatchPayload = env.payload;
+        const actionEnvelope: ConsumeEventEntry = {
+          type: 'action',
           sessionId: env.sessionId,
           intent: dispatchPayload.intent,
-          actionData: dispatchPayload.actionData ?? null,
+          actionData: dispatchPayload.actionData,
           uiContext: dispatchPayload.uiContext,
           actionId: env.actionId,
           firedAt: env.firedAt,
