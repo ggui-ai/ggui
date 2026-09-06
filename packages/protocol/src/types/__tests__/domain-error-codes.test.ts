@@ -9,11 +9,12 @@
  * branches on `text.startsWith(code + ': ')` — one code, one plane), and
  * bound to the data-plane tools that emit it.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   DOMAIN_ERROR_CODES,
   DOMAIN_ERROR_RECOVERIES,
   DOMAIN_ERROR_REGISTRY,
+  DOMAIN_ERROR_ROWS,
   isDomainErrorCode,
   type DomainErrorCode,
 } from '../domain-error-codes';
@@ -98,5 +99,13 @@ describe('DOMAIN_ERROR_CODES — the closed Plane-2 registry (ggui#880)', () => 
     expect(isDomainErrorCode('ggui_render')).toBe(false);
     expect(isDomainErrorCode('app_policy_missing')).toBe(false);
     expect(isDomainErrorCode('')).toBe(false);
+  });
+});
+
+describe('DOMAIN_ERROR_ROWS — the literal-typed rows beside the normalized view (ggui#889)', () => {
+  it('types each row\'s `code` as its key and its `recovery` as the literal', () => {
+    expectTypeOf(DOMAIN_ERROR_ROWS.session_not_found.code).toEqualTypeOf<'session_not_found'>();
+    expectTypeOf(DOMAIN_ERROR_ROWS.session_not_found.recovery).toEqualTypeOf<'re-mint'>();
+    expect(DOMAIN_ERROR_ROWS).toBe(DOMAIN_ERROR_REGISTRY);
   });
 });

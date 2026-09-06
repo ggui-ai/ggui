@@ -62,7 +62,13 @@ function defineDomainErrorRegistry<
   return rows;
 }
 
-const DOMAIN_ERROR_ROWS = /* @__PURE__ */ defineDomainErrorRegistry({
+/**
+ * The registry with its per-key literal types kept (ggui#889):
+ * `DOMAIN_ERROR_ROWS.session_not_found.code` is `'session_not_found'`,
+ * its `recovery` is `'re-mint'`. {@link DOMAIN_ERROR_REGISTRY} is the
+ * same object read through the normalized row type.
+ */
+export const DOMAIN_ERROR_ROWS = /* @__PURE__ */ defineDomainErrorRegistry({
   // ── identity ──────────────────────────────────────────────────────
   session_not_found: {
     code: 'session_not_found',

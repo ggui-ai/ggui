@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The registries export their literal-typed rows (2026-09-06, types-only,
+ * pre-launch, ggui#889 — PATCH). `PRE_GENERATION_REFUSAL_CODES` and
+ * `DOMAIN_ERROR_REGISTRY` are the normalized views (`Record<Code, Row>`),
+ * which erase the per-key literal the `const` definers preserve — so a
+ * producer that must satisfy a wire enum from a row had to parse it
+ * through the enum (ggui#886). `PRE_GENERATION_REFUSAL_ROWS` and
+ * `DOMAIN_ERROR_ROWS` are the SAME objects with the literal types kept:
+ * each row's `code` is typed as its own key. No wire change;
+ * the kit's registry-completeness catalog reads the normalized view as
+ * before. Not breaking under VERSION-POLICY §2; PATCH under §1.3.
+ *
+ * --------------------------------------------------------------------
  * Plane-2 slugs lead the wire text (2026-09-06, wire-text, pre-launch,
  * ggui#880 — MINOR). SPEC
  * §7.9 promised "the `code` field on each class is the wire literal"

@@ -39,11 +39,12 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   MCP_ENDPOINT_REFUSAL_CODES,
   PRE_GENERATION_REFUSAL_CODES,
+  PRE_GENERATION_REFUSAL_ROWS,
   RENDER_GATE_REFUSAL_CODES,
 } from '../../index.js';
 
@@ -537,5 +538,17 @@ describe('MCP_ENDPOINT_REFUSAL_CODES — the transport surface (registry v11, gg
     for (const notACode of ['no_issuer', 'foreign_issuer', 'subject_denied', 'forbidden', 'unauthorized']) {
       expect(PRE_GENERATION_REFUSAL_CODES?.[notACode as keyof typeof PRE_GENERATION_REFUSAL_CODES]).toBeUndefined();
     }
+  });
+});
+
+describe('PRE_GENERATION_REFUSAL_ROWS — the literal-typed rows beside the normalized view (ggui#889)', () => {
+  it('types each row\'s `code` as its key, so a consumer reads a wire code without a parse or a literal', () => {
+    expectTypeOf(PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.code).toEqualTypeOf<'app_rate_limited'>();
+    expectTypeOf(PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.retry).toEqualTypeOf<'later'>();
+    expect(PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.code).toBe('app_rate_limited');
+  });
+
+  it('is the same object the normalized view reads — one registry, two types', () => {
+    expect(PRE_GENERATION_REFUSAL_ROWS).toBe(PRE_GENERATION_REFUSAL_CODES);
   });
 });

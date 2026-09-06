@@ -408,6 +408,16 @@ export const PRE_GENERATION_REFUSAL_CODES: Readonly<
 > = REFUSAL_ROWS;
 
 /**
+ * The SAME registry object with its per-key literal types kept
+ * (ggui#889): `PRE_GENERATION_REFUSAL_ROWS.app_rate_limited.code` is
+ * `'app_rate_limited'`, its `retry` is `'later'`. The normalized view
+ * above erases those literals so `fixBy` reads uniformly; a producer
+ * that must satisfy a wire enum from a row (the registry-purity pin
+ * forbids the literal in source) reads it here — no parse, no literal.
+ */
+export const PRE_GENERATION_REFUSAL_ROWS: typeof REFUSAL_ROWS = REFUSAL_ROWS;
+
+/**
  * The codes on one surface, derived type-level from the literal rows'
  * `surfaces` tuples. A runtime `.filter()` cannot narrow a type, so the
  * union is computed here and the tuple below is proved complete
