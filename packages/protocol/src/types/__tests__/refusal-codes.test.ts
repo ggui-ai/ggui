@@ -31,10 +31,11 @@
  * `registry-completeness` catalog. The two pins below that read repo
  * source — the docstring rule and the "no code literal outside this file
  * within oss/packages" grep — live HERE, where the invariant is owned and
- * the path is stable: the kit ships only `dist`, so a source walk could
- * never run for an npm adopter.
+ * the path is stable: the kit ships only `dist`, so a grep over tracked
+ * sources could never run for an npm adopter.
  */
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -425,7 +426,10 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     expect(registrySource()).not.toMatch(/tier/i);
   });
 
-  it('no registry code appears as a string literal outside the registry file within oss/packages', () => {
+  it('no registry code appears as a string literal outside the registry file within oss/packages', { timeout: 20_000 }, () => {
+    // Budget stated, not defaulted: the pin's cost is one `git grep` over the
+    // tree (~0.2 s here); the file walk it replaced took 5627 ms on a loaded
+    // runner (CI run 34005425123) and reddened main on vitest's 5 s default.
     // Ruling 5b. The registry is the anti-drift mechanism only while no
     // seat mints a code in a handler; a literal elsewhere is that drift.
     const codes = rows().map(([, row]) => row.code);
@@ -435,13 +439,16 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     expect(offenders).toEqual([]);
   });
 
-  it('the literal walk skips build output (dist and dist.staging-<pid>) but still catches a minted code in src', () => {
+  it('the literal grep reads tracked .ts sources only — build output (dist, dist.staging-<pid>) and untracked files are never offences, a minted code in tracked src is', () => {
     // Every oss/packages/*/package.json#build stages into `dist.staging-$$`
     // and swaps it into `dist` when done; in CI that tree coexists with this
     // suite, and its generated `.d.ts` unions quote every registry code.
     // Those files are OUTPUT of the registry, not a second source of it —
-    // walking them is a false offence (CI run 33832497812).
-    const root = mkdtempSync(join(tmpdir(), 'refusal-codes-walk-'));
+    // reporting them was a false offence (CI run 33832497812), and walking
+    // every file under oss/packages to avoid them crossed vitest's 5 s
+    // budget on a loaded runner (CI run 34005425123, 5627 ms). Tracked
+    // sources are what publishes; one `git grep` over them is the pin.
+    const root = mkdtempSync(join(tmpdir(), 'refusal-codes-grep-'));
     mkdirSync(join(root, 'dist.staging-1', 'types'), { recursive: true });
     mkdirSync(join(root, 'dist'), { recursive: true });
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -449,48 +456,63 @@ describe('PRE_GENERATION_REFUSAL_CODES — the source-level obligations', () => 
     writeFileSync(join(root, 'dist', 'y.d.ts'), "export type C = 'unsupported_provider';\n");
     writeFileSync(join(root, 'src', 'clean.ts'), 'export const c = codeOf(1);\n');
     writeFileSync(join(root, 'src', 'mint.ts'), "export const c = 'unsupported_provider';\n");
+    writeFileSync(join(root, 'src', 'mint.test.ts'), "export const c = 'unsupported_provider';\n");
+    git(root, ['init', '-q']);
+    git(root, ['add', '-A']);
+    git(root, ['-c', 'user.name=pin', '-c', 'user.email=pin@ggui.test', 'commit', '-q', '-m', 'seed']);
+    // Written AFTER the commit: untracked, so never published, so never an offence.
+    writeFileSync(join(root, 'src', 'untracked.ts'), "export const c = 'unsupported_provider';\n");
     expect(findCodeLiterals(root, ['unsupported_provider'], '')).toEqual([
       `${join(root, 'src', 'mint.ts')}: unsupported_provider`,
     ]);
   });
 });
 
+/** Run git in `cwd`; exit 1 from `grep` means "no match", anything else non-zero is an error. */
+function git(cwd: string, args: readonly string[]): string {
+  const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (run.status !== 0 && !(args[0] === 'grep' && run.status === 1)) {
+    throw new Error(`git ${args.join(' ')} failed (${run.status}): ${run.stderr}`);
+  }
+  return run.stdout;
+}
+
+
+
 /**
- * Walk `root` for `.ts` sources (skipping `dist*` build output, `node_modules` and this
- * suite's own tests) and report every file quoting one of `codes` as a
- * string literal. Deliberately narrow: it looks for the quoted form, so
- * prose in a docstring naming a code is not an offence — minting the code
- * as a value is.
+ * Report every TRACKED `.ts` source under `root` (skipping `dist*` build
+ * output, `node_modules`, dot-entries, `*.test.ts` and the registry file)
+ * that quotes one of `codes` as a string literal. One `git grep` over the
+ * tree instead of a file walk: tracked files are what publishes, build
+ * output is never tracked, and the pin stays under a second regardless of
+ * tree size. Deliberately narrow: it looks for the quoted form, so prose
+ * in a docstring naming a code is not an offence — minting the code as a
+ * value is.
  */
 function findCodeLiterals(
   root: string,
   codes: readonly string[],
   registryFile: string,
 ): string[] {
+  // Fixed strings, one `-e` per quoted form: 0.2 s over 1.5k files here,
+  // where the same set as an ERE alternation cost 1.2 s (and needs no
+  // regex escaping to get wrong).
+  const patterns = codes.flatMap((code) => ['-e', `'${code}'`, '-e', `"${code}"`]);
+  const out = git(root, ['grep', '-n', '-o', '-F', ...patterns, '--', '*.ts']);
+  const seen = new Set<string>();
   const offenders: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      // `dist*` covers `dist` and the build's `dist.staging-<pid>` — output, never source.
-      if (entry === 'node_modules' || entry.startsWith('dist') || entry.startsWith('.')) {
-        continue;
-      }
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!full.endsWith('.ts') || full.endsWith('.test.ts')) continue;
-      if (full === registryFile) continue;
-      const src = readFileSync(full, 'utf8');
-      for (const code of codes) {
-        if (src.includes(`'${code}'`) || src.includes(`"${code}"`)) {
-          offenders.push(`${full}: ${code}`);
-          break;
-        }
-      }
-    }
-  };
-  walk(root);
+  for (const line of out.split('\n')) {
+    if (line === '') continue;
+    const [rel, , quoted] = line.split(':', 3) as [string, string, string];
+    const segments = rel.split('/');
+    // `dist*` covers `dist` and the build's `dist.staging-<pid>` — output, never source.
+    if (segments.some((s) => s === 'node_modules' || s.startsWith('dist') || s.startsWith('.'))) continue;
+    if (rel.endsWith('.test.ts')) continue;
+    const full = join(root, rel);
+    if (full === registryFile || seen.has(full)) continue;
+    seen.add(full);
+    offenders.push(`${full}: ${quoted.slice(1, -1)}`);
+  }
   return offenders.sort();
 }
 
