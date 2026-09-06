@@ -62,6 +62,18 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-07',
+    text:
+      'Generator identities de-modeled: the two generation harnesses are now ' +
+      'identified as `ui-gen-default` and `ui-gen-advanced` (previously ' +
+      '`ui-gen-default-haiku-4-5` and `ui-gen-advanced-opus-4-7`). A harness is ' +
+      'not a model — the model under test is each arm’s own field — so the ids ' +
+      'no longer carry one. Reports published from this date carry the new ids ' +
+      'and `meta.schemaVersion = "benchmark-report.v1"`; earlier reports keep ' +
+      'their ids unchanged (history is not rewritten). Scores, corpus, matrix, ' +
+      'and the judge panel are unchanged.',
+  },
+  {
     date: '2026-09-03',
     text:
       'Disclosure: the in-loop evaluator’s per-criterion coverage now also ' +

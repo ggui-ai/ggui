@@ -530,7 +530,7 @@ describe('Report Generator', () => {
       evaluation: mkEval(82, { layout: 85, designTokens: 80, hierarchy: 75, polish: 90, dataPresentation: 80 }),
       estimatedCostUsd: 0.015,
       timestamp: '2026-03-15T00:00:00Z',
-      generator: 'ui-gen-default-haiku-4-5',
+      generator: 'ui-gen-default',
     },
     {
       variant: { id: 'openai-fast', sdkName: 'openai', tier: 'fast', modelId: 'openai/gpt-5.1-codex-mini' },
@@ -544,7 +544,7 @@ describe('Report Generator', () => {
       evaluation: mkEval(78, { layout: 80, designTokens: 75, hierarchy: 70, polish: 85, dataPresentation: 80 }),
       estimatedCostUsd: 0.027,
       timestamp: '2026-03-15T00:00:00Z',
-      generator: 'ui-gen-default-haiku-4-5',
+      generator: 'ui-gen-default',
     },
     {
       variant: { id: 'google-fast', sdkName: 'google', tier: 'fast', modelId: 'gemini/gemini-3-flash-preview' },
@@ -554,7 +554,7 @@ describe('Report Generator', () => {
       estimatedCostUsd: 0,
       error: 'Timeout after 300000ms',
       timestamp: '2026-03-15T00:00:00Z',
-      generator: 'ui-gen-default-haiku-4-5',
+      generator: 'ui-gen-default',
     },
   ];
 

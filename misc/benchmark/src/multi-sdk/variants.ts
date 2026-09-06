@@ -221,9 +221,9 @@ export function getRawVsSdkVariants(): BenchmarkVariant[] {
  * generator slugs on identical commits so a reader can see
  * `default-haiku vs advanced-opus` side-by-side on the same fixture.
  *
- *   - `gen-default-haiku` → {@link DEFAULT_GENERATOR_SLUG} (`ui-gen-default-haiku-4-5`)
+ *   - `gen-default-haiku` → {@link DEFAULT_GENERATOR_SLUG} (`ui-gen-default`)
  *     on the Claude `fast` tier (haiku). The default seed; no extra deps.
- *   - `gen-advanced-opus` → {@link ADVANCED_GENERATOR_SLUG} (`ui-gen-advanced-opus-4-7`)
+ *   - `gen-advanced-opus` → {@link ADVANCED_GENERATOR_SLUG} (`ui-gen-advanced`)
  *     on the Claude `balanced` tier (sonnet-default; the advanced loop
  *     re-uses the wrapped generator's identity for prompt routing).
  *     Requires Playwright in the bench env — the runner emits a clear

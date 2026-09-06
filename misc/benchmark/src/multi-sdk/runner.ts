@@ -83,7 +83,7 @@ export class BenchmarkRunner {
 
   /**
    * Whether Playwright is wired into the runner. Required by
-   * `ui-gen-advanced-opus-4-7`; when `false`, advanced variants
+   * `ui-gen-advanced`; when `false`, advanced variants
    * short-circuit with a SKIP error result. Default `false` —
    * operators opt in by passing `playwright` to the constructor.
    */
@@ -258,9 +258,9 @@ export class BenchmarkRunner {
     // ── Generator dispatch resolution ──────────────────────────
     // The runner can route a variant through one of several
     // registered generators. The default seed
-    // (`ui-gen-default-haiku-4-5`) goes through the existing
+    // (`ui-gen-default`) goes through the existing
     // `dispatchGeneration` path; the advanced generator
-    // (`ui-gen-advanced-opus-4-7`) requires Playwright. When the
+    // (`ui-gen-advanced`) requires Playwright. When the
     // bench env doesn't have Playwright wired, the advanced variant
     // short-circuits to an error result so the matrix still has a
     // row for it.

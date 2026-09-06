@@ -128,7 +128,7 @@ describe('resolveGeneratorSlug', () => {
     };
   }
 
-  it('defaults to ui-gen-default-haiku-4-5 when variant.generator is absent', () => {
+  it('defaults to ui-gen-default when variant.generator is absent', () => {
     expect(resolveGeneratorSlug(mkVariant())).toBe(DEFAULT_GENERATOR_SLUG);
   });
 
@@ -460,5 +460,19 @@ describe('Multi-generator integration', () => {
     const report = generateReport([mkResult()], 1000);
     const md = renderReportMarkdown(report);
     expect(md).not.toContain('## Multi-generator Comparison');
+  });
+});
+
+describe('generator identities are de-modeled (#928, founder ruling 2026-09-06)', () => {
+  it('pins the two shipped slugs to their model-free ids', () => {
+    expect(DEFAULT_GENERATOR_SLUG).toBe('ui-gen-default');
+    expect(ADVANCED_GENERATOR_SLUG).toBe('ui-gen-advanced');
+  });
+
+  it('no generator slug names a model or a model version — the model is the arm (variant.modelId)', () => {
+    const modelToken = /haiku|opus|sonnet|fable|gpt|gemini|\d+-\d+/i;
+    for (const slug of [DEFAULT_GENERATOR_SLUG, ADVANCED_GENERATOR_SLUG]) {
+      expect(slug).not.toMatch(modelToken);
+    }
   });
 });

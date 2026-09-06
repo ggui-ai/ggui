@@ -73,7 +73,7 @@ function outageRun(): BenchmarkRunResult {
     evaluation: null,
     estimatedCostUsd: 0,
     timestamp: now,
-    generator: 'ui-gen-default-haiku-4-5',
+    generator: 'ui-gen-default',
   };
 }
 
@@ -290,5 +290,12 @@ describe('toDisplayReport outage handling', () => {
     const c = d.commitSummaries.find((s) => s.commitId === 'weather-card');
     expect(c).toBeDefined();
     expect(c!.avgScore).toBe(-1);
+  });
+});
+
+describe('report schemaVersion (#928)', () => {
+  it("stamps 'benchmark-report.v1' on meta — a report without the field is v0 (generator ids carried model names)", () => {
+    const report = generateReport([tierEvaluatedRun('a', ALL_RAN)], 0);
+    expect(report.meta.schemaVersion).toBe('benchmark-report.v1');
   });
 });

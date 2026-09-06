@@ -184,7 +184,7 @@ function mkResults(date, dayIdx) {
           estimatedCostUsd: 0,
           error: 'Timeout after 300000ms',
           timestamp,
-          generator: 'ui-gen-default-haiku-4-5',
+          generator: 'ui-gen-default',
         });
         return;
       }
@@ -209,7 +209,7 @@ function mkResults(date, dayIdx) {
         evaluation,
         estimatedCostUsd: 0.012 + vIdx * 0.006 + cIdx * 0.003,
         timestamp,
-        generator: 'ui-gen-default-haiku-4-5',
+        generator: 'ui-gen-default',
       });
     });
   });

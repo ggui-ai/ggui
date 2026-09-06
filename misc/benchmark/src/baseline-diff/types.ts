@@ -80,7 +80,7 @@ export interface StatBand {
 /**
  * One group row's diff. `key` is whatever value occupied the group's
  * key field — for slo, e.g. `'blueprint_hit'`; for multi-sdk, a
- * generator slug like `'ui-gen-default-haiku-4-5'`.
+ * generator slug like `'ui-gen-default'`.
  *
  * `presence` is row-level: the row may exist on both sides, only the
  * after side (`'added'` — a new group surfaced), or only the before

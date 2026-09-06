@@ -56,8 +56,8 @@ export interface TriageItem {
    *   - `slo.status` — status-level rule
    *   - `slo.blueprint_hit.timeToFirstPreview` — stat field
    *   - `a2ui.form.totalParseFailures` — scalar field
-   *   - `multi-sdk.ui-gen-default-haiku-4-5.avgScore` — scalar field
-   *   - `multi-sdk.ui-gen-advanced-opus-4-7.presence` — row-presence rule
+   *   - `multi-sdk.ui-gen-default.avgScore` — scalar field
+   *   - `multi-sdk.ui-gen-advanced.presence` — row-presence rule
    */
   readonly location: string;
   readonly severity: Severity;

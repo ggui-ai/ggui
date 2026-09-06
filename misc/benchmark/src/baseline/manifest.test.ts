@@ -128,13 +128,13 @@ describe('extractMultiSdkSummary', () => {
     const s = extractMultiSdkSummary({
       meta: { totalRuns: 6 },
       generatorSummaries: [
-        { generator: 'ui-gen-default-haiku-4-5', runs: 3, avgTimeMs: 30000, avgScore: 76.0 },
-        { generator: 'ui-gen-advanced-opus-4-7', runs: 3, avgTimeMs: 42500, avgScore: 78.0 },
+        { generator: 'ui-gen-default', runs: 3, avgTimeMs: 30000, avgScore: 76.0 },
+        { generator: 'ui-gen-advanced', runs: 3, avgTimeMs: 42500, avgScore: 78.0 },
       ],
     });
     expect(s.totalRuns).toBe(6);
-    expect(s.headline).toContain('ui-gen-default-haiku-4-5: 3r t=30.0s s=76.0');
-    expect(s.headline).toContain('ui-gen-advanced-opus-4-7: 3r t=42.5s s=78.0');
+    expect(s.headline).toContain('ui-gen-default: 3r t=30.0s s=76.0');
+    expect(s.headline).toContain('ui-gen-advanced: 3r t=42.5s s=78.0');
   });
 
   it('handles reports without generatorSummaries (pre-generator-dimension reports)', () => {
@@ -149,7 +149,7 @@ describe('extractMultiSdkSummary', () => {
     const s = extractMultiSdkSummary({
       meta: { totalRuns: 1 },
       generatorSummaries: [
-        { generator: 'ui-gen-default-haiku-4-5', runs: 1, avgTimeMs: 0, avgScore: -1 },
+        { generator: 'ui-gen-default', runs: 1, avgTimeMs: 0, avgScore: -1 },
       ],
     });
     expect(s.headline).toContain('s=n/a');

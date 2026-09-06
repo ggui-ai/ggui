@@ -164,7 +164,7 @@ describe('N→F1 silent internal failure', () => {
           kind: 'grouped',
           keyField: 'generator',
           rows: [
-            mkRow('ui-gen-default-haiku-4-5', {
+            mkRow('ui-gen-default', {
               avgScore: scalar(75.0, -1.0), // n/a sentinel
               avgTimeMs: scalar(12000, 0),
               successRate: scalar(1.0, 0.0),
@@ -198,7 +198,7 @@ describe('N→F1 silent internal failure', () => {
           kind: 'grouped',
           keyField: 'generator',
           rows: [
-            mkRow('ui-gen-default-haiku-4-5', {
+            mkRow('ui-gen-default', {
               avgScore: scalar(75, -1),
               successRate: scalar(1, 0),
               avgTimeMs: scalar(12000, 0),
@@ -397,7 +397,7 @@ describe('schema drift', () => {
           keyField: 'generator',
           rows: [
             mkRow(
-              'ui-gen-default-haiku-4-5',
+              'ui-gen-default',
               {
                 runs: scalar(null, 1),
                 avgScore: scalar(null, 75),
@@ -500,7 +500,7 @@ describe('provisional anchor surfacing', () => {
           kind: 'grouped',
           keyField: 'generator',
           rows: [
-            mkRow('ui-gen-default-haiku-4-5', {
+            mkRow('ui-gen-default', {
               avgScore: scalar(75, 70), // -5 at n=1 → notice (provisional)
               successRate: scalar(1, 1),
               avgTimeMs: scalar(12000, 12000),
@@ -529,7 +529,7 @@ describe('multi-sdk score-drop n-scoping', () => {
           kind: 'grouped',
           keyField: 'generator',
           rows: [
-            mkRow('ui-gen-default-haiku-4-5', {
+            mkRow('ui-gen-default', {
               avgScore: scalar(82, 75), // -7, beyond alertDrop=3
               successRate: scalar(1, 1),
               avgTimeMs: scalar(12000, 12000),
@@ -568,7 +568,7 @@ describe('multi-sdk score-drop n-scoping', () => {
           kind: 'grouped',
           keyField: 'generator',
           rows: [
-            mkRow('ui-gen-default-haiku-4-5', {
+            mkRow('ui-gen-default', {
               avgScore: scalar(75, -1),
               successRate: scalar(1, 1),
               avgTimeMs: scalar(12000, 12000),

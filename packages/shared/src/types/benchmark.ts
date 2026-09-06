@@ -113,6 +113,12 @@ export interface BenchmarkMeta {
    * representative. Viewers must annotate.
    */
   criteriaCoverageDegraded?: true;
+  /**
+   * Report JSON shape version. `'benchmark-report.v1'` from 2026-09-07 (generator
+   * ids de-modeled: `ui-gen-default` / `ui-gen-advanced`). Absent = v0, whose
+   * generator ids carried model names (`ui-gen-default-haiku-4-5`).
+   */
+  schemaVersion?: 'benchmark-report.v1';
   /** SPDX id of the published dataset license. */
   dataLicense?: string;
 }

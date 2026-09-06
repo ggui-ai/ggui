@@ -32,6 +32,7 @@ import {
   DEFAULT_GENERATOR_SLUG,
   PROVIDER_DISPLAY_NAMES,
 } from './types';
+import { REPORT_SCHEMA_VERSION } from './types.js';
 
 /**
  * Dedupe a list of judge disclosures by model id, preserving first-seen
@@ -167,6 +168,7 @@ export function generateReport(
 
   return {
     meta: {
+      schemaVersion: REPORT_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
       totalDurationMs,
       totalVariants: new Set(results.map((r) => r.variant.id)).size,
@@ -678,6 +680,7 @@ export function toDisplayReport(
 ): BenchmarkReportDisplay {
   return {
     meta: {
+      schemaVersion: report.meta.schemaVersion,
       reportId,
       timestamp: report.meta.timestamp,
       version,

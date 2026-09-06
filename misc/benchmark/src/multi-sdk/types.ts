@@ -42,7 +42,7 @@ export interface BenchmarkVariant {
   /**
    * UI generator slug. Identifies which registered `UiGenerator`
    * impl runs this variant. Optional — defaults to
-   * {@link DEFAULT_GENERATOR_SLUG} (`ui-gen-default-haiku-4-5`, the
+   * {@link DEFAULT_GENERATOR_SLUG} (`ui-gen-default`, the
    * open-source seed) so existing bench corpus / fixtures don't need
    * to be migrated.
    *
@@ -51,9 +51,9 @@ export interface BenchmarkVariant {
    * {@link BenchmarkReport.byGenerator} for the comparison matrix.
    *
    * Recognized slugs:
-   *   - `ui-gen-default-haiku-4-5` — the open-source seed; routes
+   *   - `ui-gen-default` — the open-source seed; routes
    *     through `dispatchGeneration`.
-   *   - `ui-gen-advanced-opus-4-7` — iterative two-stage validator
+   *   - `ui-gen-advanced` — iterative two-stage validator
    *     loop. Requires Playwright in the bench env; skipped with a
    *     clear log line when Playwright is missing.
    *
@@ -68,7 +68,7 @@ export interface BenchmarkVariant {
  * is absent. Pinned to the open-source seed so older fixtures keep
  * producing identical results.
  */
-export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default-haiku-4-5' as const;
+export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default' as const;
 
 /**
  * The advanced-generator slug. Recognized by the bench runner; when
@@ -76,7 +76,16 @@ export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default-haiku-4-5' as const;
  * from `@ggui-ai/ui-gen/advanced`. Requires Playwright in the bench
  * env (gated at runtime — the runner emits a skip when missing).
  */
-export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced-opus-4-7' as const;
+export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced' as const;
+
+/**
+ * Report JSON shape version, stamped on every {@link BenchmarkReport.meta}.
+ * `'benchmark-report.v1'` = generator ids are de-modeled (`ui-gen-default` /
+ * `ui-gen-advanced`; #928). Reports WITHOUT the field are v0: their generator
+ * ids carried model names (`ui-gen-default-haiku-4-5`). Bump on any change a
+ * reader of the published JSON must detect; announce on the methodology page.
+ */
+export const REPORT_SCHEMA_VERSION = 'benchmark-report.v1' as const;
 
 export interface HybridConfig {
   /** Model for initial draft generation */
@@ -267,6 +276,8 @@ export interface PostGenerationResult {
 
 export interface BenchmarkReport {
   meta: {
+    /** See {@link REPORT_SCHEMA_VERSION}. Absent on reports published before 2026-09-07. */
+    schemaVersion: typeof REPORT_SCHEMA_VERSION;
     timestamp: string;
     totalDurationMs: number;
     totalVariants: number;
