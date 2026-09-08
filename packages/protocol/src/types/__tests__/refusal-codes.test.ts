@@ -198,10 +198,9 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
 });
 
 describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
-  it('ships exactly the fourteen render-gate codes (v2 + v5 + v7 + v8 + v9 + v10)', () => {
+  it('ships exactly the eleven render-gate codes (v2 + v5 + v7 + v8 + v9 + v10; v11 retired the plan-era three)', () => {
     expect(codesOn('render-gate')).toEqual(
       [
-        'app_canceled',
         // v8 — a record with no owner claim cannot be funded, so the
         // gate refuses it BEFORE any reservation or metering. It is a
         // render-gate state, not (only) a provisioning one.
@@ -220,8 +219,6 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
         'issuer_rate_limited',
         'managed_default_cap_exceeded',
         'model_not_allowed',
-        'trial_exhausted',
-        'trial_expired',
         'unsupported_provider',
       ].sort(),
     );
@@ -241,20 +238,8 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
     );
   });
 
-  it('ships exactly the nine owner-api codes (v4, as the landed mirror emits them)', () => {
-    expect(codesOn('owner-api')).toEqual(
-      [
-        'subscription_unchanged',
-        'card_update_unavailable',
-        'checkout_unavailable',
-        'managed_app_no_card_update',
-        'managed_app_no_checkout',
-        'managed_app_no_portal',
-        'no_subscription',
-        'portal_unavailable',
-        'subscription_exists',
-      ].sort(),
-    );
+  it('ships exactly the one owner-api code (v11 — the prepaid wallet has one Stripe surface, the top-up)', () => {
+    expect(codesOn('owner-api')).toEqual(['checkout_unavailable']);
   });
 
   it('ships exactly the three provisioning-api codes (v7 + v8)', () => {
@@ -283,15 +268,16 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
     expect(row.fixBy).toBeUndefined();
   });
 
-  it('`subscription_exists` is owner-api ONLY — it never reaches a render wire', () => {
+  it('`checkout_unavailable` is owner-api ONLY — it never reaches a render wire', () => {
     const row = refusalRowContract.parse(
-      PRE_GENERATION_REFUSAL_CODES?.subscription_exists,
+      PRE_GENERATION_REFUSAL_CODES?.checkout_unavailable,
     );
     expect(row.surfaces).toEqual(['owner-api']);
     expect(row.surfaces).not.toContain('render-gate');
-    // One state, two actions (a second checkout AND deleting the app).
-    expect(row.retry).toBe('after-fix');
-    expect(row.fixBy).toBe('owner');
+    // v11: the prepaid wallet's one Stripe surface — unconfigured or its
+    // provider down; only the operator restores it.
+    expect(row.retry).toBe('later');
+    expect(row.fixBy).toBe('operator');
   });
 
   it('`checkout_unavailable` is not a render-gate code', () => {
@@ -334,7 +320,7 @@ describe('RENDER_GATE_REFUSAL_CODES — derived, never a second list', () => {
     // not satisfy "contains none of these" vacuously.
     const renderGate = new Set<string>(RENDER_GATE_REFUSAL_CODES);
     expect(renderGate.size).toBe(codesOn('render-gate').length);
-    for (const code of ['subscription_exists', 'owner_ref_mismatch']) {
+    for (const code of ['checkout_unavailable', 'owner_ref_mismatch']) {
       expect(renderGate.has(code)).toBe(false);
     }
   });

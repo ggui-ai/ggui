@@ -814,7 +814,7 @@ describe('renderRefusalSchema — the refusal envelope', () => {
   it('rejects an owner-api-only code — those never reach a render wire', () => {
     expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
     expect(() =>
-      renderRefusalSchema.parse({ ...REFUSAL, code: 'subscription_exists' }),
+      renderRefusalSchema.parse({ ...REFUSAL, code: 'owner_ref_mismatch' }),
     ).toThrow();
     expect(() =>
       renderRefusalSchema.parse({ ...REFUSAL, code: 'checkout_unavailable' }),

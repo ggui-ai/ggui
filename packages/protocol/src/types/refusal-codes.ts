@@ -136,6 +136,22 @@ type RefusalRowPolicy =
 type RefusalRowBase = RefusalRowShared & RefusalRowPolicy;
 
 /**
+ * Registry v11 (ggui#960, 2026-09-08) — the plan model is retired: a
+ * deployment funds renders from a credit balance at flat rates, and the
+ * states that only a plan, a trial or a subscription could produce no
+ * longer exist. Retired with their emitting arms, in the same slice:
+ * render-gate `trial_exhausted`, `trial_expired`, `app_canceled`;
+ * owner-api `subscription_exists`, `no_subscription`,
+ * `subscription_unchanged`, `portal_unavailable`, `card_update_unavailable`,
+ * `managed_app_no_portal`, `managed_app_no_card_update`,
+ * `managed_app_no_checkout` (the top-up mutation is user-scoped — no
+ * managed branch exists to refuse from). Re-described: `billing_path_missing`
+ * (off the trial), `model_not_allowed` (per-account grant),
+ * `checkout_unavailable` (adding credit), `insufficient_credit` (pool or
+ * BYOK — the BYOK lane is charged). `managed_default_cap_exceeded` is NOT in this
+ * bump: unemitted since N1's swap but federated-side (ggui#965).
+ */
+/**
  * The registry is the ONLY list of refusal codes: {@link RefusalCode}
  * is derived from the keys below, and this definer forces every row's
  * `code` to equal its key at the type level. The `const` type parameter
@@ -169,7 +185,7 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     fixBy: 'owner',
     emitter: "a deployment's generation gate, balance arm",
     description:
-      'The balance this deployment funds the app from is exhausted. The app owner adds funds, after which the same call succeeds.',
+      "The balance this deployment funds the render from is at or below zero — pool or BYOK lane alike — so nothing renders under it. The owner adds credit, after which the same call succeeds.",
   },
   hard_cap_exceeded: {
     code: 'hard_cap_exceeded',
@@ -186,7 +202,7 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     fixBy: 'caller',
     emitter: "a deployment's generation gate, model arm",
     description:
-      'The requested model is not one this app is allowed to use on this deployment. The caller picks a model the app is allowed to use and retries with the same handshakeId — the one render-gate state an agent may act on itself.',
+      'The requested model is not one this account has been granted on this deployment. The caller picks a granted model and retries with the same handshakeId — the one render-gate state an agent may act on itself.',
   },
   managed_default_cap_exceeded: {
     code: 'managed_default_cap_exceeded',
@@ -217,33 +233,6 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
       "a deployment's provisioning guard and its generation gate, reading the same record",
     description:
       'The app record declares a funding mode this deployment does not recognise, or declares none at all. The value is reported as read and never coerced — an unreadable record is not a policy.',
-  },
-  app_canceled: {
-    code: 'app_canceled',
-    surfaces: ['render-gate'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's generation gate, plan-state arm",
-    description:
-      "The app's plan has ended, so it renders nothing while the stored work is kept. The owner starts a new plan to restore rendering.",
-  },
-  trial_exhausted: {
-    code: 'trial_exhausted',
-    surfaces: ['render-gate'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's generation gate, trial arm",
-    description:
-      'The trial this deployment grants the app has used up its allotment. The owner starts a paid plan.',
-  },
-  trial_expired: {
-    code: 'trial_expired',
-    surfaces: ['render-gate'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's generation gate, trial arm",
-    description:
-      "The app's trial window has closed. The owner starts a paid plan.",
   },
   issuer_rate_limited: {
     code: 'issuer_rate_limited',
@@ -276,21 +265,12 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     retry: 'after-fix',
     fixBy: 'owner',
     emitter:
-      "the generation gate's fall-through arm: a non-playground identity that resolves to no billing path (not a trial account, not a managed app, not a credit holder)",
+      "the generation gate's fall-through arm: a non-playground identity that resolves to no billing path (not a managed app, not a credit holder)",
     description:
-      'The caller has no billing subject on this deployment, so nothing renders under it. The owner provisions one — a trial account, a managed policy, or credit. Unlike `billing_mode_anomaly` — an app record that exists and declares a funding mode this deployment cannot read — no record arm applies here: there is simply no subject to bill. A deployment MAY suppress this refusal by operator override; that switch is deployment policy, not a wire state.',
+      "The caller has no billing subject on this deployment, so nothing renders under it. The owner provisions one — a managed policy, or credit. Unlike `billing_mode_anomaly` — an app record that exists and declares a funding mode this deployment cannot read — no record arm applies here: there is simply no subject to bill. A deployment MAY suppress this refusal by operator override; that switch is deployment policy, not a wire state.",
   },
 
   // ── owner-api ─────────────────────────────────────────────────────
-  subscription_exists: {
-    code: 'subscription_exists',
-    surfaces: ['owner-api'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      "An active (non-canceled) plan exists on this app. It refuses starting another one AND deleting the app — the refusal's own `fix` names the next step for the action that was called.",
-  },
   checkout_unavailable: {
     code: 'checkout_unavailable',
     surfaces: ['owner-api'],
@@ -298,67 +278,7 @@ const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
     fixBy: 'operator',
     emitter: "a deployment's owner billing mutations",
     description:
-      'The surface that starts a plan is unavailable on this deployment right now — unconfigured, or its provider is down. Only the operator can restore it.',
-  },
-  card_update_unavailable: {
-    code: 'card_update_unavailable',
-    surfaces: ['owner-api'],
-    retry: 'later',
-    fixBy: 'operator',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'The surface that updates a payment method is unavailable on this deployment right now. Only the operator can restore it.',
-  },
-  portal_unavailable: {
-    code: 'portal_unavailable',
-    surfaces: ['owner-api'],
-    retry: 'later',
-    fixBy: 'operator',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      "The self-service billing surface is unavailable on this deployment right now. Only the operator can restore it.",
-  },
-  no_subscription: {
-    code: 'no_subscription',
-    surfaces: ['owner-api'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'A plan-management action was called on an app that has no plan. The owner starts a plan first.',
-  },
-  subscription_unchanged: {
-    code: 'subscription_unchanged',
-    surfaces: ['owner-api'],
-    retry: 'after-fix',
-    fixBy: 'owner',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'The subscription requested is the one the app already holds, so there is nothing to change. The owner picks a different one.',
-  },
-  managed_app_no_checkout: {
-    code: 'managed_app_no_checkout',
-    surfaces: ['owner-api'],
-    retry: 'never',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'This app is funded by the tenant that provisioned it, so it has no owner-facing plan surface at all. No owner action creates one.',
-  },
-  managed_app_no_card_update: {
-    code: 'managed_app_no_card_update',
-    surfaces: ['owner-api'],
-    retry: 'never',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'This app is funded by the tenant that provisioned it, so it carries no owner payment method to update.',
-  },
-  managed_app_no_portal: {
-    code: 'managed_app_no_portal',
-    surfaces: ['owner-api'],
-    retry: 'never',
-    emitter: "a deployment's owner billing mutations",
-    description:
-      'This app is funded by the tenant that provisioned it, so it has no owner self-service billing surface.',
+      'The surface that adds credit (a top-up) is unavailable on this deployment right now — unconfigured, or its provider is down. Only the operator can restore it.',
   },
 
   // ── provisioning-api ──────────────────────────────────────────────
@@ -474,9 +394,6 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveCodesOn<'render-gate'>()([
   'app_policy_missing',
   'billing_mode_anomaly',
   'billing_path_missing',
-  'app_canceled',
-  'trial_exhausted',
-  'trial_expired',
   'issuer_rate_limited',
   'app_rate_limited',
   'app_deprovisioned',
@@ -490,4 +407,22 @@ export const RENDER_GATE_REFUSAL_CODES = exhaustiveCodesOn<'render-gate'>()([
  */
 export const MCP_ENDPOINT_REFUSAL_CODES = exhaustiveCodesOn<'mcp-endpoint'>()([
   'app_deprovisioned',
+]);
+
+/**
+ * A code an owner-API billing mutation may refuse with — i.e. one whose
+ * `surfaces` include `owner-api`. Derived, so a render-gate code is not
+ * expressible on an owner-API refusal. Registry v11 (ggui#960): the
+ * plan-era owner-api rows retired with the plan model; one owner billing
+ * surface remains — adding credit.
+ */
+export type OwnerApiRefusalCode = CodesOnSurface<'owner-api'>;
+
+/**
+ * Every owner-api code, as the literal tuple a backend's owner-API
+ * refusal helper types its `code` from (ggui#960). Order is the
+ * registry's.
+ */
+export const OWNER_API_REFUSAL_CODES = exhaustiveCodesOn<'owner-api'>()([
+  'checkout_unavailable',
 ]);

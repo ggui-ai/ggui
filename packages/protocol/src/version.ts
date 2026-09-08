@@ -6,6 +6,26 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Refusal registry v11 — the retail plan model retired (2026-09-08,
+ * wire-code, pre-launch, ggui#960 — MINOR on the 0.16.0 draft wave; the
+ * protocol half of the pricing publication ggui#949, WITH cloud's arm
+ * deletion). Founder's ruling: one product, prepaid pay-as-you-go at flat
+ * rates, trial and tiers retired, the welcome credit as the free entry.
+ * Eleven codes lose their emitting arms and retire in the same slice —
+ * render-gate `trial_exhausted`, `trial_expired`, `app_canceled`
+ * (`RENDER_GATE_REFUSAL_CODES` 14 → 11); owner-api `subscription_exists`,
+ * `no_subscription`, `subscription_unchanged`, `portal_unavailable`,
+ * `card_update_unavailable`, `managed_app_no_portal`,
+ * `managed_app_no_card_update`, `managed_app_no_checkout` (9 → 1: the
+ * prepaid wallet's one Stripe surface is the top-up, user-scoped). Four
+ * rows re-described in the new model's words: `billing_path_missing`,
+ * `model_not_allowed` (per-account grant), `checkout_unavailable`
+ * (top-ups), `insufficient_credit` (pool or BYOK). New typed exports
+ * `OWNER_API_REFUSAL_CODES` + `OwnerApiRefusalCode`. Not breaking under
+ * §2: pre-launch draft wave, every retired code had lost its emitter in
+ * the same publication; the kit's non-render-surface case re-aims to the
+ * surviving owner-api code. `managed_default_cap_exceeded` stays (ggui#965).
+ * --------------------------------------------------------------------
  * Blueprint provenance de-modeled (2026-09-06, wire-tightening, pre-launch,
  * ggui#924 — MINOR; half of ggui#923, one WITH publication across six
  * lanes). `LlmBlueprintSource.generator` is the identity `ui-gen-<tier>`
