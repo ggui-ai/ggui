@@ -12,7 +12,6 @@
 import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { AdapterResult } from "../adapters/types.js";
 import type { RenderingContext } from "../contract-context.js";
-import type { EvaluationResult } from "../evaluation/types.js";
 import type { EvalResult } from "../evaluation/types-public.js";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
@@ -53,8 +52,6 @@ export type ModelRoles = Partial<Record<ModelRole, string>>;
 export interface GenerationResult extends AdapterResult {
   /** Number of generation passes the harness performed */
   passesUsed: number;
-  /** Evaluation results per round (legacy numeric scoring — backward compat) */
-  evaluations?: EvaluationResult[];
   /** Three-tier evaluation result (tier 0 + LLM tier 1+2 + visual) */
   evalResult?: EvalResult;
   /** Whether background improvement should be spawned (auto-improve mode) */
