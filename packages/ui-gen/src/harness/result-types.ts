@@ -14,6 +14,7 @@ import type { AdapterResult } from "../adapters/types.js";
 import type { RenderingContext } from "../contract-context.js";
 import type { EvaluationResult } from "../evaluation/types.js";
 import type { EvalResult } from "../evaluation/types-public.js";
+import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // =============================================================================
 // Model Roles
@@ -62,6 +63,20 @@ export interface GenerationResult extends AdapterResult {
   selfCheckPassed?: boolean;
   /** Which model was used for each role (for benchmark reporting) */
   modelRolesUsed?: Record<string, string>;
+  /**
+   * The triad this generation ran under — recorded ONLY when the caller
+   * set `designMode` on the dispatch (a bench arm switch, an operator
+   * option). Absent = the constrained default path, byte-identical to
+   * the pre-`designMode` result.
+   */
+  designMode?: DesignMode;
+  /**
+   * The canvas class the `free` prompt stated — the explicit `canvas`
+   * when the caller passed one, else the shell × screen derivation the
+   * prompt itself used. Absent in constrained mode (that prompt states
+   * no canvas) unless the caller passed one explicitly.
+   */
+  canvas?: CanvasClass;
   /** Phase-level timing breakdown (ms) */
   timing?: Record<string, number>;
   /** Per-turn/per-outcome breakdown for benchmark analysis.

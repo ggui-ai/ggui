@@ -58,7 +58,7 @@ import {
   type GadgetDescriptor,
   type JsonObject,
 } from "@ggui-ai/protocol";
-import type { CanvasClass, DesignMode } from "../design-mode.js";
+import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -535,5 +535,17 @@ export async function dispatchGeneration(
   // pairedSource via the workflow output) — guaranteed to pair with
   // telemetry.compiledCode when runResult.ok is true.
   const finalSource = runResult.finalSource ?? "";
-  return assembleGenerationResult({ session, telemetry, source: finalSource });
+  const result = assembleGenerationResult({ session, telemetry, source: finalSource });
+  // Record the arm this generation ran under (bench reports read it per
+  // cell). The canvas is the one the free prompt stated: explicit when
+  // passed, else the same shell × screen derivation the prompt used.
+  // Nothing is stamped on the default (constrained, no option) path.
+  const recordedCanvas: CanvasClass | undefined =
+    params.canvas ??
+    (params.designMode === "free" ? canvasForRendering(params.shellType, params.screen) : undefined);
+  return {
+    ...result,
+    ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),
+    ...(recordedCanvas !== undefined ? { canvas: recordedCanvas } : {}),
+  };
 }

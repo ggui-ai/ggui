@@ -36,6 +36,13 @@
  *     --max-concurrent N      (default 12) max cells in flight at once
  *     --cell-timeout-sec N    (default 600 = 10m) hard kill per cell
  *     --heartbeat-sec N       (default 90) kill if log silent this long
+ *     --design-mode M         constrained | free (env GGUI_DESIGN_MODE as
+ *                             fallback) — the arm every cell runs under;
+ *                             forwarded to bench.mjs and recorded in the
+ *                             runs manifest. Default = today's behaviour.
+ *     --canvas C              xs-chat-card | mobile-fullscreen-small | md |
+ *                             lg | xl — explicit canvas for the free prompt;
+ *                             forwarded + recorded likewise.
  *
  * Caller is expected to be at workspace root or a worktree thereof.
  */
@@ -69,6 +76,10 @@ const flags = {
   // default: ~6GB peak RAM (12 × 500MB), and ≤4 simultaneous calls per
   // provider on n=3 × 3 providers (12 / 3 = 4).
   maxConcurrent: 12,
+  // Arm switch (Exp 008 4-cell probe) — forwarded to bench.mjs verbatim
+  // and recorded in the runs manifest. `null` = today's behaviour.
+  designMode: process.env.GGUI_DESIGN_MODE || null,
+  canvas: null,
   extras: [],
 };
 
@@ -81,6 +92,8 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--cell-timeout-sec') flags.cellTimeoutSec = parseInt(args[++i] ?? '600', 10);
   else if (a === '--heartbeat-sec') flags.heartbeatSec = parseInt(args[++i] ?? '90', 10);
   else if (a === '--max-concurrent') flags.maxConcurrent = parseInt(args[++i] ?? '12', 10);
+  else if (a === '--design-mode') flags.designMode = args[++i] ?? null;
+  else if (a === '--canvas') flags.canvas = args[++i] ?? null;
   else if (a === '--timeout') {
     const v = args[++i] ?? '';
     flags.innerTimeoutMs = parseInt(v, 10) || 0;
@@ -108,6 +121,22 @@ if (!flags.tag) {
   console.error('[bench-n] --tag is required');
   process.exit(2);
 }
+// Validate the arm switch against ui-gen's ONE definition (this script
+// runs under `node --import tsx`, like bench.mjs) so a typo fails the
+// whole pool up front instead of 72 cells each exiting 1.
+const { DESIGN_MODES, CANVAS_CLASSES } = await import(
+  resolve(__dirname, '..', 'node_modules/@ggui-ai/ui-gen/src/design-mode.ts')
+);
+if (flags.designMode !== null && !DESIGN_MODES.includes(flags.designMode)) {
+  console.error(`[bench-n] unknown --design-mode ${flags.designMode}; available: ${DESIGN_MODES.join(', ')}`);
+  process.exit(2);
+}
+if (flags.canvas !== null && !CANVAS_CLASSES.includes(flags.canvas)) {
+  console.error(`[bench-n] unknown --canvas ${flags.canvas}; available: ${CANVAS_CLASSES.join(', ')}`);
+  process.exit(2);
+}
+if (flags.designMode !== null) flags.extras.push('--design-mode', flags.designMode);
+if (flags.canvas !== null) flags.extras.push('--canvas', flags.canvas);
 if (!flags.providers) {
   console.error('[bench-n] --provider is required (comma-separated)');
   process.exit(2);
@@ -252,7 +281,8 @@ for (let run = 1; run <= flags.n; run++) {
 }
 
 console.log(
-  `[bench-n] === pool: ${allCells.length} cells (${flags.n} runs × ${providers.length} providers × ${commits.length} commits), max ${flags.maxConcurrent} concurrent ===`,
+  `[bench-n] === pool: ${allCells.length} cells (${flags.n} runs × ${providers.length} providers × ${commits.length} commits), max ${flags.maxConcurrent} concurrent ===` +
+    `${flags.designMode ? ` design-mode=${flags.designMode}` : ''}${flags.canvas ? ` canvas=${flags.canvas}` : ''}`,
 );
 
 const cellResults = await runPool(allCells, flags.maxConcurrent);
@@ -261,7 +291,19 @@ const runs = cellResults;
 const manifestPath = resolve(logsDir, `${flags.tag}-runs.json`);
 writeFileSync(
   manifestPath,
-  JSON.stringify({ tag: flags.tag, n: flags.n, providers, commits, runs }, null, 2),
+  JSON.stringify(
+    {
+      tag: flags.tag,
+      n: flags.n,
+      providers,
+      commits,
+      ...(flags.designMode ? { designMode: flags.designMode } : {}),
+      ...(flags.canvas ? { canvas: flags.canvas } : {}),
+      runs,
+    },
+    null,
+    2,
+  ),
 );
 console.log(`[bench-n] manifest → ${manifestPath}`);
 

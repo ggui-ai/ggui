@@ -187,6 +187,19 @@ export interface GenerationResultDisplay {
   turnsUsed: number;
   tokens: { input: number; output: number; total: number };
   passesUsed?: number;
+  /**
+   * The triad the cell ran under — present only when the run set the
+   * arm switch (`--design-mode`); absent on default runs. Vocabulary
+   * mirrors `DesignMode` in `@ggui-ai/ui-gen` (pinned at compile time
+   * in the benchmark reporter — this package cannot depend on ui-gen).
+   */
+  designMode?: 'constrained' | 'free';
+  /**
+   * The canvas class the free prompt stated for this cell — present
+   * only when the run set it or ran the free arm. Mirrors `CanvasClass`
+   * in `@ggui-ai/ui-gen` (same compile-time pin).
+   */
+  canvas?: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl';
 }
 
 /**

@@ -45,6 +45,14 @@
  *                    LLM scoring during eval rounds). The visual judge is the
  *                    in-loop evaluation agent (--eval), not a separate model.
  *   --quality        Quality mode: fast (default), auto-improve, high-quality
+ *   --design-mode    Arm switch: constrained (today's triad) | free. Falls back
+ *                    to env GGUI_DESIGN_MODE. Threaded into the generator and
+ *                    recorded per cell as generation.designMode. Default =
+ *                    today's behaviour (unset, nothing recorded).
+ *   --canvas         Explicit canvas class for the free prompt:
+ *                    xs-chat-card | mobile-fullscreen-small | md | lg | xl.
+ *                    Recorded per cell as generation.canvas. Default = derived
+ *                    from the variant's shell × screen by the prompt itself.
  *   --preset         Named preset: quick, full, coding-agent
  *   --list           List available commits and exit
  *   --help, -h       Show help
@@ -232,6 +240,21 @@ if (panelPrompt !== 'default' && panelPrompt !== 'arm-neutral') {
 }
 const playwrightEnabled = hasFlag(['--playwright']) || process.env.BENCH_PLAYWRIGHT === '1';
 const qualityMode = getArg(['--quality'], 'fast');
+// Arm switch (Exp 008 4-cell probe). Validated against ui-gen's ONE
+// definition (DESIGN_MODES / CANVAS_CLASSES) — no parallel list here.
+const designModeArg = getArg(['--design-mode'], process.env.GGUI_DESIGN_MODE || null);
+const canvasArg = getArg(['--canvas'], null);
+const { DESIGN_MODES, CANVAS_CLASSES } = await import(resolve(UI_GEN_DIR, 'src/design-mode.ts'));
+if (designModeArg !== null && !DESIGN_MODES.includes(designModeArg)) {
+  console.error(`  ✗ Unknown --design-mode: ${designModeArg}. Available: ${DESIGN_MODES.join(', ')}`);
+  process.exit(1);
+}
+if (canvasArg !== null && !CANVAS_CLASSES.includes(canvasArg)) {
+  console.error(`  ✗ Unknown --canvas: ${canvasArg}. Available: ${CANVAS_CLASSES.join(', ')}`);
+  process.exit(1);
+}
+const designMode = designModeArg;
+const canvas = canvasArg;
 
 // Harness selector retired 2026-04-27 (Step 4 of the cloud→OSS
 // migration). Pre-step-4 the bench dual-routed through cloud's hardened
@@ -271,6 +294,8 @@ console.log(`  Timeout:      ${timeoutMs}ms`);
 console.log(`  Threshold:    ${passThreshold}`);
 console.log(`  Quality:      ${qualityMode}`);
 if (visualEnabled) console.log(`  Visual eval:  enabled (judge = in-loop evaluation agent)`);
+if (designMode) console.log(`  Design mode:  ${designMode}${process.env.GGUI_DESIGN_MODE && !getArg(['--design-mode'], null) ? ' (from GGUI_DESIGN_MODE)' : ''}`);
+if (canvas) console.log(`  Canvas:       ${canvas}`);
 console.log('');
 
 // ---------------------------------------------------------------------------
@@ -400,6 +425,9 @@ const run = async () => {
         passThreshold: Math.max(passThreshold - 20, 60),
       },
     } : {}),
+    // Arm switch — absent keys = today's constrained path, nothing recorded.
+    ...(designMode ? { designMode } : {}),
+    ...(canvas ? { canvas } : {}),
   });
 
   // Register adapters per provider

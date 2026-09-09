@@ -12,6 +12,7 @@ import type {
   SdkComparisonEntry,
 } from '@ggui-ai/shared';
 import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
+import type { CanvasClass, DesignMode } from '@ggui-ai/ui-gen';
 import type { JudgeDisclosureDisplay } from '@ggui-ai/shared';
 import type { JudgeSampling } from './post-eval.js';
 import type {
@@ -753,8 +754,31 @@ function mapGeneration(r: BenchmarkRunResult): GenerationResultDisplay | null {
   if ('passesUsed' in gen && typeof gen.passesUsed === 'number') {
     result.passesUsed = gen.passesUsed;
   }
+  // Arm record (Exp 008 4-cell probe): the harness stamps these only
+  // when the run set the switch — copied verbatim, never defaulted, so
+  // a default run's row stays byte-identical to today's.
+  if ('designMode' in gen && gen.designMode !== undefined) {
+    result.designMode = gen.designMode;
+  }
+  if ('canvas' in gen && gen.canvas !== undefined) {
+    result.canvas = gen.canvas;
+  }
   return result;
 }
+
+/**
+ * Compile-time pins: the display row's `designMode` / `canvas`
+ * vocabularies (owned by `@ggui-ai/shared`, which cannot depend on
+ * ui-gen) must accept every value ui-gen's `DesignMode` / `CanvasClass`
+ * can produce, so a vocabulary change fails here instead of narrowing
+ * silently on the page.
+ */
+const _designModeVocabularyPinned: DesignMode extends NonNullable<GenerationResultDisplay['designMode']>
+  ? true
+  : never = true;
+const _canvasClassVocabularyPinned: CanvasClass extends NonNullable<GenerationResultDisplay['canvas']>
+  ? true
+  : never = true;
 
 function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
   if (!r.evaluation) return null;

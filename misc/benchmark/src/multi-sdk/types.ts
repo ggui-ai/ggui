@@ -2,6 +2,7 @@
 
 import type { GadgetDescriptor, ModelTier, LlmProvider, DataContract, JsonObject } from '@ggui-ai/protocol';
 import type { EvalResult } from '@ggui-ai/ui-gen/evaluation';
+import type { CanvasClass, DesignMode } from '@ggui-ai/ui-gen';
 import type { ProviderName, AdapterResult, AdapterMode } from '@ggui-ai/ui-gen/adapters/types';
 import type { GenerationResult, ModelRoles, RenderingContext } from '@ggui-ai/ui-gen/harness/result-types';
 import type { AestheticScores, JudgeDisclosure, PanelEvalResult } from './post-eval.js';
@@ -535,6 +536,20 @@ export interface BenchmarkConfig {
    * variants short-circuit to a SKIP error result.
    */
   playwright?: PlaywrightModule;
+  /**
+   * Arm switch: which triad every cell runs under (`--design-mode`,
+   * env `GGUI_DESIGN_MODE`). Threaded into `dispatchGeneration` and
+   * recorded per cell as `generation.designMode`. Absent = today's
+   * constrained path, nothing recorded.
+   */
+  designMode?: DesignMode;
+  /**
+   * Explicit canvas class for the free prompt (`--canvas`). Threaded
+   * into `dispatchGeneration` and recorded per cell as
+   * `generation.canvas`. Absent = derived from the variant's shell ×
+   * screen by the prompt itself.
+   */
+  canvas?: CanvasClass;
 }
 
 /**
@@ -578,4 +593,8 @@ export interface BenchmarkRunnerConfig {
   panelPrompt?: PanelPrompt;
   /** Playwright module handle — see {@link BenchmarkConfig.playwright}. */
   playwright?: PlaywrightModule;
+  /** Arm switch — see {@link BenchmarkConfig.designMode}. */
+  designMode?: DesignMode;
+  /** Explicit canvas class — see {@link BenchmarkConfig.canvas}. */
+  canvas?: CanvasClass;
 }

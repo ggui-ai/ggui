@@ -299,3 +299,34 @@ describe('report schemaVersion (#928)', () => {
     expect(report.meta.schemaVersion).toBe('benchmark-report.v2');
   });
 });
+
+/**
+ * Arm record (Exp 008 4-cell probe): the harness stamps `designMode` /
+ * `canvas` on the GenerationResult only when the run set the switch; the
+ * display row copies them verbatim under `generation` and a default run's
+ * row carries neither key.
+ */
+describe('generation.designMode / generation.canvas on the display row', () => {
+  it('copies the harness-stamped arm record onto generation, omitting it when the run never set the switch', () => {
+    const free: BenchmarkRunResult = {
+      ...generatedRun('kanban-board', null),
+      generation: {
+        compiledCode: 'x',
+        sourceCode: 'x',
+        tokens: { input: 1, output: 1, total: 2 },
+        generationTimeMs: 1000,
+        turnsUsed: 3,
+        passesUsed: 1,
+        designMode: 'free',
+        canvas: 'xs-chat-card',
+      },
+    };
+    const plain = generatedRun('kanban-board', null);
+    const d = toDisplayReport(generateReport([free, plain], 0), 'rep-arm', 'test');
+    expect(d.results[0]?.generation?.designMode).toBe('free');
+    expect(d.results[0]?.generation?.canvas).toBe('xs-chat-card');
+    expect(d.results[1]?.generation).toBeDefined();
+    expect('designMode' in d.results[1]!.generation!).toBe(false);
+    expect('canvas' in d.results[1]!.generation!).toBe(false);
+  });
+});

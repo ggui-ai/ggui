@@ -427,6 +427,12 @@ export class BenchmarkRunner {
             maxAttempts: this.config.maxAttempts,
             maxEvalRounds: this.config.maxEvalRounds,
             qualityConfig: { ...DEFAULT_QUALITY_CONFIG, quality: this.config.qualityMode ?? 'fast' },
+            // Arm switch (`--design-mode` / `--canvas`): the harness
+            // records both on the GenerationResult, which the reporter
+            // maps to `generation.designMode` / `generation.canvas`.
+            // Absent → the constrained default path, nothing recorded.
+            ...(this.config.designMode !== undefined ? { designMode: this.config.designMode } : {}),
+            ...(this.config.canvas !== undefined ? { canvas: this.config.canvas } : {}),
             // Thread the bench commit's registered wrapper catalog
             // so plugin-aware commits (Leaflet, Mapbox, …) see the
             // same `clientCapabilities — registered catalog` table
