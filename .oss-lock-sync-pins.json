@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T07:35:42.713Z",
+  "generatedAt": "2026-09-09T12:32:59.603Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -14,7 +14,9 @@
     "@anthropic-ai/claude-agent-sdk-win32-x64",
     "@aws-sdk/checksums",
     "@aws-sdk/client-bedrock-runtime",
+    "@aws-sdk/client-ecs",
     "@aws-sdk/client-s3",
+    "@aws-sdk/client-ssm",
     "@aws-sdk/core",
     "@aws-sdk/credential-provider-cognito-identity",
     "@aws-sdk/credential-provider-env",
@@ -281,7 +283,9 @@
     "@anthropic-ai/claude-agent-sdk-win32-x64",
     "@aws-sdk/checksums",
     "@aws-sdk/client-bedrock-runtime",
+    "@aws-sdk/client-ecs",
     "@aws-sdk/client-s3",
+    "@aws-sdk/client-ssm",
     "@aws-sdk/core",
     "@aws-sdk/credential-provider-cognito-identity",
     "@aws-sdk/credential-provider-env",

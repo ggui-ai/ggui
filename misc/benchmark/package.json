@@ -40,7 +40,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
+    "@aws-sdk/client-ecs": "^3.500.0",
     "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/client-ssm": "^3.500.0",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/mcp-server-handlers": "workspace:*",
