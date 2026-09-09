@@ -535,11 +535,30 @@ export async function dispatchGeneration(
   // pairedSource via the workflow output) — guaranteed to pair with
   // telemetry.compiledCode when runResult.ok is true.
   const finalSource = runResult.finalSource ?? "";
-  const result = assembleGenerationResult({ session, telemetry, source: finalSource });
+  // `assembleGenerationResult` is async — the spread below must see the
+  // RESOLVED result, never the promise (a spread promise is `{}`: every
+  // consumer downstream lost `compiledCode` / `tokens` on 2026-09-09).
+  const result: GenerationResult = await assembleGenerationResult({ session, telemetry, source: finalSource });
   // Record the arm this generation ran under (bench reports read it per
   // cell). The canvas is the one the free prompt stated: explicit when
   // passed, else the same shell × screen derivation the prompt used.
   // Nothing is stamped on the default (constrained, no option) path.
+  return withArmRecord(result, params);
+}
+
+/**
+ * Stamp the arm record (`designMode` / `canvas`) onto a RESOLVED
+ * {@link GenerationResult}. The input must be the resolved result, never a
+ * promise — a spread promise is `{}` and every consumer downstream loses
+ * `compiledCode` / `tokens` (2026-09-09; gate:
+ * `generation-dispatch.resolved-result.test.ts`). Nothing is stamped on the
+ * default (constrained, no option) path, so a default run's result is
+ * byte-identical to the input.
+ */
+function withArmRecord(
+  result: GenerationResult,
+  params: Pick<GenerationDispatchParams, "designMode" | "canvas" | "shellType" | "screen">,
+): GenerationResult {
   const recordedCanvas: CanvasClass | undefined =
     params.canvas ??
     (params.designMode === "free" ? canvasForRendering(params.shellType, params.screen) : undefined);
