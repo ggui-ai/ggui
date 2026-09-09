@@ -113,6 +113,7 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
     contract: contract,
     originalPrompt: prompt,
     classification: harness.classification,
+    designMode: harness.designMode,
   };
   let axisIssueCount = 0;
   const seenAxisIds = new Set<string>();

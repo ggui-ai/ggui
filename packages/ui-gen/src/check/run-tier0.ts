@@ -16,6 +16,7 @@ import ts from 'typescript';
 import type { DataContract } from '@ggui-ai/protocol';
 import { HOOK_NAME_RE, listContractGadgets } from '@ggui-ai/protocol';
 import { consumedTokenManifest } from '@ggui-ai/design/themes';
+import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
 import { validateAllContracts, type ContractIssue } from './contract-validation.js';
 import { typecheck } from './type-checker.js';
 import { lintReactHooks, type ReactLintDiagnostic } from './react-linter.js';
@@ -95,10 +96,22 @@ function stripComments(code: string): string {
 function detectCertainDoubleWiredActions(
   sourceCode: string,
   actionBindings: readonly string[],
+  /**
+   * `constrained` keeps the design-package tag sets above. `free`
+   * retargets the SAME invariant ("one useAction binding → exactly one
+   * gesture surface") at raw elements: the outer host is ANY JSX element
+   * whose onClick/onPress calls a binding (`<div onClick>`, `<li>`,
+   * `<tr>`, `<button>`, `<a>`, `[role=button]`, a design primitive…),
+   * and the inner match is ANY descendant whose handler attribute calls
+   * the same binding. Tag names stop mattering because in free mode a
+   * raw element is a first-class gesture surface.
+   */
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): EvalIssue[] {
   const issues: EvalIssue[] = [];
   if (actionBindings.length === 0) return issues;
   const bindings = new Set(actionBindings);
+  const anyElementIsInteractive = designMode === 'free';
   const TRAIT_HOST_TAGS = new Set(['Card', 'Box', 'Stack', 'Row']);
   const TRAITS_THAT_FIRE = new Set(['Clickable', 'Pressable']);
   const INTERACTIVE_DESCENDANTS = new Set([
@@ -148,7 +161,11 @@ function detectCertainDoubleWiredActions(
 
   function isTraitHostWithFiringAs(node: ts.JsxOpeningElement): boolean {
     const tag = tagNameText(node);
-    if (tag === undefined || !TRAIT_HOST_TAGS.has(tag)) return false;
+    if (tag === undefined) return false;
+    // Free mode: every element with a handler is a gesture surface —
+    // the callee check in `visit` decides whether it fires a binding.
+    if (anyElementIsInteractive) return true;
+    if (!TRAIT_HOST_TAGS.has(tag)) return false;
     const asExpr = attrExpression(node, 'as');
     return (
       asExpr !== undefined &&
@@ -206,7 +223,10 @@ function detectCertainDoubleWiredActions(
           : undefined;
       if (opening !== undefined) {
         const tag = tagNameText(opening);
-        if (tag !== undefined && INTERACTIVE_DESCENDANTS.has(tag)) {
+        if (
+          tag !== undefined &&
+          (anyElementIsInteractive || INTERACTIVE_DESCENDANTS.has(tag))
+        ) {
           for (const attrName of HANDLER_ATTRS) {
             const callee = extractCalleeName(attrExpression(opening, attrName));
             if (callee === expectedBinding) {
@@ -239,6 +259,9 @@ function detectCertainDoubleWiredActions(
           const outerLine =
             sf.getLineAndCharacterOfPosition(node.openingElement.getStart())
               .line + 1;
+          const outerLabel = anyElementIsInteractive
+            ? `<${outerTag}>`
+            : `<${outerTag} as={...}>`;
           issues.push({
             tier: 0,
             result: 'fail',
@@ -246,9 +269,11 @@ function detectCertainDoubleWiredActions(
             subcategory: 'double-wired-action:certain',
             severity: 'critical',
             description:
-              `Nested-interactive double-wire: outer <${outerTag} as={...}> at line ${outerLine} and inner <${match.tag}> at line ${match.line} both dispatch the same useAction binding '${outerCallee}'. ` +
+              `Nested-interactive double-wire: outer ${outerLabel} at line ${outerLine} and inner <${match.tag}> at line ${match.line} both dispatch the same useAction binding '${outerCallee}'. ` +
               `One user click on the inner control fires its handler AND bubbles to the outer handler — '${outerCallee}' dispatches TWICE, the action runs back-to-back, and a toggle-style action silently reverts the user's change.`,
-            fix: `Pick ONE surface for the gesture: either drop \`as={...}\` + onClick on the outer <${outerTag}> and let the inner <${match.tag}> own the gesture, OR remove the inner <${match.tag}> and let the outer <${outerTag} as={...}> own it. Don't wire both to the same useAction binding.`,
+            fix: anyElementIsInteractive
+              ? `Pick ONE gesture surface for '${outerCallee}': either remove the onClick from the outer <${outerTag}> and let the inner <${match.tag}> own the gesture, OR drop the inner <${match.tag}>'s handler and let the outer <${outerTag}> own it. Never wire both to the same useAction binding — stopPropagation is not a fix.`
+              : `Pick ONE surface for the gesture: either drop \`as={...}\` + onClick on the outer <${outerTag}> and let the inner <${match.tag}> own the gesture, OR remove the inner <${match.tag}> and let the outer <${outerTag} as={...}> own it. Don't wire both to the same useAction binding.`,
             line: outerLine,
           });
         }
@@ -346,9 +371,25 @@ export async function runTier0Checks(
    * narrowing). Standard-library-only callers omit it.
    */
   gadgetTypes?: Readonly<Record<string, string>>,
+  /**
+   * Which triad produced the source. `constrained` (default) runs every
+   * leg exactly as before. `free` gates OFF the design-VOCABULARY legs —
+   * `raw-spacing`, `raw-pixels`, `numeric-spacing-prop`, the
+   * `stack-row-*` prop checks and `clickable-wrapper` — because raw
+   * elements, inline CSS and literal spacing are first-class there. It
+   * KEEPS every contract leg: `hex-color`, `hardcoded-color-fn`,
+   * `named-color`, `token-fallback`, `off-manifest-token`,
+   * `asset-color-pair` (color stays on the closed token manifest),
+   * imports, security, Props / default-export, wire_* and gadget checks,
+   * and the double-wired-action detector (retargeted at raw elements).
+   */
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): Promise<EvalIssue[]> {
   const issues: EvalIssue[] = [];
   const lines = sourceCode.split('\n');
+  // Design-vocabulary legs fire only when the prompt taught the
+  // vocabulary — see `designMode` above.
+  const enforceDesignVocabulary = designMode === 'constrained';
 
   // ── Compile check ─────────────────────────────────────────
   //
@@ -627,9 +668,11 @@ export async function runTier0Checks(
     // `#fff` defeats its colors. Only the STRING-literal form fails;
     // the numeric escape (`gap={12}`) is untouched, so a genuine
     // off-scale pixel value still has a path.
-    const rawSpacingMatch = line.match(
-      /\b(gap|padding|paddingX|paddingY|margin|radius)\s*=\s*["'][\d.]+(?:px|rem|em)["']/,
-    );
+    const rawSpacingMatch = enforceDesignVocabulary
+      ? line.match(
+          /\b(gap|padding|paddingX|paddingY|margin|radius)\s*=\s*["'][\d.]+(?:px|rem|em)["']/,
+        )
+      : null;
     if (rawSpacingMatch) {
       issues.push({
         tier: 0,
@@ -700,7 +743,9 @@ export async function runTier0Checks(
     }
 
     // Raw pixel values in spacing CSS properties
-    const pxMatch = line.match(/(?:padding|margin|gap|borderRadius)\s*:\s*['"]?\d+px/);
+    const pxMatch = enforceDesignVocabulary
+      ? line.match(/(?:padding|margin|gap|borderRadius)\s*:\s*['"]?\d+px/)
+      : null;
     if (pxMatch && !line.includes('var(--ggui-')) {
       issues.push({
         tier: 0,
@@ -708,14 +753,16 @@ export async function runTier0Checks(
         category: 'tokens',
         subcategory: 'raw-pixels',
         description: 'Raw pixel value in spacing — must use design tokens',
-        fix: 'Replace with var(--ggui-spacing-*, fallback)',
+        fix: 'Replace with a bare var(--ggui-spacing-*) token — no literal fallback (the runtime injects every token) — or the scale name on the primitive prop (gap="md", padding="lg")',
         line: lineNum,
       });
     }
 
     // Numeric spacing props on components (e.g., padding={24}, gap={8})
     // These bypass the design system — should use var(--ggui-spacing-*)
-    const numericSpacingMatch = line.match(/\b(padding|paddingX|paddingY|gap|margin)\s*=\s*\{?\s*(\d+)\s*\}?/);
+    const numericSpacingMatch = enforceDesignVocabulary
+      ? line.match(/\b(padding|paddingX|paddingY|gap|margin)\s*=\s*\{?\s*(\d+)\s*\}?/)
+      : null;
     if (numericSpacingMatch && !line.includes('var(--ggui-')) {
       issues.push({
         tier: 0,
@@ -735,7 +782,7 @@ export async function runTier0Checks(
   // onClick on them is a plain type error the type-checker catches — don't
   // steer those toward `as={Clickable}` (it won't compile on them).
   const clickablePattern = /<(?:Card|Box|Stack|Row)\s[^>]*onClick/;
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = 0; enforceDesignVocabulary && i < lines.length; i++) {
     if (clickablePattern.test(lines[i]) && !lines[i].includes('as={Clickable}') && !lines[i].includes('as={Pressable}')) {
       issues.push({
         tier: 0, result: 'warn', category: 'contract', subcategory: 'clickable-wrapper',
@@ -752,9 +799,21 @@ export async function runTier0Checks(
   // another (the inner gesture bubbles to the outer handler). Captured
   // in scenario-07: a `Card as={Clickable} onClick` row containing a
   // `Checkbox onChange`, both calling the same action → double-toggle.
-  const actionBindings = [
-    ...sourceCode.matchAll(/(?:const|let)\s+(\w+)\s*=\s*useAction\s*\(/g),
-  ]
+  //
+  // Binding extraction. The constrained regex is the pre-`designMode`
+  // one, kept verbatim: it matches `useAction(` only, so a binding
+  // declared with the generic the boilerplate itself emits —
+  // `useAction<ActionXPayload>('x')` — is NOT collected there (a
+  // pre-existing gap, left in place because the constrained gate must
+  // stay byte-identical for the A/B; collapse the two regexes once that
+  // pin is lifted). `free` mode accepts the optional generic so the
+  // one-gesture-surface invariant actually fires on boilerplate-shaped
+  // hook lines.
+  const bindingRe =
+    designMode === 'free'
+      ? /(?:const|let)\s+(\w+)\s*=\s*useAction\s*(?:<[^>]*>)?\s*\(/g
+      : /(?:const|let)\s+(\w+)\s*=\s*useAction\s*\(/g;
+  const actionBindings = [...sourceCode.matchAll(bindingRe)]
     .map((m) => m[1])
     .filter((name): name is string => typeof name === 'string');
   for (const binding of actionBindings) {
@@ -794,7 +853,7 @@ export async function runTier0Checks(
   // CAUSE one turn earlier and prevents shipping the broken a11y nest.
   if (actionBindings.length > 0) {
     issues.push(
-      ...detectCertainDoubleWiredActions(sourceCode, actionBindings),
+      ...detectCertainDoubleWiredActions(sourceCode, actionBindings, designMode),
     );
   }
 
@@ -862,7 +921,7 @@ export async function runTier0Checks(
   const ALIGN_VALUES = new Set(['start', 'center', 'end', 'stretch']);
   const JUSTIFY_VALUES = new Set(['start', 'center', 'end', 'between', 'around', 'evenly']);
   const tagRegex = /<(Stack|Row)\b([^>]*)>/gs;
-  for (const tag of sourceCode.matchAll(tagRegex)) {
+  for (const tag of enforceDesignVocabulary ? sourceCode.matchAll(tagRegex) : []) {
     const tagName = tag[1];
     const attrs = tag[2];
     const tagLine = sourceCode.slice(0, tag.index).split('\n').length;
@@ -1316,8 +1375,9 @@ export async function runTier0Checks(
 export async function runTier0(
   sourceCode: string,
   contract?: DataContract,
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): Promise<EvalResult> {
-  const issues = await runTier0Checks(sourceCode, contract);
+  const issues = await runTier0Checks(sourceCode, contract, undefined, undefined, designMode);
   const pass: string[] = [];
 
   // Build pass list from categories that had no issues

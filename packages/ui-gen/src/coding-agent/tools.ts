@@ -18,6 +18,7 @@ import type {
   ToolResult,
   CommitMetadata,
 } from './types';
+import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
 
 /**
  * Extract documentation for a single component from the full primitives docs.
@@ -69,6 +70,8 @@ async function autoCommit(
    * stdlib hooks unconditionally.
    */
   gadgetTypes?: Readonly<Record<string, string>>,
+  /** Which tier-0 legs fire — see `runTier0Checks`'s `designMode`. */
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): Promise<ToolResult> {
   const commitStart = Date.now();
   const raw = workspace.read();
@@ -118,6 +121,7 @@ async function autoCommit(
     contract,
     buildResult.errors,
     gadgetTypes,
+    designMode,
   );
   const tier0Fails = tier0Issues.filter(i => i.result === 'fail');
   const selfCheckPassed = tier0Fails.length === 0;
@@ -196,6 +200,8 @@ export async function executeTool(
    * callers omit it.
    */
   gadgetTypes?: Readonly<Record<string, string>>,
+  /** Which tier-0 legs fire on auto-commit — see `runTier0Checks`'s `designMode`. */
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): Promise<ToolResult> {
   switch (tool) {
     case 'write':
@@ -216,7 +222,7 @@ export async function executeTool(
       const message = (input.commit_message as string) || `write ${lineCount} lines`;
 
       console.log(`[coding-agent] write: ${lineCount} lines → auto-commit`);
-      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes);
+      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode);
     }
 
     case 'apply_changes': {
@@ -523,7 +529,7 @@ export async function executeTool(
       const message = (input.commit_message as string) || 'apply changes';
 
       console.log(`[coding-agent] apply_changes: ${changes.length} changes applied → auto-commit`);
-      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes);
+      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode);
     }
 
     case 'get_components_info': {

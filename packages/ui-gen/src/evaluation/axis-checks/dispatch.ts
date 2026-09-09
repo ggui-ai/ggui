@@ -7,12 +7,15 @@ import type { Classification } from "../../classifier/index.js";
 import type { EvalIssue } from "../types-public.js";
 import { REGISTRY } from "./registry.js";
 import { matches, type AxisCheckInput } from "./types.js";
+import type { DesignMode } from "../../design-mode.js";
 
 export interface RunAxisChecksInput {
   sourceCode: string;
   compiledCode: string | null;
   contract?: DataContract;
   originalPrompt: string;
+  /** Which triad produced the source — see `AxisCheckInput.designMode`. */
+  designMode?: DesignMode;
 }
 
 export function runAxisChecks(
@@ -27,6 +30,7 @@ export function runAxisChecks(
     ...(input.contract !== undefined ? { contract: input.contract } : {}),
     originalPrompt: input.originalPrompt,
     classification,
+    ...(input.designMode !== undefined ? { designMode: input.designMode } : {}),
   };
 
   const issues: EvalIssue[] = [];

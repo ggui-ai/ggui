@@ -674,6 +674,9 @@ ${closingInstruction}`;
     // typecheck overlays the real wrapper declarations and a generated
     // direct gadget import gets strict option/return narrowing.
     harness.what.gadgetTypes,
+    // Which tier-0 legs fire — the design-vocabulary legs stand down in
+    // `free` mode; every contract leg runs in both.
+    harness.designMode,
   );
   const toolMs = Date.now() - toolStart;
 

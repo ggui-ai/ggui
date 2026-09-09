@@ -145,6 +145,11 @@ const stepperAdopted: AxisCheck = {
   values: ["multi-step"],
   run(input: AxisCheckInput): EvalIssue[] {
     if (input.compiledCode === null) return [];
+    // `free` design mode: the Stepper composite is optional (the prompt
+    // names it as a default, not a requirement), so the adoption
+    // mandate stands down. `layout.multi_step.state_present` — the
+    // behavioural rule — still fires in both modes.
+    if (input.designMode === "free") return [];
     if (/<Stepper[\s/>]/.test(input.sourceCode)) return [];
     return [
       mkIssue(

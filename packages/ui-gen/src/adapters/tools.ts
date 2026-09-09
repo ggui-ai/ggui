@@ -461,7 +461,7 @@ export async function runSelfChecks(
         check: 'hex-color',
         line: lineNum,
         message: `Hardcoded color "${hexMatch[0]}" — must use design tokens`,
-        fix: `Replace with var(--ggui-color-*, ${hexMatch[0]})`,
+        fix: `Replace "${hexMatch[0]}" with a primitive variant OR a bare token reference such as var(--ggui-color-primary-500) — never a literal fallback inside var()`,
       });
     }
 
@@ -501,7 +501,7 @@ export async function runSelfChecks(
         check: 'raw-pixels',
         line: lineNum,
         message: `Raw pixel value in spacing — must use design tokens`,
-        fix: `Replace with var(--ggui-spacing-*, fallback)`,
+        fix: `Replace with a bare var(--ggui-spacing-*) token — no literal fallback — or the scale name on the primitive prop (gap="md", padding="lg")`,
       });
     }
 
