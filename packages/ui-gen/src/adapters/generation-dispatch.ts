@@ -51,7 +51,7 @@ import type {
   GenerationResult,
   RenderingContext,
 } from "../harness/result-types.js";
-import type { AdapterResult, ProviderName, ToolDefinition } from "./types.js";
+import type { ProviderName, ToolDefinition } from "./types.js";
 import type { QualityConfig } from "../evaluation/types-public.js";
 import type { AgentConfig } from "../harness/llm-router.js";
 import {
@@ -196,7 +196,7 @@ function mapProviderForLLMRouter(provider: ProviderName): "anthropic" | "openai"
  */
 export async function dispatchGeneration(
   params: GenerationDispatchParams,
-): Promise<AdapterResult | GenerationResult> {
+): Promise<GenerationResult> {
   // NOTE: userPrompt arrives already enriched with rendering context + contract
   // (including examples) from the caller (runner.ts / generator.ts).
   // The contract are injected via injectContracts() which calls propsSpecToTypeScript()

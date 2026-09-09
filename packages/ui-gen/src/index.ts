@@ -21,6 +21,7 @@ export {
 } from './create-ui-generator.js';
 export type { CreateUiGeneratorOptions } from './create-ui-generator.js';
 export type { ProviderRetryInfo } from './harness/llm-router.js';
+export type { GenerationResult } from './harness/result-types.js';
 
 // Generator registry seam re-export. The interface + slug helpers live
 // in `@ggui-ai/mcp-server-core`; the in-memory factory lives in

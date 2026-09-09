@@ -56,6 +56,7 @@ import {
 import { createGeneratorTools } from './adapters/index.js';
 import { dispatchGeneration } from './adapters/generation-dispatch.js';
 import type { ProviderName } from './adapters/types.js';
+import type { GenerationResult } from './harness/result-types.js';
 import {
   canvasForRenderingContext,
   injectContracts,
@@ -170,6 +171,20 @@ export interface CreateUiGeneratorOptions {
    */
   readonly onRetry?: AgentConfig['onRetry'];
   /**
+   * Generation observer. Invoked once per successful `generate()` with
+   * the FULL harness result — source, compiled code, token counters,
+   * timing breakdown, evaluation rounds and (when configured) the
+   * per-canvas visual scores — before it is projected onto the
+   * `UiGenerateResult` envelope, which carries only what the protocol
+   * needs. Lets a host record or forward the complete run without
+   * re-deriving it from the envelope. Bound ONCE at construction
+   * (mirrors `onRetry`); not invoked when generation fails. An
+   * exception thrown by the observer is the caller's own and fails
+   * that generation like any other error on the path — keep it
+   * non-throwing.
+   */
+  readonly onGenerated?: (result: GenerationResult) => void;
+  /**
    * Which generation triad to run. `constrained` (default) is the
    * design-system triad — byte-identical to the generator's behaviour
    * before this option existed. `free` relaxes only the design
@@ -197,6 +212,7 @@ export function createUiGenerator(
     gadgetCatalog,
     disableEnvMutation = false,
     onRetry,
+    onGenerated,
     designMode,
   } = options;
 
@@ -345,6 +361,8 @@ export function createUiGenerator(
           ...(designMode !== undefined ? { designMode } : {}),
           ...(canvas !== undefined ? { canvas } : {}),
         });
+
+        onGenerated?.(result);
 
         const metadata: GenerationMetadata = {
           provider: input.llm.provider,
