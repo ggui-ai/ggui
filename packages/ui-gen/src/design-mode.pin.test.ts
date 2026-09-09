@@ -180,7 +180,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 export const FREE_PROMPT_SHA256 =
-  'cef209a915ca5f25c806d05a267770523fae571b27fdea30dfcfbd7ccd5cde2e';
+  'bfca8b9158184a6d572de9ed8c320b4cfb01da37d41ec20b8c29f22dc53439db';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
