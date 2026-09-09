@@ -246,6 +246,17 @@ export interface EvaluationResultDisplay {
 }
 
 export interface TierEvaluationDisplay {
+  /**
+   * The in-loop visual judge's summary when it ran in per-canvas mode
+   * (`benchmark-report.v2`, #973): the mean score, whether every canvas passed,
+   * and one entry per canvas. PNG-free by design; artefact refs live on
+   * `visualCanvases` when the EVAL task persisted them.
+   */
+  visual?: {
+    score: number;
+    passed: boolean;
+    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean }>;
+  };
   issues: Array<{
     tier: number;
     result: string;
@@ -315,7 +326,8 @@ export interface VisualCanvasArtefactDisplay {
   viewport: { width: number; height: number };
   score: number;
   passed: boolean;
-  artefact: { path: string; sha256: string; bytes: number };
+  /** Absent on the harness path (summary only); present when the EVAL task persisted the PNG. */
+  artefact?: { path: string; sha256: string; bytes: number };
 }
 
 /**

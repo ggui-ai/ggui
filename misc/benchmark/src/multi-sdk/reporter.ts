@@ -10,6 +10,7 @@ import type {
   PostGenerationDisplay,
   VariantSummaryDisplay,
   SdkComparisonEntry,
+  VisualCanvasArtefactDisplay,
 } from '@ggui-ai/shared';
 import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
 import type { CanvasClass, DesignMode } from '@ggui-ai/ui-gen';
@@ -716,7 +717,8 @@ export function toDisplayReport(
   };
 }
 
-function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
+/** One runner result → one published row. Exported so the Exp 008 EVAL task emits the SAME row shape (#973). */
+export function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
   return {
     variant: {
       id: r.variant.id,
@@ -779,6 +781,16 @@ const _designModeVocabularyPinned: DesignMode extends NonNullable<GenerationResu
 const _canvasClassVocabularyPinned: CanvasClass extends NonNullable<GenerationResultDisplay['canvas']>
   ? true
   : never = true;
+// The same pin for the two other display fields that carry a canvas class
+// (#973): the per-canvas artefact row and the in-loop visual summary.
+const _visualCanvasArtefactVocabularyPinned: CanvasClass extends VisualCanvasArtefactDisplay['canvas']
+  ? true
+  : never = true;
+const _tierVisualCanvasVocabularyPinned: CanvasClass extends NonNullable<
+  TierEvaluationDisplay['visual']
+>['canvases'][number]['canvas']
+  ? true
+  : never = true;
 
 function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
   if (!r.evaluation) return null;
@@ -839,6 +851,20 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
       description: i.description,
     })),
     pass: [...r.tierEvaluation.pass],
+    ...(r.tierEvaluation.visual !== undefined
+      ? {
+          visual: {
+            score: r.tierEvaluation.visual.score,
+            passed: r.tierEvaluation.visual.passed,
+            canvases: r.tierEvaluation.visual.canvases.map((c) => ({
+              canvas: c.canvas,
+              viewport: c.viewport,
+              score: c.score,
+              passed: c.passed,
+            })),
+          },
+        }
+      : {}),
     ...(r.tierEvaluation.criteriaCoverage !== undefined
       ? {
           criteriaCoverage: r.tierEvaluation.criteriaCoverage.map((c) => ({

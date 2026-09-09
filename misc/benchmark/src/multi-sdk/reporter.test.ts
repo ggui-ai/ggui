@@ -330,3 +330,21 @@ describe('generation.designMode / generation.canvas on the display row', () => {
     expect('canvas' in d.results[1]!.generation!).toBe(false);
   });
 });
+
+describe('per-canvas visual summary reaches the published row (#973)', () => {
+  it("copies tierEvaluation.visual {score, passed, canvases[]} into the display row — rnd's verdict script reads it there first", () => {
+    const run = tierEvaluatedRun('a', ALL_RAN);
+    const withVisual: BenchmarkRunResult = {
+      ...run,
+      tierEvaluation: {
+        ...run.tierEvaluation!,
+        visual: { score: 74, passed: true, canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true }] },
+      },
+    };
+    const d = toDisplayReport(generateReport([withVisual], 0), 'rep-v', 'test');
+    expect(d.results[0]?.tierEvaluation?.visual).toEqual({
+      score: 74, passed: true,
+      canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true }],
+    });
+  });
+});

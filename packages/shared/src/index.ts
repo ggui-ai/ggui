@@ -36,4 +36,9 @@ export type {
   VariantSummaryDisplay,
   CommitSummaryDisplay,
   SdkComparisonEntry,
+  // #973 / #928 additions — every display type the published row carries is importable by name.
+  CriterionCoverageSummaryDisplay,
+  RuntimeProbeVerdictDisplay,
+  ContractBehaviorDisplay,
+  VisualCanvasArtefactDisplay,
 } from './types/benchmark';

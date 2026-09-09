@@ -62,6 +62,7 @@
  *   --help, -h       Show help
  */
 
+import { loadPlaywright } from './lib/load-playwright.mjs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
@@ -502,23 +503,3 @@ run().catch((err) => {
   process.exit(1);
 });
 
-/**
- * PlaywrightModule adapter (#973): `chromium.launch` with the image's binary
- * and no Chromium sandbox (containers without user namespaces). Fails loudly
- * when playwright-core or the binary is missing — a silent fallback would
- * turn every contractBehavior into SKIP without anyone noticing.
- */
-async function loadPlaywright() {
-  const pw = await import('playwright-core');
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-  return {
-    chromium: {
-      launch: (options) =>
-        pw.chromium.launch({
-          ...options,
-          ...(executablePath ? { executablePath } : {}),
-          chromiumSandbox: false,
-        }),
-    },
-  };
-}

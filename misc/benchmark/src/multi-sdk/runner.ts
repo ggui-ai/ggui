@@ -36,7 +36,9 @@ import type {
 } from "./types.js";
 import { deriveRuntimeProbeVerdict, runtimeProbeIssues } from './runtime-probe.js';
 import { runContractBehaviorCheck } from './contract-behavior.js';
+import { visualCanvasesFromTierEvaluation } from './canvas.js';
 import { createLimiter } from './post-eval.js';
+import type { PanelEvalResult } from './post-eval.js';
 
 import {
   ADVANCED_GENERATOR_SLUG,
@@ -543,6 +545,10 @@ export class BenchmarkRunner {
             : `SKIP — ${contractBehavior.reason}`),
       );
 
+      // Per-canvas visual summary from the in-loop evaluator (harness path,
+      // PNG-free) → the row's visualCanvases without artefact refs.
+      const harnessCanvases = visualCanvasesFromTierEvaluation(tierEvaluation);
+
       // Aesthetic evaluation — 3-provider judge PANEL (Anthropic +
       // OpenAI + Google), temp 0, mean score + spread.
       let aestheticEval = null;
@@ -556,12 +562,7 @@ export class BenchmarkRunner {
       // Judge-token cost: each panel judge is a separate LLM call billed
       // independently of the coding adapter's rawCost. Price each judge's
       // tokens against MODEL_REGISTRY and add on top of the coding cost.
-      const judgeCostUsd = aestheticEval
-        ? aestheticEval.judges.reduce(
-            (sum, j) => sum + calculateCost(resolveJudgeCostModelId(j.judge.model), j.tokens),
-            0,
-          )
-        : 0;
+      const judgeCostUsd = judgePanelCostUsd(aestheticEval);
 
       const evalSuffix = aestheticEval
         ? ` | score: ${aestheticEval.score}/100 (spread ${aestheticEval.spread}, n=${aestheticEval.judges.length})${aestheticEval.passed ? "" : " ⚠"}`
@@ -612,6 +613,7 @@ export class BenchmarkRunner {
         tierEvaluation,
         runtimeProbeVerdict,
         contractBehavior,
+        ...(harnessCanvases !== undefined ? { visualCanvases: harnessCanvases } : {}),
         // Coding-model cost (adapter rawCost when reported, else our
         // estimate) PLUS the panel judges' token cost — judge calls are
         // separate LLM calls, not part of the coding adapter's rawCost.
@@ -773,6 +775,19 @@ const unknownCostModels = new Set<string>();
  * would otherwise read as "free run" in every report row. Adapters
  * that report real cost override this estimate via `rawCostUsd`.
  */
+/**
+ * The judge panel's own token cost — each judge is a separate LLM call billed
+ * independently of the coding adapter's rawCost. Shared with the Exp 008
+ * EVAL task so a cell's `estimatedCostUsd` is computed by the same rule.
+ */
+export function judgePanelCostUsd(panel: PanelEvalResult | null): number {
+  if (!panel) return 0;
+  return panel.judges.reduce(
+    (sum, j) => sum + calculateCost(resolveJudgeCostModelId(j.judge.model), j.tokens),
+    0,
+  );
+}
+
 export function calculateCost(
   modelId: string,
   tokens: { input: number; output: number; cacheCreation?: number; cacheRead?: number },
@@ -841,7 +856,8 @@ async function runWithConcurrency<T>(
  * Run lightweight post-generation analysis on an AdapterResult.
  * No AWS services needed — pure code inspection.
  */
-function runPostGeneration(
+/** Post-generation analysis of one cell — exported so the Exp 008 EVAL task's row carries the same `postGeneration` as the published matrix (#973). */
+export function runPostGeneration(
   generation: AdapterResult,
   commit: BenchmarkCommit
 ): PostGenerationResult {
