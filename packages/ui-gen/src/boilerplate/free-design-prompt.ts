@@ -63,7 +63,97 @@ You are not required to compose from the \`@ggui-ai/design\` primitives. Compose
 
 Spacing, typography, radius, shadow geometry and layout values MAY be literals: \`padding: '20px'\`, \`fontSize: 'clamp(1rem, 2vw, 1.5rem)'\`, \`borderRadius: 12\`, \`gap: '0.75rem'\`, \`boxShadow: '0 8px 24px var(--ggui-color-outlineVariant)'\`. Color is the one exception — next section.`;
 
-export const FREE_COLOR_RULE = `## Color stays tokenized (the one hard styling rule)
+const COLOR_PREFIX = "--ggui-color-";
+
+/** Ramp families the manifest MAY carry, in the order the prompt lists them. */
+const RAMP_FAMILIES = ["primary", "neutral", "success", "warning", "error", "info"] as const;
+
+export interface ColorRamp {
+  readonly family: string;
+  /** Numeric steps present in the manifest, ascending — the WHOLE ramp. */
+  readonly steps: readonly number[];
+  /** Whether the bare `--ggui-color-<family>` token also exists. */
+  readonly bare: boolean;
+}
+
+/**
+ * Semantic (non-ramp) color roles, grouped for the prose. A group renders
+ * only the names the manifest actually carries and is dropped when none
+ * do; manifest roles not named here land under "other roles".
+ */
+const SEMANTIC_ROLES: ReadonlyArray<{ readonly names: readonly string[]; readonly role: string }> = [
+  { names: ["surface", "onSurface"], role: "page background + body text" },
+  { names: ["surfaceVariant", "onSurfaceVariant"], role: "panels + secondary text" },
+  { names: ["surface-subtle", "surface-sunken", "surface-gradient"], role: "quiet fills" },
+  { names: ["container", "onContainer"], role: "branded fills + the text on them" },
+  { names: ["onPrimary"], role: "text on the brand color" },
+  { names: ["outline", "outlineVariant"], role: "borders + dividers" },
+  { names: ["onError"], role: "text on an error fill" },
+];
+
+/** Split the manifest's `--ggui-color-*` names into ramps (family + numeric steps) and semantic roles. */
+export function colorVocabularyFromManifest(manifest: readonly string[]): {
+  readonly ramps: readonly ColorRamp[];
+  readonly roles: readonly string[];
+} {
+  const colors = manifest.filter((t) => t.startsWith(COLOR_PREFIX)).map((t) => t.slice(COLOR_PREFIX.length));
+  const ramps: ColorRamp[] = [];
+  const claimed = new Set<string>();
+  for (const family of RAMP_FAMILIES) {
+    const steps: number[] = [];
+    for (const name of colors) {
+      const m = new RegExp(`^${family}-(\\d+)$`).exec(name);
+      if (m) {
+        steps.push(Number(m[1]));
+        claimed.add(name);
+      }
+    }
+    if (steps.length === 0) continue;
+    steps.sort((a, b) => a - b);
+    const bare = colors.includes(family);
+    if (bare) claimed.add(family);
+    ramps.push({ family, steps, bare });
+  }
+  const roles = colors.filter((n) => !claimed.has(n)).sort();
+  return { ramps, roles };
+}
+
+function renderRamp(r: ColorRamp): string {
+  return `\`${r.family}-${r.steps.join("/")}\`${r.bare ? ` (plus bare \`${r.family}\`)` : ""}`;
+}
+
+/**
+ * The one hard styling rule of the free arm, with the color vocabulary
+ * rendered FROM the closed consumed-token manifest (the same set
+ * `tokens:off-manifest-token` checks against) — every ramp step and
+ * every role the prose names exists on `:root`; nothing is implied by a
+ * `50…800` range that the manifest does not carry step for step.
+ */
+export function renderFreeColorRule(manifest: readonly string[] = consumedTokenManifest): string {
+  const { ramps, roles } = colorVocabularyFromManifest(manifest);
+  const brand = ramps.filter((r) => r.family === "primary" || r.family === "neutral");
+  const state = ramps.filter((r) => r.family !== "primary" && r.family !== "neutral");
+  const roleLines: string[] = [];
+  const named = new Set<string>();
+  for (const g of SEMANTIC_ROLES) {
+    const present = g.names.filter((n) => roles.includes(n));
+    if (present.length === 0) continue;
+    for (const n of present) named.add(n);
+    roleLines.push(`${present.map((n) => `\`${n}\``).join(" / ")} (${g.role})`);
+  }
+  const other = roles.filter((n) => !named.has(n));
+  if (other.length > 0) roleLines.push(`other roles: ${other.map((n) => `\`${n}\``).join(", ")}`);
+
+  const vocabulary = [
+    roleLines.length > 0 ? `- Semantic roles cover most needs: ${roleLines.join("; ")}.` : "",
+    brand.length > 0 ? `- Brand + neutral ramps (every step that exists, nothing else): ${brand.map(renderRamp).join(", ")}.` : "",
+    state.length > 0 ? `- State ramps (every step that exists, nothing else): ${state.map(renderRamp).join(", ")}.` : "",
+    "- A step not listed does not exist and renders unset; pick the nearest listed step.",
+  ]
+    .filter((l) => l.length > 0)
+    .join("\n");
+
+  return `## Color stays tokenized (the one hard styling rule)
 
 Brand-bearing color — text, backgrounds, borders, fills, gradient stops, focus rings, shadow tints — comes ONLY from the closed \`--ggui-color-*\` token manifest, referenced BARE: \`color: 'var(--ggui-color-onSurface)'\`, \`background: 'var(--ggui-color-primary-50)'\`, \`border: '1px solid var(--ggui-color-outline)'\`, \`linear-gradient(135deg, var(--ggui-color-primary-500), var(--ggui-color-primary-700))\`.
 
@@ -73,7 +163,11 @@ Brand-bearing color — text, backgrounds, borders, fills, gradient stops, focus
 - Shadows: \`var(--ggui-shape-shadow-sm|md|lg|xl)\`, or a literal offset/blur whose color is a token — never an \`rgba()\` tint.
 - Why: the operator switches the whole app's theme (light, dark, branded) by redefining these variables. A component that reads them is on-brand everywhere; one that hardcodes color is off-brand everywhere but the default.
 
-Semantic roles cover most needs: \`surface\` / \`onSurface\` (page + body text), \`surfaceVariant\` / \`onSurfaceVariant\` (panels + secondary text), \`surface-subtle\` / \`surface-sunken\` (quiet fills), \`container\` / \`onContainer\` (branded fills), \`outline\` / \`outlineVariant\` (borders), \`primary-50…900\` (brand ramp), \`success|warning|error|info-50…800\` (state).`;
+The color vocabulary (rendered from the manifest — these names and steps, exactly):
+${vocabulary}`;
+}
+
+export const FREE_COLOR_RULE = renderFreeColorRule();
 
 export const FREE_HOST_ENVELOPE = `## Where this renders
 
