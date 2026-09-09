@@ -32,18 +32,7 @@ export {
 
 // Theme validator
 export { validateConsumerContrast } from './validate';
-export {
-  NON_THEME_DEFINABLE_TOKENS,
-  validateThemeCoverage,
-} from './validate-coverage';
-export type {
-  ThemeCoverageResult,
-  ThemeRegistrationDocs,
-  ThemeRegistrationDocsInput,
-} from './validate-coverage';
 export { consumedTokenManifest } from './consumed-tokens';
-export { resolveRegistrationVariables } from './resolve-registration';
-export type { ResolvedRegistrationVariables } from './resolve-registration';
 
 // Theme registry
 export {
@@ -60,3 +49,10 @@ export { darkTheme } from './defaults/dark';
 
 // Theme provider
 export { ThemeProvider, useTheme } from './ThemeProvider';
+
+// ggui#987 — the ONE producer, the write-door check, the face transport.
+export { deriveThemeVariables, hexToOklch, oklchToHex, mixOklch, contrastRatio, ThemeDocumentInvalidError } from './derive-theme-variables';
+export type { ThemeVariableMap, Oklch } from './derive-theme-variables';
+export { validateOverlayCoverage, NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
+export type { OverlayCoverageReport } from './validate-overlay-coverage';
+export { fontFaceRulesFor, assertFontFace } from './font-faces';

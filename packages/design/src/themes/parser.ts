@@ -7,120 +7,22 @@
  *   2. @keyframes declarations
  */
 
-import type { DtcgTheme, DtcgToken, ParsedTheme } from './types';
+import { deriveThemeVariables } from './derive-theme-variables';
+import type { DtcgTheme, ParsedTheme, ThemeMode } from './types';
 
-/**
- * Format a DTCG token value for CSS output.
- *
- * Most token types (`color`, `dimension`, `fontFamily`, `fontWeight`,
- * `duration`, `cubicBezier`, `number`, `string`, `transition`-as-string)
- * ship their `$value` as a CSS-ready string and pass through unchanged.
- *
- * Two DTCG-spec composite types may ship as structured objects when the
- * theme came from an operator-authored {@link ThemeDocument} file:
- *
- *   - `shadow` → `{ offsetX, offsetY, blur, spread, color }`
- *     → composes to `${offsetX} ${offsetY} ${blur} ${spread} ${color}`
- *   - `transition` → `{ duration, timingFunction, property? }`
- *     → composes to `${property} ${duration} ${timingFunction}` (no
- *       property when absent)
- *
- * Arrays are comma-joined.
- */
-function formatValue(token: DtcgToken<unknown>): string {
-  const v = token.$value;
-  if (Array.isArray(v)) {
-    return v.join(', ');
-  }
-  if (v !== null && typeof v === 'object') {
-    const obj = v as Record<string, unknown>;
-    if (token.$type === 'shadow' && 'offsetX' in obj) {
-      return `${obj.offsetX} ${obj.offsetY} ${obj.blur} ${obj.spread} ${obj.color}`;
-    }
-    if (token.$type === 'transition' && 'duration' in obj && 'timingFunction' in obj) {
-      const prop = typeof obj.property === 'string' && obj.property ? `${obj.property} ` : '';
-      return `${prop}${obj.duration} ${obj.timingFunction}`;
-    }
-    // Unknown composite — coerce to string (will surface as `[object Object]`
-    // for the operator to debug; this is intentional, since silently emitting
-    // a broken CSS value would hide the misconfiguration).
-  }
-  return String(v);
-}
 
 /** A recursive tree of DTCG tokens — leaves are DtcgToken, branches are nested records. */
-type DtcgTokenTree = { [key: string]: DtcgToken<unknown> | DtcgTokenTree };
 
 /**
- * Walk a tree of DtcgTokens and emit CSS variable declarations.
- * Recursively handles nested records (e.g. font.family.sans).
+ * The theme's variable declarations — produced by the ONE producer,
+ * {@link deriveThemeVariables} (ggui#987 §2.4), sorted by name.
+ * Returns the raw lines (without a selector wrapper).
  */
-function walkTokens(
-  obj: DtcgTokenTree,
-  prefix: string,
-  out: string[]
-): void {
-  for (const [key, value] of Object.entries(obj)) {
-    if (key.startsWith('$')) continue;
-
-    if (value !== null && typeof value === 'object' && '$value' in value) {
-      out.push(`  --ggui-${prefix}-${key}: ${formatValue(value as DtcgToken<unknown>)};`);
-    } else if (value !== null && typeof value === 'object') {
-      walkTokens(value as DtcgTokenTree, `${prefix}-${key}`, out);
-    }
-  }
-}
-
-/**
- * The derived colour slots (ggui#983). Two tokens the primitives consume
- * that no theme authors: the link colour (`Link`, and every Markdown
- * anchor through it) and the flat error tone. Every theme emits them as
- * aliases of the ladder stops it already ships — `primary-600` and
- * `error-500` — so the consumed-token manifest is covered without a
- * theme repeating itself, and a host palette or a per-app override may
- * set either directly and reach every rendered card. Emitted only when
- * the aliased stop exists, so a partial file-format tree never carries a
- * dangling reference.
- */
-function derivedColorSlots(color: unknown): string[] {
-  const has = (family: string, shade: string): boolean => {
-    if (color === null || typeof color !== 'object') return false;
-    const fam = (color as Record<string, unknown>)[family];
-    if (fam === null || typeof fam !== 'object') return false;
-    const tok = (fam as Record<string, unknown>)[shade];
-    return tok !== null && typeof tok === 'object' && '$value' in tok;
-  };
-  const out: string[] = [];
-  if (has('primary', '600')) out.push('  --ggui-color-link: var(--ggui-color-primary-600);');
-  if (has('error', '500')) out.push('  --ggui-color-error: var(--ggui-color-error-500);');
-  return out;
-}
-
-/**
- * Build CSS custom property declarations from a DtcgTheme.
- * Returns the raw lines (without :root wrapper).
- */
-function buildCssVariables(theme: DtcgTheme): string {
-  const lines: string[] = [];
-
-  walkTokens(theme.color, 'color', lines);
-  lines.push(...derivedColorSlots(theme.color));
-  walkTokens(theme.font, 'font', lines);
-  walkTokens(theme.spacing, 'spacing', lines);
-  walkTokens(theme.shape, 'shape', lines);
-  walkTokens(
-    {
-      duration: theme.motion.duration,
-      easing: theme.motion.easing,
-      transition: theme.motion.transition,
-    },
-    'motion',
-    lines
-  );
-  walkTokens(theme.accessibility, 'accessibility', lines);
-  walkTokens(theme.zIndex, 'zIndex', lines);
-
-  return lines.join('\n');
+function buildCssVariables(theme: DtcgTheme, mode: ThemeMode): string {
+  return Object.entries(deriveThemeVariables(theme, mode))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
 }
 
 /**
@@ -181,8 +83,8 @@ function buildCssKeyframes(theme: DtcgTheme): string {
  * @param theme - Full DtcgTheme definition
  * @returns ParsedTheme with CSS strings
  */
-export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
-  const cssVariablesBody = buildCssVariables(theme);
+export function parseTheme(id: string, theme: DtcgTheme, mode: ThemeMode = 'light'): ParsedTheme {
+  const cssVariablesBody = buildCssVariables(theme, mode);
   const cssVariables = `:root {\n${cssVariablesBody}\n}`;
   const cssKeyframes = buildCssKeyframes(theme);
 
@@ -201,56 +103,33 @@ export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
   };
 }
 
-// ───── Duck-typed walker helpers (used by file-format consumers) ─────
+// ───── File-format entry points ─────
 //
-// These helpers walk any DTCG-shaped token tree (including the open
-// `ThemeDocument` plain-DTCG file format from `@ggui-ai/project-config`)
-// without requiring the strict `DtcgTheme` shape. They power the
-// `loadTheme({ file })` path where operators ship Figma-Tokens /
-// Style-Dictionary output that may not include `motion`.
+// A `ggui.json#theme` document and a registry definition are the same
+// v2 document (ggui#987): both project through `deriveThemeVariables`.
+// There is no duck-typed walk any more — the write door validates the
+// shape and the derivation refuses a document missing a role.
+
+/** Emit `:root { --ggui-*: value; }` for a document in one mode. */
+export function generateCssVariables(theme: DtcgTheme, mode: ThemeMode = 'light'): string {
+  return wrapInSelector(':root', buildCssVariables(theme, mode).split('\n'));
+}
+
+/** Same as {@link generateCssVariables}, wrapped in a caller-supplied selector (scoped previews). */
+export function generateScopedCssVariables(theme: DtcgTheme, selector: string, mode: ThemeMode = 'light'): string {
+  return wrapInSelector(selector, buildCssVariables(theme, mode).split('\n'));
+}
 
 /**
- * Convert DTCG token path to CSS variable name.
- * Example: `['color','primary','600']` → `--ggui-color-primary-600`.
+ * Convert a DTCG-shaped tree to a flat map of `var()` references keyed
+ * by dot-notation token paths — the AUTHORED tokens only (derived
+ * variables have no document path).
+ * @returns `{ 'color.primary.600': 'var(--ggui-color-primary-600)' }`
  */
 function tokenPathToCssVar(path: string[]): string {
   return `--ggui-${path.join('-')}`;
 }
 
-/**
- * Recursively walk a DTCG-shaped tree and emit `:root { --ggui-*: value; }`
- * declarations. Accepts any tree of `{ $value, $type }` leaves and nested
- * groups (duck-typed) — used for plain DTCG documents that may not
- * conform to the full {@link DtcgTheme} shape.
- *
- * @param theme - Any DTCG-shaped token tree
- * @returns CSS string `:root { --ggui-*: value; }`
- */
-export function generateCssVariables(theme: unknown): string {
-  return wrapInSelector(':root', emitDuckTyped(theme));
-}
-
-/**
- * Same as {@link generateCssVariables} but wraps the declarations in
- * a caller-supplied selector. Useful for scoped previews.
- *
- * @param theme - Any DTCG-shaped token tree
- * @param selector - CSS selector to scope the variables to (e.g. `.preview`)
- */
-export function generateScopedCssVariables(
-  theme: unknown,
-  selector: string,
-): string {
-  return wrapInSelector(selector, emitDuckTyped(theme));
-}
-
-/**
- * Convert a DTCG-shaped tree to a flat map of `var()` references keyed
- * by dot-notation token paths. Useful for TypeScript code that needs
- * to reference theme tokens programmatically.
- *
- * @returns `{ 'color.primary.600': 'var(--ggui-color-primary-600)' }`
- */
 export function themeToCssVarReferences(
   theme: unknown,
 ): Record<string, string> {
@@ -275,31 +154,6 @@ export function themeToCssVarReferences(
   return refs;
 }
 
-function emitDuckTyped(theme: unknown): string[] {
-  const declarations: string[] = [];
-
-  function traverse(obj: Record<string, unknown>, path: string[] = []) {
-    for (const [key, value] of Object.entries(obj)) {
-      if (key.startsWith('$')) continue;
-
-      if (value !== null && typeof value === 'object' && '$value' in value) {
-        const cssVar = tokenPathToCssVar([...path, key]);
-        const formatted = formatValue(value as DtcgToken<unknown>);
-        declarations.push(`  ${cssVar}: ${formatted};`);
-      } else if (value !== null && typeof value === 'object') {
-        traverse(value as Record<string, unknown>, [...path, key]);
-      }
-    }
-  }
-
-  if (theme !== null && typeof theme === 'object') {
-    traverse(theme as Record<string, unknown>);
-  }
-  if (theme !== null && typeof theme === 'object') {
-    declarations.push(...derivedColorSlots((theme as Record<string, unknown>).color));
-  }
-  return declarations;
-}
 
 function wrapInSelector(selector: string, lines: string[]): string {
   return `${selector} {\n${lines.join('\n')}\n}`;
@@ -314,119 +168,37 @@ function wrapInSelector(selector: string, lines: string[]): string {
  * @returns Markdown reference listing all emitted CSS variables
  */
 export function generateThemeReferenceDocumentation(theme: DtcgTheme): string {
+  const derived = deriveThemeVariables(theme, 'light');
+  const byFamily = new Map<string, Array<[string, string]>>();
+  for (const [name, value] of Object.entries(derived)) {
+    const family = name.replace(/^--ggui-/, '').split('-')[0]!;
+    const list = byFamily.get(family) ?? [];
+    list.push([name, value]);
+    byFamily.set(family, list);
+  }
   const sections: string[] = [
     '# Design System CSS Variables',
     '',
-    'Use these CSS variables in your component styles:',
+    'Use these CSS variables in your component styles. They are the complete set a card can read — every one is emitted by every theme (ggui#987 §2.4):',
     '',
   ];
-
-  // Colors — handles both scales (Record<string,DtcgToken>) and singletons.
-  sections.push('## Colors', '');
-  for (const [key, value] of Object.entries(theme.color)) {
-    if (value !== null && typeof value === 'object' && '$value' in value) {
-      sections.push(`- var(--ggui-color-${key}) - ${formatValue(value as DtcgToken<unknown>)}`);
-    } else if (value !== null && typeof value === 'object') {
-      for (const [shade, token] of Object.entries(value as Record<string, DtcgToken>)) {
-        sections.push(`- var(--ggui-color-${key}-${shade}) - ${token.$value}`);
-      }
-    }
+  for (const [family, entries] of byFamily) {
+    sections.push(`## ${family[0]!.toUpperCase()}${family.slice(1)}`, '');
+    for (const [name, value] of entries) sections.push(`- var(${name}) - ${value}`);
+    sections.push('');
   }
-
-  // Derived slots (ggui#983) — consumable like any other colour token.
-  sections.push(
-    '- var(--ggui-color-link) - the link colour (aliases primary-600 unless the host or theme sets it)',
-    '- var(--ggui-color-error) - the flat error colour (aliases error-500 unless the host or theme sets it)',
-  );
-
-  // Material 3 role pairs — render guidance so the LLM picks the right
-  // foreground for each tinted surface. The singletons above already emit
-  // CSS vars; this section spells out the on*/container pairing contract.
-  sections.push('', '## Material Role Pairs', '');
+  sections.push('## Material Role Pairs', '');
   sections.push(
     'Each tinted surface ships an `on*` foreground token. Always pair them:',
+    '- `--ggui-color-container` with `--ggui-color-onContainer` (a card, a bubble, a panel)',
+    '- `--ggui-color-ground` with `--ggui-color-onGround` (the page canvas)',
+    '- `--ggui-color-sunken` with `--ggui-color-onSunken` (inputs at rest, wells, code)',
+    '- `--ggui-color-elevated` with `--ggui-color-onElevated` (menus, popovers, modals, toasts)',
+    '- `--ggui-color-primary-500` with `--ggui-color-onPrimary`; `--ggui-color-primaryContainer` with `--ggui-color-onPrimaryContainer`',
+    '- `--ggui-color-error-500` with `--ggui-color-onError`; `--ggui-color-errorContainer` with `--ggui-color-onErrorContainer`',
+    '- `--ggui-color-tertiaryContainer` with `--ggui-color-onTertiaryContainer` (the second accent)',
+    '',
+    'Links read `--ggui-color-link`; the flat `--ggui-color-error` is the error tone.',
   );
-  sections.push('');
-  sections.push('- Surfaces: `--ggui-color-surface` + `--ggui-color-onSurface`');
-  sections.push(
-    '- Surface variants: `--ggui-color-surfaceVariant` + `--ggui-color-onSurfaceVariant`',
-  );
-  sections.push('- Containers: `--ggui-color-container` + `--ggui-color-onContainer`');
-  sections.push(
-    '- Primary CTAs: `--ggui-color-primary-500` + `--ggui-color-onPrimary`',
-  );
-  sections.push(
-    '- Primary tinted surface: `--ggui-color-primaryContainer` + `--ggui-color-onPrimaryContainer`',
-  );
-  sections.push(
-    '- Error CTAs: `--ggui-color-error-500` + `--ggui-color-onError`',
-  );
-  sections.push(
-    '- Error tinted surface: `--ggui-color-errorContainer` + `--ggui-color-onErrorContainer`',
-  );
-  sections.push(
-    '- Tertiary accent: `--ggui-color-tertiary` + `--ggui-color-onTertiary`',
-  );
-  sections.push(
-    '- Tertiary tinted surface: `--ggui-color-tertiaryContainer` + `--ggui-color-onTertiaryContainer`',
-  );
-  sections.push('- Outlines: `--ggui-color-outline` / `--ggui-color-outlineVariant`');
-
-  sections.push('', '## Spacing', '');
-  for (const [key, token] of Object.entries(theme.spacing)) {
-    sections.push(`- var(--ggui-spacing-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Typography', '');
-  sections.push('### Font Families');
-  for (const [key, token] of Object.entries(theme.font.family)) {
-    if (token) sections.push(`- var(--ggui-font-family-${key}) - ${token.$value}`);
-  }
-  sections.push('', '### Font Sizes');
-  for (const [key, token] of Object.entries(theme.font.size)) {
-    sections.push(`- var(--ggui-font-size-${key}) - ${token.$value}`);
-  }
-  sections.push('', '### Font Weights');
-  for (const [key, token] of Object.entries(theme.font.weight)) {
-    sections.push(`- var(--ggui-font-weight-${key}) - ${token.$value}`);
-  }
-  sections.push('', '### Line Heights');
-  for (const [key, token] of Object.entries(theme.font.lineHeight)) {
-    sections.push(`- var(--ggui-font-lineHeight-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Border Radius', '');
-  for (const [key, token] of Object.entries(theme.shape.radius)) {
-    sections.push(`- var(--ggui-shape-radius-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Shadows', '');
-  for (const [key, token] of Object.entries(theme.shape.shadow)) {
-    sections.push(`- var(--ggui-shape-shadow-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Durations', '');
-  for (const [key, token] of Object.entries(theme.motion.duration)) {
-    sections.push(`- var(--ggui-motion-duration-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Transitions', '');
-  for (const [key, token] of Object.entries(theme.motion.transition)) {
-    sections.push(`- var(--ggui-motion-transition-${key}) - ${token.$value}`);
-  }
-
-  sections.push('', '## Accessibility', '');
-  sections.push('### Focus Ring');
-  sections.push(`- var(--ggui-accessibility-focusRing-color) - ${theme.accessibility.focusRing.color.$value}`);
-  sections.push(`- var(--ggui-accessibility-focusRing-width) - ${theme.accessibility.focusRing.width.$value}`);
-  sections.push(`- var(--ggui-accessibility-focusRing-offset) - ${theme.accessibility.focusRing.offset.$value}`);
-  sections.push('', '### Reduced Motion');
-  sections.push(`- var(--ggui-accessibility-reducedMotion-duration) - ${theme.accessibility.reducedMotion.duration.$value}`);
-  sections.push('', '### High Contrast');
-  sections.push(`- var(--ggui-accessibility-highContrast-borderWidth) - ${theme.accessibility.highContrast.borderWidth.$value}`);
-  sections.push(`- var(--ggui-accessibility-highContrast-textColor) - ${theme.accessibility.highContrast.textColor.$value}`);
-  sections.push(`- var(--ggui-accessibility-highContrast-backgroundColor) - ${theme.accessibility.highContrast.backgroundColor.$value}`);
-  sections.push(`- var(--ggui-accessibility-highContrast-linkColor) - ${theme.accessibility.highContrast.linkColor.$value}`);
-
   return sections.join('\n');
 }

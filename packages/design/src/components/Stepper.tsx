@@ -30,9 +30,9 @@ const markerStyles: Record<StepState, CSSProperties> = {
     color: 'var(--ggui-color-onPrimary, #ffffff)',
   },
   upcoming: {
-    backgroundColor: 'var(--ggui-color-surface, #fafafa)',
+    backgroundColor: 'var(--ggui-color-sunken, #fafafa)',
     border: '1px solid var(--ggui-color-outline, #d4d4d8)',
-    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+    color: 'var(--ggui-color-onSunken, #52525b)',
   },
 };
 

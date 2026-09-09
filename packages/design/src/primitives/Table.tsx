@@ -54,7 +54,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
     textAlign: 'left',
     fontWeight: 'var(--ggui-font-weight-semibold, 600)' as CSSProperties['fontWeight'],
     fontSize: 'var(--ggui-font-size-xs, 12px)',
-    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+    color: 'var(--ggui-color-onSunken, #52525b)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     borderBottom: '2px solid var(--ggui-color-outlineVariant, #e4e4e7)',
@@ -78,7 +78,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
           width: '100%',
           borderCollapse: 'collapse',
           fontSize: 'var(--ggui-font-size-sm, 14px)',
-          color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          color: 'var(--ggui-color-onSunken, #52525b)',
         }}
       >
         {caption && (
@@ -86,7 +86,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
             style={{
               padding: cellPadding,
               fontSize: 'var(--ggui-font-size-sm, 14px)',
-              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              color: 'var(--ggui-color-onSunken, #52525b)',
               textAlign: 'left',
               captionSide: 'top',
             }}
@@ -139,9 +139,9 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
               style={{
                 backgroundColor:
                   hoverable && hoveredRow === rowIndex
-                    ? 'var(--ggui-color-surface, #fafafa)'
+                    ? 'var(--ggui-color-sunken, #fafafa)'
                     : striped && rowIndex % 2 === 1
-                      ? 'var(--ggui-color-surface, #fafafa)'
+                      ? 'var(--ggui-color-sunken, #fafafa)'
                       : 'transparent',
                 transition: 'background-color 0.15s ease',
               }}
@@ -152,9 +152,9 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                   style={{
                     padding: cellPadding,
                     textAlign: col.align || 'left',
-                    borderBottom: '1px solid var(--ggui-color-surfaceVariant, #f4f4f5)',
+                    borderBottom: '1px solid var(--ggui-color-sunken, #f4f4f5)',
                     borderRight: bordered
-                      ? '1px solid var(--ggui-color-surfaceVariant, #f4f4f5)'
+                      ? '1px solid var(--ggui-color-sunken, #f4f4f5)'
                       : undefined,
                   }}
                 >

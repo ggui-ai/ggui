@@ -5,25 +5,25 @@ import { animation } from '../tokens/motion';
 
 const variantStyles: Record<string, { bg: string; border: string; text: string; icon: string }> = {
   info: {
-    bg: 'var(--ggui-color-info-50, #ecfeff)',
+    bg: 'var(--ggui-color-elevated, #ecfeff)',
     border: 'var(--ggui-color-info-200, #a5f3fc)',
     text: 'var(--ggui-color-info-800, #155e75)',
     icon: 'var(--ggui-color-info-500, #06b6d4)',
   },
   success: {
-    bg: 'var(--ggui-color-success-50, #f0fdf4)',
+    bg: 'var(--ggui-color-elevated, #f0fdf4)',
     border: 'var(--ggui-color-success-200, #bbf7d0)',
     text: 'var(--ggui-color-success-800, #166534)',
     icon: 'var(--ggui-color-success-500, #22c55e)',
   },
   warning: {
-    bg: 'var(--ggui-color-warning-50, #fffbeb)',
+    bg: 'var(--ggui-color-elevated, #fffbeb)',
     border: 'var(--ggui-color-warning-200, #fde68a)',
     text: 'var(--ggui-color-warning-800, #92400e)',
     icon: 'var(--ggui-color-warning-500, #f59e0b)',
   },
   error: {
-    bg: 'var(--ggui-color-error-50, #fef2f2)',
+    bg: 'var(--ggui-color-elevated, #fef2f2)',
     border: 'var(--ggui-color-error-200, #fecaca)',
     text: 'var(--ggui-color-error-800, #991b1b)',
     icon: 'var(--ggui-color-error-500, #ef4444)',

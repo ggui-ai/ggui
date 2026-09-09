@@ -33,9 +33,9 @@ describe('consumed-tokens manifest', () => {
     ).toBe(0);
   });
 
-  it('manifest pins: version === 1, tokens sorted, unique, valid --ggui-* names', () => {
+  it('manifest pins: version === 2, tokens sorted, unique, valid --ggui-* names', () => {
     const manifest: ConsumedTokensManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    expect(manifest.version).toBe(1);
+    expect(manifest.version).toBe(2); // ggui#987 §6.2
     expect(Array.isArray(manifest.tokens)).toBe(true);
     expect(manifest.tokens.length).toBeGreaterThan(0);
     for (const token of manifest.tokens) {

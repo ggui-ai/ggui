@@ -17,6 +17,16 @@
  *
  * @typeParam T - The TypeScript type of the token value (defaults to `string`)
  */
+/** One declared font face (ggui#987 §5). */
+export interface FontFaceDeclaration {
+  readonly family: string;
+  /** `https:` URL of the face; validated at the document door. */
+  readonly src: string;
+  readonly weight?: string | number;
+  readonly style?: string;
+  readonly display?: string;
+}
+
 export interface DtcgToken<T = string> {
   $value: T;
   $type: string;
@@ -39,12 +49,11 @@ export interface DtcgTheme {
    * by SPEC (foreign namespaces are unknowable, so the open record is
    * the honest type — narrow per-namespace at the consumer). ggui's
    * own namespace: `'ai.ggui.coverage'` — the registration-gate
-   * inherit declarations (see `validate-coverage.ts`).
+   * inherit declarations (see `validate-overlay-coverage.ts`).
    */
   $extensions?: Record<string, unknown>;
   $metadata?: {
     font?: string;
-    fontUrl?: string;
     philosophy?: string;
     /**
      * The embedding host draws the card silhouette (a rim / rounded
@@ -72,13 +81,22 @@ export interface DtcgTheme {
     error: Record<string, DtcgToken>;
     /** 50-900 scale, info semantic color (cyans/blues). */
     info: Record<string, DtcgToken>;
-    // Material 3 semantic role pairs.
-    surface: DtcgToken;
-    onSurface: DtcgToken;
-    surfaceVariant: DtcgToken;
-    onSurfaceVariant: DtcgToken;
+    // Surface-layering roles (ggui#987 §2.1) — one kind of AREA each.
+    /** The page / chat canvas behind everything. */
+    ground: DtcgToken;
+    onGround: DtcgToken;
+    /** A card, a bubble, a panel — the unit of content. */
     container: DtcgToken;
     onContainer: DtcgToken;
+    /** Wells, inputs at rest, code blocks — recessed inside `container`. */
+    sunken: DtcgToken;
+    onSunken: DtcgToken;
+    // `elevated` / `onElevated` are never authored — derived (§2.4).
+    /**
+     * The link colour, per mode. When stated it is emitted as stated;
+     * when unstated the derivation aliases `primary-600` (ggui#987 §2.4).
+     */
+    link?: DtcgToken;
     outline: DtcgToken;
     outlineVariant: DtcgToken;
     /** Text / icon color rendered ON a primary surface (CTA buttons, etc.). */
@@ -107,10 +125,33 @@ export interface DtcgTheme {
     family: {
       sans: DtcgToken;
       mono?: DtcgToken;
+      /** Heading family — falls back to `sans` (ggui#987 §2.2). */
+      heading?: DtcgToken;
     };
-    size: Record<string, DtcgToken>;
+    /** Weights; `heading` optional (default: bold). */
     weight: Record<string, DtcgToken>;
-    lineHeight: Record<string, DtcgToken>;
+    /** Letter-spacing roles; defaults 0 / −0.01em. */
+    letterSpacing?: {
+      body?: DtcgToken;
+      heading?: DtcgToken;
+    };
+    /**
+     * The one size knob (ggui#987 §2.2): the eight stops are derived by
+     * `size(stop) = base × ratio^exp` (xs −2 · sm −1 · base 0 · lg +1 ·
+     * xl +2 · 2xl +3 · 3xl +4 · 4xl +5). Absent = the layer-1 ladder.
+     */
+    ramp?: {
+      base: DtcgToken;
+      ratio: DtcgToken<number>;
+    };
+  };
+  /**
+   * Font-face transport (ggui#987 §5): the faces a theme declares. Each
+   * `src` MUST be `https:`; the embedding host admits the origin and
+   * hands the rendered `@font-face` rules to the card.
+   */
+  typography?: {
+    faces?: ReadonlyArray<FontFaceDeclaration>;
   };
 
   spacing: Record<string, DtcgToken>;
@@ -118,11 +159,18 @@ export interface DtcgTheme {
   shape: {
     radius: Record<string, DtcgToken>;
     shadow: Record<string, DtcgToken>;
+    border?: {
+      width?: DtcgToken;
+      style?: DtcgToken;
+    };
   };
 
+  /**
+   * Motion — durations and easings are layer-1 (never per app,
+   * ggui#987 §2.3); the document carries only composed transitions and
+   * keyframes.
+   */
   motion: {
-    duration: Record<string, DtcgToken>;
-    easing: Record<string, DtcgToken>;
     /**
      * Composed transition shorthands ready for the CSS `transition`
      * property. Each value is a full transition string (e.g.

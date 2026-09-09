@@ -28,23 +28,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.875rem', $type: 'dimension' },
-      base: { $value: '1rem', $type: 'dimension' },
-      lg: { $value: '1.125rem', $type: 'dimension' },
-      xl: { $value: '1.3rem', $type: 'dimension' },
-      '2xl': { $value: '1.6rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.3', $type: 'number' },
-      normal: { $value: '1.6', $type: 'number' },
-      relaxed: { $value: '1.9', $type: 'number' },
     },
   },
 
@@ -89,26 +77,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '200ms', $type: 'duration' },
-      normal: { $value: '500ms', $type: 'duration' },
-      slow: { $value: '1500ms', $type: 'duration' },
-      ambient: { $value: '6000ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.33, 0, 0.67, 1)',
-        $type: 'cubicBezier',
-      },
-      bounce: {
-        $value: 'cubic-bezier(0.34, 1.2, 0.64, 1)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     keyframes: {
       'slow-breathe': {
         $value:
@@ -144,8 +112,6 @@ const zenLight: DtcgTheme = {
     'Minimalist Japanese aesthetic — warm stone tones, deliberate space, and unhurried motion.',
   $metadata: {
     font: 'Noto Serif JP',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;600;700&display=swap',
     philosophy: 'Beauty in imperfection. Stillness as presence.',
   },
 
@@ -214,12 +180,12 @@ const zenLight: DtcgTheme = {
       '800': { $type: 'color', $value: '#2c3d46' },
     },
     // Semantic roles
-    surface: { $value: '#faf9f7', $type: 'color' },
-    onSurface: { $value: '#2a2724', $type: 'color' },
-    surfaceVariant: { $value: '#f3f1ed', $type: 'color' },
-    onSurfaceVariant: { $value: '#6b635b', $type: 'color' },
-    container: { $value: '#e8ebe2', $type: 'color' },
-    onContainer: { $value: '#33392e', $type: 'color' },
+    ground: { $value: '#faf9f7', $type: 'color' },
+    onGround: { $value: '#2a2724', $type: 'color' },
+    sunken: { $value: '#f3f1ed', $type: 'color' },
+    onSunken: { $value: '#6b635b', $type: 'color' },
+    container: { $value: '#faf9f7', $type: 'color' },
+    onContainer: { $value: '#2a2724', $type: 'color' },
     outline: { $value: '#d5d0c8', $type: 'color' },
     outlineVariant: { $value: '#e7e4de', $type: 'color' },
     // Primary role pair — onPrimary is stone ivory on moss.
@@ -268,8 +234,6 @@ const zenDark: DtcgTheme = {
     'Minimalist Japanese aesthetic (dark) — dusk stone surfaces with restrained moss accents and unhurried motion.',
   $metadata: {
     font: 'Noto Serif JP',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;600;700&display=swap',
     philosophy: 'Beauty in imperfection. Stillness as presence.',
   },
 
@@ -336,12 +300,12 @@ const zenDark: DtcgTheme = {
       '700': { $type: 'color', $value: '#546771' },
       '800': { $type: 'color', $value: '#38454d' },
     },
-    surface: { $value: '#2a2724', $type: 'color' },
-    onSurface: { $value: '#f3f1ed', $type: 'color' }, // muted off-cream, not pure white
-    surfaceVariant: { $value: '#3e3a36', $type: 'color' },
-    onSurfaceVariant: { $value: '#b8b0a4', $type: 'color' },
-    container: { $value: '#48543d', $type: 'color' }, // deep moss
-    onContainer: { $value: '#e8ebe2', $type: 'color' }, // primary-100 in dark tree
+    ground: { $value: '#2a2724', $type: 'color' },
+    onGround: { $value: '#f3f1ed', $type: 'color' }, // muted off-cream, not pure white
+    sunken: { $value: '#3e3a36', $type: 'color' },
+    onSunken: { $value: '#b8b0a4', $type: 'color' },
+    container: { $value: '#2a2724', $type: 'color' }, // deep moss
+    onContainer: { $value: '#f3f1ed', $type: 'color' }, // primary-100 in dark tree
     outline: { $value: '#5e5650', $type: 'color' },
     outlineVariant: { $value: '#3e3a36', $type: 'color' },
     // Primary role pair — dark: onPrimary is deep stone; container = deep moss.

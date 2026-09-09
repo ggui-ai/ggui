@@ -80,7 +80,7 @@ export interface ContainerProps extends BaseProps {
  * Card -- Container with background, shadow, and optional border.
  *
  * Renders a `<div>` with:
- * - Background: `var(--ggui-color-surface)`
+ * - Background: `var(--ggui-color-container)`
  * - Border (when enabled): `1px solid var(--ggui-color-outlineVariant)`
  * - Shadow and radius controlled by design tokens via CSS variables.
  * - No built-in transitions.
@@ -130,7 +130,7 @@ export interface CardProps extends BaseProps {
   /**
    * Semantic surface slot. Same vocabulary as {@link BoxProps.surface};
    * see that prop's docs for the full slot table. Default Card surface
-   * is `'default'` (the active theme's `--ggui-color-surface`); pair
+   * is `'default'` (the active theme's `--ggui-color-container`); pair
    * with `shadow="md"|"lg"` for elevated cards, or use `'inverted'`
    * for a dark testimonial-style card on a light theme.
    *
@@ -531,7 +531,7 @@ export interface SpacerProps extends BaseProps {
  * color). `caps` adds the uppercase, letter-spaced treatment for tiny
  * section labels (the classic overline/eyebrow look).
  *
- * Default text color: `var(--ggui-color-onSurface)`.
+ * Default text color: `var(--ggui-color-onContainer)`.
  * All text renders with `margin: 0` (no default paragraph spacing).
  *
  * @example
@@ -594,7 +594,7 @@ export interface TextProps extends BaseProps {
    * `color?: string` escape was retired — raw color strings bypass
    * theming and silently override the operator's preset.
    *
-   * @default 'default' (var(--ggui-color-onSurface))
+   * @default 'default' (var(--ggui-color-onContainer))
    */
   tone?:
     | 'default'
@@ -654,7 +654,7 @@ export interface TextProps extends BaseProps {
  * - Level 5: 18px / semibold / 1.5 line-height / 0em tracking
  * - Level 6: 16px / semibold / 1.5 line-height / 0em tracking
  *
- * Default text color: `var(--ggui-color-onSurface)`.
+ * Default text color: `var(--ggui-color-onContainer)`.
  * All headings render with `margin: 0` (no default heading spacing).
  *
  * @example
@@ -680,7 +680,7 @@ export interface HeadingProps extends BaseProps {
    * way to set a Heading color — the legacy `color?: string` escape
    * was retired so the operator's theme always wins.
    *
-   * @default 'default' (var(--ggui-color-onSurface))
+   * @default 'default' (var(--ggui-color-onContainer))
    */
   tone?:
     | 'default'
@@ -736,9 +736,9 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
   /**
    * Visual style. Maps to CSS variables:
    * - `'primary'` -- `var(--ggui-color-primary-600)` background, white text, no border
-   * - `'secondary'` -- `var(--ggui-color-surfaceVariant)` background, `var(--ggui-color-onSurfaceVariant)` text, no border
+   * - `'secondary'` -- `var(--ggui-color-sunken)` background, `var(--ggui-color-onSunken)` text, no border
    * - `'outline'` -- transparent background, `1px solid var(--ggui-color-primary-600)` border, primary-600 text
-   * - `'ghost'` -- transparent background, `var(--ggui-color-onSurfaceVariant)` text, no border
+   * - `'ghost'` -- transparent background, `var(--ggui-color-onSunken)` text, no border
    * - `'danger'` -- `var(--ggui-color-error-600)` background, white text, no border
    * @default 'primary'
    */
@@ -783,12 +783,12 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
  * Styling:
  * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
- * - Background: `var(--ggui-color-surface)` (normal),
- *   `var(--ggui-color-surface)` (disabled)
- * - Text: `var(--ggui-color-onSurface)`
+ * - Background: `var(--ggui-color-container)` (normal),
+ *   `var(--ggui-color-container)` (disabled)
+ * - Text: `var(--ggui-color-onContainer)`
  * - Border radius: `var(--ggui-shape-radius-md)`
  * - Label: `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`,
- *   `var(--ggui-color-onSurfaceVariant)`
+ *   `var(--ggui-color-onSunken)`
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
  *
  * Accessibility: auto-generated `id` links `<label>` to `<input>` via `htmlFor`.
@@ -807,7 +807,7 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
 export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInputElement>, 'style' | 'className' | 'onChange' | 'size'> {
   /**
    * Label rendered above the input. Linked to the input via auto-generated `htmlFor`/`id`.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Placeholder text shown when the input is empty. */
@@ -836,7 +836,7 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
    */
   error?: string;
   /**
-   * Helper text displayed below the input in `var(--ggui-color-onSurfaceVariant)`.
+   * Helper text displayed below the input in `var(--ggui-color-onSunken)`.
    * Only shown when `error` is not set.
    */
   helperText?: string;
@@ -848,7 +848,7 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
   required?: boolean;
   /**
    * When true, sets the native `disabled` attribute. Background changes to
-   * `var(--ggui-color-surface)`.
+   * `var(--ggui-color-container)`.
    * @default false
    */
   disabled?: boolean;
@@ -872,8 +872,8 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
  * - Padding: `10px 12px`, font: `var(--ggui-font-size-sm)`, `font-family: inherit`
  * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
- * - Background: `var(--ggui-color-surface)` (normal),
- *   `var(--ggui-color-surface)` (disabled)
+ * - Background: `var(--ggui-color-container)` (normal),
+ *   `var(--ggui-color-container)` (disabled)
  * - Border radius: `var(--ggui-shape-radius-md)`
  * - Resize: `vertical` by default, `none` when `autoResize` is true
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
@@ -892,7 +892,7 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
 export interface TextAreaProps extends BaseProps, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'style' | 'className' | 'onChange'> {
   /**
    * Label rendered above the textarea. Linked via auto-generated `htmlFor`/`id`.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Placeholder text shown when the textarea is empty. */
@@ -917,7 +917,7 @@ export interface TextAreaProps extends BaseProps, Omit<TextareaHTMLAttributes<HT
    */
   error?: string;
   /**
-   * Helper text displayed below the textarea in `var(--ggui-color-onSurfaceVariant)`.
+   * Helper text displayed below the textarea in `var(--ggui-color-onSunken)`.
    * Only shown when `error` is not set.
    */
   helperText?: string;
@@ -929,7 +929,7 @@ export interface TextAreaProps extends BaseProps, Omit<TextareaHTMLAttributes<HT
   required?: boolean;
   /**
    * When true, sets the native `disabled` attribute. Background changes to
-   * `var(--ggui-color-surface)`.
+   * `var(--ggui-color-container)`.
    * @default false
    */
   disabled?: boolean;
@@ -985,10 +985,10 @@ export interface SelectOption {
  * Styling:
  * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
- * - Background: `var(--ggui-color-surface)` (normal),
- *   `var(--ggui-color-surface)` (disabled)
- * - Text: `var(--ggui-color-onSurface)` when a value is selected,
- *   `var(--ggui-color-onSurfaceVariant)` when showing placeholder
+ * - Background: `var(--ggui-color-container)` (normal),
+ *   `var(--ggui-color-container)` (disabled)
+ * - Text: `var(--ggui-color-onContainer)` when a value is selected,
+ *   `var(--ggui-color-onSunken)` when showing placeholder
  * - Border radius: `var(--ggui-shape-radius-md)`
  * - Cursor: `pointer` (normal), `not-allowed` (disabled)
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
@@ -1017,7 +1017,7 @@ export interface SelectOption {
 export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSelectElement>, 'style' | 'className' | 'onChange' | 'size'> {
   /**
    * Label rendered above the select. Linked via auto-generated `htmlFor`/`id`.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Controlled value. Should match one of the `options[].value` strings. */
@@ -1045,7 +1045,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
    */
   error?: string;
   /**
-   * Helper text displayed below the select in `var(--ggui-color-onSurfaceVariant)`.
+   * Helper text displayed below the select in `var(--ggui-color-onSunken)`.
    * Only shown when `error` is not set.
    */
   helperText?: string;
@@ -1057,7 +1057,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
   required?: boolean;
   /**
    * When true, sets the native `disabled` attribute. Background changes to
-   * `var(--ggui-color-surface)` and cursor becomes `not-allowed`.
+   * `var(--ggui-color-container)` and cursor becomes `not-allowed`.
    * @default false
    */
   disabled?: boolean;
@@ -1082,12 +1082,12 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
  * - Box border: `2px solid var(--ggui-color-primary-600)` (checked/indeterminate),
  *   `var(--ggui-color-outline)` (unchecked)
  * - Box fill: `var(--ggui-color-primary-600)` (checked/indeterminate),
- *   `var(--ggui-color-surface)` (unchecked)
+ *   `var(--ggui-color-container)` (unchecked)
  * - Check/dash icon: white SVG, 12x12px
  * - Box radius: `var(--ggui-shape-radius-sm)`
  * - Transition: all 0.2s
  * - Label: `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`
- * - Description: `var(--ggui-font-size-xs)`, `var(--ggui-color-onSurfaceVariant)`
+ * - Description: `var(--ggui-font-size-xs)`, `var(--ggui-color-onSunken)`
  * - Disabled: `opacity: 0.5`, `cursor: not-allowed`
  * - Gap between box and text: `var(--ggui-spacing-2)`
  *
@@ -1105,7 +1105,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
 export interface CheckboxProps extends BaseProps {
   /**
    * Primary label text rendered beside the checkbox box.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Controlled checked state. */
@@ -1124,7 +1124,7 @@ export interface CheckboxProps extends BaseProps {
   disabled?: boolean;
   /**
    * Secondary description text rendered below the label in smaller, muted type
-   * (`var(--ggui-font-size-xs)`, `var(--ggui-color-onSurfaceVariant)`).
+   * (`var(--ggui-font-size-xs)`, `var(--ggui-color-onSunken)`).
    */
   description?: string;
   /**
@@ -1164,7 +1164,7 @@ export interface ToggleProps extends BaseProps {
   /**
    * Label text rendered to the right of the toggle track.
    * Also used as `aria-label` on the switch element.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Controlled checked (on/off) state. */
@@ -1203,12 +1203,12 @@ export interface RadioOption {
   value: string;
   /**
    * Display text for this option.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label: string;
   /**
    * Optional secondary description rendered below the label in smaller, muted type
-   * (`var(--ggui-font-size-xs)`, `var(--ggui-color-onSurfaceVariant)`).
+   * (`var(--ggui-font-size-xs)`, `var(--ggui-color-onSunken)`).
    */
   description?: string;
   /**
@@ -1230,7 +1230,7 @@ export interface RadioOption {
  * - Selected circle: `2px solid var(--ggui-color-primary-600)` border with
  *   an 8px `var(--ggui-color-primary-600)` filled inner dot
  * - Unselected circle: `2px solid var(--ggui-color-outline)` border,
- *   `var(--ggui-color-surface)` fill
+ *   `var(--ggui-color-container)` fill
  * - Circle radius: `var(--ggui-shape-radius-full)`
  * - Transition: all 0.2s
  * - Vertical gap: `var(--ggui-spacing-2)`, horizontal gap: `var(--ggui-spacing-4)`
@@ -1260,7 +1260,7 @@ export interface RadioGroupProps extends BaseProps {
   /**
    * Group label rendered above the options.
    * Used as `aria-labelledby` target on the `role="radiogroup"` container.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /** Controlled value. Should match one of `options[].value`. */
@@ -1325,7 +1325,7 @@ export interface SliderProps extends BaseProps {
   /**
    * Label rendered above the slider track (left-aligned).
    * Used as `aria-labelledby` target on the native range input.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSurfaceVariant)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
    */
   label?: string;
   /**
@@ -1390,16 +1390,16 @@ export interface BadgeProps extends BaseProps {
   children?: ReactNode;
   /**
    * Visual style. Maps to background/text color pairings:
-   * - `'default'` -- bg `var(--ggui-color-surfaceVariant)`, text `var(--ggui-color-onSurfaceVariant)`
+   * - `'default'` -- bg `var(--ggui-color-sunken)`, text `var(--ggui-color-onSunken)`
    * - `'primary'` -- bg `var(--ggui-color-primary-100)`, text `var(--ggui-color-primary-700)`
-   * - `'secondary'` -- bg `var(--ggui-color-outlineVariant)`, text `var(--ggui-color-onSurface)`
+   * - `'secondary'` -- bg `var(--ggui-color-outlineVariant)`, text `var(--ggui-color-onContainer)`
    * - `'success'` -- bg `var(--ggui-color-success-100)`, text `var(--ggui-color-success-700)`
    * - `'warning'` -- bg `var(--ggui-color-warning-100)`, text `var(--ggui-color-warning-700)`
    * - `'error'` -- bg `var(--ggui-color-error-100)`, text `var(--ggui-color-error-700)`
    * - `'info'` -- bg `var(--ggui-color-info-100)`, text `var(--ggui-color-info-700)`
    * @default 'default'
    */
-  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'tertiary';
   /**
    * Controls padding and font size:
    * - `'sm'` -- padding `2px 6px`, font `var(--ggui-font-size-xs)`
@@ -1817,7 +1817,7 @@ export interface LinkProps extends BaseProps, Omit<AnchorHTMLAttributes<HTMLAnch
  * a fixed-position tooltip `<div role="tooltip">` when visible.
  *
  * Tooltip appearance:
- * - Background: `var(--ggui-color-onSurface)`
+ * - Background: `var(--ggui-color-onContainer)`
  * - Text: white, `var(--ggui-font-size-xs)`
  * - Padding: `6px 10px`, border-radius: `var(--ggui-shape-radius-md)`
  * - Max width: 200px, `white-space: nowrap`, `pointer-events: none`
@@ -1874,7 +1874,7 @@ export interface TableColumn<T = Record<string, unknown>> {
   key: string;
   /**
    * Column header text. Rendered in uppercase, `var(--ggui-font-size-xs)`,
-   * `var(--ggui-font-weight-semibold)`, `var(--ggui-color-onSurfaceVariant)`,
+   * `var(--ggui-font-weight-semibold)`, `var(--ggui-color-onSunken)`,
    * with `letter-spacing: 0.05em`.
    */
   header: string;
@@ -1922,9 +1922,9 @@ export type SortDirection = 'asc' | 'desc';
  * `overflow-x: auto` for horizontal scrolling on narrow viewports.
  *
  * Header row: 2px bottom border (`var(--ggui-color-outlineVariant)`).
- * Data rows: 1px bottom border (`var(--ggui-color-surfaceVariant)`).
- * Hover: `var(--ggui-color-surface)` background with 150ms ease transition.
- * Striped: alternating rows (odd index) get `var(--ggui-color-surface)`.
+ * Data rows: 1px bottom border (`var(--ggui-color-sunken)`).
+ * Hover: `var(--ggui-color-container)` background with 150ms ease transition.
+ * Striped: alternating rows (odd index) get `var(--ggui-color-container)`.
  *
  * Sort behavior: clicking a sortable column header calls `onSort(key, direction)`.
  * If the same column is clicked again while ascending, it toggles to descending.
@@ -1975,12 +1975,12 @@ export interface TableProps<T = Record<string, unknown>> extends BaseProps {
   onSort?: (key: string, direction: SortDirection) => void;
   /**
    * When true, alternating rows (odd index) get a
-   * `var(--ggui-color-surface)` background.
+   * `var(--ggui-color-container)` background.
    * @default false
    */
   striped?: boolean;
   /**
-   * When true, rows highlight with `var(--ggui-color-surface)`
+   * When true, rows highlight with `var(--ggui-color-container)`
    * on mouse enter, with a 150ms ease background-color transition.
    * @default true
    */
@@ -1995,7 +1995,7 @@ export interface TableProps<T = Record<string, unknown>> extends BaseProps {
   /**
    * When true, adds a 1px border around the table wrapper and between cells.
    * Wrapper border: `1px solid var(--ggui-color-outlineVariant)`.
-   * Cell borders: `1px solid var(--ggui-color-surfaceVariant)`.
+   * Cell borders: `1px solid var(--ggui-color-sunken)`.
    * Wrapper border-radius: `var(--ggui-shape-radius-lg)`.
    * @default false
    */
@@ -2003,7 +2003,7 @@ export interface TableProps<T = Record<string, unknown>> extends BaseProps {
   /**
    * Accessible table caption. Rendered as a `<caption>` element with
    * `caption-side: top`, `var(--ggui-font-size-sm)`,
-   * `var(--ggui-color-onSurfaceVariant)`.
+   * `var(--ggui-color-onSunken)`.
    */
   caption?: string;
 }
@@ -2194,7 +2194,7 @@ export interface AccordionItem {
   title: ReactNode;
   /**
    * Panel content rendered below the header when expanded. Styled with
-   * `var(--ggui-font-size-sm)`, `var(--ggui-color-onSurfaceVariant)`,
+   * `var(--ggui-font-size-sm)`, `var(--ggui-color-onSunken)`,
    * `line-height: var(--ggui-font-lineHeight-normal)`.
    * Padding: `0 var(--ggui-spacing-4) var(--ggui-spacing-4)`.
    */
@@ -2219,7 +2219,7 @@ export interface AccordionItem {
  *
  * Header button: full-width flex layout (`justify-content: space-between`),
  * `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`,
- * `var(--ggui-color-onSurface)`.
+ * `var(--ggui-color-onContainer)`.
  * Header padding: `var(--ggui-spacing-2) var(--ggui-spacing-4)`.
  * Background transition: `background-color 100ms ease-in-out`.
  *

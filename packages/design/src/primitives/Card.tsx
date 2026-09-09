@@ -51,7 +51,7 @@ export function Card(props: WithTrait<CardProps>) {
   // `surface` (typed slot) lets the LLM pick the variant family —
   // 'inverted' for testimonial-style dark cards on a light theme,
   // 'accent' for branded fills, etc. Default = 'default' = the theme's
-  // `--ggui-color-surface`.
+  // `--ggui-color-container`.
   const resolvedSurface = resolveSurfaceCss(surface ?? 'default');
 
   const composedStyle: CSSProperties = {

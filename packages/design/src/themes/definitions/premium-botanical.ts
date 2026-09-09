@@ -31,23 +31,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.875rem', $type: 'dimension' },
-      base: { $value: '1rem', $type: 'dimension' },
-      lg: { $value: '1.15rem', $type: 'dimension' },
-      xl: { $value: '1.3rem', $type: 'dimension' },
-      '2xl': { $value: '1.625rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.3', $type: 'number' },
-      normal: { $value: '1.6', $type: 'number' },
-      relaxed: { $value: '1.85', $type: 'number' },
     },
   },
 
@@ -92,26 +80,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '200ms', $type: 'duration' },
-      normal: { $value: '400ms', $type: 'duration' },
-      slow: { $value: '1200ms', $type: 'duration' },
-      ambient: { $value: '5000ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        $type: 'cubicBezier',
-      },
-      bounce: {
-        $value: 'cubic-bezier(0.34, 1.3, 0.64, 1)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     keyframes: {
       'leaf-float': {
         $value:
@@ -140,8 +108,6 @@ const botanicalLight: DtcgTheme = {
     'Organic greens on warm cream — leaf-float animations and vine-grow motion.',
   $metadata: {
     font: 'Lora',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap',
     philosophy: 'Rooted in nature. Growing with intention.',
   },
 
@@ -191,12 +157,12 @@ const botanicalLight: DtcgTheme = {
     },
     info: standardSemanticScales.light.info,
     // Semantic roles
-    surface: { $value: '#fefcf8', $type: 'color' },
-    onSurface: { $value: '#352e20', $type: 'color' },
-    surfaceVariant: { $value: '#fdf8ef', $type: 'color' },
-    onSurfaceVariant: { $value: '#746448', $type: 'color' },
-    container: { $value: '#dcfce7', $type: 'color' },
-    onContainer: { $value: '#14532d', $type: 'color' },
+    ground: { $value: '#fefcf8', $type: 'color' },
+    onGround: { $value: '#352e20', $type: 'color' },
+    sunken: { $value: '#fdf8ef', $type: 'color' },
+    onSunken: { $value: '#746448', $type: 'color' },
+    container: { $value: '#fefcf8', $type: 'color' },
+    onContainer: { $value: '#352e20', $type: 'color' },
     outline: { $value: '#f0e4c9', $type: 'color' },
     outlineVariant: { $value: '#f8f0df', $type: 'color' },
     // Primary role pair — onPrimary is cream for the leaf-green brand hex.
@@ -246,8 +212,6 @@ const botanicalDark: DtcgTheme = {
     'Forest at night (dark) — deep soil surfaces with lifted leaf-green accents and gentle organic motion.',
   $metadata: {
     font: 'Lora',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap',
     philosophy: 'Rooted in nature. Growing with intention.',
   },
 
@@ -280,12 +244,12 @@ const botanicalDark: DtcgTheme = {
     warning: standardSemanticScales.dark.warning,
     error: standardSemanticScales.dark.error,
     info: standardSemanticScales.dark.info,
-    surface: { $value: '#1f1c18', $type: 'color' },
-    onSurface: { $value: '#fefcf8', $type: 'color' },
-    surfaceVariant: { $value: '#352e20', $type: 'color' },
-    onSurfaceVariant: { $value: '#dccba5', $type: 'color' },
-    container: { $value: '#166534', $type: 'color' }, // deep forest
-    onContainer: { $value: '#dcfce7', $type: 'color' },
+    ground: { $value: '#1f1c18', $type: 'color' },
+    onGround: { $value: '#fefcf8', $type: 'color' },
+    sunken: { $value: '#352e20', $type: 'color' },
+    onSunken: { $value: '#dccba5', $type: 'color' },
+    container: { $value: '#1f1c18', $type: 'color' }, // deep forest
+    onContainer: { $value: '#fefcf8', $type: 'color' },
     outline: { $value: '#504530', $type: 'color' },
     outlineVariant: { $value: '#352e20', $type: 'color' },
     // Primary role pair — dark: lifted leaf-green, onPrimary = forest soil.

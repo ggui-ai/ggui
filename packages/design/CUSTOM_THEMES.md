@@ -134,12 +134,17 @@ shape.shadow
 motion.duration, motion.easing, motion.keyframes
 ```
 
-Two colour slots are **derived for you** and need no entry: `--ggui-color-link`
-(what `Link` and every Markdown anchor paint; aliases `primary-600`) and the
-flat `--ggui-color-error` (what the `error` tone paints; aliases `error-500`).
-Every theme emits both from the ladders it already ships, so a host palette or
-a per-app override can set either one directly and it reaches every rendered
-card.
+**One producer.** A theme is one DTCG document; what a card reads is its
+projection — `deriveThemeVariables(doc, mode)` from `@ggui-ai/design/themes` —
+which emits exactly the consumed-token manifest: the six role pairs you state
+(`ground`, `container`, `sunken` and their `on*`), the ramps and role pairs
+derived from what you leave unstated (`elevated`/`onElevated` are never
+authored; a family is synthesised from its `500` anchor; `neutral` from
+`ground → onGround`; `link` aliases `primary-600` unless you state
+`color.link`; the flat `error` is `error-500`; font sizes from `font.ramp`
+or the layer-1 ladder), and the layer-1 constants (weights, line heights,
+shadows, radii, spacing). A host palette or a per-app overlay may set any of
+them directly and it reaches every rendered card.
 
 Spacing in particular ships **both** numeric (`1..12`) and named
 (`xs..2xl`) keys on purpose — primitives reference the named keys,

@@ -82,25 +82,24 @@ describe('DtcgTheme required fields', () => {
     >();
   });
 
-  it('Material 3 role-pair singletons are present', () => {
-    expectTypeOf<DtcgTheme['color']['surface']>().toEqualTypeOf<DtcgToken>();
-    expectTypeOf<DtcgTheme['color']['onSurface']>().toEqualTypeOf<DtcgToken>();
-    expectTypeOf<DtcgTheme['color']['surfaceVariant']>().toEqualTypeOf<DtcgToken>();
-    expectTypeOf<DtcgTheme['color']['onSurfaceVariant']>().toEqualTypeOf<DtcgToken>();
+  it('the surface-layering role pairs are present (ggui#987 §2.1); elevated is never authored', () => {
+    expectTypeOf<DtcgTheme['color']['ground']>().toEqualTypeOf<DtcgToken>();
+    expectTypeOf<DtcgTheme['color']['onGround']>().toEqualTypeOf<DtcgToken>();
+    expectTypeOf<DtcgTheme['color']['sunken']>().toEqualTypeOf<DtcgToken>();
+    expectTypeOf<DtcgTheme['color']['onSunken']>().toEqualTypeOf<DtcgToken>();
+    expectTypeOf<DtcgTheme['color']>().not.toHaveProperty('elevated');
+    expectTypeOf<DtcgTheme['color']['link']>().toEqualTypeOf<DtcgToken | undefined>();
     expectTypeOf<DtcgTheme['color']['container']>().toEqualTypeOf<DtcgToken>();
     expectTypeOf<DtcgTheme['color']['onContainer']>().toEqualTypeOf<DtcgToken>();
     expectTypeOf<DtcgTheme['color']['outline']>().toEqualTypeOf<DtcgToken>();
     expectTypeOf<DtcgTheme['color']['outlineVariant']>().toEqualTypeOf<DtcgToken>();
   });
 
-  it('motion has duration + easing + transition + keyframes records', () => {
-    expectTypeOf<DtcgTheme['motion']>().toHaveProperty('duration');
-    expectTypeOf<DtcgTheme['motion']>().toHaveProperty('easing');
+  it('motion carries transition + keyframes only — durations and easings are layer-1 (ggui#987 §2.3)', () => {
+    expectTypeOf<DtcgTheme['motion']>().not.toHaveProperty('duration');
+    expectTypeOf<DtcgTheme['motion']>().not.toHaveProperty('easing');
     expectTypeOf<DtcgTheme['motion']>().toHaveProperty('transition');
     expectTypeOf<DtcgTheme['motion']>().toHaveProperty('keyframes');
-    expectTypeOf<DtcgTheme['motion']['duration']>().toEqualTypeOf<
-      Record<string, DtcgToken>
-    >();
     expectTypeOf<DtcgTheme['motion']['transition']>().toEqualTypeOf<
       Record<string, DtcgToken>
     >();

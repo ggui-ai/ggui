@@ -82,11 +82,11 @@ export const lightTheme: DtcgTheme = {
     //   text.primary   → onSurface
     //   text.secondary → onSurfaceVariant
     //   text.disabled  → outlineVariant
-    surface: { $type: 'color', $value: '#ffffff' },
-    onSurface: { $type: 'color', $value: '#111827' },
-    surfaceVariant: { $type: 'color', $value: '#f3f4f6' },
-    onSurfaceVariant: { $type: 'color', $value: '#6b7280' },
-    container: { $type: 'color', $value: '#f9fafb' },
+    ground: { $type: 'color', $value: '#ffffff' },
+    onGround: { $type: 'color', $value: '#111827' },
+    sunken: { $type: 'color', $value: '#f3f4f6' },
+    onSunken: { $type: 'color', $value: '#6b7280' },
+    container: { $type: 'color', $value: '#ffffff' },
     onContainer: { $type: 'color', $value: '#111827' },
     outline: { $type: 'color', $value: '#9ca3af' },
     outlineVariant: { $type: 'color', $value: '#d1d5db' },
@@ -121,26 +121,11 @@ export const lightTheme: DtcgTheme = {
           'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       },
     },
-    size: {
-      xs: { $type: 'dimension', $value: '12px' },
-      sm: { $type: 'dimension', $value: '14px' },
-      base: { $type: 'dimension', $value: '16px' },
-      lg: { $type: 'dimension', $value: '18px' },
-      xl: { $type: 'dimension', $value: '20px' },
-      '2xl': { $type: 'dimension', $value: '24px' },
-      '3xl': { $type: 'dimension', $value: '30px' },
-      '4xl': { $type: 'dimension', $value: '36px' },
-    },
     weight: {
       normal: { $type: 'fontWeight', $value: '400' },
       medium: { $type: 'fontWeight', $value: '500' },
       semibold: { $type: 'fontWeight', $value: '600' },
       bold: { $type: 'fontWeight', $value: '700' },
-    },
-    lineHeight: {
-      tight: { $type: 'number', $value: '1.25' },
-      normal: { $type: 'number', $value: '1.5' },
-      relaxed: { $type: 'number', $value: '1.75' },
     },
   },
 
@@ -189,18 +174,6 @@ export const lightTheme: DtcgTheme = {
   },
 
   motion: {
-    duration: {
-      instant: { $type: 'duration', $value: '0ms' },
-      fast: { $type: 'duration', $value: '100ms' },
-      normal: { $type: 'duration', $value: '200ms' },
-      slow: { $type: 'duration', $value: '300ms' },
-      slower: { $type: 'duration', $value: '500ms' },
-    },
-    easing: {
-      default: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-      easeOut: { $type: 'cubicBezier', $value: 'cubic-bezier(0, 0, 0.2, 1)' },
-      easeIn: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 1, 1)' },
-    },
     transition: {
       fast: { $type: 'transition', $value: '100ms cubic-bezier(0.4, 0, 0.2, 1)' },
       normal: { $type: 'transition', $value: '200ms cubic-bezier(0.4, 0, 0.2, 1)' },

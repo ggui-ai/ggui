@@ -30,23 +30,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.875rem', $type: 'dimension' },
-      base: { $value: '1rem', $type: 'dimension' },
-      lg: { $value: '1.125rem', $type: 'dimension' },
-      xl: { $value: '1.25rem', $type: 'dimension' },
-      '2xl': { $value: '1.5rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.25', $type: 'number' },
-      normal: { $value: '1.5', $type: 'number' },
-      relaxed: { $value: '1.75', $type: 'number' },
     },
   },
 
@@ -83,26 +71,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '120ms', $type: 'duration' },
-      normal: { $value: '250ms', $type: 'duration' },
-      slow: { $value: '800ms', $type: 'duration' },
-      ambient: { $value: '2500ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        $type: 'cubicBezier',
-      },
-      bounce: {
-        $value: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     transition: {
       fast: {
         $value: '120ms cubic-bezier(0.4, 0, 0.2, 1)',
@@ -157,8 +125,6 @@ const neonNoirLight: DtcgTheme = {
     'Hot pink neon on dark — electric glow effects, neon flicker, and flowing magenta particles.',
   $metadata: {
     font: 'Outfit',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
     philosophy: 'Midnight electricity. The city never sleeps.',
   },
 
@@ -204,12 +170,12 @@ const neonNoirLight: DtcgTheme = {
       '500': { $value: '#38bdf8', $type: 'color' },
     },
     // Semantic roles (dark theme — inverted neutral scale)
-    surface: { $value: '#09090b', $type: 'color' },
-    onSurface: { $value: '#ececf0', $type: 'color' },
-    surfaceVariant: { $value: '#111114', $type: 'color' },
-    onSurfaceVariant: { $value: '#8a8a9a', $type: 'color' },
-    container: { $value: '#9d174d', $type: 'color' },
-    onContainer: { $value: '#fce7f3', $type: 'color' },
+    ground: { $value: '#09090b', $type: 'color' },
+    onGround: { $value: '#ececf0', $type: 'color' },
+    sunken: { $value: '#111114', $type: 'color' },
+    onSunken: { $value: '#8a8a9a', $type: 'color' },
+    container: { $value: '#09090b', $type: 'color' },
+    onContainer: { $value: '#ececf0', $type: 'color' },
     outline: { $value: '#3b3b44', $type: 'color' },
     outlineVariant: { $value: '#232329', $type: 'color' },
     // Primary role pair — onPrimary is deep noir so hot pink CTAs pop.
@@ -257,8 +223,6 @@ const neonNoirDark: DtcgTheme = {
     'Hot pink neon on pure black (dark) — sharper noir contrast, brighter electric glow, deeper magenta containers.',
   $metadata: {
     font: 'Outfit',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
     philosophy: 'Midnight electricity. The city never sleeps.',
   },
 
@@ -303,12 +267,12 @@ const neonNoirDark: DtcgTheme = {
       ...standardSemanticScales.dark.info,
       '500': { $value: '#5acdff', $type: 'color' },
     },
-    surface: { $value: '#000000', $type: 'color' },
-    onSurface: { $value: '#ececf0', $type: 'color' },
-    surfaceVariant: { $value: '#09090b', $type: 'color' },
-    onSurfaceVariant: { $value: '#b0b0be', $type: 'color' },
-    container: { $value: '#be185d', $type: 'color' }, // richer magenta
-    onContainer: { $value: '#fce7f3', $type: 'color' },
+    ground: { $value: '#000000', $type: 'color' },
+    onGround: { $value: '#ececf0', $type: 'color' },
+    sunken: { $value: '#09090b', $type: 'color' },
+    onSunken: { $value: '#b0b0be', $type: 'color' },
+    container: { $value: '#000000', $type: 'color' }, // richer magenta
+    onContainer: { $value: '#ececf0', $type: 'color' },
     outline: { $value: '#19191e', $type: 'color' },
     outlineVariant: { $value: '#111114', $type: 'color' },
     // Primary role pair — dark: onPrimary is pure black, container = richer magenta.

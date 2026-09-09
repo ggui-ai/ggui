@@ -65,7 +65,7 @@ export function Input({
           style={{
             fontSize: 'var(--ggui-font-size-sm, 14px)',
             fontWeight: 'var(--ggui-font-weight-medium, 500)',
-            color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+            color: 'var(--ggui-color-onSunken, #52525b)',
           }}
         >
           {label}
@@ -94,9 +94,9 @@ export function Input({
               : 'var(--ggui-color-outline, #d4d4d8)'
           }`,
           backgroundColor: disabled
-            ? 'var(--ggui-color-surface, #fafafa)'
-            : 'var(--ggui-color-surface, #ffffff)',
-          color: 'var(--ggui-color-onSurface, #18181b)',
+            ? 'var(--ggui-color-sunken, #fafafa)'
+            : 'var(--ggui-color-sunken, #ffffff)',
+          color: 'var(--ggui-color-onContainer, #18181b)',
           transition: `border-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}`,
           boxSizing: 'border-box',
         }}
@@ -110,7 +110,7 @@ export function Input({
             fontSize: 'var(--ggui-font-size-xs, 12px)',
             color: hasError
               ? 'var(--ggui-color-error-500, #ef4444)'
-              : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              : 'var(--ggui-color-onSunken, #52525b)',
           }}
         >
           {error || helperText}

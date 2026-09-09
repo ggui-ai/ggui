@@ -44,7 +44,7 @@ export function Select({
           style={{
             fontSize: 'var(--ggui-font-size-sm, 14px)',
             fontWeight: 'var(--ggui-font-weight-medium, 500)',
-            color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+            color: 'var(--ggui-color-onSunken, #52525b)',
           }}
         >
           {label}
@@ -64,8 +64,8 @@ export function Select({
           width: '100%',
           borderRadius: 'var(--ggui-shape-radius-md, 8px)',
           border: `1px solid ${hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
-          backgroundColor: disabled ? 'var(--ggui-color-surface, #fafafa)' : 'var(--ggui-color-surface, #ffffff)',
-          color: value ? 'var(--ggui-color-onSurface, #18181b)' : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          backgroundColor: disabled ? 'var(--ggui-color-sunken, #fafafa)' : 'var(--ggui-color-sunken, #ffffff)',
+          color: value ? 'var(--ggui-color-onContainer, #18181b)' : 'var(--ggui-color-onSunken, #52525b)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           appearance: 'none',
           backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,
@@ -94,7 +94,7 @@ export function Select({
           role={hasError ? 'alert' : undefined}
           style={{
             fontSize: 'var(--ggui-font-size-xs, 12px)',
-            color: hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+            color: hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-onSunken, #52525b)',
           }}
         >
           {error || helperText}

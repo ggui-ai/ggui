@@ -1,124 +1,70 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { lightTheme } from './defaults/light';
+import { darkTheme } from './defaults/dark';
 import {
   generateCssVariables,
   generateThemeReferenceDocumentation,
   parseTheme,
+  themeToCssVarReferences,
 } from './parser';
-import { lightTheme } from './defaults/light';
+import { deriveThemeVariables } from './derive-theme-variables';
+import { validateOverlayCoverage } from './validate-overlay-coverage';
 import { getRawTheme, getThemeIds } from './registry';
-import type { ThemeMode } from './types';
+
+// ggui#987 §2.4 — the projection IS the manifest: every emitted variable is
+// one a card reads, and every variable a card reads is emitted by every theme.
 
 describe('generateCssVariables', () => {
-  it('generates CSS variables for color tokens', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toContain('--ggui-color-primary-600: #0284c7');
-    expect(css).toContain('--ggui-color-neutral-900: #111827');
+  it('emits the surface-layering role pairs and the primary ramp (§2.1)', () => {
+    const css = generateCssVariables(lightTheme, 'light');
+    for (const role of ['ground', 'onGround', 'container', 'onContainer', 'sunken', 'onSunken', 'elevated', 'onElevated']) {
+      expect(css).toMatch(new RegExp(`--ggui-color-${role}: #[0-9a-f]{6};`));
+    }
+    expect(css).toMatch(/--ggui-color-primary-600: #[0-9a-f]{6};/);
   });
 
-  it('emits semantic role pairs', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toContain('--ggui-color-surface: #ffffff');
-    expect(css).toContain('--ggui-color-onSurface: #111827');
-    expect(css).toContain('--ggui-color-onSurfaceVariant: #6b7280');
+  it('emits the spacing ladder and the named steps', () => {
+    const css = generateCssVariables(lightTheme, 'light');
+    expect(css).toContain('--ggui-spacing-4:');
+    expect(css).toContain('--ggui-spacing-md:');
   });
 
-  it('generates CSS variables for spacing tokens', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toContain('--ggui-spacing-md: 16px');
+  it('does NOT emit unconsumed groups — accessibility, zIndex and the motion ladders are layer-1 or code constants, never projected', () => {
+    const css = generateCssVariables(lightTheme, 'light');
+    expect(css).not.toContain('--ggui-accessibility-');
+    expect(css).not.toContain('--ggui-zIndex-');
+    expect(css).not.toContain('--ggui-motion-duration-');
   });
 
-  it('generates CSS variables for accessibility tokens', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toContain('--ggui-accessibility-focusRing-color: #0284c7');
-    expect(css).toContain('--ggui-accessibility-focusRing-width: 2px');
-    expect(css).toContain('--ggui-accessibility-focusRing-offset: 2px');
-    expect(css).toContain('--ggui-accessibility-reducedMotion-duration: 0ms');
-    expect(css).toContain('--ggui-accessibility-highContrast-borderWidth: 2px');
-  });
-
-  it('generates CSS variables for zIndex tokens', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toContain('--ggui-zIndex-modal: 1400');
-    expect(css).toContain('--ggui-zIndex-tooltip: 1800');
-  });
-
-  it('wraps output in :root selector', () => {
-    const css = generateCssVariables(lightTheme);
-    expect(css).toMatch(/^:root \{/);
-    expect(css).toMatch(/\}$/);
+  it('wraps output in :root selector, sorted by name', () => {
+    const css = generateCssVariables(lightTheme, 'light');
+    expect(css.startsWith(':root {')).toBe(true);
+    const names = [...css.matchAll(/^ {2}(--ggui-[^:]+):/gm)].map((m) => m[1]!);
+    expect(names).toEqual([...names].sort());
   });
 });
 
 describe('parseTheme', () => {
-  it('emits the same canonical CSS vars as the duck-typed walker for DtcgTheme inputs', () => {
-    const parsed = parseTheme('default', lightTheme);
-    expect(parsed.cssVariables).toContain('--ggui-color-onSurface: #111827');
-    expect(parsed.cssVariables).toContain('--ggui-motion-transition-fast');
-    expect(parsed.cssVariables).toContain('--ggui-shape-radius-md: 8px');
+  it('its variables are the derivation, wrapped — one producer', () => {
+    const parsed = parseTheme('probe', darkTheme, 'dark');
+    const derived = deriveThemeVariables(darkTheme, 'dark');
+    for (const [name, value] of Object.entries(derived)) expect(parsed.cssVariables).toContain(`${name}: ${value};`);
+    expect(parsed.css).toContain(parsed.cssVariables);
   });
 
-  // Shape-conformance gate across every registered theme × every mode.
-  // Catches a premium theme drifting from the canonical DtcgTheme shape
-  // before it ships — without this, a missing `accessibility` or
-  // `motion.transition` block only surfaces at render time, not test time.
-  describe('shape conformance across every registered theme', () => {
-    const themeIds = getThemeIds();
-    const modes: readonly ThemeMode[] = ['light', 'dark'];
-
-    for (const id of themeIds) {
-      for (const mode of modes) {
-        it(`${id} (${mode}) parses + emits every required token group`, () => {
-          const raw = getRawTheme(id, mode);
-          expect(raw, `getRawTheme(${id}, ${mode}) returned undefined`).toBeDefined();
-          const parsed = parseTheme(id, raw!);
-
-          // Required emission groups — every canonical DtcgTheme must
-          // ship all of these. Premium themes that override durations or
-          // semantic-color stops still emit under these prefixes.
-          expect(parsed.cssVariables).toContain('--ggui-color-primary-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-neutral-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-success-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-warning-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-error-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-info-500');
-          expect(parsed.cssVariables).toContain('--ggui-color-surface');
-          expect(parsed.cssVariables).toContain('--ggui-color-onSurface');
-          expect(parsed.cssVariables).toContain('--ggui-color-outline');
-          // Material 3 role pairs — primary / error / tertiary families.
-          // Every theme MUST ship a foreground for each tinted surface so
-          // the LLM never has to invent contrast colors.
-          expect(parsed.cssVariables).toContain('--ggui-color-onPrimary');
-          expect(parsed.cssVariables).toContain('--ggui-color-primaryContainer');
-          expect(parsed.cssVariables).toContain('--ggui-color-onPrimaryContainer');
-          expect(parsed.cssVariables).toContain('--ggui-color-onError');
-          expect(parsed.cssVariables).toContain('--ggui-color-errorContainer');
-          expect(parsed.cssVariables).toContain('--ggui-color-onErrorContainer');
-          expect(parsed.cssVariables).toContain('--ggui-color-tertiary');
-          expect(parsed.cssVariables).toContain('--ggui-color-onTertiary');
-          expect(parsed.cssVariables).toContain('--ggui-color-tertiaryContainer');
-          expect(parsed.cssVariables).toContain('--ggui-color-onTertiaryContainer');
-          expect(parsed.cssVariables).toContain('--ggui-font-family-sans');
-          // ggui#983 — the two derived colour slots the primitives consume
-          // (Link's colour, the flat error tone) are emitted by EVERY theme
-          // as aliases of the ladder stops it already authors, so the
-          // consumed-token manifest is covered without a theme repeating them.
-          expect(parsed.cssVariables).toContain('--ggui-color-link');
-          expect(parsed.cssVariables).toContain('--ggui-color-error');
-          expect(parsed.css).toContain('--ggui-color-link: var(--ggui-color-primary-600);');
-          expect(parsed.css).toContain('--ggui-color-error: var(--ggui-color-error-500);');
-          expect(parsed.cssVariables).toContain('--ggui-shape-radius-');
-          expect(parsed.cssVariables).toContain('--ggui-shape-shadow-');
-          expect(parsed.cssVariables).toContain('--ggui-motion-duration-');
-          expect(parsed.cssVariables).toContain('--ggui-motion-transition-');
-          expect(parsed.cssVariables).toContain('--ggui-accessibility-focusRing-color');
-          expect(parsed.cssVariables).toContain('--ggui-accessibility-reducedMotion-duration');
-          expect(parsed.cssVariables).toContain('--ggui-accessibility-highContrast-borderWidth');
-          expect(parsed.cssVariables).toContain('--ggui-zIndex-modal');
-          expect(parsed.cssVariables).toContain('--ggui-zIndex-tooltip');
-
-          // ParsedTheme metadata round-trips from the source theme.
-          expect(parsed.id).toBe(id);
-          expect(parsed.name).toBe(raw!.$name);
+  describe('every registered theme, both modes, is a complete projection (the v2 registration gate)', () => {
+    for (const id of getThemeIds()) {
+      for (const mode of ['light', 'dark'] as const) {
+        it(`${id} (${mode}) derives with nothing uncovered and nothing unknown`, () => {
+          const doc = getRawTheme(id, mode);
+          expect(doc).toBeDefined();
+          const overlay = deriveThemeVariables(doc!, mode);
+          const report = validateOverlayCoverage(overlay);
+          expect(report.uncovered).toEqual([]);
+          expect(report.unknown).toEqual([]);
+          const parsed = parseTheme(id, doc!, mode);
+          expect(parsed.cssVariables).toContain(':root {');
+          if (doc!.motion.keyframes && Object.keys(doc!.motion.keyframes).length > 0) expect(parsed.cssKeyframes).toContain('@keyframes ggui-');
         });
       }
     }
@@ -126,46 +72,42 @@ describe('parseTheme', () => {
 });
 
 describe('generateThemeReferenceDocumentation', () => {
-  it('includes accessibility section', () => {
-    const docs = generateThemeReferenceDocumentation(lightTheme);
-    expect(docs).toContain('## Accessibility');
-    expect(docs).toContain('### Focus Ring');
-    expect(docs).toContain('var(--ggui-accessibility-focusRing-color)');
-    expect(docs).toContain('### Reduced Motion');
-    expect(docs).toContain('### High Contrast');
-  });
-
-  it('includes color documentation with both scales and singletons', () => {
-    const docs = generateThemeReferenceDocumentation(lightTheme);
-    expect(docs).toContain('## Colors');
-    expect(docs).toContain('var(--ggui-color-primary-600)');
-    expect(docs).toContain('var(--ggui-color-surface)');
-  });
-
-  it('lists transitions and shape tokens under canonical paths', () => {
-    const docs = generateThemeReferenceDocumentation(lightTheme);
-    expect(docs).toContain('var(--ggui-shape-radius-md)');
-    expect(docs).toContain('var(--ggui-shape-shadow-md)');
-    expect(docs).toContain('var(--ggui-motion-transition-normal)');
+  it('documents the derived families and the role pairs', () => {
+    const doc = generateThemeReferenceDocumentation(lightTheme);
+    expect(doc).toContain('## Color');
+    expect(doc).toContain('var(--ggui-color-ground)');
+    expect(doc).toContain('var(--ggui-color-onContainer)');
+    expect(doc).toContain('## Font');
+    expect(doc).toContain('## Spacing');
+    expect(doc).toContain('## Shape');
+    expect(doc).toContain('Material Role Pairs');
+    expect(doc).not.toContain('--ggui-color-surface');
   });
 });
 
-describe('derived colour slots on the file-format path (ggui#983)', () => {
-  it('a plain DTCG tree that authors primary-600 and error-500 emits the link and flat-error aliases', () => {
-    const css = generateCssVariables({
-      color: {
-        primary: { '600': { $value: '#123456', $type: 'color' } },
-        error: { '500': { $value: '#b91c1c', $type: 'color' } },
-      },
-    });
-    expect(css).toContain('--ggui-color-link: var(--ggui-color-primary-600);');
-    expect(css).toContain('--ggui-color-error: var(--ggui-color-error-500);');
-  });
-
-  it('a tree without those stops emits no dangling alias', () => {
-    const css = generateCssVariables({ color: { surface: { $value: '#fff', $type: 'color' } } });
-    expect(css).not.toContain('--ggui-color-link');
-    expect(css).not.toContain('--ggui-color-error:');
+describe('themeToCssVarReferences', () => {
+  it('maps AUTHORED token paths to var() references', () => {
+    const refs = themeToCssVarReferences(lightTheme);
+    expect(refs['color.primary.600']).toBe('var(--ggui-color-primary-600)');
+    expect(refs['color.ground']).toBe('var(--ggui-color-ground)');
   });
 });
 
+describe('the file-format path is the same producer (ggui#987 §2.4)', () => {
+  it('a document with a stated link emits it as stated; an unstated link aliases primary-600', () => {
+    const stated = generateCssVariables({ ...lightTheme, color: { ...lightTheme.color, link: { $value: '#123456', $type: 'color' } } }, 'light');
+    expect(stated).toContain('--ggui-color-link: #123456;');
+    const unstated = generateCssVariables(lightTheme, 'light');
+    const primary600 = /--ggui-color-primary-600: (#[0-9a-f]{6});/.exec(unstated)?.[1];
+    expect(primary600).toBeDefined();
+    expect(unstated).toContain(`--ggui-color-link: ${primary600};`);
+  });
+
+  it('the flat error is the error-500 stop, in both modes', () => {
+    for (const [doc, mode] of [[lightTheme, 'light'], [darkTheme, 'dark']] as const) {
+      const css = generateCssVariables(doc, mode);
+      const e500 = /--ggui-color-error-500: (#[0-9a-f]{6});/.exec(css)?.[1];
+      expect(css).toContain(`--ggui-color-error: ${e500};`);
+    }
+  });
+});

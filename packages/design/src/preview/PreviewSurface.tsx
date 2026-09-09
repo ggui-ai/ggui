@@ -73,7 +73,7 @@ export function PreviewSurface({
   const rootStyle: CSSProperties = {
     position: 'relative',
     cursor: 'progress',
-    backgroundColor: 'var(--ggui-color-surface-subtle, rgba(148, 163, 184, 0.08))',
+    backgroundColor: 'var(--ggui-color-ground-subtle, rgba(148, 163, 184, 0.08))',
     borderRadius: 'var(--ggui-shape-radius-md, 8px)',
     overflow: 'hidden',
     // Block pointer events on every descendant so control shells don't

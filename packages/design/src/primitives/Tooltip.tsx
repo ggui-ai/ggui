@@ -107,10 +107,10 @@ export function Tooltip({
             top: coords.top,
             left: coords.left,
             transform: getTransform(),
-            backgroundColor: 'var(--ggui-color-onSurface, #18181b)',
-            // Inverse pair: text on the inverted (onSurface) ground is
-            // the surface color — white was only right for light themes.
-            color: 'var(--ggui-color-surface, #ffffff)',
+            // The inverse container pair (ggui#987 §2.1): a tooltip is
+            // legible by inversion, not by lift — never `elevated`.
+            backgroundColor: 'var(--ggui-color-onContainer, #18181b)',
+            color: 'var(--ggui-color-container, #ffffff)',
             padding: '6px 10px',
             borderRadius: 'var(--ggui-shape-radius-md, 8px)',
             fontSize: 'var(--ggui-font-size-xs, 12px)',

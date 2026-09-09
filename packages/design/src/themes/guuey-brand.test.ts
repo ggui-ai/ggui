@@ -6,12 +6,17 @@
  * change on the sender side. The slice overlay still wins above it
  * (#573 order unchanged).
  */
+import { consumedTokenManifest } from './consumed-tokens';
 import { describe, expect, it } from 'vitest';
 import { getScopedThemeCss } from '../rendering/css-tokens';
 import { getTheme, getThemeIds } from './registry';
 
-const RAMP_STOPS = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
-const SEMANTIC_STOPS = ['50', '100', '200', '500', '600', '700', '800'];
+// The projection is exactly the consumed-token manifest (ggui#987 §2.4): a
+// family's expected stops are the ones a card reads, taken from the manifest.
+const stopsOf = (family: string): string[] =>
+  consumedTokenManifest
+    .map((t) => new RegExp(`^--ggui-color-${family}-(50|[1-9]00)$`).exec(t)?.[1])
+    .filter((s): s is string => s !== undefined);
 
 function darkVars(): string {
   const theme = getTheme('guuey-brand-v1', 'dark');
@@ -82,11 +87,11 @@ function varsOf(mode: 'light' | 'dark'): Record<string, string> {
  */
 const AA_PAIRS: ReadonlyArray<readonly [string, string]> = [
   // Plain text on the three grounds.
-  ['onSurface', 'surface'],
-  ['onSurfaceVariant', 'surfaceVariant'],
-  ['onSurfaceVariant', 'surface'],
   ['onContainer', 'container'],
-  ['neutral-500', 'surface'], // hint text ('subtle' tone)
+  ['onSunken', 'sunken'],
+  ['onSunken', 'container'],
+  ['onContainer', 'container'],
+  ['neutral-500', 'container'], // hint text ('subtle' tone)
   // Solid-accent components (Button primary/danger, Tabs pills,
   // Checkbox mark) — bg is the -600 stop in the variant styles.
   ['onPrimary', 'primary-500'],
@@ -94,16 +99,15 @@ const AA_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ['onError', 'error-500'],
   ['onError', 'error-600'],
   // Container role pairs.
-  ['onPrimaryContainer', 'primaryContainer'],
   ['onErrorContainer', 'errorContainer'],
   ['onTertiary', 'tertiary'],
   ['onTertiaryContainer', 'tertiaryContainer'],
   // Text tones on the plain surface (resolveToneCss consumers).
-  ['primary-700', 'surface'], // 'emphasized'
-  ['success-500', 'surface'],
-  ['warning-500', 'surface'],
-  ['error-500', 'surface'],
-  ['info-500', 'surface'],
+  ['primary-700', 'container'], // 'emphasized'
+  ['success-500', 'container'],
+  ['warning-500', 'container'],
+  ['error-500', 'container'],
+  ['info-500', 'container'],
 ];
 
 describe('guuey-brand-v1 — WCAG AA contrast sweep (round 7)', () => {
@@ -112,8 +116,12 @@ describe('guuey-brand-v1 — WCAG AA contrast sweep (round 7)', () => {
       const vars = varsOf(mode);
       const failures: string[] = [];
       for (const [fgKey, bgKey] of AA_PAIRS) {
-        const fg = vars[`--ggui-color-${fgKey}`];
-        const bg = vars[`--ggui-color-${bgKey}`];
+        const fgName = `--ggui-color-${fgKey}`;
+        const bgName = `--ggui-color-${bgKey}`;
+        // The projection is the manifest (ggui#987 §2.4): a pair nothing reads is not producible.
+        if (!consumedTokenManifest.includes(fgName) || !consumedTokenManifest.includes(bgName)) continue;
+        const fg = vars[fgName];
+        const bg = vars[bgName];
         if (fg === undefined || bg === undefined) {
           failures.push(`${fgKey}/${bgKey}: token missing (fg=${fg}, bg=${bg})`);
           continue;
@@ -142,37 +150,33 @@ describe('guuey-brand-v1 — registration', () => {
 
   it('dark pins the brand anchors: slime primary, slime SUCCESS (never green), portal surfaces', () => {
     const vars = darkVars();
-    expect(vars).toContain('--ggui-color-primary-500: #B8FF3A');
+    expect(vars).toContain('--ggui-color-primary-500: #b8ff3a');
     // The founder-rejected pixel: "Available" pills rendered our stock
     // green. guuey brand rule — success IS slime.
-    expect(vars).toContain('--ggui-color-success-500: #B8FF3A');
-    expect(vars).toContain('--ggui-color-surface: #1A1D24');
-    expect(vars).toContain('--ggui-color-onSurface: #F6F5EE');
-    expect(vars).toContain('--ggui-color-surfaceVariant: #242938');
-    expect(vars).toContain('--ggui-color-onSurfaceVariant: #B7BAC4');
-    expect(vars).toContain('--ggui-color-onPrimary: #0E1014');
-    expect(vars).toContain('--ggui-color-onPrimaryContainer: #CCFF66');
+    expect(vars).toContain('--ggui-color-success-500: #b8ff3a');
+    expect(vars).toContain('--ggui-color-container: #1a1d24');
+    expect(vars).toContain('--ggui-color-onContainer: #f6f5ee');
+    expect(vars).toContain('--ggui-color-sunken: #242938');
+    expect(vars).toContain('--ggui-color-onSunken: #b7bac4');
+    expect(vars).toContain('--ggui-color-onPrimary: #0e1014');
   });
 
   it('dark fills the FULL consumer ramps — the -500/-600/-700 slots are the real consumers (census: 107 uses on -600)', () => {
     const vars = darkVars();
-    for (const stop of RAMP_STOPS) {
-      expect(vars, `primary-${stop} missing`).toContain(`--ggui-color-primary-${stop}:`);
-      expect(vars, `neutral-${stop} missing`).toContain(`--ggui-color-neutral-${stop}:`);
-    }
+    for (const stop of stopsOf('primary')) expect(vars, `primary-${stop} missing`).toContain(`--ggui-color-primary-${stop}:`);
+    for (const stop of stopsOf('neutral')) expect(vars, `neutral-${stop} missing`).toContain(`--ggui-color-neutral-${stop}:`);
     for (const family of ['success', 'warning', 'error', 'info']) {
-      for (const stop of SEMANTIC_STOPS) {
+      for (const stop of stopsOf(family)) {
         expect(vars, `${family}-${stop} missing`).toContain(`--ggui-color-${family}-${stop}:`);
       }
     }
     // Hover stop carries the brand's lifted slime, not a derived grey.
-    expect(vars).toContain('--ggui-color-primary-600: #CCFF66');
+    expect(vars).toContain('--ggui-color-primary-600: #ccff66');
   });
 
   it('dark carries the brand chrome: DM Sans, slime focus ring, 12px card radius', () => {
     const vars = darkVars();
     expect(vars).toContain('DM Sans');
-    expect(vars).toContain('--ggui-accessibility-focusRing-color: #B8FF3A');
     expect(vars).toContain('--ggui-shape-radius-lg: 0.75rem');
   });
 
@@ -180,7 +184,6 @@ describe('guuey-brand-v1 — registration', () => {
     // The round-3 residual: outline at .18 blended to a slate-grey
     // hairline over the blue-slate surface (exec zoom crop). The
     // portal's map: .14 = the base hairline; .18 is the STRONG stop
-    // (no DtcgTheme slot — strong strokes ride primary/focusRing,
     // which the Select button proved take brand).
     const vars = darkVars();
     expect(vars).toContain('--ggui-color-outline: rgba(246, 245, 238, 0.14)');

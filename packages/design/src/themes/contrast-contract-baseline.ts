@@ -28,8 +28,8 @@ export interface ContrastBaselineEntry {
 
 export const CONSUMER_CONTRAST_BASELINE: readonly ContrastBaselineEntry[] = [
   // loud class — founder-excluded 2026-08-22; fix rides ggui#573.
-  { theme: 'claudic', mode: 'light', label: 'slots.loud p500/surface' },
-  { theme: 'premium-zen', mode: 'light', label: 'slots.loud p500/surface' },
-  { theme: 'premium-botanical', mode: 'light', label: 'slots.loud p500/surface' },
-  { theme: 'guuey-brand-v1', mode: 'light', label: 'slots.loud p500/surface' },
+  { theme: 'claudic', mode: 'light', label: 'slots.loud p500/container' },
+  { theme: 'premium-zen', mode: 'light', label: 'slots.loud p500/container' },
+  { theme: 'premium-botanical', mode: 'light', label: 'slots.loud p500/container' },
+  { theme: 'guuey-brand-v1', mode: 'light', label: 'slots.loud p500/container' },
 ];

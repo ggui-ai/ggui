@@ -3,7 +3,7 @@
  * `--ggui-*` variables generated component code actually consumes,
  * which registration coverage (ggui#598-C) validates against. The
  * JSON file stays the single source of truth; this module is its
- * typed doorway for composers wiring `validateThemeCoverage`.
+ * typed doorway for composers wiring `validateOverlayCoverage` (ggui#987 §3.4).
  */
 import manifest from './consumed-tokens.manifest.json' with { type: 'json' };
 

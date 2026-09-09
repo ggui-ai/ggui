@@ -75,23 +75,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.875rem', $type: 'dimension' },
-      base: { $value: '1rem', $type: 'dimension' },
-      lg: { $value: '1.125rem', $type: 'dimension' },
-      xl: { $value: '1.25rem', $type: 'dimension' },
-      '2xl': { $value: '1.5rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.25', $type: 'number' },
-      normal: { $value: '1.55', $type: 'number' }, // claude.ai-ish — slightly looser than Indigo
-      relaxed: { $value: '1.75', $type: 'number' },
     },
   },
 
@@ -156,21 +144,6 @@ const shared = {
   motion: {
     // Claudic is calmer than Indigo — no `ambient` 3s breathing
     // duration is exposed. Animations stay snappy + functional only.
-    duration: {
-      fast: { $value: '120ms', $type: 'duration' },
-      normal: { $value: '240ms', $type: 'duration' },
-      slow: { $value: '480ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     keyframes: {
       entrance: {
         $value:
@@ -268,12 +241,12 @@ const claudicLight: DtcgTheme = {
       '800': { $value: '#363432', $type: 'color' },
     },
     // Two-tier semantic roles
-    surface: { $value: '#faf9f5', $type: 'color' }, // Ivory
-    onSurface: { $value: '#141413', $type: 'color' }, // Slate
-    surfaceVariant: { $value: '#f5f4ee', $type: 'color' },
-    onSurfaceVariant: { $value: '#56544f', $type: 'color' },
-    container: { $value: '#fbf2ee', $type: 'color' }, // primary-50
-    onContainer: { $value: '#4d2920', $type: 'color' }, // primary-900
+    ground: { $value: '#faf9f5', $type: 'color' }, // Ivory
+    onGround: { $value: '#141413', $type: 'color' }, // Slate
+    sunken: { $value: '#f5f4ee', $type: 'color' },
+    onSunken: { $value: '#56544f', $type: 'color' },
+    container: { $value: '#faf9f5', $type: 'color' }, // primary-50
+    onContainer: { $value: '#141413', $type: 'color' }, // primary-900
     outline: { $value: '#dad8cc', $type: 'color' },
     outlineVariant: { $value: '#ebe9df', $type: 'color' },
     // Primary role pair — text on Crail CTAs is ivory, container is Crail-50.
@@ -399,12 +372,12 @@ const claudicDark: DtcgTheme = {
       '700': { $value: '#d1cfca', $type: 'color' },
       '800': { $value: '#e6e4e0', $type: 'color' },
     },
-    surface: { $value: '#262624', $type: 'color' }, // Charcoal
-    onSurface: { $value: '#faf9f5', $type: 'color' }, // Ivory
-    surfaceVariant: { $value: '#2d2c2a', $type: 'color' },
-    onSurfaceVariant: { $value: '#a8a59f', $type: 'color' },
-    container: { $value: '#3d3b39', $type: 'color' },
-    onContainer: { $value: '#fbf2ee', $type: 'color' },
+    ground: { $value: '#262624', $type: 'color' }, // Charcoal
+    onGround: { $value: '#faf9f5', $type: 'color' }, // Ivory
+    sunken: { $value: '#2d2c2a', $type: 'color' },
+    onSunken: { $value: '#a8a59f', $type: 'color' },
+    container: { $value: '#262624', $type: 'color' },
+    onContainer: { $value: '#faf9f5', $type: 'color' },
     outline: { $value: '#3d3b39', $type: 'color' },
     outlineVariant: { $value: '#2d2c2a', $type: 'color' },
     // Primary role pair — dark: onPrimary is charcoal so text reads on the

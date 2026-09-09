@@ -30,8 +30,8 @@
  *
  * | slot          | token                              | use case                                    |
  * | ------------- | ---------------------------------- | ------------------------------------------- |
- * | `default`     | `--ggui-color-onSurface`           | primary body text (most common)              |
- * | `muted`       | `--ggui-color-onSurfaceVariant`    | secondary / metadata / captions             |
+ * | `default`     | `--ggui-color-onContainer`         | primary body text (most common)              |
+ * | `muted`       | `--ggui-color-onSunken`            | secondary / metadata / captions             |
  * | `subtle`      | `--ggui-color-neutral-500`         | very-low-emphasis labels, hint text          |
  * | `emphasized`  | `--ggui-color-primary-700`         | accent text (branded label, tagline)         |
  * | `loud`        | `--ggui-color-primary-500`         | the strongest accent (call-to-action label)  |
@@ -39,7 +39,7 @@
  * | `warning`     | `--ggui-color-warning`             | warning status text (semantic flat token)    |
  * | `error`       | `--ggui-color-error`               | error status text (semantic flat token)      |
  * | `info`        | `--ggui-color-info`                | info status text (semantic flat token)       |
- * | `inverse`     | `--ggui-color-surface`             | text rendered on a dark / inverted surface    |
+ * | `inverse`     | `--ggui-color-container`           | text rendered on a dark / inverted surface    |
  * | `inherit`     | `inherit`                          | use the parent's color (nested-render case)  |
  *
  * @public
@@ -68,9 +68,9 @@ export type ToneSlot =
 export function resolveToneCss(tone: ToneSlot): string {
   switch (tone) {
     case 'default':
-      return 'var(--ggui-color-onSurface, #18181b)';
+      return 'var(--ggui-color-onContainer, #18181b)';
     case 'muted':
-      return 'var(--ggui-color-onSurfaceVariant, #52525b)';
+      return 'var(--ggui-color-onSunken, #52525b)';
     case 'subtle':
       // `subtle` resolves to `neutral-500` rather than `outline`
       // (intended for borders, ~2:1 contrast on dark surfaces —
@@ -107,7 +107,7 @@ export function resolveToneCss(tone: ToneSlot): string {
       // (found by the beauty/002 understand pass, 2026-08-19).
       return `var(--ggui-color-${tone}-500, ${SEMANTIC_TONE_FALLBACK[tone]})`;
     case 'inverse':
-      return 'var(--ggui-color-surface, #ffffff)';
+      return 'var(--ggui-color-container, #ffffff)';
     case 'inherit':
       return 'inherit';
   }
@@ -136,11 +136,11 @@ const SEMANTIC_TONE_FALLBACK: Readonly<Record<'success' | 'warning' | 'error' | 
  *
  * | slot         | token                          | use case                                 |
  * | ------------ | ------------------------------ | ---------------------------------------- |
- * | `default`    | `--ggui-color-surface`         | base container (most common)              |
- * | `elevated`   | `--ggui-color-surface`         | same fill, intended for shadow + raise    |
- * | `sunken`     | `--ggui-color-surfaceVariant`  | inset / quoted region, slightly recessed  |
+ * | `default`    | `--ggui-color-container`       | a card, a bubble, a panel (most common)   |
+ * | `elevated`   | `--ggui-color-elevated`        | floats above the container (menu, modal)  |
+ * | `sunken`     | `--ggui-color-sunken`          | inset / quoted region, slightly recessed  |
  * | `accent`     | `--ggui-color-primary-50`      | branded fill — "highlighted" region        |
- * | `inverted`   | `--ggui-color-onSurface`       | dark surface in light mode (testimonial,    |
+ * | `inverted`   | `--ggui-color-onContainer`     | dark surface in light mode (testimonial,    |
  * |              |                                | code-snippet card)                          |
  * | `transparent`| `transparent`                  | no fill (defer to parent)                  |
  *
@@ -163,14 +163,17 @@ export type SurfaceSlot =
 export function resolveSurfaceCss(surface: SurfaceSlot): string {
   switch (surface) {
     case 'default':
+      return 'var(--ggui-color-container, #ffffff)';
     case 'elevated':
-      return 'var(--ggui-color-surface, #ffffff)';
+      // A float above the container (popover, menu, modal, toast) — its own
+      // role (ggui#987 §2.1); derived, never authored (§2.4).
+      return 'var(--ggui-color-elevated, #ffffff)';
     case 'sunken':
-      return 'var(--ggui-color-surfaceVariant, #f4f4f5)';
+      return 'var(--ggui-color-sunken, #f4f4f5)';
     case 'accent':
       return 'var(--ggui-color-primary-50, #f0f9ff)';
     case 'inverted':
-      return 'var(--ggui-color-onSurface, #18181b)';
+      return 'var(--ggui-color-onContainer, #18181b)';
     case 'transparent':
       return 'transparent';
   }

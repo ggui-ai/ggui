@@ -7,7 +7,7 @@ const innerStyle = {
   border: '1px dashed var(--ggui-color-primary-300, #7dd3fc)',
   borderRadius: '8px',
   fontSize: '14px',
-  color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+  color: 'var(--ggui-color-onSunken, #52525b)',
 } as const;
 
 const meta: Meta<typeof Container> = {

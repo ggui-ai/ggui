@@ -37,7 +37,7 @@ export function Skeleton({
     width: resolvedWidth,
     height: resolvedHeight,
     borderRadius: isCircle ? '9999px' : resolveRadius(radius),
-    backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
+    backgroundColor: 'var(--ggui-color-sunken, #f4f4f5)',
     animation: 'ggui-skeleton-pulse 1.5s ease-in-out infinite',
     ...style,
   };

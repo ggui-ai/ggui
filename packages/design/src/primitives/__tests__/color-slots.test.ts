@@ -19,8 +19,8 @@ import { getTheme, getThemeIds } from '../../themes/registry';
 
 describe('resolveToneCss', () => {
   it.each([
-    ['default', 'var(--ggui-color-onSurface, #18181b)'],
-    ['muted', 'var(--ggui-color-onSurfaceVariant, #52525b)'],
+    ['default', 'var(--ggui-color-onContainer, #18181b)'],
+    ['muted', 'var(--ggui-color-onSunken, #52525b)'],
     ['subtle', 'var(--ggui-color-neutral-500, #71717a)'],
     ['emphasized', 'var(--ggui-color-primary-700, #0369a1)'],
     ['loud', 'var(--ggui-color-primary-500, #0ea5e9)'],
@@ -29,7 +29,7 @@ describe('resolveToneCss', () => {
     // ggui#983: the flat --ggui-color-error reads first (a host or override sets it), the 500 stop beneath it.
     ['error', 'var(--ggui-color-error, var(--ggui-color-error-500, #b91c1c))'],
     ['info', 'var(--ggui-color-info-500, #0e7490)'],
-    ['inverse', 'var(--ggui-color-surface, #ffffff)'],
+    ['inverse', 'var(--ggui-color-container, #ffffff)'],
     ['inherit', 'inherit'],
   ] as readonly [ToneSlot, string][])(
     'tone "%s" → "%s"',
@@ -79,11 +79,11 @@ describe('resolveToneCss', () => {
 
 describe('resolveSurfaceCss', () => {
   it.each([
-    ['default', 'var(--ggui-color-surface, #ffffff)'],
-    ['elevated', 'var(--ggui-color-surface, #ffffff)'],
-    ['sunken', 'var(--ggui-color-surfaceVariant, #f4f4f5)'],
+    ['default', 'var(--ggui-color-container, #ffffff)'],
+    ['elevated', 'var(--ggui-color-elevated, #ffffff)'],
+    ['sunken', 'var(--ggui-color-sunken, #f4f4f5)'],
     ['accent', 'var(--ggui-color-primary-50, #f0f9ff)'],
-    ['inverted', 'var(--ggui-color-onSurface, #18181b)'],
+    ['inverted', 'var(--ggui-color-onContainer, #18181b)'],
     ['transparent', 'transparent'],
   ] as readonly [SurfaceSlot, string][])(
     'surface "%s" → "%s"',
@@ -92,9 +92,6 @@ describe('resolveSurfaceCss', () => {
     },
   );
 
-  it('default and elevated emit the same fill — elevated picks up shadow on Card, NOT a different bg', () => {
-    expect(resolveSurfaceCss('default')).toBe(resolveSurfaceCss('elevated'));
-  });
 
   it('every slot emits either a var() reference OR "transparent" — never raw hex', () => {
     const slots: SurfaceSlot[] = [

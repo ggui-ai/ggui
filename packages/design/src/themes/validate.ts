@@ -3,13 +3,14 @@
  *
  * The 8-role `validateTheme` predecessor was deleted 2026-08-22
  * (ggui#598 slice 2): it had zero callers since birth and its
- * successor is `validate-coverage.ts` — the manifest-grounded
+ * successor is `validate-overlay-coverage.ts` — the manifest-grounded
  * registration gate. What remains here is the CONSUMER contrast
  * surface (`validateConsumerContrast` + its ratchet pairs), which has
  * live test consumers.
  */
 
-import type { DtcgTheme } from './types';
+import type { DtcgTheme, ThemeMode } from './types';
+import { deriveThemeVariables } from './derive-theme-variables';
 
 /**
  * Parse a CSS color value to [r, g, b]. Accepts #rgb/#rrggbb hex and
@@ -98,51 +99,51 @@ export const CONSUMER_CONTRAST_PAIRS: readonly ConsumerContrastPair[] = [
     source: 'Stepper.tsx current marker (sm semibold numeral on -600 fill)',
   },
   {
-    label: 'stepper.upcoming onSV/surface',
-    fg: 'color.onSurfaceVariant',
-    bg: 'color.surface',
+    label: 'stepper.upcoming onSunken/container',
+    fg: 'color.onSunken',
+    bg: 'color.container',
     min: 4.5,
     source: 'Stepper.tsx upcoming marker',
   },
   {
-    label: 'slots.subtle n500/surface',
+    label: 'slots.subtle n500/container',
     fg: 'color.neutral.500',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 3.0,
     source: 'color-slots.ts `subtle` (low-emphasis hint text)',
   },
   {
-    label: 'slots.emphasized p700/surface',
+    label: 'slots.emphasized p700/container',
     fg: 'color.primary.700',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 4.5,
     source: 'color-slots.ts `emphasized` (accent text)',
   },
   {
-    label: 'slots.loud p500/surface',
+    label: 'slots.loud p500/container',
     fg: 'color.primary.500',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 4.5,
     source: 'color-slots.ts `loud` (CTA label text)',
   },
   {
-    label: 'slots.positive s500/surface',
+    label: 'slots.positive s500/container',
     fg: 'color.success.500',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 4.5,
     source: 'color-slots.ts semantic tone text',
   },
   {
-    label: 'slots.negative e500/surface',
+    label: 'slots.negative e500/container',
     fg: 'color.error.500',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 4.5,
     source: 'color-slots.ts semantic tone text',
   },
   {
-    label: 'slots.warning w500/surface',
+    label: 'slots.warning w500/container',
     fg: 'color.warning.500',
-    bg: 'color.surface',
+    bg: 'color.container',
     min: 4.5,
     source: 'color-slots.ts semantic tone text',
   },
@@ -158,18 +159,6 @@ export interface ConsumerContrastViolation {
   readonly bgValue: string | undefined;
 }
 
-function tokenValueAtPath(theme: DtcgTheme, path: string): string | undefined {
-  let node: unknown = theme as unknown as Record<string, unknown>;
-  for (const seg of path.split('.')) {
-    if (node === null || typeof node !== 'object') return undefined;
-    node = (node as Record<string, unknown>)[seg];
-  }
-  if (node !== null && typeof node === 'object' && '$value' in node) {
-    const v = (node as { $value: unknown }).$value;
-    return typeof v === 'string' ? v : undefined;
-  }
-  return undefined;
-}
 
 /**
  * Check one theme against {@link CONSUMER_CONTRAST_PAIRS}.
@@ -187,11 +176,17 @@ function tokenValueAtPath(theme: DtcgTheme, path: string): string | undefined {
  */
 export function validateConsumerContrast(
   theme: DtcgTheme,
+  mode: ThemeMode = 'light',
 ): ConsumerContrastViolation[] {
+  // Judged on the PROJECTION (ggui#987 §2.4): a pair reads what a card
+  // paints, which for an unstated token is the derived value — never the
+  // document alone.
+  const projected = deriveThemeVariables(theme, mode);
+  const at = (path: string): string | undefined => projected[`--ggui-${path.split('.').join('-')}`];
   const out: ConsumerContrastViolation[] = [];
   for (const pair of CONSUMER_CONTRAST_PAIRS) {
-    const fgValue = tokenValueAtPath(theme, pair.fg);
-    const bgValue = tokenValueAtPath(theme, pair.bg);
+    const fgValue = at(pair.fg);
+    const bgValue = at(pair.bg);
     if (fgValue === undefined || bgValue === undefined) continue;
     const fgRgb = cssColorToRgb(fgValue);
     const bgRgb = cssColorToRgb(bgValue);

@@ -67,7 +67,7 @@ export function Text({
   // escape; all color flows through theme tokens.
   const resolvedColor = tone
     ? resolveToneCss(tone)
-    : 'var(--ggui-color-onSurface, #18181b)';
+    : 'var(--ggui-color-onContainer, #18181b)';
 
   const textStyle = {
     fontSize: sizeMap[size],

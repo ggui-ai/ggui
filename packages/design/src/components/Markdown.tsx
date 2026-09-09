@@ -43,16 +43,16 @@ export type { MarkdownProps, MarkdownInlineProps } from './types';
 const CODE_INLINE: CSSProperties = {
   fontFamily: 'var(--ggui-font-family-mono, ui-monospace, monospace)',
   fontSize: '0.9em',
-  background: 'var(--ggui-color-surface-sunken, rgba(0,0,0,0.06))',
-  borderRadius: 'var(--ggui-radius-sm, 4px)',
+  background: 'var(--ggui-color-sunken, rgba(0,0,0,0.06))',
+  borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
   padding: '0.1em 0.35em',
 };
 
 const CODE_FENCE: CSSProperties = {
   fontFamily: 'var(--ggui-font-family-mono, ui-monospace, monospace)',
   fontSize: 'var(--ggui-font-size-sm, 14px)',
-  background: 'var(--ggui-color-surface-sunken, rgba(0,0,0,0.06))',
-  borderRadius: 'var(--ggui-radius-md, 8px)',
+  background: 'var(--ggui-color-sunken, rgba(0,0,0,0.06))',
+  borderRadius: 'var(--ggui-shape-radius-md, 8px)',
   padding: 'var(--ggui-spacing-sm, 12px)',
   overflowX: 'auto',
   whiteSpace: 'pre',
@@ -89,7 +89,7 @@ const TABLE_CELL: CSSProperties = {
 const TABLE_HEADER_CELL: CSSProperties = {
   ...TABLE_CELL,
   fontWeight: 'var(--ggui-font-weight-semibold, 600)',
-  background: 'var(--ggui-color-surface-sunken, rgba(0,0,0,0.06))',
+  background: 'var(--ggui-color-sunken, rgba(0,0,0,0.06))',
 };
 
 /**

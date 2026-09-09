@@ -99,7 +99,7 @@ export function Tabs({
         ...base,
         color: isActive
           ? 'var(--ggui-color-primary-600, #0284c7)'
-          : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          : 'var(--ggui-color-onSunken, #52525b)',
         borderBottom: isActive
           ? '2px solid var(--ggui-color-primary-600, #0284c7)'
           : '2px solid transparent',
@@ -112,7 +112,7 @@ export function Tabs({
         ...base,
         color: isActive
           ? 'var(--ggui-color-onPrimary, #ffffff)'
-          : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          : 'var(--ggui-color-onSunken, #52525b)',
         backgroundColor: isActive
           ? 'var(--ggui-color-primary-600, #0284c7)'
           : 'transparent',
@@ -125,14 +125,14 @@ export function Tabs({
       ...base,
       color: isActive
         ? 'var(--ggui-color-primary-600, #0284c7)'
-        : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+        : 'var(--ggui-color-onSunken, #52525b)',
       backgroundColor: isActive
-        ? 'var(--ggui-color-surface, #ffffff)'
+        ? 'var(--ggui-color-container, #ffffff)'
         : 'transparent',
       border: isActive
         ? '1px solid var(--ggui-color-outlineVariant, #e4e4e7)'
         : '1px solid transparent',
-      borderBottom: isActive ? '1px solid var(--ggui-color-surface, #ffffff)' : '1px solid transparent',
+      borderBottom: isActive ? '1px solid var(--ggui-color-container, #ffffff)' : '1px solid transparent',
       borderRadius: 'var(--ggui-shape-radius-md, 6px) var(--ggui-shape-radius-md, 6px) 0 0',
       marginBottom: '-1px',
     };
@@ -147,7 +147,7 @@ export function Tabs({
         : undefined,
     backgroundColor:
       variant === 'pills'
-        ? 'var(--ggui-color-surfaceVariant, #f4f4f5)'
+        ? 'var(--ggui-color-sunken, #f4f4f5)'
         : undefined,
     borderRadius:
       variant === 'pills'

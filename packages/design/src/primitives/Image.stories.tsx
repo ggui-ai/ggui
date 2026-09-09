@@ -74,9 +74,9 @@ export const WithFallback: Story = {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
+          background: 'var(--ggui-color-sunken, #f4f4f5)',
           borderRadius: '8px',
-          color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          color: 'var(--ggui-color-onSunken, #52525b)',
           fontSize: '14px',
         }}
       >

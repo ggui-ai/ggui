@@ -56,23 +56,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.8125rem', $type: 'dimension' }, // 13px
-      base: { $value: '0.9375rem', $type: 'dimension' }, // 15px
-      lg: { $value: '1.0625rem', $type: 'dimension' }, // 17px
-      xl: { $value: '1.3125rem', $type: 'dimension' }, // 21px — bumped for display headings
-      '2xl': { $value: '1.75rem', $type: 'dimension' }, // 28px — generous display
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '680', $type: 'fontWeight' }, // variable-axis weight; reads bold without going harsh on Inter
-    },
-    lineHeight: {
-      tight: { $value: '1.1', $type: 'number' }, // headings
-      normal: { $value: '1.55', $type: 'number' }, // body — generous, editorial
-      relaxed: { $value: '1.7', $type: 'number' },
     },
   },
 
@@ -132,23 +120,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '150ms', $type: 'duration' },
-      normal: { $value: '250ms', $type: 'duration' },
-      slow: { $value: '420ms', $type: 'duration' },
-      ambient: { $value: '8000ms', $type: 'duration' }, // background breathing
-    },
-    easing: {
-      // Linear's signature easing — confident, slightly overshoots arrival.
-      default: {
-        $value: 'cubic-bezier(0.32, 0.72, 0, 1)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.16, 1, 0.3, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     keyframes: {
       entrance: {
         $value:
@@ -250,12 +221,12 @@ const indigoLight: DtcgTheme = {
       '800': { $value: '#164e63', $type: 'color' },
     },
 
-    surface: { $value: '#fafaf7', $type: 'color' }, // Paper
-    onSurface: { $value: '#15131f', $type: 'color' }, // Ink
-    surfaceVariant: { $value: '#f4f4f0', $type: 'color' },
-    onSurfaceVariant: { $value: '#4a4954', $type: 'color' },
-    container: { $value: '#eef2ff', $type: 'color' }, // primary-50 — pale indigo whisper
-    onContainer: { $value: '#1e1b4b', $type: 'color' }, // primary-900
+    ground: { $value: '#fafaf7', $type: 'color' }, // Paper
+    onGround: { $value: '#15131f', $type: 'color' }, // Ink
+    sunken: { $value: '#f4f4f0', $type: 'color' },
+    onSunken: { $value: '#4a4954', $type: 'color' },
+    container: { $value: '#fafaf7', $type: 'color' }, // primary-50 — pale indigo whisper
+    onContainer: { $value: '#15131f', $type: 'color' }, // primary-900
     outline: { $value: '#d4d3cf', $type: 'color' },
     outlineVariant: { $value: '#e8e7e3', $type: 'color' },
     // Primary role pair — text on indigo CTAs is paper, container = primary-50.
@@ -379,12 +350,12 @@ const indigoDark: DtcgTheme = {
     // indistinguishable from default. Variant is now #221e35 (visible
     // 1-tier step) and outline #3e3c50 (matches neutral-400, gives
     // borders a hairline visibility on dark).
-    surface: { $value: '#15131f', $type: 'color' },
-    onSurface: { $value: '#f5f4f9', $type: 'color' },
-    surfaceVariant: { $value: '#221e35', $type: 'color' },
-    onSurfaceVariant: { $value: '#c8c6d2', $type: 'color' },
-    container: { $value: '#312e81', $type: 'color' }, // primary-100 dark
-    onContainer: { $value: '#eef2ff', $type: 'color' },
+    ground: { $value: '#15131f', $type: 'color' },
+    onGround: { $value: '#f5f4f9', $type: 'color' },
+    sunken: { $value: '#221e35', $type: 'color' },
+    onSunken: { $value: '#c8c6d2', $type: 'color' },
+    container: { $value: '#15131f', $type: 'color' }, // primary-100 dark
+    onContainer: { $value: '#f5f4f9', $type: 'color' },
     outline: { $value: '#3e3c50', $type: 'color' },
     outlineVariant: { $value: '#2a2839', $type: 'color' },
     // Primary role pair — dark: onPrimary is midnight, container = deep indigo.

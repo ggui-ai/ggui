@@ -3,7 +3,7 @@
  *
  * Use with the `as` prop pattern on any primitive:
  *   <Card as={Clickable} onClick={handler} hoverStyle={{ opacity: 0.8 }}>
- *   <Box as={Hoverable} hoverStyle={{ background: 'var(--ggui-color-surfaceVariant)' }}>
+ *   <Box as={Hoverable} hoverStyle={{ background: 'var(--ggui-color-sunken)' }}>
  *   <Card as={Pressable} onPress={handler} pressStyle={{ transform: 'scale(0.98)' }}>
  *
  * Or use standalone:

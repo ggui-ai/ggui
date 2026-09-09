@@ -45,23 +45,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.875rem', $type: 'dimension' },
-      base: { $value: '1rem', $type: 'dimension' },
-      lg: { $value: '1.125rem', $type: 'dimension' },
-      xl: { $value: '1.25rem', $type: 'dimension' },
-      '2xl': { $value: '1.5rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.25', $type: 'number' },
-      normal: { $value: '1.5', $type: 'number' },
-      relaxed: { $value: '1.75', $type: 'number' },
     },
   },
 
@@ -84,20 +72,6 @@ const shared = {
   // wants classic soft grey.
 
   motion: {
-    duration: {
-      fast: { $value: '120ms', $type: 'duration' },
-      normal: { $value: '200ms', $type: 'duration' },
-      slow: { $value: '400ms', $type: 'duration' },
-      ambient: { $value: '2000ms', $type: 'duration' },
-    },
-    easing: {
-      default: { $value: 'cubic-bezier(0.4, 0, 0.2, 1)', $type: 'cubicBezier' },
-      bounce: {
-        $value: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)',
-        $type: 'cubicBezier',
-      },
-      spring: { $value: 'cubic-bezier(0.22, 1, 0.36, 1)', $type: 'cubicBezier' },
-    },
     transition: {
       fast: { $value: '120ms cubic-bezier(0.4, 0, 0.2, 1)', $type: 'transition' },
       normal: { $value: '200ms cubic-bezier(0.4, 0, 0.2, 1)', $type: 'transition' },
@@ -183,8 +157,6 @@ const guueyBrandDark: DtcgTheme = {
     'The guuey product brand (dark) — slate-ink surfaces, slime #B8FF3A accent, DM Sans.',
   $metadata: {
     font: 'DM Sans',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap',
     philosophy: 'Agent-native. Slime on slate.',
     // Round 5 (founder-ruled): the guuey host clips the view with its
     // own rounded rim — the HOST owns the card silhouette; the theme
@@ -261,11 +233,11 @@ const guueyBrandDark: DtcgTheme = {
       '800': { $value: '#BFECFF', $type: 'color' },
     },
     // M3 roles — portal values verbatim.
-    surface: { $value: '#1A1D24', $type: 'color' },
-    onSurface: { $value: '#F6F5EE', $type: 'color' },
-    surfaceVariant: { $value: '#242938', $type: 'color' },
-    onSurfaceVariant: { $value: '#B7BAC4', $type: 'color' },
-    container: { $value: '#232630', $type: 'color' }, // elevated
+    ground: { $value: '#1A1D24', $type: 'color' },
+    onGround: { $value: '#F6F5EE', $type: 'color' },
+    sunken: { $value: '#242938', $type: 'color' },
+    onSunken: { $value: '#B7BAC4', $type: 'color' },
+    container: { $value: '#1A1D24', $type: 'color' }, // elevated
     onContainer: { $value: '#F6F5EE', $type: 'color' },
     // Round 4 (portal stops): .14 IS the base hairline; .18 is the
     // STRONG stop (no DtcgTheme slot — strong/interactive strokes
@@ -365,11 +337,11 @@ const guueyBrandLight: DtcgTheme = {
       '700': { $value: '#06455D', $type: 'color' },
       '800': { $value: '#0A3346', $type: 'color' },
     },
-    surface: { $value: '#FFFFFF', $type: 'color' },
-    onSurface: { $value: '#1A1D24', $type: 'color' },
-    surfaceVariant: { $value: '#F6F5EE', $type: 'color' },
-    onSurfaceVariant: { $value: '#4A4F5C', $type: 'color' },
-    container: { $value: '#FBFAF6', $type: 'color' },
+    ground: { $value: '#FFFFFF', $type: 'color' },
+    onGround: { $value: '#1A1D24', $type: 'color' },
+    sunken: { $value: '#F6F5EE', $type: 'color' },
+    onSunken: { $value: '#4A4F5C', $type: 'color' },
+    container: { $value: '#FFFFFF', $type: 'color' },
     onContainer: { $value: '#1A1D24', $type: 'color' },
     outline: { $value: 'rgba(26, 29, 36, 0.18)', $type: 'color' },
     outlineVariant: { $value: 'rgba(26, 29, 36, 0.10)', $type: 'color' },

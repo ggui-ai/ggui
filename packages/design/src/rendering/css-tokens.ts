@@ -15,7 +15,7 @@
  * Several tokens bake `color-mix()` so elevation/glow/surface ramps carry
  * a primary-accent tint that adapts per color mode at runtime:
  *   - the `--ggui-shape-shadow-*` tokens (indigo/claudic themes), and
- *   - the scoped `--ggui-color-surface-gradient` / `--ggui-effect-glow-*`
+ *   - the scoped `--ggui-color-ground-gradient` / `--ggui-effect-glow-*`
  *     tokens emitted below.
  *
  * Browsers without `color-mix()` support (Safari <16.2, Firefox <113) drop
@@ -281,7 +281,7 @@ export function getScopedThemeCss(
   // that don't explicitly set `font-family`) inherit the active
   // theme's sans stack instead of the user-agent default (which is
   // Times New Roman in most browsers' default stylesheets for h1-h6).
-  // Same for body color so the `--ggui-color-onSurface` token
+  // Same for body color so the `--ggui-color-onGround` token
   // resolves on plain text without a Text/Heading wrapper.
   //
   // Scope root stays TRANSPARENT (no `background`). When this tree is
@@ -290,19 +290,19 @@ export function getScopedThemeCss(
   // generated UI is meant to layer onto whatever container the host
   // provides, not paint its own opaque page surface. Primitives that
   // need a real surface (Card, Modal, etc.) opt into
-  // `var(--ggui-color-surface)` or `var(--ggui-color-surface-gradient)`
+  // `var(--ggui-color-ground)` or `var(--ggui-color-ground-gradient)`
   // explicitly. The standalone `/r/<shortCode>` viewer that ships with
   // OSS bakes its OWN page-level background in the shell HTML for the
   // direct-browser case.
   const baseInherits = `.${scopeClass} {
   font-family: var(--ggui-font-family-sans);
-  color: var(--ggui-color-onSurface);
+  color: var(--ggui-color-onGround);
   background-color: transparent;
 }`;
   // Gradient + effect tokens primitives can opt-in to for premium accents.
   // `--ggui-color-primary-gradient` is a confident left-to-right
   // primary-500 → primary-600 ramp suitable for hero CTAs (no color-mix —
-  // valid everywhere). `--ggui-color-surface-gradient` /
+  // valid everywhere). `--ggui-color-ground-gradient` /
   // `--ggui-effect-glow-primary` / `--ggui-effect-glow-primary-strong`
   // bake `color-mix()`, so they ship a static fallback + an `@supports`
   // modern tier (see `buildGradientTokens`).
@@ -337,7 +337,7 @@ function structuralScaffolding(scopeClass: string): string {
 function baseInheritsRule(scopeClass: string): string {
   return `.${scopeClass} {
   font-family: var(--ggui-font-family-sans);
-  color: var(--ggui-color-onSurface);
+  color: var(--ggui-color-onGround);
   background-color: transparent;
 }`;
 }
@@ -408,7 +408,7 @@ function buildGradientTokens(
   // `--ggui-color-primary-gradient` has no color-mix — always valid.
   const primaryGradient = `  --ggui-color-primary-gradient: linear-gradient(135deg, var(--ggui-color-primary-500) 0%, var(--ggui-color-primary-600) 100%);`;
   // Modern color-mix declarations (the current, exact look).
-  const surfaceGradientModern = `  --ggui-color-surface-gradient: linear-gradient(180deg, var(--ggui-color-surface) 0%, color-mix(in srgb, var(--ggui-color-primary-500) 4%, var(--ggui-color-surface)) 100%);`;
+  const surfaceGradientModern = `  --ggui-color-ground-gradient: linear-gradient(180deg, var(--ggui-color-ground) 0%, color-mix(in srgb, var(--ggui-color-primary-500) 4%, var(--ggui-color-ground)) 100%);`;
   const glowModern = `  --ggui-effect-glow-primary: 0 0 0 4px color-mix(in srgb, var(--ggui-color-primary-500) 18%, transparent);`;
   const glowStrongModern = `  --ggui-effect-glow-primary-strong: 0 8px 24px -4px color-mix(in srgb, var(--ggui-color-primary-500) 40%, transparent), 0 0 0 1px color-mix(in srgb, var(--ggui-color-primary-500) 30%, transparent) inset;`;
 
@@ -421,7 +421,7 @@ function buildGradientTokens(
   // STATIC fallbacks (no color-mix). Flat surface gradient never collapses
   // to white/none; glow tints precompute to exact rgba (mix-vs-transparent
   // == rgba, so identical to the modern value on modern browsers).
-  const surfaceGradientFallback = `  --ggui-color-surface-gradient: linear-gradient(180deg, var(--ggui-color-surface) 0%, var(--ggui-color-surface) 100%);`;
+  const surfaceGradientFallback = `  --ggui-color-ground-gradient: linear-gradient(180deg, var(--ggui-color-ground) 0%, var(--ggui-color-ground) 100%);`;
   const glowFallback = `  --ggui-effect-glow-primary: ${precomputePrimaryColorMix(
     '0 0 0 4px color-mix(in srgb, var(--ggui-color-primary-500) 18%, transparent)',
     primary500Hex

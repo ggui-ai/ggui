@@ -29,23 +29,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.8rem', $type: 'dimension' },
-      base: { $value: '0.95rem', $type: 'dimension' },
-      lg: { $value: '1.1rem', $type: 'dimension' },
-      xl: { $value: '1.3rem', $type: 'dimension' },
-      '2xl': { $value: '1.6rem', $type: 'dimension' },
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.2', $type: 'number' },
-      normal: { $value: '1.5', $type: 'number' },
-      relaxed: { $value: '1.7', $type: 'number' },
     },
   },
 
@@ -81,26 +69,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '100ms', $type: 'duration' },
-      normal: { $value: '200ms', $type: 'duration' },
-      slow: { $value: '600ms', $type: 'duration' },
-      ambient: { $value: '2000ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        $type: 'cubicBezier',
-      },
-      bounce: {
-        $value: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     keyframes: {
       'glitch-flicker': {
         $value:
@@ -162,8 +130,6 @@ const cyberpunkLight: DtcgTheme = {
     'Neon-lit dystopian tech — cyan neon on dark chrome with glitch animations.',
   $metadata: {
     font: 'Orbitron',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap',
     philosophy: 'Chromatic noise, electric tension, digital rebellion.',
   },
 
@@ -233,12 +199,12 @@ const cyberpunkLight: DtcgTheme = {
       '800': { $value: '#005266', $type: 'color' },
     },
     // Semantic roles (dark theme — inverted neutral scale)
-    surface: { $value: '#0a0a0f', $type: 'color' },
-    onSurface: { $value: '#e8e8f0', $type: 'color' },
-    surfaceVariant: { $value: '#111118', $type: 'color' },
-    onSurfaceVariant: { $value: '#8888a0', $type: 'color' },
-    container: { $value: '#155e75', $type: 'color' },
-    onContainer: { $value: '#cffafe', $type: 'color' },
+    ground: { $value: '#0a0a0f', $type: 'color' },
+    onGround: { $value: '#e8e8f0', $type: 'color' },
+    sunken: { $value: '#111118', $type: 'color' },
+    onSunken: { $value: '#8888a0', $type: 'color' },
+    container: { $value: '#0a0a0f', $type: 'color' },
+    onContainer: { $value: '#e8e8f0', $type: 'color' },
     outline: { $value: '#3a3a48', $type: 'color' },
     outlineVariant: { $value: '#25252f', $type: 'color' },
     // Primary role pair — onPrimary is the deep night chrome, container
@@ -288,8 +254,6 @@ const cyberpunkDark: DtcgTheme = {
     'Neon-lit dystopian tech (dark) — brighter cyan on pure-black chrome, cranked neon contrast.',
   $metadata: {
     font: 'Orbitron',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap',
     philosophy: 'Chromatic noise, electric tension, digital rebellion.',
   },
 
@@ -362,12 +326,12 @@ const cyberpunkDark: DtcgTheme = {
       '700': { $value: '#85e6ff', $type: 'color' },
       '800': { $value: '#adeeff', $type: 'color' },
     },
-    surface: { $value: '#000005', $type: 'color' },
-    onSurface: { $value: '#e8e8f0', $type: 'color' },
-    surfaceVariant: { $value: '#0a0a0f', $type: 'color' },
-    onSurfaceVariant: { $value: '#aaaabe', $type: 'color' },
-    container: { $value: '#0e7490', $type: 'color' }, // deeper teal
-    onContainer: { $value: '#cffafe', $type: 'color' },
+    ground: { $value: '#000005', $type: 'color' },
+    onGround: { $value: '#e8e8f0', $type: 'color' },
+    sunken: { $value: '#0a0a0f', $type: 'color' },
+    onSunken: { $value: '#aaaabe', $type: 'color' },
+    container: { $value: '#000005', $type: 'color' }, // deeper teal
+    onContainer: { $value: '#e8e8f0', $type: 'color' },
     outline: { $value: '#1a1a24', $type: 'color' },
     outlineVariant: { $value: '#111118', $type: 'color' },
     // Primary role pair — dark: onPrimary is pure-black-ish, container = deeper teal.

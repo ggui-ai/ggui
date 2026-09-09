@@ -119,7 +119,7 @@ export function Accordion({
                   opacity: isDisabled ? 0.5 : 1,
                   fontSize: 'var(--ggui-font-size-sm, 14px)',
                   fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-                  color: 'var(--ggui-color-onSurface, #18181b)',
+                  color: 'var(--ggui-color-onContainer, #18181b)',
                   textAlign: 'left',
                   transition: `background-color ${duration.fast} ${easing.easeInOut}`,
                 }}
@@ -142,7 +142,7 @@ export function Accordion({
                   style={{
                     padding: '0 var(--ggui-spacing-4, 16px) var(--ggui-spacing-4, 16px)',
                     fontSize: 'var(--ggui-font-size-sm, 14px)',
-                    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                    color: 'var(--ggui-color-onSunken, #52525b)',
                     lineHeight: 'var(--ggui-font-lineHeight-normal, 1.5)',
                   }}
                 >

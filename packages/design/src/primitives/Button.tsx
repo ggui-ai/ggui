@@ -36,8 +36,8 @@ const variantStyles: Record<string, CSSProperties> = {
     border: 'none',
   },
   secondary: {
-    backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
-    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+    backgroundColor: 'var(--ggui-color-sunken, #f4f4f5)',
+    color: 'var(--ggui-color-onSunken, #52525b)',
     border: 'none',
   },
   outline: {
@@ -47,7 +47,7 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   ghost: {
     backgroundColor: 'transparent',
-    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+    color: 'var(--ggui-color-onSunken, #52525b)',
     border: 'none',
   },
   danger: {

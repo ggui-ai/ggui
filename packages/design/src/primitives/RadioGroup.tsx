@@ -39,7 +39,7 @@ export function RadioGroup({
           style={{
             fontSize: 'var(--ggui-font-size-sm, 14px)',
             fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-            color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+            color: 'var(--ggui-color-onSunken, #52525b)',
           }}
         >
           {label}
@@ -99,7 +99,7 @@ export function RadioGroup({
                     height: '18px',
                     borderRadius: 'var(--ggui-shape-radius-full, 9999px)',
                     border: `2px solid ${isSelected ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
-                    backgroundColor: 'var(--ggui-color-surface, #ffffff)',
+                    backgroundColor: 'var(--ggui-color-sunken, #ffffff)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -123,7 +123,7 @@ export function RadioGroup({
                   style={{
                     fontSize: 'var(--ggui-font-size-sm, 14px)',
                     fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-                    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                    color: 'var(--ggui-color-onSunken, #52525b)',
                   }}
                 >
                   {option.label}
@@ -132,7 +132,7 @@ export function RadioGroup({
                   <span
                     style={{
                       fontSize: 'var(--ggui-font-size-xs, 12px)',
-                      color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                      color: 'var(--ggui-color-onSunken, #52525b)',
                     }}
                   >
                     {option.description}

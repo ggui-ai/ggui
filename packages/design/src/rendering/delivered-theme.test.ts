@@ -13,8 +13,8 @@ const SCOPE = 'gg-598c';
 const VARS = {
   '--ggui-color-primary-500': '#B8FF3A',
   '--ggui-color-primary-600': '#CCFF66',
-  '--ggui-color-surface': '#101216',
-  '--ggui-color-onSurface': '#f0f0f2',
+  '--ggui-color-ground': '#101216',
+  '--ggui-color-onGround': '#f0f0f2',
   '--ggui-font-family-sans': 'DM Sans, sans-serif',
 };
 
@@ -22,16 +22,16 @@ describe('assembleDeliveredThemeCss', () => {
   it('emits the delivered variables scoped and key-sorted', () => {
     const css = assembleDeliveredThemeCss(SCOPE, VARS);
     expect(css).toContain(`.${SCOPE} {`);
-    const surfaceIdx = css.indexOf('--ggui-color-surface:');
+    const groundIdx = css.indexOf('--ggui-color-ground:');
     const primaryIdx = css.indexOf('--ggui-color-primary-500:');
     expect(primaryIdx).toBeGreaterThan(-1);
-    expect(surfaceIdx).toBeGreaterThan(primaryIdx); // sorted
+    expect(groundIdx).toBeLessThan(primaryIdx); // sorted — `ground` precedes `primary`
   });
 
   it('carries the compiled path\'s scaffolding: base inherits, box-sizing, font-inherit', () => {
     const css = assembleDeliveredThemeCss(SCOPE, VARS);
     expect(css).toContain('font-family: var(--ggui-font-family-sans);');
-    expect(css).toContain('color: var(--ggui-color-onSurface);');
+    expect(css).toContain('color: var(--ggui-color-onGround);');
     expect(css).toContain('background-color: transparent;');
     expect(css).toContain(`box-sizing: border-box`);
     expect(css).toContain('font-family: inherit;');
@@ -40,7 +40,7 @@ describe('assembleDeliveredThemeCss', () => {
   it('derives the gradient/effect tokens from the delivered map with the color-mix fallback split', () => {
     const css = assembleDeliveredThemeCss(SCOPE, VARS);
     expect(css).toContain('--ggui-color-primary-gradient:');
-    expect(css).toContain('--ggui-color-surface-gradient:');
+    expect(css).toContain('--ggui-color-ground-gradient:');
     expect(css).toContain('--ggui-effect-glow-primary:');
     // primary-500 resolvable → the static rgba fallback + the modern tier.
     expect(css).toContain('@supports (color: color-mix(in srgb, red, blue))');

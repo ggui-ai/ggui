@@ -61,7 +61,7 @@ export function Checkbox({
             height: '18px',
             borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
             border: `2px solid ${checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
-            backgroundColor: checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-surface, #ffffff)',
+            backgroundColor: checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-sunken, #ffffff)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -92,7 +92,7 @@ export function Checkbox({
               style={{
                 fontSize: 'var(--ggui-font-size-sm, 14px)',
                 fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-                color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                color: 'var(--ggui-color-onSunken, #52525b)',
               }}
             >
               {label}
@@ -102,7 +102,7 @@ export function Checkbox({
             <span
               style={{
                 fontSize: 'var(--ggui-font-size-xs, 12px)',
-                color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                color: 'var(--ggui-color-onSunken, #52525b)',
               }}
             >
               {description}

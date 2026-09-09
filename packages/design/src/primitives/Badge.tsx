@@ -3,8 +3,8 @@ import type { BadgeProps } from './types';
 
 const variantStyles: Record<string, CSSProperties> = {
   default: {
-    backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
-    color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+    backgroundColor: 'var(--ggui-color-sunken, #f4f4f5)',
+    color: 'var(--ggui-color-onSunken, #52525b)',
   },
   primary: {
     backgroundColor: 'var(--ggui-color-primary-100, #e0f2fe)',
@@ -12,7 +12,7 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   secondary: {
     backgroundColor: 'var(--ggui-color-outlineVariant, #e4e4e7)',
-    color: 'var(--ggui-color-onSurface, #18181b)',
+    color: 'var(--ggui-color-onContainer, #18181b)',
   },
   success: {
     backgroundColor: 'var(--ggui-color-success-100, #dcfce7)',
@@ -29,6 +29,11 @@ const variantStyles: Record<string, CSSProperties> = {
   info: {
     backgroundColor: 'var(--ggui-color-info-100, #cffafe)',
     color: 'var(--ggui-color-info-700, #0e7490)',
+  },
+  // The second accent (ggui#987 §2.1): the tertiary container pair.
+  tertiary: {
+    backgroundColor: 'var(--ggui-color-tertiaryContainer, #ccfbf1)',
+    color: 'var(--ggui-color-onTertiaryContainer, #134e4a)',
   },
 };
 

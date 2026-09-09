@@ -37,7 +37,7 @@ export function Image({
           width: resolveSize(width) || '100%',
           height: resolveSize(height) || 'auto',
           borderRadius: resolveRadius(radius),
-          backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
+          backgroundColor: 'var(--ggui-color-sunken, #f4f4f5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

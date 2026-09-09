@@ -37,11 +37,11 @@ export function Progress({
     <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ggui-spacing-1, 4px)', ...style }}>
       {showLabel && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 'var(--ggui-font-size-sm, 14px)', color: 'var(--ggui-color-onSurfaceVariant, #52525b)' }}>{accessibleName}</span>
+          <span style={{ fontSize: 'var(--ggui-font-size-sm, 14px)', color: 'var(--ggui-color-onSunken, #52525b)' }}>{accessibleName}</span>
           <span style={{
             fontSize: 'var(--ggui-font-size-sm, 14px)',
             fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-            color: 'var(--ggui-color-onSurface, #18181b)',
+            color: 'var(--ggui-color-onContainer, #18181b)',
           }}>
             {Math.round(percentage)}%
           </span>

@@ -50,10 +50,11 @@ describe('getCssTokens', () => {
     expect(css).toContain('--ggui-shape-radius-');
   });
 
-  it('contains semantic surface roles', () => {
+  it('contains the surface-layering roles (ggui#987 §2.1)', () => {
     const css = getCssTokens();
-    expect(css).toContain('--ggui-color-surface');
-    expect(css).toContain('--ggui-color-onSurface');
+    expect(css).toContain('--ggui-color-ground');
+    expect(css).toContain('--ggui-color-container');
+    expect(css).toContain('--ggui-color-onContainer');
   });
 
   it('contains @keyframes declarations (motion)', () => {

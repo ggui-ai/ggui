@@ -53,23 +53,11 @@ const shared = {
         $type: 'fontFamily',
       },
     },
-    size: {
-      sm: { $value: '0.8125rem', $type: 'dimension' }, // 13px
-      base: { $value: '0.875rem', $type: 'dimension' }, // 14px — brand-kit body
-      lg: { $value: '1rem', $type: 'dimension' }, // 16px
-      xl: { $value: '1.125rem', $type: 'dimension' }, // 18px
-      '2xl': { $value: '1.375rem', $type: 'dimension' }, // 22px — brand-kit hero tag
-    },
     weight: {
       normal: { $value: '400', $type: 'fontWeight' },
       medium: { $value: '500', $type: 'fontWeight' },
       semibold: { $value: '600', $type: 'fontWeight' },
       bold: { $value: '700', $type: 'fontWeight' },
-    },
-    lineHeight: {
-      tight: { $value: '1.2', $type: 'number' },
-      normal: { $value: '1.5', $type: 'number' },
-      relaxed: { $value: '1.6', $type: 'number' },
     },
   },
 
@@ -124,26 +112,6 @@ const shared = {
   },
 
   motion: {
-    duration: {
-      fast: { $value: '120ms', $type: 'duration' },
-      normal: { $value: '200ms', $type: 'duration' },
-      slow: { $value: '400ms', $type: 'duration' },
-      ambient: { $value: '2000ms', $type: 'duration' },
-    },
-    easing: {
-      default: {
-        $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        $type: 'cubicBezier',
-      },
-      bounce: {
-        $value: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-        $type: 'cubicBezier',
-      },
-      spring: {
-        $value: 'cubic-bezier(0.22, 1, 0.36, 1)',
-        $type: 'cubicBezier',
-      },
-    },
     transition: standardTransitions,
     keyframes: {
       'accent-pulse': {
@@ -175,8 +143,6 @@ const gguiLight: DtcgTheme = {
     'The default ggui theme — monochrome paper + ink, architectural, no decorative flourish.',
   $metadata: {
     font: 'Inter',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;700&display=swap',
     philosophy:
       'The interface is the artifact, not the chrome around it.',
   },
@@ -251,11 +217,11 @@ const gguiLight: DtcgTheme = {
       '800': { $value: '#181818', $type: 'color' },
     },
     // Semantic surface roles
-    surface: { $value: '#f4f3ed', $type: 'color' }, // paper
-    onSurface: { $value: '#292929', $type: 'color' }, // ink
-    surfaceVariant: { $value: '#ebe9e1', $type: 'color' }, // paper-2
-    onSurfaceVariant: { $value: '#5a5a5a', $type: 'color' }, // ink-3
-    container: { $value: '#ebe9e1', $type: 'color' }, // paper-2
+    ground: { $value: '#f4f3ed', $type: 'color' }, // paper
+    onGround: { $value: '#292929', $type: 'color' }, // ink
+    sunken: { $value: '#ebe9e1', $type: 'color' }, // paper-2
+    onSunken: { $value: '#5a5a5a', $type: 'color' }, // ink-3
+    container: { $value: '#f4f3ed', $type: 'color' }, // paper-2
     onContainer: { $value: '#292929', $type: 'color' }, // ink
     outline: { $value: '#d6d4cb', $type: 'color' }, // line-2
     outlineVariant: { $value: '#e4e4e2', $type: 'color' }, // chrome-2
@@ -308,8 +274,6 @@ const gguiDark: DtcgTheme = {
     'The default ggui theme (dark) — ink canvas, paper text, architectural and flat.',
   $metadata: {
     font: 'Inter',
-    fontUrl:
-      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;700&display=swap',
     philosophy:
       'The interface is the artifact, not the chrome around it.',
   },
@@ -382,11 +346,11 @@ const gguiDark: DtcgTheme = {
       '700': { $value: '#e8e8e8', $type: 'color' },
       '800': { $value: '#f0f0f0', $type: 'color' },
     },
-    surface: { $value: '#1f1f1f', $type: 'color' }, // surface above ink base
-    onSurface: { $value: '#f4f3ed', $type: 'color' }, // paper
-    surfaceVariant: { $value: '#292929', $type: 'color' }, // ink
-    onSurfaceVariant: { $value: '#d9d9d9', $type: 'color' }, // chrome
-    container: { $value: '#292929', $type: 'color' }, // ink
+    ground: { $value: '#1f1f1f', $type: 'color' }, // surface above ink base
+    onGround: { $value: '#f4f3ed', $type: 'color' }, // paper
+    sunken: { $value: '#292929', $type: 'color' }, // ink
+    onSunken: { $value: '#d9d9d9', $type: 'color' }, // chrome
+    container: { $value: '#1f1f1f', $type: 'color' }, // ink
     onContainer: { $value: '#f4f3ed', $type: 'color' }, // paper
     outline: { $value: '#3d3d3d', $type: 'color' }, // ink-2
     outlineVariant: { $value: '#292929', $type: 'color' },

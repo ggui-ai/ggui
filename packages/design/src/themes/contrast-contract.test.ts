@@ -39,7 +39,7 @@ function sweep(): Found[] {
     for (const mode of entry.modes) {
       const theme = getRawTheme(entry.id, mode);
       if (!theme) continue;
-      for (const v of validateConsumerContrast(theme)) {
+      for (const v of validateConsumerContrast(theme, mode)) {
         found.push({
           theme: entry.id,
           mode,

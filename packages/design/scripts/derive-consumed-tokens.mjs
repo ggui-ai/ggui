@@ -38,7 +38,7 @@ const designRoot = path.resolve(here, '..');
 const packagesRoot = path.resolve(designRoot, '..');
 
 const MANIFEST_PATH = path.join(designRoot, 'src', 'themes', 'consumed-tokens.manifest.json');
-const MANIFEST_VERSION = 1;
+const MANIFEST_VERSION = 2; // ggui#987 §6.2 — the role vocabulary; a bump obliges the projector to re-push, never the reader to refuse
 
 /** The single declared dynamic-consumption site (see header comment). */
 const DYNAMIC_SITE = path.join(designRoot, 'src', 'primitives', 'color-slots.ts');

@@ -17,9 +17,11 @@ export function MenuItem({
   style,
   className,
 }: MenuItemProps) {
-  const baseColor = danger ? colors.error[600] : colors.gray[700];
-  const hoverBg = danger ? colors.error[50] : colors.gray[100];
-  const activeBg = danger ? colors.error[100] : colors.primary[50];
+  // Sits on an `elevated` menu (ggui#987 §2.1): text is onElevated, the
+  // hover wash is sunken, the active wash the accent's container tint.
+  const baseColor = danger ? 'var(--ggui-color-error-600, #dc2626)' : 'var(--ggui-color-onElevated, #3f3f46)';
+  const hoverBg = danger ? 'var(--ggui-color-error-50, #fef2f2)' : 'var(--ggui-color-sunken, #f4f4f5)';
+  const activeBg = danger ? 'var(--ggui-color-error-100, #fee2e2)' : 'var(--ggui-color-primary-50, #f0f9ff)';
 
   return (
     <button
