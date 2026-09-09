@@ -20,6 +20,7 @@ import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
 import type { EvalIssue } from './types-public.js';
+import type { LaunchOptions } from 'puppeteer-core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -199,27 +200,104 @@ ${bundledCode}
 // Screenshot capture (optional puppeteer dependency)
 // ---------------------------------------------------------------------------
 
-/**
- * Take a screenshot of the rendered component.
- * Returns base64-encoded PNG or null if puppeteer is not available.
- */
-async function captureScreenshot(
-  html: string,
-  viewport: { width: number; height: number } = { width: 1280, height: 800 },
-): Promise<Buffer | null> {
-  try {
-    // puppeteer-core + @sparticuz/chromium — works on both local dev & Lambda
-    const puppeteer = await import('puppeteer-core');
-    const chromium = await import('@sparticuz/chromium');
+/** The page surface the capture uses — a structural subset of puppeteer's `Page`. */
+export interface ScreenshotPage {
+  setContent(html: string, options: { waitUntil: 'load'; timeout: number }): Promise<void>;
+  waitForNetworkIdle(options: { idleTime: number; timeout: number }): Promise<void>;
+  waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
+  screenshot(options: { type: 'png'; fullPage: boolean }): Promise<Uint8Array>;
+}
 
-    const launchOptions = {
-      args: chromium.default.args,
+/** The browser surface the capture uses — a structural subset of puppeteer's `Browser`. */
+export interface ScreenshotBrowser {
+  newPage(): Promise<ScreenshotPage>;
+  close(): Promise<void>;
+}
+
+export type ScreenshotLauncher = (options: LaunchOptions) => Promise<ScreenshotBrowser>;
+
+/** The two members of `@sparticuz/chromium` the fallback launch path reads. */
+export interface ChromiumProvider {
+  readonly args: string[];
+  executablePath(): Promise<string>;
+}
+
+/**
+ * Injection points for the capture — every default is the production
+ * path; tests replace them to pin branch selection without launching a
+ * browser.
+ */
+export interface ScreenshotDeps {
+  /** Launches the browser (default: `puppeteer-core`'s `launch`). */
+  launch?: ScreenshotLauncher;
+  /** Environment the executable-path override is read from (default: `process.env`). */
+  env?: NodeJS.ProcessEnv;
+  /** Loads `@sparticuz/chromium` (default: dynamic import) — only consulted when no override is set. */
+  loadChromium?: () => Promise<ChromiumProvider>;
+  /** Post-load settle time before the screenshot, ms (default 1000). */
+  settleMs?: number;
+}
+
+/**
+ * Chromium flags the `PUPPETEER_EXECUTABLE_PATH` launch adds: a system
+ * Chromium inside a container has no user namespace for the sandbox and
+ * `/dev/shm` is too small for a render surface.
+ */
+export const EXECUTABLE_PATH_LAUNCH_ARGS: readonly string[] = ['--no-sandbox', '--disable-dev-shm-usage'];
+
+const DEFAULT_SCREENSHOT_VIEWPORT = { width: 1280, height: 800 } as const;
+
+async function loadSparticuzChromium(): Promise<ChromiumProvider> {
+  const chromium = await import('@sparticuz/chromium');
+  return chromium.default;
+}
+
+/**
+ * Pick the browser binary. `PUPPETEER_EXECUTABLE_PATH` (a system
+ * Chromium — the bench runner image, a dev box) wins and skips the
+ * `@sparticuz/chromium` load entirely; otherwise the bundled Lambda
+ * Chromium supplies both binary and flags, as before.
+ */
+export async function resolveLaunchOptions(
+  viewport: { width: number; height: number },
+  deps: Pick<ScreenshotDeps, 'env' | 'loadChromium'> = {},
+): Promise<LaunchOptions> {
+  const env = deps.env ?? process.env;
+  const override = env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (override) {
+    return {
+      executablePath: override,
+      args: [...EXECUTABLE_PATH_LAUNCH_ARGS],
       defaultViewport: viewport,
-      executablePath: await chromium.default.executablePath(),
       headless: true,
     };
+  }
+  const chromium = await (deps.loadChromium ?? loadSparticuzChromium)();
+  return {
+    args: chromium.args,
+    defaultViewport: viewport,
+    executablePath: await chromium.executablePath(),
+    headless: true,
+  };
+}
 
-    const browser = await puppeteer.default.launch(launchOptions);
+async function launchWithPuppeteer(options: LaunchOptions): Promise<ScreenshotBrowser> {
+  const puppeteer = await import('puppeteer-core');
+  return puppeteer.default.launch(options);
+}
+
+/**
+ * Take a screenshot of the rendered component.
+ * Returns the PNG bytes, or null if no browser could be launched.
+ */
+export async function captureScreenshot(
+  html: string,
+  viewport: { width: number; height: number } = DEFAULT_SCREENSHOT_VIEWPORT,
+  deps: ScreenshotDeps = {},
+): Promise<Buffer | null> {
+  try {
+    const launchOptions = await resolveLaunchOptions(viewport, deps);
+    const browser = await (deps.launch ?? launchWithPuppeteer)(launchOptions);
     try {
       const page = await browser.newPage();
       // puppeteer ≥24.43 narrowed setContent's waitUntil to
@@ -229,9 +307,9 @@ async function captureScreenshot(
       await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 }).catch(() => {});
       await page.waitForSelector('#root > *', { timeout: 10000 }).catch(() => {});
       // Wait a bit for CSS/fonts to settle
-      await new Promise(r => setTimeout(r, 1000));
-      const screenshot = await page.screenshot({ type: 'png', fullPage: true }) as Buffer;
-      return screenshot;
+      await new Promise((r) => setTimeout(r, deps.settleMs ?? 1000));
+      const screenshot = await page.screenshot({ type: 'png', fullPage: true });
+      return Buffer.from(screenshot);
     } finally {
       await browser.close();
     }
