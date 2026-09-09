@@ -337,6 +337,7 @@ overrides:
   node-abi: 3.94.0
   node-exports-info: 1.6.2
   node-releases: 2.0.52
+  nodemailer: 9.1.1
   nwsapi: 2.2.24
   own-keys: 1.0.2
   package-manager-detector: 1.8.0
@@ -1296,8 +1297,8 @@ importers:
         specifier: ^5.2.1
         version: 5.2.1
       nodemailer:
-        specifier: ^9.0.1
-        version: 9.0.3
+        specifier: 9.1.1
+        version: 9.1.1
       resend:
         specifier: 6.18.1
         version: 6.18.1
@@ -8073,8 +8074,8 @@ packages:
     resolution: {integrity: sha512-MRlTqhAfoMx/4mhEbPo3Hi02g9LJZaJkka69V6h67Cb1gjrAG0jsTE4CZX1eptNx+VCAwJmfpnDIF4P0Nh1A7A==}
     engines: {node: '>=18'}
 
-  nodemailer@9.0.3:
-    resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
+  nodemailer@9.1.1:
+    resolution: {integrity: sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ==}
     engines: {node: '>=6.0.0'}
 
   nopt@5.0.0:
@@ -16818,7 +16819,7 @@ snapshots:
 
   node-releases@2.0.52: {}
 
-  nodemailer@9.0.3: {}
+  nodemailer@9.1.1: {}
 
   nopt@5.0.0:
     dependencies:

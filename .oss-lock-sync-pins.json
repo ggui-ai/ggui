@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T07:17:02.418Z",
+  "generatedAt": "2026-09-09T07:21:02.025Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -225,6 +225,7 @@
     "node-abi",
     "node-exports-info",
     "node-releases",
+    "nodemailer",
     "nwsapi",
     "own-keys",
     "package-manager-detector",
@@ -545,6 +546,7 @@
     "node-abi",
     "node-exports-info",
     "node-releases",
+    "nodemailer",
     "nwsapi",
     "own-keys",
     "package-manager-detector",
