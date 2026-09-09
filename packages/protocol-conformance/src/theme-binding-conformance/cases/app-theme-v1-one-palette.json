@@ -1,0 +1,6 @@
+{
+  "name": "app-theme-v1-one-palette",
+  "description": "The v1 overlay wire: a pinned mode and ONE cssVariables palette. Accepted by appThemeSchema at N (app-theme.ts:45-46). ggui#987 refuses this shape; this case is the §1.1 receipt for that.",
+  "theme": { "mode": "light", "cssVariables": { "--ggui-color-primary-500": "#3355ff" } },
+  "expect": "accepted"
+}

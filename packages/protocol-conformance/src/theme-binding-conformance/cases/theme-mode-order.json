@@ -1,0 +1,6 @@
+{
+  "name": "theme-mode-order",
+  "description": "The client projection of the themeMode total order. Promoted from iframe-runtime's host-theme-mode pin (ggui#589) and protocol's theme-binding pin: with a stamped mode and a host announce present, the STAMP wins — the announce is the final fallback. This case is the ggui#987 arbiter receipt (VERSION-POLICY §1.1): it passes at N and fails when the order flips.",
+  "sources": { "stamped": "light", "sessionSidecar": null, "hostAnnounced": "dark" },
+  "expect": "light"
+}
