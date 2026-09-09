@@ -161,7 +161,6 @@ import { isVisibleToCaller } from './render-visibility.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
-  withResolvedThemeBase,
   derivePublicEnvProjection,
   deriveContractBundle,
   rewritePrivateBundleUrls,
@@ -462,12 +461,11 @@ export interface GguiSessionPostSuccessArgs {
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /**
    * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3):
-   * an explicit `ggui_render({themeId})` naming an id that matches
-   * neither this list nor the app's registered themes (via
-   * `themeBaseProvider`) refuses at the door — a typo is caught where
-   * it was typed instead of silently painting the default ladder.
-   * Absent AND no `themeBaseProvider` = no check (compositions without
-   * theme surfaces keep the historical accept-anything behavior).
+   * an explicit `ggui_render({themeId})` naming an id outside this
+   * list refuses at the door — a typo is caught where it was typed
+   * instead of silently painting the default ladder. Absent = no check
+   * (compositions without theme surfaces keep the historical
+   * accept-anything behavior).
    */
   readonly staticThemeIds?: readonly string[];
   /**
@@ -1159,33 +1157,27 @@ function generateShortCode(): string {
  */
 /**
  * The themeId door (ggui#598 slice 3). Refuses an explicit per-render
- * `themeId` that matches neither a built-in preset
- * ({@link GguiRenderHandlerDeps.staticThemeIds}) nor a runtime
- * registration (resolved through `themeBaseProvider`). No theme
- * surfaces composed = no check. Exported for its unit pins.
+ * `themeId` outside the built-in presets
+ * ({@link GguiRenderHandlerDeps.staticThemeIds}). No preset list
+ * composed = no check. Exported for its unit pins.
  *
  * @internal
  */
 export async function assertKnownThemeId(
   themeId: string,
   appId: string,
-  deps: Pick<GguiRenderHandlerDeps, 'staticThemeIds' | 'themeBaseProvider'>,
+  deps: Pick<GguiRenderHandlerDeps, 'staticThemeIds'>,
 ): Promise<void> {
-  const hasStatic = deps.staticThemeIds !== undefined;
-  const hasProvider = deps.themeBaseProvider !== undefined;
-  if (!hasStatic && !hasProvider) return;
-  if (hasStatic && deps.staticThemeIds!.includes(themeId)) return;
-  if (hasProvider) {
-    const registered = await deps.themeBaseProvider!(appId, themeId);
-    if (registered !== null) return;
-  }
+  void appId;
+  if (deps.staticThemeIds === undefined) return;
+  if (deps.staticThemeIds.includes(themeId)) return;
   throw new ContractViolationError({
     tool: 'ggui_render',
     violations: [
       {
         code: 'CTR_RENDER_UNKNOWN_THEME_ID',
         field: 'themeId',
-        message: `themeId "${themeId}" matches no built-in preset and no registered theme for this app. Omit themeId to use the app default, pick a built-in id, or register the theme first.`,
+        message: `themeId "${themeId}" matches no built-in preset. Omit themeId to use the app default, pick a built-in id, or register the theme first.`,
       },
     ],
   });
@@ -2891,12 +2883,8 @@ export function createGguiRenderHandler(
           // projection so CSP origins + iframe registrations both see
           // the fetchable (presigned) URL. Passthrough when the
           // deployment wires no presigner (OSS same-origin story).
-          view = await withResolvedThemeBase(
-            deriveRenderMeta(
-              await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
-            ),
-            deps,
-            ctx.appId,
+          view = deriveRenderMeta(
+            await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
           );
           // Over-cap inline-channel omission is a named event, not a
           // silent degrade: on a host whose iframe CSP blocks fetches

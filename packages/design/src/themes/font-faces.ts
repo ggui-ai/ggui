@@ -52,7 +52,16 @@ export function assertFontFace(face: FontFaceDeclaration): void {
  * per face, in declaration order; the empty string when none.
  */
 export function fontFaceRulesFor(doc: DtcgTheme): string {
-  const faces = doc.typography?.faces ?? [];
+  return fontFaceRules(doc.typography?.faces ?? []);
+}
+
+/**
+ * The `@font-face` rules for a list of declarations — the same text
+ * `fontFaceRulesFor` emits for a document's `typography.faces`, for a
+ * caller that holds the declarations rather than the document (a
+ * server composing the served shell). Every face is asserted first.
+ */
+export function fontFaceRules(faces: ReadonlyArray<FontFaceDeclaration>): string {
   return faces
     .map((face) => {
       assertFontFace(face);

@@ -125,8 +125,9 @@ export interface App {
    */
   readonly generation?: AppGeneration;
   /**
-   * Per-app theme — the resolved per-app CSS-variable overlay + mode applied
-   * at render. Absent ⇒ the renderer's default theme. See {@link AppTheme}.
+   * Per-app theme — both modes' derived `--ggui-*` projections and
+   * their attestation, injected at render for the host's mode. Absent
+   * ⇒ the renderer's default theme. See {@link AppTheme}.
    */
   readonly theme?: AppTheme;
   /**

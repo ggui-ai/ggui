@@ -46,7 +46,6 @@ import {
   RUNTIME_SHIMS_URL_PREFIX,
 } from "@ggui-ai/iframe-runtime/server";
 import type {
-  ThemeStore,
   AppMetadataStore,
   AuditSink,
   AuthAdapter,
@@ -102,7 +101,6 @@ import {
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type {
-  AppThemeBase,
   GguiRenderHandlerDeps,
   HandlerContext,
   SharedHandler,
@@ -182,12 +180,7 @@ import {
   type AppsSource,
   type UserDefaultAppSource,
 } from "@ggui-ai/mcp-server-handlers/ops-apps";
-import {
-  createDeleteThemeHandler,
-  createListThemesHandler,
-  createRegisterThemeHandler,
-  type ThemeCoverageValidator,
-} from "@ggui-ai/mcp-server-handlers/ops-themes";
+import { fontFaceRules, validateOverlayCoverage, type FontFaceDeclaration } from "@ggui-ai/design/themes";
 import {
   createIssueConnectorKeyHandler,
   createListConnectorKeysHandler,
@@ -818,11 +811,6 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
-    /** Runtime theme-registration resolver — forwarded to the handler (ggui#598-C). */
-    readonly themeBaseProvider?: (
-      appId: string,
-      themeName: string,
-    ) => Promise<AppThemeBase | null> | AppThemeBase | null;
     /** Built-in preset ids for the themeId door (ggui#598 slice 3). */
     readonly staticThemeIds?: readonly string[];
     /**
@@ -1046,11 +1034,6 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
-    /** Runtime theme-registration resolver — forwarded to the handler (ggui#598-C). */
-    readonly themeBaseProvider?: (
-      appId: string,
-      themeName: string,
-    ) => Promise<AppThemeBase | null> | AppThemeBase | null;
     /** Built-in preset ids for the themeId door (ggui#598 slice 3). */
     readonly staticThemeIds?: readonly string[];
   };
@@ -1399,9 +1382,6 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
-        ...(deps.update.themeBaseProvider !== undefined
-          ? { themeBaseProvider: deps.update.themeBaseProvider }
-          : {}),
         // Mutation-time `render.contract_violation` events (P2
         // measurement — update-time violations are baselined with
         // render-time ones, not hidden).
@@ -1604,9 +1584,6 @@ export function defaultHandlers(deps: {
         ...(deps.render.themeProvider !== undefined
           ? { themeProvider: deps.render.themeProvider }
           : {}),
-        ...(deps.render.themeBaseProvider !== undefined
-          ? { themeBaseProvider: deps.render.themeBaseProvider }
-          : {}),
         ...(deps.render.staticThemeIds !== undefined
           ? { staticThemeIds: deps.render.staticThemeIds }
           : {}),
@@ -1691,25 +1668,6 @@ export interface OpsBundleDeps {
     readonly apps: AppsSource;
     readonly userDefaultApp: UserDefaultAppSource;
   };
-  /**
-   * Known theme ids for the brand-shaped-overlay WARN's name
-   * resolution (`ggui_ops_set_app_theme`, ggui#598 slice 3). On the
-   * server path this is `CreateGguiServerOptions.knownThemeIds`.
-   */
-  readonly knownThemeIds?: readonly string[];
-  /**
-   * Runtime theme registration tools (ggui#598-C). Sources for the
-   * three `ggui_ops_*_theme*` handlers: the app-ownership source, the
-   * `ThemeStore`, the coverage validator + consumed-token manifest,
-   * and the built-in theme-id list (registration refuses collisions).
-   */
-  readonly opsThemes?: {
-    readonly apps: AppsSource;
-    readonly themeStore: ThemeStore;
-    readonly coverageValidator: ThemeCoverageValidator;
-    readonly manifestTokens: readonly string[];
-    readonly staticThemeIds: readonly string[];
-  };
   readonly opsOrgs?: {
     readonly orgs: OrgsSource;
     readonly invites: OrgInvitesSource;
@@ -1759,24 +1717,12 @@ export function buildOpsBundleHandlers(
       createListAppsHandler({ apps }),
       createCreateAppHandler({ apps }),
       createUpdateAppHandler({ apps }),
-      createSetAppThemeHandler({ apps, ...(deps.knownThemeIds !== undefined ? { knownThemeIds: deps.knownThemeIds } : {}) }),
+      // The write door's coverage judgement is design's manifest
+      // validator (ggui#987 §3.4) — bound here so the MCP door and the
+      // REST/AppSync doors refuse the same overlay for the same reason.
+      createSetAppThemeHandler({ apps, overlayCoverage: (overlay) => validateOverlayCoverage(overlay) }),
       createDeleteAppHandler({ apps, userDefaultApp }),
       createSetDefaultAppHandler({ apps, userDefaultApp })
-    );
-  }
-  if (deps.opsThemes) {
-    const { apps, themeStore, coverageValidator, manifestTokens, staticThemeIds } =
-      deps.opsThemes;
-    handlers.push(
-      createRegisterThemeHandler({
-        apps,
-        themeStore,
-        coverageValidator,
-        manifestTokens,
-        staticThemeIds,
-      }),
-      createListThemesHandler({ apps, themeStore }),
-      createDeleteThemeHandler({ apps, themeStore })
     );
   }
   if (deps.opsOrgs) {
@@ -2111,28 +2057,21 @@ export interface CreateGguiServerOptions {
     | undefined;
 
   /**
-   * Runtime theme-registration resolver (ggui#598-C): `(appId,
-   * themeName)` → the registered ladder's delivery payload
-   * (`{documentHash, light, dark, keyframes?, frameless?}`) or `null` for names with no
-   * registration. Threaded to every emitting door (render/update
-   * result-meta, the read-served shell, `/state`) so delivery cannot
-   * drift across transports. Bind it to a ThemeStore +
-   * `resolveRegistrationVariables` (typically memoized on
-   * documentHash). Absent = no runtime registration surface.
-   */
-  readonly themeBaseProvider?: (
-    appId: string,
-    themeName: string,
-  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
-
-  /**
-   * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3)
-   * and the brand-shaped-overlay WARN's name resolution. Threaded to
-   * the render handler (`staticThemeIds`) and `ggui_ops_set_app_theme`
-   * (`knownThemeIds`). Absent = no door check beyond registered-theme
-   * resolution, and overlay names cannot be resolved.
+   * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3):
+   * threaded to the render handler as `staticThemeIds`. Absent = no
+   * door check.
    */
   readonly knownThemeIds?: readonly string[];
+
+  /**
+   * Font faces the app's theme document declares (`typography.faces`,
+   * ggui#987 §5). The CLI hands them from the loaded document; the
+   * server unions each face's origin into every served shell's CSP
+   * `resourceDomains` and inlines the `@font-face` rules in the shell,
+   * so the faces load under the card's `font-src` without host
+   * cooperation. Absent = no faces.
+   */
+  readonly fontFaces?: readonly FontFaceDeclaration[];
 
   /**
    * Optional change notifier — fires when the operator's theme
@@ -3516,7 +3455,6 @@ export interface CreateGguiServerOptions {
    * under the same name wins.
    */
   readonly opsApps?: OpsBundleDeps["opsApps"];
-  readonly opsThemes?: OpsBundleDeps["opsThemes"];
   readonly opsOrgs?: OpsBundleDeps["opsOrgs"];
   readonly opsConnectorKeys?: OpsBundleDeps["opsConnectorKeys"];
   readonly opsCoupon?: OpsBundleDeps["opsCoupon"];
@@ -4496,7 +4434,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // without restarting the server. CLI owns the shared
               // state cell; this getter just reads it.
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
-              ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
               ...(opts.knownThemeIds !== undefined ? { staticThemeIds: opts.knownThemeIds } : {}),
               // Only thread the limiter through when the operator
               // bound a real one — passing the NoopRateLimiter is a
@@ -4697,7 +4634,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { themeMode: opts.theme.mode }
                 : {}),
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
-              ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
               ...(opts.knownThemeIds !== undefined ? { staticThemeIds: opts.knownThemeIds } : {}),
             },
           }
@@ -4716,9 +4652,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // ephemeral InMemoryAppMetadataStore instances (the pre-Phase-3
       // shape). The CLI seeds this from `ggui.json#theme.preset`.
       ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
-      ...(opts.themeBaseProvider !== undefined
-        ? { themeBaseProvider: opts.themeBaseProvider }
-        : {}),
       // Theme catalog resolver. Read per-call so additions to the
       // registry surface without a restart. Wired alongside
       // `appMetadataStore` to register `ggui_list_themes`; absent ⇒
@@ -5052,7 +4985,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let inlineShellHtml: string | undefined;
   if (mcpAppsEnabled && mcpAppsConfig.inlineRuntimeShell === true) {
     if (runtimeBundleBytes !== undefined) {
-      inlineShellHtml = buildInlineRenderShellHtml(runtimeBundleBytes.toString("utf8"));
+      inlineShellHtml = buildInlineRenderShellHtml(runtimeBundleBytes.toString("utf8"), {
+        // ggui#987 §5 — the /r/<shortCode> shell carries the same faces
+        // the ui:// shell does.
+        ...(opts.fontFaces !== undefined && opts.fontFaces.length > 0
+          ? { fontFacesCss: fontFaceRules(opts.fontFaces) }
+          : {}),
+      });
     } else {
       // inlineRuntimeShell is on but the runtime bundle could not be
       // read at composition — serve the thin postMessage shell instead.
@@ -5133,9 +5072,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ...(opts.themeProvider !== undefined
               ? { themeProvider: opts.themeProvider }
               : {}),
-            ...(opts.themeBaseProvider !== undefined
-              ? { themeBaseProvider: opts.themeBaseProvider }
-              : {}),
+            ...(opts.fontFaces !== undefined ? { fontFaces: opts.fontFaces } : {}),
             // Resume contract — registry-only fallback. Wired
             // when the blueprint vector store is available so the
             // resource handler can rehydrate a render-evicted

@@ -65,10 +65,6 @@
     "./ops-coupon": {
       "types": "./dist/ops-coupon/index.d.ts",
       "import": "./dist/ops-coupon/index.js"
-    },
-    "./ops-themes": {
-      "types": "./dist/ops-themes/index.d.ts",
-      "import": "./dist/ops-themes/index.js"
     }
   },
   "scripts": {

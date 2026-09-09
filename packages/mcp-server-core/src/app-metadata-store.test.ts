@@ -162,8 +162,12 @@ describe('composeApp', () => {
   // St3 M1 — theme read path
   it('composeApp threads theme through when present', () => {
     const theme = {
+      overlayHash: 'ab'.repeat(32),
       mode: 'dark',
-      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+      overlays: {
+        light: { '--ggui-color-primary-600': '#0284c7' },
+        dark: { '--ggui-color-primary-600': '#7c3aed' },
+      },
     } as const;
     const app = composeApp({ id: 'a1', theme });
     expect(app.theme).toEqual(theme);

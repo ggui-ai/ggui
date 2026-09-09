@@ -35,10 +35,12 @@ export type { CreateAppDeps, CreateAppOutput } from './create-app.js';
 export { createUpdateAppHandler } from './update-app.js';
 export type { UpdateAppDeps, UpdateAppOutput } from './update-app.js';
 
-export { createSetAppThemeHandler } from './set-app-theme.js';
+export { createSetAppThemeHandler, admitAppTheme } from './set-app-theme.js';
 export type {
   SetAppThemeDeps,
   SetAppThemeOutput,
+  OverlayCoverageValidator,
+  AppThemeAdmission,
 } from './set-app-theme.js';
 
 export { createDeleteAppHandler } from './delete-app.js';

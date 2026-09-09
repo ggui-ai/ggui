@@ -50,8 +50,6 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
-  withResolvedThemeBase,
-  type AppThemeBase,
   spreadRenderMetaViewOntoSlice,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import {
@@ -71,15 +69,6 @@ interface MountOptions {
   readonly secret: string;
   /** Per-app metadata store for the publicEnv projection (optional). */
   readonly appMetadataStore?: AppMetadataStore;
-  /**
-   * Runtime theme-registration resolver (ggui#598-C) — same contract
-   * as `RenderSliceMetaDeps.themeBaseProvider`; bound by the server
-   * composer so /state cannot drift from the result-meta emitters.
-   */
-  readonly themeBaseProvider?: (
-    appId: string,
-    themeName: string,
-  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
   /** Operator-picked theme preset id stamped on /state reads. */
   readonly themeId?: string;
   /** Operator-picked theme mode stamped on /state reads. */
@@ -225,7 +214,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     // R6 addition: polling clients use it to initialize the R7 /events
     // cursor (`?sinceSequence=N`) aligned with the WS stream.
     const view = !isMcpApps
-      ? await withResolvedThemeBase(deriveRenderMeta(render), opts, render.appId)
+      ? deriveRenderMeta(render)
       : undefined;
     let statePublicEnv: Readonly<Record<string, string>> | undefined;
     if (appMetadataStore && !isMcpApps) {

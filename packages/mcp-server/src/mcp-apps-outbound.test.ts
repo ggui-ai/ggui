@@ -287,7 +287,7 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
     // scheme-scoped pre-theme ink (#662) so overlay text stays legible
     // on whichever neutral ground prefers-color-scheme picked.
     expect(GGUI_RENDER_SHELL_HTML).toContain(
-      'var(--ggui-color-onSurface,var(--ggui-shell-scheme-on-surface,#374151))',
+      'var(--ggui-color-onGround,var(--ggui-shell-scheme-on-surface,#374151))',
     );
     expect(GGUI_RENDER_SHELL_HTML).not.toContain('color:#666');
     // Diagnostic reachable but collapsed; Retry wired by element id.

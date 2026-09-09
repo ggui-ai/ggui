@@ -10,11 +10,6 @@ import { describe, expect, it } from 'vitest';
 import { ContractViolationError } from '@ggui-ai/protocol';
 import { assertKnownThemeId } from './render.js';
 
-const BASE = {
-  documentHash: 'e'.repeat(64),
-  light: {},
-  dark: {},
-};
 
 describe('assertKnownThemeId — the themeId door', () => {
   it('a built-in preset id passes', async () => {
@@ -25,22 +20,12 @@ describe('assertKnownThemeId — the themeId door', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('a runtime-registered id passes via the theme-base provider', async () => {
-    await expect(
-      assertKnownThemeId('acme-brand-v1', 'app-1', {
-        staticThemeIds: ['ggui'],
-        themeBaseProvider: async (appId, name) =>
-          appId === 'app-1' && name === 'acme-brand-v1' ? BASE : null,
-      }),
-    ).resolves.toBeUndefined();
-  });
 
   it('an unknown id REFUSES with a violation naming the field and the id', async () => {
     let caught: unknown;
     try {
       await assertKnownThemeId('midnihgt', 'app-1', {
         staticThemeIds: ['ggui', 'midnight'],
-        themeBaseProvider: async () => null,
       });
     } catch (err) {
       caught = err;
@@ -58,7 +43,7 @@ describe('assertKnownThemeId — the themeId door', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('static-only composition still refuses unknowns (the provider is optional, the door is not)', async () => {
+  it('an id outside the built-in presets refuses (the door is not optional once presets are wired)', async () => {
     await expect(
       assertKnownThemeId('nope', 'app-1', { staticThemeIds: ['ggui'] }),
     ).rejects.toThrow(ContractViolationError);

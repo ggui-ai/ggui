@@ -1837,8 +1837,12 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
 
 describe('createGguiRenderHandler — resultMeta forwards App.theme to the wire slice (St3 M2.1)', () => {
   const THEME: AppTheme = {
+    overlayHash: 'ab'.repeat(32),
     mode: 'dark',
-    cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+    overlays: {
+      light: { '--ggui-color-primary-600': '#0284c7' },
+      dark: { '--ggui-color-primary-600': '#7c3aed' },
+    },
     name: 'violet',
   };
 

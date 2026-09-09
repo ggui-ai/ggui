@@ -305,8 +305,12 @@ function parseProps(meta: McpAppAiGguiRenderMeta): unknown {
 }
 
 const APP_THEME: AppTheme = {
+  overlayHash: "ab".repeat(32),
   mode: "dark",
-  cssVariables: { "--ggui-color-accent": "#ff00aa" },
+  overlays: {
+    light: { "--ggui-color-primary-500": "#ff00aa" },
+    dark: { "--ggui-color-primary-500": "#ff66cc" },
+  },
   name: "operator-overlay",
 };
 

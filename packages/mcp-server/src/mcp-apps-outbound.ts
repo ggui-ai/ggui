@@ -43,8 +43,6 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
-  withResolvedThemeBase,
-  type AppThemeBase,
   filterDescriptorsToContract,
   findBlueprintExact,
   resolveSliceTheme,
@@ -54,6 +52,7 @@ import {
   type BlueprintDurabilityDeps,
   type SliceThemeDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
+import { fontFaceRules, type FontFaceDeclaration } from "@ggui-ai/design/themes";
 import type {
   ComponentGguiSession,
   GguiSession,
@@ -215,7 +214,7 @@ var lastEnvelope=null;
 // own scheme <style> defines (#662) — legible on whichever neutral
 // ground prefers-color-scheme picked. (#481 killed the illegible
 // hardcoded #666; #662 killed the dark-only fallback.)
-var SHELL_FG='var(--ggui-color-onSurface,var(--ggui-shell-scheme-on-surface,#374151))';
+var SHELL_FG='var(--ggui-color-onGround,var(--ggui-shell-scheme-on-surface,#374151))';
 function setOverlay(text){
   if(mounted)return;
   rootEl.innerHTML='<div style="font:13px system-ui,sans-serif;padding:24px;color:'+SHELL_FG+';opacity:.55">'+text+'</div>';
@@ -436,7 +435,7 @@ startInit();
 })();
 `;
 
-// `--ggui-color-surface` is injected at `:root` on this document's
+// `--ggui-color-ground` is injected at `:root` on this document's
 // `<head>` by the iframe-runtime at boot (react-renderer.ts ->
 // `<style id="ggui-theme-vars">`), so the `var()` resolves to the
 // active theme's exact per-mode surface color at runtime. The static
@@ -591,7 +590,14 @@ try{
  * module-level thin-shell constants (and their pinned CSP hash) are
  * deliberately untouched.
  */
-export function buildInlineRenderShellHtml(runtimeSource: string): string {
+export function buildInlineRenderShellHtml(
+  runtimeSource: string,
+  opts?: { readonly fontFacesCss?: string },
+): string {
+  const fontsStyle =
+    opts?.fontFacesCss !== undefined && opts.fontFacesCss !== ""
+      ? `<style data-ggui-fonts>${opts.fontFacesCss}</style>`
+      : "";
   // No anchor div: the runtime appends its own mount target to
   // `document.body` at boot, so a thin-shell-style `#ggui-root`
   // placeholder here would just stack empty space ABOVE the rendered
@@ -600,7 +606,7 @@ export function buildInlineRenderShellHtml(runtimeSource: string): string {
   // no-container posture as `gguiShellHtml`; the shell marker rides
   // on `<body>`.
   return `<!doctype html>
-<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
+<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title>${fontsStyle}</head>
 <body style="margin:0;background-color:${GGUI_RENDER_SHELL_SURFACE}" data-ggui-shell="inline">${GGUI_SHELL_LOADING_INDICATOR_HTML}
 <script>${GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY}</script>
 <script type="module" data-ggui-runtime="inline">${escapeInlineScript(runtimeSource)}</script></body></html>`;
@@ -665,7 +671,14 @@ function buildCspMeta(
    * WebSocket, EventSource, and fetch are all connect-src-governed,
    * and the base's ws-twin flip only covers the base's own host.
    */
-  extraConnectUrls?: readonly (string | undefined)[]
+  extraConnectUrls?: readonly (string | undefined)[],
+  /**
+   * Resource URLs whose ORIGINS must be fetchable from the served
+   * shell (ggui#987 §5: every declared font face's `src`). Unioned
+   * into `resourceDomains`, deduped — a declared face is admitted by
+   * construction, as a gadget's bundle origin is.
+   */
+  extraResourceUrls?: readonly string[]
 ):
   | {
       readonly ui: {
@@ -696,17 +709,38 @@ function buildCspMeta(
       }
       if (!connectDomains.includes(extraOrigin)) connectDomains.push(extraOrigin);
     }
+    const resourceDomains = [origin];
+    for (const url of extraResourceUrls ?? []) {
+      let extraOrigin: string;
+      try {
+        extraOrigin = new URL(url).origin;
+      } catch {
+        continue;
+      }
+      if (!resourceDomains.includes(extraOrigin)) resourceDomains.push(extraOrigin);
+    }
     return {
       ui: {
         csp: {
           connectDomains,
-          resourceDomains: [origin],
+          resourceDomains,
         },
       },
     };
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Inline the deployment's `@font-face` rules into a served shell
+ * (ggui#987 §5) under ONE `<style data-ggui-fonts>` in `<head>`, so a
+ * host that announces no fonts of its own still paints the app's
+ * faces. Empty rules leave the shell byte-identical.
+ */
+function withFontFaces(html: string, fontFacesCss: string): string {
+  if (fontFacesCss === "") return html;
+  return html.replace("</head>", `<style data-ggui-fonts>${fontFacesCss}</style></head>`);
 }
 
 /**
@@ -1481,14 +1515,14 @@ export interface GguiRenderResourceTemplateOptions {
    *  componentCode. */
   readonly renderStore: GguiSessionStore;
   /**
-   * Runtime theme-registration resolver (ggui#598-C) — the same
-   * contract as `RenderSliceMetaDeps.themeBaseProvider`, bound here so
-   * the read-served shell cannot drift from the result-meta emitters.
+   * Font faces the deployment declares (ggui#987 §5 — the theme
+   * document's `typography.faces`, handed here by the composer that
+   * holds the document). Each face's origin rides
+   * `_meta.ui.csp.resourceDomains` on every served shell and the
+   * `@font-face` rules are inlined in it, so the faces load under the
+   * card's `font-src` without any host cooperation. Absent = no faces.
    */
-  readonly themeBaseProvider?: (
-    appId: string,
-    themeName: string,
-  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
+  readonly fontFaces?: readonly FontFaceDeclaration[];
   /** Absolute URL of the iframe-runtime bundle inlined in the shell. */
   readonly runtimeUrl: string;
   /**
@@ -1912,7 +1946,11 @@ export function registerGguiRenderResourceTemplate(
   // fails with a generic "script error" since cross-origin script
   // loading is blocked. Same shape declared on the static
   // `ui://ggui/render` resource; this is the per-call mirror.
-  const templateCspMeta = buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl);
+  // ggui#987 §5: the declared faces' origins ride every CSP meta this
+  // registration emits, and their rules ride every served shell.
+  const faceSrcs = (opts.fontFaces ?? []).map((face) => face.src);
+  const fontFacesCss = opts.fontFaces !== undefined && opts.fontFaces.length > 0 ? fontFaceRules(opts.fontFaces) : "";
+  const templateCspMeta = buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl, undefined, faceSrcs);
   type CspMeta = NonNullable<ReturnType<typeof buildCspMeta>>;
   type ShellContent = {
     readonly uri: string;
@@ -2364,14 +2402,7 @@ export function registerGguiRenderResourceTemplate(
     // (the browser-enforced gate ultimately comes from the host's
     // `allow=""` attribute when the host translates
     // `_meta.ui.permissions` — set by McpAppIframe consumers).
-    // Theme-base enrichment needs the owning app; mcpApps sources carry
-    // no appId AND project an empty view (no theme), so the enrichment
-    // is definitionally a no-op there — skip rather than fake an id.
-    const baseView = deriveRenderMeta(picked.source);
-    const view =
-      picked.source.type !== "mcpApps"
-        ? await withResolvedThemeBase(baseView, opts, picked.source.appId)
-        : baseView;
+    const view = deriveRenderMeta(picked.source);
     const isSystem = picked.kind !== undefined;
 
     // A fault on EITHER delivery channel, held rather than acted on.
@@ -2632,13 +2663,14 @@ export function registerGguiRenderResourceTemplate(
     // registration-time declaration.
     const renderCspBase =
       sessionApiUrls !== undefined || wsUrl !== undefined
-        ? buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl, [
-            wsUrl,
-            sessionApiUrls?.sseUrl,
-            sessionApiUrls?.pollingUrl,
-          ])
+        ? buildCspMeta(
+            opts.publicBaseUrl,
+            opts.runtimeUrl,
+            [wsUrl, sessionApiUrls?.sseUrl, sessionApiUrls?.pollingUrl],
+            faceSrcs,
+          )
         : templateCspMeta;
-    return shellContents(uri, html, augmentCspMeta(gadgetOrigins, renderCspBase));
+    return shellContents(uri, withFontFaces(html, fontFacesCss), augmentCspMeta(gadgetOrigins, renderCspBase));
   }
 
   /**

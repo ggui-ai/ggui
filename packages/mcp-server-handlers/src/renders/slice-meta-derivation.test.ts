@@ -273,13 +273,14 @@ describe('deriveRenderMeta', () => {
   // apply the operator-curated CSS-variable overlay at boot.
   it('stamps the app theme onto the slice (component variant)', () => {
     const theme: AppTheme = {
+      overlayHash: 'ab'.repeat(32),
       mode: 'dark',
-      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+      overlays: {
+        light: { '--ggui-color-primary-600': '#0284c7' },
+        dark: { '--ggui-color-primary-600': '#7c3aed' },
+      },
     };
-    expect(deriveRenderMeta(componentItem({ theme })).theme).toEqual({
-      mode: 'dark',
-      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
-    });
+    expect(deriveRenderMeta(componentItem({ theme })).theme).toEqual(theme);
   });
 
   it('omits theme when the item has none', () => {
@@ -290,8 +291,9 @@ describe('deriveRenderMeta', () => {
 describe('deriveTheme', () => {
   it('returns the sidecar theme when present', () => {
     const theme: AppTheme = {
+      overlayHash: 'cd'.repeat(32),
       mode: 'light',
-      cssVariables: { '--ggui-color-bg': '#ffffff' },
+      overlays: { light: { '--ggui-color-ground': '#ffffff' }, dark: { '--ggui-color-ground': '#101014' } },
       name: 'daylight',
     };
     expect(deriveTheme(componentItem({ theme }))).toEqual(theme);
