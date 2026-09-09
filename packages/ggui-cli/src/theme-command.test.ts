@@ -32,10 +32,17 @@ import { runThemeCommand } from './theme-command.js';
 const baseTheme: ThemeDocument = {
   $name: 'cli-test-theme',
   color: {
-    primary: {
-      '500': { $type: 'color', $value: '#0ea5e9' },
-    },
-    surface: { $type: 'color', $value: '#ffffff' },
+    primary: { '500': { $type: 'color', $value: '#0ea5e9' } },
+    success: { '500': { $type: 'color', $value: '#16a34a' } },
+    warning: { '500': { $type: 'color', $value: '#f59e0b' } },
+    error: { '500': { $type: 'color', $value: '#dc2626' } },
+    info: { '500': { $type: 'color', $value: '#2563eb' } },
+    ground: { $type: 'color', $value: '#ffffff' },
+    onGround: { $type: 'color', $value: '#111827' },
+    container: { $type: 'color', $value: '#ffffff' },
+    onContainer: { $type: 'color', $value: '#111827' },
+    sunken: { $type: 'color', $value: '#f3f4f6' },
+    onSunken: { $type: 'color', $value: '#374151' },
   },
   spacing: {
     '4': { $type: 'dimension', $value: '16px' },
@@ -44,14 +51,8 @@ const baseTheme: ThemeDocument = {
     family: {
       sans: { $type: 'fontFamily', $value: ['Inter', 'system-ui'] },
     },
-    size: {
-      md: { $type: 'dimension', $value: '16px' },
-    },
     weight: {
       regular: { $type: 'fontWeight', $value: 400 },
-    },
-    lineHeight: {
-      normal: { $type: 'number', $value: 1.5 },
     },
   },
   shape: {
@@ -154,8 +155,8 @@ describe('ggui theme validate', () => {
       const written = stdoutSpy.mock.calls.map((c) => c[0]).join('');
       expect(written).toContain('Theme valid');
       expect(written).toContain('cli-test-theme');
-      // 2 entries in `color`: `primary` + `surface`.
-      expect(written).toContain('color: 2 palettes/roles');
+      // 11 entries in `color`: five family anchors + six layering roles.
+      expect(written).toContain('color: 11 palettes/roles');
       expect(written).toContain('optional blocks: none');
       expect(written).toContain(path);
     } finally {
@@ -167,7 +168,6 @@ describe('ggui theme validate', () => {
     const themeWithOptional: ThemeDocument = {
       ...baseTheme,
       motion: {
-        duration: { fast: { $type: 'duration', $value: '120ms' } },
         transition: {
           standard: {
             $type: 'transition',

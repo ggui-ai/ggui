@@ -18,6 +18,7 @@
  * with minimal opts. This one exercises `buildMcpServerBackend`
  * directly so drift on the CLI bundle is caught at CI time.
  */
+import { normalizeThemeDocument, parseThemeDocument } from '@ggui-ai/project-config/node';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -512,39 +513,40 @@ describe('buildMcpServerBackend', () => {
       source: 'file',
       path: '/tmp/app/theme.json',
       mode: 'light',
-      document: {
-        color: {
-          primary: { '500': { $type: 'color', $value: '#ff00ff' } },
-          surface: { $type: 'color', $value: '#000000' },
-        },
-        spacing: { '4': { $type: 'dimension', $value: '16px' } },
-        font: {
-          family: {
-            sans: { $type: 'fontFamily', $value: 'Brand Sans' },
+      // A producer-ready document (what `loadTheme` hands back after
+      // `normalizeThemeDocument`): the six roles + the family anchors,
+      // the optional groups filled from the shipped default.
+      document: normalizeThemeDocument(
+        parseThemeDocument({
+          $name: 'brand',
+          color: {
+            primary: { '500': { $type: 'color', $value: '#ff00ff' } },
+            success: { '500': { $type: 'color', $value: '#16a34a' } },
+            warning: { '500': { $type: 'color', $value: '#f59e0b' } },
+            error: { '500': { $type: 'color', $value: '#dc2626' } },
+            info: { '500': { $type: 'color', $value: '#2563eb' } },
+            ground: { $type: 'color', $value: '#000000' },
+            onGround: { $type: 'color', $value: '#ffffff' },
+            container: { $type: 'color', $value: '#111111' },
+            onContainer: { $type: 'color', $value: '#ffffff' },
+            sunken: { $type: 'color', $value: '#222222' },
+            onSunken: { $type: 'color', $value: '#dddddd' },
           },
-          size: { md: { $type: 'dimension', $value: '16px' } },
-          weight: {
-            regular: { $type: 'fontWeight', $value: 400 },
+          spacing: { '4': { $type: 'dimension', $value: '16px' } },
+          font: {
+            family: { sans: { $type: 'fontFamily', $value: 'Brand Sans' } },
+            weight: { regular: { $type: 'fontWeight', $value: 400 } },
           },
-          lineHeight: { normal: { $type: 'number', $value: 1.5 } },
-        },
-        shape: {
-          radius: { md: { $type: 'dimension', $value: '8px' } },
-          shadow: {
-            sm: {
-              $type: 'shadow',
-              $value: {
-                offsetX: '0',
-                offsetY: '1px',
-                blur: '2px',
-                spread: '0',
-                color: 'rgba(0,0,0,.05)',
-              },
-            },
+          shape: {
+            radius: { md: { $type: 'dimension', $value: '8px' } },
+            shadow: { sm: { $type: 'shadow', $value: '0 1px 2px 0 rgba(0,0,0,.05)' } },
           },
-        },
+        }),
+      ),
+      overlays: {
+        light: { '--ggui-color-primary-500': '#ff00ff' },
+        dark: { '--ggui-color-primary-500': '#ff00ff' },
       },
-      cssVariables: ':root {\n  --ggui-color-primary-500: #ff00ff;\n}',
     };
     const b = buildMcpServerBackend({
       cliVersion: 'test-0.0.0',

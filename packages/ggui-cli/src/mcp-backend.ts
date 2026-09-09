@@ -972,6 +972,14 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // `ggui.json#theme`; absent = `createGguiServer` falls back to its
     // `lightTheme`-backed default internally.
     ...(opts.theme ? { theme: opts.theme } : {}),
+    // The theme document's declared font faces (ggui#987 §5): the
+    // server unions their origins into every served shell's CSP and
+    // inlines the rules, so the faces load without host cooperation.
+    ...(opts.theme !== undefined &&
+    opts.theme.document.typography?.faces !== undefined &&
+    opts.theme.document.typography.faces.length > 0
+      ? { fontFaces: opts.theme.document.typography.faces }
+      : {}),
     // Console theme picker writer — paired with the admin-gated
     // `/ggui/console/theme` POST. Absent = picker UI surfaces a
     // read-only banner + POST returns 501. CLI sets this when

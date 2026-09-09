@@ -15,7 +15,16 @@ function minimalTheme(): ThemeDocument {
   return {
     color: {
       primary: { '500': { $type: 'color', $value: '#0ea5e9' } },
-      surface: { $type: 'color', $value: '#ffffff' },
+      success: { '500': { $type: 'color', $value: '#16a34a' } },
+      warning: { '500': { $type: 'color', $value: '#f59e0b' } },
+      error: { '500': { $type: 'color', $value: '#dc2626' } },
+      info: { '500': { $type: 'color', $value: '#2563eb' } },
+      ground: { $type: 'color', $value: '#ffffff' },
+      onGround: { $type: 'color', $value: '#111827' },
+      container: { $type: 'color', $value: '#ffffff' },
+      onContainer: { $type: 'color', $value: '#111827' },
+      sunken: { $type: 'color', $value: '#f3f4f6' },
+      onSunken: { $type: 'color', $value: '#374151' },
     },
     spacing: {
       '4': { $type: 'dimension', $value: '16px' },
@@ -24,14 +33,8 @@ function minimalTheme(): ThemeDocument {
       family: {
         sans: { $type: 'fontFamily', $value: ['Inter', 'system-ui'] },
       },
-      size: {
-        md: { $type: 'dimension', $value: '16px' },
-      },
       weight: {
         regular: { $type: 'fontWeight', $value: 400 },
-      },
-      lineHeight: {
-        normal: { $type: 'number', $value: 1.5 },
       },
     },
     shape: {
@@ -85,8 +88,8 @@ describe('loadTheme — default path', () => {
     expect(result.theme.source).toBe('default');
     expect(result.theme.document.color).toBeDefined();
     expect(result.theme.document.spacing).toBeDefined();
-    expect(result.theme.cssVariables).toContain(':root {');
-    expect(result.theme.cssVariables).toMatch(/--ggui-color-primary-\d+/);
+    expect(result.theme.overlays.light['--ggui-color-primary-500']).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(result.theme.overlays.dark['--ggui-color-ground']).toBeDefined();
   });
 
   it('throws when projectRoot is not absolute', () => {
@@ -121,9 +124,8 @@ describe('loadTheme — file path', () => {
     if (result.theme.source === 'file') {
       expect(result.theme.path).toBe(themePath);
     }
-    expect(result.theme.cssVariables).toContain(
-      '--ggui-color-primary-500: #0ea5e9',
-    );
+    expect(result.theme.overlays.light['--ggui-color-primary-500']).toBe('#0ea5e9');
+    expect(result.theme.overlays.dark['--ggui-color-primary-500']).toBe('#0ea5e9');
   });
 
   it('accepts an absolute path as-is', () => {
@@ -246,8 +248,8 @@ describe('loadTheme — preset path', () => {
     if (result.theme.source !== 'preset') return;
     expect(result.theme.preset).toBe('claudic');
     expect(result.theme.mode).toBe('light');
-    expect(result.theme.cssVariables).toContain(':root {');
-    expect(result.theme.cssVariables).toContain('--ggui-color-primary-500');
+    expect(result.theme.overlays.light['--ggui-color-primary-500']).toBeDefined();
+    expect(result.theme.overlays.dark['--ggui-color-primary-500']).toBeDefined();
   });
 
   it('loads a registered preset via the object form with explicit mode', () => {
@@ -263,7 +265,7 @@ describe('loadTheme — preset path', () => {
     expect(result.theme.mode).toBe('dark');
   });
 
-  it('emits distinct CSS for light vs dark when both modes ship', () => {
+  it('carries BOTH overlays whichever mode is declared; mode selects the document; the two overlays differ', () => {
     const light = loadTheme({
       projectRoot: tmp,
       manifest: makeGgui({ theme: { preset: 'claudic', mode: 'light' } }),
@@ -274,7 +276,10 @@ describe('loadTheme — preset path', () => {
     });
     expect(light.ok && dark.ok).toBe(true);
     if (!light.ok || !dark.ok) return;
-    expect(light.theme.cssVariables).not.toBe(dark.theme.cssVariables);
+    expect(light.theme.mode).toBe('light');
+    expect(dark.theme.mode).toBe('dark');
+    expect(light.theme.overlays.light).toEqual(dark.theme.overlays.light);
+    expect(light.theme.overlays.light).not.toEqual(light.theme.overlays.dark);
   });
 
   it('applies flat dot-path overrides onto the preset before CSS emission', () => {
@@ -296,9 +301,7 @@ describe('loadTheme — preset path', () => {
     });
     // The override is on the leaf value, so the emitted CSS contains
     // the new color string for the corresponding variable.
-    expect(result.theme.cssVariables).toContain(
-      '--ggui-color-primary-500: #ff00ff',
-    );
+    expect(result.theme.overlays.light['--ggui-color-primary-500']).toBe('#ff00ff');
   });
 
   it('silently ignores override paths that do not resolve to a token leaf', () => {
@@ -318,13 +321,9 @@ describe('loadTheme — preset path', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     if (result.theme.source !== 'preset') return;
-    expect(result.theme.cssVariables).toContain(
-      '--ggui-color-primary-500: #ff00ff',
-    );
-    // Bogus paths leave no trace in the emitted CSS.
-    expect(result.theme.cssVariables).not.toContain(
-      '--ggui-color-primary-does-not-exist',
-    );
+    expect(result.theme.overlays.light['--ggui-color-primary-500']).toBe('#ff00ff');
+    // Bogus paths leave no trace in the projection.
+    expect('--ggui-color-primary-does-not-exist' in result.theme.overlays.light).toBe(false);
   });
 
   it('does not pollute the registry cache when overrides are applied', () => {
@@ -346,8 +345,8 @@ describe('loadTheme — preset path', () => {
     });
     expect(overridden.ok && clean.ok).toBe(true);
     if (!overridden.ok || !clean.ok) return;
-    expect(clean.theme.cssVariables).not.toContain('#ff00ff');
-    expect(clean.theme.cssVariables).toContain('#cc785c'); // Crail
+    expect(clean.theme.overlays.light['--ggui-color-primary-500']).not.toBe('#ff00ff');
+    expect(clean.theme.overlays.light['--ggui-color-primary-500']).toBe('#cc785c'); // Crail
   });
 
   it('surfaces an issue when the preset is not registered', () => {

@@ -45,7 +45,7 @@ import {
   runConfigPushStep,
 } from './config-push.js';
 import { readGadgetsFromGguiJson } from './internal/ggui-json.js';
-import { appThemeSchema } from '@ggui-ai/protocol';
+import { appThemeSchema, canonicalOverlayHash } from '@ggui-ai/protocol';
 import type { GguiJsonV1, ThemeConfig } from '@ggui-ai/project-config';
 
 // ─── theme fixtures ─────────────────────────────────────────────────────────
@@ -198,49 +198,49 @@ describe('readGenerationFromGguiJson', () => {
 
 // ─── readThemeFromGguiJson ────────────────────────────────────────────────────
 describe('readThemeFromGguiJson', () => {
-  // `__dirname`-free absolute root — the reader only resolves relative
-  // `theme.file` paths against this, and preset themes never touch disk.
   const projectRoot = tmpdir();
 
-  it('returns undefined when the theme field is absent', () => {
-    expect(readThemeFromGguiJson(projectRoot, makeThemeManifest(undefined))).toBeUndefined();
+  it('returns undefined when the theme field is absent', async () => {
+    expect(await readThemeFromGguiJson(projectRoot, makeThemeManifest(undefined))).toBeUndefined();
   });
 
-  it('resolves a preset theme to an injection-safe AppTheme', () => {
-    // `claudic` is a registered preset (see @ggui-ai/design themes/registry.ts).
+  it('resolves a preset theme to the v2 projection: both overlays, attestation, label, default mode', async () => {
     const manifest = makeThemeManifest({ preset: 'claudic', mode: 'dark' });
-    const theme = readThemeFromGguiJson(projectRoot, manifest);
+    const theme = await readThemeFromGguiJson(projectRoot, manifest);
     expect(theme).toBeDefined();
     expect(theme!.mode).toBe('dark');
     expect(theme!.name).toBe('claudic');
-
-    const keys = Object.keys(theme!.cssVariables);
-    expect(keys.length).toBeGreaterThan(0);
-    for (const k of keys) {
-      expect(k.startsWith('--ggui-'), `key ${k} must be --ggui-* namespaced`).toBe(true);
+    expect(theme!.overlayHash).toMatch(/^[0-9a-f]{64}$/);
+    for (const mode of ['light', 'dark'] as const) {
+      const keys = Object.keys(theme!.overlays[mode]);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const k of keys) {
+        expect(k.startsWith('--ggui-'), `key ${k} must be --ggui-* namespaced`).toBe(true);
+      }
     }
-    // No `:root {` / `}` wrapper artifacts leaked into the map.
-    expect(keys).not.toContain(':root {');
-    expect(theme!.cssVariables[':root {']).toBeUndefined();
+    expect(theme!.overlays.light).not.toEqual(theme!.overlays.dark);
+    expect('cssVariables' in theme!).toBe(false);
   });
 
-  it('honors the requested mode (light vs dark differ)', () => {
-    const dark = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' }));
-    const light = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'light' }));
+  it('the declared mode is the DEFAULT only — the same preset yields the same overlays either way', async () => {
+    const dark = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' }));
+    const light = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'light' }));
     expect(dark!.mode).toBe('dark');
     expect(light!.mode).toBe('light');
-    expect(dark!.cssVariables).not.toEqual(light!.cssVariables);
+    expect(dark!.overlays).toEqual(light!.overlays);
+    expect(dark!.overlayHash).toBe(light!.overlayHash);
   });
 
-  it('produces a value that passes appThemeSchema (proves injection-safety)', () => {
-    const theme = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'ggui', mode: 'light' }));
+  it('produces a value that passes appThemeSchema and whose attestation recomputes (proves the write door admits it)', async () => {
+    const theme = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'ggui', mode: 'light' }));
     const parsed = appThemeSchema.safeParse(theme);
     expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error?.issues)).toBe(true);
+    expect(await canonicalOverlayHash({ overlays: theme!.overlays })).toBe(theme!.overlayHash);
   });
 
-  it('throws a clear error when the preset id is unregistered', () => {
+  it('throws a clear error when the preset id is unregistered', async () => {
     const manifest = makeThemeManifest({ preset: 'not-a-real-preset', mode: 'light' });
-    expect(() => readThemeFromGguiJson(projectRoot, manifest)).toThrow(/theme/i);
+    await expect(readThemeFromGguiJson(projectRoot, manifest)).rejects.toThrow(/theme/i);
   });
 });
 
@@ -466,7 +466,8 @@ describe('runConfigPushStep', () => {
     expect(patch.theme).toBeDefined();
     expect(patch.theme!.mode).toBe('dark');
     expect(patch.theme!.name).toBe('claudic');
-    expect(Object.keys(patch.theme!.cssVariables).every((k) => k.startsWith('--ggui-'))).toBe(true);
+    expect(patch.theme!.overlayHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(patch.theme!.overlays.dark).every((k) => k.startsWith('--ggui-'))).toBe(true);
   });
 
   it('omits theme from the PATCH when ggui.json has no theme block', async () => {

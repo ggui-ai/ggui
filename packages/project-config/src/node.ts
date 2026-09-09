@@ -336,10 +336,11 @@ export {
 
 // Browser-safe theme document schema + parsers — re-exported on the
 // Node subpath so `ggui serve` / `ggui dev` get the full theme
-// surface from one import path. See `./theme.js` for the v1
+// surface from one import path. See `./theme.js` for the v2
 // plain-DTCG contract.
 export {
-  ThemeDocumentV1,
+  ThemeDocumentV2,
+  normalizeThemeDocument,
   parseThemeDocument,
   safeParseThemeDocument,
   type ThemeDocument,

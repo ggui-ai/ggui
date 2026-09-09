@@ -72,7 +72,7 @@ export interface DtcgTheme {
     /** 50-900 scale, primary brand color. */
     primary: Record<string, DtcgToken>;
     /** 50-900 scale, neutral/gray foundation. */
-    neutral: Record<string, DtcgToken>;
+    neutral?: Record<string, DtcgToken>;
     /** 50-900 scale, success semantic color (greens). */
     success: Record<string, DtcgToken>;
     /** 50-900 scale, warning semantic color (ambers). */
@@ -92,33 +92,47 @@ export interface DtcgTheme {
     sunken: DtcgToken;
     onSunken: DtcgToken;
     // `elevated` / `onElevated` are never authored — derived (§2.4).
+    // Everything below is OPTIONAL to author: the one producer
+    // (`deriveThemeVariables`) derives it from the roles + anchors above
+    // — the neutral ladder from ground/onGround, outlines from it, each
+    // family's `on*` ink and containers from its `500` anchor, tertiary
+    // from primary when absent. A stated value wins over the derived one.
     /**
      * The link colour, per mode. When stated it is emitted as stated;
      * when unstated the derivation aliases `primary-600` (ggui#987 §2.4).
      */
     link?: DtcgToken;
-    outline: DtcgToken;
-    outlineVariant: DtcgToken;
+    outline?: DtcgToken;
+    outlineVariant?: DtcgToken;
     /** Text / icon color rendered ON a primary surface (CTA buttons, etc.). */
-    onPrimary: DtcgToken;
+    onPrimary?: DtcgToken;
     /** Softer primary-tinted surface (e.g. selected chips, hover wash). */
-    primaryContainer: DtcgToken;
+    primaryContainer?: DtcgToken;
     /** Text / icon color rendered ON a primaryContainer surface. */
-    onPrimaryContainer: DtcgToken;
+    onPrimaryContainer?: DtcgToken;
     /** Text / icon color rendered ON an error surface (destructive CTAs). */
-    onError: DtcgToken;
+    onError?: DtcgToken;
     /** Softer error-tinted surface (e.g. inline error banner). */
-    errorContainer: DtcgToken;
+    errorContainer?: DtcgToken;
     /** Text / icon color rendered ON an errorContainer surface. */
-    onErrorContainer: DtcgToken;
+    onErrorContainer?: DtcgToken;
+    onSuccess?: DtcgToken;
+    successContainer?: DtcgToken;
+    onSuccessContainer?: DtcgToken;
+    onWarning?: DtcgToken;
+    warningContainer?: DtcgToken;
+    onWarningContainer?: DtcgToken;
+    onInfo?: DtcgToken;
+    infoContainer?: DtcgToken;
+    onInfoContainer?: DtcgToken;
     /** Accent / complementary role, typically harmonizing with primary. */
-    tertiary: DtcgToken;
+    tertiary?: DtcgToken;
     /** Text / icon color rendered ON a tertiary surface. */
-    onTertiary: DtcgToken;
+    onTertiary?: DtcgToken;
     /** Softer tertiary-tinted surface (e.g. accent callouts). */
-    tertiaryContainer: DtcgToken;
+    tertiaryContainer?: DtcgToken;
     /** Text / icon color rendered ON a tertiaryContainer surface. */
-    onTertiaryContainer: DtcgToken;
+    onTertiaryContainer?: DtcgToken;
   };
 
   font: {

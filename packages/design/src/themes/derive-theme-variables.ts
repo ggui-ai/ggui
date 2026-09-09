@@ -233,7 +233,12 @@ function parseSize(value: string): { n: number; unit: string } | undefined {
  * The one producer. See the module header for the rules.
  */
 export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVariableMap {
-  const c = doc.color as unknown as Readonly<Record<string, Tokens | DtcgToken<unknown> | undefined>>;
+  // The document's colour block, read by name: every key is a palette
+  // (a record of stops) or a single role token — the union the entries
+  // of `DtcgTheme['color']` already carry, so no widening is needed.
+  const c: Readonly<Record<string, Tokens | DtcgToken<unknown> | undefined>> = Object.fromEntries(
+    Object.entries(doc.color),
+  );
   const single = (key: string): string | undefined => tokenValue(c[key] as DtcgToken<unknown> | undefined);
   const group = (key: string): Tokens => c[key] as Tokens;
   const V: Record<string, string> = {};

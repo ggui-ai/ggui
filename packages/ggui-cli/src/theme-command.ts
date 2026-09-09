@@ -31,7 +31,7 @@ Usage:
   ggui theme <subcommand> [options]
 
 Subcommands:
-  validate <path>   Validate a JSON theme file against the ThemeDocumentV1 schema.
+  validate <path>   Validate a JSON theme file against the ThemeDocumentV2 schema.
 
 Run \`ggui theme <subcommand> --help\` for subcommand-specific options.
 `;

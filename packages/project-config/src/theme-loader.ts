@@ -14,16 +14,15 @@
  * exception. `ggui serve` escalates issues to a fatal exit before
  * binding a port.
  *
- * ## cssVariables pre-rendering
+ * ## Both modes, projected
  *
- * The loader pre-renders the `:root { --ggui-*: value; }` CSS block
- * via `@ggui-ai/design/themes`: `parseTheme(id, DtcgTheme)` for the
- * preset / default paths (full DTCG with motion tokens) and
- * `generateCssVariables(ThemeDocument)` for the file path (the
- * duck-typed walker accepts the plain DTCG document without requiring
- * the strict {@link DtcgTheme} shape). Downstream consumers (console,
- * render endpoint, MCP apps iframe) inject the pre-rendered string
- * without re-walking the token tree.
+ * Every `LoadedTheme` carries `overlays` — the `--ggui-*` variable map
+ * for BOTH modes, produced by `@ggui-ai/design/themes`'
+ * `deriveThemeVariables(document, mode)` (the one producer, ggui#987):
+ * a preset's light document and its dark twin, or a file's single
+ * document projected for each mode. Downstream consumers (the CLI's
+ * deploy PATCH, the console picker) ship the projection as the app's
+ * theme; nothing re-walks the token tree.
  *
  * ## Mode handling
  *
@@ -36,44 +35,55 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import {
-  generateCssVariables,
+  ThemeDocumentInvalidError,
+  darkTheme,
+  deriveThemeVariables,
   getRawTheme,
-  getTheme,
   lightTheme,
-  parseTheme,
 } from '@ggui-ai/design/themes';
-import type { DtcgTheme, ThemeMode } from '@ggui-ai/design/themes';
+import type { DtcgTheme, ThemeMode, ThemeVariableMap } from '@ggui-ai/design/themes';
 import type { GguiJsonV1, ThemeConfig } from './schema.js';
-import { parseThemeDocument, type ThemeDocument } from './theme.js';
+import { normalizeThemeDocument, parseThemeDocument, type ThemeDocument } from './theme.js';
+
+/**
+ * Both modes' projections of a loaded theme — the `overlays` an app
+ * theme carries on the wire (ggui#987 §3), produced by the ONE producer.
+ */
+export interface ThemeOverlays {
+  readonly light: ThemeVariableMap;
+  readonly dark: ThemeVariableMap;
+}
+
+/** Project a light document (and its dark twin when it has one) for both modes. */
+function deriveOverlays(light: DtcgTheme, dark: DtcgTheme | undefined): ThemeOverlays {
+  return {
+    light: deriveThemeVariables(light, 'light'),
+    dark: deriveThemeVariables(dark ?? light, 'dark'),
+  };
+}
 
 /**
  * One loaded theme — discriminated on `source`. Every variant carries
- * the resolved `mode`, the parsed token document, and the pre-rendered
- * `--ggui-*` CSS variable block.
+ * the resolved `mode` (the default the card paints when no host
+ * announces one), the producer-ready document, and both modes'
+ * projections (`overlays`).
  *
- * **`document` is shape-discriminated by `source`** (no casts, two
- * structurally-similar but separately-validated underlying types):
+ * **`document` is the producer's `DtcgTheme` on every variant**: the
+ * registry's own document for `default` / `preset`, and for `file` the
+ * strict-Zod `ThemeDocument` after `normalizeThemeDocument` (the open
+ * `ggui.json#theme` format keeps `motion`/`accessibility`/`zIndex`
+ * optional so external tools that emit only a subset still parse; the
+ * normaliser fills them from the shipped default).
  *
- *   - `default` / `preset` → `DtcgTheme` (the canonical theme shape
- *     consumed by every registry-side theme — produces full
- *     `--ggui-*` CSS through `parseTheme`; every group required).
- *   - `file` → `ThemeDocument` (the strict-Zod schema for the open
- *     `ggui.json#theme` file format — same `color`/`font`/`spacing`/
- *     `shape`/`motion`/`accessibility`/`zIndex` vocabulary
- *     as `DtcgTheme`, but `motion`/`accessibility`/`zIndex`
- *     are optional so external tools that emit only a subset still
- *     parse).
- *
- * Consumers narrow on `source` if they ever need the shape. CSS-variable
- * emission happens upstream into `cssVariables`, so most downstream code
- * only reads that string.
+ * Consumers narrow on `source` only for provenance. The projection
+ * happens here, once, into `overlays`; downstream code reads the maps.
  */
 export type LoadedTheme =
   | {
       readonly source: 'default';
       readonly mode: ThemeMode;
       readonly document: DtcgTheme;
-      readonly cssVariables: string;
+      readonly overlays: ThemeOverlays;
     }
   | {
       readonly source: 'preset';
@@ -83,15 +93,16 @@ export type LoadedTheme =
       /** Flat dot-path token overrides applied on top of the preset. */
       readonly overrides?: Record<string, string>;
       readonly document: DtcgTheme;
-      readonly cssVariables: string;
+      readonly overlays: ThemeOverlays;
     }
   | {
       readonly source: 'file';
       /** Absolute filesystem path of the loaded theme file. */
       readonly path: string;
       readonly mode: ThemeMode;
-      readonly document: ThemeDocument;
-      readonly cssVariables: string;
+      /** The parsed file, normalised to the producer's document (see `normalizeThemeDocument`). */
+      readonly document: DtcgTheme;
+      readonly overlays: ThemeOverlays;
     };
 
 /**
@@ -161,7 +172,7 @@ export function loadTheme(options: LoadThemeOptions): LoadThemeResult {
         source: 'default',
         mode: 'light',
         document: lightTheme,
-        cssVariables: parseTheme('default', lightTheme).cssVariables,
+        overlays: deriveOverlays(lightTheme, darkTheme),
       },
     };
   }
@@ -200,8 +211,8 @@ function loadPreset(
   mode: ThemeMode,
   overrides: Record<string, string> | undefined,
 ): LoadThemeResult {
-  // Resolve the raw token tree first so we can layer overrides
-  // before parseTheme walks the leaves.
+  // Resolve the raw token tree first (also the registration check)
+  // before layering overrides and projecting both modes.
   const raw = getRawTheme(preset, mode);
   if (!raw) {
     return {
@@ -216,46 +227,26 @@ function loadPreset(
     };
   }
 
-  // No overrides: hand off to the registry's parser directly so we
-  // share its cache.
-  if (!overrides || Object.keys(overrides).length === 0) {
-    const parsed = getTheme(preset, mode);
-    if (!parsed) {
-      // Should not happen — getRawTheme succeeded above. Defensive.
-      return {
-        ok: false,
-        issue: {
-          path: preset,
-          message: `Theme preset "${preset}" parsed unexpectedly empty.`,
-        },
-      };
-    }
-    return {
-      ok: true,
-      theme: {
-        source: 'preset',
-        preset,
-        mode,
-        document: raw,
-        cssVariables: parsed.cssVariables,
-      },
-    };
-  }
-
-  // With overrides: clone the raw tree, deep-set each leaf's $value,
-  // then re-parse. We bypass the registry's cache because the
-  // override set is per-call and would pollute it.
-  const mutated = applyOverrides(raw, overrides);
-  const parsed = parseTheme(preset, mutated);
+  // Both modes ride the loaded theme (ggui#987 §3): the preset's light
+  // document and its dark twin (a single-mode preset projects the one
+  // document for both), overrides applied to each before projection.
+  // Overrides clone the raw trees so the registry's cache stays clean.
+  const rawLight = getRawTheme(preset, 'light') ?? raw;
+  const rawDark = getRawTheme(preset, 'dark');
+  const hasOverrides = overrides !== undefined && Object.keys(overrides).length > 0;
+  const light = hasOverrides ? applyOverrides(rawLight, overrides) : rawLight;
+  const dark =
+    rawDark === undefined ? undefined : hasOverrides ? applyOverrides(rawDark, overrides) : rawDark;
+  const document = mode === 'dark' ? (dark ?? light) : light;
   return {
     ok: true,
     theme: {
       source: 'preset',
       preset,
       mode,
-      overrides,
-      document: mutated,
-      cssVariables: parsed.cssVariables,
+      ...(hasOverrides ? { overrides } : {}),
+      document,
+      overlays: deriveOverlays(light, dark),
     },
   };
 }
@@ -328,14 +319,35 @@ function loadFile(
     };
   }
 
+  // The producer is the validator of what the schema cannot see (a
+  // family with no `500` anchor, an unparseable colour): its refusal is
+  // the load issue, named by path.
+  const normalized = normalizeThemeDocument(document);
+  let overlays: ThemeOverlays;
+  try {
+    overlays = deriveOverlays(normalized, undefined);
+  } catch (cause) {
+    if (cause instanceof ThemeDocumentInvalidError) {
+      return {
+        ok: false,
+        issue: {
+          path: absolutePath,
+          message: `Theme file cannot be projected: ${cause.message}`,
+          cause,
+        },
+      };
+    }
+    throw cause;
+  }
+
   return {
     ok: true,
     theme: {
       source: 'file',
       path: absolutePath,
       mode,
-      document,
-      cssVariables: generateCssVariables(document),
+      document: normalized,
+      overlays,
     },
   };
 }

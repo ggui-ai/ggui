@@ -12,6 +12,7 @@
  * MCP SDK so the test proves actual wire compatibility — not a hand-
  * rolled JSON-RPC impl that could drift from the spec.
  */
+import { normalizeThemeDocument, parseThemeDocument } from "@ggui-ai/project-config/node";
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GGUI_WAVE_VERSION } from '@ggui-ai/protocol';
@@ -1437,53 +1438,41 @@ describe('createGguiServer — theme (OSS split Phase 4 #4 wiring)', () => {
     const server = createGguiServer({ logger: silentLogger });
     expect(server.theme.source).toBe('default');
     expect(server.theme.document).toBeDefined();
-    expect(server.theme.cssVariables).toContain(':root {');
+    expect(server.theme.overlays.light['--ggui-color-primary-500']).toMatch(/^#[0-9a-f]{6}$/i);
     // The shipped lightTheme emits a primary color palette; if that
     // ever changes we want the drift surfaced here.
-    expect(server.theme.cssVariables).toMatch(/--ggui-color-primary-\d+/);
+    expect(server.theme.overlays.dark['--ggui-color-ground']).toBeDefined();
   });
 
   it('surfaces the passed `LoadedTheme` on `server.theme` when opt provided', () => {
-    const customDoc = {
-      color: {
-        primary: {
-          '500': { $type: 'color' as const, $value: '#ff00ff' },
+    // A producer-ready document, as `loadTheme` hands it back: the six
+    // roles + the family anchors, normalised from the open file format.
+    const customDoc = normalizeThemeDocument(
+      parseThemeDocument({
+        color: {
+          primary: { '500': { $type: 'color', $value: '#ff00ff' } },
+          success: { '500': { $type: 'color', $value: '#16a34a' } },
+          warning: { '500': { $type: 'color', $value: '#f59e0b' } },
+          error: { '500': { $type: 'color', $value: '#dc2626' } },
+          info: { '500': { $type: 'color', $value: '#2563eb' } },
+          ground: { $type: 'color', $value: '#000000' },
+          onGround: { $type: 'color', $value: '#ffffff' },
+          container: { $type: 'color', $value: '#111111' },
+          onContainer: { $type: 'color', $value: '#ffffff' },
+          sunken: { $type: 'color', $value: '#222222' },
+          onSunken: { $type: 'color', $value: '#dddddd' },
         },
-        surface: { $type: 'color' as const, $value: '#000000' },
-      },
-      spacing: {
-        '4': { $type: 'dimension' as const, $value: '16px' },
-      },
-      font: {
-        family: {
-          sans: { $type: 'fontFamily' as const, $value: 'Brand Sans' },
+        spacing: { '4': { $type: 'dimension', $value: '16px' } },
+        font: {
+          family: { sans: { $type: 'fontFamily', $value: 'Brand Sans' } },
+          weight: { regular: { $type: 'fontWeight', $value: 400 } },
         },
-        size: {
-          md: { $type: 'dimension' as const, $value: '16px' },
+        shape: {
+          radius: { md: { $type: 'dimension', $value: '8px' } },
+          shadow: { sm: { $type: 'shadow', $value: '0 1px 2px 0 rgba(0,0,0,.05)' } },
         },
-        weight: {
-          regular: { $type: 'fontWeight' as const, $value: 400 },
-        },
-        lineHeight: {
-          normal: { $type: 'number' as const, $value: 1.5 },
-        },
-      },
-      shape: {
-        radius: { md: { $type: 'dimension' as const, $value: '8px' } },
-        shadow: {
-          sm: {
-            $type: 'shadow' as const,
-            $value: {
-              offsetX: '0',
-              offsetY: '1px',
-              blur: '2px',
-              spread: '0',
-              color: 'rgba(0,0,0,.05)',
-            },
-          },
-        },
-      },
-    };
+      }),
+    );
     const server = createGguiServer({
       logger: silentLogger,
       theme: {
@@ -1491,14 +1480,17 @@ describe('createGguiServer — theme (OSS split Phase 4 #4 wiring)', () => {
         path: '/tmp/app/theme.json',
         mode: 'light',
         document: customDoc,
-        cssVariables: ':root {\n  --ggui-color-primary-500: #ff00ff;\n}',
+        overlays: {
+          light: { '--ggui-color-primary-500': '#ff00ff' },
+          dark: { '--ggui-color-primary-500': '#ff00ff' },
+        },
       },
     });
     expect(server.theme.source).toBe('file');
     if (server.theme.source === 'file') {
       expect(server.theme.path).toBe('/tmp/app/theme.json');
     }
-    expect(server.theme.cssVariables).toContain('#ff00ff');
+    expect(server.theme.overlays.light['--ggui-color-primary-500']).toBe('#ff00ff');
   });
 });
 

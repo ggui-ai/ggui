@@ -1,82 +1,45 @@
 /**
- * `ggui.json#theme` → plain DTCG JSON document.
+ * `ggui.json#theme` → plain DTCG JSON document, v2 (ggui#987).
  *
  * The theme file is a plain JSON document matching the Design Tokens
- * Community Group (DTCG) spec. It is one of the open file-format
- * surfaces in the ggui manifest model, alongside
- * `ggui.primitives.json` and `ggui.ui.json`.
+ * Community Group (DTCG) spec, in the same vocabulary as
+ * `@ggui-ai/design`'s canonical {@link DtcgTheme}: the curated registry
+ * themes and an authored `theme.json` are the same shape.
  *
- * **Shape parity with the internal `DtcgTheme`.** This v1 schema is
- * deliberately the same shape as `@ggui-ai/design`'s canonical
- * {@link DtcgTheme} — `color`/`font`/`spacing`/`shape`/`motion`/
- * `accessibility`/`zIndex` — so an authored `theme.json`
- * uses the same vocabulary the curated registry themes (light/dark/
- * premium-*) use. Previously this schema was Tailwind-style flat
- * (`typography`/`radius`/`shadow` at root); the v1 schema now mirrors
- * the internal shape to remove the divergence.
+ * **What is authored, what is derived.** An author states the six
+ * layering roles (`ground`/`onGround`, `container`/`onContainer`,
+ * `sunken`/`onSunken`), one `500` anchor per family (`primary`,
+ * `success`, `warning`, `error`, `info`), the font families and
+ * weights, spacing, radii, shadows. Everything else — the ten-stop
+ * ramps, every `on*` ink and container, the neutral ladder, outlines,
+ * `elevated`, the type scale from the one `font.ramp` — is DERIVED by
+ * the one producer (`deriveThemeVariables`), so the retired ladders
+ * (`font.size`, `font.lineHeight`, `motion.duration`, `motion.easing`)
+ * and `$metadata.fontUrl` are refused, not ignored. Fonts are declared
+ * as `typography.faces` (https `src` only); the card installs them.
  *
- * **External-tool compatibility.** External tooling (Figma Tokens,
- * Style Dictionary, Tokens Studio) commonly emits only a subset of
- * the canonical shape. Only the original required groups (`color`,
- * `font`, `spacing`, `shape`) stay required; `motion`,
- * `accessibility`, `zIndex`, and the new DTCG metadata fields
- * (`$name`, `$description`, `$metadata`) are all OPTIONAL so tools
- * that only emit colors + dimensions still parse cleanly.
- *
- * **BREAKING for old `theme.json` files.** Authors who hand-wrote a
- * `theme.json` against the pre-rc schema must rename:
- *
- *   - `typography.fontFamily` → `font.family`
- *   - `typography.fontSize` → `font.size`
- *   - `typography.fontWeight` → `font.weight`
- *   - `typography.lineHeight` → `font.lineHeight`
- *   - top-level `radius` → `shape.radius`
- *   - top-level `shadow` → `shape.shadow`
- *   - top-level `duration` → `motion.duration`
- *   - top-level `transition` → `motion.transition`
- *
- * Plus: under `font.family`, `sans` is the only required sub-token
- * (was previously freeform); other family slots (`mono`, …) are
- * optional. The font-family record itself stays open so additional
- * named families parse without a schema change.
+ * **External-tool leniency.** `motion`, `accessibility`, `zIndex` and
+ * the DTCG metadata fields stay OPTIONAL; {@link normalizeThemeDocument}
+ * fills them from the shipped default and flattens the DTCG object
+ * forms (structured shadows, transitions, array font stacks) to the CSS
+ * strings the producer reads.
  *
  * **Ownership boundary:**
  *
  *   - *Where* the theme lives → `ggui.json#theme` (pointer string).
  *   - *What* the theme file looks like → this module's schema.
- *   - *How* DTCG tokens become CSS variables → `@ggui-ai/design`'s
- *     `generateCssVariables` (stays over there; this schema does not
- *     emit). The duck-typed walker accepts any DTCG-shaped tree, so
- *     the new nested groups (`font.size`, `shape.radius`, …) walk
- *     into `--ggui-font-size-md`/`--ggui-shape-radius-md` CSS vars
- *     without code changes.
+ *   - *How* the document becomes CSS variables → `@ggui-ai/design`'s
+ *     `deriveThemeVariables` (the loader calls it for both modes).
  *   - *Built-in default* when `theme` is absent → `@ggui-ai/design`'s
- *     shipped `lightTheme`.
+ *     shipped `lightTheme` / `darkTheme`.
  *
- * **Extending rules:**
- *
- *   1. Additive only within `schema: '1'`. New optional fields must
- *      default to no-op behaviour so older tooling ignores them.
- *   2. Framework-neutral + host-neutral. No vendor names in enum
- *      values, no build-pipeline fields.
- *   3. Root and per-group objects are strict — unknown keys fail
- *      parse. Same discipline as `ggui.json`, `ggui.ui.json`, and
- *      `ggui.primitives.json`.
- *
- * **Strictness tradeoff:**
- *
- * Individual DTCG token leaves are validated with a discriminated
- * union over `$type` (color / dimension / fontFamily / fontWeight /
- * shadow / duration / cubicBezier / transition / number). Each
- * variant validates its `$value` shape. `$description` is accepted
- * everywhere as a free-form docstring. Token leaves under newer
- * groups (`accessibility`, `zIndex`) accept a slightly
- * wider token vocabulary because external tools sometimes encode
- * scalar/array values with permissive `$type` strings (`string`,
- * `array`, …); the schema accepts those without enumerating every
- * possible spelling.
+ * **Extending rules:** additive only within `schema: '1'`; framework-
+ * and host-neutral; root and per-group objects are strict — unknown
+ * keys fail parse, the same discipline as `ggui.json`.
  */
 import { z } from 'zod';
+import { lightTheme } from '@ggui-ai/design/themes';
+import type { DtcgTheme, DtcgToken } from '@ggui-ai/design/themes';
 
 // ─── Token leaves ────────────────────────────────────────────────────
 
@@ -119,14 +82,6 @@ const DurationToken = z.strictObject({
   $description: z.string().optional(),
 });
 
-/** DTCG cubic-bezier easing token. `$value` is a CSS timing function
- *  string (`"cubic-bezier(0.4, 0, 0.2, 1)"`, keyword aliases like
- *  `"ease-out"`, etc.). */
-const CubicBezierToken = z.strictObject({
-  $type: z.literal('cubicBezier'),
-  $value: z.string().min(1),
-  $description: z.string().optional(),
-});
 
 /** Structured shadow value — DTCG spec composite shape. */
 const ShadowValue = z.strictObject({
@@ -167,32 +122,33 @@ const NumberToken = z.strictObject({
 });
 
 /** Line-height token — DTCG allows unit-less number or dimension. */
-const LineHeightToken = z.union([
-  z.strictObject({
-    $type: z.literal('number'),
-    $value: z.number(),
-    $description: z.string().optional(),
-  }),
-  z.strictObject({
-    $type: z.literal('dimension'),
-    $value: z.string().min(1),
-    $description: z.string().optional(),
-  }),
-]);
 
-/**
- * Permissive token leaf for the newer optional groups
- * (`motion.keyframes`, `zIndex`). DTCG hasn't standardised every
- * `$type` value the curated registry themes carry — for example
- * easing uses `$type: 'cubicBezier'`. Rather than
- * enumerate every spelling, this leaf accepts any `$type` string and
- * any JSON-serializable `$value`. Strict per-leaf shape stays in
- * force for the original token types via the leaves above.
- */
-const PermissiveToken = z.strictObject({
+/** A token whose `$value` is a CSS string under any `$type` spelling
+ *  (keyframes text, border style, …). */
+const StringToken = z.strictObject({
   $type: z.string().min(1),
-  $value: z.unknown(),
+  $value: z.string().min(1),
   $description: z.string().optional(),
+});
+/** A declared font face (ggui#987 §5): `src` MUST be `https:` with a
+ *  well-formed host — the same rule the design package asserts. */
+const FontFaceDeclarationSchema = z.strictObject({
+  family: z.string().min(1).refine((f) => !/[\r\n]/.test(f), 'family must be one line'),
+  src: z
+    .string()
+    .min(1)
+    .refine((src) => {
+      let url: URL;
+      try {
+        url = new URL(src);
+      } catch {
+        return false;
+      }
+      return url.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(url.hostname) && url.hostname.includes('.');
+    }, 'src must be an https: URL with a well-formed host'),
+  weight: z.union([z.string().min(1), z.number().int().min(1).max(1000)]).optional(),
+  style: z.string().min(1).optional(),
+  display: z.string().min(1).optional(),
 });
 
 // ─── Groups ──────────────────────────────────────────────────────────
@@ -205,50 +161,72 @@ const PermissiveToken = z.strictObject({
 const ColorPalette = z.record(z.string(), ColorToken);
 
 /**
- * Color group — two-tier: `{palette}` records for scales (primary /
- * neutral / semantic scales) plus single-token semantic roles
- * (surface / onSurface / outline / …) at the top level.
- *
- * Kept open (`z.record` not `z.strictObject`) so authored themes
- * can add brand-specific palettes (`accent`, `brand-green`, …) and
- * semantic roles without a schema change. `color` itself is
- * required but its internal shape is author-extensible.
- *
- * Each entry can be EITHER a singleton `ColorToken` (e.g. a Material
- * role like `surface`) OR a `ColorPalette` (a scale like `primary`'s
- * 50-900 stops). Tools that emit only singleton colors (no scales)
- * stay parseable.
+ * The colour block: five family anchors (`500` stated; the other stops
+ * derived unless stated) + the six layering roles, all REQUIRED; the
+ * derived roles (`neutral`, outlines, `on*` inks, containers,
+ * `tertiary`, `link`) are optional and win over derivation when stated.
  */
-const ColorGroup = z.record(
-  z.string(),
-  z.union([ColorToken, ColorPalette]),
-);
+const ColorGroup = z.strictObject({
+  primary: ColorPalette,
+  neutral: ColorPalette.optional(),
+  success: ColorPalette,
+  warning: ColorPalette,
+  error: ColorPalette,
+  info: ColorPalette,
+  ground: ColorToken,
+  onGround: ColorToken,
+  container: ColorToken,
+  onContainer: ColorToken,
+  sunken: ColorToken,
+  onSunken: ColorToken,
+  link: ColorToken.optional(),
+  outline: ColorToken.optional(),
+  outlineVariant: ColorToken.optional(),
+  onPrimary: ColorToken.optional(),
+  primaryContainer: ColorToken.optional(),
+  onPrimaryContainer: ColorToken.optional(),
+  onSuccess: ColorToken.optional(),
+  successContainer: ColorToken.optional(),
+  onSuccessContainer: ColorToken.optional(),
+  onWarning: ColorToken.optional(),
+  warningContainer: ColorToken.optional(),
+  onWarningContainer: ColorToken.optional(),
+  onError: ColorToken.optional(),
+  errorContainer: ColorToken.optional(),
+  onErrorContainer: ColorToken.optional(),
+  onInfo: ColorToken.optional(),
+  infoContainer: ColorToken.optional(),
+  onInfoContainer: ColorToken.optional(),
+  tertiary: ColorToken.optional(),
+  onTertiary: ColorToken.optional(),
+  tertiaryContainer: ColorToken.optional(),
+  onTertiaryContainer: ColorToken.optional(),
+});
 
 const SpacingGroup = z.record(z.string(), DimensionToken);
 
 /**
- * Font group — `family` / `size` / `weight` / `lineHeight` records.
- * Renamed from `typography` (previously: `typography.fontFamily`,
- * `typography.fontSize`, …) to mirror the internal `DtcgTheme`
- * shape's `font.family` / `font.size` / `font.weight` /
- * `font.lineHeight`.
- *
- * Inside `family`, `sans` is the only required slot — the canonical
- * theme always carries a sans-serif default. `mono` and any other
- * family slot (e.g. `serif`, `display`) are optional. The record
- * stays open so authors can declare additional named families.
+ * Font group — `family` (the `sans` slot required; `mono`, `heading`
+ * and any other named family optional) and `weight`; optional
+ * `letterSpacing` and the ONE `ramp` the type scale is derived from.
  */
+/** Font families: `sans` required; `mono`, `heading` and any other named family optional. */
 const FontFamilyGroup = z.record(z.string(), FontFamilyToken).and(
   z.object({
     sans: FontFamilyToken,
   }),
 );
-
 const FontGroup = z.strictObject({
   family: FontFamilyGroup,
-  size: z.record(z.string(), DimensionToken),
   weight: z.record(z.string(), FontWeightToken),
-  lineHeight: z.record(z.string(), LineHeightToken),
+  letterSpacing: z
+    .strictObject({ body: DimensionToken.optional(), heading: DimensionToken.optional() })
+    .optional(),
+  ramp: z.strictObject({ base: DimensionToken, ratio: NumberToken }).optional(),
+});
+/** Declared font faces (ggui#987 §5). */
+const TypographyGroup = z.strictObject({
+  faces: z.array(FontFaceDeclarationSchema).optional(),
 });
 
 /**
@@ -259,19 +237,17 @@ const FontGroup = z.strictObject({
 const ShapeGroup = z.strictObject({
   radius: z.record(z.string(), DimensionToken),
   shadow: z.record(z.string(), ShadowToken),
+  border: z.strictObject({ width: DimensionToken.optional(), style: StringToken.optional() }).optional(),
 });
 
 /**
- * Motion group — `duration` / `easing` / `transition` / `keyframes`.
- * Moved here from the previous top-level `duration` and `transition`
- * fields. `easing` and `keyframes` are optional because external
- * tools (Figma Tokens, Style Dictionary) don't always emit them.
+ * Motion group — `transition` (required sub-record) + `keyframes`
+ * (optional). Durations and easings are not ladders any more: they ride
+ * each transition's own value.
  */
 const MotionGroup = z.strictObject({
-  duration: z.record(z.string(), DurationToken),
-  easing: z.record(z.string(), CubicBezierToken).optional(),
   transition: z.record(z.string(), TransitionToken),
-  keyframes: z.record(z.string(), PermissiveToken).optional(),
+  keyframes: z.record(z.string(), StringToken).optional(),
 });
 
 const AccessibilityGroup = z.strictObject({
@@ -306,8 +282,9 @@ const ZIndexGroup = z.record(z.string(), NumberToken);
  */
 const MetadataGroup = z.strictObject({
   font: z.string().min(1).optional(),
-  fontUrl: z.string().min(1).optional(),
   philosophy: z.string().min(1).optional(),
+  /** The embedding host draws the card silhouette; the renderer suppresses root-children strokes. */
+  frameless: z.boolean().optional(),
 });
 
 // ─── Root document ───────────────────────────────────────────────────
@@ -331,7 +308,7 @@ const MetadataGroup = z.strictObject({
  * allow-listed (DTCG metadata); anything else is a typo. Additive
  * slices add new fields here under `schema: '1'`.
  */
-export const ThemeDocumentV1 = z.strictObject({
+export const ThemeDocumentV2 = z.strictObject({
   /** Optional DTCG spec URL. Not validated — the spec hasn't frozen
    *  a canonical URL and hand-authored themes often omit it. */
   $schema: z.string().min(1).optional(),
@@ -360,6 +337,9 @@ export const ThemeDocumentV1 = z.strictObject({
   /** Font tokens — `family` / `size` / `weight` / `lineHeight`. Required. */
   font: FontGroup,
 
+  /** Declared font faces (ggui#987 §5) — https `src` only; the card installs them. */
+  typography: TypographyGroup.optional(),
+
   /** Shape tokens — `radius` + `shadow`. Required. */
   shape: ShapeGroup,
 
@@ -376,17 +356,17 @@ export const ThemeDocumentV1 = z.strictObject({
 });
 
 /** Static TypeScript type derived from the v1 schema. */
-export type ThemeDocumentV1 = z.infer<typeof ThemeDocumentV1>;
+export type ThemeDocumentV2 = z.infer<typeof ThemeDocumentV2>;
 
 /** Canonical type alias used everywhere else. */
-export type ThemeDocument = ThemeDocumentV1;
+export type ThemeDocument = ThemeDocumentV2;
 
 /**
  * Parse a raw JSON value into a validated {@link ThemeDocument}.
  * Throws a `ZodError` with human-readable issues on invalid input.
  */
 export function parseThemeDocument(raw: unknown): ThemeDocument {
-  return ThemeDocumentV1.parse(raw);
+  return ThemeDocumentV2.parse(raw);
 }
 
 /**
@@ -396,6 +376,86 @@ export function parseThemeDocument(raw: unknown): ThemeDocument {
  */
 export function safeParseThemeDocument(
   raw: unknown,
-): ReturnType<typeof ThemeDocumentV1.safeParse> {
-  return ThemeDocumentV1.safeParse(raw);
+): ReturnType<typeof ThemeDocumentV2.safeParse> {
+  return ThemeDocumentV2.safeParse(raw);
+}
+
+// ─── Normalisation → the producer's document ─────────────────────────
+
+function stringToken<T>(token: { $type: string; $value: T; $description?: string }, value: string): DtcgToken {
+  return { $type: token.$type, $value: value, ...(token.$description !== undefined ? { $description: token.$description } : {}) };
+}
+
+function mapRecord<In, Out>(record: Readonly<Record<string, In>>, f: (value: In) => Out): Record<string, Out> {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, f(v)]));
+}
+
+/**
+ * Turn a parsed document into the EXACT {@link DtcgTheme} the one
+ * producer (`deriveThemeVariables`) consumes:
+ *
+ *   - names the document (`$name` ⇒ `'custom'`, `$description` ⇒ `''`);
+ *   - drops the DTCG envelope fields the producer does not read
+ *     (`$schema`, `$version`);
+ *   - flattens the DTCG object forms to the CSS strings the producer
+ *     reads: array font stacks → `'Inter, system-ui'`, numeric weights →
+ *     `'400'`, structured shadows → `'0 1px 2px 0 …'`, structured
+ *     transitions → `'<property ?? all> <duration> <timingFunction>'`;
+ *   - fills the optional groups (`motion`, `accessibility`, `zIndex` and
+ *     their sub-records) from the shipped default, so an external tool's
+ *     colours-and-dimensions export still derives every consumed token.
+ *
+ * The authored roles, anchors and faces pass through verbatim.
+ */
+export function normalizeThemeDocument(doc: ThemeDocument): DtcgTheme {
+  const family = doc.font.family;
+  const fontFamily = (t: (typeof family)['sans']): DtcgToken =>
+    stringToken(t, Array.isArray(t.$value) ? t.$value.join(', ') : t.$value);
+  const accessibility = doc.accessibility;
+  return {
+    $name: doc.$name ?? 'custom',
+    $description: doc.$description ?? '',
+    ...(doc.$metadata !== undefined ? { $metadata: doc.$metadata } : {}),
+    color: doc.color,
+    font: {
+      family: { ...mapRecord(family, fontFamily), sans: fontFamily(family.sans) },
+      weight: mapRecord(doc.font.weight, (t) => stringToken(t, String(t.$value))),
+      ...(doc.font.letterSpacing !== undefined ? { letterSpacing: doc.font.letterSpacing } : {}),
+      ...(doc.font.ramp !== undefined ? { ramp: doc.font.ramp } : {}),
+    },
+    ...(doc.typography !== undefined ? { typography: doc.typography } : {}),
+    spacing: doc.spacing,
+    shape: {
+      radius: doc.shape.radius,
+      shadow: mapRecord(doc.shape.shadow, (t) =>
+        stringToken(
+          t,
+          typeof t.$value === 'string'
+            ? t.$value
+            : `${t.$value.offsetX} ${t.$value.offsetY} ${t.$value.blur} ${t.$value.spread} ${t.$value.color}`,
+        ),
+      ),
+      ...(doc.shape.border !== undefined ? { border: doc.shape.border } : {}),
+    },
+    motion:
+      doc.motion === undefined
+        ? lightTheme.motion
+        : {
+            transition: mapRecord(doc.motion.transition, (t) =>
+              stringToken(
+                t,
+                typeof t.$value === 'string'
+                  ? t.$value
+                  : `${t.$value.property ?? 'all'} ${t.$value.duration} ${t.$value.timingFunction}`,
+              ),
+            ),
+            keyframes: doc.motion.keyframes ?? lightTheme.motion.keyframes,
+          },
+    accessibility: {
+      focusRing: accessibility?.focusRing ?? lightTheme.accessibility.focusRing,
+      reducedMotion: accessibility?.reducedMotion ?? lightTheme.accessibility.reducedMotion,
+      highContrast: accessibility?.highContrast ?? lightTheme.accessibility.highContrast,
+    },
+    zIndex: doc.zIndex ?? lightTheme.zIndex,
+  };
 }
