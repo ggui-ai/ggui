@@ -1,0 +1,17 @@
+{
+  "name": "app-theme-v2-label-too-long",
+  "description": "A stamped label carrying a FULL sha256 after the prefix is 77 chars and exceeds appThemeSchema's 64-char `name` cap \u2014 REFUSED at the door. The seam ggui#987 flagged for the platform's pin shape.",
+  "theme": {
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff"
+      }
+    },
+    "overlayHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "guuey-app-v2.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "expect": "refused"
+}

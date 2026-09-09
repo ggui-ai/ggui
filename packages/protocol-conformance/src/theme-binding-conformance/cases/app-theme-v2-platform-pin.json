@@ -1,0 +1,17 @@
+{
+  "name": "app-theme-v2-platform-pin",
+  "description": "The exact overlay shape a platform's -v2 composer sends (ggui#987 \u00a79; guuey#1128): both projections, the attestation, and a label of the form `<prefix>.<hash-prefix>`. `name` is capped at 64 chars by appThemeSchema, so a stamped label must keep its hash segment to 51 chars after a 13-char prefix. Accepted.",
+  "theme": {
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff"
+      }
+    },
+    "overlayHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "guuey-app-v2.ccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "expect": "accepted"
+}
