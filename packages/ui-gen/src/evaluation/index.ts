@@ -108,3 +108,25 @@ export type {
   ScreenshotPage,
   ChromiumProvider,
 } from './visual-evaluator.js';
+
+// Canvas vocabulary — the per-canvas visual evaluation speaks it
+// (`VisualEvalConfig.canvases`, `CanvasVisualResult.canvas`); re-exported
+// here so a caller driving `runVisualEvaluation` from this subpath never
+// has to reach the package root for the class names, viewports or
+// descriptors.
+export {
+  CANVAS_CLASSES,
+  CANVAS_VIEWPORTS,
+  CANVAS_BREAKPOINTS,
+  CANVAS_DESCRIPTORS,
+  canvasForViewportWidth,
+  canvasForRendering,
+  canvasDisplayModeForShell,
+  describeCanvas,
+} from '../design-mode.js';
+export type {
+  CanvasClass,
+  CanvasViewport,
+  CanvasDisplayMode,
+  CanvasDescriptor,
+} from '../design-mode.js';
