@@ -22,6 +22,10 @@
  *   --provider, -p   Provider(s): claude, openai, google (comma-separated).
  *                    Subsets the matrix by SDK. Default: all three.
  *   --tier           Tier(s): fast, balanced, premium (comma-separated).
+ *   --variant        Variant id(s) to keep after the provider × tier subset
+ *                    (comma-separated, e.g. claude-frontier,openai-frontier);
+ *                    the frontier arms share the premium tier label, so this
+ *                    is the only way to run them alone.
  *                    Subsets the matrix by tier. Default: all three.
  *   --commit, -c     Commit ID(s): weather-card, survey-form, etc. (comma-separated)
  *   --model, -m      IGNORED when running the matrix — the per-tier SKUs are
@@ -213,6 +217,7 @@ if (presetName && !preset) {
 const providers = (getArg(['--provider', '-p'], null) || preset?.providers?.join(',') || 'google').split(',');
 // Tier subset of the matrix. Default = all three tiers (the full grid).
 const tiers = (getArg(['--tier'], null) || 'fast,balanced,premium').split(',');
+const variantIds = (getArg(['--variant'], null) || '').split(',').map((v) => v.trim()).filter(Boolean);
 const commits = (getArg(['--commit', '-c'], null) || preset?.commits?.join(',') || 'weather-card').split(',');
 // --model is intentionally a no-op when running the matrix — the per-tier
 // SKUs from getDefaultVariants() are the point of the grid. Parsed only so
@@ -368,10 +373,11 @@ const run = async () => {
   const hasSharedRoles = Object.keys(sharedModelRoles).length > 0;
   const variants = getDefaultVariants()
     .filter((v) => providers.includes(v.sdkName) && tiers.includes(v.tier))
+    .filter((v) => variantIds.length === 0 || variantIds.includes(v.id))
     .map((v) => (hasSharedRoles ? { ...v, modelRoles: { ...v.modelRoles, ...sharedModelRoles } } : v));
 
   if (variants.length === 0) {
-    console.error(`  ✗ No matrix cells for providers [${providers.join(', ')}] × tiers [${tiers.join(', ')}]`);
+    console.error(`  ✗ No matrix cells for providers [${providers.join(', ')}] × tiers [${tiers.join(', ')}]${variantIds.length ? ` × variants [${variantIds.join(', ')}]` : ''}`);
     console.error(`  Providers: claude, openai, google.  Tiers: fast, balanced, premium.`);
     process.exit(1);
   }
