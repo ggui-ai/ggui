@@ -77,8 +77,10 @@ describe('DtcgTheme required fields', () => {
     expectTypeOf<DtcgTheme['color']['primary']>().toEqualTypeOf<
       Record<string, DtcgToken>
     >();
+    // `neutral` is optional to author — derived from ground/onGround
+    // when absent (the producer's contract, ggui#987 §2.4).
     expectTypeOf<DtcgTheme['color']['neutral']>().toEqualTypeOf<
-      Record<string, DtcgToken>
+      Record<string, DtcgToken> | undefined
     >();
   });
 
@@ -91,8 +93,9 @@ describe('DtcgTheme required fields', () => {
     expectTypeOf<DtcgTheme['color']['link']>().toEqualTypeOf<DtcgToken | undefined>();
     expectTypeOf<DtcgTheme['color']['container']>().toEqualTypeOf<DtcgToken>();
     expectTypeOf<DtcgTheme['color']['onContainer']>().toEqualTypeOf<DtcgToken>();
-    expectTypeOf<DtcgTheme['color']['outline']>().toEqualTypeOf<DtcgToken>();
-    expectTypeOf<DtcgTheme['color']['outlineVariant']>().toEqualTypeOf<DtcgToken>();
+    // Outlines are derived from the neutral ladder unless stated.
+    expectTypeOf<DtcgTheme['color']['outline']>().toEqualTypeOf<DtcgToken | undefined>();
+    expectTypeOf<DtcgTheme['color']['outlineVariant']>().toEqualTypeOf<DtcgToken | undefined>();
   });
 
   it('motion carries transition + keyframes only — durations and easings are layer-1 (ggui#987 §2.3)', () => {
