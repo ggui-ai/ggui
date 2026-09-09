@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Generator profile slot: `appGenerationProfileSchema` (2026-09-10,
+ * additive, ggui#991 — MINOR; the D7 mechanism of ggui#987). One new
+ * schema on the app's `generation` section — `profile?: { styling?,
+ * density?, layout? }`, free text, trimmed, door-bounded at
+ * `APP_GENERATION_PROFILE_BOUNDS` (2000 / 200 / 200), control characters
+ * refused — plus its refusal body. A generation-time input, never a
+ * token; absent or empty leaves the generator's prompts byte-identical.
+ * No existing type changes; readers and doors land with the #991 set.
+ * --------------------------------------------------------------------
  * Theming revision — the overlay is the projection, the host owns runtime
  * mode (2026-09-10, ggui#987 — **BREAKING on the draft wave**, named by the
  * conformance kit: `protocol-conformance/src/theme-binding-conformance`
