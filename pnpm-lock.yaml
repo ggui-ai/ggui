@@ -37,6 +37,7 @@ overrides:
   '@smithy/types': ^4.14.0
   brace-expansion@>=5: ^5.0.9
   fast-uri@<3.1.6: ^3.1.6
+  svgo@4: ^4.1.0
   immutable@<3.8.4: ^3.8.4
   fflate@>=0.8.0 <0.8.3: ^0.8.3
   fast-xml-builder@<1.1.7: ^1.1.7
@@ -47,8 +48,8 @@ overrides:
   undici: ^7.28.0
   fast-xml-parser@>=4 <5: ^4.5.5
   fast-xml-parser@>=5: ^5.8.0
-  js-yaml@>=3 <4: ^3.15.1
-  js-yaml@>=4: ^4.3.1
+  js-yaml@>=3 <4: ^3.15.2
+  js-yaml@>=4: ^4.3.2
   ip-address@<10.3.1: ^10.3.1
   '@mikro-orm/knex@<6.6.14': ^6.6.14
   qs@>=6.11.1 <6.16.0: ^6.16.0
@@ -330,6 +331,8 @@ overrides:
   isomorphic-git: 1.40.0
   jose@^5: 5.10.0
   jose@^6: 6.2.8
+  js-yaml@^3: 3.15.2
+  js-yaml@^4: 4.3.2
   lru.min: 1.1.5
   mariadb: 3.5.4
   memfs: 4.66.1
@@ -7416,12 +7419,12 @@ packages:
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
 
-  js-yaml@3.15.1:
-    resolution: {integrity: sha512-S99WuO3HlhO3XN41EtYUNl9zzXjoJx7QvmipxsJVxtCBT0YHEFy+iOJhjSvrmV12nYhWpZaM8lPHkJm0yUMbag==}
+  js-yaml@3.15.2:
+    resolution: {integrity: sha512-6EuL879VkRA+1Cz578mKMiKvjPNEuk6+r1JaFzoSWejZmtf7xWbIyw1e3KkxlkzTIt9Taw6JBhEppG7utc1P+w==}
     hasBin: true
 
-  js-yaml@4.3.1:
-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
   jsc-safe-url@0.2.4:
@@ -10724,7 +10727,7 @@ snapshots:
   '@changesets/parse@0.4.3':
     dependencies:
       '@changesets/types': 6.1.0
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
 
   '@changesets/pre@2.0.2':
     dependencies:
@@ -11096,7 +11099,7 @@ snapshots:
       globals: 13.24.0
       ignore: 5.3.2
       import-fresh: 3.3.1
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       minimatch: 3.1.5
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
@@ -11231,7 +11234,7 @@ snapshots:
       adm-zip: 0.6.0
       express: 4.22.1
       google-auth-library: 10.6.2
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       jsonpath-plus: 10.4.0
       lodash-es: 4.18.1
       winston: 3.19.0
@@ -11267,7 +11270,7 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 2.10.0(@opentelemetry/api@1.9.0)
       adm-zip: 0.6.0
       google-auth-library: 10.6.2
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       jsonpath-plus: 10.4.0
       lodash-es: 4.18.1
       winston: 3.19.0
@@ -11567,7 +11570,7 @@ snapshots:
       camelcase: 5.3.1
       find-up: 4.1.0
       get-package-type: 0.1.0
-      js-yaml: 3.15.1
+      js-yaml: 3.15.2
       resolve-from: 5.0.0
 
   '@istanbuljs/schema@0.1.6': {}
@@ -11889,7 +11892,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       mariadb: 3.5.4
     transitivePeerDependencies:
       - better-sqlite3
@@ -11942,7 +11945,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       pg: 8.19.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
@@ -14947,7 +14950,7 @@ snapshots:
       imurmurhash: 0.1.4
       is-glob: 4.0.3
       is-path-inside: 3.0.3
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       json-stable-stringify-without-jsonify: 1.0.1
       levn: 0.4.1
       lodash.merge: 4.6.2
@@ -15973,12 +15976,12 @@ snapshots:
 
   js-tokens@9.0.1: {}
 
-  js-yaml@3.15.1:
+  js-yaml@3.15.2:
     dependencies:
       argparse: 1.0.10
       esprima: 4.0.1
 
-  js-yaml@4.3.1:
+  js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 
@@ -17476,7 +17479,7 @@ snapshots:
   read-yaml-file@1.1.0:
     dependencies:
       graceful-fs: 4.2.11
-      js-yaml: 3.15.1
+      js-yaml: 3.15.2
       pify: 4.0.1
       strip-bom: 3.0.0
 

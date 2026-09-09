@@ -139,6 +139,8 @@ overrides:
   "brace-expansion@>=5": ^5.0.9
   # fast-uri floor raised 3.1.4 → 3.1.6 (2026-09-03: GHSA-5jgf-p345-68v8 / f65p-4m7j-42xc / fph4-wmhf-6fwf / jqff-g426-hqxp, HIGH, published 2026-09-02; ajv@8 resolver, in the pod + backend prod closures). Same-major.
   "fast-uri@<3.1.6": ^3.1.6
+  # GHSA-w27v-7q3p-w38r + GHSA-4vpr-x523-8j87 (svgo removeScripts bypasses; transitive via astro, build-time) — whole-major floor
+  "svgo@4": ^4.1.0
   # immutable <3.8.4 (GHSA-xvcm-6775-5m9r, HIGH; surfaced by the 2026-09-03
   # rescan — Amplify codegen devDeps chain: @ardatan/relay-compiler →
   # appsync-modelgen-plugin → backend-cli; build toolchain, not shipped).
@@ -164,8 +166,8 @@ overrides:
   undici: ^7.28.0
   "fast-xml-parser@>=4 <5": ^4.5.5
   "fast-xml-parser@>=5": ^5.8.0
-  "js-yaml@>=3 <4": ^3.15.1
-  "js-yaml@>=4": ^4.3.1
+  "js-yaml@>=3 <4": ^3.15.2
+  "js-yaml@>=4": ^4.3.2
   "ip-address@<10.3.1": ^10.3.1
   "@mikro-orm/knex@<6.6.14": ^6.6.14
   # qs floor raised 6.15.2 → 6.16.0 (2026-09-03: GHSA-4mjr-xmp4-gh2g / x5fp-wj9c-mxmx, MEDIUM, published 2026-09-02; express 5 / body-parser, in the pod + backend prod closures). Same-major.
@@ -469,6 +471,8 @@ overrides:
   isomorphic-git: 1.40.0
   "jose@^5": 5.10.0
   "jose@^6": 6.2.8
+  "js-yaml@^3": 3.15.2
+  "js-yaml@^4": 4.3.2
   lru.min: 1.1.5
   mariadb: 3.5.4
   memfs: 4.66.1

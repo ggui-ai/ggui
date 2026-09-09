@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T07:34:09.535Z",
+  "generatedAt": "2026-09-09T07:35:42.713Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -218,6 +218,7 @@
     "hono",
     "isomorphic-git",
     "jose",
+    "js-yaml",
     "lru.min",
     "mariadb",
     "memfs",
@@ -540,6 +541,8 @@
     "isomorphic-git",
     "jose@^5",
     "jose@^6",
+    "js-yaml@^3",
+    "js-yaml@^4",
     "lru.min",
     "mariadb",
     "memfs",
