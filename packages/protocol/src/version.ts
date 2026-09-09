@@ -6,6 +6,13 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Model registry: `openai/gpt-6-astra` (2026-09-09, additive, ggui#977 —
+ * MINOR; Exp 008's founder-ruled second arm, ggui#972). One new `ModelId`
+ * union member and one `MODELS.openai` allowlist entry; premium, active,
+ * not in the lineup; costs 10 / 50 / 12.5 / 1.0 per 1M (input / output /
+ * cache write / cache read), `maxTokens` 922000, tools — every field a
+ * receipt on the issue; `retireNotBefore` unset (none published).
+ * --------------------------------------------------------------------
  * Refusal registry v11 — the retail plan model retired (2026-09-08,
  * wire-code, pre-launch, ggui#960 — MINOR on the 0.16.0 draft wave; the
  * protocol half of the pricing publication ggui#949, WITH cloud's arm

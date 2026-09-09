@@ -12,9 +12,11 @@ import {
   MODEL_LINEUP,
   MODEL_REGISTRY,
   isLineupModel,
+  isModelId,
   type ModelConfig,
   type ModelId,
 } from '../llm.js';
+import { isValidLlmRoute, modelRefOfRoute } from '../llm-route.js';
 
 const ids = (): ModelId[] => Object.keys(MODEL_REGISTRY).sort() as ModelId[];
 
@@ -103,5 +105,46 @@ describe('MODEL_REGISTRY — ModelId derives from the rows (no second list)', ()
     expectTypeOf<ModelId>().toEqualTypeOf<keyof typeof MODEL_REGISTRY>();
     const row: ModelConfig = MODEL_REGISTRY['anthropic/claude-fable-5-1'];
     expect(row.id).toBe('anthropic/claude-fable-5-1');
+  });
+});
+
+/**
+ * ggui#977 — Exp 008's founder-ruled second arm. Every number below is a
+ * receipt on the issue (2026-09-09): existence `GET /v1/models/gpt-6-astra`
+ * → 200; pricing from platform.openai.com/docs/pricing, standard
+ * short-context tier ($10 input / $1 cached input / $12.50 cache writes /
+ * $50 output per 1M); context window 922,000 and tool support from
+ * developers.openai.com/api/docs/models/gpt-6-astra. No retirement date is
+ * published, so `retireNotBefore` is unset. Not in the lineup: an
+ * experiment arm, like Sol.
+ */
+describe('MODEL_REGISTRY — GPT-6 Astra row (ggui#977)', () => {
+  it('carries openai/gpt-6-astra exactly as receipted on ggui#977', () => {
+    const row = MODEL_REGISTRY['openai/gpt-6-astra'];
+    expect(row).toEqual({
+      id: 'openai/gpt-6-astra',
+      provider: 'openai',
+      displayName: 'GPT-6 Astra',
+      tier: 'premium',
+      state: 'active',
+      lineup: false,
+      costs: {
+        inputPer1M: 10.0,
+        outputPer1M: 50.0,
+        cacheWritePer1M: 12.5,
+        cacheReadPer1M: 1.0,
+      },
+      maxTokens: 922000,
+      supportsTools: true,
+    });
+    expect(isModelId('openai/gpt-6-astra')).toBe(true);
+    expect(isLineupModel('openai/gpt-6-astra')).toBe(false);
+  });
+
+  it('routes: the allowlist admits it and the registry id is its ModelRef', () => {
+    expect(isValidLlmRoute('openai', 'gpt-6-astra')).toBe(true);
+    const ref = modelRefOfRoute({ provider: 'openai', model: 'gpt-6-astra' });
+    expect(ref).toBe('openai/gpt-6-astra');
+    expect(isModelId(ref)).toBe(true);
   });
 });

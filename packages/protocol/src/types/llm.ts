@@ -373,6 +373,27 @@ const MODEL_ROWS = defineModelRegistry({
   // confirmed upstream LiteLLM has ingested both cuts, so these costs
   // now agree with the vendored snapshot (no PENDING_UPSTREAM
   // exemption needed).
+  // ggui#977 (2026-09-09) — Exp 008's founder-ruled second arm. Receipts on
+  // the issue: existence `GET /v1/models/gpt-6-astra` → 200; pricing from
+  // platform.openai.com/docs/pricing, standard short-context tier; context
+  // window and tool support from the model page. No retirement date is
+  // published → `retireNotBefore` unset. Not in the lineup (experiment arm).
+  "openai/gpt-6-astra": {
+    id: "openai/gpt-6-astra",
+    provider: "openai",
+    displayName: "GPT-6 Astra",
+    tier: "premium",
+    state: "active",
+    lineup: false,
+    costs: {
+      inputPer1M: 10.0,
+      outputPer1M: 50.0,
+      cacheWritePer1M: 12.5,
+      cacheReadPer1M: 1.0,
+    },
+    maxTokens: 922000,
+    supportsTools: true,
+  },
   "openai/gpt-5.6-sol": {
     id: "openai/gpt-5.6-sol",
     provider: "openai",

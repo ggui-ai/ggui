@@ -80,6 +80,7 @@ export const MODELS = {
     // reasoning), `terra` (balanced), `luna` (fast/cost). The bare
     // `gpt-5.6` alias routes to Sol on OpenAI's side. No dated
     // siblings registered at adoption time.
+    'gpt-6-astra', // ggui#977 (2026-09-09): listed by `GET /v1/models/gpt-6-astra` → 200
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
