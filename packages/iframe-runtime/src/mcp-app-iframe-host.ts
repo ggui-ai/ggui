@@ -85,6 +85,21 @@ export interface McpAppIframeMountOptions {
   /** Optional locale; defaults to `navigator.language` when
    *  available. */
   readonly locale?: string;
+  /**
+   * The color mode this host paints around the card (ggui#987 §4: the
+   * embedding host owns runtime mode). Announced as
+   * `hostContext.theme`; the card's ladder, overlay and `color-scheme`
+   * follow it. Omit to announce nothing — the card falls back to the
+   * slice's stamped mode.
+   */
+  readonly theme?: 'light' | 'dark';
+  /**
+   * `@font-face` rules the card may install (ggui#987 §5), announced
+   * as `hostContext.styles.css.fonts`. The card's CSP decides whether
+   * each `src` loads; a refused face is reported back as
+   * `font-face-blocked`.
+   */
+  readonly fonts?: string;
 }
 
 export interface McpAppIframeMount {
@@ -218,7 +233,9 @@ export function mountMcpAppIframe(
         // `hostCapabilities` + `hostContext`; the pre-App draft shape
         // fails that gate and kills the embedded mount. Adapter
         // boundary — `hostContext` carries `{locale,
-        // containerDimensions}` ONLY (no outer ggui render state).
+        // containerDimensions}` plus the host's OWN `theme` / fonts
+        // when the embedder passed them (ggui#987 §4/§5); never any
+        // outer ggui render state.
         const requestedRaw = req.params?.['protocolVersion'];
         const requested =
           typeof requestedRaw === 'string' && requestedRaw.length > 0
@@ -240,6 +257,8 @@ export function mountMcpAppIframe(
               opts.locale ??
               (typeof navigator !== 'undefined' ? navigator.language : 'en-US'),
             containerDimensions: dims,
+            ...(opts.theme !== undefined ? { theme: opts.theme } : {}),
+            ...(opts.fonts !== undefined ? { styles: { css: { fonts: opts.fonts } } } : {}),
           },
         };
         response = { jsonrpc: '2.0', id, result };

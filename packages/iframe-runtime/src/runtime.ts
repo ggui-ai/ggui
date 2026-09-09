@@ -57,6 +57,7 @@ import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
   validateMeta,
+  reportInvalidAppTheme,
 } from './meta-parse.js';
 import type {
   McpAppAiGguiMetaParseFailureReason,
@@ -77,6 +78,7 @@ import {
   applyHostContextStyling,
   attachListener as attachHostContextListener,
   seed as seedHostContext,
+  subscribeLocal as subscribeHostContext,
 } from './host-context-emitter.js';
 import { mapHostPaletteToGguiVars } from './host-palette-bridge.js';
 import {
@@ -356,10 +358,11 @@ function getCurrentApp(): App | null {
  * `color-scheme` via `applyDocumentTheme` — nothing in the token
  * pipeline keys off it, so a dark host painted the light ladder
  * (host-fit 46.0 vs 87.7 with the dark ladder, probe `cc728a8eb`).
- * `buildOpts` consumes this ONLY when the slice stamps no `themeMode`:
- * every operator layer (live provider > per-render override > app
- * default > server default) still wins by being stamped; the host
- * fills the gap where no operator had an opinion.
+ * Under ggui#987 §4 the embedding host OWNS runtime mode: when it
+ * announces one, `buildOpts` paints it over every stamped opinion; the
+ * stamped layers decide only when the host is silent. Read live from
+ * the App's pre-merged hostContext, so a `hostcontextchanged` flip
+ * re-resolves on the next `buildOpts`.
  *
  * @internal — exported for unit tests (`setCurrentApp` injects the
  *   App); production caller is `buildOpts` inside `bootSequence`.
@@ -370,42 +373,33 @@ export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
 }
 
 /**
- * Resolve the mount's base-stylesheet color mode from the slice, with
- * the host as the final fallback (ggui#589, completing the ggui#551
- * precedence ruling — "slice wins, host is the fallback, absent ≠
- * light"):
+ * Resolve the mount's color mode (ggui#987 §4 — the embedding host owns
+ * runtime mode; the app theme's `mode` is a DEFAULT, never a pin):
  *
- *   stamped `themeMode`  >  `theme.mode` (the slice theme OBJECT)  >
- *   host-announced theme  >  undefined
+ *   host-announced theme  >  stamped `themeMode`  >  `theme.mode`
+ *   (the app theme's default)  >  undefined
  *
- * The middle leg is the ggui#589 fix: a render envelope carrying a
- * per-app theme (`theme: {mode, cssVariables}`) but no top-level
- * `themeMode` is still a slice-stamped mode opinion — before this,
- * the base token ladder ignored it and painted the LIGHT token set
- * under a dark overlay whenever the host (correctly, per the
- * adapter-boundary doctrine in the native host helpers) announced no
- * `hostContext.theme`: a light skeleton in a dark skin. The theme
- * object's own `mode` already drove `color-scheme`; now it also
- * selects the ladder.
+ * A card that ignored the host's announced mode painted a light
+ * skeleton inside a dark chat — the host's word is what the user
+ * actually sees around the card. The stamped layers (live provider >
+ * per-render override > app default > server default) decide only when
+ * the host is silent, which is the adapter-boundary case (a host
+ * helper that announces no `hostContext.theme`).
  *
  * `undefined` still means "no opinion anywhere" — the renderer's
- * default applies; never coerced to `'light'`.
+ * default applies; never coerced to `'light'` here (ggui#551).
  *
  * @internal — exported for unit tests; production caller is
  *   `buildOpts` inside `bootSequence`.
  */
 export function resolveMountThemeMode(meta: {
   readonly themeMode?: 'light' | 'dark';
-  readonly theme?: {
-    readonly mode: 'light' | 'dark';
-    readonly cssVariables?: Record<string, string>;
-  };
+  readonly theme?: { readonly mode?: 'light' | 'dark' };
 }): 'light' | 'dark' | undefined {
   // The CLIENT projection of the protocol's normative theme-binding
-  // total order (@ggui-ai/protocol/integrations/theme-binding,
-  // ggui#598 leg 4) — the server stamps via the sibling projection and
-  // the protocol's composition-law test pins that the two compose
-  // without rank drift.
+  // total order (@ggui-ai/protocol/integrations/theme-binding) — the
+  // server stamps via the sibling projection and the protocol's
+  // composition-law test pins that the two compose without rank drift.
   return effectiveThemeMode({
     stamped: meta.themeMode,
     sessionSidecar: meta.theme?.mode,
@@ -414,38 +408,22 @@ export function resolveMountThemeMode(meta: {
 }
 
 /**
- * Resolve the mount's base-theme id from the slice (ggui#589 ask 3):
+ * Resolve the mount's compiled-ladder id from the slice (ggui#987 D2):
  *
- *   stamped `themeId`  >  `theme.name` (the slice theme OBJECT's name)
- *   >  undefined (renderer default ladder)
+ *   stamped `themeId`  >  undefined (renderer default ladder)
  *
- * The name leg makes a slice theme whose `name` matches a REGISTERED
- * theme id select that theme as the BASE token ladder — the overlay's
- * cssVariables still apply above it, so the base carries the full
- * brand ramp coverage a sparse overlay cannot (the "only the mapped
- * vars carry brand" store-frame class). An unregistered name is
- * harmless by construction: `getScopedThemeCss` falls back to the
- * default theme, which is byte-identical to the no-themeId path
- * (`getScopedCssTokens` ≡ `getScopedThemeCss(default)`), so a slice
- * naming its theme "My Custom" renders exactly as before.
+ * The app theme's `name` is a LABEL the author's tooling reads back —
+ * it never selects a ladder. An app theme carries its own full
+ * projection (`overlays`, exactly the manifest minus the floor), so
+ * there is no coverage gap for a compiled theme to fill beneath it.
  *
  * @internal — exported for unit tests; production caller is
  *   `buildOpts` inside `bootSequence`.
  */
-export function resolveMountThemeId(meta: {
-  readonly themeId?: string;
-  readonly theme?: {
-    readonly name?: string;
-    readonly mode?: 'light' | 'dark';
-    readonly cssVariables?: Record<string, string>;
-  };
-}): string | undefined {
+export function resolveMountThemeId(meta: { readonly themeId?: string }): string | undefined {
   // Client projection of the normative theme-binding order — see
   // resolveMountThemeMode above.
-  return effectiveThemeId({
-    stamped: meta.themeId,
-    sidecarName: meta.theme?.name,
-  });
+  return effectiveThemeId({ stamped: meta.themeId });
 }
 
 /**
@@ -1963,7 +1941,7 @@ export async function resolveMetaViaReadDoor(
   if (text === undefined) return null;
   const envelope = readGguiShellEnvelope(text);
   if (envelope === undefined) return null;
-  const parsed = parseMcpAppAiGguiRenderMeta(envelope);
+  const parsed = parseMcpAppAiGguiRenderMeta(envelope, { onInvalidTheme: reportInvalidAppTheme });
   if (!parsed.ok || parsed.meta === undefined) return null;
   const validated = validateMeta(parsed.meta);
   return validated.ok ? validated.meta : null;
@@ -2542,7 +2520,7 @@ function applyFreezeCue(root: HTMLElement): void {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     fontSize: '11px',
     fontWeight: '600',
-    color: 'var(--ggui-color-onSurface, inherit)',
+    color: 'var(--ggui-color-onContainer, inherit)',
     background: 'rgba(128,128,128,0.16)',
     border: '1px solid currentColor',
     opacity: '0.85',
@@ -4799,29 +4777,27 @@ async function bootProduction(opts: {
           !('createdAt' in render)
             ? { codeModuleUrl: meta.codeModuleUrl }
             : {}),
-          // Base-theme ladder (ggui#589 ask 3 — see `resolveMountThemeId`):
-          // stamped themeId > the slice theme object's NAME (a
-          // registered name binds the full brand base; unregistered
-          // names fall back to the default ladder, byte-identical to
-          // the no-themeId path).
+          // Compiled ladder (see `resolveMountThemeId`): the stamped
+          // themeId alone; absent = the renderer's default ladder.
           ...(() => {
             const themeId = resolveMountThemeId(meta);
             return themeId !== undefined ? { themeId } : {};
           })(),
-          // Mode ladder (ggui#551 + #589 — see `resolveMountThemeMode`):
-          // stamped `themeMode` > the slice theme OBJECT's `mode` >
-          // host-announced theme. Absent everywhere means "no opinion",
-          // not "light".
+          // Mode (ggui#987 §4 — see `resolveMountThemeMode`): host-
+          // announced theme > stamped `themeMode` > the app theme's
+          // default `mode`. Absent everywhere means "no opinion", not
+          // "light". Re-resolved on every buildOpts, so the live
+          // hostcontextchanged re-injection below picks up a flip.
           ...(() => {
             const themeMode = resolveMountThemeMode(meta);
             return themeMode !== undefined ? { themeMode } : {};
           })(),
-          // Per-app theme overlay (St3 M2.2). Threaded straight from the
+          // Per-app theme (ggui#987 v2). Threaded straight from the
           // bootstrap's `_meta["ai.ggui/render"].theme` (typed `AppTheme`,
           // already injection-validated by the wire parser) onto the mount
-          // options so the renderer applies the `--ggui-*` overrides +
-          // `color-scheme` at `:root`. THEME IS COMPONENT-ONLY — system
-          // cards theme via the SystemCardHost/ThemeProvider path.
+          // options; the renderer injects the effective mode's overlay
+          // into the scoped block + `:root`. THEME IS COMPONENT-ONLY —
+          // system cards theme via the SystemCardHost/ThemeProvider path.
           ...(meta.theme !== undefined ? { appTheme: meta.theme } : {}),
           // Host palette: always threaded when the host announced one —
           // unlike mode there is no either/or gate here, because the
@@ -4856,6 +4832,18 @@ async function bootProduction(opts: {
         }
         await renderHandle.update(buildOpts(render));
       };
+
+      // Live re-injection (ggui#987 §4): the host owns runtime mode and
+      // may flip it mid-session (`hostcontextchanged`). The App pre-
+      // merges the new hostContext before the emitter fans out, so
+      // re-running `buildOpts` on the CURRENT render re-resolves mode
+      // + palette and the renderer repaints from the retained other
+      // overlay — no fetch, no remount. Fires once on subscribe when
+      // seeded (before the first mount ⇒ no handle ⇒ no-op).
+      subscribeHostContext(() => {
+        if (renderHandle === null || currentRender === null) return;
+        void renderHandle.update(buildOpts(currentRender));
+      });
 
       // Publish `applyRender` module-level. The persistent tool-result
       // listener is ALREADY registered — `bootSequence` installs it

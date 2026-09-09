@@ -23,10 +23,11 @@ describe('mapHostPaletteToGguiVars — spec key mapping', () => {
       '--color-border-primary': '#3f3f46',
     });
     expect(mapped).toEqual({
-      '--ggui-color-surface': '#101014',
-      '--ggui-color-surfaceVariant': '#1b1b22',
-      '--ggui-color-onSurface': '#f4f4f5',
-      '--ggui-color-onSurfaceVariant': '#a1a1aa',
+      '--ggui-color-ground': '#101014',
+      '--ggui-color-container': '#1b1b22',
+      '--ggui-color-onGround': '#f4f4f5',
+      '--ggui-color-onContainer': '#f4f4f5',
+      '--ggui-color-onSunken': '#a1a1aa',
       '--ggui-color-outline': '#3f3f46',
     });
   });
@@ -59,7 +60,7 @@ describe('mapHostPaletteToGguiVars — spec key mapping', () => {
       '--color-ring-primary': '#6366f1',
       '--color-background-primary': '#ffffff',
     });
-    expect(mapped).toEqual({ '--ggui-color-surface': '#ffffff' });
+    expect(mapped).toEqual({ '--ggui-color-ground': '#ffffff' });
   });
 
   it('drops undefined and blank values', () => {

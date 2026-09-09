@@ -16,7 +16,8 @@
  *      the host's `theme` updated but ggui doesn't project theme).
  *   4. Apply host theme + styles + fonts to the iframe DOM via the
  *      spec-canonical {@link applyDocumentTheme} /
- *      {@link applyHostStyleVariables} / {@link applyHostFonts} helpers
+ *      {@link applyHostStyleVariables} helper + this package's
+ *      `installHostFonts` (ggui#987 §5: replace-on-payload)
  *      from `@modelcontextprotocol/ext-apps`. Fires on EVERY raw
  *      `McpUiHostContext` the runtime observes (initial + change
  *      notifications). The application path is INDEPENDENT of the
@@ -54,12 +55,12 @@
  */
 import {
   applyDocumentTheme,
-  applyHostFonts,
   applyHostStyleVariables,
   type App,
   type McpUiHostContext,
   type McpUiHostContextChangedNotification,
 } from '@modelcontextprotocol/ext-apps';
+import { installHostFonts } from './host-fonts.js';
 import {
   hostContextProjectionsEqual,
   projectHostContext,
@@ -331,10 +332,13 @@ export function applyHostContextStyling(raw: unknown): void {
   try {
     const fontsCss = ctx.styles?.css?.fonts;
     if (typeof fontsCss === 'string' && fontsCss.length > 0) {
-      applyHostFonts(fontsCss);
+      // Replace-on-payload under ONE style element (ggui#987 §5) — a
+      // host that changes fonts repaints; the reference helper's
+      // append-per-call would accumulate every payload ever announced.
+      installHostFonts(fontsCss);
     }
   } catch {
-    // applyHostFonts injects a <style> tag; jsdom may reject the
+    // installHostFonts writes a <style> tag; jsdom may reject the
     // operation under strict modes. Swallow.
   }
   // safeAreaInsets — the spec carries these for mobile chrome

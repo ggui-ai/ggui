@@ -31,8 +31,12 @@ const baseSlice: McpAppAiGguiRenderMeta = {
 describe('validateMeta — per-app theme carry-through (St3 M2.2)', () => {
   it('carries a valid theme overlay through projectMeta onto the validated slice', () => {
     const theme: AppTheme = {
+      overlayHash: 'ab'.repeat(32),
       mode: 'dark',
-      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+      overlays: {
+        light: { '--ggui-color-primary-600': '#0284c7' },
+        dark: { '--ggui-color-primary-600': '#7c3aed' },
+      },
     };
 
     const result = validateMeta({ ...baseSlice, theme });

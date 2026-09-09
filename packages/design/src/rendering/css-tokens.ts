@@ -294,11 +294,7 @@ export function getScopedThemeCss(
   // explicitly. The standalone `/r/<shortCode>` viewer that ships with
   // OSS bakes its OWN page-level background in the shell HTML for the
   // direct-browser case.
-  const baseInherits = `.${scopeClass} {
-  font-family: var(--ggui-font-family-sans);
-  color: var(--ggui-color-onGround);
-  background-color: transparent;
-}`;
+  const baseInherits = baseInheritsRule(scopeClass);
   // Gradient + effect tokens primitives can opt-in to for premium accents.
   // `--ggui-color-primary-gradient` is a confident left-to-right
   // primary-500 → primary-600 ramp suitable for hero CTAs (no color-mix —
@@ -315,25 +311,46 @@ export function getScopedThemeCss(
   // untouched. `:where()` keeps specificity at zero; `!important` is
   // required because generated components carry inline styles.
   const framelessRule =
-    theme.metadata?.frameless === true
-      ? `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`
-      : '';
+    theme.metadata?.frameless === true ? framelessSuppressionRule(scopeClass) : '';
   return `${scoped}\n${baseInherits}\n${gradientTokens}\n${theme.cssKeyframes}\n${structuralScaffolding(scopeClass)}${framelessRule}`;
+}
+
+/**
+ * The frameless silhouette rule (`$metadata.frameless` on a compiled
+ * theme; `frameless: true` on a per-app theme overlay — ggui#987 §3.3):
+ * the embedding host draws the card silhouette (rim / rounded clip
+ * mask), so a stroke on the document's ROOT layer gets its corners
+ * amputated by the mask. Targets only the scope's direct children (the
+ * mounted component's outermost element(s)); inner-container strokes
+ * are untouched. `:where()` keeps specificity at zero; `!important` is
+ * required because generated components carry inline styles. ONE
+ * string for both transports — the renderer appends this exact rule
+ * for an overlay that declares `frameless`.
+ */
+export function framelessSuppressionRule(scopeClass: string): string {
+  return `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`;
 }
 
 /**
  * The structural scaffolding EVERY scoped ladder needs regardless of
  * where its variables came from: border-box sizing and the
  * font-family inherit for elements user-agent stylesheets would
- * otherwise style (h1-h6, form controls). Shared verbatim between the
- * compiled path ({@link getScopedThemeCss}) and the delivered path
- * ({@link assembleDeliveredThemeCss}) — one string builder, no drift.
+ * otherwise style (h1-h6, form controls).
  */
 function structuralScaffolding(scopeClass: string): string {
   return `.${scopeClass} *, .${scopeClass} *::before, .${scopeClass} *::after { box-sizing: border-box; }\n.${scopeClass} h1, .${scopeClass} h2, .${scopeClass} h3, .${scopeClass} h4, .${scopeClass} h5, .${scopeClass} h6, .${scopeClass} button, .${scopeClass} input, .${scopeClass} textarea, .${scopeClass} select { font-family: inherit; }`;
 }
 
-/** The base-inherits rule shared by both ladder paths. */
+/**
+ * Apply the theme's `font-family` + base body color to the scope root
+ * so unstyled descendants (h1-h6 / button / etc — primitives that
+ * don't explicitly set `font-family`) inherit the active theme's sans
+ * stack instead of the user-agent default, and plain text resolves
+ * `--ggui-color-onGround` without a Text/Heading wrapper. The scope
+ * root stays TRANSPARENT (no `background`): inside an MCP-Apps host
+ * iframe the host's card chrome shows through; primitives that need a
+ * real surface opt into `var(--ggui-color-ground)` explicitly.
+ */
 function baseInheritsRule(scopeClass: string): string {
   return `.${scopeClass} {
   font-family: var(--ggui-font-family-sans);
@@ -342,49 +359,6 @@ function baseInheritsRule(scopeClass: string): string {
 }`;
 }
 
-/**
- * Assemble the scoped CSS block for a DELIVERED ladder (ggui#598-C
- * runtime theme registration): the wire's `theme.base` variable map,
- * given the SAME scaffolding the compiled ladder gets — base
- * inherits, derived gradient/effect tokens (color-mix fallback split
- * included), box-sizing, and font-inherit. Without this the delivered
- * path silently dropped every non-ladder rule (the injection review's
- * finding).
- *
- * Parity with the compiled path is now full (ggui#613 residual 2):
- * theme-document keyframes and the `$metadata.frameless` suppression
- * ride the delivered wire via `opts` — same blocks, same rule text,
- * one doctrine on two transports.
- */
-export function assembleDeliveredThemeCss(
-  scopeClass: string,
-  variables: Readonly<Record<string, string>>,
-  opts?: {
-    /** The active mode's `@keyframes` block from the delivered base. */
-    readonly keyframes?: string;
-    /** `$metadata.frameless` delivered — appends the compiled path's
-     *  exact root-children border-suppression rule. */
-    readonly frameless?: boolean;
-  },
-): string {
-  const body = Object.keys(variables)
-    .sort()
-    .map((k) => `  ${k}: ${variables[k]};`)
-    .join('\n');
-  const block = `.${scopeClass} {\n${body}\n}`;
-  const primary500 = resolvePrimary500Hex(block);
-  const scoped = withColorMixFallback(block, `.${scopeClass}`, primary500);
-  const gradientTokens = buildGradientTokens(scopeClass, primary500);
-  const keyframesBlock =
-    opts?.keyframes !== undefined && opts.keyframes !== ''
-      ? `\n${opts.keyframes}`
-      : '';
-  const framelessRule =
-    opts?.frameless === true
-      ? `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`
-      : '';
-  return `${scoped}\n${baseInheritsRule(scopeClass)}\n${gradientTokens}${keyframesBlock}\n${structuralScaffolding(scopeClass)}${framelessRule}`;
-}
 
 /**
  * Build the scoped gradient + glow effect tokens with a two-tier

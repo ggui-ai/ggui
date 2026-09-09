@@ -102,20 +102,13 @@ export interface RenderItemOptions {
    */
   readonly themeMode?: 'light' | 'dark';
   /**
-   * Per-app theme overlay forwarded to {@link ReactRootMountOptions.appTheme}
-   * so the renderer injects the `--ggui-*` overrides + `color-scheme` at
-   * `:root`. Sourced from the bootstrap's `_meta["ai.ggui/render"].theme`.
-   * A structural subset of protocol's `AppTheme` (`name` is display-only).
-   * `base` is the delivered registered ladder (ggui#598-C) — forwarded
-   * verbatim; the renderer injects the mode-selected set in place of
-   * the compiled ladder block (see
-   * {@link ReactRootMountOptions.appTheme}).
+   * The per-app theme (protocol's `AppTheme`, ggui#987 v2) forwarded
+   * verbatim to {@link ReactRootMountOptions.appTheme}: the renderer
+   * injects the overlay for the effective `themeMode` into the scoped
+   * block and at `:root`. Sourced from the bootstrap's
+   * `_meta["ai.ggui/render"].theme`.
    */
-  readonly appTheme?: {
-    readonly mode: 'light' | 'dark';
-    readonly cssVariables: Record<string, string>;
-    readonly base?: NonNullable<AppTheme['base']>;
-  };
+  readonly appTheme?: AppTheme;
   /**
    * Host-announced palette, pre-mapped onto `--ggui-*` tokens by the
    * host-palette bridge. Forwarded to

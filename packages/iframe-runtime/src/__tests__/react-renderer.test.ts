@@ -22,6 +22,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { act } from 'react';
 import { mountReactRoot } from '../react-renderer.js';
 
+/** A syntactically valid attestation — the renderer never recomputes it. */
+const OVERLAY_HASH = 'ab'.repeat(32);
+
 function makeContainer(): HTMLElement {
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -104,8 +107,10 @@ describe('mountReactRoot — per-app theme overlay', () => {
     await flush(async () => {
       mount = await mountReactRoot(container, {
         render: { id: 'x', componentCode: '' },
+        themeMode: 'dark',
         appTheme: {
-          mode: 'dark',
+          overlayHash: OVERLAY_HASH,
+          overlays: { light: {}, dark: {} },
           cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
         },
       });
@@ -124,8 +129,10 @@ describe('mountReactRoot — per-app theme overlay', () => {
     await flush(async () => {
       mount = await mountReactRoot(container, {
         render: { id: 'x', componentCode: '' },
+        themeMode: 'light',
         appTheme: {
-          mode: 'light',
+          overlayHash: OVERLAY_HASH,
+          overlays: { light: {}, dark: {} },
           cssVariables: { '--ggui-color-primary-600': '#abcdef' },
         },
       });
@@ -154,8 +161,10 @@ describe('mountReactRoot — per-app theme overlay', () => {
     await flush(async () => {
       mount = await mountReactRoot(container, {
         render: { id: 'x', componentCode: '' },
+        themeMode: 'light',
         appTheme: {
-          mode: 'light',
+          overlayHash: OVERLAY_HASH,
+          overlays: { light: {}, dark: {} },
           cssVariables: { '--ggui-color-primary-600': '#abcdef' },
         },
       });
@@ -211,8 +220,10 @@ describe('mountReactRoot — host palette fallback layer (ggui#572 / #573 ruling
       mount = await mountReactRoot(container, {
         render: { id: 'x', componentCode: '' },
         hostPalette: { '--ggui-color-surface': '#101014' },
+        themeMode: 'dark',
         appTheme: {
-          mode: 'dark',
+          overlayHash: OVERLAY_HASH,
+          overlays: { light: {}, dark: {} },
           cssVariables: { '--ggui-color-surface': '#22222a' },
         },
       });
@@ -238,8 +249,10 @@ describe('mountReactRoot — host palette fallback layer (ggui#572 / #573 ruling
       mount = await mountReactRoot(container, {
         render: { id: 'x', componentCode: '' },
         hostPalette: { '--ggui-color-surface': '#101014' },
+        themeMode: 'dark',
         appTheme: {
-          mode: 'dark',
+          overlayHash: OVERLAY_HASH,
+          overlays: { light: {}, dark: {} },
           cssVariables: { '--ggui-color-surface': '#22222a' },
         },
       });

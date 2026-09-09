@@ -14,7 +14,7 @@ export {
   getScopedCssTokens,
   getThemeCss,
   getScopedThemeCss,
-  assembleDeliveredThemeCss,
+  framelessSuppressionRule,
 } from './css-tokens';
 export {
   rewriteImports,

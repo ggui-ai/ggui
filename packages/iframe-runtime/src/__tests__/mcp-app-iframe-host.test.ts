@@ -33,12 +33,14 @@ const SAMPLE_RENDER: McpAppsGguiSession = {
 
 async function initializeRoundTrip(
   params?: Record<string, unknown>,
+  mountOpts?: { readonly theme?: 'light' | 'dark'; readonly fonts?: string },
 ): Promise<unknown> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const mount = mountMcpAppIframe(container, {
     render: SAMPLE_RENDER,
     sessionId: SAMPLE_RENDER.id,
+    ...(mountOpts ?? {}),
   });
   const inner = mount.element.contentWindow;
   if (inner === null) throw new Error('jsdom iframe has no contentWindow');
@@ -126,5 +128,22 @@ describe('mountMcpAppIframe — no ungoverned chrome (ggui#597, round-6 doctrine
     expect(style.display).toBe('block');
     mount.unmount();
     container.remove();
+  });
+});
+
+describe('ui/initialize announces the embedder\'s own theme + fonts (ggui#987 §4/§5)', () => {
+  it('threads `theme` and `fonts` options onto hostContext', async () => {
+    const fonts = "@font-face { font-family: 'Host Sans'; src: url('https://fonts.example.com/h.woff2'); }";
+    const raw = await initializeRoundTrip(undefined, { theme: 'dark', fonts });
+    const result = McpUiInitializeResultSchema.parse(raw);
+    expect(result.hostContext.theme).toBe('dark');
+    expect(result.hostContext.styles?.css?.fonts).toBe(fonts);
+  });
+
+  it('announces neither when the embedder passed neither — absence stays absence', async () => {
+    const raw = await initializeRoundTrip();
+    const result = McpUiInitializeResultSchema.parse(raw);
+    expect(result.hostContext).not.toHaveProperty('theme');
+    expect(result.hostContext).not.toHaveProperty('styles');
   });
 });

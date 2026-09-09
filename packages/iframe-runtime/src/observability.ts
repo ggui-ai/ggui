@@ -36,6 +36,8 @@ import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
  */
 export type ObservabilityEvent =
   | SchemaVersionMismatchEvent
+  | FontFaceBlockedEvent
+  | AppThemeInvalidEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
@@ -329,6 +331,37 @@ export interface RelayDeadTapEvent {
  *
  * @public
  */
+/**
+ * A host-delivered `@font-face` src the document's CSP refused
+ * (ggui#987 §5): the card installed the host's `styles.css.fonts`, the
+ * browser blocked the fetch under `font-src`, and the family will fall
+ * back to its stack. Reported ONCE per (family, host) per document —
+ * the operator's signal that the shell's `font-src` allowlist and the
+ * host's font origin disagree.
+ *
+ * @public
+ */
+export interface FontFaceBlockedEvent {
+  readonly kind: 'font-face-blocked';
+  /** The `font-family` the refused `@font-face` block declared. */
+  readonly family: string;
+  /** Host of the blocked `src` URL (`blockedURI`, origin-stripped by CSP). */
+  readonly host: string;
+}
+
+/**
+ * The render slice carried a `theme` the wire schema refused (ggui#987
+ * §3.4): the parser dropped it and the card painted the compiled ladder
+ * alone. `issues` are the schema's own messages — the operator's
+ * pointer to what the write door should have refused.
+ *
+ * @public
+ */
+export interface AppThemeInvalidEvent {
+  readonly kind: 'app-theme-invalid';
+  readonly issues: readonly string[];
+}
+
 export interface UnknownObservabilityEvent {
   readonly kind: string & {};
   readonly [field: string]: unknown;

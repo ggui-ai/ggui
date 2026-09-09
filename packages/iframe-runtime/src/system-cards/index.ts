@@ -79,8 +79,8 @@ function UnknownSystemCard({
         borderRadius: 'var(--ggui-shape-radius-md, 10px)',
         fontFamily:
           'var(--ggui-font-family-sans, -apple-system, BlinkMacSystemFont, sans-serif)',
-        background: 'var(--ggui-color-surfaceVariant, #f4f4f5)',
-        color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+        background: 'var(--ggui-color-sunken, #f4f4f5)',
+        color: 'var(--ggui-color-onSunken, #52525b)',
       },
     },
     React.createElement(

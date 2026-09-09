@@ -57,7 +57,7 @@ function GguiWordmark(): React.JSX.Element {
   // off-white in dark). `gray-300` flips too — the gray scale in
   // `darkTheme` is intentionally inverted, so the wordmark's
   // contrasting "chrome" tone reads correctly under either theme.
-  const ink = 'var(--ggui-color-onSurface, #292929)';
+  const ink = 'var(--ggui-color-onContainer, #292929)';
   const chrome = 'var(--ggui-color-neutral-300, #d1d5db)';
   return (
     <svg
@@ -178,10 +178,10 @@ export function NoCredentialsCard({
   // INVERTED in darkTheme so `gray-100` is light-on-dark when in
   // dark mode and dark-on-light when in light mode).
   //
-  //   - `--ggui-color-surface` — opaque card surface (white in light,
+  //   - `--ggui-color-container` — opaque card surface (white in light,
   //     slate-800 in dark). Used for the URL block + QR backdrop.
-  //   - `--ggui-color-onSurface` — high-contrast body text.
-  //   - `--ggui-color-onSurfaceVariant` — muted captions/headings.
+  //   - `--ggui-color-onContainer` — high-contrast body text.
+  //   - `--ggui-color-onSunken` — muted captions/headings.
   //   - `--ggui-color-neutral-100` — subtle tinted background that
   //     auto-flips. Used for the inner "details" panel — slightly
   //     differentiated from outer transparent canvas without being
@@ -194,7 +194,7 @@ export function NoCredentialsCard({
     // background creates a card-on-card look. Padding stays so content
     // doesn't crowd the iframe edges. Outside Claude (preview iframe,
     // console inspector), the ThemeProvider's body background is the
-    // theme's `--ggui-color-surface`, so a transparent card just
+    // theme's `--ggui-color-container`, so a transparent card just
     // shows the theme's canvas behind it — also fine.
     <Card
       padding="lg"
@@ -229,7 +229,7 @@ export function NoCredentialsCard({
                 fontFamily:
                   'var(--ggui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
                 fontSize: 'var(--ggui-font-size-xs, 11px)',
-                color: 'var(--ggui-color-onSurfaceVariant, #71717a)',
+                color: 'var(--ggui-color-onSunken, #71717a)',
                 opacity: 0.7,
                 userSelect: 'all',
               }}
@@ -240,7 +240,7 @@ export function NoCredentialsCard({
           </div>
           <Text
             style={{
-              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              color: 'var(--ggui-color-onSunken, #52525b)',
               lineHeight: '1.55',
             }}
           >
@@ -279,7 +279,7 @@ export function NoCredentialsCard({
             {/* QR colors are HARDCODED black-on-white (not themed). */}
             {/* A QR code must look like a printed code regardless of */}
             {/* theme so the phone camera's contrast detection works */}
-            {/* — using `--ggui-color-surface` would render dark-on- */}
+            {/* — using `--ggui-color-container` would render dark-on- */}
             {/* dark in dark mode, making the code unscannable. */}
             <div
               style={{
@@ -307,7 +307,7 @@ export function NoCredentialsCard({
               <Text
                 size="xs"
                 style={{
-                  color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                  color: 'var(--ggui-color-onSunken, #52525b)',
                   fontSize: 'var(--ggui-font-size-xs, 11px)',
                   textAlign: 'center',
                 }}
@@ -327,7 +327,7 @@ export function NoCredentialsCard({
               <Text
                 size="xs"
                 style={{
-                  color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                  color: 'var(--ggui-color-onSunken, #52525b)',
                   fontWeight: 'var(--ggui-font-weight-semibold, 600)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
@@ -341,11 +341,11 @@ export function NoCredentialsCard({
                   fontFamily:
                     'var(--ggui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
                   fontSize: 'var(--ggui-font-size-sm, 13px)',
-                  color: 'var(--ggui-color-onSurface, #111)',
+                  color: 'var(--ggui-color-onContainer, #111)',
                   wordBreak: 'break-all',
                   userSelect: 'all',
                   padding: 'var(--ggui-spacing-3, 12px)',
-                  background: 'var(--ggui-color-surface, #fff)',
+                  background: 'var(--ggui-color-container, #fff)',
                   border: '1px solid var(--ggui-color-neutral-200, #e4e4e7)',
                   borderRadius: 'var(--ggui-shape-radius-sm, 6px)',
                   lineHeight: '1.45',
@@ -373,7 +373,7 @@ export function NoCredentialsCard({
                   <Text
                     size="xs"
                     style={{
-                      color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                      color: 'var(--ggui-color-onSunken, #52525b)',
                       opacity: 0.85,
                     }}
                   >
@@ -389,7 +389,7 @@ export function NoCredentialsCard({
           <Text
             size="xs"
             style={{
-              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              color: 'var(--ggui-color-onSunken, #52525b)',
               opacity: 0.7,
             }}
           >

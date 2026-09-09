@@ -58,6 +58,7 @@ import type {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiMetaParseResult } from './types.js';
+import { postObservabilityToParent } from './observability.js';
 
 /**
  * Type guard — true iff `value` is a non-null, non-array plain object.
@@ -351,6 +352,18 @@ export function validateMeta(
 }
 
 /**
+ * The wire parser refused the slice's `theme` (ggui#987 §3.4): report it
+ * to the embedding host as `app-theme-invalid` and mount without it. A
+ * write door should have refused this upstream — the event is the
+ * operator's pointer to the door that did not. Passed as
+ * `onInvalidTheme` on every `parseMcpAppAiGguiRenderMeta` call in this
+ * package.
+ */
+export function reportInvalidAppTheme(issues: readonly string[]): void {
+  postObservabilityToParent({ kind: 'app-theme-invalid', issues: [...issues] });
+}
+
+/**
  * Parse the render slice from `globalThis.__GGUI_META__` — the
  * synchronous self-contained shell delivery channel.
  *
@@ -372,7 +385,7 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
   if (!isPlainObject(raw)) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiRenderMeta(raw);
+  const parsed = parseMcpAppAiGguiRenderMeta(raw, { onInvalidTheme: reportInvalidAppTheme });
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
@@ -428,7 +441,7 @@ export function parseMetaFromToolResult(
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   const meta: Record<string, unknown> = topMeta;
-  const parsed = parseMcpAppAiGguiRenderMeta(meta);
+  const parsed = parseMcpAppAiGguiRenderMeta(meta, { onInvalidTheme: reportInvalidAppTheme });
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }

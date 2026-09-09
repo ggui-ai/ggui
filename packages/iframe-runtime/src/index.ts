@@ -64,6 +64,8 @@ export type {
   ObservabilityEmitter,
   ObservabilityMessage,
   SchemaVersionMismatchEvent,
+  FontFaceBlockedEvent,
+  AppThemeInvalidEvent,
   SubscribeFailedEvent,
   ChannelTransportPickedEvent,
   ChannelTransportFallbackEvent,

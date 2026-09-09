@@ -53,8 +53,9 @@ describe('hostAnnouncedPalette — the ggui#572 input leg', () => {
       },
     });
     expect(hostAnnouncedPalette()).toEqual({
-      '--ggui-color-surface': '#101014',
-      '--ggui-color-onSurface': '#f4f4f5',
+      '--ggui-color-ground': '#101014',
+      '--ggui-color-onGround': '#f4f4f5',
+      '--ggui-color-onContainer': '#f4f4f5',
     });
   });
 
@@ -68,7 +69,7 @@ describe('hostAnnouncedPalette — the ggui#572 input leg', () => {
       ...DEFAULT_HOST_CONTEXT,
       styles: { variables: { '--color-background-primary': '#ffffff' } },
     });
-    expect(hostAnnouncedPalette()).toEqual({ '--ggui-color-surface': '#ffffff' });
+    expect(hostAnnouncedPalette()).toEqual({ '--ggui-color-ground': '#ffffff' });
     transport.pushNotification({
       method: 'ui/notifications/host-context-changed',
       params: {
@@ -76,6 +77,6 @@ describe('hostAnnouncedPalette — the ggui#572 input leg', () => {
       },
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(hostAnnouncedPalette()).toEqual({ '--ggui-color-surface': '#101014' });
+    expect(hostAnnouncedPalette()).toEqual({ '--ggui-color-ground': '#101014' });
   });
 });

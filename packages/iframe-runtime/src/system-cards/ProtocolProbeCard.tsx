@@ -463,7 +463,7 @@ function ProbeButtonRow({
         padding: 'var(--ggui-spacing-3, 12px)',
         borderRadius: 'var(--ggui-shape-radius-md, 10px)',
         border: '1px solid var(--ggui-color-neutral-200, #e4e4e7)',
-        background: 'var(--ggui-color-surface, #fff)',
+        background: 'var(--ggui-color-container, #fff)',
       }}
     >
       <div
@@ -480,7 +480,7 @@ function ProbeButtonRow({
             fontFamily:
               'var(--ggui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
             fontSize: 'var(--ggui-font-size-sm, 13px)',
-            color: 'var(--ggui-color-onSurface, #111)',
+            color: 'var(--ggui-color-onContainer, #111)',
             fontWeight: 'var(--ggui-font-weight-semibold, 600)',
           }}
         >
@@ -491,7 +491,7 @@ function ProbeButtonRow({
       <Text
         size="xs"
         style={{
-          color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+          color: 'var(--ggui-color-onSunken, #52525b)',
           fontSize: 'var(--ggui-font-size-xs, 11px)',
         }}
       >
@@ -517,7 +517,7 @@ function ProbeButtonRow({
             color:
               outcome.state === 'error'
                 ? 'var(--ggui-color-warning-500, #b45309)'
-                : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                : 'var(--ggui-color-onSunken, #52525b)',
             background: 'var(--ggui-color-neutral-100, #f4f4f5)',
             padding: 'var(--ggui-spacing-2, 8px)',
             borderRadius: 'var(--ggui-shape-radius-sm, 6px)',
@@ -573,7 +573,7 @@ export function ProtocolProbeCard({
           </div>
           <Text
             style={{
-              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              color: 'var(--ggui-color-onSunken, #52525b)',
               lineHeight: '1.55',
             }}
           >
@@ -631,7 +631,7 @@ export function ProtocolProbeCard({
             <Text
               size="xs"
               style={{
-                color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                color: 'var(--ggui-color-onSunken, #52525b)',
                 fontSize: 'var(--ggui-font-size-xs, 11px)',
               }}
             >
@@ -642,7 +642,7 @@ export function ProtocolProbeCard({
             <Text
               size="xs"
               style={{
-                color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                color: 'var(--ggui-color-onSunken, #52525b)',
                 fontStyle: 'italic',
               }}
             >
@@ -676,12 +676,12 @@ export function ProtocolProbeCard({
                     style={{
                       cursor: 'pointer',
                       padding: 'var(--ggui-spacing-1, 4px) 0',
-                      color: 'var(--ggui-color-onSurface, #111)',
+                      color: 'var(--ggui-color-onContainer, #111)',
                     }}
                   >
                     <span
                       style={{
-                        color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                        color: 'var(--ggui-color-onSunken, #52525b)',
                         marginRight: '8px',
                       }}
                     >
@@ -694,7 +694,7 @@ export function ProtocolProbeCard({
                       margin: '4px 0 0 16px',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
-                      color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+                      color: 'var(--ggui-color-onSunken, #52525b)',
                     }}
                   >
                     {JSON.stringify(entry.params, null, 2)}
@@ -709,7 +709,7 @@ export function ProtocolProbeCard({
           <Text
             size="xs"
             style={{
-              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
+              color: 'var(--ggui-color-onSunken, #52525b)',
               opacity: 0.7,
             }}
           >

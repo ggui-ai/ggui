@@ -25,7 +25,7 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   sseUrl: 'https://example.test/api/sessions/r-1/stream?wsToken=tok-1',
   themeId: 'theme-1',
   themeMode: 'dark',
-  theme: { mode: 'dark', cssVariables: { '--ggui-color-primary-600': '#7c3aed' } },
+  theme: { overlayHash: 'ab'.repeat(32), mode: 'dark', overlays: { light: { '--ggui-color-primary-600': '#0284c7' }, dark: { '--ggui-color-primary-600': '#7c3aed' } } },
   gadgets: [{ package: '@acme/map', bundleUrl: 'https://cdn.test/map.js' }],
   // Key MUST match PUBLIC_ENV_APP_KEY_RE (GGUI_PUBLIC_APP_*) — the
   // projection legitimately collapses non-conforming maps to absent.

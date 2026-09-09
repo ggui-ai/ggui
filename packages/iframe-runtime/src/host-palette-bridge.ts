@@ -37,20 +37,24 @@
  * `--ggui-color-error` target would repaint nothing (no theme emits
  * flat semantic tokens).
  */
-const SPEC_TO_GGUI: Readonly<Record<string, string>> = {
-  '--color-background-primary': '--ggui-color-surface',
-  '--color-background-secondary': '--ggui-color-surfaceVariant',
-  '--color-background-tertiary': '--ggui-color-container',
-  '--color-background-danger': '--ggui-color-errorContainer',
-  '--color-text-primary': '--ggui-color-onSurface',
-  '--color-text-secondary': '--ggui-color-onSurfaceVariant',
-  '--color-text-tertiary': '--ggui-color-neutral-500',
-  '--color-text-danger': '--ggui-color-error-500',
-  '--color-text-success': '--ggui-color-success-500',
-  '--color-text-warning': '--ggui-color-warning-500',
-  '--color-text-info': '--ggui-color-info-500',
-  '--color-border-primary': '--ggui-color-outline',
-  '--color-border-secondary': '--ggui-color-outlineVariant',
+const SPEC_TO_GGUI: Readonly<Record<string, readonly string[]>> = {
+  // Surface-layering roles (ggui#987 §2.1): the host's primary background
+  // is the canvas a card sits on (`ground`), its secondary the card
+  // itself (`container`), its tertiary the recessed wells (`sunken`);
+  // primary text is the ink on both the canvas and the card.
+  '--color-background-primary': ['--ggui-color-ground'],
+  '--color-background-secondary': ['--ggui-color-container'],
+  '--color-background-tertiary': ['--ggui-color-sunken'],
+  '--color-background-danger': ['--ggui-color-errorContainer'],
+  '--color-text-primary': ['--ggui-color-onGround', '--ggui-color-onContainer'],
+  '--color-text-secondary': ['--ggui-color-onSunken'],
+  '--color-text-tertiary': ['--ggui-color-neutral-500'],
+  '--color-text-danger': ['--ggui-color-error-500'],
+  '--color-text-success': ['--ggui-color-success-500'],
+  '--color-text-warning': ['--ggui-color-warning-500'],
+  '--color-text-info': ['--ggui-color-info-500'],
+  '--color-border-primary': ['--ggui-color-outline'],
+  '--color-border-secondary': ['--ggui-color-outlineVariant'],
 };
 
 /**
@@ -92,12 +96,12 @@ export function mapHostPaletteToGguiVars(
   if (variables === undefined) return undefined;
   const mapped: Record<string, string> = {};
   let count = 0;
-  for (const [specKey, gguiKey] of Object.entries(SPEC_TO_GGUI)) {
+  for (const [specKey, gguiKeys] of Object.entries(SPEC_TO_GGUI)) {
     const raw = variables[specKey];
     if (typeof raw !== 'string') continue;
     const value = raw.trim();
     if (!isSafeCssValue(value)) continue;
-    mapped[gguiKey] = value;
+    for (const gguiKey of gguiKeys) mapped[gguiKey] = value;
     count += 1;
   }
   return count > 0 ? mapped : undefined;

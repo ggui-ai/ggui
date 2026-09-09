@@ -50,8 +50,8 @@ export function QrCode({
   value,
   size = 128,
   errorCorrection = 'M',
-  foreground = 'var(--ggui-color-onSurface, #18181b)',
-  background = 'var(--ggui-color-surface, #ffffff)',
+  foreground = 'var(--ggui-color-onContainer, #18181b)',
+  background = 'var(--ggui-color-container, #ffffff)',
   ariaLabel,
 }: QrCodeProps): React.JSX.Element | null {
   const moduleMatrix = React.useMemo(() => {
