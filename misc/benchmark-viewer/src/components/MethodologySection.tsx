@@ -62,6 +62,21 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-09',
+    text:
+      'Matrix: an OpenAI frontier arm added — openai-frontier = GPT-6 astra ' +
+      '($10 / $50 per MTok), alongside the existing fast, balanced and premium ' +
+      'OpenAI arms; the matrix is now 11 arms. As with claude-frontier, the arm ' +
+      'carries the "premium" tier label (the tier vocabulary has no frontier ' +
+      'value) and is a separate row. Scores for the new arm start with its first ' +
+      'run on or after this date; every existing arm, the corpus, and the judge ' +
+      'panel are unchanged, so prior rows stay comparable. Reports from this ' +
+      'date also carry per-cell fields — the runtime-probe verdict and a ' +
+      'contract-behaviour check re-run in-task for every cell — under ' +
+      'meta.schemaVersion = "benchmark-report.v2"; these add disclosure and ' +
+      'change no score. History is not rewritten.',
+  },
+  {
     date: '2026-09-07',
     text:
       'Generator identities de-modeled: the two generation harnesses are now ' +

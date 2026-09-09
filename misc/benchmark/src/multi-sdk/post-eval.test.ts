@@ -5,6 +5,7 @@ import {
   createLimiter,
   buildJudgeDisclosure,
   AESTHETIC_PROMPT_VERSION_PANEL,
+  selectPanelPrompt,
   type SingleJudgeResult,
   type AestheticScores,
 } from './post-eval.js';
@@ -239,5 +240,22 @@ describe('createLimiter', () => {
     expect(results[0]).toEqual({ status: 'fulfilled', value: 'a' });
     expect(results[1].status).toBe('rejected');
     expect(results[2]).toEqual({ status: 'fulfilled', value: 'c' });
+  });
+});
+
+describe('arm-neutral panel prompt (#973 §5b — experiment-lane promptVersion; the published page keeps the default)', () => {
+  it('selects the default prompt + version when unset', () => {
+    const { promptVersion } = selectPanelPrompt(undefined);
+    expect(promptVersion).toBe(AESTHETIC_PROMPT_VERSION_PANEL);
+  });
+
+  it('the arm-neutral prompt carries its own promptVersion and does not reward a token vocabulary', () => {
+    const { prompt, promptVersion } = selectPanelPrompt('arm-neutral');
+    expect(promptVersion).toBe('aesthetic-eval.v3-panel-arm-neutral');
+    expect(promptVersion).not.toBe(AESTHETIC_PROMPT_VERSION_PANEL);
+    expect(prompt).not.toMatch(/var\(--ggui/);
+    expect(prompt).not.toMatch(/ggui design tokens/i);
+    // still scores the same five keys so the report shape is unchanged
+    for (const k of ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation']) expect(prompt).toContain(`"${k}"`);
   });
 });

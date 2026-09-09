@@ -237,10 +237,18 @@ describe('BenchmarkRunner generator dispatch', () => {
     // backoff — measured 18-27s wall on an idle machine (2026-08-19,
     // n=4), which tips over the default 30s under full-suite load.
     const runner = makeRunnerWithMockAdapter({
-      // Field is read off the config object via narrow shape check
-      // (`{ playwright?: { chromium?: unknown } }`) in the runner.
-      playwright: { chromium: {} },
-    } as ConstructorParameters<typeof BenchmarkRunner>[0]);
+      // A real `PlaywrightModule` shape (#973 tightened the config type from
+      // `{ chromium?: unknown }`): presence of `chromium` marks the advanced
+      // generator runnable; the browser is never launched on this path
+      // because MockAdapter fails the dispatch first.
+      playwright: {
+        chromium: {
+          launch: async () => {
+            throw new Error('unit test: browser must not launch');
+          },
+        },
+      },
+    });
     const report = await runner.run({
       variants: [{
         id: 'claude-advanced',

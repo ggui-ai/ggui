@@ -114,11 +114,13 @@ export interface BenchmarkMeta {
    */
   criteriaCoverageDegraded?: true;
   /**
-   * Report JSON shape version. `'benchmark-report.v1'` from 2026-09-07 (generator
-   * ids de-modeled: `ui-gen-default` / `ui-gen-advanced`). Absent = v0, whose
-   * generator ids carried model names (`ui-gen-default-haiku-4-5`).
+   * Report JSON shape version. `'benchmark-report.v2'` (#973): per-cell
+   * `runtimeProbeVerdict` / `contractBehavior` / `visualCanvases`.
+   * `'benchmark-report.v1'` from 2026-09-07: generator ids de-modeled
+   * (`ui-gen-default` / `ui-gen-advanced`). Absent = v0, whose generator ids
+   * carried model names (`ui-gen-default-haiku-4-5`).
    */
-  schemaVersion?: 'benchmark-report.v1';
+  schemaVersion?: 'benchmark-report.v1' | 'benchmark-report.v2';
   /** SPDX id of the published dataset license. */
   dataLicense?: string;
 }
@@ -276,7 +278,43 @@ export interface BenchmarkRunResultDisplay {
   estimatedCostUsd: number;
   error?: string;
   timestamp: string;
+  /** Runner's per-cell runtime-probe verdict (`benchmark-report.v2`, #973). */
+  runtimeProbeVerdict?: RuntimeProbeVerdictDisplay;
+  /** `validateContractBehavior` re-run in-task for this cell (`benchmark-report.v2`, #973). */
+  contractBehavior?: ContractBehaviorDisplay;
+  /** Per-canvas visual scores + PNG artefact refs (`benchmark-report.v2`, #973). */
+  visualCanvases?: VisualCanvasArtefactDisplay[];
   postGeneration?: PostGenerationDisplay;
+}
+
+/** Mirrors `ContractBehaviorResult` in `@ggui-ai/benchmark/multi-sdk/contract-behavior`. */
+export interface ContractBehaviorDisplay {
+  status: 'ran' | 'skipped';
+  ok?: boolean;
+  failures?: ReadonlyArray<{ kind: 'action-no-effect' | 'action-not-rendered' | 'render-failed' | 'timeout'; actionName?: string; diagnostic: string }>;
+  reason?: string;
+  durationMs?: number;
+}
+
+/** Mirrors `VisualCanvasArtefact` in `@ggui-ai/benchmark/multi-sdk/canvas` — the PNG itself is never in the report. */
+export interface VisualCanvasArtefactDisplay {
+  canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl';
+  viewport: { width: number; height: number };
+  score: number;
+  passed: boolean;
+  artefact: { path: string; sha256: string; bytes: number };
+}
+
+/**
+ * Mirrors `RuntimeProbeVerdict` in `@ggui-ai/benchmark/multi-sdk/runtime-probe`.
+ * `skipped` is never a pass and always carries `reason`.
+ */
+export interface RuntimeProbeVerdictDisplay {
+  status: 'ran' | 'skipped';
+  passed: boolean;
+  failures: number;
+  warnings: number;
+  reason?: string;
 }
 
 export interface VariantSummaryDisplay {

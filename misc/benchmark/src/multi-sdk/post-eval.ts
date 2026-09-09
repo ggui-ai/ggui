@@ -98,10 +98,11 @@ export interface JudgeDisclosure {
 export function buildJudgeDisclosure(
   model: string,
   sampling: JudgeSampling | undefined,
+  promptVersion: string = AESTHETIC_PROMPT_VERSION_PANEL,
 ): JudgeDisclosure {
   return {
     model,
-    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
+    promptVersion,
     ...(sampling !== undefined ? { sampling } : {}),
   };
 }
@@ -133,6 +134,49 @@ Respond with ONLY a JSON object, no markdown:
   "dataPresentation": <0-100>,
   "critique": "<2-3 sentences summarizing the main issues>"
 }`;
+
+/**
+ * Arm-neutral variant for the Exp 008 A/B (#973 §5b): identical to the default
+ * except dimension 2, which the default defines as ggui-token usage — a
+ * reward for one arm's constraint set. Used for BOTH arms, only when the
+ * runner is told `panelPrompt: 'arm-neutral'`; the published run never is, so
+ * the page's methodology is unchanged. Disclosed per judge via promptVersion.
+ */
+const AESTHETIC_EVAL_PROMPT_ARM_NEUTRAL = `You are a UI quality evaluator for generated React components.
+
+Score the following generated component source code on 5 aesthetic dimensions (0-100 each):
+
+1. **layout** (20%): Is the layout correct? Proper grid/flex usage, responsive, no overflow or clipping issues, appropriate spacing between elements.
+
+2. **designTokens** (20%) — read here as VISUAL SYSTEM CONSISTENCY: does the component apply ONE coherent color and spacing system throughout — a platform token vocabulary or its own consistent scale? Score coherence and restraint: a consistent palette, a consistent spacing rhythm, no ad-hoc one-off values. Do NOT reward or penalise the use of any particular token vocabulary or CSS-variable convention.
+
+3. **hierarchy** (20%): Clear visual hierarchy? Proper heading sizes, section separation, scannable structure, good use of whitespace.
+
+4. **polish** (20%): Interactive polish? Hover/focus states on buttons/links, transitions, disabled states on forms, loading indicators where appropriate.
+
+5. **dataPresentation** (20%): Does it render data from props correctly? No placeholder text like "Lorem ipsum", no hardcoded example data in the component body (defaults in props are OK), proper formatting of numbers/dates.
+
+Respond with ONLY a JSON object, no markdown:
+{
+  "layout": <0-100>,
+  "designTokens": <0-100>,
+  "hierarchy": <0-100>,
+  "polish": <0-100>,
+  "dataPresentation": <0-100>,
+  "critique": "<2-3 sentences summarizing the main issues>"
+}`;
+
+export type PanelPrompt = 'default' | 'arm-neutral';
+
+export const AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL = 'aesthetic-eval.v3-panel-arm-neutral' as const;
+
+/** Resolve which panel prompt + version a run judges with. */
+export function selectPanelPrompt(kind: PanelPrompt | undefined): { prompt: string; promptVersion: string } {
+  return kind === 'arm-neutral'
+    ? { prompt: AESTHETIC_EVAL_PROMPT_ARM_NEUTRAL, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL }
+    : { prompt: AESTHETIC_EVAL_PROMPT, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL };
+}
+
 
 /** Per-dimension weights — equal 20% each, summing to 100%. */
 const WEIGHTS = { layout: 0.2, designTokens: 0.2, hierarchy: 0.2, polish: 0.2, dataPresentation: 0.2 };
@@ -308,13 +352,14 @@ async function runSingleJudge(
   model: string,
   sourceCode: string,
   prompt: string,
+  panel: { prompt: string; promptVersion: string },
   contract?: unknown,
 ): Promise<SingleJudgeResult | null> {
   try {
     const userMessage = buildJudgeUserMessage(sourceCode, prompt, contract);
     const response = await callLLM(
       { provider, model, temperature: 0 },
-      AESTHETIC_EVAL_PROMPT,
+      panel.prompt,
       userMessage,
       2000,
     );
@@ -335,7 +380,7 @@ async function runSingleJudge(
     };
 
     return {
-      judge: buildJudgeDisclosure(model, response.sampling),
+      judge: buildJudgeDisclosure(model, response.sampling, panel.promptVersion),
       score: weightedScore(dimensions),
       dimensions,
       critique: parsed.critique,
@@ -385,8 +430,10 @@ export async function evaluateAestheticsPanel(
   sourceCode: string,
   prompt: string,
   contract?: unknown,
+  opts?: { panelPrompt?: PanelPrompt },
 ): Promise<PanelEvalResult | null> {
   const startTime = Date.now();
+  const panel = selectPanelPrompt(opts?.panelPrompt);
 
   // Each judge: globally concurrency-capped per ATTEMPT, retried with
   // backoff on null/throw. The backoff sleep happens OUTSIDE the limiter
@@ -394,7 +441,7 @@ export async function evaluateAestheticsPanel(
   const settled = await Promise.all(
     PANEL.map((p) =>
       retryWithBackoff(
-        () => judgeLimit(() => runSingleJudge(p.provider, p.model, sourceCode, prompt, contract)),
+        () => judgeLimit(() => runSingleJudge(p.provider, p.model, sourceCode, prompt, panel, contract)),
         JUDGE_RETRY,
       ),
     ),
@@ -418,7 +465,7 @@ export async function evaluateAestheticsPanel(
     dimensions: agg.dimensions,
     spread: agg.spread,
     judges: survivors,
-    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
+    promptVersion: panel.promptVersion,
     critique: harshest.critique,
     evalTimeMs: Date.now() - startTime,
   };

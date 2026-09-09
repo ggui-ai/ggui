@@ -294,8 +294,8 @@ describe('toDisplayReport outage handling', () => {
 });
 
 describe('report schemaVersion (#928)', () => {
-  it("stamps 'benchmark-report.v1' on meta — a report without the field is v0 (generator ids carried model names)", () => {
+  it("stamps 'benchmark-report.v2' on meta (v1 = de-modeled ids; absent = v0)", () => {
     const report = generateReport([tierEvaluatedRun('a', ALL_RAN)], 0);
-    expect(report.meta.schemaVersion).toBe('benchmark-report.v1');
+    expect(report.meta.schemaVersion).toBe('benchmark-report.v2');
   });
 });

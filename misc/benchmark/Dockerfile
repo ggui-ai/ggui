@@ -6,7 +6,7 @@
 #      transitively-pulled giants that bench doesn't load at runtime.
 #      Each strip RUN is in this stage so the final image's COPY only
 #      sees the SLIM result — no orphan giants in committed layers.
-#   2. `runtime` stage: alpine base, COPY --from=prep of the slim tree.
+#   2. `runtime` stage: debian-slim base + Chromium, COPY --from=prep of the slim tree.
 #      Final image is the only one tagged + pushed.
 #
 # Build (from workspace root):
@@ -32,7 +32,7 @@
 #   BENCH_DATE                — override target date (YYYY-MM-DD, default: today UTC)
 
 # ─── Prep stage: strip the giants in transient layers ─────────────────
-FROM node:24-alpine AS prep
+FROM node:24-bookworm-slim AS prep
 WORKDIR /prep
 
 COPY deploy/ ./
@@ -72,10 +72,26 @@ RUN find node_modules/.pnpm \
       -delete 2>/dev/null || true
 
 # ─── Runtime stage: clean alpine, COPY only the slim tree ─────────────
-FROM node:24-alpine
+# Debian, not alpine (ggui#973): the runner now carries a Chromium binary at
+# /usr/bin/chromium. TODAY only `validateContractBehavior` (playwright-core,
+# via bench.mjs's adapter) uses it; ui-gen's visual judge (puppeteer-core)
+# still launches @sparticuz/chromium's own glibc-built binary and ignores
+# PUPPETEER_EXECUTABLE_PATH until rnd's evaluator change lands — the env var
+# is exported now so that change needs no image rebuild. No package ever
+# downloads a browser at install or run time.
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 ENV NODE_ENV=production
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends chromium fonts-liberation \
+  && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    PUPPETEER_SKIP_DOWNLOAD=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    BENCH_PLAYWRIGHT=1
 
 ARG GIT_SHA=dev
 # Hash of the triad/runner SOURCE the image measures (git tree hashes of

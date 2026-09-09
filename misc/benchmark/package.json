@@ -2,7 +2,7 @@
   "name": "@ggui-ai/benchmark",
   "version": "0.0.1",
   "private": true,
-  "description": "Benchmark suite for the ggui generation protocol — triad-iteration tooling. Monorepo-only.",
+  "description": "Benchmark suite for the ggui generation protocol \u2014 triad-iteration tooling. Monorepo-only.",
   "license": "Apache-2.0",
   "type": "module",
   "files": [
@@ -50,6 +50,8 @@
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/shared": "workspace:*",
     "@ggui-ai/ui-gen": "workspace:*",
+    "@ggui-ai/ui-visual-tester": "workspace:*",
+    "playwright-core": "^1.62.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {

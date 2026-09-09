@@ -400,9 +400,9 @@ describe('MODEL_REGISTRY', () => {
 // =============================================================================
 
 describe('Benchmark Variants', () => {
-  it('default variants cover all 9 SDK × tier combos plus the Claude frontier arm (10)', () => {
+  it('default variants cover all 9 SDK × tier combos plus the two frontier arms — claude-frontier and openai-frontier (11)', () => {
     const variants = getDefaultVariants();
-    expect(variants).toHaveLength(10);
+    expect(variants).toHaveLength(11);
 
     // #713 (Fable 5.1 sweep): the frontier SKU rides alongside the standard
     // flagship; both carry tier 'premium' because ModelTier has no 4th value.
@@ -688,3 +688,14 @@ describe('Raw vs SDK Variants', () => {
   });
 });
 
+
+
+describe('public arm openai-frontier (#973, founder ruling 2026-09-09: "Add astra as a public 11th benchmark arm")', () => {
+  it('is in the default matrix as openai/gpt-6-astra with the premium tier label, mirroring claude-frontier', () => {
+    const v = getDefaultVariants().find((x) => x.id === 'openai-frontier');
+    expect(v).toBeDefined();
+    expect(v?.sdkName).toBe('openai');
+    expect(v?.modelId).toBe('openai/gpt-6-astra');
+    expect(v?.tier).toBe('premium');
+  });
+});

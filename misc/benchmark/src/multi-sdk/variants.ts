@@ -77,6 +77,17 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       tier: 'premium',
       modelId: 'openai/gpt-5.6-sol',
     },
+    {
+      // Founder ruling 2026-09-09 (#972/#973, picker verbatim: "Add astra as
+      // a public 11th benchmark arm"): OpenAI's frontier model as its own
+      // arm, mirroring `claude-frontier`. Tier label stays `premium` — the
+      // tier vocabulary has no frontier value (ggui#707 ruling); separate
+      // arm, separate rows. Registry row + prices: ggui#977.
+      id: 'openai-frontier',
+      sdkName: 'openai',
+      tier: 'premium',
+      modelId: 'openai/gpt-6-astra',
+    },
 
     // --- Google (Gemini) ---
     {

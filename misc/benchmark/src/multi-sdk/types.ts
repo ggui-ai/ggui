@@ -68,6 +68,12 @@ export interface BenchmarkVariant {
  * is absent. Pinned to the open-source seed so older fixtures keep
  * producing identical results.
  */
+import type { RuntimeProbeVerdict } from './runtime-probe.js';
+import type { ContractBehaviorResult } from './contract-behavior.js';
+import type { VisualCanvasArtefact } from './canvas.js';
+import type { PanelPrompt } from './post-eval.js';
+import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
+
 export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default' as const;
 
 /**
@@ -80,12 +86,13 @@ export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced' as const;
 
 /**
  * Report JSON shape version, stamped on every {@link BenchmarkReport.meta}.
- * `'benchmark-report.v1'` = generator ids are de-modeled (`ui-gen-default` /
- * `ui-gen-advanced`; #928). Reports WITHOUT the field are v0: their generator
- * ids carried model names (`ui-gen-default-haiku-4-5`). Bump on any change a
- * reader of the published JSON must detect; announce on the methodology page.
+ * `'benchmark-report.v2'` (#973): per-cell `runtimeProbeVerdict`, `contractBehavior`
+ * and `visualCanvases` fields. `'benchmark-report.v1'` (#928) = generator ids
+ * de-modeled (`ui-gen-default` / `ui-gen-advanced`). Reports WITHOUT the field are
+ * v0: their generator ids carried model names. Bump on any change a reader of the
+ * published JSON must detect; announce on the methodology page.
  */
-export const REPORT_SCHEMA_VERSION = 'benchmark-report.v1' as const;
+export const REPORT_SCHEMA_VERSION = 'benchmark-report.v2' as const;
 
 export interface HybridConfig {
   /** Model for initial draft generation */
@@ -225,6 +232,24 @@ export interface BenchmarkRunResult {
   timestamp: string;
   /** Post-generation analysis (metadata extraction, data-free check) */
   postGeneration?: PostGenerationResult;
+  /**
+   * The runner's per-cell runtime-probe verdict (#973; the value that was
+   * console-logged only until `benchmark-report.v2`). Derived from
+   * `tierEvaluation` by {@link deriveRuntimeProbeVerdict}; `skipped` carries
+   * the reason and is never a pass. Absent on results from older reports.
+   */
+  runtimeProbeVerdict?: RuntimeProbeVerdict;
+  /**
+   * `validateContractBehavior` re-run for this cell in-task (#973 §5a(4);
+   * `benchmark-report.v2`). `skipped` carries the reason, never a pass.
+   */
+  contractBehavior?: ContractBehaviorResult;
+  /**
+   * Per-canvas visual-judge scores with the PNG artefact refs written beside
+   * `source.tsx` (#973 §4b; `benchmark-report.v2`). Present only when the
+   * evaluator ran in per-canvas mode.
+   */
+  visualCanvases?: VisualCanvasArtefact[];
   /**
    * Generator slug this run was executed under. Always set —
    * `undefined` on the variant resolves to {@link DEFAULT_GENERATOR_SLUG}
@@ -499,11 +524,17 @@ export interface BenchmarkConfig {
     viewport?: { width: number; height: number };
   };
   /**
+   * Which post-gen aesthetic panel prompt judges this run. `'arm-neutral'` is
+   * the Exp 008 experiment-lane prompt (#973 §5b), disclosed per judge via
+   * `promptVersion`; the published run never sets it.
+   */
+  panelPrompt?: PanelPrompt;
+  /**
    * Playwright module handle. Presence (an object with a `chromium`
    * field) marks the advanced generator as runnable; absent, advanced
    * variants short-circuit to a SKIP error result.
    */
-  playwright?: { chromium?: unknown };
+  playwright?: PlaywrightModule;
 }
 
 /**
@@ -539,6 +570,12 @@ export interface BenchmarkRunnerConfig {
     passThreshold?: number;
     viewport?: { width: number; height: number };
   };
+  /**
+   * Which post-gen aesthetic panel prompt judges this run. `'arm-neutral'` is
+   * the Exp 008 experiment-lane prompt (#973 §5b), disclosed per judge via
+   * `promptVersion`; the published run never sets it.
+   */
+  panelPrompt?: PanelPrompt;
   /** Playwright module handle — see {@link BenchmarkConfig.playwright}. */
-  playwright?: { chromium?: unknown };
+  playwright?: PlaywrightModule;
 }

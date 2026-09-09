@@ -53,6 +53,8 @@ export function isRealSourceHash(hash) {
  * @param {string|undefined} [a.imageSourceHash]
  *   BENCH_SOURCE_HASH baked into the image (ggui#766): sha256 of the git
  *   tree hashes of oss/packages/ui-gen/src, oss/misc/benchmark/src,
+ *   + oss/packages/ui-visual-tester/src and its package.json (ggui#973: it
+ *   decides the published `contractBehavior` field, so it is harness source)
  *   oss/misc/benchmark/scripts and the package.json of ui-gen / benchmark /
  *   protocol / shared (`make bench-source-hash`). This is what the bench
  *   MEASURES; the image also rebuilds on unrelated pnpm-lock churn, and

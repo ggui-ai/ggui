@@ -734,6 +734,9 @@ function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
     estimatedCostUsd: r.estimatedCostUsd,
     error: r.error,
     timestamp: r.timestamp,
+    ...(r.runtimeProbeVerdict ? { runtimeProbeVerdict: r.runtimeProbeVerdict } : {}),
+    ...(r.contractBehavior ? { contractBehavior: r.contractBehavior } : {}),
+    ...(r.visualCanvases ? { visualCanvases: r.visualCanvases } : {}),
     postGeneration: mapPostGeneration(r),
   };
 }

@@ -34,12 +34,20 @@ import type {
   GenerationResult,
   PostGenerationResult,
 } from "./types.js";
+import { deriveRuntimeProbeVerdict, runtimeProbeIssues } from './runtime-probe.js';
+import { runContractBehaviorCheck } from './contract-behavior.js';
+import { createLimiter } from './post-eval.js';
+
 import {
   ADVANCED_GENERATOR_SLUG,
   DEFAULT_GENERATOR_SLUG,
 } from "./types.js";
 import type { BenchmarkStorage } from "./storage/types.js";
 import { getDefaultVariants } from "./variants.js";
+
+/** At most this many browser sessions at once, across all cells of a run. */
+const BROWSER_CONCURRENCY = 2;
+const BROWSER_LIMIT = createLimiter(BROWSER_CONCURRENCY);
 
 /**
  * Orchestrates parallel benchmark runs across multiple SDK adapters.
@@ -487,44 +495,23 @@ export class BenchmarkRunner {
       //     infra-dead probe scored PASS on every cell.
       //   - PASS: probe RAN, no probe issues with result=fail
       //   - FAIL: probe RAN, ≥1 probe issue with result=fail
-      let runtimeProbeResult: { passed: boolean; failures: number; warnings: number; skipped: boolean };
-      const probeMeta = tierEvaluation?.runtimeProbe;
-      if (!tierEvaluation) {
-        runtimeProbeResult = { passed: false, failures: 0, warnings: 0, skipped: true };
+      const runtimeProbeVerdict = deriveRuntimeProbeVerdict(tierEvaluation);
+      if (runtimeProbeVerdict.status === 'skipped') {
         console.log(
-          `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — eval rounds did not run`,
+          `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — ${runtimeProbeVerdict.reason}`,
         );
-      } else if (!probeMeta || probeMeta.status !== 'ran') {
-        runtimeProbeResult = { passed: false, failures: 0, warnings: 0, skipped: true };
-        const why = probeMeta
-          ? `${probeMeta.status}${probeMeta.reason ? `: ${probeMeta.reason}` : ''}`
-          : 'no runtimeProbe stamp on eval result';
-        console.log(
-          `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — probe did not run (${why})`,
-        );
-      } else {
-        const probeIssues = tierEvaluation.issues.filter((i) =>
-          typeof i.subcategory === 'string' && i.subcategory.startsWith('runtime:'),
-        );
-        const probeFailCount = probeIssues.filter((i) => i.result === 'fail').length;
-        const probeWarnCount = probeIssues.filter((i) => i.result === 'warn').length;
-        runtimeProbeResult = {
-          passed: probeFailCount === 0,
-          failures: probeFailCount,
-          warnings: probeWarnCount,
-          skipped: false,
-        };
+      } else if (tierEvaluation) {
         console.log(
           `  [runtime-probe] ${variant.id} × ${commit.id}: ` +
-            `${runtimeProbeResult.passed ? 'PASS' : 'FAIL'} ` +
-            `(fail=${probeFailCount} warn=${probeWarnCount})`,
+            `${runtimeProbeVerdict.passed ? 'PASS' : 'FAIL'} ` +
+            `(fail=${runtimeProbeVerdict.failures} warn=${runtimeProbeVerdict.warnings})`,
         );
         // Log each probe issue's diagnostic so we can investigate the
         // patterns. These are real wiring bugs at the runtime level —
         // action-wiring missing, useStream subscribed but never read in
         // JSX, clientTool not registered, etc. Goal: average 0 probe
         // failures via harness engineering.
-        for (const issue of probeIssues) {
+        for (const issue of runtimeProbeIssues(tierEvaluation)) {
           const tag = issue.result === 'fail' ? 'FAIL' : 'WARN';
           const sub = issue.subcategory ? `:${issue.subcategory}` : '';
           console.log(
@@ -533,12 +520,31 @@ export class BenchmarkRunner {
         }
       }
 
+      // Contract behaviour — validateContractBehavior for EVERY cell in-task
+      // (#973 §5a(4)); only the browser call is serialised behind BROWSER_LIMIT
+      // (action-free cells never queue), so the 12-way cell concurrency never
+      // holds 12 Chromiums.
+      const contractBehavior = await runContractBehaviorCheck({
+        compiledCode: generation.compiledCode,
+        contract: commit.contract,
+        playwright: this.config.playwright,
+        limit: BROWSER_LIMIT,
+      });
+      console.log(
+        `  [contract-behavior] ${variant.id} × ${commit.id}: ` +
+          (contractBehavior.status === 'ran'
+            ? `${contractBehavior.ok ? 'OK' : 'FAIL'} (${contractBehavior.failures?.length ?? 0} failures, ${contractBehavior.durationMs}ms)`
+            : `SKIP — ${contractBehavior.reason}`),
+      );
+
       // Aesthetic evaluation — 3-provider judge PANEL (Anthropic +
       // OpenAI + Google), temp 0, mean score + spread.
       let aestheticEval = null;
       if (!this.config.skipEvaluation && generation.sourceCode) {
         const { evaluateAestheticsPanel } = await import("./post-eval.js");
-        aestheticEval = await evaluateAestheticsPanel(generation.sourceCode, commit.prompt, commit.contract);
+        aestheticEval = await evaluateAestheticsPanel(generation.sourceCode, commit.prompt, commit.contract, {
+          ...(this.config.panelPrompt !== undefined ? { panelPrompt: this.config.panelPrompt } : {}),
+        });
       }
 
       // Judge-token cost: each panel judge is a separate LLM call billed
@@ -598,6 +604,8 @@ export class BenchmarkRunner {
         generation,
         evaluation: aestheticEval,
         tierEvaluation,
+        runtimeProbeVerdict,
+        contractBehavior,
         // Coding-model cost (adapter rawCost when reported, else our
         // estimate) PLUS the panel judges' token cost — judge calls are
         // separate LLM calls, not part of the coding adapter's rawCost.

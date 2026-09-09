@@ -222,6 +222,15 @@ const timeoutMs = parseInt(getArg(['--timeout'], String(preset?.timeout ?? 30000
 const passThreshold = parseInt(getArg(['--threshold'], '70'), 10);
 const concurrency = parseInt(getArg(['--concurrency'], '36'), 10);
 const visualEnabled = hasFlag(['--visual']);
+// #973 — experiment-lane panel prompt ('arm-neutral') and in-task Chromium.
+// The published run sets neither flag; the image sets BENCH_PLAYWRIGHT=1 so
+// validateContractBehavior runs for every cell (contractBehavior field).
+const panelPrompt = getArg(['--panel-prompt'], process.env.BENCH_PANEL_PROMPT ?? 'default');
+if (panelPrompt !== 'default' && panelPrompt !== 'arm-neutral') {
+  console.error(`  ✗ --panel-prompt must be 'default' or 'arm-neutral' (got '${panelPrompt}')`);
+  process.exit(1);
+}
+const playwrightEnabled = hasFlag(['--playwright']) || process.env.BENCH_PLAYWRIGHT === '1';
 const qualityMode = getArg(['--quality'], 'fast');
 
 // Harness selector retired 2026-04-27 (Step 4 of the cloud→OSS
@@ -363,8 +372,16 @@ const run = async () => {
     process.exit(1);
   }
 
+  // Chromium for the runner: playwright-core with the image's binary
+  // (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; the package never downloads one).
+  // The adapter keeps the PlaywrightModule shape the runner + ui-visual-tester
+  // expect while pinning the executable and the container-safe sandbox flag.
+  const playwright = playwrightEnabled ? await loadPlaywright() : undefined;
+
   // Build runner
   const runner = new BenchmarkRunner({
+    ...(playwright ? { playwright } : {}),
+    ...(panelPrompt === 'arm-neutral' ? { panelPrompt } : {}),
     storage,
     concurrency,
     timeoutMs,
@@ -450,3 +467,24 @@ run().catch((err) => {
   console.error(`\n  ✗ ${err.message}\n`);
   process.exit(1);
 });
+
+/**
+ * PlaywrightModule adapter (#973): `chromium.launch` with the image's binary
+ * and no Chromium sandbox (containers without user namespaces). Fails loudly
+ * when playwright-core or the binary is missing — a silent fallback would
+ * turn every contractBehavior into SKIP without anyone noticing.
+ */
+async function loadPlaywright() {
+  const pw = await import('playwright-core');
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  return {
+    chromium: {
+      launch: (options) =>
+        pw.chromium.launch({
+          ...options,
+          ...(executablePath ? { executablePath } : {}),
+          chromiumSandbox: false,
+        }),
+    },
+  };
+}
