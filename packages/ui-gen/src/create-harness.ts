@@ -20,6 +20,7 @@ import { defaultApplyPatch } from "./patch.js";
 import { computeHarnessId, computeHarnessName, hashClassification } from "./hash.js";
 import { pickWorkflow } from "./workflows.js";
 import { DEFAULT_HARNESS_POLICY, isDefaultHarnessPolicy } from "./policy.js";
+import { DEFAULT_DESIGN_MODE } from "./design-mode.js";
 import type {
   CreateHarnessInput,
   Harness,
@@ -69,6 +70,9 @@ function countCacheTiers(fragments: readonly { cacheTier: CacheTier }[]): Record
 export function createHarness(input: CreateHarnessInput): Harness {
   const { classification, contract, prompt, shellType, screen, overrides } = input;
   const ctx: HarnessConstructionContext = { classification, contract, prompt };
+  // Which triad to materialise — reaches the HOW leg (prompt), the WHAT
+  // leg (boilerplate) and, via `harness.designMode`, every CHECK consumer.
+  const designMode = input.designMode ?? DEFAULT_DESIGN_MODE;
 
   // ── Compose fragments from classification ────────────────────────────────
   const composed = compose(classification);
@@ -84,6 +88,8 @@ export function createHarness(input: CreateHarnessInput): Harness {
     shellType,
     screen,
     axisDelta: composed.promptText,
+    designMode,
+    ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
   });
   const howFragments = composed.fragments.filter(
     (f) => f.promptText && f.promptText.trim().length > 0,
@@ -112,6 +118,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
     screen,
     composed.boilerplateSections,
     input.appGadgets,
+    designMode,
   );
   const whatFragments = composed.fragments.filter(
     (f) => f.boilerplateMarker && f.boilerplateMarker.trim().length > 0,
@@ -179,6 +186,9 @@ export function createHarness(input: CreateHarnessInput): Harness {
   // Only non-default policies contribute to the harness id — preserves
   // byte-identical id across default-policy runs.
   if (!isDefaultHarnessPolicy(policy)) overrideLabels.push("policy");
+  // Only a non-default design mode contributes — the constrained id is
+  // byte-identical to the pre-`designMode` harness.
+  if (designMode !== DEFAULT_DESIGN_MODE) overrideLabels.push(`designMode:${designMode}`);
 
   const id = computeHarnessId({
     classificationHash,
@@ -210,6 +220,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
     id,
     name,
     classification,
+    designMode,
     how,
     what,
     check,

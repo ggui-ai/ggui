@@ -49,6 +49,22 @@ export {
   injectVariance,
 } from './contract-context.js';
 export type { RenderingContext } from './contract-context.js';
+export { canvasForRenderingContext } from './contract-context.js';
+
+// ── Design mode ──────────────────────────────────────────────────────
+//
+// `createUiGenerator({ designMode })` — `constrained` (default) or
+// `free`; the canvas vocabulary the `free` prompt states.
+export {
+  DESIGN_MODES,
+  DEFAULT_DESIGN_MODE,
+  RENDER_CANVASES,
+  CANVAS_DESCRIPTORS,
+  canvasForRendering,
+  canvasForViewportWidth,
+  describeCanvas,
+} from './design-mode.js';
+export type { DesignMode, RenderCanvas, CanvasDescriptor } from './design-mode.js';
 
 // ── Anthropic SDK construction ──────────────────────────────────────
 //

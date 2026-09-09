@@ -35,6 +35,7 @@ import type {
 } from '@ggui-ai/protocol';
 import { HOOK_NAME_RE, listContractGadgets } from '@ggui-ai/protocol';
 import { propsSpecToTypeScript } from './check/index.js';
+import { canvasForViewportWidth, type RenderCanvas } from './design-mode.js';
 
 /**
  * Rendering context — how and where the component will be displayed.
@@ -86,6 +87,27 @@ const DEVICE_HINTS: Record<string, string> = {
   desktop: `**Desktop:** Multi-column. Hover states. Dense layouts. Keyboard shortcuts. Pointer interactions.`,
   spatial: `**Spatial:** Fixed-size floating panel (~600x400). High contrast. Large text. No hover (gaze/hand input).`,
 };
+
+/**
+ * Map a host rendering context onto the canvas class the `free` prompt
+ * states. A `chat` shell is always the inline card whatever the host
+ * viewport is (the bubble, not the window, bounds the component); a
+ * known viewport width refines the fullscreen / partial shells; otherwise
+ * the device category decides.
+ */
+export function canvasForRenderingContext(ctx: RenderingContext): RenderCanvas {
+  if (ctx.shell === 'chat') return 'xs-card';
+  if (ctx.viewport) return canvasForViewportWidth(ctx.viewport.width);
+  switch (ctx.device) {
+    case 'mobile':
+      return 'mobile';
+    case 'tablet':
+    case 'spatial':
+      return 'md';
+    case 'desktop':
+      return ctx.shell === 'partial' ? 'md' : 'lg';
+  }
+}
 
 /** Build rendering-context block to inject into user prompt. */
 export function buildRenderingContext(ctx: RenderingContext): string {

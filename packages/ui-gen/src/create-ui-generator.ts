@@ -57,11 +57,13 @@ import { createGeneratorTools } from './adapters/index.js';
 import { dispatchGeneration } from './adapters/generation-dispatch.js';
 import type { ProviderName } from './adapters/types.js';
 import {
+  canvasForRenderingContext,
   injectContracts,
   injectRenderingContext,
   injectVariance,
 } from './contract-context.js';
 import type { RenderingContext } from './contract-context.js';
+import type { DesignMode } from './design-mode.js';
 import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
 import type { QualityConfig } from './evaluation/types-public.js';
 import type { AgentConfig } from './harness/llm-router.js';
@@ -167,6 +169,21 @@ export interface CreateUiGeneratorOptions {
    * still log via `console.warn`, just without a caller-side hook.
    */
   readonly onRetry?: AgentConfig['onRetry'];
+  /**
+   * Which generation triad to run. `constrained` (default) is the
+   * design-system triad — byte-identical to the generator's behaviour
+   * before this option existed. `free` relaxes only the design
+   * vocabulary (raw HTML, inline CSS, literal spacing / typography /
+   * radius; the design package importable but optional) while keeping
+   * every hard contract: the boilerplate-typed wire hooks, the import
+   * allowlist + security bans, the host envelope, the budgets, the
+   * blueprint-reuse shape, and brand-bearing color on the closed
+   * `--ggui-color-*` token manifest. Reaches the prompt, boilerplate,
+   * tier-0 gate, axis checks and evaluator criteria through the harness.
+   * The rendering canvas the `free` prompt states is derived from
+   * `input.rendering` (device × shell, refined by viewport width).
+   */
+  readonly designMode?: DesignMode;
 }
 
 export function createUiGenerator(
@@ -180,6 +197,7 @@ export function createUiGenerator(
     gadgetCatalog,
     disableEnvMutation = false,
     onRetry,
+    designMode,
   } = options;
 
   const identity = resolveIdentity(options);
@@ -272,6 +290,10 @@ export function createUiGenerator(
         const promptWithRendering = rendering
           ? injectRenderingContext(input.request.prompt, rendering)
           : input.request.prompt;
+        // Canvas class for the `free` prompt — TOLD, never guessed.
+        // Ignored by the constrained prompt (its shell/screen
+        // descriptors stay byte-identical).
+        const canvas = rendering ? canvasForRenderingContext(rendering) : undefined;
         const promptWithVariance = injectVariance(
           promptWithRendering,
           input.variance,
@@ -320,6 +342,8 @@ export function createUiGenerator(
           enableRuntimeRender,
           ...(routeOverride !== undefined ? { routeOverride } : {}),
           ...(onRetry !== undefined ? { onRetry } : {}),
+          ...(designMode !== undefined ? { designMode } : {}),
+          ...(canvas !== undefined ? { canvas } : {}),
         });
 
         const metadata: GenerationMetadata = {

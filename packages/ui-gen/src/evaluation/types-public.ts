@@ -20,6 +20,8 @@
 
 export type Priority = "P0" | "P1" | "P2";
 
+import type { DesignMode } from "../design-mode.js";
+
 // ─── Issue shape ───────────────────────────────────────────────────────────
 
 export type EvalTier = 0 | 1 | 2;
@@ -209,6 +211,13 @@ export interface AxisCheckInput {
   originalPrompt: string;
   /** Full classification — checks may read sibling axes. */
   classification: Classification;
+  /**
+   * Which triad produced the source. Checks that assert a design-package
+   * component (e.g. `layout.multi_step.stepper_adopted`) read it and
+   * stand down in `free` mode, where the primitive is optional. Absent
+   * means `constrained`.
+   */
+  designMode?: DesignMode;
 }
 
 /**
@@ -506,26 +515,84 @@ Only list ACTUAL violations. Use 'fail' only for pervasive violations.`,
   },
 ] as const;
 
+/**
+ * `designMode: 'free'` overrides — ONLY the two criteria whose text
+ * encodes the design vocabulary. `tokens` narrows to COLOR (the free arm
+ * relaxes spacing / typography / radius / shadow to literals but keeps
+ * brand-bearing color on the closed `--ggui-color-*` manifest, no
+ * fallbacks); `visual` becomes arm-neutral (composition, hierarchy,
+ * consistency, fit to canvas — no reward or penalty for design-system
+ * usage). Every other criterion is shared verbatim between the modes.
+ * Constraint alignment: what the free prompt says, the free evaluator
+ * checks — and nothing more.
+ */
+const FREE_DESIGN_CRITERIA_OVERRIDES: readonly EvalCriterion[] = [
+  {
+    id: "tokens",
+    name: "Color tokens",
+    priority: "P1",
+    tier: 0,
+    failOutcome: "warn",
+    codingGuidance:
+      "Every color is a bare var(--ggui-color-*) from the token manifest — no hex, rgb()/hsl(), CSS named colors or literal fallbacks, in style props and <style> blocks alike. Spacing, typography, radius and shadow geometry may be literals.",
+    evalInstruction:
+      "Flag hardcoded hex colors, rgba/hsl functions, CSS named colors, and literal fallbacks inside var(--ggui-*) references. Do NOT flag literal spacing, font sizes, radii or pixel values — they are allowed in this mode.",
+  },
+  {
+    id: "visual",
+    name: "Visual composition",
+    priority: "P2",
+    tier: 2,
+    failOutcome: "warn",
+    codingGuidance:
+      "Compose deliberately: one clear focal point, consistent spacing rhythm, a coherent theme-token palette, a fit to the rendering canvas.",
+    evalInstruction: `Evaluate VISUAL COMPOSITION: Is the component composed deliberately for its canvas?
+
+Judge: visual hierarchy (one clear focal point, headings distinct from body text), consistent spacing rhythm and alignment, a coherent palette drawn from the theme tokens, fit to the canvas (fluid width, no fixed widths, nothing cramped or stretched).
+Do NOT reward or penalise the use of design-system primitives — raw HTML with inline CSS is a first-class choice here. Literal spacing / typography / radius values are fine.
+
+Only list ACTUAL composition problems. Use 'fail' only for a fundamentally incoherent composition.`,
+  },
+];
+
+/**
+ * The criteria registry for a design mode. `constrained` IS `CRITERIA`
+ * (same array, byte-identical summary); `free` swaps in the two
+ * overrides above by id, preserving order.
+ */
+export function criteriaFor(designMode: DesignMode = "constrained"): readonly EvalCriterion[] {
+  if (designMode === "constrained") return CRITERIA;
+  return CRITERIA.map(
+    (c) => FREE_DESIGN_CRITERIA_OVERRIDES.find((o) => o.id === c.id) ?? c,
+  );
+}
+
 /** Get all criteria for a specific priority level */
-export function getCriteriaByPriority(priority: Priority): EvalCriterion[] {
-  return CRITERIA.filter((c) => c.priority === priority);
+export function getCriteriaByPriority(
+  priority: Priority,
+  designMode: DesignMode = "constrained",
+): EvalCriterion[] {
+  return criteriaFor(designMode).filter((c) => c.priority === priority);
 }
 
 /** Get a specific criterion by ID */
-export function getCriterionById(id: string): EvalCriterion | undefined {
-  return CRITERIA.find((c) => c.id === id);
+export function getCriterionById(
+  id: string,
+  designMode: DesignMode = "constrained",
+): EvalCriterion | undefined {
+  return criteriaFor(designMode).find((c) => c.id === id);
 }
 
 /** Get all LLM-evaluated criteria (tier 1 + 2) */
-export function getLLMCriteria(): EvalCriterion[] {
-  return CRITERIA.filter((c) => c.tier > 0);
+export function getLLMCriteria(designMode: DesignMode = "constrained"): EvalCriterion[] {
+  return criteriaFor(designMode).filter((c) => c.tier > 0);
 }
 
 /**
  * Build the coding agent's criteria summary from the single source of truth.
  * Grouped by priority for the P0→P1→P2 hierarchy.
  */
-export function buildCodingCriteriaSummary(): string {
+export function buildCodingCriteriaSummary(designMode: DesignMode = "constrained"): string {
   const lines: string[] = ["## Priority (P0 first, then P1, then P2)", ""];
 
   for (const priority of ["P0", "P1", "P2"] as Priority[]) {
@@ -535,7 +602,7 @@ export function buildCodingCriteriaSummary(): string {
         : priority === "P1"
           ? "Should (safety)"
           : "Nice (quality)";
-    const criteria = getCriteriaByPriority(priority);
+    const criteria = getCriteriaByPriority(priority, designMode);
     lines.push(`**${priority} — ${label}:**`);
     for (const c of criteria) {
       lines.push(`- ${c.codingGuidance}`);

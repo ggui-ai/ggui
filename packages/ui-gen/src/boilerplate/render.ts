@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,20 +36,41 @@ const TEMPLATE_DIRS = [
   resolve(__dirname, '..', '..', '..', '..', 'src', 'boilerplate', 'templates'),
 ];
 
-let baseCache: string | null = null;
+/**
+ * One base template per design mode. `constrained` pre-imports the whole
+ * design surface and scaffolds a per-shell layout; `free` keeps the
+ * wire / Props / gadget anchors EXACTLY and drops the design mass-import
+ * and the layout scaffold (the design package stays importable).
+ */
+const BASE_TEMPLATE_FILE: Readonly<Record<DesignMode, string>> = {
+  constrained: 'base.tsx.tmpl',
+  free: 'base-free.tsx.tmpl',
+};
+
+/** Free-mode body — no design-package scaffold, just a fluid root. */
+const FREE_LAYOUT = [
+  "    <div style={{ width: '100%' }}>",
+  '      {/* implement your UI here */}',
+  '    </div>',
+].join('\n');
+
+const baseCache = new Map<DesignMode, string>();
 const layoutCache = new Map<string, string>();
 
-function loadBase(): string {
-  if (baseCache) return baseCache;
+function loadBase(designMode: DesignMode): string {
+  const cached = baseCache.get(designMode);
+  if (cached !== undefined) return cached;
 
+  const file = BASE_TEMPLATE_FILE[designMode];
   for (const dir of TEMPLATE_DIRS) {
     try {
-      baseCache = readFileSync(resolve(dir, 'base.tsx.tmpl'), 'utf-8');
-      return baseCache;
+      const content = readFileSync(resolve(dir, file), 'utf-8');
+      baseCache.set(designMode, content);
+      return content;
     } catch { continue; }
   }
 
-  throw new Error('No base.tsx.tmpl found');
+  throw new Error(`No ${file} found`);
 }
 
 function loadLayout(shellType: string, screen: string): string {
@@ -96,9 +118,11 @@ export function renderBoilerplate(
   shellType: string,
   screen: string,
   markers: BoilerplateMarkers,
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): string {
-  let template = loadBase();
-  const layout = loadLayout(shellType, screen);
+  let template = loadBase(designMode);
+  const layout =
+    designMode === 'free' ? FREE_LAYOUT : loadLayout(shellType, screen);
   template = template.replace('{{LAYOUT}}', layout);
 
   for (const [key, value] of Object.entries(markers)) {

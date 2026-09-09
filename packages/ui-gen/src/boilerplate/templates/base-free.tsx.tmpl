@@ -1,0 +1,24 @@
+// DO NOT EDIT imports — the wire + gadget imports below are runtime-resolution anchors.
+// prettier-ignore-start
+/* eslint-disable no-unused-vars */
+{{REACT_IMPORT}}
+// Compose freely: raw HTML elements, inline `style` props and <style> blocks.
+// The `@ggui-ai/design` package is importable but OPTIONAL — add your own
+// import only when a primitive (Skeleton, EmptyState, Icon, …) saves you work.
+// Color stays on bare var(--ggui-color-*) tokens; everything else may be literal.
+{{WIRE_IMPORT}}/* eslint-enable no-unused-vars */
+// prettier-ignore-end
+
+// DO NOT EDIT Props — auto-generated from the data contract
+{{PROPS_INTERFACE}}
+{{ACTION_TYPES}}
+{{STREAM_TYPES}}
+
+// Place helper components here if needed
+
+export default function Component(props: Props) {
+{{CONTEXT_HOOKS}}{{WIRE_HOOKS}}{{AXIS_SECTIONS}}
+  return (
+{{LAYOUT}}
+  );
+}

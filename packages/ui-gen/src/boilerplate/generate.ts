@@ -36,6 +36,7 @@ import type {
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { renderBoilerplate } from "./render.js";
 import { jsonSchemaTypeToTs } from "./json-schema-ts.js";
+import { DEFAULT_DESIGN_MODE, type DesignMode } from "../design-mode.js";
 
 /** Shell layout modes supported by the boilerplate templates. */
 export type ShellType = "chat" | "fullscreen" | "spatial";
@@ -184,6 +185,14 @@ export function generateBoilerplate(
    * point rather than an empty `useFoo()` it might delete.
    */
   appGadgets?: readonly GadgetDescriptor[],
+  /**
+   * Which base template to render. `constrained` (default) pre-imports
+   * the design surface + a per-shell layout scaffold — byte-identical to
+   * the pre-`designMode` boilerplate. `free` drops both; the Props /
+   * Action / Stream types, wire hooks, contextSpec hooks and gadget
+   * imports are emitted EXACTLY as in constrained mode.
+   */
+  designMode: DesignMode = DEFAULT_DESIGN_MODE,
 ): string {
   // ── Props interface from data contract (data only — NO action callbacks) ──
   // Contract shape (PropsSpec is ALWAYS the wrapper — never flat):
@@ -557,5 +566,5 @@ export function generateBoilerplate(
     CONTEXT_HOOKS: contextHooks,
     WIRE_HOOKS: hookBody,
     AXIS_SECTIONS: composedSections ?? "",
-  });
+  }, designMode);
 }

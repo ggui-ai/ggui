@@ -39,6 +39,7 @@ export {
   priorityForIssue,
   isBlocked,
   getActionableIssues,
+  criteriaFor,
   getCriteriaByPriority,
   getCriterionById,
   getLLMCriteria,

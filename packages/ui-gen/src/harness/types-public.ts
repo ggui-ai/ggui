@@ -24,6 +24,7 @@ import type { EvalIssue, EvalTier, AxisCheck, RuntimeProbeStatus } from "../eval
 import type { LLMToolDef } from "../llm.js";
 import type { CacheTier, HarnessFragment } from "../fragments/index.js";
 import type { HarnessPolicy, ProcessMode } from "../policy.js";
+import type { DesignMode, RenderCanvas } from "../design-mode.js";
 
 export type { ProcessMode };
 
@@ -293,6 +294,14 @@ export interface Harness {
   readonly id: HarnessId;
   readonly name: HarnessName;
   readonly classification: Classification;
+  /**
+   * Which triad this harness materialised — threaded from
+   * `CreateHarnessInput.designMode` into the HOW leg (prompt), the WHAT
+   * leg (boilerplate) and every CHECK consumer (tier-0 gate, axis
+   * checks, evaluator criteria). `constrained` unless the caller opted
+   * into `free`.
+   */
+  readonly designMode: DesignMode;
 
   readonly how: HowLeg;
   readonly what: WhatLeg;
@@ -383,6 +392,10 @@ export type SystemPromptBuilder = (input: {
   readonly shellType?: string;
   readonly screen?: string;
   readonly axisDelta?: string;
+  /** Which triad to teach — see `CreateHarnessInput.designMode`. */
+  readonly designMode?: DesignMode;
+  /** Rendering canvas class (`free` mode) — see `CreateHarnessInput.canvas`. */
+  readonly canvas?: RenderCanvas;
 }) => string;
 
 export interface CreateHarnessInput {
@@ -392,6 +405,20 @@ export interface CreateHarnessInput {
   readonly shellType?: "chat" | "fullscreen" | "spatial";
   readonly screen?: "mobile" | "tablet" | "desktop" | "universal";
   readonly overrides?: HarnessOverrides;
+  /**
+   * Which triad to materialise. `constrained` (default) is today's
+   * design-system triad, byte-identical to the pre-`designMode`
+   * harness (same prompt, boilerplate, tier-0 legs, criteria and id).
+   * `free` relaxes only the design vocabulary; every hard contract
+   * stays. See `../design-mode.ts`.
+   */
+  readonly designMode?: DesignMode;
+  /**
+   * Rendering canvas class the `free` prompt states explicitly. When
+   * omitted the prompt derives it from `shellType` × `screen`. Ignored
+   * by the `constrained` prompt.
+   */
+  readonly canvas?: RenderCanvas;
   /**
    * Pre-resolved static harness policy. When omitted, `createHarness`
    * falls back to `DEFAULT_HARNESS_POLICY` from `@ggui-ai/ui-gen/policy`.

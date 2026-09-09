@@ -58,6 +58,7 @@ import {
   type GadgetDescriptor,
   type JsonObject,
 } from "@ggui-ai/protocol";
+import type { DesignMode, RenderCanvas } from "../design-mode.js";
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -163,6 +164,15 @@ export interface GenerationDispatchParams {
    * a no-op.
    */
   onRetry?: AgentConfig["onRetry"];
+  /**
+   * Which triad to materialise — see `CreateHarnessInput.designMode`.
+   * Reaches the system prompt, the boilerplate, the tier-0 gate, the
+   * axis checks and the evaluator criteria through the harness. Absent
+   * means `constrained` (byte-identical to the pre-`designMode` path).
+   */
+  designMode?: DesignMode;
+  /** Rendering canvas class for the `free` prompt — see `CreateHarnessInput.canvas`. */
+  canvas?: RenderCanvas;
 }
 
 /**
@@ -274,6 +284,9 @@ export async function dispatchGeneration(
     ...(params.gadgetTypes !== undefined
       ? { gadgetTypes: params.gadgetTypes }
       : {}),
+    // Design mode + canvas — the harness carries them to every leg.
+    ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),
+    ...(params.canvas !== undefined ? { canvas: params.canvas } : {}),
     // Policy is pre-resolved at the dispatch boundary so `createHarness`
     // stays free of experiment plumbing. `resolveHarnessPolicy` applies
     // the `GGUI_POLICY_PROFILE` experimental-profile layer and hands the
@@ -293,7 +306,7 @@ export async function dispatchGeneration(
     // prompt's gadget catalog renders a `Type:` line per third-party
     // gadget (the LLM sees a wrapper's real call shape it otherwise
     // can't know).
-    systemPromptBuilder: ({ userRequest, shellType, screen, axisDelta }) =>
+    systemPromptBuilder: ({ userRequest, shellType, screen, axisDelta, designMode, canvas }) =>
       buildSystemPromptWithFunnel(
         userRequest,
         shellType,
@@ -301,6 +314,8 @@ export async function dispatchGeneration(
         axisDelta,
         params.appGadgets,
         params.gadgetTypes,
+        designMode,
+        canvas,
       ),
     // Pre-filtered axis-check registry. The `matches()` predicate
     // selects the checks relevant to this generation's axis vector.
