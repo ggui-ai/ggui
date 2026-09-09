@@ -622,6 +622,12 @@ importers:
       '@ggui-ai/ui-gen':
         specifier: workspace:*
         version: link:../../packages/ui-gen
+      '@ggui-ai/ui-visual-tester':
+        specifier: workspace:*
+        version: link:../../packages/ui-visual-tester
+      playwright-core:
+        specifier: 1.62.1
+        version: 1.62.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
