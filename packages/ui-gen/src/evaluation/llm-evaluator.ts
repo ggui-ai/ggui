@@ -26,6 +26,7 @@ import { createAgent } from '../harness/llm-router';
 import type { AgentConfig, LLMToolDef, LLMAgent } from '../harness/llm-router';
 import type { JsonObject } from '@ggui-ai/protocol';
 import { getCriterionById } from './types-public.js';
+import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
 
 // =============================================================================
 // Helpers
@@ -66,6 +67,14 @@ export interface LLMEvalContext {
   originalPrompt: string;
   designContext?: string;
   contract?: unknown;
+  /**
+   * Which triad produced the source. Selects the criteria text
+   * (`criteriaFor`) and the mother prompt's styling rules: in `free`
+   * mode the `tokens` criterion narrows to color and the `visual`
+   * criterion + "Design System Rules" block become arm-neutral. Absent
+   * means `constrained` (byte-identical to the pre-`designMode` prompt).
+   */
+  designMode?: DesignMode;
 }
 
 export interface LLMEvalConfig {
@@ -108,14 +117,62 @@ export interface EvalContext {
   originalPrompt: string;
   contract?: unknown;
   designSystemSummary?: string;
+  /** See `LLMEvalContext.designMode`. */
+  designMode?: DesignMode;
 }
+
+/**
+ * Arm-neutral styling rules for `designMode: 'free'` — replaces the
+ * constrained "Design System Rules" block. Mirrors the free prompt: color
+ * on the closed token manifest, everything else may be literal, raw HTML
+ * + CSS is a first-class choice.
+ */
+const FREE_STYLING_RULES = `## Styling Rules (important for evaluation)
+- Color: every color must be a bare \`var(--ggui-color-*)\` token — a hardcoded #hex, rgb()/hsl() or CSS named color is a fail, and so is a literal fallback inside \`var(--ggui-*, …)\`.
+- Spacing, typography, radius, shadow geometry and layout values MAY be literals (\`padding: '20px'\`, \`fontSize: 18\`, \`borderRadius: 12\`) — NEVER flag them.
+- Raw HTML elements with inline styles or \`<style>\` blocks are a first-class choice — never flag "not using the design system" or reward using it.
+- When \`@ggui-ai/design\` primitives ARE used, their enum/scale props (\`variant="primary"\`, \`size="lg"\`, \`gap="md"\`, \`tone="muted"\`, \`surface="accent"\`) are valid.
+- One \`export default function Component\` — helper components as named functions above it are fine`;
+
+const CONSTRAINED_STYLING_RULES = `## Design System Rules (important for evaluation)
+- Spacing props (\`gap\`, \`padding\`, \`margin\`) take a t-shirt-scale name: \`gap="md"\`, \`padding="lg"\` (\`none|xs|sm|md|lg|xl|2xl\`). **These ARE design tokens** — each resolves to a \`--ggui-spacing-*\` variable. A raw \`var(--ggui-spacing-*)\` string is an accepted escape hatch. NEVER flag a scale name as "hardcoded". Only a numeric prop (\`padding={24}\`) or a raw CSS length (\`gap="13px"\`) bypasses the scale and should be warned.
+- All colors must use CSS variables: \`color="var(--ggui-color-primary-600)"\` — hardcoded #hex or rgb() is a fail
+- Component props that take enum/scale values — \`variant="primary"\`, \`size="lg"\`, \`gap="md"\`, \`padding="lg"\`, \`shadow="md"\`, \`radius="lg"\`, \`tone="muted"\`, \`surface="accent"\` — are all design system tokens and are always valid
+- One \`export default function Component\` — helper components as named functions above it are fine`;
+
+const CONSTRAINED_VISUAL_REFERENCE = `**visual**: Design system consistency.
+- Uses CSS variables (var(--ggui-*)) for colors, not hardcoded values
+- Consistent use of spacing tokens
+- Proper use of component variants (primary, outline, ghost)
+- Shadow, border-radius from design system tokens`;
+
+const FREE_VISUAL_REFERENCE = `**visual**: Visual composition.
+- Clear hierarchy (one focal point, headings distinct from body), consistent spacing rhythm
+- Coherent palette drawn from the theme color tokens
+- Fit to the canvas: fluid width, nothing cramped or stretched
+- No reward or penalty for using (or not using) the design-system primitives`;
+
+const CONSTRAINED_RAW_CLICK_TARGET_GAP = `- A raw \`<div>\` / \`<span>\` used as a click target without \`as={Clickable}\`
+  (no role, no keyboard) — or any hand-rolled interactive element.`;
+
+const FREE_RAW_CLICK_TARGET_GAP = `- A raw \`<div>\` / \`<span>\` used as a click target with no \`role="button"\`,
+  \`tabIndex\` and keyboard handler — a real \`<button>\` / \`<a href>\` is the
+  correct raw element and is never a gap.`;
 
 export function buildMotherPrompt(ctx: EvalContext): string {
   const parts: string[] = [];
+  const designMode = ctx.designMode ?? DEFAULT_DESIGN_MODE;
+  const free = designMode === 'free';
 
-  parts.push(`You are evaluating a generated React component built with the ggui design system.
+  parts.push(
+    free
+      ? `You are evaluating a generated React component. It was composed freely — raw HTML elements, inline styles and <style> blocks are allowed and the ggui design package is optional — against a data contract and a theme-token color rule.
+The code has already passed automated checks (compilation, security, imports, color tokens).
+Your job is to evaluate ONE specific quality criterion per call.`
+      : `You are evaluating a generated React component built with the ggui design system.
 The code has already passed automated checks (compilation, security, imports, design tokens).
-Your job is to evaluate ONE specific quality criterion per call.`);
+Your job is to evaluate ONE specific quality criterion per call.`,
+  );
 
   parts.push(`## About This Prompt
 This system prompt has 2 sections:
@@ -173,11 +230,7 @@ ${JSON.stringify(ctx.contract).slice(0, 6000)}
 ${ctx.designSystemSummary}`);
   }
 
-  parts.push(`## Design System Rules (important for evaluation)
-- Spacing props (\`gap\`, \`padding\`, \`margin\`) take a t-shirt-scale name: \`gap="md"\`, \`padding="lg"\` (\`none|xs|sm|md|lg|xl|2xl\`). **These ARE design tokens** — each resolves to a \`--ggui-spacing-*\` variable. A raw \`var(--ggui-spacing-*)\` string is an accepted escape hatch. NEVER flag a scale name as "hardcoded". Only a numeric prop (\`padding={24}\`) or a raw CSS length (\`gap="13px"\`) bypasses the scale and should be warned.
-- All colors must use CSS variables: \`color="var(--ggui-color-primary-600)"\` — hardcoded #hex or rgb() is a fail
-- Component props that take enum/scale values — \`variant="primary"\`, \`size="lg"\`, \`gap="md"\`, \`padding="lg"\`, \`shadow="md"\`, \`radius="lg"\`, \`tone="muted"\`, \`surface="accent"\` — are all design system tokens and are always valid
-- One \`export default function Component\` — helper components as named functions above it are fine
+  parts.push(`${free ? FREE_STYLING_RULES : CONSTRAINED_STYLING_RULES}
 
 ## Evaluation Criteria Reference
 
@@ -221,11 +274,7 @@ ${ctx.designSystemSummary}`);
 - Error boundaries or error messages for failure cases
 - Empty states ("No items found") when data arrays could be empty
 
-**visual**: Design system consistency.
-- Uses CSS variables (var(--ggui-*)) for colors, not hardcoded values
-- Consistent use of spacing tokens
-- Proper use of component variants (primary, outline, ghost)
-- Shadow, border-radius from design system tokens
+${free ? FREE_VISUAL_REFERENCE : CONSTRAINED_VISUAL_REFERENCE}
 
 ## Primitive Accessibility (built-in — do NOT flag as missing)
 
@@ -259,8 +308,7 @@ role, aria-*, label, or keyboard support — it is already there:
   to text is CORRECTLY silent — never ask for \`aria-hidden\`, it is there.
 
 REAL accessibility gaps worth flagging:
-- A raw \`<div>\` / \`<span>\` used as a click target without \`as={Clickable}\`
-  (no role, no keyboard) — or any hand-rolled interactive element.
+${free ? FREE_RAW_CLICK_TARGET_GAP : CONSTRAINED_RAW_CLICK_TARGET_GAP}
 - A hand-rolled control whose state (checked / selected / expanded /
   pressed) is conveyed ONLY by styling — e.g. a styled-div "checkbox"
   with a check icon + strikethrough label but no \`role="checkbox"\` /
@@ -329,11 +377,15 @@ function makeTier2Tool(criterion: string): LLMToolDef {
 // Per-criterion user prompts
 // =============================================================================
 
-function getCriterionPrompt(criterion: string, numberedSource: string): string {
+function getCriterionPrompt(
+  criterion: string,
+  numberedSource: string,
+  designMode: DesignMode,
+): string {
   const sourceBlock = `\nSource code (with line numbers):\n\`\`\`tsx\n${numberedSource}\n\`\`\``;
 
   // Use criteria.ts as single source of truth when available
-  const criterionDef = getCriterionById(criterion);
+  const criterionDef = getCriterionById(criterion, designMode);
   if (criterionDef && criterionDef.tier > 0) {
     return `${criterionDef.evalInstruction}
 ${sourceBlock}
@@ -553,10 +605,11 @@ async function evalCriterion(
   numberedSource: string,
   agent: LLMAgent,
   model: string,
+  designMode: DesignMode,
 ): Promise<CriterionResult> {
   const start = Date.now();
   const tool = tier === 1 ? makeTier1Tool(criterion) : makeTier2Tool(criterion);
-  const userPrompt = getCriterionPrompt(criterion, numberedSource);
+  const userPrompt = getCriterionPrompt(criterion, numberedSource, designMode);
 
   try {
     const response = await agent.callTools(
@@ -679,6 +732,7 @@ export async function preWarmEval(
     originalPrompt: context.originalPrompt,
     contract: context.contract,
     designSystemSummary: context.designContext,
+    designMode: context.designMode,
   });
 
   return { motherPrompt, dynamicCriteria: [] };
@@ -777,10 +831,12 @@ export async function runLLMEvaluation(
       : (providerName as 'openai' | 'google');
 
   // Use pre-warmed context if available, otherwise build fresh
+  const designMode = context.designMode ?? DEFAULT_DESIGN_MODE;
   const motherPrompt = preWarmedContext?.motherPrompt ?? buildMotherPrompt({
     originalPrompt: context.originalPrompt,
     contract: context.contract,
     designSystemSummary: context.designContext,
+    designMode,
   });
 
   // Add line numbers to source
@@ -810,8 +866,8 @@ export async function runLLMEvaluation(
 
   // Run ALL criteria in parallel: 7 static (2 tier 1 + 5 tier 2)
   const results = await Promise.all([
-    ...TIER_1_CRITERIA.map(c => evalCriterion(c, 1, motherPrompt, numberedSource, agent, model)),
-    ...TIER_2_CRITERIA.map(c => evalCriterion(c, 2, motherPrompt, numberedSource, agent, model)),
+    ...TIER_1_CRITERIA.map(c => evalCriterion(c, 1, motherPrompt, numberedSource, agent, model, designMode)),
+    ...TIER_2_CRITERIA.map(c => evalCriterion(c, 2, motherPrompt, numberedSource, agent, model, designMode)),
   ]);
 
   // Merge results

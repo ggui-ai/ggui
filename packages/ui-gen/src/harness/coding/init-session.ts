@@ -168,6 +168,7 @@ export async function initSession(input: {
             originalPrompt: params.userPrompt,
             contract: params.contract,
             designContext: undefined,
+            designMode: harness.designMode,
           },
           {
             provider: mapProviderForEvaluator(evalSpec.provider),

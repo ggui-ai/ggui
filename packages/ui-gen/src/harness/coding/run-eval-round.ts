@@ -453,6 +453,10 @@ export async function runEvalRound(
               sourceCode: currentSource,
               originalPrompt: userPrompt,
               contract,
+              // Criteria + mother prompt follow the triad that produced
+              // the source (free mode: color-only tokens, arm-neutral
+              // visual judging).
+              designMode: harness.designMode,
             },
             {
               provider: mapProviderForEvaluator(evaluationAgent.provider),
