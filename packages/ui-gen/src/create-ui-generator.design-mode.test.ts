@@ -78,13 +78,13 @@ describe('createUiGenerator — designMode option threading', () => {
     expect(captured[0]!.designMode).toBe('free');
   });
 
-  it('derives the canvas from input.rendering (chat → xs-card; desktop fullscreen → lg; viewport refines)', async () => {
+  it('derives the canvas from input.rendering (chat → xs-chat-card; desktop fullscreen → lg; viewport refines)', async () => {
     const gen = createUiGenerator({ designMode: 'free', disableEnvMutation: true });
     await gen.generate(fakeInput({ device: 'desktop', shell: 'chat' }));
     await gen.generate(fakeInput({ device: 'desktop', shell: 'fullscreen' }));
     await gen.generate(fakeInput({ device: 'mobile', shell: 'fullscreen' }));
     await gen.generate(fakeInput({ device: 'desktop', shell: 'fullscreen', viewport: { width: 1600, height: 900 } }));
     await gen.generate(fakeInput({ device: 'desktop', shell: 'partial' }));
-    expect(captured.map((p) => p.canvas)).toEqual(['xs-card', 'lg', 'mobile', 'xl', 'md']);
+    expect(captured.map((p) => p.canvas)).toEqual(['xs-chat-card', 'lg', 'mobile-fullscreen-small', 'xl', 'md']);
   });
 });

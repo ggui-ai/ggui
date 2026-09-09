@@ -35,7 +35,11 @@ import type {
 } from '@ggui-ai/protocol';
 import { HOOK_NAME_RE, listContractGadgets } from '@ggui-ai/protocol';
 import { propsSpecToTypeScript } from './check/index.js';
-import { canvasForViewportWidth, type RenderCanvas } from './design-mode.js';
+import {
+  canvasDisplayModeForShell,
+  canvasForViewportWidth,
+  type CanvasClass,
+} from './design-mode.js';
 
 /**
  * Rendering context — how and where the component will be displayed.
@@ -90,17 +94,19 @@ const DEVICE_HINTS: Record<string, string> = {
 
 /**
  * Map a host rendering context onto the canvas class the `free` prompt
- * states. A `chat` shell is always the inline card whatever the host
- * viewport is (the bubble, not the window, bounds the component); a
- * known viewport width refines the fullscreen / partial shells; otherwise
- * the device category decides.
+ * states and the visual evaluator judges at. The class is derived from
+ * DISPLAY MODE + width: a `chat` shell is always the inline card
+ * whatever the host viewport is (the bubble, not the window, bounds the
+ * component); a known viewport width refines the fullscreen / partial
+ * shells; otherwise the device category decides.
  */
-export function canvasForRenderingContext(ctx: RenderingContext): RenderCanvas {
-  if (ctx.shell === 'chat') return 'xs-card';
-  if (ctx.viewport) return canvasForViewportWidth(ctx.viewport.width);
+export function canvasForRenderingContext(ctx: RenderingContext): CanvasClass {
+  const mode = canvasDisplayModeForShell(ctx.shell);
+  if (mode === 'inline') return 'xs-chat-card';
+  if (ctx.viewport) return canvasForViewportWidth(mode, ctx.viewport.width);
   switch (ctx.device) {
     case 'mobile':
-      return 'mobile';
+      return 'mobile-fullscreen-small';
     case 'tablet':
     case 'spatial':
       return 'md';

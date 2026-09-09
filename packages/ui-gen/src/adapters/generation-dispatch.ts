@@ -58,7 +58,7 @@ import {
   type GadgetDescriptor,
   type JsonObject,
 } from "@ggui-ai/protocol";
-import type { DesignMode, RenderCanvas } from "../design-mode.js";
+import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -172,7 +172,7 @@ export interface GenerationDispatchParams {
    */
   designMode?: DesignMode;
   /** Rendering canvas class for the `free` prompt — see `CreateHarnessInput.canvas`. */
-  canvas?: RenderCanvas;
+  canvas?: CanvasClass;
 }
 
 /**

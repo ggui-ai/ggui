@@ -58,13 +58,22 @@ export { canvasForRenderingContext } from './contract-context.js';
 export {
   DESIGN_MODES,
   DEFAULT_DESIGN_MODE,
-  RENDER_CANVASES,
+  CANVAS_CLASSES,
+  CANVAS_VIEWPORTS,
+  CANVAS_BREAKPOINTS,
   CANVAS_DESCRIPTORS,
+  canvasDisplayModeForShell,
   canvasForRendering,
   canvasForViewportWidth,
   describeCanvas,
 } from './design-mode.js';
-export type { DesignMode, RenderCanvas, CanvasDescriptor } from './design-mode.js';
+export type {
+  DesignMode,
+  CanvasClass,
+  CanvasViewport,
+  CanvasDisplayMode,
+  CanvasDescriptor,
+} from './design-mode.js';
 
 // ── Anthropic SDK construction ──────────────────────────────────────
 //

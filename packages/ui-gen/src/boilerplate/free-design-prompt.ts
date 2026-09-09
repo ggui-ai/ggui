@@ -19,7 +19,7 @@
 // elements · a regenerated quality checklist.
 
 import { consumedTokenManifest } from "@ggui-ai/design/themes";
-import { describeCanvas, type RenderCanvas } from "../design-mode.js";
+import { describeCanvas, type CanvasClass } from "../design-mode.js";
 import {
   ANTI_PATTERNS,
   COMPONENT_STRUCTURE,
@@ -35,7 +35,7 @@ import {
 
 export interface FreeDesignPromptInputs {
   readonly userRequest: string;
-  readonly canvas: RenderCanvas;
+  readonly canvas: CanvasClass;
   /** Pre-rendered `## Shape Guidance` section (empty string when no axis fragments fired). */
   readonly axisSection: string;
   /** Pre-rendered P0/P1/P2 criteria summary (free-mode criteria). */
@@ -100,7 +100,7 @@ Never call \`eval()\`, \`Function()\`, \`fetch()\` or the host-document APIs lis
 
 export const FREE_RESPONSIVE_INVARIANT = `## Responsive invariant
 
-The component must fit the host-supplied iframe width at every point of the canvas range: \`width: 100%\` (plus \`max-width\` where you want to cap), never a fixed width, no horizontal scroll. Use \`@media\` / \`@container\` queries, \`clamp()\`, \`minmax()\`, \`auto-fit\` grids and \`flex-wrap\` freely. Compact chrome on \`xs-card\` (the host draws the card border and shadow); own the chrome on fullscreen canvases.`;
+The component must fit the host-supplied iframe width at every point of the canvas range: \`width: 100%\` (plus \`max-width\` where you want to cap), never a fixed width, no horizontal scroll. Use \`@media\` / \`@container\` queries, \`clamp()\`, \`minmax()\`, \`auto-fit\` grids and \`flex-wrap\` freely. Compact chrome on \`xs-chat-card\` (the host draws the card border and shadow); own the chrome on the fullscreen canvases (\`mobile-fullscreen-small\`, \`md\`, \`lg\`, \`xl\`).`;
 
 export const FREE_ACCESSIBILITY = `## Accessibility (REQUIRED)
 

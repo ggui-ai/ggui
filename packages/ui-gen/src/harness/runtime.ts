@@ -32,7 +32,7 @@ import { renderPitfallsBlock } from "./pitfalls.js";
 import type { GadgetDescriptor, DataContract, JsonObject } from "@ggui-ai/protocol";
 import { buildSystemPrompt as buildSystemPromptSkeleton } from "../boilerplate.js";
 import type { AgentConfig } from "./llm-router.js";
-import type { DesignMode, RenderCanvas } from "../design-mode.js";
+import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // Re-export the boilerplate generator so existing internal importers
 // (create-harness.ts, benchmarks/preview-boilerplate.ts) keep working.
@@ -141,7 +141,7 @@ export function buildSystemPrompt(
    */
   designMode?: DesignMode,
   /** Rendering canvas class (`free` mode) — see `SystemPromptInputs.canvas`. */
-  canvas?: RenderCanvas,
+  canvas?: CanvasClass,
 ): string {
   return buildSystemPromptSkeleton({
     userRequest,

@@ -180,7 +180,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 export const FREE_PROMPT_SHA256 =
-  'd4b80ea576e616d9b2eb9f43912bf91542ab2b476312bae8b30fda882849bf4f';
+  'ff5877c554a94da77899deb015dd539112d0d33eb3159f5bb6ef164cdf52f0ed';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
@@ -285,8 +285,8 @@ describe('free-design pin — drift in the experimental arm is visible', () => {
     ]) {
       expect(prompt).not.toContain(gone);
     }
-    // … the canvas is stated explicitly (chat × mobile → xs-card) …
-    expect(prompt).toContain('renders on the `xs-card` canvas');
+    // … the canvas is stated explicitly (chat × mobile → xs-chat-card) …
+    expect(prompt).toContain('renders on the `xs-chat-card` canvas');
     // … and the hard sections are byte-identical to the constrained prompt.
     const constrained = buildProductionPrompt(f.userRequest, f.shellType, f.screen);
     for (const marker of ['## Protocol Notes', '## Contract surface', '## Defensive coding', '## Observable state via']) {

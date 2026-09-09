@@ -24,7 +24,7 @@ import type { EvalIssue, EvalTier, AxisCheck, RuntimeProbeStatus } from "../eval
 import type { LLMToolDef } from "../llm.js";
 import type { CacheTier, HarnessFragment } from "../fragments/index.js";
 import type { HarnessPolicy, ProcessMode } from "../policy.js";
-import type { DesignMode, RenderCanvas } from "../design-mode.js";
+import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 export type { ProcessMode };
 
@@ -395,7 +395,7 @@ export type SystemPromptBuilder = (input: {
   /** Which triad to teach — see `CreateHarnessInput.designMode`. */
   readonly designMode?: DesignMode;
   /** Rendering canvas class (`free` mode) — see `CreateHarnessInput.canvas`. */
-  readonly canvas?: RenderCanvas;
+  readonly canvas?: CanvasClass;
 }) => string;
 
 export interface CreateHarnessInput {
@@ -418,7 +418,7 @@ export interface CreateHarnessInput {
    * omitted the prompt derives it from `shellType` × `screen`. Ignored
    * by the `constrained` prompt.
    */
-  readonly canvas?: RenderCanvas;
+  readonly canvas?: CanvasClass;
   /**
    * Pre-resolved static harness policy. When omitted, `createHarness`
    * falls back to `DEFAULT_HARNESS_POLICY` from `@ggui-ai/ui-gen/policy`.

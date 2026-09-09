@@ -26,7 +26,7 @@ import {
   DEFAULT_DESIGN_MODE,
   canvasForRendering,
   type DesignMode,
-  type RenderCanvas,
+  type CanvasClass,
 } from "../design-mode.js";
 import { buildFreeDesignPrompt } from "./free-design-prompt.js";
 import {
@@ -125,7 +125,7 @@ export interface SystemPromptInputs {
    * it is derived from `shellType` × `screen`. Ignored in `constrained`
    * mode (that prompt keeps its shell/screen descriptors verbatim).
    */
-  canvas?: RenderCanvas;
+  canvas?: CanvasClass;
 }
 
 const SHELL_DESCRIPTIONS: Record<string, string> = {

@@ -69,7 +69,7 @@ describe('createHarness — designMode', () => {
     const free = createHarness({ classification, contract, prompt, shellType: 'chat', screen: 'mobile', designMode: 'free' });
     const constrained = createHarness({ classification, contract, prompt, shellType: 'chat', screen: 'mobile' });
     expect(free.how.systemPrompt).toContain('## Design freedom');
-    expect(free.how.systemPrompt).toContain('renders on the `xs-card` canvas');
+    expect(free.how.systemPrompt).toContain('renders on the `xs-chat-card` canvas');
     expect(constrained.how.systemPrompt).not.toContain('## Design freedom');
     expect(free.what.boilerplate).not.toMatch(/^import .* from '@ggui-ai\/design'/m);
     expect(constrained.what.boilerplate).toMatch(/^import .* from '@ggui-ai\/design'/m);
