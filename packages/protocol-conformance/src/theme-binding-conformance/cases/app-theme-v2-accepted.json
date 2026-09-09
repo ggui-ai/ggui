@@ -1,0 +1,18 @@
+{
+  "name": "app-theme-v2-accepted",
+  "description": "The v2 overlay: both projections, the attestation, an optional default mode and a label. Accepted.",
+  "theme": {
+    "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff"
+      }
+    },
+    "mode": "light",
+    "name": "ocean"
+  },
+  "expect": "accepted"
+}

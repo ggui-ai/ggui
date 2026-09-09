@@ -28,6 +28,7 @@ export * from "./schemas/data-contract";
 // (`--ggui-*` css-var map). Consumed by the deploy/persist path (ggui.json
 // → managed cloud app) and projected into the rendered iframe's `:root`.
 export * from "./schemas/app-theme";
+export * from "./integrations/overlay-hash";
 // Registry-side helpers — pure utilities for computing the canonical
 // identity hash of a DataContract shape. Consumed by the Tier 1
 // exact-match path of the blueprint registry.

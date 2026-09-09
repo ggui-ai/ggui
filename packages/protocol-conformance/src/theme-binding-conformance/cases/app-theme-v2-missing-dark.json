@@ -1,0 +1,13 @@
+{
+  "name": "app-theme-v2-missing-dark",
+  "description": "An overlay with only one projection cannot follow the host's mode \u2014 REFUSED.",
+  "theme": {
+    "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      }
+    }
+  },
+  "expect": "refused"
+}

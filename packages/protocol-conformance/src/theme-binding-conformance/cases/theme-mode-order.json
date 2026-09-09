@@ -1,6 +1,10 @@
 {
   "name": "theme-mode-order",
-  "description": "The client projection of the themeMode total order. Promoted from iframe-runtime's host-theme-mode pin (ggui#589) and protocol's theme-binding pin: with a stamped mode and a host announce present, the STAMP wins — the announce is the final fallback. This case is the ggui#987 arbiter receipt (VERSION-POLICY §1.1): it passes at N and fails when the order flips.",
-  "sources": { "stamped": "light", "sessionSidecar": null, "hostAnnounced": "dark" },
-  "expect": "light"
+  "description": "The client projection of the themeMode total order since ggui#987 (D4 = A, 'follow the widget'): with a stamped mode and a host announce present, the HOST wins \u2014 the embedding host owns runtime mode; the stamp and the sidecar are defaults. Before #987 this case expected 'light' (the stamp); it was promoted into the kit at that version and FAILED when the order flipped \u2014 the VERSION-POLICY \u00a71.1 receipt that names the flip breaking.",
+  "sources": {
+    "stamped": "light",
+    "sessionSidecar": null,
+    "hostAnnounced": "dark"
+  },
+  "expect": "dark"
 }

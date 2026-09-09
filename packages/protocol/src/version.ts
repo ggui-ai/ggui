@@ -6,6 +6,25 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Theming revision — the overlay is the projection, the host owns runtime
+ * mode (2026-09-10, ggui#987 — **BREAKING on the draft wave**, named by the
+ * conformance kit: `protocol-conformance/src/theme-binding-conformance`
+ * promoted today's pins in the prior commit, and this change fails them —
+ * VERSION-POLICY §1.1; shipped under §1.4's `draft-` clause, §3.5's window
+ * waived pre-v1.0). Founder rulings D1–D7 (2026-09-09/10), joint spec
+ * `docs/superpowers/specs/2026-09-09-theming-revision-protocol-half.md`.
+ * `appThemeSchema` v2: `overlays: { light, dark }` REQUIRED (the derived
+ * projection for both modes — one producer, `@ggui-ai/design`'s
+ * `deriveThemeVariables`), `overlayHash` REQUIRED (`canonicalOverlayHash`,
+ * recomputed at every write door), `mode` optional and a DEFAULT only,
+ * `name` a label; `base` DELETED with the registration tier (D2 = B). The
+ * client projection of `themeMode` flips — `hostAnnounced ?? stamped ??
+ * sessionSidecar` (D4 = A: M1 + M2, "follow the widget") — the server stamp
+ * is unchanged; `themeId` loses its `sidecarName` leg. `AppThemeRefusalBody`
+ * is the one write-door refusal shape. `parseMcpAppAiGguiRenderMeta` gains
+ * `onInvalidTheme` so the read door is never silent. The render shell paints
+ * `--ggui-color-ground` (the surface-layering roles of §2.1).
+ * --------------------------------------------------------------------
  * Model registry: `openai/gpt-6-astra` (2026-09-09, additive, ggui#977 —
  * MINOR; Exp 008's founder-ruled second arm, ggui#972). One new `ModelId`
  * union member and one `MODELS.openai` allowlist entry; premium, active,

@@ -1,0 +1,10 @@
+{
+  "name": "theme-mode-default-when-silent-host",
+  "description": "A host that announces nothing leaves the stamp (then the sidecar) to fill the mode \u2014 the defaults still apply.",
+  "sources": {
+    "stamped": "light",
+    "sessionSidecar": "dark",
+    "hostAnnounced": null
+  },
+  "expect": "light"
+}

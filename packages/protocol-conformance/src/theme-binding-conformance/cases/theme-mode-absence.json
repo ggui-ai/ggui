@@ -1,6 +1,10 @@
 {
   "name": "theme-mode-absence",
-  "description": "The absence law (ggui#551): when no layer resolves, the projection is undefined — never a light default.",
-  "sources": { "stamped": null, "sessionSidecar": null, "hostAnnounced": null },
+  "description": "The absence law (ggui#551): when no layer resolves, the projection is undefined \u2014 never a light default.",
+  "sources": {
+    "stamped": null,
+    "sessionSidecar": null,
+    "hostAnnounced": null
+  },
   "expect": null
 }

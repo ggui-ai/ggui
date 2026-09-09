@@ -1,0 +1,15 @@
+{
+  "name": "app-theme-v2-no-hash",
+  "description": "The attestation is REQUIRED: an overlay without `overlayHash` is refused at the door.",
+  "theme": {
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff"
+      }
+    }
+  },
+  "expect": "refused"
+}

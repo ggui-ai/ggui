@@ -338,11 +338,13 @@ export interface McpAppAiGguiRenderMeta {
   readonly themeId?: string;
   readonly themeMode?: 'light' | 'dark';
   /**
-   * Resolved per-app theme overlay — mode + the `--ggui-*` CSS-variable
-   * map snapshotted from `App.theme` and projected by `deriveRenderMeta`.
-   * Distinct from `themeId` (a registry preset reference) and `themeMode`
-   * (the bare light/dark discriminator): this carries the concrete
-   * variable values the iframe applies as a `:root` declaration block.
+   * Resolved per-app theme overlay (ggui#987): the projection for BOTH
+   * modes (`overlays.light` / `overlays.dark`), the mode-agnostic
+   * `cssVariables` on top, per-mode keyframes, the `overlayHash`
+   * attestation, and an optional default `mode` — snapshotted from
+   * `App.theme`. Distinct from `themeId` (a compiled-theme reference) and
+   * `themeMode` (the bare light/dark discriminator): the iframe injects
+   * `overlays[effectiveMode]` then `cssVariables` as `:root` declarations.
    * Absent ⇒ no per-app overlay; the renderer applies its default theme.
    */
   readonly theme?: AppTheme;
@@ -446,8 +448,18 @@ export type ParseMcpAppAiGguiRenderMetaResult =
  *
  * @public
  */
+export interface ParseMcpAppAiGguiRenderMetaOptions {
+  /**
+   * Called when a `theme` is present but fails `appThemeSchema` — the read
+   * door drops it (tolerant degrade) but MUST NOT be silent (ggui#987 §3.4):
+   * the caller logs or emits its observability event with the issues.
+   */
+  readonly onInvalidTheme?: ((issues: readonly string[]) => void) | undefined;
+}
+
 export function parseMcpAppAiGguiRenderMeta(
   meta: unknown,
+  options: ParseMcpAppAiGguiRenderMetaOptions = {},
 ): ParseMcpAppAiGguiRenderMetaResult {
   if (!isRecord(meta)) {
     return { ok: true };
@@ -563,6 +575,9 @@ export function parseMcpAppAiGguiRenderMeta(
     s.theme !== undefined ? appThemeSchema.safeParse(s.theme) : undefined;
   const parsedTheme: AppTheme | undefined =
     themeParse?.success === true ? themeParse.data : undefined;
+  if (themeParse !== undefined && !themeParse.success) {
+    options.onInvalidTheme?.(themeParse.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
+  }
 
   const slice: McpAppAiGguiRenderMeta = {
     sessionId: s.sessionId,
@@ -1717,7 +1732,7 @@ export function toolResultGguiRender(
  * @public
  */
 export const GGUI_RENDER_SHELL_SURFACE =
-  'var(--ggui-shell-background, var(--ggui-color-surface, var(--ggui-shell-scheme-surface, #f9fafb)))';
+  'var(--ggui-shell-background, var(--ggui-color-ground, var(--ggui-shell-scheme-surface, #f9fafb)))';
 
 /**
  * Inline `<style>` block that gives the shell's pre-render placeholder

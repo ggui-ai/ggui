@@ -1,6 +1,11 @@
 {
   "name": "app-theme-v1-one-palette",
-  "description": "The v1 overlay wire: a pinned mode and ONE cssVariables palette. Accepted by appThemeSchema at N (app-theme.ts:45-46). ggui#987 refuses this shape; this case is the §1.1 receipt for that.",
-  "theme": { "mode": "light", "cssVariables": { "--ggui-color-primary-500": "#3355ff" } },
-  "expect": "accepted"
+  "description": "The v1 overlay wire \u2014 a pinned mode and ONE cssVariables palette \u2014 is REFUSED since ggui#987: an overlay that could not follow the host's mode is not accepted; both projections are required. Accepted before #987 (promoted, then failed \u2014 the \u00a71.1 receipt).",
+  "theme": {
+    "mode": "light",
+    "cssVariables": {
+      "--ggui-color-primary-500": "#3355ff"
+    }
+  },
+  "expect": "refused"
 }

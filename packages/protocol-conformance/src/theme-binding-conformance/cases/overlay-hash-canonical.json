@@ -1,0 +1,17 @@
+{
+  "name": "overlay-hash-canonical",
+  "description": "canonicalOverlayHash is ONE function on every minter and door: keys sorted recursively, no whitespace, absent fields omitted, sha256 lowercase hex. The expected value was computed independently with node:crypto over the canonical JSON; the input's keys are deliberately unsorted.",
+  "input": {
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-500": "#3355ff",
+        "--ggui-color-ground": "#ffffff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff",
+        "--ggui-color-ground": "#0e1014"
+      }
+    }
+  },
+  "expect": "7cc8c947beeae43de91a8e3eedc182a739ae134e3a3957958ebee4ec6cf25e96"
+}

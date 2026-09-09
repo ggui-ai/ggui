@@ -32,7 +32,11 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   sseUrl: 'https://example.test/api/sessions/r-1/stream?wsToken=tok-1',
   themeId: 'theme-1',
   themeMode: 'dark',
-  theme: { mode: 'dark', cssVariables: { '--ggui-color-primary-600': '#7c3aed' } },
+  theme: {
+    mode: 'dark',
+    overlayHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    overlays: { light: { '--ggui-color-primary-600': '#7c3aed' }, dark: { '--ggui-color-primary-600': '#a78bfa' } },
+  },
   gadgets: [{ package: '@acme/map', bundleUrl: 'https://cdn.test/map.js' }],
   // Keyed per PUBLIC_ENV_APP_KEY_RE so the same fixture round-trips
   // the iframe-runtime's stricter projection (its parity twin).

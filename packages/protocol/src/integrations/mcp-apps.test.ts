@@ -515,7 +515,11 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
   it('preserves a well-formed `theme` overlay through the parser', () => {
     const theme = {
       mode: 'dark' as const,
-      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+      overlayHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      overlays: {
+        light: { '--ggui-color-primary-600': '#7c3aed' },
+        dark: { '--ggui-color-primary-600': '#a78bfa' },
+      },
       name: 'violet',
     };
     const result = parseMcpAppAiGguiRenderMeta({
@@ -527,15 +531,21 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     }
   });
 
-  it('drops a malformed `theme` overlay (tolerant degrade, slice still ok)', () => {
-    const result = parseMcpAppAiGguiRenderMeta({
-      // `mode` is not a valid enum value → appThemeSchema rejects →
-      // theme dropped, slice still parses.
-      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
-        ...minimalRender,
-        theme: { mode: 'sepia', cssVariables: {} },
+  it('drops a malformed `theme` overlay (tolerant degrade, slice still ok) — and is never silent about it (ggui#987)', () => {
+    const reported: string[][] = [];
+    const result = parseMcpAppAiGguiRenderMeta(
+      {
+        // `mode` is not a valid enum value → appThemeSchema rejects →
+        // theme dropped, slice still parses, the read door reports it.
+        [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+          ...minimalRender,
+          theme: { mode: 'sepia', cssVariables: {} },
+        },
       },
-    });
+      { onInvalidTheme: (issues) => reported.push([...issues]) },
+    );
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.some((i) => i.startsWith('mode:'))).toBe(true);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.meta?.sessionId).toBe('r-1');

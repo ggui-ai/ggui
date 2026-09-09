@@ -7,8 +7,8 @@
  * ## The normative total order
  *
  * ```
- * themeMode:  consolePick  >  staticConfig  >  sessionSidecar  >  hostAnnounced
- * themeId:    consolePick  >  renderOverride  >  staticConfig  >  sidecarName
+ * themeMode:  hostAnnounced  >  consolePick  >  staticConfig  >  sessionSidecar
+ * themeId:    consolePick  >  renderOverride  >  staticConfig
  * ```
  *
  * - `consolePick`    — the live operator pick (console theme provider).
@@ -17,8 +17,12 @@
  * - `sessionSidecar` — the per-app `App.theme` sidecar snapshotted at
  *   render-commit: its `mode` (for `themeMode`) / its `name` (for
  *   `themeId`, the registered-theme base-ladder binding).
- * - `hostAnnounced`  — the embedding host's `hostContext.theme`
- *   (mode only; hosts announce no theme id).
+ * - `hostAnnounced`  — the embedding host's `hostContext.theme` (mode
+ *   only; hosts announce no theme id). HIGHEST rank since ggui#987 (D4):
+ *   the embedding host owns runtime mode; every other layer is a default
+ *   the host's announce overrides. A one-palette sidecar can no longer
+ *   exist (`appThemeSchema` requires both projections), so following the
+ *   host never paints the wrong palette.
  *
  * An unresolved fact is `undefined` — NEVER defaulted to `'light'`.
  * Absence is load-bearing: it is the signal that lets the next layer
@@ -75,7 +79,7 @@ export interface ThemeModeEffectiveSources {
   readonly stamped?: ThemeModeOpinion | undefined;
   /** The slice theme OBJECT's own `mode` (the sidecar, read directly). */
   readonly sessionSidecar?: ThemeModeOpinion | undefined;
-  /** The embedding host's `hostContext.theme` announce — final fallback. */
+  /** The embedding host's `hostContext.theme` announce — HIGHEST rank (ggui#987). */
   readonly hostAnnounced?: ThemeModeOpinion | undefined;
 }
 
@@ -90,7 +94,7 @@ export function stampThemeMode(
 export function effectiveThemeMode(
   s: ThemeModeEffectiveSources,
 ): ThemeModeOpinion | undefined {
-  return s.stamped ?? s.sessionSidecar ?? s.hostAnnounced;
+  return s.hostAnnounced ?? s.stamped ?? s.sessionSidecar;
 }
 
 /** Server-visible `themeId` layers, highest rank first. */
@@ -103,16 +107,14 @@ export interface ThemeIdStampSources {
   readonly staticConfig?: string | undefined;
 }
 
-/** Client-visible `themeId` layers, highest rank first. */
+/**
+ * Client-visible `themeId` layers. Since ggui#987 (D2 = B, the registration
+ * tier is gone) the sidecar's `name` is a label and never a binding: the
+ * only client-visible layer is the stamp.
+ */
 export interface ThemeIdEffectiveSources {
   /** The slice's stamped top-level `themeId`. */
   readonly stamped?: string | undefined;
-  /**
-   * The slice theme OBJECT's `name` — the registered-theme base-ladder
-   * binding (ggui#589 ask 3): an unregistered name is harmless by
-   * construction (renderer falls back to the default ladder).
-   */
-  readonly sidecarName?: string | undefined;
 }
 
 /** Server projection of the `themeId` total order → the stamped field. */
@@ -122,5 +124,5 @@ export function stampThemeId(s: ThemeIdStampSources): string | undefined {
 
 /** Client projection of the `themeId` total order → the effective id. */
 export function effectiveThemeId(s: ThemeIdEffectiveSources): string | undefined {
-  return s.stamped ?? s.sidecarName;
+  return s.stamped;
 }

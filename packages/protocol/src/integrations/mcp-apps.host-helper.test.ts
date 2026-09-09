@@ -228,7 +228,7 @@ describe('gguiShellHtml', () => {
 
   it('paints the theme surface backdrop by default (served-document posture)', () => {
     const html = gguiShellHtml(bootstrap);
-    expect(html).toContain('var(--ggui-color-surface');
+    expect(html).toContain('var(--ggui-color-ground');
     expect(html).not.toContain('background:transparent');
   });
 
@@ -241,14 +241,14 @@ describe('gguiShellHtml', () => {
     // hosts.
     const html = gguiShellHtml(bootstrap);
     expect(html).toContain(
-      'var(--ggui-shell-background, var(--ggui-color-surface',
+      'var(--ggui-shell-background, var(--ggui-color-ground',
     );
   });
 
   it('supports the transparent backdrop for host-embedded cards', () => {
     const html = gguiShellHtml(bootstrap, { background: 'transparent' });
     expect(html).toContain('background:transparent');
-    expect(html).not.toContain('var(--ggui-color-surface');
+    expect(html).not.toContain('var(--ggui-color-ground');
   });
 
   it('declares viewport + color-scheme metas (mobile WebView hosts)', () => {
@@ -265,7 +265,7 @@ describe('gguiShellHtml', () => {
   // while components loaded. The terminal fallback is now a
   // scheme-scoped variable the shell's own <style> sets per
   // prefers-color-scheme: neutral light ground on light, neutral dark
-  // ground on dark. Theme still wins post-inject (--ggui-color-surface
+  // ground on dark. Theme still wins post-inject (--ggui-color-ground
   // outranks it) and --ggui-shell-background stays the top override.
   // ── #667: the serve-time loading-indicator slot (pair: guuey#559) ──
   //
@@ -314,7 +314,7 @@ describe('gguiShellHtml', () => {
     // The surface chain terminates in the scheme var, not a bare dark
     // constant — precedence: override > theme > scheme fallback.
     expect(GGUI_RENDER_SHELL_SURFACE).toBe(
-      'var(--ggui-shell-background, var(--ggui-color-surface, var(--ggui-shell-scheme-surface, #f9fafb)))',
+      'var(--ggui-shell-background, var(--ggui-color-ground, var(--ggui-shell-scheme-surface, #f9fafb)))',
     );
     expect(html).not.toContain('#1e293b');
   });

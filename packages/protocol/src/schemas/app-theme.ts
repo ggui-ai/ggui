@@ -42,54 +42,57 @@ const cssVariableMap = z
 
 export const appThemeSchema = z
   .object({
-    mode: z.enum(['light', 'dark']),
-    cssVariables: cssVariableMap,
+    /**
+     * Default appearance: the mode painted when NO embedding host announces
+     * one. Never a pin — the host owns runtime mode (ggui#987 D4; see
+     * `integrations/theme-binding.ts`). Absent ⇒ mode-neutral.
+     */
+    mode: z.enum(['light', 'dark']).optional(),
+    /** A label the author's tooling reads back. Never resolved by a renderer. */
     name: z.string().min(1).max(64).optional(),
     /**
-     * The REGISTERED base ladder, delivered (runtime theme
-     * registration): both modes' resolved variable sets ride the
-     * envelope so a mid-session mode switch is a local operation and
-     * delivery never depends on the iframe being able to fetch. The
-     * renderer injects the mode-selected set BELOW `cssVariables` (the
-     * per-app overlay) in the documented precedence. `documentHash` is
-     * the registration's identity: it joins painted ladders to
-     * registration records, and a receiver holding the hash may be
-     * served a future envelope without the variable sets.
+     * Delivery attestation: `canonicalOverlayHash({ overlays, cssVariables,
+     * keyframes })` (`integrations/overlay-hash.ts`). Every write door
+     * recomputes it and refuses a mismatch; read doors pass it through.
      */
-    base: z
+    overlayHash: z.string().regex(/^[0-9a-f]{64}$/, 'overlayHash must be sha256 lowercase hex'),
+    /**
+     * The projection, both modes — the derived `--ggui-*` sets a card
+     * injects for the effective mode (ggui#987 §2.4: produced by ONE
+     * function on every path). REQUIRED, both: an overlay that could not
+     * follow the host's mode is not accepted.
+     */
+    overlays: z.object({ light: cssVariableMap, dark: cssVariableMap }).strict(),
+    /** Mode-agnostic per-app overrides, injected above both projections. */
+    cssVariables: cssVariableMap.optional(),
+    /** Per-mode `@keyframes` blocks, injected verbatim after the variables. */
+    keyframes: z
       .object({
-        documentHash: z
-          .string()
-          .regex(/^[0-9a-f]{64}$/, 'documentHash must be sha256 lowercase hex'),
-        light: cssVariableMap,
-        dark: cssVariableMap,
-        /**
-         * Per-mode `@keyframes` blocks from the registration document
-         * (ggui#613 residual 2). A mode key is absent when its
-         * document declares no motion keyframes; the whole field is
-         * absent on pre-#613 registrations (additive optional — old
-         * bases stay valid). Injected verbatim after the variable
-         * ladder, same position the compiled path gives
-         * `theme.cssKeyframes`.
-         */
-        keyframes: z
-          .object({
-            light: z.string().max(8192).optional(),
-            dark: z.string().max(8192).optional(),
-          })
-          .strict()
-          .optional(),
-        /**
-         * `$metadata.frameless` delivered (OR of both modes): the
-         * embedding host owns the card silhouette, so the renderer
-         * appends the root-children border-suppression rule — the
-         * SAME rule the compiled path emits.
-         */
-        frameless: z.boolean().optional(),
+        light: z.string().max(8192).optional(),
+        dark: z.string().max(8192).optional(),
       })
       .strict()
       .optional(),
+    /**
+     * The embedding host owns the card silhouette: the renderer appends the
+     * root-children border-suppression rule.
+     */
+    frameless: z.boolean().optional(),
   })
   .strict();
 
 export type AppTheme = z.infer<typeof appThemeSchema>;
+
+/**
+ * The ONE refusal body every write door returns for an overlay it will not
+ * store (ggui#987 §3.4): REST 422 `invalid_app_config`, the AppSync
+ * `errorInfo`, the MCP ops door's `{ ok: false }` structured content. A
+ * discriminated union by key — exactly one of the four.
+ */
+export const appThemeRefusalBodySchema = z.union([
+  z.object({ uncovered: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),
+  z.object({ unknown: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),
+  z.object({ overlayHash: z.literal('mismatch') }).strict(),
+  z.object({ refused: z.literal('v1 shape') }).strict(),
+]);
+export type AppThemeRefusalBody = z.infer<typeof appThemeRefusalBodySchema>;

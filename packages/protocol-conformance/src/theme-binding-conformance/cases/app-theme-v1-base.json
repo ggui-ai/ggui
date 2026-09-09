@@ -1,14 +1,18 @@
 {
   "name": "app-theme-v1-base",
-  "description": "The v1 overlay carrying a registered base ladder (app-theme.ts:59-91). Accepted at N; ggui#987 deletes `base` with the registration tier.",
+  "description": "A v1 overlay carrying a registered `base` ladder is REFUSED since ggui#987 (D2 = B): the registration tier and `base` are gone. Accepted before #987 (promoted, then failed \u2014 the \u00a71.1 receipt).",
   "theme": {
     "mode": "dark",
     "cssVariables": {},
     "base": {
       "documentHash": "0000000000000000000000000000000000000000000000000000000000000000",
-      "light": { "--ggui-color-primary-500": "#3355ff" },
-      "dark": { "--ggui-color-primary-500": "#99aaff" }
+      "light": {
+        "--ggui-color-primary-500": "#3355ff"
+      },
+      "dark": {
+        "--ggui-color-primary-500": "#99aaff"
+      }
     }
   },
-  "expect": "accepted"
+  "expect": "refused"
 }
