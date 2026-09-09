@@ -22,6 +22,8 @@ export type {
   EvalOutcome,
   EvalCategory,
   EvalResult,
+  VisualEvalSummary,
+  CanvasVisualSummary,
   EvalCriterion,
   CriterionCoverage,
   CriterionRunStatus,
@@ -85,5 +87,24 @@ export type { RunAxisChecksInput } from './axis-checks/index.js';
 // rubric — scoring generation on criteria the generator was never taught
 // is a constraint-alignment violation, so out-of-loop judges get this
 // seam instead of a rubric extension.
-export { callMultimodalLLM } from './visual-evaluator.js';
-export type { VisualEvalConfig } from './visual-evaluator.js';
+export {
+  callMultimodalLLM,
+  captureScreenshot,
+  resolveLaunchOptions,
+  runVisualEvaluation,
+  runVisualEval,
+  summarizeVisualResult,
+} from './visual-evaluator.js';
+export type {
+  VisualEvalConfig,
+  VisualEvalContext,
+  VisualEvalDeps,
+  VisualEvalOutcome,
+  VisualEvaluationResult,
+  CanvasVisualResult,
+  ScreenshotDeps,
+  ScreenshotLauncher,
+  ScreenshotBrowser,
+  ScreenshotPage,
+  ChromiumProvider,
+} from './visual-evaluator.js';

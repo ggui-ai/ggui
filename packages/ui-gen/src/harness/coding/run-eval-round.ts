@@ -22,7 +22,7 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { EvalIssue, EvalResult, RuntimeProbeMeta } from "../../evaluation/types-public.js";
+import type { EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary } from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
@@ -487,6 +487,10 @@ export async function runEvalRound(
               passThreshold: visualThreshold,
               sampleProps: visualEvaluation?.sampleProps,
               viewport: visualEvaluation?.viewport,
+              // Per-canvas judging (arm-neutral) — absent = single shot.
+              ...(visualEvaluation?.canvases !== undefined
+                ? { canvases: visualEvaluation.canvases }
+                : {}),
               // #484/#489 — same threading as the LLM-eval leg above:
               // the visual eval's multimodal call runs inside the same
               // concurrent generation, so it needs the same routing
@@ -501,7 +505,8 @@ export async function runEvalRound(
     ]);
     evalLlmMs = Date.now() - evalLlmStart;
     llmResult = llm;
-    visualIssues = visual;
+    visualIssues = visual?.issues ?? null;
+    const visualSummary: VisualEvalSummary | undefined = visual?.summary;
 
     // Track costs from LLM eval calls
     if (llmResult) {
@@ -528,6 +533,10 @@ export async function runEvalRound(
       ...(llmResult?.criteriaCoverage !== undefined
         ? { criteriaCoverage: llmResult.criteriaCoverage }
         : {}),
+      // Per-canvas visual summary — present only when canvases were
+      // requested and the leg ran; every later re-stamp spreads this
+      // base so it survives to the assembled result.
+      ...(visualSummary !== undefined ? { visual: visualSummary } : {}),
     };
 
     // ── Log merged results, with mode-check subcategory breakdown ──

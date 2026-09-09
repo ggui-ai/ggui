@@ -19,8 +19,9 @@ import { writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { EvalIssue } from './types-public.js';
+import type { CanvasVisualSummary, EvalIssue, VisualEvalSummary } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
+import { CANVAS_VIEWPORTS, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,18 @@ export interface VisualEvalConfig {
   /** Viewport dimensions for screenshot */
   viewport?: { width: number; height: number };
   /**
+   * Per-canvas judging — ARM-NEUTRAL (the same judge, prompt and
+   * threshold in every design mode). When set, the SAME rendered HTML
+   * shell is screenshotted once per class at `CANVAS_VIEWPORTS[class]`
+   * and judged once per class; the result carries one entry per class
+   * in `canvases`, and the single-shot fields aggregate: `finalScore` =
+   * mean of the canvas scores (rounded), `passed` = every canvas passed,
+   * `dimensions` = per-dimension means, `issues` = every canvas's issues
+   * (description prefixed `[<canvas>]`). Unset (or empty) = today's
+   * single screenshot at `viewport`; no `canvases` field on the result.
+   */
+  canvases?: readonly CanvasClass[];
+  /**
    * Optional provider-routing override — see
    * `AgentConfig.routeOverride`. Threaded onto the agent this
    * evaluator constructs so its multimodal call never falls back to
@@ -51,6 +64,34 @@ export interface VisualEvalConfig {
    * reaches the caller's structured log.
    */
   onRetry?: AgentConfig['onRetry'];
+}
+
+/** One canvas's verdict — screenshot + judge score at that class's viewport. */
+export interface CanvasVisualResult {
+  canvas: CanvasClass;
+  viewport: CanvasViewport;
+  /** The judge's weighted score for this canvas (0-100). */
+  score: number;
+  /** `score >= passThreshold`. */
+  passed: boolean;
+  /** The PNG the judge saw — kept for artefact persistence + the human look. */
+  screenshotPng: Buffer;
+}
+
+/**
+ * `runVisualEvaluation`'s result. Identical to `EvaluationResult` when
+ * `config.canvases` is unset; with canvases set, `canvases` holds the
+ * per-class verdicts and the base fields aggregate them (see
+ * `VisualEvalConfig.canvases`).
+ */
+export interface VisualEvaluationResult extends EvaluationResult {
+  canvases?: CanvasVisualResult[];
+}
+
+/** Injection points for `runVisualEvaluation` — screenshot deps plus the judge call (tests). */
+export interface VisualEvalDeps extends ScreenshotDeps {
+  /** The multimodal judge call (default: `callMultimodalLLM`). */
+  judge?: typeof callMultimodalLLM;
 }
 
 export interface VisualEvalContext {
@@ -411,8 +452,10 @@ async function callMultimodalLLM(
 export async function runVisualEvaluation(
   context: VisualEvalContext,
   config: VisualEvalConfig,
-): Promise<EvaluationResult | null> {
+  deps: VisualEvalDeps = {},
+): Promise<VisualEvaluationResult | null> {
   const startTime = Date.now();
+  const judge = deps.judge ?? callMultimodalLLM;
 
   // Bundle component + design system into a single JS file
   const bundledCode = await bundleForRendering(
@@ -421,11 +464,49 @@ export async function runVisualEvaluation(
   );
   console.log(`[visual-eval] bundled: ${bundledCode.length}B (${Date.now() - startTime}ms)`);
 
-  // Build the HTML page
+  // Build the HTML page — ONE shell; per-canvas mode re-renders it at each viewport.
   const html = buildRenderHTML(bundledCode, context.cssTokens);
+  const model = config.model ?? getDefaultVisualModel(config.provider);
 
-  // Take screenshot
-  const screenshot = await captureScreenshot(html, config.viewport);
+  // ── Per-canvas mode: one screenshot + one judge call per class ──
+  if (config.canvases !== undefined && config.canvases.length > 0) {
+    const perCanvas: CanvasVisualResult[] = [];
+    const perCanvasResults: EvaluationResult[] = [];
+    for (const canvas of config.canvases) {
+      const viewport = CANVAS_VIEWPORTS[canvas];
+      const screenshot = await captureScreenshot(html, viewport, deps);
+      if (!screenshot) {
+        console.warn(`[visual-eval] no browser available at canvas ${canvas} — skipping visual evaluation`);
+        return null;
+      }
+      const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, context.originalPrompt);
+      const result = parseVisualResponse(response.text, config.passThreshold);
+      result.inputTokens = response.inputTokens;
+      result.outputTokens = response.outputTokens;
+      perCanvasResults.push(result);
+      perCanvas.push({
+        canvas,
+        viewport,
+        score: result.finalScore,
+        passed: result.passed,
+        screenshotPng: screenshot,
+      });
+      console.log(
+        `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore} ` +
+          `${result.passed ? 'pass' : 'FAIL'} | in=${response.inputTokens} out=${response.outputTokens}`,
+      );
+    }
+    const aggregate = aggregateCanvasResults(perCanvas, perCanvasResults);
+    const elapsed = Date.now() - startTime;
+    console.log(
+      `[visual-eval] score=${aggregate.finalScore} (mean of ${perCanvas.length} canvases; ` +
+        `${aggregate.passed ? 'every canvas passed' : `${perCanvas.filter((c) => !c.passed).length} failed`}) (${elapsed}ms)`,
+    );
+    return aggregate;
+  }
+
+  // ── Single-shot mode (today's path) ──
+  const screenshot = await captureScreenshot(html, config.viewport, deps);
   if (!screenshot) {
     console.warn('[visual-eval] no browser available — skipping visual evaluation');
     return null;
@@ -433,8 +514,7 @@ export async function runVisualEvaluation(
   console.log(`[visual-eval] screenshot: ${screenshot.length}B (${Date.now() - startTime}ms)`);
 
   // Send to multimodal LLM
-  const model = config.model ?? getDefaultVisualModel(config.provider);
-  const response = await callMultimodalLLM(
+  const response = await judge(
     config,
     model,
     VISUAL_EVAL_PROMPT,
@@ -451,6 +531,61 @@ export async function runVisualEvaluation(
   console.log(`[visual-eval] score=${result.finalScore} (${elapsed}ms) | in=${response.inputTokens} out=${response.outputTokens}`);
 
   return result;
+}
+
+/**
+ * Fold per-canvas verdicts into the single-shot fields: `finalScore` =
+ * rounded mean, `passed` = every canvas passed, `dimensions` = rounded
+ * per-dimension means, `issues` = union (description prefixed with the
+ * canvas), `critique` = one line per canvas, tokens summed.
+ */
+function aggregateCanvasResults(
+  perCanvas: readonly CanvasVisualResult[],
+  results: readonly EvaluationResult[],
+): VisualEvaluationResult {
+  const n = results.length;
+  const mean = (pick: (r: EvaluationResult) => number): number =>
+    Math.round(results.reduce((sum, r) => sum + pick(r), 0) / n);
+  const dimensions: DimensionScores = {
+    completeness: mean((r) => r.dimensions.completeness),
+    visualPolish: mean((r) => r.dimensions.visualPolish),
+    interactivity: mean((r) => r.dimensions.interactivity),
+    accessibility: mean((r) => r.dimensions.accessibility),
+    codeQuality: mean((r) => r.dimensions.codeQuality),
+  };
+  const issues: EvaluationIssue[] = [];
+  const critiques: string[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  results.forEach((r, i) => {
+    const canvas = perCanvas[i]!.canvas;
+    for (const issue of r.issues) issues.push({ ...issue, description: `[${canvas}] ${issue.description}` });
+    if (r.critique) critiques.push(`${canvas}: ${r.critique}`);
+    inputTokens += r.inputTokens ?? 0;
+    outputTokens += r.outputTokens ?? 0;
+  });
+  return {
+    passed: perCanvas.every((c) => c.passed),
+    finalScore: mean((r) => r.finalScore),
+    dimensions,
+    issues,
+    ...(critiques.length > 0 ? { critique: critiques.join('\n') } : {}),
+    inputTokens,
+    outputTokens,
+    canvases: [...perCanvas],
+  };
+}
+
+/** The per-canvas verdicts without the PNGs — what the harness stamps on `EvalResult.visual`. */
+export function summarizeVisualResult(result: VisualEvaluationResult): VisualEvalSummary | undefined {
+  if (result.canvases === undefined) return undefined;
+  const canvases: CanvasVisualSummary[] = result.canvases.map((c) => ({
+    canvas: c.canvas,
+    viewport: c.viewport,
+    score: c.score,
+    passed: c.passed,
+  }));
+  return { score: result.finalScore, passed: result.passed, canvases };
 }
 
 /**
@@ -526,17 +661,30 @@ function getDefaultVisualModel(provider: 'claude' | 'google'): string {
 // Tier 2 adapter — returns EvalIssue[]
 // ---------------------------------------------------------------------------
 
+/** What the harness's eval round consumes from the visual leg. */
+export interface VisualEvalOutcome {
+  /** Tier-2 issues (empty when no browser is available). */
+  issues: EvalIssue[];
+  /**
+   * Per-canvas summary — present ONLY when `config.canvases` was set and
+   * the leg ran; the harness stamps it on `EvalResult.visual`. Absent on
+   * the single-shot path (byte-identical to the pre-canvas result).
+   */
+  summary?: VisualEvalSummary;
+}
+
 /**
- * Run visual evaluation and return tier 2 EvalIssues.
+ * Run visual evaluation and return tier 2 EvalIssues (+ the per-canvas
+ * summary when canvases were requested).
  */
 export async function runVisualEval(
   context: VisualEvalContext,
   config: VisualEvalConfig,
-): Promise<EvalIssue[]> {
+): Promise<VisualEvalOutcome> {
   const result = await runVisualEvaluation(context, config);
-  if (!result) return []; // puppeteer not available
+  if (!result) return { issues: [] }; // puppeteer not available
 
-  return (result.issues || []).map(issue => ({
+  const issues: EvalIssue[] = (result.issues || []).map(issue => ({
     tier: 2 as const,
     result: (issue.severity === 'critical' ? 'fail' : 'warn') as 'fail' | 'warn',
     category: 'visual' as const,
@@ -545,4 +693,6 @@ export async function runVisualEval(
     description: issue.description,
     fix: issue.fix || '',
   }));
+  const summary = summarizeVisualResult(result);
+  return summary === undefined ? { issues } : { issues, summary };
 }

@@ -30,6 +30,9 @@ import * as realLlmEvaluator from '../../evaluation/llm-evaluator.js';
 import type { LLMEvalConfig, LLMEvalContext, PreWarmedEvalContext } from '../../evaluation/llm-evaluator.js';
 import { LLM_EVAL_STATIC_CRITERIA } from '../../evaluation/types-public.js';
 import type { CriterionCoverage } from '../../evaluation/types-public.js';
+import * as realVisualEvaluator from '../../evaluation/visual-evaluator.js';
+import type { VisualEvalConfig } from '../../evaluation/visual-evaluator.js';
+import type { VisualEvalSummary } from '../../evaluation/types-public.js';
 import type { AgentSpec } from '../runtime.js';
 import type { EvalRoundContext, EvalRoundInput } from './run-eval-round.js';
 
@@ -205,5 +208,106 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
     expect(cov.map((c) => c.criterion)).toEqual(LLM_EVAL_STATIC_CRITERIA.map((c) => c.criterion));
     expect(cov.every((c) => c.status === 'not-applicable')).toBe(true);
     expect(cov.every((c) => typeof c.reason === 'string' && c.reason.includes('low-risk bypass'))).toBe(true);
+  });
+});
+
+/**
+ * Per-canvas visual judging reaches the harness result: the round
+ * threads `visualEvaluation.canvases` into the visual leg's config and
+ * stamps the leg's PNG-free summary on `evalResult.visual` (→
+ * `GenerationResult.evalResult.visual`, the bench's
+ * `tierEvaluation.visual`). Without canvases the field is absent — the
+ * pre-canvas result shape, byte for byte.
+ */
+describe('runEvalRound — per-canvas visual summary → evalResult.visual', () => {
+  beforeEach(() => {
+    mockRunCheck.mockReset();
+    mockRunCheck.mockResolvedValue({ issues: [] });
+  });
+
+  async function buildCtx(
+    visualEvaluation: EvalRoundContext['visualEvaluation'],
+    visualMod: EvalRoundContext['visualMod'],
+  ) {
+    const classification = {
+      ...classifyAxes({ contract: {}, prompt: 'test prompt' }),
+      riskTier: 'medium' as const,
+    };
+    const harness = createHarness({ classification, contract: {}, prompt: 'test prompt' });
+    const workspace = new AgentWorkspace();
+    await workspace.init();
+    const compiledCode = 'export default function C() { return null; }';
+    workspace.write(compiledCode);
+    const evaluationAgent: AgentSpec = { provider: 'anthropic', model: 'claude-haiku-4-5' };
+    const fakeLlmEvalMod: typeof realLlmEvaluator = {
+      ...realLlmEvaluator,
+      runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], inputTokens: 0, outputTokens: 0 }),
+    };
+    const ctx: EvalRoundContext = {
+      workspace,
+      harness,
+      contract: undefined,
+      userPrompt: 'test prompt',
+      fixtureProps: undefined,
+      classification,
+      evaluationAgent,
+      visualEvalAgent: evaluationAgent,
+      visualEvaluation,
+      visualThreshold: 70,
+      qualityMode: 'fast',
+      maxEvalRounds: 3,
+      costTracker: new CostTracker(null),
+      llmEvalMod: fakeLlmEvalMod,
+      visualMod,
+      preWarmPromise: undefined,
+    };
+    const input: EvalRoundInput = {
+      compiledCode,
+      evalRoundsUsed: 0,
+      preWarmedContext: undefined,
+      prevModeSubcats: new Set(),
+      prevFailFingerprints: new Set(),
+    };
+    return { ctx, input };
+  }
+
+  it('threads canvases into the visual config and stamps the summary on evalResult.visual', async () => {
+    const summary: VisualEvalSummary = {
+      score: 84,
+      passed: true,
+      canvases: [
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true },
+        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 88, passed: true },
+      ],
+    };
+    const captured: VisualEvalConfig[] = [];
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: (_context, config) => {
+        captured.push(config);
+        return Promise.resolve({ issues: [], summary });
+      },
+    };
+    const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card', 'xl'] }, fakeVisualMod);
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.canvases).toEqual(['xs-chat-card', 'xl']);
+    expect(captured[0]?.passThreshold).toBe(70);
+    expect(round.evalResult?.visual).toEqual(summary);
+  });
+
+  it('without canvases the visual leg returns no summary and evalResult carries no `visual` key', async () => {
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: () => Promise.resolve({ issues: [] }),
+    };
+    const { ctx, input } = await buildCtx({ enabled: true }, fakeVisualMod);
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult).toBeDefined();
+    expect('visual' in round.evalResult!).toBe(false);
   });
 });

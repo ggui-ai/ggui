@@ -20,7 +20,7 @@
 
 export type Priority = "P0" | "P1" | "P2";
 
-import type { DesignMode } from "../design-mode.js";
+import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // ─── Issue shape ───────────────────────────────────────────────────────────
 
@@ -176,6 +176,34 @@ export interface EvalResult {
    * probe runner; absent on eval paths that never invoke the probe.
    */
   runtimeProbe?: RuntimeProbeMeta;
+  /**
+   * Per-canvas visual verdicts. Stamped by the harness ONLY when the
+   * visual leg ran with `visualEvaluation.canvases` set (arm-neutral —
+   * the same judge in every design mode); absent on the single-shot
+   * visual path and whenever the visual leg did not run. PNGs stay on
+   * `runVisualEvaluation`'s own result (`VisualEvaluationResult.canvases[*].screenshotPng`),
+   * never here — this object is serialized into reports.
+   */
+  visual?: VisualEvalSummary;
+}
+
+/** One canvas's visual verdict, PNG-free — see `EvalResult.visual`. */
+export interface CanvasVisualSummary {
+  canvas: CanvasClass;
+  viewport: { width: number; height: number };
+  /** The judge's weighted score at this canvas (0-100). */
+  score: number;
+  /** `score >= passThreshold`. */
+  passed: boolean;
+}
+
+/** The visual leg's per-canvas summary — see `EvalResult.visual`. */
+export interface VisualEvalSummary {
+  /** Mean of the canvas scores (rounded). */
+  score: number;
+  /** Every canvas passed. */
+  passed: boolean;
+  canvases: CanvasVisualSummary[];
 }
 
 // ─── Quality mode ──────────────────────────────────────────────────────────

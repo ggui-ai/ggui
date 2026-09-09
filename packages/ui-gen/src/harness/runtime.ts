@@ -83,6 +83,13 @@ export interface SingleComponentParams {
     passThreshold?: number;
     sampleProps?: JsonObject;
     viewport?: { width: number; height: number };
+    /**
+     * Per-canvas judging — see `VisualEvalConfig.canvases`. When set, the
+     * eval round screenshots + judges once per class and the harness
+     * stamps `EvalResult.visual` with the PNG-free summary. Unset =
+     * today's single screenshot at `viewport`.
+     */
+    canvases?: readonly CanvasClass[];
   };
   onProgress?: (event: unknown) => void;
   onInitialResult?: (result: {
