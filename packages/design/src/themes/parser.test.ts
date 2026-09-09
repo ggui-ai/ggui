@@ -98,6 +98,14 @@ describe('parseTheme', () => {
           expect(parsed.cssVariables).toContain('--ggui-color-tertiaryContainer');
           expect(parsed.cssVariables).toContain('--ggui-color-onTertiaryContainer');
           expect(parsed.cssVariables).toContain('--ggui-font-family-sans');
+          // ggui#983 — the two derived colour slots the primitives consume
+          // (Link's colour, the flat error tone) are emitted by EVERY theme
+          // as aliases of the ladder stops it already authors, so the
+          // consumed-token manifest is covered without a theme repeating them.
+          expect(parsed.cssVariables).toContain('--ggui-color-link');
+          expect(parsed.cssVariables).toContain('--ggui-color-error');
+          expect(parsed.css).toContain('--ggui-color-link: var(--ggui-color-primary-600);');
+          expect(parsed.css).toContain('--ggui-color-error: var(--ggui-color-error-500);');
           expect(parsed.cssVariables).toContain('--ggui-shape-radius-');
           expect(parsed.cssVariables).toContain('--ggui-shape-shadow-');
           expect(parsed.cssVariables).toContain('--ggui-motion-duration-');
@@ -141,3 +149,23 @@ describe('generateThemeReferenceDocumentation', () => {
     expect(docs).toContain('var(--ggui-motion-transition-normal)');
   });
 });
+
+describe('derived colour slots on the file-format path (ggui#983)', () => {
+  it('a plain DTCG tree that authors primary-600 and error-500 emits the link and flat-error aliases', () => {
+    const css = generateCssVariables({
+      color: {
+        primary: { '600': { $value: '#123456', $type: 'color' } },
+        error: { '500': { $value: '#b91c1c', $type: 'color' } },
+      },
+    });
+    expect(css).toContain('--ggui-color-link: var(--ggui-color-primary-600);');
+    expect(css).toContain('--ggui-color-error: var(--ggui-color-error-500);');
+  });
+
+  it('a tree without those stops emits no dangling alias', () => {
+    const css = generateCssVariables({ color: { surface: { $value: '#fff', $type: 'color' } } });
+    expect(css).not.toContain('--ggui-color-link');
+    expect(css).not.toContain('--ggui-color-error:');
+  });
+});
+

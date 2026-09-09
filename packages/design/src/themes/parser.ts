@@ -72,6 +72,31 @@ function walkTokens(
 }
 
 /**
+ * The derived colour slots (ggui#983). Two tokens the primitives consume
+ * that no theme authors: the link colour (`Link`, and every Markdown
+ * anchor through it) and the flat error tone. Every theme emits them as
+ * aliases of the ladder stops it already ships — `primary-600` and
+ * `error-500` — so the consumed-token manifest is covered without a
+ * theme repeating itself, and a host palette or a per-app override may
+ * set either directly and reach every rendered card. Emitted only when
+ * the aliased stop exists, so a partial file-format tree never carries a
+ * dangling reference.
+ */
+function derivedColorSlots(color: unknown): string[] {
+  const has = (family: string, shade: string): boolean => {
+    if (color === null || typeof color !== 'object') return false;
+    const fam = (color as Record<string, unknown>)[family];
+    if (fam === null || typeof fam !== 'object') return false;
+    const tok = (fam as Record<string, unknown>)[shade];
+    return tok !== null && typeof tok === 'object' && '$value' in tok;
+  };
+  const out: string[] = [];
+  if (has('primary', '600')) out.push('  --ggui-color-link: var(--ggui-color-primary-600);');
+  if (has('error', '500')) out.push('  --ggui-color-error: var(--ggui-color-error-500);');
+  return out;
+}
+
+/**
  * Build CSS custom property declarations from a DtcgTheme.
  * Returns the raw lines (without :root wrapper).
  */
@@ -79,6 +104,7 @@ function buildCssVariables(theme: DtcgTheme): string {
   const lines: string[] = [];
 
   walkTokens(theme.color, 'color', lines);
+  lines.push(...derivedColorSlots(theme.color));
   walkTokens(theme.font, 'font', lines);
   walkTokens(theme.spacing, 'spacing', lines);
   walkTokens(theme.shape, 'shape', lines);
@@ -269,6 +295,9 @@ function emitDuckTyped(theme: unknown): string[] {
   if (theme !== null && typeof theme === 'object') {
     traverse(theme as Record<string, unknown>);
   }
+  if (theme !== null && typeof theme === 'object') {
+    declarations.push(...derivedColorSlots((theme as Record<string, unknown>).color));
+  }
   return declarations;
 }
 
@@ -303,6 +332,12 @@ export function generateThemeReferenceDocumentation(theme: DtcgTheme): string {
       }
     }
   }
+
+  // Derived slots (ggui#983) — consumable like any other colour token.
+  sections.push(
+    '- var(--ggui-color-link) - the link colour (aliases primary-600 unless the host or theme sets it)',
+    '- var(--ggui-color-error) - the flat error colour (aliases error-500 unless the host or theme sets it)',
+  );
 
   // Material 3 role pairs — render guidance so the LLM picks the right
   // foreground for each tinted surface. The singletons above already emit

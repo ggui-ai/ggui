@@ -83,9 +83,17 @@ export function resolveToneCss(tone: ToneSlot): string {
       return 'var(--ggui-color-primary-700, #0369a1)';
     case 'loud':
       return 'var(--ggui-color-primary-500, #0ea5e9)';
+    case 'error':
+      // The flat `--ggui-color-error` is the one semantic slot a host
+      // palette or a theme override addresses directly (ggui#983); it
+      // reads first, with the ladder's live `error-500` stop beneath it
+      // so an unset flat token changes nothing. Static on purpose: the
+      // consumed-token manifest derives the dynamic site below from
+      // `SEMANTIC_TONE_FALLBACK`'s range, and this slot must be visible
+      // to it as two plain tokens.
+      return `var(--ggui-color-error, var(--ggui-color-error-500, ${SEMANTIC_TONE_FALLBACK.error}))`;
     case 'success':
     case 'warning':
-    case 'error':
     case 'info':
       // Semantic tones resolve to the ladder's `500` stop — the "live"
       // stop every theme annotates as the semantic role color and ships

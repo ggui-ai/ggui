@@ -2,6 +2,7 @@
   "version": 1,
   "tokens": [
     "--ggui-color-container",
+    "--ggui-color-error",
     "--ggui-color-error-100",
     "--ggui-color-error-200",
     "--ggui-color-error-50",
@@ -15,6 +16,7 @@
     "--ggui-color-info-500",
     "--ggui-color-info-700",
     "--ggui-color-info-800",
+    "--ggui-color-link",
     "--ggui-color-neutral-100",
     "--ggui-color-neutral-200",
     "--ggui-color-neutral-300",

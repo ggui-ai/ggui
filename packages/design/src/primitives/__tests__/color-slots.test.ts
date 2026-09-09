@@ -26,7 +26,8 @@ describe('resolveToneCss', () => {
     ['loud', 'var(--ggui-color-primary-500, #0ea5e9)'],
     ['success', 'var(--ggui-color-success-500, #15803d)'],
     ['warning', 'var(--ggui-color-warning-500, #b45309)'],
-    ['error', 'var(--ggui-color-error-500, #b91c1c)'],
+    // ggui#983: the flat --ggui-color-error reads first (a host or override sets it), the 500 stop beneath it.
+    ['error', 'var(--ggui-color-error, var(--ggui-color-error-500, #b91c1c))'],
     ['info', 'var(--ggui-color-info-500, #0e7490)'],
     ['inverse', 'var(--ggui-color-surface, #ffffff)'],
     ['inherit', 'inherit'],

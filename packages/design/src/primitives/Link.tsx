@@ -14,9 +14,14 @@ export function Link({
   className,
   ...rest
 }: LinkProps) {
+  // The link slot (ggui#983): a host's or theme's `--ggui-color-link`
+  // paints every anchor — Markdown links included, they render through
+  // this primitive — and the primary ladder's 600 stop is the colour
+  // beneath it when nobody set one. `tone` still routes through the
+  // tone slots, as before.
   const linkColor = tone
     ? resolveToneCss(tone)
-    : 'var(--ggui-color-primary-600, #0284c7)';
+    : 'var(--ggui-color-link, var(--ggui-color-primary-600, #0284c7))';
 
   const underlineStyle = {
     always: 'underline',

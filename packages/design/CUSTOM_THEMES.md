@@ -134,6 +134,13 @@ shape.shadow
 motion.duration, motion.easing, motion.keyframes
 ```
 
+Two colour slots are **derived for you** and need no entry: `--ggui-color-link`
+(what `Link` and every Markdown anchor paint; aliases `primary-600`) and the
+flat `--ggui-color-error` (what the `error` tone paints; aliases `error-500`).
+Every theme emits both from the ladders it already ships, so a host palette or
+a per-app override can set either one directly and it reaches every rendered
+card.
+
 Spacing in particular ships **both** numeric (`1..12`) and named
 (`xs..2xl`) keys on purpose — primitives reference the named keys,
 LLM-generated UIs and existing consumers mix both. Drop either set and
