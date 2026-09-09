@@ -42,7 +42,7 @@
     "@ggui-ai/gadget-signing": "workspace:*",
     "@ggui-ai/registry-core": "workspace:*",
     "@hono/node-server": "^2.0.12",
-    "hono": "^4.12.8"
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@sigstore/mock": "~0.12.1",

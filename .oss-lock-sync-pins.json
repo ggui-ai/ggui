@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T07:21:02.025Z",
+  "generatedAt": "2026-09-09T07:34:09.535Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -215,6 +215,7 @@
     "flatted",
     "function.prototype.name",
     "happy-dom",
+    "hono",
     "isomorphic-git",
     "jose",
     "lru.min",
@@ -535,6 +536,7 @@
     "flatted",
     "function.prototype.name",
     "happy-dom",
+    "hono@^4",
     "isomorphic-git",
     "jose@^5",
     "jose@^6",
