@@ -51,6 +51,11 @@
       "import": "./dist/resource-read-conformance/index.js",
       "default": "./dist/resource-read-conformance/index.js"
     },
+    "./theme-binding-conformance": {
+      "types": "./dist/theme-binding-conformance/index.d.ts",
+      "import": "./dist/theme-binding-conformance/index.js",
+      "default": "./dist/theme-binding-conformance/index.js"
+    },
     "./binding-conformance": {
       "types": "./dist/binding-conformance/index.d.ts",
       "import": "./dist/binding-conformance/index.js",

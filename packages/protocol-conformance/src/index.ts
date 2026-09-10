@@ -306,3 +306,17 @@ export type {
   ToolCallDriver,
   ToolCallScenario,
 } from './domain-error-conformance/index.js';
+
+// ── theme binding (ggui#987 — the theming wave's arbiter; guuey 1.3 judges against it) ──
+export {
+  APP_THEME_CASES,
+  OVERLAY_HASH_CASES,
+  THEME_MODE_CASES,
+  runThemeBindingConformance,
+} from './theme-binding-conformance/index.js';
+export type {
+  AppThemeCase,
+  OverlayHashCase,
+  ThemeBindingResult,
+  ThemeModeCase,
+} from './theme-binding-conformance/index.js';
