@@ -155,11 +155,18 @@ function installRegistry(): GguiRegistry {
 const CLICKABLE_SELECTOR =
   'button, [role="button"], input[type="submit"], input[type="button"], ' +
   'input[type="checkbox"], input[type="radio"], [role="switch"], [role="checkbox"], ' +
-  '[role="menuitem"], [role="tab"], [role="option"], a[href], [data-action], summary';
+  '[role="menuitem"], [role="tab"], [role="option"], [data-action]';
+// Deliberately NOT candidates: <a href> (a click navigates the fixture page
+// away and aborts every remaining check) and <summary> (its click toggles the
+// parent <details> — a DOM change that says nothing about the action).
 /** Per-control wait in the fallback pass — enough for a synchronous dispatch + a render. */
 const FALLBACK_CLICK_WAIT_MS = 600;
-/** The fallback pass shares one budget so a busy screen cannot run past the caller's timeout. */
-const FALLBACK_BUDGET_FLOOR_MS = 6000;
+/**
+ * ONE deadline covers both passes for an action: max(the caller's wait, this
+ * floor). A few loosely-matching decoys can no longer run an action for
+ * minutes; the floor keeps very short test waits from starving the fallback.
+ */
+const ACTION_BUDGET_FLOOR_MS = 6000;
 
 function norm(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -182,7 +189,9 @@ function collectActionCandidates(
     (el): el is HTMLElement =>
       el instanceof HTMLElement &&
       !el.hasAttribute('disabled') &&
-      el.getAttribute('aria-disabled') !== 'true',
+      el.getAttribute('aria-disabled') !== 'true' &&
+      // an already-checked radio fires no change on click — nothing to observe
+      !(el instanceof HTMLInputElement && el.type === 'radio' && el.checked),
   );
   const lcName = name.toLowerCase();
   const lcLabel = label.toLowerCase();
@@ -430,10 +439,10 @@ async function run(input: RunInput): Promise<RunOutcome> {
         diagnostic: `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")`,
       };
     }
-    // Named controls each get the caller's full wait; the fallback pass is
-    // bounded per control and as a whole (a busy screen has many clickables).
-    const fallbackEachMs = Math.min(input.waitMs, FALLBACK_CLICK_WAIT_MS);
-    const fallbackBudgetMs = Math.max(input.waitMs * 3, FALLBACK_BUDGET_FLOOR_MS);
+    // One deadline for the whole action. Named controls get the caller's wait
+    // (or what is left of the budget); fallback controls get a short slice each.
+    const deadline = Date.now() + Math.max(input.waitMs, ACTION_BUDGET_FLOOR_MS);
+    const remaining = (): number => Math.max(0, deadline - Date.now());
     let clicked = 0;
     let bestDispatch = false;
     let bestDom = false;
@@ -450,18 +459,21 @@ async function run(input: RunInput): Promise<RunOutcome> {
         ? { status: 'ok', dispatchFired: obs.dispatchFired, domChanged: obs.domChanged, via, clicked }
         : null;
     };
-    for (const el of named) {
-      const hit = await attempt(el, input.waitMs, 'named');
-      if (hit !== null) return hit;
-    }
-    const fallbackStart = Date.now();
     let exhausted = false;
-    for (const el of fallback) {
-      if (Date.now() - fallbackStart > fallbackBudgetMs) {
+    for (const el of named) {
+      if (remaining() === 0) {
         exhausted = true;
         break;
       }
-      const hit = await attempt(el, fallbackEachMs, 'fallback');
+      const hit = await attempt(el, Math.min(input.waitMs, remaining()), 'named');
+      if (hit !== null) return hit;
+    }
+    for (const el of fallback) {
+      if (exhausted || remaining() === 0) {
+        exhausted = true;
+        break;
+      }
+      const hit = await attempt(el, Math.min(FALLBACK_CLICK_WAIT_MS, remaining()), 'fallback');
       if (hit !== null) return hit;
     }
     const missing: string[] = [];

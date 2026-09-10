@@ -311,6 +311,28 @@ const TOGGLE_CONTRACT: DataContract = {
   },
 };
 
+const DECOY_THEN_REAL_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Chat() {
+  const archive = useAction('archive');
+  const send = useAction('sendMessage');
+  return (
+    <div>
+      <button aria-label="Send Message to archive" onClick={() => archive({})}>Archive</button>
+      <button onClick={() => send({ text: 'hi' })}>Go</button>
+    </div>
+  );
+}
+`;
+
+const WRONG_ACTION_ONLY_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Chat() {
+  const archive = useAction('archive');
+  return <button onClick={() => archive({})}>Archive</button>;
+}
+`;
+
 describe('#996 — the control is found the way the harness finds it, not by the label text', () => {
   it('#996 a button named by data-action passes even though its text ("Send") is not the label ("Send Message")', async () => {
     const code = await compile(SEND_DATA_ACTION_SRC);
@@ -319,18 +341,25 @@ describe('#996 — the control is found the way the harness finds it, not by the
     expect(result.ok).toBe(true);
   }, 60_000);
 
-  it('#996 an unnamed checkbox wired to the action passes via the click-every-clickable fallback (the Exp 008 pre-flight shape)', async () => {
+  it('#996 an unnamed checkbox wired to the action passes via the click-every-clickable fallback (the shape generated components use)', async () => {
     const code = await compile(UNNAMED_CHECKBOX_SRC);
     const result = await validateContractBehavior({ componentCode: code, contract: TOGGLE_CONTRACT, timeoutMs: 2000, playwright });
     expect(result.failures).toEqual([]);
     expect(result.ok).toBe(true);
   }, 60_000);
 
-  it('#996 action-not-rendered means NO clickable control at all, and says so', async () => {
-    const code = await compile(NO_BUTTON_SRC);
-    const result = await validateContractBehavior({ componentCode: code, contract: CONTEXT_BOUND_CONTRACT, timeoutMs: 1000, playwright });
+  it('#996 a named decoy that dispatches ANOTHER action does not pass; the unnamed real control is found by the fallback', async () => {
+    const code = await compile(DECOY_THEN_REAL_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SEND_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#996 a lone control that dispatches the wrong action reads action-no-effect and names what it dispatched', async () => {
+    const code = await compile(WRONG_ACTION_ONLY_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SEND_CONTRACT, timeoutMs: 1000, playwright });
     expect(result.ok).toBe(false);
-    expect(result.failures[0]?.kind).toBe('action-not-rendered');
-    expect(result.failures[0]?.diagnostic).toMatch(/no clickable control/);
+    expect(result.failures[0]?.kind).toBe('action-no-effect');
+    expect(result.failures[0]?.diagnostic).toContain('other actions dispatched: archive');
   }, 60_000);
 });
