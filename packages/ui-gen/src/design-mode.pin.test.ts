@@ -184,8 +184,12 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
+// Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
+// roles) — the free color rule renders the consumed-token manifest, so the free prompt
+// moved with it; the constrained digest was re-recorded for the same change by #989 and
+// is untouched here (INVARIANT 1 holds across the re-record).
 export const FREE_PROMPT_SHA256 =
-  'd53cae7166f0564dd360f3bffba447875cc82fb2faf43f0710ef12757b49c4f3';
+  'caa375593c1df0347fbe692291ea2750ecda3f44a3a1d01f2dd3d311caec234b';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
