@@ -3638,7 +3638,7 @@ export const PROTOCOL_VERSION = "draft-2026-09-10";
  *     PATCH under §1.3); it cannot be cut from main, whose delta since
  *     0.14.0 is minor-class.
  */
-export const GGUI_WAVE_VERSION = "0.15.0";
+export const GGUI_WAVE_VERSION = "0.16.0";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the
