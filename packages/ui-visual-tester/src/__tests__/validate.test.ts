@@ -367,6 +367,75 @@ describe('sampleProps — the component is rendered with the props it was genera
   }, 60_000);
 });
 
+// The shape generated components actually produce for an agent-bound toggle:
+// the design Checkbox (hidden input over a styled box), CONTROLLED from props,
+// onChange → useAction. A user's pointer click fires change → dispatch; an
+// in-page HTMLElement.click() on the hidden input does not.
+const CONTROLLED_DESIGN_CHECKBOX_SRC = `
+import { useAction } from '@ggui-ai/wire';
+import { Checkbox } from '@ggui-ai/design/primitives';
+export default function Todos({ todos = [] }: { todos?: ReadonlyArray<{ id: string; text: string; done: boolean }> }) {
+  const toggle = useAction('toggleItem');
+  return (
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id}><Checkbox label={t.text} checked={t.done} onChange={() => toggle({ id: t.id })} /></li>
+      ))}
+    </ul>
+  );
+}
+`;
+
+// The todo cells' exact shape: filter buttons BEFORE the list, in DOM order; a
+// filter click re-renders the list, so controls collected before it are detached.
+const FILTER_THEN_LIST_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+import { Checkbox } from '@ggui-ai/design/primitives';
+type Todo = { id: string; text: string; done: boolean };
+export default function Todos({ todos = [] }: { todos?: ReadonlyArray<Todo> }) {
+  const toggle = useAction('toggleItem');
+  const [filter, setFilter] = useState<'all' | 'active' | 'done'>('all');
+  const shown = todos.filter((t) => filter === 'all' || (filter === 'done' ? t.done : !t.done));
+  return (
+    <div>
+      <button onClick={() => setFilter('all')}>All</button>
+      <button onClick={() => setFilter('active')}>Active</button>
+      <button onClick={() => setFilter('done')}>Done</button>
+      <ul>
+        {shown.map((t) => (
+          <li key={t.id}><Checkbox label={t.text} checked={t.done} onChange={() => toggle({ id: t.id })} /></li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+`;
+
+describe('candidates are re-collected live before every click — a control detached by an earlier click is never the one clicked', () => {
+  it('a filter that re-renders the list before the checkboxes are reached does not hide the toggle', async () => {
+    const code = await compile(FILTER_THEN_LIST_SRC);
+    const result = await validateContractBehavior({
+      componentCode: code, contract: TOGGLE_CONTRACT, timeoutMs: 3000, playwright,
+      sampleProps: { todos: [{ id: 't1', text: 'Buy oat milk', done: false }, { id: 't2', text: 'Renew passport', done: true }, { id: 't3', text: 'Call mom', done: false }] },
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+});
+
+describe('a controlled design Checkbox wired to useAction dispatches on click', () => {
+  it('a controlled design Checkbox (hidden input over a styled box) dispatches on click', async () => {
+    const code = await compile(CONTROLLED_DESIGN_CHECKBOX_SRC);
+    const result = await validateContractBehavior({
+      componentCode: code, contract: TOGGLE_CONTRACT, timeoutMs: 3000, playwright,
+      sampleProps: { todos: [{ id: 't1', text: 'Buy oat milk', done: false }, { id: 't2', text: 'Renew passport', done: true }] },
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+});
+
 describe('#996 — the control is found the way the harness finds it, not by the label text', () => {
   it('#996 a button named by data-action passes even though its text ("Send") is not the label ("Send Message")', async () => {
     const code = await compile(SEND_DATA_ACTION_SRC);

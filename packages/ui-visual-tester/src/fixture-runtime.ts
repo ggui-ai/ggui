@@ -288,6 +288,24 @@ function satisfied(req: SignalRequirement, obs: Observation): boolean {
   return (req.requireDispatch ? obs.dispatchFired : true) && (req.requireDom ? obs.domChanged : true);
 }
 
+/**
+ * A control's identity across re-renders: its path from the mount root by tag
+ * and sibling index (plus an input's type). A re-rendered equivalent at the
+ * same position counts as already tried; a detached node never gets clicked.
+ */
+function signatureOf(root: HTMLElement, el: HTMLElement): string {
+  const parts: string[] = [];
+  let cur: HTMLElement | null = el;
+  while (cur !== null && cur !== root) {
+    const parent: HTMLElement | null = cur.parentElement;
+    const idx = parent === null ? 0 : Array.prototype.indexOf.call(parent.children, cur);
+    const type = cur instanceof HTMLInputElement ? `[${cur.type}]` : '';
+    parts.push(`${cur.tagName.toLowerCase()}${type}:${idx}`);
+    cur = parent;
+  }
+  return parts.reverse().join('/');
+}
+
 async function evaluateComponent(
   code: string,
 ): Promise<React.ComponentType<Record<string, unknown>>> {
@@ -443,8 +461,8 @@ async function run(input: RunInput): Promise<RunOutcome> {
 
     const req = signalRequirement(input.classification);
     const container = handles.container;
-    const { named, fallback } = collectActionCandidates(container, input.actionName, entry.label);
-    if (named.length === 0 && fallback.length === 0) {
+    const first = collectActionCandidates(container, input.actionName, entry.label);
+    if (first.named.length === 0 && first.fallback.length === 0) {
       return {
         status: 'action-not-rendered',
         diagnostic: `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")`,
@@ -470,21 +488,30 @@ async function run(input: RunInput): Promise<RunOutcome> {
         ? { status: 'ok', dispatchFired: obs.dispatchFired, domChanged: obs.domChanged, via, clicked }
         : null;
     };
+    // Re-collect LIVE candidates before EVERY click: an earlier click may have
+    // re-rendered the tree (a filter, a tab, an opened editor), detaching what
+    // was collected and adding what was not there. A control is tried once,
+    // by its DOM path; a detached node is never the one clicked.
+    const tried = new Set<string>();
     let exhausted = false;
-    for (const el of named) {
+    for (;;) {
       if (remaining() === 0) {
         exhausted = true;
         break;
       }
-      const hit = await attempt(el, Math.min(input.waitMs, remaining()), 'named');
-      if (hit !== null) return hit;
-    }
-    for (const el of fallback) {
-      if (exhausted || remaining() === 0) {
-        exhausted = true;
-        break;
-      }
-      const hit = await attempt(el, Math.min(FALLBACK_CLICK_WAIT_MS, remaining()), 'fallback');
+      const live = collectActionCandidates(container, input.actionName, entry.label);
+      const untried = (list: readonly HTMLElement[]): HTMLElement | undefined =>
+        list.find((el) => el.isConnected && !tried.has(signatureOf(container, el)));
+      const nextNamed = untried(live.named);
+      const next = nextNamed ?? untried(live.fallback);
+      if (next === undefined) break;
+      const via: 'named' | 'fallback' = nextNamed !== undefined ? 'named' : 'fallback';
+      tried.add(signatureOf(container, next));
+      const hit = await attempt(
+        next,
+        via === 'named' ? Math.min(input.waitMs, remaining()) : Math.min(FALLBACK_CLICK_WAIT_MS, remaining()),
+        via,
+      );
       if (hit !== null) return hit;
     }
     const missing: string[] = [];
@@ -494,8 +521,8 @@ async function run(input: RunInput): Promise<RunOutcome> {
     return {
       status: 'action-no-effect',
       diagnostic:
-        `${req.description}; clicked ${clicked} control(s) (${named.length} named, ${fallback.length} fallback` +
-        `${exhausted ? ', budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
+        `${req.description}; clicked ${clicked} control(s) (${tried.size} distinct; first collection ${first.named.length} named, ${first.fallback.length} fallback` +
+        `${exhausted ? '; budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
         `missing=${missing.join('+')}${others}`,
     };
   } finally {
