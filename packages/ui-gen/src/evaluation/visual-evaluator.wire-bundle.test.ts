@@ -8,7 +8,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { runVisualEvaluation, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
+import { existsSync } from 'node:fs';
+import { resolveWirePackageDir, runVisualEvaluation, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
 
 const WIRE_COMPONENT = `
 import React from 'react';
@@ -47,6 +48,12 @@ function deps(): VisualEvalDeps & { bundled: string[] } {
 }
 
 describe('visual judge bundler — @ggui-ai/wire resolves from the temp entry', () => {
+  it('aliases @ggui-ai/wire to an existing file resolved from ui-gen\'s own module graph (layout-proof)', () => {
+    const dir = resolveWirePackageDir();
+    expect(dir).not.toBeNull();
+    expect(existsSync(`${dir}/package.json`)).toBe(true);
+    expect(String(dir).endsWith('/wire')).toBe(true);
+  });
   it('bundles a wire-bearing component and reaches the judge', async () => {
     const d = deps();
     const result = await runVisualEvaluation(

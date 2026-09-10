@@ -15,7 +15,7 @@ import { build } from 'esbuild';
 import { getCssTokens } from '@ggui-ai/design/rendering';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
@@ -135,6 +135,40 @@ export function resolveUiGenPackageDir(): string {
   return resolve(selfDir, '..', '..');
 }
 
+/**
+ * Where `@ggui-ai/wire` actually is, from ui-gen's OWN module graph —
+ * layout-proof: a workspace checkout links it under `node_modules/`, a
+ * `pnpm deploy` tree puts it beside ui-gen under `.pnpm/…/node_modules/`,
+ * and a plain install nests it; `import.meta.resolve` answers for all
+ * three (directory candidates first, module graph last). Aliased
+ * explicitly in the judge's bundle so the generated component's wire
+ * import never depends on the directory layout the evaluator runs in.
+ */
+export function resolveWirePackageDir(): string | null {
+  const uiGenDir = resolveUiGenPackageDir();
+  const candidates = [
+    resolve(uiGenDir, 'node_modules', '@ggui-ai', 'wire'), // workspace / nested install
+    resolve(uiGenDir, '..', 'wire'), // pnpm deploy: `.pnpm/<ui-gen>@<ver>/node_modules/@ggui-ai/{ui-gen,wire}`
+    resolve(uiGenDir, '..', '..', '@ggui-ai', 'wire'), // hoisted flat install beside the scope dir
+  ];
+  for (const dir of candidates) {
+    if (existsSync(resolve(dir, 'package.json'))) return dir;
+  }
+  try {
+    // Last resort: ask the module graph (Node ≥ 20.6). Not every runner
+    // supports it synchronously, hence the guarded position.
+    const entry = fileURLToPath(import.meta.resolve('@ggui-ai/wire'));
+    let dir = dirname(entry);
+    for (let i = 0; i < 6; i++) {
+      if (existsSync(resolve(dir, 'package.json'))) return dir;
+      dir = dirname(dir);
+    }
+  } catch {
+    // fall through — nodePaths still gets a chance
+  }
+  return null;
+}
+
 export function resolveDesignPackageDir(): string {
   const selfDir = dirname(fileURLToPath(import.meta.url));
   return resolve(selfDir, '..', '..', '..', 'design');
@@ -151,6 +185,7 @@ async function bundleForRendering(
   const entryFile = resolve(tmpDir, 'entry.tsx');
 
   const designPkgDir = resolveDesignPackageDir();
+  const wirePkgDir = resolveWirePackageDir();
 
   // Write the compiled component as a separate module
   writeFileSync(componentFile, compiledCode);
@@ -212,6 +247,10 @@ try {
       jsxImportSource: 'react',
       external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
       alias: {
+        // The wire hooks: resolved from ui-gen's own module graph so the
+        // alias holds in a workspace checkout AND in a `pnpm deploy` image
+        // (where deps are siblings, not children, of this package).
+        ...(wirePkgDir !== null ? { '@ggui-ai/wire': wirePkgDir } : {}),
         // D1: generated code imports the single `@ggui-ai/design` barrel.
         // The subpath aliases stay for any first-party / legacy code.
         '@ggui-ai/design': resolve(designPkgDir, 'src', 'index.ts'),
@@ -223,7 +262,10 @@ try {
       // Bare imports in the generated component resolve against ui-gen's
       // own node_modules — the temp entry dir has none. Without this every
       // wire-bearing component (`@ggui-ai/wire`) failed to bundle.
-      nodePaths: [resolve(resolveUiGenPackageDir(), 'node_modules')],
+      // Workspace layout (deps under this package's node_modules) and the
+      // `pnpm deploy` layout (deps as siblings of this package) — both
+      // searched for any other allowlisted bare import.
+      nodePaths: [resolve(resolveUiGenPackageDir(), 'node_modules'), resolve(resolveUiGenPackageDir(), '..')],
       logLevel: 'silent',
     });
 
