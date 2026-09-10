@@ -5,7 +5,7 @@ import {
   type ValidateContractBehaviorInput,
   type ValidateContractBehaviorResult,
 } from '@ggui-ai/ui-visual-tester';
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 
 /**
  * Per-cell contract-behaviour verdict (#973 §5a(4)): `validateContractBehavior`
@@ -34,6 +34,8 @@ type Validate = (input: ValidateContractBehaviorInput) => Promise<ValidateContra
 export async function runContractBehaviorCheck(input: {
   readonly compiledCode: string;
   readonly contract: DataContract;
+  /** The commit's fixture props — the validator mounts the component with them (a props-driven list is empty without). */
+  readonly sampleProps?: JsonObject;
   readonly playwright: PlaywrightModule | undefined;
   readonly timeoutMs?: number;
   /** Injected for tests; production uses `validateContractBehavior`. */
@@ -62,6 +64,7 @@ export async function runContractBehaviorCheck(input: {
     const result = await limit(() =>
       validate({
         componentCode: input.compiledCode,
+        ...(input.sampleProps !== undefined ? { sampleProps: input.sampleProps } : {}),
         contract: input.contract,
         playwright,
         timeoutMs: input.timeoutMs ?? CONTRACT_BEHAVIOR_TIMEOUT_MS,

@@ -72,6 +72,8 @@ type ActionClassification = 'agent-bound' | 'context-bound';
 interface RunInput {
   readonly componentCode: string;
   readonly contract: unknown;
+  /** Parsed JSON of the commit's fixture props; a plain object or nothing. */
+  readonly sampleProps: unknown;
   readonly actionName: string;
   readonly classification: ActionClassification;
   readonly settleMs: number;
@@ -309,8 +311,15 @@ interface MountHandles {
   readonly root: ReactDomClient.Root;
 }
 
+function propsOf(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function mountTree(
   Comp: React.ComponentType<Record<string, unknown>>,
+  props: Record<string, unknown>,
 ): MountHandles {
   const container = document.createElement('div');
   container.id = 'ggui-vt-mount';
@@ -338,7 +347,9 @@ function mountTree(
   };
 
   const root = ReactDomClient.createRoot(container);
-  const componentElement = React.createElement(Comp, {});
+  // The commit's fixture props: a component that draws its controls from
+  // props (a board's tasks, a list's items) mounts EMPTY without them.
+  const componentElement = React.createElement(Comp, props);
   const tree = React.createElement(Wire.GguiWireProvider, {
     config: wireConfig,
     children: componentElement,
@@ -410,7 +421,7 @@ async function run(input: RunInput): Promise<RunOutcome> {
   let handles: MountHandles | null = null;
   try {
     try {
-      handles = mountTree(Comp);
+      handles = mountTree(Comp, propsOf(input.sampleProps));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { status: 'render-failed', diagnostic: msg };

@@ -18,7 +18,7 @@ import type {
   Browser as PlaywrightBrowser,
   Page as PlaywrightPage,
 } from 'playwright-core';
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import type {
   BehaviorFailure,
   BehaviorFailureKind,
@@ -31,6 +31,7 @@ import { PlaywrightNotAvailableError } from './index.js';
 interface RunInput {
   readonly componentCode: string;
   readonly contract: DataContract;
+  readonly sampleProps?: JsonObject;
   readonly actionName: string;
   readonly classification: ActionClassification;
   readonly settleMs: number;
@@ -101,6 +102,8 @@ async function preparePage(browser: PlaywrightBrowser): Promise<PlaywrightPage> 
 interface SerializedRunInput {
   readonly componentCode: string;
   readonly contractJson: string;
+  /** JSON of `sampleProps` (`{}` when absent) — crosses into the page the way the contract does. */
+  readonly samplePropsJson: string;
   readonly actionName: string;
   readonly classification: ActionClassification;
   readonly settleMs: number;
@@ -159,6 +162,7 @@ async function runOne(page: PlaywrightPage, input: RunInput): Promise<RunOutcome
   const serialized: SerializedRunInput = {
     componentCode: input.componentCode,
     contractJson: JSON.stringify(input.contract),
+    samplePropsJson: JSON.stringify(input.sampleProps ?? {}),
     actionName: input.actionName,
     classification: input.classification,
     settleMs: input.settleMs,
@@ -170,6 +174,7 @@ async function runOne(page: PlaywrightPage, input: RunInput): Promise<RunOutcome
         __validateContractBehavior_run__?: (i: {
           readonly componentCode: string;
           readonly contract: unknown;
+          readonly sampleProps: unknown;
           readonly actionName: string;
           readonly classification: 'agent-bound' | 'context-bound';
           readonly settleMs: number;
@@ -183,6 +188,7 @@ async function runOne(page: PlaywrightPage, input: RunInput): Promise<RunOutcome
     return await fn({
       componentCode: arg.componentCode,
       contract: JSON.parse(arg.contractJson) as unknown,
+      sampleProps: JSON.parse(arg.samplePropsJson) as unknown,
       actionName: arg.actionName,
       classification: arg.classification,
       settleMs: arg.settleMs,
@@ -280,6 +286,7 @@ export async function validateContractBehavior(
         const outcome = await runOne(page, {
           componentCode: input.componentCode,
           contract: input.contract,
+          ...(input.sampleProps !== undefined ? { sampleProps: input.sampleProps } : {}),
           actionName: name,
           classification,
           settleMs: SETTLE_MS,

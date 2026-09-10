@@ -535,6 +535,8 @@ export class BenchmarkRunner {
       const contractBehavior = await runContractBehaviorCheck({
         compiledCode: generation.compiledCode,
         contract: commit.contract,
+        // the commit's fixture props — the same object the visual judge gets
+        ...(commit.props !== undefined ? { sampleProps: commit.props as JsonObject } : {}),
         playwright: this.config.playwright,
         limit: BROWSER_LIMIT,
       });

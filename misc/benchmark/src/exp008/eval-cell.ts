@@ -283,6 +283,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   const contractBehavior = await runContractBehaviorCheck({
     compiledCode: inputs.compiledCode,
     contract: inputs.contract,
+    ...(inputs.commit.props !== undefined ? { sampleProps: inputs.commit.props } : {}),
     playwright: deps.playwright,
     ...(deps.contractTimeoutMs !== undefined ? { timeoutMs: deps.contractTimeoutMs } : {}),
   });

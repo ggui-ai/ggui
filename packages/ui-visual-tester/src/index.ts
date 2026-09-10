@@ -52,7 +52,9 @@
  *
  * For each entry in `contract.actionSpec`:
  *
- *   1. Render the component in a real Chromium tab via Playwright.
+ *   1. Render the component in a real Chromium tab via Playwright, with
+ *      `sampleProps` (the commit's fixture props) — a component that draws its
+ *      controls from props has nothing to click without them.
  *   2. Collect the controls to try, the way the harness's render-check
  *      does (#996): first those that NAME the action (`data-action` by
  *      value, then aria-label / text carrying the label or the name), then
@@ -70,7 +72,7 @@
  * Empty `actionSpec` returns `{ ok: true, failures: [] }` (not
  * applicable — nothing to test).
  */
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import type {
   Browser as PlaywrightBrowser,
   BrowserContext as PlaywrightBrowserContext,
@@ -102,6 +104,13 @@ export type {
 export interface ValidateContractBehaviorInput {
   readonly componentCode: string;
   readonly contract: DataContract;
+  /**
+   * The props the component was generated for (the commit's fixture props —
+   * the same object the visual judge receives). Without them a component that
+   * renders its controls from props (a board's tasks, a list's items) mounts
+   * EMPTY and has nothing to click, which reads as action-not-rendered.
+   */
+  readonly sampleProps?: JsonObject;
   readonly timeoutMs?: number;
   /**
    * Playwright module. Pass `{ chromium }` from `playwright-core` or

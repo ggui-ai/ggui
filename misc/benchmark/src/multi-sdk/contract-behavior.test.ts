@@ -55,3 +55,13 @@ describe('the browser limiter gates only the validator call', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('sampleProps pass-through', () => {
+  it('hands the commit props to the validator verbatim, and nothing when absent', async () => {
+    const seen: unknown[] = [];
+    const validate = async (input: { sampleProps?: unknown }) => { seen.push(input.sampleProps); return { ok: true, failures: [] }; };
+    await runContractBehaviorCheck({ compiledCode: 'x', contract: withActions, playwright: fakePlaywright, validate, sampleProps: { items: [1] } });
+    await runContractBehaviorCheck({ compiledCode: 'x', contract: withActions, playwright: fakePlaywright, validate });
+    expect(seen).toEqual([{ items: [1] }, undefined]);
+  });
+});

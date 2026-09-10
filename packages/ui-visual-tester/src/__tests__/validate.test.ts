@@ -333,6 +333,40 @@ export default function Chat() {
 }
 `;
 
+const LIST_FROM_PROPS_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Picker({ items = [] }: { items?: ReadonlyArray<{ id: string; name: string }> }) {
+  const pick = useAction('pick');
+  return (
+    <ul>
+      {items.map((it) => (
+        <li key={it.id}><button onClick={() => pick({ id: it.id })}>{it.name}</button></li>
+      ))}
+    </ul>
+  );
+}
+`;
+
+const PICK_CONTRACT: DataContract = {
+  actionSpec: { pick: { label: 'Pick', nextStep: 'pickItem' } },
+  agentCapabilities: { tools: { pickItem: { toolInfo: { inputSchema: { type: 'object' }, description: 'Pick an item' } } } },
+};
+
+describe('sampleProps — the component is rendered with the props it was generated for', () => {
+  it('a list rendered from props is ok with sampleProps and action-not-rendered without them', async () => {
+    const code = await compile(LIST_FROM_PROPS_SRC);
+    const withProps = await validateContractBehavior({
+      componentCode: code, contract: PICK_CONTRACT, timeoutMs: 2000, playwright,
+      sampleProps: { items: [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Beta' }] },
+    });
+    expect(withProps.failures).toEqual([]);
+    expect(withProps.ok).toBe(true);
+    const without = await validateContractBehavior({ componentCode: code, contract: PICK_CONTRACT, timeoutMs: 1000, playwright });
+    expect(without.ok).toBe(false);
+    expect(without.failures[0]?.kind).toBe('action-not-rendered');
+  }, 60_000);
+});
+
 describe('#996 — the control is found the way the harness finds it, not by the label text', () => {
   it('#996 a button named by data-action passes even though its text ("Send") is not the label ("Send Message")', async () => {
     const code = await compile(SEND_DATA_ACTION_SRC);
