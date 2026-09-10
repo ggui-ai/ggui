@@ -68,6 +68,7 @@ import type { RenderingContext } from './contract-context.js';
 import type { DesignMode } from './design-mode.js';
 import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
 import type { QualityConfig } from './evaluation/types-public.js';
+import type { EvaluationConfig } from './evaluation/types.js';
 import type { AgentConfig } from './harness/llm-router.js';
 
 /** The slug for the OSS default seed generator. */
@@ -90,6 +91,14 @@ export interface CreateUiGeneratorOptions {
   readonly maxAttempts?: number;
   /** Maximum evaluation rounds. */
   readonly maxEvalRounds?: number;
+  /**
+   * In-loop LLM evaluation config (ggui#1001). When set, every generation
+   * runs the evaluator tiers after the coding leg (`maxRounds` defaults to
+   * `maxEvalRounds`) and the harness result carries `evalResult` — the
+   * probe verdict a downstream judge reads. Default: none, as today —
+   * a serving deployment leaves it unset; offline minting jobs set a round.
+   */
+  readonly evaluation?: EvaluationConfig;
   /** Quality config controlling eval tiers + improvement behavior. */
   readonly qualityConfig?: QualityConfig;
   /**
@@ -209,6 +218,7 @@ export function createUiGenerator(
     enableRuntimeRender = false,
     maxAttempts,
     maxEvalRounds,
+    evaluation,
     qualityConfig,
     gadgetCatalog,
     disableEnvMutation = false,
@@ -346,6 +356,7 @@ export function createUiGenerator(
           originalPrompt: input.request.prompt,
           ...(maxAttempts !== undefined ? { maxAttempts } : {}),
           ...(maxEvalRounds !== undefined ? { maxEvalRounds } : {}),
+          ...(evaluation !== undefined ? { evaluation } : {}),
           ...(qualityConfig !== undefined ? { qualityConfig } : {}),
           ...(resolvedAppGadgets !== undefined
             ? { appGadgets: resolvedAppGadgets }
