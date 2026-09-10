@@ -421,11 +421,17 @@ async function launchWithPuppeteer(options: LaunchOptions): Promise<ScreenshotBr
  * Take a screenshot of the rendered component.
  * Returns the PNG bytes, or null if no browser could be launched.
  */
-export async function captureScreenshot(
+/** Screenshot plus the reason when none could be taken — the judge's `unavailableReason`. */
+export interface ScreenshotAttempt {
+  readonly png: Buffer | null;
+  readonly reason?: string;
+}
+
+export async function captureScreenshotDetailed(
   html: string,
   viewport: { width: number; height: number } = DEFAULT_SCREENSHOT_VIEWPORT,
   deps: ScreenshotDeps = {},
-): Promise<Buffer | null> {
+): Promise<ScreenshotAttempt> {
   try {
     const launchOptions = await resolveLaunchOptions(viewport, deps);
     const browser = await (deps.launch ?? launchWithPuppeteer)(launchOptions);
@@ -440,14 +446,23 @@ export async function captureScreenshot(
       // Wait a bit for CSS/fonts to settle
       await new Promise((r) => setTimeout(r, deps.settleMs ?? 1000));
       const screenshot = await page.screenshot({ type: 'png', fullPage: true });
-      return Buffer.from(screenshot);
+      return { png: Buffer.from(screenshot) };
     } finally {
       await browser.close();
     }
   } catch (e) {
-    console.warn(`[visual-eval] screenshot failed: ${e instanceof Error ? e.message : e}`);
-    return null;
+    const reason = `screenshot failed: ${e instanceof Error ? e.message : String(e)}`;
+    console.warn(`[visual-eval] ${reason}`);
+    return { png: null, reason };
   }
+}
+
+export async function captureScreenshot(
+  html: string,
+  viewport: { width: number; height: number } = DEFAULT_SCREENSHOT_VIEWPORT,
+  deps: ScreenshotDeps = {},
+): Promise<Buffer | null> {
+  return (await captureScreenshotDetailed(html, viewport, deps)).png;
 }
 
 // ---------------------------------------------------------------------------
@@ -543,19 +558,46 @@ async function callMultimodalLLM(
  *
  * Returns null if puppeteer is not available (graceful fallback).
  */
+/**
+ * The judge's answer WITH the reason when it could not judge: `result` is
+ * null exactly when no screenshot could be taken (no browser, a launch or
+ * in-page failure) or the component could not be bundled; `unavailableReason`
+ * names why in words and `canvas` the canvas it happened at. A production
+ * caller records the reason in its receipt — a `judge_unavailable` that only
+ * says "null" cost a log dive on 2026-09-10 (puppeteer-core missing in the
+ * deploy image).
+ */
+export interface VisualEvalDetailed {
+  readonly result: VisualEvaluationResult | null;
+  readonly unavailableReason?: string;
+  readonly canvas?: CanvasClass;
+}
+
 export async function runVisualEvaluation(
   context: VisualEvalContext,
   config: VisualEvalConfig,
   deps: VisualEvalDeps = {},
 ): Promise<VisualEvaluationResult | null> {
+  return (await runVisualEvaluationDetailed(context, config, deps)).result;
+}
+
+export async function runVisualEvaluationDetailed(
+  context: VisualEvalContext,
+  config: VisualEvalConfig,
+  deps: VisualEvalDeps = {},
+): Promise<VisualEvalDetailed> {
   const startTime = Date.now();
   const judge = deps.judge ?? callMultimodalLLM;
 
   // Bundle component + design system into a single JS file
-  const bundledCode = await bundleForRendering(
-    context.compiledCode,
-    config.sampleProps ?? {},
-  );
+  let bundledCode: string;
+  try {
+    bundledCode = await bundleForRendering(context.compiledCode, config.sampleProps ?? {});
+  } catch (e) {
+    const unavailableReason = `bundle failed: ${e instanceof Error ? e.message : String(e)}`;
+    console.warn(`[visual-eval] ${unavailableReason}`);
+    return { result: null, unavailableReason };
+  }
   console.log(`[visual-eval] bundled: ${bundledCode.length}B (${Date.now() - startTime}ms)`);
 
   // Build the HTML page — ONE shell; per-canvas mode re-renders it at each viewport.
@@ -568,10 +610,12 @@ export async function runVisualEvaluation(
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
       const viewport = CANVAS_VIEWPORTS[canvas];
-      const screenshot = await captureScreenshot(html, viewport, deps);
+      const attempt = await captureScreenshotDetailed(html, viewport, deps);
+      const screenshot = attempt.png;
       if (!screenshot) {
-        console.warn(`[visual-eval] no browser available at canvas ${canvas} — skipping visual evaluation`);
-        return null;
+        const unavailableReason = attempt.reason ?? 'no browser available';
+        console.warn(`[visual-eval] ${unavailableReason} at canvas ${canvas} — skipping visual evaluation`);
+        return { result: null, unavailableReason, canvas };
       }
       const response = await judge(
         config,
@@ -603,14 +647,16 @@ export async function runVisualEvaluation(
       `[visual-eval] score=${aggregate.finalScore} (mean of ${perCanvas.length} canvases; ` +
         `${aggregate.passed ? 'every canvas passed' : `${perCanvas.filter((c) => !c.passed).length} failed`}) (${elapsed}ms)`,
     );
-    return aggregate;
+    return { result: aggregate };
   }
 
   // ── Single-shot mode (today's path) ──
-  const screenshot = await captureScreenshot(html, config.viewport, deps);
+  const attempt = await captureScreenshotDetailed(html, config.viewport, deps);
+  const screenshot = attempt.png;
   if (!screenshot) {
-    console.warn('[visual-eval] no browser available — skipping visual evaluation');
-    return null;
+    const unavailableReason = attempt.reason ?? 'no browser available';
+    console.warn(`[visual-eval] ${unavailableReason} — skipping visual evaluation`);
+    return { result: null, unavailableReason };
   }
   console.log(`[visual-eval] screenshot: ${screenshot.length}B (${Date.now() - startTime}ms)`);
 
@@ -632,7 +678,7 @@ export async function runVisualEvaluation(
   const elapsed = Date.now() - startTime;
   console.log(`[visual-eval] score=${result.finalScore} (${elapsed}ms) | in=${response.inputTokens} out=${response.outputTokens}`);
 
-  return result;
+  return { result };
 }
 
 /**

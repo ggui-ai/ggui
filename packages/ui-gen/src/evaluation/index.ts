@@ -92,6 +92,8 @@ export {
   captureScreenshot,
   resolveLaunchOptions,
   runVisualEvaluation,
+  runVisualEvaluationDetailed,
+  captureScreenshotDetailed,
   runVisualEval,
   summarizeVisualResult,
 } from './visual-evaluator.js';
@@ -101,6 +103,8 @@ export type {
   VisualEvalDeps,
   VisualEvalOutcome,
   VisualEvaluationResult,
+  VisualEvalDetailed,
+  ScreenshotAttempt,
   CanvasVisualResult,
   ScreenshotDeps,
   ScreenshotLauncher,
