@@ -1,0 +1,16 @@
+{
+  "name": "app-theme-v2-keyframes-accepted",
+  "description": "Per-mode keyframes text that is exactly `@keyframes <ident> { … }` blocks (two blocks, a comment, frame selectors of every kind) is ACCEPTED by appThemeSchema — the slot carries what the card injects verbatim after the variables (ggui#987 §3.3, follower D).",
+  "theme": {
+    "overlays": {
+      "light": { "--ggui-color-primary-500": "#3355ff" },
+      "dark": { "--ggui-color-primary-500": "#99aaff" }
+    },
+    "overlayHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "keyframes": {
+      "light": "/* entrance */ @keyframes entrance { 0% { opacity: 0; transform: translateY(4px) } 100% { opacity: 1; transform: none } }\n@keyframes accent-pulse{0%,100%{opacity:1}50%{opacity:.7}}",
+      "dark": "@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }"
+    }
+  },
+  "expect": "accepted"
+}

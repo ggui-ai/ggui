@@ -29,6 +29,8 @@ import appThemeV1OnePalette from './cases/app-theme-v1-one-palette.json' with { 
 import appThemeV2Accepted from './cases/app-theme-v2-accepted.json' with { type: 'json' };
 import appThemeV2MissingDark from './cases/app-theme-v2-missing-dark.json' with { type: 'json' };
 import appThemeV2LabelTooLong from './cases/app-theme-v2-label-too-long.json' with { type: 'json' };
+import appThemeV2KeyframesAccepted from './cases/app-theme-v2-keyframes-accepted.json' with { type: 'json' };
+import appThemeV2KeyframesNotKeyframes from './cases/app-theme-v2-keyframes-not-keyframes.json' with { type: 'json' };
 import appThemeV2NoHash from './cases/app-theme-v2-no-hash.json' with { type: 'json' };
 import appThemeV2PlatformPin from './cases/app-theme-v2-platform-pin.json' with { type: 'json' };
 import overlayHashCanonical from './cases/overlay-hash-canonical.json' with { type: 'json' };
@@ -112,7 +114,7 @@ function overlayHashCase(raw: unknown): OverlayHashCase {
 }
 
 export const THEME_MODE_CASES: readonly ThemeModeCase[] = [themeModeOrder, themeModeAbsence, themeModeDefaultWhenSilentHost].map(themeModeCase);
-export const APP_THEME_CASES: readonly AppThemeCase[] = [appThemeV1OnePalette, appThemeV1Base, appThemeV2Accepted, appThemeV2MissingDark, appThemeV2NoHash, appThemeV2PlatformPin, appThemeV2LabelTooLong].map(appThemeCase);
+export const APP_THEME_CASES: readonly AppThemeCase[] = [appThemeV1OnePalette, appThemeV1Base, appThemeV2Accepted, appThemeV2MissingDark, appThemeV2NoHash, appThemeV2PlatformPin, appThemeV2LabelTooLong, appThemeV2KeyframesAccepted, appThemeV2KeyframesNotKeyframes].map(appThemeCase);
 export const OVERLAY_HASH_CASES: readonly OverlayHashCase[] = [overlayHashCanonical].map(overlayHashCase);
 
 export interface ThemeBindingResult {

@@ -1,0 +1,15 @@
+{
+  "name": "app-theme-v2-keyframes-not-keyframes",
+  "description": "Keyframes text that carries anything other than `@keyframes` blocks — here a bare `body { … }` rule after a valid block — is REFUSED by appThemeSchema: the slot is bounded to what it is for, so the theme principal cannot ship arbitrary same-document CSS through it (ggui#987 §3.4, follower D).",
+  "theme": {
+    "overlays": {
+      "light": { "--ggui-color-primary-500": "#3355ff" },
+      "dark": { "--ggui-color-primary-500": "#99aaff" }
+    },
+    "overlayHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "keyframes": {
+      "light": "@keyframes spin { to { transform: rotate(360deg) } } body { display: none }"
+    }
+  },
+  "expect": "refused"
+}

@@ -40,6 +40,64 @@ const cssVariableMap = z
   .record(z.string().regex(GGUI_CSS_VAR_KEY_RE, 'css var key must be --ggui-*'), cssValue)
   .refine((m) => Object.keys(m).length <= 200, 'too many css variables (max 200)');
 
+/**
+ * The grammar a per-mode `keyframes` string MUST satisfy (ggui#987 §3.4,
+ * follower D). The renderer injects the text verbatim into the card's
+ * `<style>` after the variables, so the text is bounded to what that slot
+ * is FOR: zero or more `@keyframes <ident> { <frame-selectors> { <declarations> } … }`
+ * blocks and nothing else — no other at-rule (`@import`, `@font-face`,
+ * `@media`, …), no `<` / `>`, braces balanced and nested exactly one level
+ * inside a block. Comments (`/* … *\/`) are stripped before the walk and are
+ * therefore allowed, as `cssVariableMap` values allow `url(`; the deny-list
+ * on values (`;{}<>@`) cannot apply verbatim here because `;`, `{`, `}` and
+ * the one `@` ARE the grammar. Same principal, same slot, one rule.
+ */
+export const KEYFRAMES_NAME_RE = /^[A-Za-z_-][A-Za-z0-9_-]*$/;
+
+export function isKeyframesText(text: string): boolean {
+  const s = text.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  if (/[<>]/.test(s)) return false;
+  let i = 0;
+  const n = s.length;
+  const skipWs = () => {
+    while (i < n && /\s/.test(s[i] as string)) i += 1;
+  };
+  for (;;) {
+    skipWs();
+    if (i >= n) return true;
+    if (!s.startsWith('@keyframes', i)) return false;
+    i += '@keyframes'.length;
+    if (i >= n || !/\s/.test(s[i] as string)) return false;
+    skipWs();
+    const nameStart = i;
+    while (i < n && /[A-Za-z0-9_-]/.test(s[i] as string)) i += 1;
+    if (!KEYFRAMES_NAME_RE.test(s.slice(nameStart, i))) return false;
+    skipWs();
+    if (s[i] !== '{') return false;
+    i += 1;
+    // Inside the block: frame rules only — `selectors { declarations }` at depth 1, no `@`.
+    let depth = 1;
+    while (i < n && depth > 0) {
+      const ch = s[i] as string;
+      if (ch === '@') return false;
+      if (ch === '{') {
+        depth += 1;
+        if (depth > 2) return false;
+      } else if (ch === '}') {
+        depth -= 1;
+      }
+      i += 1;
+    }
+    if (depth !== 0) return false;
+  }
+}
+
+/** A per-mode keyframes string: `@keyframes` blocks only (see {@link isKeyframesText}), 8 KiB cap unchanged. */
+const keyframesText = z
+  .string()
+  .max(8192)
+  .refine(isKeyframesText, 'keyframes must be `@keyframes <name> { … }` blocks and nothing else');
+
 export const appThemeSchema = z
   .object({
     /**
@@ -65,11 +123,11 @@ export const appThemeSchema = z
     overlays: z.object({ light: cssVariableMap, dark: cssVariableMap }).strict(),
     /** Mode-agnostic per-app overrides, injected above both projections. */
     cssVariables: cssVariableMap.optional(),
-    /** Per-mode `@keyframes` blocks, injected verbatim after the variables. */
+    /** Per-mode `@keyframes` blocks, injected verbatim after the variables — bounded to that grammar by {@link isKeyframesText}. */
     keyframes: z
       .object({
-        light: z.string().max(8192).optional(),
-        dark: z.string().max(8192).optional(),
+        light: keyframesText.optional(),
+        dark: keyframesText.optional(),
       })
       .strict()
       .optional(),
