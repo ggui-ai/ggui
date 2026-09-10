@@ -58,4 +58,13 @@ describe('visual judge bundler — @ggui-ai/wire resolves from the temp entry', 
     expect(d.bundled.length).toBeGreaterThan(0);
     expect(d.bundled[0]?.includes('useAction')).toBe(true);
   });
+  it('renders inside GguiWireProvider with the stub config and an error boundary — a wire hook never throws for lack of a provider', async () => {
+    const d = deps();
+    await runVisualEvaluation({ compiledCode: WIRE_COMPONENT, originalPrompt: 'a save button' }, { provider: 'claude', passThreshold: 60 }, d);
+    const html = d.bundled[0] ?? '';
+    expect(html.includes('visual-eval')).toBe(true); // the stub config's sessionId / appId
+    expect(html.includes('RenderErrorBoundary')).toBe(true);
+    // the provider itself is in the bundle (resolved through nodePaths)
+    expect(html.includes('WireProvider')).toBe(true);
+  });
 });

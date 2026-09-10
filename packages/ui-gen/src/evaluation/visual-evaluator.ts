@@ -156,15 +156,43 @@ async function bundleForRendering(
   writeFileSync(componentFile, compiledCode);
 
   // Entry file imports the component and renders it
+  // The generated component is rendered the way a host renders it: inside
+  // `GguiWireProvider` with a stub config (dispatch/subscribe are no-ops —
+  // the judge sees the first paint, not the wire round-trip). Without the
+  // provider every `useAction` / `useStream` bearer threw
+  // "useWireContext must be used within a WireProvider", React unmounted
+  // the root and the judge scored a blank page. An error boundary turns a
+  // render throw into visible "Render error" text (which the rubric
+  // scores 0) instead of the same blank.
   const entryCode = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { GguiWireProvider } from '@ggui-ai/wire';
 import Component from './component.tsx';
 
 const props = ${JSON.stringify(sampleProps)};
+const wireConfig = {
+  app: { appId: 'visual-eval', appName: 'Visual evaluation' },
+  render: { sessionId: 'visual-eval', isConnected: true },
+  auth: { isAuthenticated: false },
+  dispatch: () => {},
+  subscribe: () => () => {},
+};
+class RenderErrorBoundary extends React.Component<{ children: React.ReactNode }, { message: string | null }> {
+  state = { message: null as string | null };
+  static getDerivedStateFromError(err: unknown) { return { message: err instanceof Error ? err.message : String(err) }; }
+  render() {
+    return this.state.message === null
+      ? this.props.children
+      : React.createElement('div', { className: 'error' }, 'Render error: ' + this.state.message);
+  }
+}
 const root = createRoot(document.getElementById('root')!);
 try {
-  root.render(React.createElement(Component, props));
+  root.render(
+    React.createElement(GguiWireProvider, { config: wireConfig },
+      React.createElement(RenderErrorBoundary, null, React.createElement(Component, props))),
+  );
 } catch (err) {
   root.render(React.createElement('div', { className: 'error' }, 'Render error: ' + (err as Error).message));
 }
