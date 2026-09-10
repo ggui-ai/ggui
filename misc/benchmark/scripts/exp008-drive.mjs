@@ -55,8 +55,8 @@ const cfg = {
   mintFamily: getArg(['--mint-family'], process.env.EXP008_MINT_FAMILY ?? null),
   evalFamily: getArg(['--eval-family'], process.env.EXP008_EVAL_FAMILY ?? null),
   networkParam: getArg(['--network-param'], process.env.EXP008_NETWORK_PARAM ?? null),
-  mintTimeoutMs: parseInt(getArg(['--mint-timeout'], '600000'), 10),
-  evalTimeoutMs: parseInt(getArg(['--eval-timeout'], '900000'), 10),
+  mintTimeoutMs: parseInt(getArg(['--mint-timeout-ms'], '600000'), 10),
+  evalTimeoutMs: parseInt(getArg(['--eval-timeout-ms'], '900000'), 10),
 };
 
 for (const [flag, value] of [['--app-id', cfg.appId], ['--bucket', cfg.bucket], ['--cluster', cfg.cluster], ['--mint-family', cfg.mintFamily], ['--eval-family', cfg.evalFamily], ['--network-param', cfg.networkParam]]) {

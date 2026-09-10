@@ -115,4 +115,9 @@ COPY --from=prep --chown=node:node /prep ./
 RUN chown node:node /app
 
 USER node
+# The image runs the public benchmark by default. A task definition that
+# reuses it for another script (the experiment eval leg, scripts/eval-cell.mjs)
+# MUST override `entryPoint`, not `command`: ECS appends `command` to this
+# ENTRYPOINT as arguments, so a `command` override runs run-and-publish with
+# junk args instead. Bought 2026-09-10 (first Exp 008 eval task).
 ENTRYPOINT ["node", "--import", "tsx", "scripts/run-and-publish.mjs"]
