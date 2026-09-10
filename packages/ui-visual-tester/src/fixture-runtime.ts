@@ -80,12 +80,15 @@ interface RunInput {
 
 type RunOutcome =
   | { readonly status: 'render-failed'; readonly diagnostic: string }
-  | { readonly status: 'action-not-rendered' }
+  | { readonly status: 'action-not-rendered'; readonly diagnostic: string }
   | { readonly status: 'action-no-effect'; readonly diagnostic: string }
   | {
       readonly status: 'ok';
       readonly dispatchFired: boolean;
       readonly domChanged: boolean;
+      /** Which pass found the control that produced the signal, and how many were clicked to get there. */
+      readonly via?: 'named' | 'fallback';
+      readonly clicked?: number;
     };
 
 declare global {
@@ -145,29 +148,133 @@ function installRegistry(): GguiRegistry {
   return registry;
 }
 
-function findActionButton(
+/**
+ * What a generated component may wire an action to. Kept to real controls
+ * (a `<div onClick>` that names nothing is not a contract affordance).
+ */
+const CLICKABLE_SELECTOR =
+  'button, [role="button"], input[type="submit"], input[type="button"], ' +
+  'input[type="checkbox"], input[type="radio"], [role="switch"], [role="checkbox"], ' +
+  '[role="menuitem"], [role="tab"], [role="option"], a[href], [data-action], summary';
+/** Per-control wait in the fallback pass — enough for a synchronous dispatch + a render. */
+const FALLBACK_CLICK_WAIT_MS = 600;
+/** The fallback pass shares one budget so a busy screen cannot run past the caller's timeout. */
+const FALLBACK_BUDGET_FLOOR_MS = 6000;
+
+function norm(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * The controls to try, the way the harness's render-check finds them (#996):
+ * pass 1 = controls that NAME the action — `data-action` by value (the one
+ * hook that names the action rather than its label), then aria-label / text
+ * carrying the label or the name; pass 2 = every other enabled clickable, in
+ * DOM order. A generated component that wires `useAction('toggleItem')` to an
+ * unnamed checkbox is found by pass 2 and judged by what its click dispatches.
+ */
+function collectActionCandidates(
   root: HTMLElement,
+  name: string,
   label: string,
-): HTMLElement | null {
-  const ariaMatch = root.querySelector(
-    `[aria-label="${CSS.escape(label)}"]`,
+): { readonly named: readonly HTMLElement[]; readonly fallback: readonly HTMLElement[] } {
+  const all = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
+    (el): el is HTMLElement =>
+      el instanceof HTMLElement &&
+      !el.hasAttribute('disabled') &&
+      el.getAttribute('aria-disabled') !== 'true',
   );
-  if (ariaMatch instanceof HTMLElement) return ariaMatch;
-  const lc = label.toLowerCase();
-  const candidates = root.querySelectorAll(
-    'button, [role="button"], a, [data-action]',
-  );
-  for (const el of Array.from(candidates)) {
-    if (!(el instanceof HTMLElement)) continue;
+  const lcName = name.toLowerCase();
+  const lcLabel = label.toLowerCase();
+  const nameKey = norm(name);
+  const labelKey = norm(label);
+  const byValue: HTMLElement[] = [];
+  const byText: HTMLElement[] = [];
+  const rest: HTMLElement[] = [];
+  for (const el of all) {
+    const dataAction = (el.getAttribute('data-action') ?? '').toLowerCase();
+    if (dataAction === lcName) {
+      byValue.push(el);
+      continue;
+    }
+    const aria = (el.getAttribute('aria-label') ?? '').toLowerCase();
     const txt = (el.textContent ?? '').trim().toLowerCase();
-    if (txt.length > 0 && txt.includes(lc)) return el;
+    const ariaNames =
+      aria.length > 0 && (aria.includes(lcLabel) || (nameKey.length > 0 && norm(aria).includes(nameKey)));
+    const textNames =
+      txt.length > 0 &&
+      (txt.includes(lcLabel) ||
+        (nameKey.length > 0 && norm(txt).includes(nameKey)) ||
+        (labelKey.length > 0 && norm(txt).includes(labelKey)));
+    (ariaNames || textNames ? byText : rest).push(el);
   }
-  for (const el of Array.from(root.querySelectorAll('*'))) {
-    if (!(el instanceof HTMLElement)) continue;
-    const txt = (el.textContent ?? '').trim().toLowerCase();
-    if (txt === lc) return el;
+  return { named: [...byValue, ...byText], fallback: rest };
+}
+
+interface Snapshot {
+  readonly text: string;
+  readonly html: string;
+  readonly named: number;
+  readonly total: number;
+}
+
+function countNamedDispatches(actionName: string): number {
+  return (window.__ggui_test_dispatches__ ?? []).filter((d) => d.actionName === actionName).length;
+}
+
+function snapshot(container: HTMLElement, actionName: string): Snapshot {
+  return {
+    text: container.textContent ?? '',
+    html: container.innerHTML,
+    named: countNamedDispatches(actionName),
+    total: (window.__ggui_test_dispatches__ ?? []).length,
+  };
+}
+
+interface Observation {
+  readonly dispatchFired: boolean;
+  readonly domChanged: boolean;
+  /** Actions OTHER than the one under test that the click dispatched — reported, never counted. */
+  readonly otherActions: readonly string[];
+}
+
+/** Poll for the required signal after a click. `dispatchFired` counts only dispatches of THIS action. */
+async function observe(
+  container: HTMLElement,
+  actionName: string,
+  before: Snapshot,
+  req: SignalRequirement,
+  waitMs: number,
+): Promise<Observation> {
+  const start = Date.now();
+  let dispatchFired = false;
+  let domChanged = false;
+  while (Date.now() - start < waitMs) {
+    await delay(50);
+    if (!dispatchFired && countNamedDispatches(actionName) > before.named) {
+      dispatchFired = true;
+    }
+    if (!domChanged) {
+      const afterText = container.textContent ?? '';
+      const afterHtml = container.innerHTML;
+      if (afterText !== before.text || afterHtml !== before.html) {
+        domChanged = true;
+      }
+    }
+    if (dispatchFired && domChanged) break;
+    // Early-exit once the REQUIRED signal has fired (don't wait for the other one).
+    if (req.requireDispatch && dispatchFired) break;
+    if (req.requireDom && domChanged) break;
   }
-  return null;
+  const otherActions = (window.__ggui_test_dispatches__ ?? [])
+    .slice(before.total)
+    .map((d) => d.actionName)
+    .filter((n) => n !== actionName);
+  return { dispatchFired, domChanged, otherActions: [...new Set(otherActions)] };
+}
+
+function satisfied(req: SignalRequirement, obs: Observation): boolean {
+  return (req.requireDispatch ? obs.dispatchFired : true) && (req.requireDom ? obs.domChanged : true);
 }
 
 async function evaluateComponent(
@@ -314,57 +421,60 @@ async function run(input: RunInput): Promise<RunOutcome> {
       };
     }
 
-    const button = findActionButton(handles.container, entry.label);
-    if (button === null) {
-      return { status: 'action-not-rendered' };
-    }
-
-    const beforeText = handles.container.textContent ?? '';
-    const beforeHtml = handles.container.innerHTML;
-    const dispatchesBefore = (window.__ggui_test_dispatches__ ?? []).length;
-
-    button.click();
-
-    const start = Date.now();
-    let dispatchFired = false;
-    let domChanged = false;
-    while (Date.now() - start < input.waitMs) {
-      await delay(50);
-      if (
-        !dispatchFired &&
-        (window.__ggui_test_dispatches__ ?? []).length > dispatchesBefore
-      ) {
-        dispatchFired = true;
-      }
-      if (!domChanged) {
-        const afterText = handles.container.textContent ?? '';
-        const afterHtml = handles.container.innerHTML;
-        if (afterText !== beforeText || afterHtml !== beforeHtml) {
-          domChanged = true;
-        }
-      }
-      if (dispatchFired && domChanged) break;
-      // Early-exit if the REQUIRED signal has fired (don't wait for the
-      // other one — speeds up the slow stage when the wiring is correct).
-      const req = signalRequirement(input.classification);
-      if (req.requireDispatch && dispatchFired) break;
-      if (req.requireDom && domChanged) break;
-    }
-
     const req = signalRequirement(input.classification);
-    const required =
-      (req.requireDispatch ? dispatchFired : true) &&
-      (req.requireDom ? domChanged : true);
-    if (!required) {
-      const missing: string[] = [];
-      if (req.requireDispatch && !dispatchFired) missing.push('dispatch');
-      if (req.requireDom && !domChanged) missing.push('DOM change');
+    const container = handles.container;
+    const { named, fallback } = collectActionCandidates(container, input.actionName, entry.label);
+    if (named.length === 0 && fallback.length === 0) {
       return {
-        status: 'action-no-effect',
-        diagnostic: `${req.description}; observed dispatch=${dispatchFired}, domChanged=${domChanged}; missing=${missing.join('+')}`,
+        status: 'action-not-rendered',
+        diagnostic: `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")`,
       };
     }
-    return { status: 'ok', dispatchFired, domChanged };
+    // Named controls each get the caller's full wait; the fallback pass is
+    // bounded per control and as a whole (a busy screen has many clickables).
+    const fallbackEachMs = Math.min(input.waitMs, FALLBACK_CLICK_WAIT_MS);
+    const fallbackBudgetMs = Math.max(input.waitMs * 3, FALLBACK_BUDGET_FLOOR_MS);
+    let clicked = 0;
+    let bestDispatch = false;
+    let bestDom = false;
+    const otherActions = new Set<string>();
+    const attempt = async (el: HTMLElement, waitMs: number, via: 'named' | 'fallback'): Promise<RunOutcome | null> => {
+      const before = snapshot(container, input.actionName);
+      clicked += 1;
+      el.click();
+      const obs = await observe(container, input.actionName, before, req, waitMs);
+      bestDispatch = bestDispatch || obs.dispatchFired;
+      bestDom = bestDom || obs.domChanged;
+      for (const a of obs.otherActions) otherActions.add(a);
+      return satisfied(req, obs)
+        ? { status: 'ok', dispatchFired: obs.dispatchFired, domChanged: obs.domChanged, via, clicked }
+        : null;
+    };
+    for (const el of named) {
+      const hit = await attempt(el, input.waitMs, 'named');
+      if (hit !== null) return hit;
+    }
+    const fallbackStart = Date.now();
+    let exhausted = false;
+    for (const el of fallback) {
+      if (Date.now() - fallbackStart > fallbackBudgetMs) {
+        exhausted = true;
+        break;
+      }
+      const hit = await attempt(el, fallbackEachMs, 'fallback');
+      if (hit !== null) return hit;
+    }
+    const missing: string[] = [];
+    if (req.requireDispatch && !bestDispatch) missing.push('dispatch');
+    if (req.requireDom && !bestDom) missing.push('DOM change');
+    const others = otherActions.size > 0 ? `; other actions dispatched: ${[...otherActions].join(', ')}` : '';
+    return {
+      status: 'action-no-effect',
+      diagnostic:
+        `${req.description}; clicked ${clicked} control(s) (${named.length} named, ${fallback.length} fallback` +
+        `${exhausted ? ', budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
+        `missing=${missing.join('+')}${others}`,
+    };
   } finally {
     window.removeEventListener('error', onWindowError);
     if (handles !== null) tearDown(handles);

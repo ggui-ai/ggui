@@ -53,12 +53,17 @@
  * For each entry in `contract.actionSpec`:
  *
  *   1. Render the component in a real Chromium tab via Playwright.
- *   2. Find a button matching the action's `label` (aria-label first,
- *      then visible-text contains, case-insensitive).
- *   3. Snapshot the current DOM state.
- *   4. Click the button.
- *   5. Wait up to `timeoutMs` for the required signal (per the gate
- *      above) to fire.
+ *   2. Collect the controls to try, the way the harness's render-check
+ *      does (#996): first those that NAME the action (`data-action` by
+ *      value, then aria-label / text carrying the label or the name), then
+ *      every other enabled clickable in DOM order.
+ *   3. For each candidate: snapshot the DOM, click, wait up to `timeoutMs`
+ *      (named) or a bounded slice of it (fallback) for the required signal
+ *      (per the gate above); stop at the first control that produces it.
+ *      Only dispatches of THIS action count; others are reported.
+ *   4. `action-not-rendered` means no clickable control exists at all.
+ *   5. `action-no-effect` means controls were clicked and none produced
+ *      the required signal — the diagnostic says how many, and what was seen.
  *   6. Classify: ok / action-no-effect / action-not-rendered /
  *      render-failed.
  *

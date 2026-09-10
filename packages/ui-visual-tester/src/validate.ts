@@ -56,7 +56,7 @@ export type ActionClassification = 'agent-bound' | 'context-bound';
 
 type RunOutcome =
   | { readonly status: 'render-failed'; readonly diagnostic: string }
-  | { readonly status: 'action-not-rendered' }
+  | { readonly status: 'action-not-rendered'; readonly diagnostic: string }
   | { readonly status: 'action-no-effect'; readonly diagnostic: string }
   | {
       readonly status: 'ok';
@@ -127,8 +127,13 @@ function parseRunOutcome(value: unknown): RunOutcome {
         diagnostic: typeof diagnostic === 'string' ? diagnostic : 'unknown',
       };
     }
-    case 'action-not-rendered':
-      return { status: 'action-not-rendered' };
+    case 'action-not-rendered': {
+      const diagnostic = (value as { diagnostic?: unknown }).diagnostic;
+      return {
+        status: 'action-not-rendered',
+        diagnostic: typeof diagnostic === 'string' ? diagnostic : 'no clickable control in the rendered DOM',
+      };
+    }
     case 'action-no-effect': {
       const diagnostic = (value as { diagnostic?: unknown }).diagnostic;
       return {
@@ -204,7 +209,7 @@ function classify(
       return {
         kind: 'action-not-rendered' as BehaviorFailureKind,
         actionName,
-        diagnostic: `no button found matching actionSpec.${actionName}.label`,
+        diagnostic: outcome.diagnostic,
       };
     case 'action-no-effect':
       return {

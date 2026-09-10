@@ -264,3 +264,73 @@ describe('validateContractBehavior', () => {
     expect(result.failures).toEqual([]);
   });
 });
+
+// ── #996: the matcher must find the control the way the harness's render-check
+// does — named controls first (data-action / aria-label / text), then EVERY
+// clickable, judged by the observed dispatch — never by the label's text alone.
+const SEND_DATA_ACTION_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Chat() {
+  const send = useAction('sendMessage');
+  return (
+    <div>
+      <input placeholder="Message" />
+      <button data-action="sendMessage" onClick={() => send({ text: 'hi' })}>Send</button>
+    </div>
+  );
+}
+`;
+
+const UNNAMED_CHECKBOX_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Todos() {
+  const toggle = useAction('toggleItem');
+  return (
+    <ul>
+      <li><label><input type="checkbox" onChange={() => toggle({ id: 't1' })} /> Buy oat milk</label></li>
+    </ul>
+  );
+}
+`;
+
+const SEND_CONTRACT: DataContract = {
+  actionSpec: {
+    sendMessage: { label: 'Send Message', nextStep: 'reply' },
+  },
+  agentCapabilities: {
+    tools: { reply: { toolInfo: { inputSchema: { type: 'object' }, description: 'Reply to the user' } } },
+  },
+};
+
+const TOGGLE_CONTRACT: DataContract = {
+  actionSpec: {
+    toggleItem: { label: 'Toggle Item', nextStep: 'todoist_toggle_item' },
+  },
+  agentCapabilities: {
+    tools: { todoist_toggle_item: { toolInfo: { inputSchema: { type: 'object' }, description: 'Toggle a todo' } } },
+  },
+};
+
+describe('#996 — the control is found the way the harness finds it, not by the label text', () => {
+  it('#996 a button named by data-action passes even though its text ("Send") is not the label ("Send Message")', async () => {
+    const code = await compile(SEND_DATA_ACTION_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SEND_CONTRACT, timeoutMs: 2000, playwright });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#996 an unnamed checkbox wired to the action passes via the click-every-clickable fallback (the Exp 008 pre-flight shape)', async () => {
+    const code = await compile(UNNAMED_CHECKBOX_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: TOGGLE_CONTRACT, timeoutMs: 2000, playwright });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#996 action-not-rendered means NO clickable control at all, and says so', async () => {
+    const code = await compile(NO_BUTTON_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: CONTEXT_BOUND_CONTRACT, timeoutMs: 1000, playwright });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]?.kind).toBe('action-not-rendered');
+    expect(result.failures[0]?.diagnostic).toMatch(/no clickable control/);
+  }, 60_000);
+});
