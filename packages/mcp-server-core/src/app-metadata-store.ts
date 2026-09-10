@@ -18,6 +18,7 @@
  *     so existing rows missing `gadgets` survive.
  */
 
+import type { AppGenerationProfile } from '@ggui-ai/protocol';
 import {
   resolveAppGadgets,
   type AppBlueprintSearchConfig,
@@ -44,6 +45,13 @@ export interface AppGeneration {
   readonly model: string;
   /** Whether generation uses your own configured key or the key supplied by your hosting provider. */
   readonly keySource: 'own' | 'managed';
+  /**
+   * The app's generation profile — operator-declared free text
+   * (`styling`, `density`, `layout`) the generator honours as the app's
+   * visual brief; bounded at the write door by `appGenerationProfileSchema`.
+   * Read by the render path into `UiGenerateInput.profile`. Absent = today.
+   */
+  readonly profile?: AppGenerationProfile;
 }
 
 /**
