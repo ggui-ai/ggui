@@ -221,7 +221,12 @@ async function driveCell(cell, network) {
     console.log(`[exp008] ${cell.cellId}: MINTED ${Math.round((Date.now() - t0) / 1000)}s (mint-only; eval deferred)`);
     return { cellId: cell.cellId, ok: true, ms: Date.now() - t0, mintOnly: true };
   }
-  const evalArn = await runTask(cfg.evalFamily, buildEvalOverrides(cell, { bucket: cfg.bucket }), network);
+  const rec = manifest?.cells?.[cell.cellId]?.mint;
+  const mintReceipt = rec && manifest.declared?.mintSourceSha && manifest.declared?.promptDigestConstrained && manifest.declared?.promptDigestFree
+    ? { image: rec.image, ...(rec.imageDigest ? { imageDigest: rec.imageDigest } : {}), sourceSha: manifest.declared.mintSourceSha, promptDigestConstrained: manifest.declared.promptDigestConstrained, promptDigestFree: manifest.declared.promptDigestFree }
+    : undefined;
+  if (!mintReceipt) console.warn(`[exp008] ${cell.cellId}: NO MINT RECEIPT in the manifest — the eval task runs without MINT_* env and the row will say so`);
+  const evalArn = await runTask(cfg.evalFamily, buildEvalOverrides(cell, { bucket: cfg.bucket, ...(mintReceipt ? { mintReceipt } : {}) }), network);
   console.log(`[exp008] ${cell.cellId}: eval ${evalArn.split('/').pop()}`);
   await awaitArtefact(evalArn, cfg.bucket, `${prefix}report.json`, cfg.evalTimeoutMs, `${cell.cellId} eval`);
   const report = await readJson(cfg.bucket, `${prefix}report.json`);

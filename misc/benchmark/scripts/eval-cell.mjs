@@ -109,7 +109,18 @@ async function main() {
       }
     : undefined;
 
+  // The driver hands the MINT leg's receipt through the task env (see MintReceipt);
+  // absent = recorded in report.meta.notes, never invented.
+  const mintReceipt = process.env.MINT_IMAGE && process.env.MINT_SOURCE_SHA && process.env.MINT_PROMPT_DIGEST_CONSTRAINED && process.env.MINT_PROMPT_DIGEST_FREE
+    ? {
+        image: process.env.MINT_IMAGE,
+        ...(process.env.MINT_IMAGE_DIGEST ? { imageDigest: process.env.MINT_IMAGE_DIGEST } : {}),
+        sourceSha: process.env.MINT_SOURCE_SHA,
+        promptDigests: { constrained: process.env.MINT_PROMPT_DIGEST_CONSTRAINED, free: process.env.MINT_PROMPT_DIGEST_FREE },
+      }
+    : undefined;
   const report = await evaluateCell(inputs, {
+    ...(mintReceipt ? { mintReceipt } : {}),
     dir,
     ...(playwright ? { playwright } : {}),
     ...(visual ? { visual, visualJudge: VISUAL_JUDGE } : {}),

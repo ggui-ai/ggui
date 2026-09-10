@@ -207,8 +207,24 @@ export function visualJudgeCostUsd(judge: VisualJudgeIdentity, outcome: VisualOu
   return calculateCost(resolveJudgeCostModelId(judge.model), { input: outcome.tokens.input, output: outcome.tokens.output });
 }
 
+/**
+ * The MINT leg's receipt for this cell, handed to the eval task by the driver from
+ * its run manifest (ECS forgets stopped tasks within the hour; the operator role
+ * cannot write to the bucket). Stamped verbatim into `report.meta` so the verdict
+ * can check the image the cell was minted on and the prompt digests of that image
+ * against the experiment's pins — a receipt on the row, not the operator's word.
+ */
+export interface MintReceipt {
+  readonly image: string;
+  readonly imageDigest?: string;
+  readonly sourceSha: string;
+  readonly promptDigests: { readonly constrained: string; readonly free: string };
+}
+
 export interface EvalCellDeps {
   readonly dir: string;
+  /** Absent = the eval task ran without the MINT_* receipt env (recorded in `notes`). */
+  readonly mintReceipt?: MintReceipt;
   readonly playwright?: PlaywrightModule;
   /** Default: the arm-neutral aesthetic panel (#973 §5b). */
   readonly panel?: PanelJudge;
@@ -233,6 +249,12 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly runId: string;
     readonly arm: string;
     readonly codeHash?: string;
+    /** Image the cell was MINTED on (from the mint task via the driver's manifest). */
+    readonly mintImage?: { readonly image: string; readonly digest?: string };
+    /** Source sha the mint image was built from, as declared by the operator with the run. */
+    readonly mintSourceSha?: string;
+    /** Prompt digests (constrained / free) pinned at `mintSourceSha` — checked against the experiment's pins by the verdict. */
+    readonly promptDigests?: { readonly constrained: string; readonly free: string };
     /** Visual score summary of the cell (the per-canvas mean when canvases ran). */
     readonly visual?: { readonly score: number; readonly passed: boolean };
     readonly visualJudge?: VisualJudgeIdentity;
@@ -245,12 +267,16 @@ export interface CellReport extends BenchmarkRunResultDisplay {
   };
 }
 
+/** Recorded when the eval task ran without the driver's MINT_* receipt env — the row then carries no mint image/prompt receipt. */
+export const MINT_RECEIPT_ABSENT_NOTE = 'mint receipt absent — eval task ran without the MINT_* env (no mintImage / promptDigests on this row)';
+
 const panelFor = (kind: PanelPrompt): PanelJudge => (sourceCode, prompt, contract) =>
   evaluateAestheticsPanel(sourceCode, prompt, contract, { panelPrompt: kind });
 
 /** Run every EVAL-side judge for one cell and write `report.json` (+ PNGs) into `deps.dir`. */
 export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Promise<CellReport> {
   const notes: string[] = [];
+  if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);
   const now = deps.now ?? (() => new Date());
 
   const t0 = Date.now();
@@ -357,6 +383,16 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       runId: mint.runId,
       arm: mint.arm,
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
+      ...(deps.mintReceipt
+        ? {
+            mintImage: {
+              image: deps.mintReceipt.image,
+              ...(deps.mintReceipt.imageDigest !== undefined ? { digest: deps.mintReceipt.imageDigest } : {}),
+            },
+            mintSourceSha: deps.mintReceipt.sourceSha,
+            promptDigests: deps.mintReceipt.promptDigests,
+          }
+        : {}),
       ...(visual !== undefined ? { visual } : {}),
       ...(deps.visual && deps.visualJudge ? { visualJudge: deps.visualJudge } : {}),
       panelPromptVersion: panel?.promptVersion ?? selectPanelPrompt(panelPrompt).promptVersion,

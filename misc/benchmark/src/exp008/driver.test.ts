@@ -77,6 +77,24 @@ describe('mint overrides (cloud #975 experiment mode)', () => {
 });
 
 describe('eval overrides (cloud #975 d2: CELL_* on container eval, no --cell arg)', () => {
+  it('hands the MINT receipt to the eval task under the MINT_* names, digest optional, nothing invented when absent', () => {
+    const cell = buildStage1Cells({ runId: 'r', n: 1, models: ['anthropic/claude-fable-5-1'], arms: { A: { designMode: 'constrained' } }, canvas: 'md' })[0]!;
+    const withReceipt = buildEvalOverrides(cell, {
+      bucket: 'bkt',
+      mintReceipt: { image: 'r/ggui-agents:ggui-protocol-5a3bc54fe1b0', imageDigest: 'sha256:abc', sourceSha: '5a3bc54fe1b0ddba', promptDigestConstrained: 'c205', promptDigestFree: 'bfca' },
+    });
+    const env = Object.fromEntries(withReceipt.environment.map((e) => [e.name, e.value]));
+    expect(env.MINT_IMAGE).toBe('r/ggui-agents:ggui-protocol-5a3bc54fe1b0');
+    expect(env.MINT_IMAGE_DIGEST).toBe('sha256:abc');
+    expect(env.MINT_SOURCE_SHA).toBe('5a3bc54fe1b0ddba');
+    expect(env.MINT_PROMPT_DIGEST_CONSTRAINED).toBe('c205');
+    expect(env.MINT_PROMPT_DIGEST_FREE).toBe('bfca');
+    const noDigest = buildEvalOverrides(cell, { bucket: 'bkt', mintReceipt: { image: 'i', sourceSha: 's', promptDigestConstrained: 'c', promptDigestFree: 'f' } });
+    expect(noDigest.environment.some((e) => e.name === 'MINT_IMAGE_DIGEST')).toBe(false);
+    const without = buildEvalOverrides(cell, { bucket: 'bkt' });
+    expect(without.environment.some((e) => e.name.startsWith('MINT_'))).toBe(false);
+  });
+
   it('names the cell prefix and identity for the eval task', () => {
     const cell = buildStage1Cells({ runId: 'r1', n: 1, models: [models[0]!], arms: { A: arms.A }, canvas: 'md' })[0]!;
     const o = buildEvalOverrides(cell, { bucket: 'bkt' });

@@ -12,6 +12,7 @@ import {
   toVisualOutcome,
   visualJudgeCostUsd,
   EXP008_CELL_REPORT_VERSION,
+  MINT_RECEIPT_ABSENT_NOTE,
 } from './eval-cell';
 import type { VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import { calculateCost, resolveJudgeCostModelId, resolveCostModelId } from '../multi-sdk/runner.js';
@@ -215,5 +216,39 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
     expect(report.meta.notes).toContain('visual judge returned null');
     expect(report.meta.visualJudge).toBeUndefined();
     expect(report.meta.panelPromptVersion).toBe('aesthetic-eval.v3-panel-arm-neutral');
+  });
+});
+
+describe('mint receipt on the row', () => {
+  it('stamps the driver-handed receipt verbatim into report.meta (image, digest, source sha, prompt digests)', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      mintReceipt: {
+        image: 'acct.dkr.ecr.us-east-1.amazonaws.com/ggui-agents:ggui-protocol-5a3bc54fe1b0',
+        imageDigest: 'sha256:0123',
+        sourceSha: '5a3bc54fe1b0ddba3a9c980846cceb32c2e04c5f',
+        promptDigests: { constrained: 'c205c03e74', free: 'bfca8b9158' },
+      },
+    });
+    expect(report.meta.mintImage).toEqual({ image: 'acct.dkr.ecr.us-east-1.amazonaws.com/ggui-agents:ggui-protocol-5a3bc54fe1b0', digest: 'sha256:0123' });
+    expect(report.meta.mintSourceSha).toBe('5a3bc54fe1b0ddba3a9c980846cceb32c2e04c5f');
+    expect(report.meta.promptDigests).toEqual({ constrained: 'c205c03e74', free: 'bfca8b9158' });
+    expect(report.meta.notes).not.toContain(MINT_RECEIPT_ABSENT_NOTE);
+    const written = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as { meta: { mintSourceSha?: string } };
+    expect(written.meta.mintSourceSha).toBe('5a3bc54fe1b0ddba3a9c980846cceb32c2e04c5f');
+  });
+
+  it('without a receipt the row says so in notes and carries no mintImage / promptDigests — nothing invented', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel });
+    expect(report.meta.mintImage).toBeUndefined();
+    expect(report.meta.promptDigests).toBeUndefined();
+    expect(report.meta.notes).toContain(MINT_RECEIPT_ABSENT_NOTE);
+  });
+
+  it('the absent-receipt note is one exported sentence the eval-cell script and the tests share', () => {
+    expect(MINT_RECEIPT_ABSENT_NOTE).toMatch(/mint receipt absent/);
+    expect(MINT_RECEIPT_ABSENT_NOTE).toMatch(/MINT_\* env/);
   });
 });

@@ -150,7 +150,28 @@ export function buildMintOverrides(
 }
 
 /** EVAL task overrides (container `eval`, cloud d2): identity + the cell prefix; no `--cell` arg, the script reads `CELL_S3_URI`. */
-export function buildEvalOverrides(cell: StageCell, opts: { readonly bucket: string }): ContainerOverride {
+/** The MINT leg's receipt for a cell, as the driver's run manifest recorded it (see eval-cell's MintReceipt). */
+export interface MintReceiptEnv {
+  readonly image: string;
+  readonly imageDigest?: string;
+  readonly sourceSha: string;
+  readonly promptDigestConstrained: string;
+  readonly promptDigestFree: string;
+}
+
+export function buildEvalOverrides(
+  cell: StageCell,
+  opts: { readonly bucket: string; readonly mintReceipt?: MintReceiptEnv },
+): ContainerOverride {
+  const receiptEnv = opts.mintReceipt
+    ? [
+        { name: 'MINT_IMAGE', value: opts.mintReceipt.image },
+        ...(opts.mintReceipt.imageDigest !== undefined ? [{ name: 'MINT_IMAGE_DIGEST', value: opts.mintReceipt.imageDigest }] : []),
+        { name: 'MINT_SOURCE_SHA', value: opts.mintReceipt.sourceSha },
+        { name: 'MINT_PROMPT_DIGEST_CONSTRAINED', value: opts.mintReceipt.promptDigestConstrained },
+        { name: 'MINT_PROMPT_DIGEST_FREE', value: opts.mintReceipt.promptDigestFree },
+      ]
+    : [];
   return assertOverrideSize(
     {
       containerName: 'eval',
@@ -161,6 +182,7 @@ export function buildEvalOverrides(cell: StageCell, opts: { readonly bucket: str
         { name: 'CELL_ARM', value: cell.arm },
         { name: 'CELL_MODEL', value: cell.model },
         { name: 'CELL_CONTRACT_REF', value: cell.commitRef },
+        ...receiptEnv,
       ],
     },
     cell.cellId,
