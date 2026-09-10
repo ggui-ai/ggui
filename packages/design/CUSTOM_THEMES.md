@@ -21,7 +21,7 @@ The OSS server's manifest schema accepts a file pointer:
 // ggui.json
 {
   "schema": "1",
-  "protocol": "draft-2026-09-04", // the installed @ggui-ai/protocol PROTOCOL_VERSION — the loader refuses others
+  "protocol": "draft-2026-09-10", // the installed @ggui-ai/protocol PROTOCOL_VERSION — the loader refuses others
   "app": { "slug": "demo", "name": "Demo" },
   "theme": { "file": "./theme.json", "mode": "light" },
 }

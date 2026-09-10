@@ -16,7 +16,7 @@ import { GguiDevError, runDev } from './run-dev.js';
 // any declaration outside the supported set (UPGRADE_REQUIRED) — a
 // fictional version here would fail the boot, not exercise it. Moves
 // with the stamp; the loader's message names the fix when it lags.
-const PROTOCOL = 'draft-2026-09-04';
+const PROTOCOL = 'draft-2026-09-10';
 
 describe('runDev (orchestration)', () => {
   let tmp: string;

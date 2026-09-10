@@ -15,7 +15,7 @@ import { runDev } from './run-dev.js';
 
 // The installed `@ggui-ai/protocol` PROTOCOL_VERSION — the loader `runDev`
 // uses refuses any other declaration (UPGRADE_REQUIRED). Moves with the stamp.
-const PROTOCOL = 'draft-2026-09-04';
+const PROTOCOL = 'draft-2026-09-10';
 
 const PROJECT_JSON = JSON.stringify({
   schema: '1',

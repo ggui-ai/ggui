@@ -3482,6 +3482,19 @@
  *      2026-08-19 out-of-vocabulary enum incident as a permanent
  *      sample).
  *
+ * draft-2026-09-10 — THEMING REVISION (ggui#987 protocol half, ggui#989
+ *      OSS half, ggui#985 cloud half; BREAKING on the draft wave under
+ *      VERSION-POLICY §1.1, shipped under §1.4's `draft-` clause — the
+ *      substantive entry is the "Theming revision" block at the top of
+ *      this changelog). The wire: `appThemeSchema` v2 (`overlays` +
+ *      `overlayHash` required, `base` deleted), the client mode
+ *      projection `hostAnnounced ?? stamped ?? sessionSidecar`, `themeId`
+ *      without its sidecar-name leg, `AppThemeRefusalBody` at every write
+ *      door, `parseMcpAppAiGguiRenderMeta`'s `onInvalidTheme`, the render
+ *      shell on `--ggui-color-ground`. The 0.16.0 lockstep wave carries
+ *      it; the samples, the e2e fixtures and the docs' draft strings move
+ *      in this same commit.
+ *
  * draft-2026-09-04 — PRE-GENERATION REFUSAL ENVELOPE (ggui#786;
  *      BREAKING IN INTENT, pre-launch so no shim and no `@deprecated`
  *      — see `docs/protocol/migrations/2026-09-04-pre-generation-refusal-envelope.md`):
@@ -3583,7 +3596,7 @@
  * `CLIENT_SUPPORTED_VERSIONS`, enforced by the loader (`UPGRADE_REQUIRED`
  * on a non-member); the two coincide only while the set is a singleton.
  */
-export const PROTOCOL_VERSION = "draft-2026-09-04";
+export const PROTOCOL_VERSION = "draft-2026-09-10";
 
 /**
  * The shipped `@ggui-ai/*` WAVE version — bare semver, identical to
