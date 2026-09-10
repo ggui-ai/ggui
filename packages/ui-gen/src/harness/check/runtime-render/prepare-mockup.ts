@@ -129,6 +129,16 @@ function synthesizeFromSchema(
   hint: string,
   warnings: string[],
   depth: number,
+  /**
+   * 1-based position when the value belongs to an array element (inherited
+   * by the element's own fields). Every synthesized string inside an element
+   * carries it, so two elements never share an id or a visible label — the
+   * runtime probe's selection-identity rule ("clicking each fired the action
+   * with the same id") is undecidable on identical items and read a correct
+   * component as broken (2026-09-10, the 1.6 hello: both quick replies were
+   * `Sample Id` / `Sample Label`).
+   */
+  ordinal?: number,
 ): SynthOk | SynthFail {
   if (!schema) return { kind: "fail", reason: "no schema" };
   if (depth > MAX_DEPTH) return { kind: "fail", reason: "schema too deep" };
@@ -146,10 +156,10 @@ function synthesizeFromSchema(
 
   // Union schemas — try first branch only
   if (schema.oneOf && schema.oneOf.length > 0) {
-    return synthesizeFromSchema(schema.oneOf[0], hint, warnings, depth + 1);
+    return synthesizeFromSchema(schema.oneOf[0], hint, warnings, depth + 1, ordinal);
   }
   if (schema.anyOf && schema.anyOf.length > 0) {
-    return synthesizeFromSchema(schema.anyOf[0], hint, warnings, depth + 1);
+    return synthesizeFromSchema(schema.anyOf[0], hint, warnings, depth + 1, ordinal);
   }
 
   // Draft-07 type array (`['string','null']` — the canonical nullable
@@ -158,12 +168,7 @@ function synthesizeFromSchema(
   // above bounds the recursion.
   if (Array.isArray(schema.type)) {
     const primary = schema.type.find((t) => t !== "null") ?? "null";
-    return synthesizeFromSchema(
-      { ...schema, type: primary },
-      hint,
-      warnings,
-      depth + 1,
-    );
+    return synthesizeFromSchema({ ...schema, type: primary }, hint, warnings, depth + 1, ordinal);
   }
 
   switch (schema.type) {
@@ -184,7 +189,9 @@ function synthesizeFromSchema(
           // Use field name as a hint so it appears in DOM and prop-coverage check sees it.
           // Capitalize first letter for natural-looking placeholder.
           const cap = hint.charAt(0).toUpperCase() + hint.slice(1);
-          return { kind: "ok", value: `Sample ${cap}`, source: "schema-synth" };
+          // Inside an array element every string is distinct per element.
+          const value = ordinal === undefined ? `Sample ${cap}` : `Sample ${cap} ${ordinal}`;
+          return { kind: "ok", value, source: "schema-synth" };
         }
       }
     }
@@ -211,7 +218,7 @@ function synthesizeFromSchema(
       const items: JsonValue[] = [];
       for (let i = 0; i < 2; i++) {
         const itemHint = `${hint}Item${i + 1}`;
-        const itemSynth = synthesizeFromSchema(schema.items, itemHint, warnings, depth + 1);
+        const itemSynth = synthesizeFromSchema(schema.items, itemHint, warnings, depth + 1, i + 1);
         if (itemSynth.kind === "ok") {
           // Inject an `id` for list-key purposes if the item is an object lacking one.
           if (
@@ -233,7 +240,7 @@ function synthesizeFromSchema(
       const propsMap = schema.properties ?? {};
       const required = new Set(schema.required ?? []);
       for (const [k, sub] of Object.entries(propsMap)) {
-        const subSynth = synthesizeFromSchema(sub, k, warnings, depth + 1);
+        const subSynth = synthesizeFromSchema(sub, k, warnings, depth + 1, ordinal);
         if (subSynth.kind === "ok") {
           obj[k] = subSynth.value;
         } else if (required.has(k)) {
