@@ -5,7 +5,7 @@
  *
  *   node --import tsx scripts/exp008-drive.mjs --run-id <id> --mint-model-env <ENV> [--n 3]
  *        [--models anthropic/claude-fable-5-1,openai/gpt-6-astra] [--canvas md] [--cells id1,id2]
- *        [--concurrency 8] [--dry-run] [--eval-only]
+ *        [--concurrency 8] [--dry-run] [--eval-only | --mint-only]
  *
  * Per cell, with OPERATOR credentials (the tasks' roles do the writes):
  *   RunTask MINT (experiment mode: contract inline) → poll <prefix>mint.json
@@ -15,6 +15,11 @@
  * task's stoppedReason. Exit 0 = every selected cell has report.json (the
  * VERDICT may be FAIL — that is the verdict script's business); 1 otherwise.
  * --dry-run prints the matrix + override payload sizes and touches no AWS.
+ * --mint-only runs the MINT leg for every cell (contract key still asserted)
+ * and stops; exit 0 = every cell has mint.json. A later --eval-only on the
+ * same --run-id runs the EVAL leg over those prefixes — the two legs may bind
+ * to different images on purpose (e.g. mint on the pod that is the measured
+ * triad, eval on a judge fixed afterwards). The two flags are exclusive.
  *
  * PRECONDITION: the mint image on the target env must run the pod's EXPERIMENT
  * mode (the inline-contract, S3-export contract of ggui#975 d1/d1f); against an
@@ -46,6 +51,11 @@ const onlyCells = (getArg(['--cells'], '') || '').split(',').map((s) => s.trim()
 const concurrency = parseInt(getArg(['--concurrency'], '8'), 10);
 const dryRun = hasFlag(['--dry-run']);
 const evalOnly = hasFlag(['--eval-only']);
+const mintOnly = hasFlag(['--mint-only']);
+if (evalOnly && mintOnly) {
+  console.error('exp008-drive: --eval-only and --mint-only are exclusive — one leg per invocation');
+  process.exit(2);
+}
 const cfg = {
   // Account-specific values are NEVER defaults in this (mirrored) package: pass
   // them per run (--app-id / --bucket) or via EXP008_APP_ID / EXP008_BUCKET.
@@ -162,6 +172,10 @@ async function driveCell(cell, network) {
   if (contract.contractKey !== cell.contractKey) {
     throw new Error(`${cell.cellId}: exported contractKey ${contract.contractKey} ≠ computed ${cell.contractKey} — refusing to evaluate a cell minted for another contract`);
   }
+  if (mintOnly) {
+    console.log(`[exp008] ${cell.cellId}: MINTED ${Math.round((Date.now() - t0) / 1000)}s (mint-only; eval deferred)`);
+    return { cellId: cell.cellId, ok: true, ms: Date.now() - t0, mintOnly: true };
+  }
   const evalArn = await runTask(cfg.evalFamily, buildEvalOverrides(cell, { bucket: cfg.bucket }), network);
   console.log(`[exp008] ${cell.cellId}: eval ${evalArn.split('/').pop()}`);
   await awaitArtefact(evalArn, cfg.bucket, `${prefix}report.json`, cfg.evalTimeoutMs, `${cell.cellId} eval`);
@@ -183,8 +197,8 @@ async function main() {
     }
   })));
   const ok = results.filter((r) => r.ok).length;
-  console.log(`[exp008] run ${runId}: ${ok}/${results.length} cells have report.json${ok < results.length ? ` — failed: ${results.filter((r) => !r.ok).map((r) => r.cellId).join(', ')}` : ''}`);
-  console.log(`[exp008] evidence: aws s3 sync s3://${cfg.bucket}/exp008/${runId}/ <dir> && python3 rnd/gen-ui/tools/exp008-verdict.py <dir>`);
+  console.log(`[exp008] run ${runId}: ${ok}/${results.length} cells have ${mintOnly ? 'mint.json (mint-only; run --eval-only on this --run-id for the eval leg)' : 'report.json'}${ok < results.length ? ` — failed: ${results.filter((r) => !r.ok).map((r) => r.cellId).join(', ')}` : ''}`);
+  if (!mintOnly) console.log(`[exp008] evidence: aws s3 sync s3://${cfg.bucket}/exp008/${runId}/ <dir> && python3 rnd/gen-ui/tools/exp008-verdict.py <dir>`);
   process.exit(ok === results.length ? 0 : 1);
 }
 
