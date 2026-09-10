@@ -55,15 +55,15 @@ describe('renderFreeColorRule — ramps and roles come from the manifest', () =>
     const rule = renderFreeColorRule([
       '--ggui-color-primary-500',
       '--ggui-color-primary-900',
-      '--ggui-color-surface',
-      '--ggui-color-onSurface',
+      '--ggui-color-ground',
+      '--ggui-color-onGround',
       '--ggui-color-brandAccent',
       '--ggui-spacing-4',
     ]);
     expect(rule).toContain('`primary-500/900`');
     expect(rule).not.toContain('(plus bare `primary`)');
     expect(rule).not.toContain('State ramps');
-    expect(rule).toContain('`surface` / `onSurface` (page background + body text)');
+    expect(rule).toContain('`ground` / `onGround` (the page / chat canvas behind everything + its text)');
     expect(rule).toContain('other roles: `brandAccent`');
     expect(rule).not.toContain('`neutral-');
   });

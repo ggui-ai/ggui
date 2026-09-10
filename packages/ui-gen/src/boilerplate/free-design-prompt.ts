@@ -82,10 +82,11 @@ export interface ColorRamp {
  * do; manifest roles not named here land under "other roles".
  */
 const SEMANTIC_ROLES: ReadonlyArray<{ readonly names: readonly string[]; readonly role: string }> = [
-  { names: ["surface", "onSurface"], role: "page background + body text" },
-  { names: ["surfaceVariant", "onSurfaceVariant"], role: "panels + secondary text" },
-  { names: ["surface-subtle", "surface-sunken", "surface-gradient"], role: "quiet fills" },
-  { names: ["container", "onContainer"], role: "branded fills + the text on them" },
+  { names: ["ground", "onGround"], role: "the page / chat canvas behind everything + its text" },
+  { names: ["container", "onContainer"], role: "a card, a bubble, a panel + body text on it" },
+  { names: ["elevated", "onElevated"], role: "popover, menu, modal, toast — floats above a container" },
+  { names: ["sunken", "onSunken"], role: "wells, inputs at rest, code blocks + secondary text" },
+  { names: ["ground-subtle", "ground-gradient"], role: "quiet canvas fills" },
   { names: ["onPrimary"], role: "text on the brand color" },
   { names: ["outline", "outlineVariant"], role: "borders + dividers" },
   { names: ["onError"], role: "text on an error fill" },
@@ -155,7 +156,7 @@ export function renderFreeColorRule(manifest: readonly string[] = consumedTokenM
 
   return `## Color stays tokenized (the one hard styling rule)
 
-Brand-bearing color — text, backgrounds, borders, fills, gradient stops, focus rings, shadow tints — comes ONLY from the closed \`--ggui-color-*\` token manifest, referenced BARE: \`color: 'var(--ggui-color-onSurface)'\`, \`background: 'var(--ggui-color-primary-50)'\`, \`border: '1px solid var(--ggui-color-outline)'\`, \`linear-gradient(135deg, var(--ggui-color-primary-500), var(--ggui-color-primary-700))\`.
+Brand-bearing color — text, backgrounds, borders, fills, gradient stops, focus rings, shadow tints — comes ONLY from the closed \`--ggui-color-*\` token manifest, referenced BARE: \`color: 'var(--ggui-color-onContainer)'\`, \`background: 'var(--ggui-color-primary-50)'\`, \`border: '1px solid var(--ggui-color-outline)'\`, \`linear-gradient(135deg, var(--ggui-color-primary-500), var(--ggui-color-primary-700))\`.
 
 - No hex (\`#7c3aed\`), no \`rgb()\` / \`rgba()\` / \`hsl()\` / \`hsla()\`, no CSS named colors (\`red\`, \`slategray\`) — anywhere in the file, including \`<style>\` blocks and shadows. Tier-0 fails them (\`tokens:hex-color\`, \`tokens:hardcoded-color-fn\`, \`tokens:named-color\`). \`transparent\`, \`currentColor\` and \`inherit\` are fine.
 - No literal fallback inside ANY token reference: \`var(--ggui-color-primary-600)\` bare, never \`var(--ggui-color-primary-600, #0284c7)\` — the runtime injects every token on \`:root\`, and a fallback paints the wrong brand exactly when the operator's theme matters (\`tokens:token-fallback\`). This holds for every \`--ggui-*\` token you reference, not only colors.
@@ -242,7 +243,7 @@ const TOKEN_GROUPS: readonly TokenGroup[] = [
   { label: "Color (mandatory for every color)", prefixes: ["--ggui-color-"], note: "" },
   { label: "Spacing (optional — literals are fine)", prefixes: ["--ggui-spacing-"], note: "" },
   { label: "Typography (optional)", prefixes: ["--ggui-font-"], note: "" },
-  { label: "Radius (optional)", prefixes: ["--ggui-shape-radius-", "--ggui-radius-"], note: "" },
+  { label: "Radius (optional)", prefixes: ["--ggui-shape-radius-"], note: "" },
   { label: "Shadow (optional)", prefixes: ["--ggui-shape-shadow-"], note: "" },
 ];
 

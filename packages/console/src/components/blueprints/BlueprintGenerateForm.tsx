@@ -207,7 +207,7 @@ export function BlueprintGenerateForm({
             onChange={(event) => setContextText(event.target.value)}
             rows={3}
             spellCheck={false}
-            style={{ fontFamily: 'var(--ggui-font-mono, monospace)' }}
+            style={{ fontFamily: 'var(--ggui-font-family-mono, monospace)' }}
           />
         </div>
       </Section>

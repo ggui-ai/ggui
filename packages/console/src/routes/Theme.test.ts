@@ -140,13 +140,12 @@ describe('flattenLeaves', () => {
       'color.warning',
       'color.error',
       'color.info',
-      // Material 3 role-pair singletons (surface/onSurface/outline/…) stay
-      // under the bare `color` prefix.
+      // The surface-layering roles (ground/container/sunken + inks) and
+      // the stated outlines stay under the bare `color` prefix.
       'color',
       'shape.radius',
       'shape.shadow',
       'font.family',
-      'font.size',
       'font.weight',
       'spacing',
     ]);
@@ -176,22 +175,20 @@ describe('flattenLeaves', () => {
     }
   });
 
-  it('emits the Material 3 role-pair singletons under prefix `color`', () => {
+  it('emits the surface-layering roles (ggui#987 §2.1) under prefix `color`', () => {
     const groups = flattenLeaves(theme);
-    // Bare `color` prefix now holds ONLY the role-pair singletons —
-    // success/warning/error/info moved to their own ladder groups.
+    // Bare `color` prefix holds ONLY the authored roles (+ outlines when
+    // stated) — success/warning/error/info live in their ladder groups.
     const roles = groups.find((g) => g.prefix === 'color' && g.label === 'Color · Roles');
     expect(roles).toBeDefined();
     const paths = roles!.leaves.map((l) => l.path);
-    // Surface family — eight Material 3 role pairs.
-    expect(paths).toContain('color.surface');
-    expect(paths).toContain('color.onSurface');
-    expect(paths).toContain('color.surfaceVariant');
-    expect(paths).toContain('color.onSurfaceVariant');
-    expect(paths).toContain('color.container');
-    expect(paths).toContain('color.onContainer');
+    for (const role of ['ground', 'onGround', 'container', 'onContainer', 'sunken', 'onSunken']) {
+      expect(paths).toContain(`color.${role}`);
+    }
+    // The registry's claudic document states its outlines.
     expect(paths).toContain('color.outline');
     expect(paths).toContain('color.outlineVariant');
+    expect(paths).not.toContain('color.surface');
   });
 
   it('emits a dedicated ladder group per semantic-color scale', () => {

@@ -173,14 +173,19 @@ function renderFreeBoilerplates(): string {
 }
 
 // ── Recorded from the UNMODIFIED code (see header) ──────────────────────
+// Re-recorded 2026-09-10 for ggui#989: the prompts' colour vocabulary
+// moved to the surface-layering roles (ggui#987 §2.1 — ground /
+// container / elevated / sunken + their on* inks) in the SAME slice for
+// both arms, so INVARIANT 1 (constrained ≡ free's shared text) holds
+// across the re-record; the boilerplate digests did not move.
 export const CONSTRAINED_PROMPT_SHA256 =
-  'c205c03e742e07802ac0ae55e5907eda28cda718c3240d9ced1d494137a896c8';
+  '0e1ce42ca20b59d3db532ff9ff93d46c04346f73284b5d224f41481414765505';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 export const FREE_PROMPT_SHA256 =
-  'bfca8b9158184a6d572de9ed8c320b4cfb01da37d41ec20b8c29f22dc53439db';
+  'd53cae7166f0564dd360f3bffba447875cc82fb2faf43f0710ef12757b49c4f3';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

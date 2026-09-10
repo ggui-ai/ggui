@@ -472,7 +472,7 @@ export async function runSelfChecks(
         check: 'hardcoded-color-fn',
         line: lineNum,
         message: `Hardcoded ${colorFnMatch[1]}() — use design tokens instead`,
-        fix: `Replace with semantic tokens: var(--ggui-color-surface), var(--ggui-color-onSurface), var(--ggui-color-outline), etc.`,
+        fix: `Replace with the layering roles: var(--ggui-color-container), var(--ggui-color-onContainer), var(--ggui-color-outline), etc.`,
       });
     }
 
@@ -482,7 +482,7 @@ export async function runSelfChecks(
         check: 'prefer-semantic',
         line: lineNum,
         message: `neutral-50 for background — prefer semantic token for dark-theme compatibility`,
-        fix: `Replace with var(--ggui-color-surface) or var(--ggui-color-surfaceVariant)`,
+        fix: `Replace with var(--ggui-color-container) or var(--ggui-color-sunken)`,
       });
     }
     if (/--ggui-color-neutral-900[^0-9]/.test(line) && /color/i.test(line) && !/background/i.test(line)) {
@@ -490,7 +490,7 @@ export async function runSelfChecks(
         check: 'prefer-semantic',
         line: lineNum,
         message: `neutral-900 for text color — prefer semantic token for dark-theme compatibility`,
-        fix: `Replace with var(--ggui-color-onSurface) or var(--ggui-color-onSurfaceVariant)`,
+        fix: `Replace with var(--ggui-color-onContainer) or var(--ggui-color-onSunken)`,
       });
     }
 

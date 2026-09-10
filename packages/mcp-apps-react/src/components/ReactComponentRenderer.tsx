@@ -121,7 +121,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 24, minHeight: 80, gap: 8,
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-          fontSize: 13, color: 'var(--ggui-color-onSurface, inherit)', opacity: 0.6,
+          fontSize: 13, color: 'var(--ggui-color-onContainer, inherit)', opacity: 0.6,
         }}>
           <div style={{
             width: 16, height: 16, border: '2px solid rgba(128,128,128,0.25)',
@@ -140,7 +140,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '32px 24px', minHeight: 120, gap: 12, textAlign: 'center',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        color: 'var(--ggui-color-onSurface, inherit)',
+        color: 'var(--ggui-color-onContainer, inherit)',
       }}>
         <div style={{
           width: 48, height: 48, borderRadius: 14,

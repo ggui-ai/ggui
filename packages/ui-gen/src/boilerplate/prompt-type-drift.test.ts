@@ -66,7 +66,8 @@ const PROMPT_ENUM_CLAIMS: readonly EnumClaim[] = [
   { component: 'Stack', prop: 'justify', values: ['start', 'center', 'end', 'between', 'around', 'evenly'] },
   { component: 'Row', prop: 'align', values: ['start', 'center', 'end', 'stretch'] },
   { component: 'Row', prop: 'justify', values: ['start', 'center', 'end', 'between', 'around', 'evenly'] },
-  { component: 'Badge', prop: 'variant', values: ['default', 'primary', 'secondary', 'success', 'warning', 'error', 'info'] },
+  // `tertiary` = the second accent (ggui#987 §2.1) — Badge is its one primitive consumer.
+  { component: 'Badge', prop: 'variant', values: ['default', 'primary', 'secondary', 'tertiary', 'success', 'warning', 'error', 'info'] },
   { component: 'Stat', prop: 'trend', values: ['up', 'down', 'neutral'] },
   { component: 'Stepper', prop: 'orientation', values: ['horizontal', 'vertical'] },
   // Spacing scale — gap (Stack / Row / Grid), padding (Card / Box / Container).

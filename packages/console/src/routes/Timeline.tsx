@@ -324,7 +324,7 @@ function GguiSessionRow({
         >
           <code
             className="ggui-code"
-            style={{ fontSize: 12, fontFamily: 'var(--ggui-font-mono)' }}
+            style={{ fontSize: 12, fontFamily: 'var(--ggui-font-family-mono)' }}
           >
             {shortId}…
           </code>
@@ -567,17 +567,17 @@ function EventCard({
       >
         <span
           className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
+          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-family-mono)' }}
         >
           seq {event.seq}
         </span>
-        <span style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}>
+        <span style={{ fontFamily: 'var(--ggui-font-family-mono)', fontSize: 12 }}>
           {event.type}
         </span>
         <span style={{ flex: 1 }} />
         <span
           className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
+          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-family-mono)' }}
         >
           {formatTime(event.timestamp)}
         </span>
@@ -592,7 +592,7 @@ const preStyle: React.CSSProperties = {
   padding: 8,
   background: 'var(--ggui-paper-2, #efeee8)',
   border: '1px solid var(--ggui-rule)',
-  fontFamily: 'var(--ggui-font-mono)',
+  fontFamily: 'var(--ggui-font-family-mono)',
   fontSize: 12,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',

@@ -25,7 +25,7 @@ interface Props {
 export default function MyComponent({ title, count = 0 }: Props) {
   return (
     <div style={{ padding: 'var(--ggui-spacing-md)' }}>
-      <h1 style={{ color: 'var(--ggui-color-onSurface)' }}>{title}</h1>
+      <h1 style={{ color: 'var(--ggui-color-onContainer)' }}>{title}</h1>
       <Button>{count}</Button>
     </div>
   );
@@ -1264,7 +1264,7 @@ export default function C(props: Props) {
     const code = `
 interface Props { x: string }
 export default function C(props: Props) {
-  return <div style={{ color: 'var(--ggui-color-onSurface)', padding: 'var(--ggui-spacing-4)', boxShadow: 'var(--ggui-shape-shadow-lg)' }}>x</div>;
+  return <div style={{ color: 'var(--ggui-color-onContainer)', padding: 'var(--ggui-spacing-4)', boxShadow: 'var(--ggui-shape-shadow-lg)' }}>x</div>;
 }`;
     const issues = await runTier0Checks(code);
     expect(issues.filter(i => i.subcategory === 'off-manifest-token')).toHaveLength(0);
@@ -1352,7 +1352,7 @@ describe('taught token vocabulary ⊆ consumed-token manifest (constraint alignm
   it('the extractor flags an off-manifest name (guard proves it can fail)', async () => {
     const { consumedTokenManifest } = await import('@ggui-ai/design/themes');
     const manifest = new Set(consumedTokenManifest);
-    const sample = 'use var(--ggui-color-onSurface) and var(--ggui-color-primary-999) and var(--ggui-color-*)';
+    const sample = 'use var(--ggui-color-onContainer) and var(--ggui-color-primary-999) and var(--ggui-color-*)';
     const off = [...concreteTokens(sample)].filter(t => !manifest.has(t));
     expect(off).toEqual(['--ggui-color-primary-999']);
   });

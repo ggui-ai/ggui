@@ -735,7 +735,7 @@ export function flattenLeaves(theme: DtcgTheme): readonly LeafGroup[] {
   groups.push({
     label: 'Color · Neutral',
     prefix: 'color.neutral',
-    leaves: ladderLeaves('color.neutral', theme.color.neutral),
+    leaves: ladderLeaves('color.neutral', theme.color.neutral ?? {}),
   });
   // Semantic color scales (success/warning/error/info — 50..800 ladders).
   groups.push({
@@ -758,19 +758,24 @@ export function flattenLeaves(theme: DtcgTheme): readonly LeafGroup[] {
     prefix: 'color.info',
     leaves: ladderLeaves('color.info', theme.color.info),
   });
-  // Material 3 semantic role pairs (8 leaves).
+  // The surface-layering roles (ggui#987 §2.1) — authored; plus the
+  // outlines when the document states them (derived otherwise).
   groups.push({
     label: 'Color · Roles',
     prefix: 'color',
     leaves: [
-      { path: 'color.surface', value: stringify(theme.color.surface) },
-      { path: 'color.onSurface', value: stringify(theme.color.onSurface) },
-      { path: 'color.surfaceVariant', value: stringify(theme.color.surfaceVariant) },
-      { path: 'color.onSurfaceVariant', value: stringify(theme.color.onSurfaceVariant) },
+      { path: 'color.ground', value: stringify(theme.color.ground) },
+      { path: 'color.onGround', value: stringify(theme.color.onGround) },
       { path: 'color.container', value: stringify(theme.color.container) },
       { path: 'color.onContainer', value: stringify(theme.color.onContainer) },
-      { path: 'color.outline', value: stringify(theme.color.outline) },
-      { path: 'color.outlineVariant', value: stringify(theme.color.outlineVariant) },
+      { path: 'color.sunken', value: stringify(theme.color.sunken) },
+      { path: 'color.onSunken', value: stringify(theme.color.onSunken) },
+      ...(theme.color.outline !== undefined
+        ? [{ path: 'color.outline', value: stringify(theme.color.outline) }]
+        : []),
+      ...(theme.color.outlineVariant !== undefined
+        ? [{ path: 'color.outlineVariant', value: stringify(theme.color.outlineVariant) }]
+        : []),
     ],
   });
   // shape.radius
@@ -800,12 +805,18 @@ export function flattenLeaves(theme: DtcgTheme): readonly LeafGroup[] {
     prefix: 'font.family',
     leaves: familyLeaves,
   });
-  // font.size (numeric stops common: xs/sm/md/lg/xl)
-  groups.push({
-    label: 'Font · Size',
-    prefix: 'font.size',
-    leaves: ladderLeaves('font.size', theme.font.size),
-  });
+  // font.ramp — the one type ramp the size stops are derived from
+  // (ggui#987 §2.2); absent = the producer's default ramp.
+  if (theme.font.ramp !== undefined) {
+    groups.push({
+      label: 'Font · Ramp',
+      prefix: 'font.ramp',
+      leaves: [
+        { path: 'font.ramp.base', value: stringify(theme.font.ramp.base) },
+        { path: 'font.ramp.ratio', value: stringify(theme.font.ramp.ratio) },
+      ],
+    });
+  }
   // font.weight
   groups.push({
     label: 'Font · Weight',
@@ -1073,7 +1084,7 @@ function ThemeOverrideRow({
         autoComplete="off"
         style={{
           fontSize: 12,
-          fontFamily: 'var(--ggui-font-mono, ui-monospace, monospace)',
+          fontFamily: 'var(--ggui-font-family-mono, ui-monospace, monospace)',
           padding: '4px 8px',
           border: '1px solid currentColor',
           borderRadius: 4,
@@ -1115,7 +1126,7 @@ function ThemeCard({ preset, selected, mode, onSelect }: ThemeCardProps): ReactE
   // sidebar list and pick by colour-feel before clicking.
   const swatchTheme = getRawTheme(preset.id, mode);
   const primary = swatchTheme?.color.primary['500']?.$value;
-  const surface = swatchTheme?.color.surface.$value;
+  const ground = swatchTheme?.color.ground.$value;
   return (
     <button
       type="button"
@@ -1151,7 +1162,7 @@ function ThemeCard({ preset, selected, mode, onSelect }: ThemeCardProps): ReactE
         }}
       >
         <span style={{ flex: 1, background: primary ?? '#ccc' }} />
-        <span style={{ flex: 1, background: surface ?? '#fff' }} />
+        <span style={{ flex: 1, background: ground ?? '#fff' }} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span
@@ -1278,8 +1289,8 @@ function ThemePreview({
           // background + text. The preview is a "what your generated
           // UI would look like" mock, so it should NOT inherit the
           // console's chrome colors.
-          background: 'var(--ggui-color-surface)',
-          color: 'var(--ggui-color-onSurface)',
+          background: 'var(--ggui-color-container)',
+          color: 'var(--ggui-color-onContainer)',
           fontFamily: 'var(--ggui-font-family-sans)',
           padding: 'var(--ggui-spacing-lg, 24px)',
           borderRadius: 'var(--ggui-shape-radius-lg, 12px)',
@@ -1331,7 +1342,7 @@ function PreviewHeader({
       <span
         style={{
           fontSize: 'var(--ggui-font-size-sm, 0.875rem)',
-          color: 'var(--ggui-color-onSurfaceVariant)',
+          color: 'var(--ggui-color-onSunken)',
           fontFamily: 'var(--ggui-font-family-mono)',
         }}
       >
@@ -1351,7 +1362,7 @@ function PreviewTypography(): ReactElement {
           margin: 0,
           fontSize: 'var(--ggui-font-size-xl, 1.25rem)',
           fontWeight: 'var(--ggui-font-weight-semibold, 600)',
-          lineHeight: 'var(--ggui-font-lineHeight-tight, 1.25)',
+          lineHeight: 1.25,
         }}
       >
         Typography reads naturally
@@ -1368,8 +1379,8 @@ function PreviewTypography(): ReactElement {
           style={{
             fontFamily: 'var(--ggui-font-family-mono)',
             fontSize: '0.9em',
-            background: 'var(--ggui-color-surfaceVariant)',
-            color: 'var(--ggui-color-onSurfaceVariant)',
+            background: 'var(--ggui-color-sunken)',
+            color: 'var(--ggui-color-onSunken)',
             padding: '0.1em 0.4em',
             borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
           }}
@@ -1394,7 +1405,7 @@ function PreviewTypography(): ReactElement {
         style={{
           margin: 0,
           fontSize: 'var(--ggui-font-size-sm, 0.875rem)',
-          color: 'var(--ggui-color-onSurfaceVariant)',
+          color: 'var(--ggui-color-onSunken)',
         }}
       >
         Caption text — softer contrast for secondary info.
@@ -1412,7 +1423,7 @@ function PreviewButtons(): ReactElement {
         style={{
           padding: '8px 16px',
           background: 'var(--ggui-color-primary-500)',
-          color: 'var(--ggui-color-surface)',
+          color: 'var(--ggui-color-onPrimary)',
           border: 'none',
           borderRadius: 'var(--ggui-shape-radius-md, 8px)',
           fontFamily: 'var(--ggui-font-family-sans)',
@@ -1447,7 +1458,7 @@ function PreviewButtons(): ReactElement {
         style={{
           padding: '8px 16px',
           background: 'transparent',
-          color: 'var(--ggui-color-onSurfaceVariant)',
+          color: 'var(--ggui-color-onSunken)',
           border: 'none',
           borderRadius: 'var(--ggui-shape-radius-md, 8px)',
           fontFamily: 'var(--ggui-font-family-sans)',
@@ -1499,8 +1510,8 @@ function PreviewCard(): ReactElement {
         onChange={() => {}}
         style={{
           padding: '6px 10px',
-          background: 'var(--ggui-color-surface)',
-          color: 'var(--ggui-color-onSurface)',
+          background: 'var(--ggui-color-container)',
+          color: 'var(--ggui-color-onContainer)',
           border: '1px solid var(--ggui-color-outline)',
           borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
           fontFamily: 'var(--ggui-font-family-sans)',
@@ -1546,7 +1557,7 @@ function PreviewColorRamps({
           style={{
             width: 64,
             fontSize: 'var(--ggui-font-size-sm, 0.875rem)',
-            color: 'var(--ggui-color-onSurfaceVariant)',
+            color: 'var(--ggui-color-onSunken)',
           }}
         >
           {label}
@@ -1584,7 +1595,7 @@ function PreviewColorRamps({
       <strong
         style={{
           fontSize: 'var(--ggui-font-size-sm, 0.875rem)',
-          color: 'var(--ggui-color-onSurfaceVariant)',
+          color: 'var(--ggui-color-onSunken)',
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
         }}
@@ -1592,7 +1603,7 @@ function PreviewColorRamps({
         Color ramps
       </strong>
       {renderRamp('Primary', merged.color.primary, true)}
-      {renderRamp('Neutral', merged.color.neutral, true)}
+      {renderRamp('Neutral', merged.color.neutral ?? {}, true)}
     </section>
   );
 }
@@ -1617,7 +1628,7 @@ function PreviewSemantic(): ReactElement {
           border: '1px solid var(--ggui-color-outline)',
         }}
       />
-      <span style={{ color: 'var(--ggui-color-onSurfaceVariant)' }}>
+      <span style={{ color: 'var(--ggui-color-onSunken)' }}>
         {label}
       </span>
     </span>

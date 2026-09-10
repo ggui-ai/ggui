@@ -28,6 +28,7 @@
     "--ggui-color-neutral-50",
     "--ggui-color-neutral-500",
     "--ggui-color-neutral-600",
+    "--ggui-color-neutral-900",
     "--ggui-color-onContainer",
     "--ggui-color-onElevated",
     "--ggui-color-onError",

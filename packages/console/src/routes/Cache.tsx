@@ -369,7 +369,7 @@ function StrategyFilterRow({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: "var(--ggui-font-mono)",
+          fontFamily: "var(--ggui-font-family-mono)",
           textTransform: "uppercase",
           marginRight: 4,
         }}
@@ -387,7 +387,7 @@ function StrategyFilterRow({
             style={{
               all: "unset",
               cursor: "pointer",
-              fontFamily: "var(--ggui-font-mono)",
+              fontFamily: "var(--ggui-font-family-mono)",
               fontSize: 11,
               padding: "2px 8px",
               border: "1px solid var(--ggui-rule)",
@@ -438,7 +438,7 @@ function ClassificationFilterRow({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: "var(--ggui-font-mono)",
+          fontFamily: "var(--ggui-font-family-mono)",
           textTransform: "uppercase",
           marginRight: 4,
         }}
@@ -456,7 +456,7 @@ function ClassificationFilterRow({
             style={{
               all: "unset",
               cursor: "pointer",
-              fontFamily: "var(--ggui-font-mono)",
+              fontFamily: "var(--ggui-font-family-mono)",
               fontSize: 11,
               padding: "2px 8px",
               border: "1px solid var(--ggui-rule)",
@@ -527,7 +527,7 @@ function CacheCard({
           width: "100%",
         }}
       >
-        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-mono)" }}>
+        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-family-mono)" }}>
           {time}
         </span>
         <DecisionPill outcome={outcome} />
@@ -545,7 +545,7 @@ function CacheCard({
         ) : null}
         <span
           style={{
-            fontFamily: "var(--ggui-font-mono)",
+            fontFamily: "var(--ggui-font-family-mono)",
             fontSize: 12,
             flex: 1,
             minWidth: 0,
@@ -556,7 +556,7 @@ function CacheCard({
         >
           {intentPreview || <span className="ggui-muted">(empty intent)</span>}
         </span>
-        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-mono)" }}>
+        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-family-mono)" }}>
           top {topScore}
         </span>
         <span className="ggui-muted" style={{ fontSize: 11 }}>
@@ -565,7 +565,7 @@ function CacheCard({
         {showWinner ? (
           <span
             style={{
-              fontFamily: "var(--ggui-font-mono)",
+              fontFamily: "var(--ggui-font-family-mono)",
               fontSize: 11,
               padding: "0 6px",
               border: "1px solid var(--ggui-rule)",
@@ -600,7 +600,7 @@ function DecisionPill({ outcome }: { readonly outcome: Outcome }): ReactElement 
   return (
     <span
       style={{
-        fontFamily: "var(--ggui-font-mono)",
+        fontFamily: "var(--ggui-font-family-mono)",
         fontSize: 11,
         padding: "0 8px",
         border: "1px solid var(--ggui-rule)",
@@ -619,7 +619,7 @@ function StrategyChip({ strategy }: { readonly strategy: CacheTraceStrategy }): 
   return (
     <span
       style={{
-        fontFamily: "var(--ggui-font-mono)",
+        fontFamily: "var(--ggui-font-family-mono)",
         fontSize: 10,
         padding: "0 6px",
         border: "1px dashed var(--ggui-rule)",
@@ -647,7 +647,7 @@ function ClassificationChip({
   return (
     <span
       style={{
-        fontFamily: "var(--ggui-font-mono)",
+        fontFamily: "var(--ggui-font-family-mono)",
         fontSize: 10,
         padding: "0 6px",
         border: "1px solid var(--ggui-rule)",
@@ -677,7 +677,7 @@ function ValidatorFindingsBadge({
           : "Validator emitted warning findings — contract was returned but flagged."
       }
       style={{
-        fontFamily: "var(--ggui-font-mono)",
+        fontFamily: "var(--ggui-font-family-mono)",
         fontSize: 10,
         padding: "0 6px",
         border: severity === "error" ? "1px solid var(--ggui-ink)" : "1px dashed var(--ggui-rule)",
@@ -712,7 +712,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
             display: "flex",
             gap: 8,
             alignItems: "baseline",
-            fontFamily: "var(--ggui-font-mono)",
+            fontFamily: "var(--ggui-font-family-mono)",
             fontSize: 12,
           }}
         >
@@ -732,7 +732,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
               display: "flex",
               gap: 8,
               alignItems: "baseline",
-              fontFamily: "var(--ggui-font-mono)",
+              fontFamily: "var(--ggui-font-family-mono)",
               fontSize: 12,
             }}
           >
@@ -748,7 +748,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
       {event.cosineNoveltyDistance !== undefined ? (
         <Section label="cosine novelty distance">
           <div
-            style={{ fontFamily: "var(--ggui-font-mono)", fontSize: 12 }}
+            style={{ fontFamily: "var(--ggui-font-family-mono)", fontSize: 12 }}
             title="1 - top.cosine. Higher = farther from any registered blueprint. Track over time to spot synth fragmentation."
           >
             {event.cosineNoveltyDistance.toFixed(3)}
@@ -781,7 +781,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
                   <ValidatorFindingsBadge count={1} severity={f.severity} />
                   <span
                     style={{
-                      fontFamily: "var(--ggui-font-mono)",
+                      fontFamily: "var(--ggui-font-family-mono)",
                       fontSize: 12,
                     }}
                   >
@@ -798,7 +798,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
         <pre style={preStyle}>{event.intent || "(empty)"}</pre>
       </Section>
       <Section label="scope / threshold">
-        <div style={{ fontFamily: "var(--ggui-font-mono)", fontSize: 12 }}>
+        <div style={{ fontFamily: "var(--ggui-font-family-mono)", fontSize: 12 }}>
           <div>
             scope = <strong>{event.scope}</strong>
           </div>
@@ -845,7 +845,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
                   >
                     <span
                       style={{
-                        fontFamily: "var(--ggui-font-mono)",
+                        fontFamily: "var(--ggui-font-family-mono)",
                         fontSize: 12,
                         fontWeight: isWinner ? 600 : 400,
                       }}
@@ -860,7 +860,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
                     <span style={{ flex: 1 }} />
                     <span
                       style={{
-                        fontFamily: "var(--ggui-font-mono)",
+                        fontFamily: "var(--ggui-font-family-mono)",
                         fontSize: 12,
                       }}
                     >
@@ -872,7 +872,7 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
                       className="ggui-muted"
                       style={{
                         fontSize: 11,
-                        fontFamily: "var(--ggui-font-mono)",
+                        fontFamily: "var(--ggui-font-family-mono)",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -904,7 +904,7 @@ function Section({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: "var(--ggui-font-mono)",
+          fontFamily: "var(--ggui-font-family-mono)",
           textTransform: "uppercase",
           marginBottom: 4,
         }}
@@ -921,7 +921,7 @@ const preStyle: React.CSSProperties = {
   padding: 8,
   background: "var(--ggui-paper-2, #efeee8)",
   border: "1px solid var(--ggui-rule)",
-  fontFamily: "var(--ggui-font-mono)",
+  fontFamily: "var(--ggui-font-family-mono)",
   fontSize: 12,
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",

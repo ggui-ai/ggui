@@ -541,7 +541,7 @@ Return your evaluation using the evaluate_visual tool.
 
 Example outputs:
 - Clean: {"result": "pass"}
-- Minor issues: {"result": "warn", "issues": ["Line 45: hardcoded '#f3f4f6' should use var(--ggui-color-surfaceVariant)", "Line 80: numeric padding={16} should use a scale name like padding='md'"]}
+- Minor issues: {"result": "warn", "issues": ["Line 45: hardcoded '#f3f4f6' should use var(--ggui-color-sunken)", "Line 80: numeric padding={16} should use a scale name like padding='md'"]}
 - Severe: {"result": "fail", "issues": ["Component uses entirely custom styling with no design system tokens"]}
 
 Use 'fail' only for pervasive design system violations. Use 'warn' for isolated cases.`;

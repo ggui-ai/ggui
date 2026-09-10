@@ -440,7 +440,7 @@ EXACT primitive prop values (other values are silently ignored — the design sy
 - \`<Grid columns={N} gap="md">\` — 2-D layout (rows AND columns). Reach for it for card galleries, stat grids and dashboards — NEVER hand-roll \`style={{ display: 'grid' }}\`. When the request names exact per-breakpoint counts ("3 per row on desktop, 1 on mobile"), pass a map: \`<Grid columns={{ base: 1, md: 3 }}>\` (breakpoints \`sm\`/\`md\`/\`lg\`/\`xl\`; the design system emits the media queries). For an open-ended gallery where any column count is fine, use \`<Grid minColumnWidth={220}>\` — it fits as many equal columns as the width allows. \`radius\` (Card / Box / Image) takes the scale \`none | sm | md | lg | xl\`.
 - \`<Stat label="…" value="…" delta="+12%" trend="up">\` — KPI display (label + big value + trend-coloured delta + optional \`icon\`). \`trend\` is \`up | down | neutral\` (delta renders green / red / muted). Reach for it for any "show a number" UI; drop several into a \`<Grid>\` for a stat grid instead of hand-building label+value pairs.
 - \`<Stepper steps={STEPS} current={step} />\` — display-only step indicator for wizards/checkouts. \`steps\` is a top-level \`const\` array of labels; \`current\` is YOUR zero-indexed \`useState\` value; \`orientation\` is \`horizontal | vertical\`; optional \`onStepClick={(i) => …}\` makes steps clickable. Stepper never owns navigation state — your Next/Back handlers move \`current\`.
-- \`<Badge variant="...">\` — \`default | primary | secondary | success | warning | error | info\` for colored pills. Great for status/condition labels. There is NO \`neutral\` variant — use \`default\` (or \`secondary\`) for an un-tinted pill.
+- \`<Badge variant="...">\` — \`default | primary | secondary | tertiary | success | warning | error | info\` for colored pills. Great for status/condition labels. There is NO \`neutral\` variant — use \`default\` (or \`secondary\`) for an un-tinted pill.
 
 **Color choice rule of thumb.** Reach for typed slots first: Button \`variant\`, Badge \`variant\`, Alert \`variant\`, Text/Heading/Icon/Spinner/Link/Divider \`tone\`, Box/Card \`surface\`. NEVER hardcode hex \`#XXXXXX\`, rgba, or hsl — tier-0 self-check rejects them with \`tokens:hex-color\` / \`tokens:hardcoded-color-fn\` and the LLM must remediate. Hardcoded colors break the operator's theme switch (Indigo → Claudic → Cyberpunk preset has zero effect on a card hardcoded with \`background: '#000'\`).
 
@@ -473,8 +473,8 @@ MANDATORY:
 
 Token categories:
 - Brand: \`var(--ggui-color-primary-600)\`, \`var(--ggui-color-primary-50)\`
-- Text: \`var(--ggui-color-onSurface)\`, \`var(--ggui-color-onSurfaceVariant)\`
-- Backgrounds: \`var(--ggui-color-surface)\`, \`var(--ggui-color-surfaceVariant)\`
+- Text: \`var(--ggui-color-onContainer)\`, \`var(--ggui-color-onSunken)\`
+- Backgrounds: \`var(--ggui-color-container)\`, \`var(--ggui-color-sunken)\`
 - Borders: \`var(--ggui-color-outline)\`
 - Spacing: \`var(--ggui-spacing-4)\`, \`var(--ggui-spacing-6)\`
 - Typography: \`var(--ggui-font-size-sm)\`, \`var(--ggui-font-weight-semibold)\`
@@ -495,7 +495,7 @@ Use the FULL primary palette throughout the component — NOT only on submit but
 | Buttons, CTAs, filled interactive elements | \`primary-600\` / \`primary-700\` | Primary actions |
 | Headings on light primary backgrounds | \`primary-800\` / \`primary-900\` | High-contrast branded text |
 
-Use semantic tokens (\`onSurface\`, \`onSurfaceVariant\`) for body text and secondary info. NEVER use raw \`neutral-*\` or \`gray-*\` for body text — they break in dark themes.
+Use the layering roles' inks (\`onContainer\` for body text on a card, \`onSunken\` for secondary text, captions, labels) — never raw neutrals. NEVER use raw \`neutral-*\` or \`gray-*\` for body text — they break in dark themes.
 
 ### Theme-Agnostic Design
 
@@ -504,7 +504,7 @@ Components MUST be theme-agnostic — they reference CSS variables but NEVER ass
 DO:
 - Use \`var(--ggui-color-primary-*)\` for brand elements — the theme controls what "primary" means
 - Use \`var(--ggui-shape-shadow-*)\` for depth, \`var(--ggui-shape-radius-*)\` for corners
-- Use semantic color roles: primary for brand, surface/onSurface for structure, success/error/warning for state
+- Use semantic color roles: primary for brand; the layering roles (ground / container / elevated / sunken + their on* inks) for structure; success/error/warning for state
 
 DON'T:
 - Don't assume primary is blue — could be red, green, purple
@@ -549,11 +549,11 @@ A polished UI has ONE hero that dominates. Everything else supports it. Bad layo
 ### Color discipline — the 60/30/10 rule
 
 Don't paint everything in primary. Use:
-- **60% surface** (\`var(--ggui-color-surface)\` / \`onSurface\`) — body text, default backgrounds, structure
-- **30% surfaceVariant + onSurfaceVariant** — secondary text, captions, labels, dividers
+- **60% container** (\`var(--ggui-color-container)\` / \`onContainer\`) — body text, default backgrounds, structure
+- **30% sunken + onSunken** — wells, secondary text, captions, labels, dividers
 - **10% primary** — hero number, ONE highlight element, CTAs, brand accent
 
-If your component is 100% purple text on purple backgrounds, you've lost the eye. Headings can be \`onSurface\` (dark neutral) — they'll still feel weighty. Save the primary palette for one or two STAR moments.
+If your component is 100% purple text on purple backgrounds, you've lost the eye. Headings can be \`onContainer\` (the card's ink) — they'll still feel weighty. Save the primary palette for one or two STAR moments.
 
 \`\`\`tsx
 // BAD — everything purple, eye has no anchor
@@ -562,7 +562,7 @@ If your component is 100% purple text on purple backgrounds, you've lost the eye
 <Text tone="emphasized">all body text</Text>
 
 // GOOD — hero pops, body is neutral, primary is reserved
-<Heading>Title</Heading>  {/* defaults to onSurface */}
+<Heading>Title</Heading>  {/* defaults to onContainer */}
 <Text size="4xl" weight="bold" tone="emphasized">42</Text>
 <Text tone="muted">all body text</Text>
 \`\`\`

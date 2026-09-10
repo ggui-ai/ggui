@@ -36,20 +36,24 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 
 | Token | CSS Variable | Default | Role |
 |-------|-------------|---------|------|
-| surface | var(--ggui-color-surface) | Main content background |
-| onSurface | var(--ggui-color-onSurface) | Primary text on surface |
-| surfaceVariant | var(--ggui-color-surfaceVariant) | Card/panel background |
-| onSurfaceVariant | var(--ggui-color-onSurfaceVariant) | Muted/secondary text |
+| ground | var(--ggui-color-ground) | The page / canvas behind everything |
+| onGround | var(--ggui-color-onGround) | Text on the canvas |
+| container | var(--ggui-color-container) | A card, a bubble, a panel — the unit of content |
+| onContainer | var(--ggui-color-onContainer) | Body text on a card |
+| elevated | var(--ggui-color-elevated) | Menus, popovers, modals, toasts — floats above a card |
+| onElevated | var(--ggui-color-onElevated) | Text on an elevated surface |
+| sunken | var(--ggui-color-sunken) | Wells, inputs at rest, code blocks — recessed inside a card |
+| onSunken | var(--ggui-color-onSunken) | Muted / secondary text |
 | container | var(--ggui-color-container) | Primary-branded containers |
 | onContainer | var(--ggui-color-onContainer) | Text on branded containers |
 | outline | var(--ggui-color-outline) | Borders, dividers |
 | outlineVariant | var(--ggui-color-outlineVariant) | Subtle borders |
 
 **Usage pattern:**
-- Page/section background → \`var(--ggui-color-surface)\`
-- Body text → \`var(--ggui-color-onSurface)\`
-- Card/panel background → \`var(--ggui-color-surfaceVariant)\`
-- Secondary/muted text → \`var(--ggui-color-onSurfaceVariant)\`
+- Page/section background → \`var(--ggui-color-ground)\`
+- Body text → \`var(--ggui-color-onContainer)\`
+- Card/panel background → \`var(--ggui-color-container)\`; recessed wells / inputs → \`var(--ggui-color-sunken)\`
+- Secondary/muted text → \`var(--ggui-color-onSunken)\`
 - Branded section/header → \`var(--ggui-color-container)\` bg + \`var(--ggui-color-onContainer)\` text
 - Borders/dividers → \`var(--ggui-color-outline)\` or \`var(--ggui-color-outlineVariant)\`
 
@@ -66,11 +70,11 @@ Prefer the primitives' \`tone="success|warning|error|info"\` prop over hand-writ
 - **NEVER** use rgba(), hsl(), or other CSS color functions with hardcoded values.
 - **NEVER** use raw neutral-* or gray-* scale tokens (neutral-50, neutral-900, etc.) — these are internal to the theme and break in dark mode.
 - **ALWAYS** use semantic tokens for text and backgrounds:
-  - Text: \`var(--ggui-color-onSurface)\` or \`var(--ggui-color-onSurfaceVariant)\`
-  - Backgrounds: \`var(--ggui-color-surface)\` or \`var(--ggui-color-surfaceVariant)\`
+  - Text: \`var(--ggui-color-onContainer)\` or \`var(--ggui-color-onSunken)\`
+  - Backgrounds: \`var(--ggui-color-container)\` or \`var(--ggui-color-sunken)\`
   - Borders: \`var(--ggui-color-outline)\` or \`var(--ggui-color-outlineVariant)\`
 - For branded elements use \`var(--ggui-color-primary-*)\` scale tokens — these ARE safe because primary adapts per theme.
-- For card backgrounds use \`var(--ggui-color-surfaceVariant)\` or \`var(--ggui-color-primary-50)\`
+- For card backgrounds use \`var(--ggui-color-container)\` or \`var(--ggui-color-primary-50)\`
 
 ## Spacing
 
@@ -165,7 +169,7 @@ Use \`var(--ggui-spacing-N)\` for all padding, gap, and margin values. **Never u
 \`\`\`
 
 ### Color usage guide
-- **Semantic roles** (surface, onSurface, container, outline): Use for all surface/text/border decisions — these adapt to any theme
+- **Layering roles** (ground, container, elevated, sunken + their on* inks; outline): one kind of AREA each — use them for every background/text/border decision; they adapt to any theme
 - **primary-50/100**: Section backgrounds, highlight strips, card headers
 - **primary-200/300**: Borders, dividers, focus rings, input outlines
 - **primary-500/600**: Icons, links, labels, badges, buttons, CTAs
@@ -174,7 +178,7 @@ Use \`var(--ggui-spacing-N)\` for all padding, gap, and margin values. **Never u
 
 The primary palette is the app's brand — use it throughout (headers, accents, borders, interactive elements), not just on the submit button.
 
-**Note:** Do NOT add fallback values to var() (e.g., var(--ggui-color-surface, #fafafa)). Just use var(--ggui-color-surface) — the theme provides all values.
+**Note:** Do NOT add fallback values to var() (e.g., var(--ggui-color-container, #fafafa)). Just use var(--ggui-color-container) — the theme provides all values.
 
 ## Motion & Animation
 

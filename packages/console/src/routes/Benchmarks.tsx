@@ -84,7 +84,7 @@ export function Benchmarks(): ReactElement {
                 flex: 1,
                 padding: '8px 10px',
                 fontFamily:
-                  'var(--ggui-font-mono, ui-monospace, monospace)',
+                  'var(--ggui-font-family-mono, ui-monospace, monospace)',
                 fontSize: 13,
                 border: '1px solid var(--ggui-rule)',
                 background: 'var(--ggui-paper)',

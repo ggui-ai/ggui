@@ -58,7 +58,40 @@ const SCAN_SURFACES = [
   { file: path.join(packagesRoot, 'ui-gen', 'src', 'design-system-docs.ts') },
   { dir: path.join(packagesRoot, 'ui-gen', 'src', 'boilerplate') },
   { dir: path.join(packagesRoot, 'ui-gen', 'src', 'fragments') },
+  // ggui#987 §6.2: every reader of a `--ggui-*` token is IN the scan —
+  // the served shells, the host helpers, the console, the triad legs.
+  { dir: path.join(packagesRoot, 'ui-gen', 'src', 'check') },
+  { dir: path.join(packagesRoot, 'ui-gen', 'src', 'adapters') },
+  { dir: path.join(packagesRoot, 'ui-gen', 'src', 'evaluation') },
+  { dir: path.join(packagesRoot, 'protocol', 'src', 'integrations') },
+  { dir: path.join(packagesRoot, 'mcp-server', 'src') },
+  { dir: path.join(packagesRoot, 'mcp-apps-react', 'src') },
+  { dir: path.join(packagesRoot, 'console', 'src') },
 ];
+
+/**
+ * The served shell's OWN pre-theme namespace (`--ggui-shell-*`: the
+ * scheme-scoped placeholder ground/ink the shell paints before the
+ * runtime injects a theme, and the host-set `--ggui-shell-background`).
+ * Read by the shells, never emitted by a theme — not a consumed token.
+ */
+const SHELL_NAMESPACE_RE = /^--ggui-shell-/;
+
+/**
+ * The theme vocabulary's families — a consumed token is
+ * `--ggui-<family>-…` with one of these families (the set the manifest
+ * carried before the ggui#987 scan widening; a new family is added here
+ * deliberately, in the same change as its first emitter). Anything else
+ * under the `--ggui-` prefix is a package's OWN custom property (the
+ * console app's chrome vocabulary in its `index.css`: `--ggui-paper`,
+ * `--ggui-ink`, `--ggui-rule`, …) — read and defined by that package,
+ * never by a theme, so never a consumed token.
+ */
+const THEME_FAMILIES = new Set(['color', 'font', 'letter', 'shape', 'spacing', 'flash']);
+function isThemeFamily(name) {
+  const family = name.split('-')[3];
+  return family !== undefined && THEME_FAMILIES.has(family);
+}
 
 function isTestFile(filePath) {
   const base = path.basename(filePath);
@@ -151,6 +184,7 @@ export function deriveConsumedTokens() {
         }
         continue;
       }
+      if (SHELL_NAMESPACE_RE.test(name) || !isThemeFamily(name)) continue;
       if (name.endsWith('-')) {
         // Wildcard / doc-fragment mention (`var(--ggui-color-*`): a
         // vocabulary pattern, not a concrete consumed token.

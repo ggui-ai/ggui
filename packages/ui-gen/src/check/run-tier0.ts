@@ -632,7 +632,7 @@ export async function runTier0Checks(
         subcategory: 'hardcoded-color-fn',
         severity: 'critical',
         description: `Hardcoded ${colorFnMatch[1]}() breaks theme switching — use design tokens.`,
-        fix: 'Replace with a primitive variant OR a semantic token: var(--ggui-color-surface), var(--ggui-color-onSurface), var(--ggui-color-outline), etc.',
+        fix: 'Replace with a primitive variant OR a layering role: var(--ggui-color-container), var(--ggui-color-onContainer), var(--ggui-color-outline), etc.',
         line: lineNum,
       });
     }
@@ -657,7 +657,7 @@ export async function runTier0Checks(
         subcategory: 'off-manifest-token',
         severity: 'critical',
         description: `Token "${name}" is not in the design system's token manifest — no theme defines it, so it renders unset.`,
-        fix: `Choose a token that exists: the closed vocabulary is the manifest the design-system docs list (colors: var(--ggui-color-primary-500), var(--ggui-color-onSurface), …; spacing: var(--ggui-spacing-4); type: var(--ggui-font-size-sm)). Never invent a name and never add a literal fallback.`,
+        fix: `Choose a token that exists: the closed vocabulary is the manifest the design-system docs list (colors: var(--ggui-color-primary-500), var(--ggui-color-onContainer), …; spacing: var(--ggui-spacing-4); type: var(--ggui-font-size-sm)). Never invent a name and never add a literal fallback.`,
         line: lineNum,
       });
     }
@@ -736,7 +736,7 @@ export async function runTier0Checks(
           subcategory: 'named-color',
           severity: 'critical',
           description: `Hardcoded CSS named color "${named}" breaks theme switching — use design tokens.`,
-          fix: `Replace with a typed slot (Text tone="muted" / Box surface="accent" / Badge variant="success") OR a semantic token: var(--ggui-color-onSurfaceVariant), var(--ggui-color-primary-500), etc. The keyword "${named}" maps to a fixed RGB; the operator's theme has no effect on it.`,
+          fix: `Replace with a typed slot (Text tone="muted" / Box surface="accent" / Badge variant="success") OR a semantic token: var(--ggui-color-onSunken), var(--ggui-color-primary-500), etc. The keyword "${named}" maps to a fixed RGB; the operator's theme has no effect on it.`,
           line: lineNum,
         });
       }

@@ -243,7 +243,7 @@ function PayloadCard({
       >
         <span
           className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
+          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-family-mono)' }}
         >
           {time}
         </span>
@@ -252,17 +252,17 @@ function PayloadCard({
             fontSize: 11,
             padding: '0 6px',
             border: '1px solid var(--ggui-rule)',
-            fontFamily: 'var(--ggui-font-mono)',
+            fontFamily: 'var(--ggui-font-family-mono)',
           }}
         >
           {directionLabel}
         </span>
-        <span style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}>
+        <span style={{ fontFamily: 'var(--ggui-font-family-mono)', fontSize: 12 }}>
           {event.tool}
         </span>
         <span
           className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
+          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-family-mono)' }}
         >
           {renderShort}
         </span>
@@ -295,7 +295,7 @@ function PayloadDetail({
       <Section label="session">
         <span
           className="ggui-muted"
-          style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}
+          style={{ fontFamily: 'var(--ggui-font-family-mono)', fontSize: 12 }}
         >
           {event.sessionId} · app {event.appId}
         </span>
@@ -320,7 +320,7 @@ function Section({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: 'var(--ggui-font-mono)',
+          fontFamily: 'var(--ggui-font-family-mono)',
           textTransform: 'uppercase',
           marginBottom: 4,
         }}
@@ -360,7 +360,7 @@ const preStyle: React.CSSProperties = {
   padding: 8,
   background: 'var(--ggui-paper-2, #efeee8)',
   border: '1px solid var(--ggui-rule)',
-  fontFamily: 'var(--ggui-font-mono)',
+  fontFamily: 'var(--ggui-font-family-mono)',
   fontSize: 12,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',

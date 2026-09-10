@@ -36,7 +36,7 @@ export default function Component(props: Props) {
   const [open, setOpen] = useState(false);
   const items = props.items ?? [];
   return (
-    <section className="root" style={{ width: '100%', padding: '20px', background: 'var(--ggui-color-surface)', color: 'var(--ggui-color-onSurface)' }}>
+    <section className="root" style={{ width: '100%', padding: '20px', background: 'var(--ggui-color-ground)', color: 'var(--ggui-color-onGround)' }}>
       <style>{\`
         .root { font-family: var(--ggui-font-family-sans); border-radius: 14px; }
         .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
