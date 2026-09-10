@@ -67,8 +67,45 @@ describe('readCellInputs (cloud #975 export: compiled.js, source.tsx, contract.j
     expect(inputs.evalResult).toBeUndefined();
   });
 
-  it('names the cause when the mint exported commitRef: null (MINT_COMMIT_REF unset) — the eval cannot pick a prompt', () => {
-    expect(() => readCellInputs(cellDir({ commit: null }))).toThrow(/MINT_COMMIT_REF/);
+  it('a bootstrap cell (commitRef null) without judge-input.json is loud — no prompt to judge', () => {
+    expect(() => readCellInputs(cellDir({ commit: null }))).toThrow(/judge-input\.json/);
+  });
+
+  it('a bootstrap cell reads judge-input.json: prompt, sample props (propsSource cell), the matrix arm when the model is one', () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'Make me a hello card', sampleProps: { name: 'Gemma' } }));
+    const inputs = readCellInputs(dir);
+    expect(inputs.bootstrap).toBe(true);
+    expect(inputs.prompt).toBe('Make me a hello card');
+    expect(inputs.sampleProps).toEqual({ name: 'Gemma' });
+    expect(inputs.propsSource).toBe('cell');
+    expect(inputs.commit.id).toBe('bootstrap');
+    expect(inputs.variant.id).toBe('openai-frontier');
+  });
+
+  it('a bootstrap cell on a model outside the matrix records the model verbatim on a synthetic bootstrap variant; no sample props = empty', () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'mint.json'), JSON.stringify({ cellId: 'c1', runId: 'r1', arm: 'A', model: 'anthropic/claude-haiku-4-5-20251001', tokens: { input: 1, output: 1 }, latencyMs: 1, generationTimeMs: 1, turnsUsed: 1, passesUsed: 1, designMode: 'constrained', canvas: null }));
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'Hello' }));
+    const inputs = readCellInputs(dir);
+    expect(inputs.variant).toEqual({ id: 'bootstrap', sdkName: 'claude', tier: 'balanced', modelId: 'anthropic/claude-haiku-4-5-20251001' });
+    expect(inputs.propsSource).toBe('empty');
+    expect(inputs.sampleProps).toBeUndefined();
+  });
+
+  it('judge-input.json must carry a non-empty prompt and an object for sampleProps', () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: '' }));
+    expect(() => readCellInputs(dir)).toThrow(/non-empty string "prompt"/);
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', sampleProps: [1] }));
+    expect(() => readCellInputs(dir)).toThrow(/"sampleProps" must be a JSON object/);
+  });
+
+  it('a corpus cell is unchanged: the commit prompt and props, propsSource commit, bootstrap false', () => {
+    const inputs = readCellInputs(cellDir());
+    expect(inputs.bootstrap).toBe(false);
+    expect(inputs.prompt).toBe(commitForRef('weather-card').prompt);
+    expect(inputs.propsSource).toBe(commitForRef('weather-card').props !== undefined ? 'commit' : 'empty');
   });
 
   it('reads cloud\'s mint.json fields as named (tokens input/output, keySource, mintMs)', () => {
@@ -250,5 +287,29 @@ describe('mint receipt on the row', () => {
   it('the absent-receipt note is one exported sentence the eval-cell script and the tests share', () => {
     expect(MINT_RECEIPT_ABSENT_NOTE).toMatch(/mint receipt absent/);
     expect(MINT_RECEIPT_ABSENT_NOTE).toMatch(/MINT_\* env/);
+  });
+});
+
+describe('propsSource on the row', () => {
+  it('a bootstrap cell stamps propsSource "cell" and the bootstrap note; the judge receives the judge-input prompt and props', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'Make me a hello card', sampleProps: { name: 'Gemma' } }));
+    let seen: { originalPrompt: string; sampleProps?: unknown } | undefined;
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visual: async (ctx) => { seen = { originalPrompt: ctx.originalPrompt, sampleProps: ctx.sampleProps }; return null; },
+    });
+    expect(report.meta.propsSource).toBe('cell');
+    expect(report.meta.notes.some((n) => n.startsWith('bootstrap cell, no corpus'))).toBe(true);
+    expect(seen).toEqual({ originalPrompt: 'Make me a hello card', sampleProps: { name: 'Gemma' } });
+  });
+
+  it('a corpus cell stamps propsSource "commit" (or "empty" with the note when the commit has no props) and no bootstrap note', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel });
+    const hasProps = commitForRef('weather-card').props !== undefined;
+    expect(report.meta.propsSource).toBe(hasProps ? 'commit' : 'empty');
+    expect(report.meta.notes.some((n) => n.startsWith('no sample props'))).toBe(!hasProps);
+    expect(report.meta.notes.some((n) => n.startsWith('bootstrap cell'))).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import type { BenchmarkRunResultDisplay } from '@ggui-ai/shared';
 import { BENCHMARK_COMMITS } from '../multi-sdk/commits.js';
 import { getDefaultVariants } from '../multi-sdk/variants.js';
 import type { BenchmarkCommit, BenchmarkRunResult, BenchmarkVariant } from '../multi-sdk/types.js';
+import type { ProviderName } from '@ggui-ai/ui-gen/adapters/types';
 import { DEFAULT_GENERATOR_SLUG, REPORT_SCHEMA_VERSION } from '../multi-sdk/types.js';
 import { runContractBehaviorCheck } from '../multi-sdk/contract-behavior.js';
 import { deriveRuntimeProbeVerdict, type RuntimeProbeVerdict } from '../multi-sdk/runtime-probe.js';
@@ -83,11 +84,35 @@ export interface ContractJson {
   readonly commitRef: string | null;
 }
 
+/** Where the judge's sample props came from — stamped on the row so a receipt says in words whether the score is on the sample or the empty state. */
+export type PropsSource = 'cell' | 'commit' | 'empty';
+
+/**
+ * A bootstrap cell's judge input — the mint exports it beside contract.json
+ * when the cell has no corpus commit (the prompt is the visitor's request, not a
+ * corpus row). File-level contract shared with the exporter: `judge-input.json`.
+ */
+export interface BootstrapJudgeInput {
+  readonly prompt: string;
+  readonly sampleProps?: JsonObject;
+}
+export const JUDGE_INPUT_FILE = 'judge-input.json';
+export const BOOTSTRAP_NOTE =
+  'bootstrap cell, no corpus — prompt and sample props read from judge-input.json; variant.id "bootstrap" is synthetic when the model is not a matrix arm';
+export const EMPTY_PROPS_NOTE = 'no sample props — the judge and the behaviour check rendered the empty state';
+
 export interface CellInputs {
   readonly dir: string;
   readonly mint: MintJson;
   readonly commit: BenchmarkCommit;
   readonly variant: BenchmarkVariant;
+  /** The prompt the judges score against — the corpus commit's, or the bootstrap cell's judge-input.json. */
+  readonly prompt: string;
+  /** The sample props the judges and the behaviour check render with (see `propsSource`). */
+  readonly sampleProps?: JsonObject;
+  readonly propsSource: PropsSource;
+  /** True when the cell has no corpus commit (contract.json.commitRef === null). */
+  readonly bootstrap: boolean;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -114,13 +139,64 @@ export function variantForModel(modelId: string): BenchmarkVariant {
   return variant;
 }
 
-function requireCommitRef(ref: string | null): string {
-  if (ref === null) {
+function isJsonObject(value: unknown): value is JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Loud on a missing or malformed judge-input.json — a bootstrap cell without it has no prompt to judge. */
+export function readJudgeInput(dir: string): BootstrapJudgeInput {
+  const path = join(dir, JUDGE_INPUT_FILE);
+  if (!existsSync(path)) {
     throw new Error(
-      'eval-cell: contract.json.commitRef is null — the mint task ran without MINT_COMMIT_REF, so the eval cannot pick a prompt',
+      `eval-cell: contract.json.commitRef is null (a bootstrap cell, no corpus) and ${JUDGE_INPUT_FILE} is missing — the mint must export { prompt, sampleProps? } beside contract.json (in ${dir})`,
     );
   }
-  return ref;
+  const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  if (!isJsonObject(raw) || typeof raw.prompt !== 'string' || raw.prompt.trim().length === 0) {
+    throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} must carry a non-empty string "prompt" (in ${dir})`);
+  }
+  if (raw.sampleProps !== undefined && !isJsonObject(raw.sampleProps)) {
+    throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "sampleProps" must be a JSON object when present (in ${dir})`);
+  }
+  return { prompt: raw.prompt, ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}) };
+}
+
+/** The provider a model ref belongs to, in the matrix's vocabulary — loud for a prefix the matrix does not know. */
+export function providerOfModel(modelId: string): ProviderName {
+  const prefix = modelId.includes('/') ? modelId.slice(0, modelId.indexOf('/')) : modelId;
+  switch (prefix) {
+    case 'anthropic':
+    case 'claude':
+      return 'claude';
+    case 'openai':
+      return 'openai';
+    case 'google':
+    case 'gemini':
+      return 'google';
+    case 'openrouter':
+      return 'openrouter';
+    default:
+      throw new Error(`eval-cell: model '${modelId}' has no provider the matrix knows (prefix '${prefix}')`);
+  }
+}
+
+/** A bootstrap cell's variant: the matrix arm when the model is one, else a synthetic 'bootstrap' arm carrying the model verbatim. */
+export function bootstrapVariant(modelId: string): BenchmarkVariant {
+  const arm = getDefaultVariants().find((v) => v.modelId === modelId);
+  return arm ?? { id: 'bootstrap', sdkName: providerOfModel(modelId), tier: 'balanced', modelId };
+}
+
+/** A bootstrap cell's commit: the judge input as the row's prompt/props, the exported contract as its contract. */
+export function bootstrapCommit(judge: BootstrapJudgeInput, contract: DataContract): BenchmarkCommit {
+  return {
+    id: 'bootstrap',
+    name: 'bootstrap cell (no corpus)',
+    description: 'The prompt is the visitor request from judge-input.json, not a corpus row.',
+    complexity: 'medium',
+    prompt: judge.prompt,
+    contract,
+    ...(judge.sampleProps !== undefined ? { props: judge.sampleProps } : {}),
+  };
 }
 
 function readRequired(dir: string, name: string): string {
@@ -136,11 +212,23 @@ export function readCellInputs(dir: string): CellInputs {
   const sourceCode = readRequired(dir, 'source.tsx');
   const evalPath = join(dir, 'eval.json');
   const evalResult: EvalResult | undefined = existsSync(evalPath) ? JSON.parse(readFileSync(evalPath, 'utf8')) : undefined;
+  // A null commitRef is a bootstrap cell (no corpus): its prompt and props come
+  // from judge-input.json and become the row's commit; otherwise the corpus row.
+  const ref = contractJson.commitRef;
+  const bootstrap = ref === null;
+  const commit = ref === null ? bootstrapCommit(readJudgeInput(dir), contractJson.contract) : commitForRef(ref);
+  const variant = bootstrap ? bootstrapVariant(mint.model) : variantForModel(mint.model);
+  const sampleProps = commit.props;
+  const propsSource: PropsSource = sampleProps !== undefined ? (bootstrap ? 'cell' : 'commit') : 'empty';
   return {
     dir,
     mint,
-    commit: commitForRef(requireCommitRef(contractJson.commitRef)),
-    variant: variantForModel(mint.model),
+    commit,
+    variant,
+    prompt: commit.prompt,
+    ...(sampleProps !== undefined ? { sampleProps } : {}),
+    propsSource,
+    bootstrap,
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -249,6 +337,8 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly runId: string;
     readonly arm: string;
     readonly codeHash?: string;
+    /** Where the judges' sample props came from: the cell's judge-input.json, the corpus commit, or nothing (empty state). */
+    readonly propsSource: PropsSource;
     /** Image the cell was MINTED on (from the mint task via the driver's manifest). */
     readonly mintImage?: { readonly image: string; readonly digest?: string };
     /** Source sha the mint image was built from, as declared by the operator with the run. */
@@ -276,6 +366,8 @@ const panelFor = (kind: PanelPrompt): PanelJudge => (sourceCode, prompt, contrac
 /** Run every EVAL-side judge for one cell and write `report.json` (+ PNGs) into `deps.dir`. */
 export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Promise<CellReport> {
   const notes: string[] = [];
+  if (inputs.bootstrap) notes.push(BOOTSTRAP_NOTE);
+  if (inputs.propsSource === 'empty') notes.push(EMPTY_PROPS_NOTE);
   if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);
   const now = deps.now ?? (() => new Date());
 
@@ -283,7 +375,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   const contractBehavior = await runContractBehaviorCheck({
     compiledCode: inputs.compiledCode,
     contract: inputs.contract,
-    ...(inputs.commit.props !== undefined ? { sampleProps: inputs.commit.props } : {}),
+    ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
     playwright: deps.playwright,
     ...(deps.contractTimeoutMs !== undefined ? { timeoutMs: deps.contractTimeoutMs } : {}),
   });
@@ -294,7 +386,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
 
   const t1 = Date.now();
   const panelPrompt: PanelPrompt = deps.panelPrompt ?? 'arm-neutral';
-  const panel = await (deps.panel ?? panelFor(panelPrompt))(inputs.sourceCode, inputs.commit.prompt, inputs.contract);
+  const panel = await (deps.panel ?? panelFor(panelPrompt))(inputs.sourceCode, inputs.prompt, inputs.contract);
   const panelMs = Date.now() - t1;
   if (panel === null) notes.push('aesthetic panel returned null (no judge survived)');
 
@@ -307,9 +399,9 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   } else {
     const outcome = await deps.visual({
       compiledCode: inputs.compiledCode,
-      originalPrompt: inputs.commit.prompt,
+      originalPrompt: inputs.prompt,
       contract: inputs.contract,
-      ...(inputs.commit.props !== undefined ? { sampleProps: inputs.commit.props } : {}),
+      ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
     });
     visualOutcome = outcome;
     if (outcome === null) {
@@ -384,6 +476,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       runId: mint.runId,
       arm: mint.arm,
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
+      propsSource: inputs.propsSource,
       ...(deps.mintReceipt
         ? {
             mintImage: {
