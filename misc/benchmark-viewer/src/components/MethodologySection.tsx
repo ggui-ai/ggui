@@ -62,6 +62,21 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-10',
+    text:
+      'Instrument reading, not a score change: the contract-behaviour check ' +
+      'introduced with benchmark-report.v2 reads "action-not-rendered" on 53 of ' +
+      'the 55 action-commit cells of the 2026-09-10 run, near-identically across ' +
+      'all 11 arms and three providers. That uniformity is the validator, not the ' +
+      'models: it locates the control by the action label\'s text and never ' +
+      'clicks unnamed controls (issue #996; fix mirrors the harness\'s own ' +
+      '"click every clickable, judge by the observed dispatch" rule). The column ' +
+      'is not rendered on this page; it is present, self-described by kind and ' +
+      'diagnostic, in the public report JSON. Treat it as an instrument reading ' +
+      'until an entry here announces the fix. Quality scores, the corpus, the ' +
+      'judge panel and every arm are unaffected; history is not rewritten.',
+  },
+  {
     date: '2026-09-09',
     text:
       'Matrix: an OpenAI frontier arm added — openai-frontier = GPT-6 astra ' +
