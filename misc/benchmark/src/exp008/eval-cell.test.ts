@@ -345,3 +345,25 @@ describe('generation profile on a bootstrap cell', () => {
     expect('profile' in report.meta).toBe(false);
   });
 });
+
+describe('the visual judge says why it could not judge', () => {
+  it('an unavailability from the judge is stamped on the row (reason + canvas) and named in the notes; no visual score', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visual: async () => ({ unavailableReason: "screenshot failed: Cannot find package 'puppeteer-core'", canvas: 'xs-chat-card' }),
+    });
+    expect(report.meta.visualUnavailableReason).toBe("screenshot failed: Cannot find package 'puppeteer-core'");
+    expect(report.meta.visualUnavailableCanvas).toBe('xs-chat-card');
+    expect(report.meta.visual).toBeUndefined();
+    expect(report.meta.notes.some((n) => n.includes("visual judge unavailable — screenshot failed: Cannot find package 'puppeteer-core' (canvas xs-chat-card)"))).toBe(true);
+    expect(report.meta.costs.visualUsd).toBe(0);
+  });
+
+  it('a judge that answers null keeps the old note and stamps no reason', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel, visual: async () => null });
+    expect(report.meta.visualUnavailableReason).toBeUndefined();
+    expect(report.meta.notes).toContain('visual judge returned null');
+  });
+});

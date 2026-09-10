@@ -299,6 +299,15 @@ export function toVisualOutcome(r: VisualEvaluationResult | null): VisualOutcome
 }
 
 export type PanelJudge = (sourceCode: string, prompt: string, contract: DataContract) => Promise<PanelEvalResult | null>;
+/** Why the visual judge could not judge — the launcher, the in-page render or the screenshot failed (reason verbatim), at which canvas when known. */
+export interface VisualUnavailable {
+  readonly unavailableReason: string;
+  readonly canvas?: string;
+}
+export function isVisualUnavailable(v: VisualOutcome | VisualUnavailable | null): v is VisualUnavailable {
+  return v !== null && 'unavailableReason' in v;
+}
+
 export type VisualJudge = (ctx: {
   compiledCode: string;
   originalPrompt: string;
@@ -307,7 +316,7 @@ export type VisualJudge = (ctx: {
   contract: DataContract;
   /** The commit's fixture props — what the harness passes the judge (`runner.ts:423`). */
   sampleProps?: JsonObject;
-}) => Promise<VisualOutcome | null>;
+}) => Promise<VisualOutcome | VisualUnavailable | null>;
 
 /**
  * The visual judge's identity — FIXED across arms and models (rnd §5b): never
@@ -372,6 +381,9 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly propsSource: PropsSource;
     /** The generation profile the visual judge was told to score against, verbatim — absent when the cell carried none. */
     readonly profile?: AppGenerationProfile;
+    /** Why the visual judge could not judge (verbatim from the judge), and at which canvas — present only when it could not. */
+    readonly visualUnavailableReason?: string;
+    readonly visualUnavailableCanvas?: string;
     /** Image the cell was MINTED on (from the mint task via the driver's manifest). */
     readonly mintImage?: { readonly image: string; readonly digest?: string };
     /** Source sha the mint image was built from, as declared by the operator with the run. */
@@ -426,6 +438,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   let visual: CellReport['meta']['visual'];
   let visualCanvases: VisualCanvasArtefact[] | undefined;
   let visualOutcome: VisualOutcome | null = null;
+  let visualUnavailable: VisualUnavailable | undefined;
   const t2 = Date.now();
   if (!deps.visual) {
     notes.push('visual judge not configured');
@@ -437,10 +450,13 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
     });
-    visualOutcome = outcome;
-    if (outcome === null) {
+    if (isVisualUnavailable(outcome)) {
+      visualUnavailable = outcome;
+      notes.push(`visual judge unavailable — ${outcome.unavailableReason}${outcome.canvas ? ` (canvas ${outcome.canvas})` : ''}`);
+    } else if (outcome === null) {
       notes.push('visual judge returned null');
     } else {
+      visualOutcome = outcome;
       visual = { score: outcome.score, passed: outcome.passed };
       if (outcome.canvases && outcome.canvases.length > 0) {
         visualCanvases = persistCanvasScreenshots(deps.dir, outcome.canvases);
@@ -512,6 +528,12 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
       propsSource: inputs.propsSource,
       ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
+      ...(visualUnavailable !== undefined
+        ? {
+            visualUnavailableReason: visualUnavailable.unavailableReason,
+            ...(visualUnavailable.canvas !== undefined ? { visualUnavailableCanvas: visualUnavailable.canvas } : {}),
+          }
+        : {}),
       ...(deps.mintReceipt
         ? {
             mintImage: {

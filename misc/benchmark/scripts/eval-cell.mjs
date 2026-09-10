@@ -91,20 +91,26 @@ async function main() {
   // never one of the models under test judging itself. Runs ui-gen's
   // runVisualEvaluation directly on the minted compiled.js, once per canvas
   // class; the PNGs it returns are persisted beside source.tsx by the core.
-  // A judge that cannot run (no browser, no key) returns null → recorded in
-  // report.meta.notes, never a silent pass.
+  // A judge that cannot run (no browser, no key, a bundle that fails) says WHY:
+  // the detailed judge carries { unavailableReason, canvas } and the row stamps
+  // it (report.meta.visualUnavailableReason) — never a silent pass, never a
+  // bare null when a reason exists.
   const visual = visualEnabled
     ? async ({ compiledCode, originalPrompt, sampleProps, profile }) => {
-        const { runVisualEvaluation, CANVAS_CLASSES } = await import('@ggui-ai/ui-gen/evaluation');
+        const { runVisualEvaluationDetailed, CANVAS_CLASSES } = await import('@ggui-ai/ui-gen/evaluation');
         try {
-          const r = await runVisualEvaluation(
+          const d = await runVisualEvaluationDetailed(
             { compiledCode, originalPrompt, ...(profile ? { profile } : {}) },
             { ...VISUAL_JUDGE, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
           );
-          return toVisualOutcome(r);
+          if (d.result !== null) return toVisualOutcome(d.result);
+          const unavailableReason = d.unavailableReason ?? 'visual judge returned no result and no reason';
+          console.error(`[eval-cell] visual judge unavailable: ${unavailableReason}${d.canvas ? ` (canvas ${d.canvas})` : ''}`);
+          return { unavailableReason, ...(d.canvas ? { canvas: d.canvas } : {}) };
         } catch (err) {
-          console.error(`[eval-cell] visual judge threw: ${err instanceof Error ? err.message : String(err)}`);
-          return null;
+          const unavailableReason = `visual judge threw: ${err instanceof Error ? err.message : String(err)}`;
+          console.error(`[eval-cell] ${unavailableReason}`);
+          return { unavailableReason };
         }
       }
     : undefined;
