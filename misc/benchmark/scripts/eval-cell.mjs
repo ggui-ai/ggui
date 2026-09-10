@@ -94,11 +94,11 @@ async function main() {
   // A judge that cannot run (no browser, no key) returns null → recorded in
   // report.meta.notes, never a silent pass.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps }) => {
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile }) => {
         const { runVisualEvaluation, CANVAS_CLASSES } = await import('@ggui-ai/ui-gen/evaluation');
         try {
           const r = await runVisualEvaluation(
-            { compiledCode, originalPrompt },
+            { compiledCode, originalPrompt, ...(profile ? { profile } : {}) },
             { ...VISUAL_JUDGE, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
           );
           return toVisualOutcome(r);

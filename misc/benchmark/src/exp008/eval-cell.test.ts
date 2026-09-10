@@ -313,3 +313,35 @@ describe('propsSource on the row', () => {
     expect(report.meta.notes.some((n) => n.startsWith('bootstrap cell'))).toBe(false);
   });
 });
+
+describe('generation profile on a bootstrap cell', () => {
+  it('judge-input.json.profile is validated by the protocol schema, read onto the inputs, forwarded to the visual judge and stamped on the row', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'Hello card', profile: { styling: 'warm, editorial', density: 'airy' } }));
+    const inputs = readCellInputs(dir);
+    expect(inputs.profile).toEqual({ styling: 'warm, editorial', density: 'airy' });
+    let seen: unknown = 'not called';
+    const report = await evaluateCell(inputs, { dir, playwright: neverLaunch, panel, visual: async (ctx) => { seen = ctx.profile; return null; } });
+    expect(seen).toEqual({ styling: 'warm, editorial', density: 'airy' });
+    expect(report.meta.profile).toEqual({ styling: 'warm, editorial', density: 'airy' });
+  });
+
+  it('a profile the schema refuses is loud (unknown member, non-text member)', () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', profile: { palette: 'blue' } }));
+    expect(() => readCellInputs(dir)).toThrow(/"profile" is not a generation profile/);
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', profile: { styling: 42 } }));
+    expect(() => readCellInputs(dir)).toThrow(/"profile" is not a generation profile/);
+  });
+
+  it('absent profile = today\'s path: no profile on the inputs, no profile key handed to the judge, none on the row', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x' }));
+    const inputs = readCellInputs(dir);
+    expect('profile' in inputs).toBe(false);
+    let keys: string[] = [];
+    const report = await evaluateCell(inputs, { dir, playwright: neverLaunch, panel, visual: async (ctx) => { keys = Object.keys(ctx); return null; } });
+    expect(keys).not.toContain('profile');
+    expect('profile' in report.meta).toBe(false);
+  });
+});

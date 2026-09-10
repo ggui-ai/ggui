@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DataContract, JsonObject } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject, AppGenerationProfile } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
@@ -95,6 +96,8 @@ export type PropsSource = 'cell' | 'commit' | 'empty';
 export interface BootstrapJudgeInput {
   readonly prompt: string;
   readonly sampleProps?: JsonObject;
+  /** The app's generation profile (styling / density / layout), when the app row carries one — the judge scores against it. */
+  readonly profile?: AppGenerationProfile;
 }
 export const JUDGE_INPUT_FILE = 'judge-input.json';
 export const BOOTSTRAP_NOTE =
@@ -113,6 +116,8 @@ export interface CellInputs {
   readonly propsSource: PropsSource;
   /** True when the cell has no corpus commit (contract.json.commitRef === null). */
   readonly bootstrap: boolean;
+  /** The app's generation profile from judge-input.json — absent on corpus cells and on bootstrap cells whose app carries none. */
+  readonly profile?: AppGenerationProfile;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -158,7 +163,21 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
   if (raw.sampleProps !== undefined && !isJsonObject(raw.sampleProps)) {
     throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "sampleProps" must be a JSON object when present (in ${dir})`);
   }
-  return { prompt: raw.prompt, ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}) };
+  let profile: AppGenerationProfile | undefined;
+  if (raw.profile !== undefined) {
+    const parsed = appGenerationProfileSchema.safeParse(raw.profile);
+    if (!parsed.success) {
+      throw new Error(
+        `eval-cell: ${JUDGE_INPUT_FILE} "profile" is not a generation profile — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
+      );
+    }
+    profile = parsed.data;
+  }
+  return {
+    prompt: raw.prompt,
+    ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
+    ...(profile !== undefined ? { profile } : {}),
+  };
 }
 
 /** The provider a model ref belongs to, in the matrix's vocabulary — loud for a prefix the matrix does not know. */
@@ -216,7 +235,16 @@ export function readCellInputs(dir: string): CellInputs {
   // from judge-input.json and become the row's commit; otherwise the corpus row.
   const ref = contractJson.commitRef;
   const bootstrap = ref === null;
-  const commit = ref === null ? bootstrapCommit(readJudgeInput(dir), contractJson.contract) : commitForRef(ref);
+  let commit: BenchmarkCommit;
+  let profile: AppGenerationProfile | undefined;
+  if (ref === null) {
+    const judge = readJudgeInput(dir);
+    commit = bootstrapCommit(judge, contractJson.contract);
+    profile = judge.profile;
+  } else {
+    commit = commitForRef(ref);
+    profile = undefined;
+  }
   const variant = bootstrap ? bootstrapVariant(mint.model) : variantForModel(mint.model);
   const sampleProps = commit.props;
   const propsSource: PropsSource = sampleProps !== undefined ? (bootstrap ? 'cell' : 'commit') : 'empty';
@@ -229,6 +257,7 @@ export function readCellInputs(dir: string): CellInputs {
     ...(sampleProps !== undefined ? { sampleProps } : {}),
     propsSource,
     bootstrap,
+    ...(profile !== undefined ? { profile } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -273,6 +302,8 @@ export type PanelJudge = (sourceCode: string, prompt: string, contract: DataCont
 export type VisualJudge = (ctx: {
   compiledCode: string;
   originalPrompt: string;
+  /** The app's generation profile, when the cell carries one — the judge scores against it (absent = today's path). */
+  profile?: AppGenerationProfile;
   contract: DataContract;
   /** The commit's fixture props — what the harness passes the judge (`runner.ts:423`). */
   sampleProps?: JsonObject;
@@ -339,6 +370,8 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly codeHash?: string;
     /** Where the judges' sample props came from: the cell's judge-input.json, the corpus commit, or nothing (empty state). */
     readonly propsSource: PropsSource;
+    /** The generation profile the visual judge was told to score against, verbatim — absent when the cell carried none. */
+    readonly profile?: AppGenerationProfile;
     /** Image the cell was MINTED on (from the mint task via the driver's manifest). */
     readonly mintImage?: { readonly image: string; readonly digest?: string };
     /** Source sha the mint image was built from, as declared by the operator with the run. */
@@ -400,6 +433,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
     const outcome = await deps.visual({
       compiledCode: inputs.compiledCode,
       originalPrompt: inputs.prompt,
+      ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
     });
@@ -477,6 +511,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       arm: mint.arm,
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
       propsSource: inputs.propsSource,
+      ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
       ...(deps.mintReceipt
         ? {
             mintImage: {
