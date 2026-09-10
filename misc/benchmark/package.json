@@ -54,6 +54,7 @@
     "@ggui-ai/ui-gen": "workspace:*",
     "@ggui-ai/ui-visual-tester": "workspace:*",
     "playwright-core": "^1.62.1",
+    "puppeteer-core": "^25.6.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
