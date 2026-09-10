@@ -47,7 +47,8 @@
  *         loop is empty today.)
  *      l. Record the outcome via reporter + accumulate in result.
  *   3. Fold in the PURE-FUNCTION catalogs (ggui#786) —
- *      `refusal-envelope`, `registry-completeness` and `transport-refusal`. They grade a
+ *      `refusal-envelope`, `registry-completeness`, `transport-refusal`,
+ *      `domain-error` and `theme-binding` (ggui#987). They grade a
  *      caller-supplied projector / registry rather than the wire, so
  *      they need no transport; when the caller supplies neither, their
  *      rows are reported SKIPPED with that reason so an ungraded
@@ -100,6 +101,7 @@ import {
   type ProjectedTransportRefusal,
   type TransportRefusalInput,
 } from './transport-refusal-conformance/index.js';
+import { runThemeBindingConformance } from './theme-binding-conformance/index.js';
 import {
   domainErrorCases,
   runDomainErrorConformance,
@@ -187,6 +189,7 @@ export const PURE_FUNCTION_CATALOG_SLUGS = [
   'registry-completeness',
   'transport-refusal',
   'domain-error',
+  'theme-binding',
 ] as const;
 
 /** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
@@ -426,6 +429,26 @@ async function runPureFunctionCatalogs(
         expected: mismatch.description,
         received: mismatch.violations,
         message: `${String(mismatch.violations.length)} row(s) violate this pin`,
+      });
+    }
+  }
+
+  // ── theme-binding (ggui#987) ──
+  // The theming wave's arbiter: graded against the protocol's own functions
+  // (`appThemeSchema`, `effectiveThemeMode`, `canonicalOverlayHash`), so
+  // there is no adopter input to supply and no reason to skip — every run
+  // reports it. `only` still selects rows.
+  for (const graded of await runThemeBindingConformance()) {
+    const name = `theme-binding/${graded.name}`;
+    if (graded.pass) {
+      pass(name);
+    } else {
+      fail({
+        name,
+        criterion: 'theme binding (SPEC "Theme binding — the normative total order", ggui#987)',
+        expected: 'the case\u2019s expectation',
+        received: graded.detail,
+        message: graded.detail,
       });
     }
   }

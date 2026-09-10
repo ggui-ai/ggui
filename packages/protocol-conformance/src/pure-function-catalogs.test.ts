@@ -42,6 +42,11 @@ import {
   type RawToolCallResult,
   type ToolCallScenario,
 } from './domain-error-conformance/index.js';
+import {
+  APP_THEME_CASES,
+  OVERLAY_HASH_CASES,
+  THEME_MODE_CASES,
+} from './theme-binding-conformance/index.js';
 import * as kit from './index.js';
 
 /**
@@ -69,6 +74,10 @@ const REGISTRY_ROWS = registryCompletenessPins.map(
 const TRANSPORT_ROWS = transportRefusalCases.map((c) => `transport-refusal/${c.name}`);
 /** Row names the domain-error catalog contributes (ggui#880). */
 const DOMAIN_ROWS = domainErrorCases.map((c) => `domain-error/${c.name}`);
+/** Row names the theme-binding catalog contributes (ggui#987) — no adopter input, graded on every run. */
+const THEME_ROWS = [...THEME_MODE_CASES, ...APP_THEME_CASES, ...OVERLAY_HASH_CASES].map(
+  (c) => `theme-binding/${c.name}`,
+);
 
 /** A conformant tools/call driver, built from the catalog's own cases. */
 function catalogToolCallDriver(scenario: ToolCallScenario): RawToolCallResult | null {
@@ -190,7 +199,7 @@ describe('runConformance — pure-function catalog fold', () => {
 
   it('prints every pure-function catalog on the scorecard, skipped rows included', async () => {
     const result = await run({
-      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS],
+      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS, ...THEME_ROWS],
     });
     const scorecard = formatScorecard(result);
     for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
@@ -302,5 +311,27 @@ describe('runConformance — domain-error catalog: `only` gates the DRIVE, and t
     expect(typeof kit.runDomainErrorConformance).toBe('function');
     expect(typeof kit.isRawToolCallResult).toBe('function');
     expect(kit.domainErrorCases.length).toBe(6);
+  });
+});
+
+describe('theme-binding catalog fold (ggui#987)', () => {
+  it('is a named pure-function catalog', () => {
+    expect(PURE_FUNCTION_CATALOG_SLUGS).toContain('theme-binding');
+  });
+
+  it('grades the 13 theme-binding cases on every run — no input to supply, never skipped', async () => {
+    expect(THEME_ROWS).toHaveLength(13);
+    const result = await run({ only: THEME_ROWS });
+    expect(result.failed).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect([...result.passed].sort()).toEqual([...THEME_ROWS].sort());
+  });
+
+  it('honours `only` — a single theme-binding row is graded alone', async () => {
+    const one = 'theme-binding/app-theme-v2-platform-pin';
+    const result = await run({ only: [one] });
+    expect(result.passed).toEqual([one]);
+    expect(result.failed).toEqual([]);
+    expect(result.skipped).toEqual([]);
   });
 });
