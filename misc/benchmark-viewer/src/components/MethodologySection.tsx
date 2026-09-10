@@ -82,8 +82,11 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'beneath it the same day: the check rendered each component with NO ' +
       'props, so a board or list that draws its controls from props was empty ' +
       'and had nothing to click; it now renders with the commit\'s fixture ' +
-      'props — the same props the visual judge receives. The column reads as ' +
-      'a measurement again from the first run on a runner image carrying both ' +
+      'props — the same props the visual judge receives — and re-collects the ' +
+      'live controls after every click, because a filter or an opened editor ' +
+      're-renders the tree and a control found earlier may no longer exist. The ' +
+      'column reads as a measurement again from the first run on a runner ' +
+      'image carrying these ' +
       'fixes — the change-triggered run that follows their landing; that ' +
       'run\'s row will show the new source hash.',
   },
