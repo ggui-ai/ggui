@@ -169,6 +169,26 @@ const EXPECTED_PASSING = [
   'registry-completeness/code-equals-key',
   'registry-completeness/retry-in-closed-set',
   'registry-completeness/surfaces-non-empty',
+  // The `theme-binding` catalog (ggui#987) — the theming wave's arbiter,
+  // folded into the runner as a pure-function catalog. These 13 rows
+  // grade the protocol's own functions (`appThemeSchema`,
+  // `effectiveThemeMode`, `canonicalOverlayHash`), not any server
+  // behaviour, so they need no input and a vendor-neutral server passes
+  // them by construction; they are named here because the pass set is
+  // exact by design.
+  'theme-binding/app-theme-v1-base',
+  'theme-binding/app-theme-v1-one-palette',
+  'theme-binding/app-theme-v2-accepted',
+  'theme-binding/app-theme-v2-keyframes-accepted',
+  'theme-binding/app-theme-v2-keyframes-not-keyframes',
+  'theme-binding/app-theme-v2-label-too-long',
+  'theme-binding/app-theme-v2-missing-dark',
+  'theme-binding/app-theme-v2-no-hash',
+  'theme-binding/app-theme-v2-platform-pin',
+  'theme-binding/overlay-hash-canonical',
+  'theme-binding/theme-mode-absence',
+  'theme-binding/theme-mode-default-when-silent-host',
+  'theme-binding/theme-mode-order',
   'undeclared-action-rejected',
   'version-match',
   'version-mismatch',
