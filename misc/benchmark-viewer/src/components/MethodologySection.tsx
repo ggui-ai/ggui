@@ -78,10 +78,14 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'Same day, the fix: the validator now finds the control the way the ' +
       'generation harness does — controls that name the action first ' +
       '(data-action, aria-label, text), then every clickable, judged by the ' +
-      'dispatch actually observed for that action (#996). The column reads as ' +
-      'a measurement again from the first run on a runner image carrying the ' +
-      'fix — the change-triggered run that follows its landing; that run\'s ' +
-      'row will show the new source hash.',
+      'dispatch actually observed for that action (#996). A second defect found ' +
+      'beneath it the same day: the check rendered each component with NO ' +
+      'props, so a board or list that draws its controls from props was empty ' +
+      'and had nothing to click; it now renders with the commit\'s fixture ' +
+      'props — the same props the visual judge receives. The column reads as ' +
+      'a measurement again from the first run on a runner image carrying both ' +
+      'fixes — the change-triggered run that follows their landing; that ' +
+      'run\'s row will show the new source hash.',
   },
   {
     date: '2026-09-09',
