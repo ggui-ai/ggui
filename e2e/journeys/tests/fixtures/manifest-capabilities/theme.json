@@ -1,9 +1,18 @@
 {
+  "$name": "journeys-fixture",
+  "$description": "A theme.json in the v2 shape (ggui#987): the six layering roles and one 500 anchor per family are authored; everything else is derived.",
   "color": {
-    "primary": {
-      "500": { "$type": "color", "$value": "#0ea5e9" }
-    },
-    "surface": { "$type": "color", "$value": "#ffffff" }
+    "primary": { "500": { "$type": "color", "$value": "#0ea5e9" } },
+    "success": { "500": { "$type": "color", "$value": "#16a34a" } },
+    "warning": { "500": { "$type": "color", "$value": "#f59e0b" } },
+    "error": { "500": { "$type": "color", "$value": "#dc2626" } },
+    "info": { "500": { "$type": "color", "$value": "#2563eb" } },
+    "ground": { "$type": "color", "$value": "#ffffff" },
+    "onGround": { "$type": "color", "$value": "#111827" },
+    "container": { "$type": "color", "$value": "#ffffff" },
+    "onContainer": { "$type": "color", "$value": "#111827" },
+    "sunken": { "$type": "color", "$value": "#f3f4f6" },
+    "onSunken": { "$type": "color", "$value": "#374151" }
   },
   "spacing": {
     "4": { "$type": "dimension", "$value": "16px" }
@@ -12,31 +21,12 @@
     "family": {
       "sans": { "$type": "fontFamily", "$value": ["Inter", "system-ui"] }
     },
-    "size": {
-      "md": { "$type": "dimension", "$value": "16px" }
-    },
     "weight": {
       "regular": { "$type": "fontWeight", "$value": 400 }
-    },
-    "lineHeight": {
-      "normal": { "$type": "number", "$value": 1.5 }
     }
   },
   "shape": {
-    "radius": {
-      "md": { "$type": "dimension", "$value": "8px" }
-    },
-    "shadow": {
-      "sm": {
-        "$type": "shadow",
-        "$value": {
-          "offsetX": "0",
-          "offsetY": "1px",
-          "blur": "2px",
-          "spread": "0",
-          "color": "rgba(0,0,0,.05)"
-        }
-      }
-    }
+    "radius": { "md": { "$type": "dimension", "$value": "8px" } },
+    "shadow": { "sm": { "$type": "shadow", "$value": "0 1px 2px 0 rgba(0,0,0,.05)" } }
   }
 }

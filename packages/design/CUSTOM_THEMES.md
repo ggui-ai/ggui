@@ -64,10 +64,20 @@ const auroraLight: DtcgTheme = {
   $description: "Cool blue-green daytime palette.",
   $metadata: { font: "Inter" },
   color: {
-    primary: {/* 50..900 ladder */},
-    neutral: {/* 50..900 ladder */},
-    success: { $value: "#…", $type: "color" },
-    // …warning, error, info, surface, onSurface, container, outline, …
+    // The six layering roles — authored, one kind of AREA each.
+    ground: { $type: "color", $value: "#…" },
+    onGround: { $type: "color", $value: "#…" },
+    container: { $type: "color", $value: "#…" },
+    onContainer: { $type: "color", $value: "#…" },
+    sunken: { $type: "color", $value: "#…" },
+    onSunken: { $type: "color", $value: "#…" },
+    // One `500` anchor per family; the other stops are derived unless stated.
+    primary: { "500": { $type: "color", $value: "#…" } },
+    success: { "500": { $type: "color", $value: "#…" } },
+    warning: { "500": { $type: "color", $value: "#…" } },
+    error: {/* 500 */},
+    info: {/* 500 */},
+    // Optional, derived when absent: neutral, outline/outlineVariant, on*/…Container, tertiary, link.
   },
   font: shared.font,
   spacing: shared.spacing,
@@ -114,25 +124,34 @@ that's missing required fields. The high-level shape:
 
 ```
 color
-  primary: { 50, 100, 200, 300, 400, 500, 600, 700, 800, 900 }
-  neutral: { 50, 100, 200, 300, 400, 500, 600, 700, 800, 900 }
-  success, warning, error, info        — single tokens
-  surface, onSurface, surfaceVariant, onSurfaceVariant
-  container, onContainer
-  outline, outlineVariant
+  ground, onGround                     — the page / chat canvas + its ink       (REQUIRED)
+  container, onContainer               — a card, a bubble, a panel + its ink    (REQUIRED)
+  sunken, onSunken                     — wells, inputs at rest, code + its ink  (REQUIRED)
+  primary, success, warning, error, info — one `500` anchor each              (REQUIRED)
+  neutral (ladder), outline, outlineVariant, on*/…Container, tertiary, link — optional; derived unless stated
+  (elevated / onElevated are never authored — derived from container)
 font
-  family.sans         (mono optional)
-  size:        sm, base, lg, xl, 2xl   (extend freely)
+  family.sans         (mono, heading optional)
   weight:      normal, medium, semibold, bold
-  lineHeight:  tight, normal, relaxed
+  ramp:        { base, ratio }  — the ONE type ramp; the size stops are derived (optional)
+  letterSpacing.{body,heading}  (optional)
+typography.faces    — declared @font-face sources, https only (optional)
 spacing
   numeric 1..12 + named xs/sm/md/lg/xl/2xl   — primitives reference both
 shape.radius
   sm, md, lg, xl, full
 shape.shadow
   sm, md, lg, xl
-motion.duration, motion.easing, motion.keyframes
+motion.transition, motion.keyframes
 ```
+
+Retired with the theming revision (ggui#987), refused rather than
+ignored: `font.size`, `font.lineHeight`, `motion.duration`,
+`motion.easing`, `$metadata.fontUrl`, and the `surface` /
+`surfaceVariant` role names. A `theme.json` in the old shape fails
+schema validation, and `ggui serve` refuses to start on it — rewrite
+the file to the shape above (`ggui theme validate <path>` tells you
+exactly which field).
 
 **One producer.** A theme is one DTCG document; what a card reads is its
 projection — `deriveThemeVariables(doc, mode)` from `@ggui-ai/design/themes` —
@@ -155,7 +174,7 @@ something downstream breaks.
 
 `success` / `warning` / `error` / `info` are semantic-only. They render
 through `--ggui-color-success` etc., not through the primary/neutral
-ramps. Pick hues that read against your `surface` regardless of the
+ramps. Pick hues that read against your `ground` regardless of the
 ladder you chose for `primary`.
 
 ---
@@ -173,9 +192,9 @@ conventions. Notable patterns:
 - **Primary 600** is the hover/pressed tone; consumers of
   `--ggui-color-primary-600` rely on this being darker, not a totally
   different hue.
-- **Neutral 50** = lightest surface; **neutral 900** = darkest text in
+- **Neutral 50** = lightest ground; **neutral 900** = darkest text in
   light mode (inverted in dark).
 - **Container / onContainer** is the recessed-panel pair — it's where
-  brand-tinted regions sit without dominating the surface.
+  brand-tinted regions sit without dominating the ground.
 
 When in doubt, copy Claudic and drift.
