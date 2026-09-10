@@ -12,6 +12,7 @@
 // `adapters/generation-dispatch.ts` at the dispatch boundary; callers
 // that omit them get minimal defaults.
 
+import { hasProfile } from "./boilerplate/styling-profile.js";
 import type { CacheTier } from "./fragments/index.js";
 import { compose } from "./compose.js";
 import { buildSystemPrompt, generateBoilerplate } from "./boilerplate.js";
@@ -90,6 +91,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
     axisDelta: composed.promptText,
     designMode,
     ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
+    ...(input.profile !== undefined ? { profile: input.profile } : {}),
   });
   const howFragments = composed.fragments.filter(
     (f) => f.promptText && f.promptText.trim().length > 0,
@@ -189,6 +191,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
   // Only a non-default design mode contributes — the constrained id is
   // byte-identical to the pre-`designMode` harness.
   if (designMode !== DEFAULT_DESIGN_MODE) overrideLabels.push(`designMode:${designMode}`);
+  if (hasProfile(input.profile)) overrideLabels.push("profile");
 
   const id = computeHarnessId({
     classificationHash,
@@ -221,6 +224,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
     name,
     classification,
     designMode,
+    ...(input.profile !== undefined ? { profile: input.profile } : {}),
     how,
     what,
     check,

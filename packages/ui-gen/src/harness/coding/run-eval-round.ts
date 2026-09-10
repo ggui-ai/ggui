@@ -457,6 +457,7 @@ export async function runEvalRound(
               // the source (free mode: color-only tokens, arm-neutral
               // visual judging).
               designMode: harness.designMode,
+              profile: harness.profile,
             },
             {
               provider: mapProviderForEvaluator(evaluationAgent.provider),
@@ -480,7 +481,7 @@ export async function runEvalRound(
         : null,
       visualMod
         ? visualMod.runVisualEval(
-            { compiledCode, originalPrompt: userPrompt },
+            { compiledCode, originalPrompt: userPrompt, profile: harness.profile },
             {
               provider: mapProviderForEvaluator(visualEvalAgent.provider) as "claude" | "google",
               model: visualEvalAgent.model,

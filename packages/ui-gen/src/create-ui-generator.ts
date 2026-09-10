@@ -55,6 +55,7 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import { createGeneratorTools } from './adapters/index.js';
 import { dispatchGeneration } from './adapters/generation-dispatch.js';
+import { hasProfile } from './boilerplate/styling-profile.js';
 import type { ProviderName } from './adapters/types.js';
 import type { GenerationResult } from './harness/result-types.js';
 import {
@@ -313,6 +314,7 @@ export function createUiGenerator(
         const promptWithVariance = injectVariance(
           promptWithRendering,
           input.variance,
+          { profileDeclared: hasProfile(input.profile) },
         );
 
         // Resolve appGadgets by precedence:
@@ -360,6 +362,7 @@ export function createUiGenerator(
           ...(onRetry !== undefined ? { onRetry } : {}),
           ...(designMode !== undefined ? { designMode } : {}),
           ...(canvas !== undefined ? { canvas } : {}),
+          ...(input.profile !== undefined ? { profile: input.profile } : {}),
         });
 
         onGenerated?.(result);

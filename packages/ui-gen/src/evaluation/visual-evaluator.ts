@@ -11,6 +11,8 @@
 // issues only visible when rendered: broken layouts, overlapping elements,
 // poor visual hierarchy, missing whitespace.
 
+import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
+import type { AppGenerationProfile } from '@ggui-ai/protocol';
 import { build } from 'esbuild';
 import { getCssTokens } from '@ggui-ai/design/rendering';
 import { resolve, dirname } from 'path';
@@ -101,6 +103,8 @@ export interface VisualEvalContext {
   originalPrompt: string;
   /** Design system CSS tokens */
   cssTokens?: string;
+  /** The app's generation profile (#991) — judged relative to, never against. */
+  profile?: AppGenerationProfile;
 }
 
 // ---------------------------------------------------------------------------
@@ -505,8 +509,12 @@ async function callMultimodalLLM(
   prompt: string,
   screenshot: Buffer,
   originalPrompt: string,
+  profileBlock = '',
 ) {
-  const userPrompt = `## Original Request\n${originalPrompt}\n\nEvaluate the screenshot of the generated component.`;
+  const userPrompt =
+    `## Original Request\n${originalPrompt}\n\n` +
+    (profileBlock.length > 0 ? `${profileBlock}\n\n` : '') +
+    'Evaluate the screenshot of the generated component.';
   const agent = createVisionAgent({
     provider: config.provider === 'claude' ? 'anthropic' : config.provider,
     model,
@@ -565,7 +573,14 @@ export async function runVisualEvaluation(
         console.warn(`[visual-eval] no browser available at canvas ${canvas} — skipping visual evaluation`);
         return null;
       }
-      const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, context.originalPrompt);
+      const response = await judge(
+        config,
+        model,
+        VISUAL_EVAL_PROMPT,
+        screenshot,
+        context.originalPrompt,
+        buildStylingProfileJudgeBlock(context.profile),
+      );
       const result = parseVisualResponse(response.text, config.passThreshold);
       result.inputTokens = response.inputTokens;
       result.outputTokens = response.outputTokens;
@@ -606,6 +621,7 @@ export async function runVisualEvaluation(
     VISUAL_EVAL_PROMPT,
     screenshot,
     context.originalPrompt,
+    buildStylingProfileJudgeBlock(context.profile),
   );
 
   // Parse response

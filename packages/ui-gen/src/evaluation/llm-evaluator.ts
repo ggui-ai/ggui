@@ -14,6 +14,8 @@
 // Caching: Anthropic ephemeral cache, OpenAI auto-cache, Google explicit cache.
 // Same system prompt across all 7 calls → first call caches, 6 remaining hit cache.
 
+import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
+import type { AppGenerationProfile } from '@ggui-ai/protocol';
 import type {
   EvalIssue,
   EvalResult,
@@ -75,6 +77,8 @@ export interface LLMEvalContext {
    * means `constrained` (byte-identical to the pre-`designMode` prompt).
    */
   designMode?: DesignMode;
+  /** The app's generation profile (#991) — the judge reads the same text the coder was given. */
+  profile?: AppGenerationProfile;
 }
 
 export interface LLMEvalConfig {
@@ -119,6 +123,8 @@ export interface EvalContext {
   designSystemSummary?: string;
   /** See `LLMEvalContext.designMode`. */
   designMode?: DesignMode;
+  /** See `LLMEvalContext.profile`. */
+  profile?: AppGenerationProfile;
 }
 
 /**
@@ -323,6 +329,8 @@ ${free ? FREE_RAW_CLICK_TARGET_GAP : CONSTRAINED_RAW_CLICK_TARGET_GAP}
 - Inverted or skipped heading levels (an \`<Heading level={3}>\` rendered
   before the page's \`<Heading level={1}>\`).`);
 
+  const profileBlock = buildStylingProfileJudgeBlock(ctx.profile);
+  if (profileBlock.length > 0) parts.push(profileBlock);
   return parts.join('\n\n');
 }
 
@@ -733,6 +741,7 @@ export async function preWarmEval(
     contract: context.contract,
     designSystemSummary: context.designContext,
     designMode: context.designMode,
+    profile: context.profile,
   });
 
   return { motherPrompt, dynamicCriteria: [] };
@@ -837,6 +846,7 @@ export async function runLLMEvaluation(
     contract: context.contract,
     designSystemSummary: context.designContext,
     designMode,
+    profile: context.profile,
   });
 
   // Add line numbers to source

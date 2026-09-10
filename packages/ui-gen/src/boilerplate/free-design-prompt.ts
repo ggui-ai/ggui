@@ -34,6 +34,8 @@ import {
 } from "./hard-sections.js";
 
 export interface FreeDesignPromptInputs {
+  /** Pre-rendered Styling Profile section (#991); empty or absent renders nothing. */
+  readonly profileSection?: string;
   readonly userRequest: string;
   readonly canvas: CanvasClass;
   /** Pre-rendered `## Shape Guidance` section (empty string when no axis fragments fired). */
@@ -320,6 +322,7 @@ ${axisSection}
     COMPONENT_STRUCTURE,
     FREE_RESPONSIVE_INVARIANT,
     FREE_ACCESSIBILITY,
+    ...(inputs.profileSection !== undefined && inputs.profileSection.length > 0 ? [inputs.profileSection] : []),
     FREE_QUALITY_CHECKLIST,
     renderTokenVocabulary(),
     `### Reference (optional): \`@ggui-ai/design\` component catalog\n\nOptional — import a primitive only when it helps. Raw HTML + your own CSS is a first-class choice.\n\n${inputs.primitivesDoc}`,

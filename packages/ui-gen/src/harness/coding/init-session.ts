@@ -169,6 +169,7 @@ export async function initSession(input: {
             contract: params.contract,
             designContext: undefined,
             designMode: harness.designMode,
+            profile: harness.profile,
           },
           {
             provider: mapProviderForEvaluator(evalSpec.provider),

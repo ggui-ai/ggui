@@ -24,6 +24,7 @@
 // directly to the coding agent in the system prompt — there is no
 // separate planner stage.
 
+import type { AppGenerationProfile } from "@ggui-ai/protocol";
 import type { QualityConfig } from "../evaluation/types-public.js";
 import { DEFAULT_DESIGN_SYSTEM_DOCS } from "../design-system-docs.js";
 import { PRIMITIVES_DOCUMENTATION } from "../validation/index.js";
@@ -149,6 +150,8 @@ export function buildSystemPrompt(
   designMode?: DesignMode,
   /** Rendering canvas class (`free` mode) — see `SystemPromptInputs.canvas`. */
   canvas?: CanvasClass,
+  /** The app's generation profile (#991). */
+  profile?: AppGenerationProfile,
 ): string {
   return buildSystemPromptSkeleton({
     userRequest,
@@ -163,6 +166,7 @@ export function buildSystemPrompt(
     gadgetTypes,
     designMode,
     canvas,
+    profile,
     // criteriaBlock left undefined — ui-gen fills default from open CRITERIA.
   });
 }

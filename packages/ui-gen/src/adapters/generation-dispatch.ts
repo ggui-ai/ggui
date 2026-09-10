@@ -59,6 +59,7 @@ import {
   type JsonObject,
 } from "@ggui-ai/protocol";
 import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
+import type { AppGenerationProfile } from "@ggui-ai/protocol";
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -180,6 +181,8 @@ export interface GenerationDispatchParams {
   designMode?: DesignMode;
   /** Rendering canvas class for the `free` prompt — see `CreateHarnessInput.canvas`. */
   canvas?: CanvasClass;
+  /** The app's generation profile (#991). */
+  profile?: AppGenerationProfile;
 }
 
 /**
@@ -294,6 +297,7 @@ export async function dispatchGeneration(
     // Design mode + canvas — the harness carries them to every leg.
     ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),
     ...(params.canvas !== undefined ? { canvas: params.canvas } : {}),
+    ...(params.profile !== undefined ? { profile: params.profile } : {}),
     // Policy is pre-resolved at the dispatch boundary so `createHarness`
     // stays free of experiment plumbing. `resolveHarnessPolicy` applies
     // the `GGUI_POLICY_PROFILE` experimental-profile layer and hands the
@@ -313,7 +317,7 @@ export async function dispatchGeneration(
     // prompt's gadget catalog renders a `Type:` line per third-party
     // gadget (the LLM sees a wrapper's real call shape it otherwise
     // can't know).
-    systemPromptBuilder: ({ userRequest, shellType, screen, axisDelta, designMode, canvas }) =>
+    systemPromptBuilder: ({ userRequest, shellType, screen, axisDelta, designMode, canvas, profile }) =>
       buildSystemPromptWithFunnel(
         userRequest,
         shellType,
@@ -323,6 +327,7 @@ export async function dispatchGeneration(
         params.gadgetTypes,
         designMode,
         canvas,
+        profile,
       ),
     // Pre-filtered axis-check registry. The `matches()` predicate
     // selects the checks relevant to this generation's axis vector.

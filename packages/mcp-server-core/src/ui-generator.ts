@@ -18,6 +18,7 @@ import type {
   LlmRoute,
   GeneratorId,
   ModelRef,
+  AppGenerationProfile,
 } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
 
@@ -116,6 +117,14 @@ export interface UiGenerateInput {
    * Absent → generator runs the default styling pass.
    */
   variance?: BlueprintVariance;
+  /**
+   * The app's generation profile — operator-declared free text
+   * (`styling`, `density`, `layout`) the generator honours as the app's
+   * visual brief. Read from the app's `generation.profile`, bounded at
+   * the door by `appGenerationProfileSchema`. Absent and empty are
+   * byte-identical to today's prompts.
+   */
+  profile?: AppGenerationProfile;
   /**
    * Optional rendering hint — device + shell + viewport. When present,
    * the generator surfaces a "Rendering Context" block in the user

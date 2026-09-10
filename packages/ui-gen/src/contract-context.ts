@@ -26,6 +26,7 @@
  * sizing strategies and including the hint inline cuts a class of
  * "designed for fullscreen, rendered in a chat bubble" bugs.
  */
+import { STYLING_PROFILE_PRECEDENCE_NOTE } from './boilerplate/styling-profile.js';
 import type {
   ActionEntry,
   BlueprintVariance,
@@ -383,7 +384,10 @@ export function injectContracts(
  * Returns an empty string when no fields are populated so the inject
  * helper can no-op cleanly.
  */
-export function buildVarianceContext(variance: BlueprintVariance): string {
+export function buildVarianceContext(
+  variance: BlueprintVariance,
+  options?: { readonly profileDeclared?: boolean },
+): string {
   const lines: string[] = [];
   if (typeof variance.persona === 'string' && variance.persona.length > 0) {
     lines.push(`- **Persona**: ${variance.persona}`);
@@ -411,6 +415,7 @@ export function buildVarianceContext(variance: BlueprintVariance): string {
     'the visual treatment + copy register — but the contract shape (props,',
     'actions, contexts, streams) remains canonical. Variance changes HOW',
     'the UI looks and reads, not WHAT it does.',
+    ...(options?.profileDeclared === true ? [STYLING_PROFILE_PRECEDENCE_NOTE] : []),
     '',
     ...lines,
   ].join('\n');
@@ -420,9 +425,10 @@ export function buildVarianceContext(variance: BlueprintVariance): string {
 export function injectVariance(
   userPrompt: string,
   variance?: BlueprintVariance,
+  options?: { readonly profileDeclared?: boolean },
 ): string {
   if (!variance) return userPrompt;
-  const block = buildVarianceContext(variance);
+  const block = buildVarianceContext(variance, options);
   if (!block) return userPrompt;
   return userPrompt + '\n\n' + block;
 }

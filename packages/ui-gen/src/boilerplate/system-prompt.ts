@@ -14,6 +14,8 @@
 // string — the skeleton still renders cleanly for OSS callers who don't
 // pass doc blocks.
 
+import type { AppGenerationProfile } from "@ggui-ai/protocol";
+import { buildStylingProfileSection, withStylingProfile } from "./styling-profile.js";
 import { resolveAppGadgets } from "@ggui-ai/protocol";
 import type {
   GadgetDescriptor,
@@ -126,6 +128,8 @@ export interface SystemPromptInputs {
    * mode (that prompt keeps its shell/screen descriptors verbatim).
    */
   canvas?: CanvasClass;
+  /** The app's generation profile (#991) — one bounded section, both arms; absent = byte-identical. */
+  profile?: AppGenerationProfile;
 }
 
 const SHELL_DESCRIPTIONS: Record<string, string> = {
@@ -335,6 +339,8 @@ export function buildSystemPrompt(inputs: SystemPromptInputs): string {
     inputs.gadgetTypes,
   );
 
+  const profileSection = buildStylingProfileSection(inputs.profile);
+
   const axisSection =
     inputs.axisDelta && inputs.axisDelta.trim().length > 0
       ? `\n## Shape Guidance\n${inputs.axisDelta}\n`
@@ -349,6 +355,7 @@ export function buildSystemPrompt(inputs: SystemPromptInputs): string {
       wireDoc,
       primitivesDoc,
       gadgetsSection,
+      profileSection,
     });
   }
 
@@ -387,7 +394,7 @@ ${pitfallsBlock}
 ## Reference: Wire Hooks
 ${wireDoc}
 
-${DESIGN_SYSTEM_GUIDANCE}
+${withStylingProfile(DESIGN_SYSTEM_GUIDANCE, profileSection)}
 
 ### CSS Token Documentation
 ${designSystemDocs}
