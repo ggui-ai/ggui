@@ -6,6 +6,8 @@
  *   node --import tsx scripts/exp008-drive.mjs --run-id <id> --mint-model-env <ENV> [--n 3]
  *        [--models anthropic/claude-fable-5-1,openai/gpt-6-astra] [--canvas md] [--cells id1,id2]
  *        [--concurrency 8] [--dry-run] [--eval-only | --mint-only]
+ *        [--manifest <path>] [--mint-source-sha <sha>]
+ *        [--prompt-digest-constrained <sha256>] [--prompt-digest-free <sha256>]
  *
  * Per cell, with OPERATOR credentials (the tasks' roles do the writes):
  *   RunTask MINT (experiment mode: contract inline) → poll <prefix>mint.json
@@ -20,6 +22,12 @@
  * same --run-id runs the EVAL leg over those prefixes — the two legs may bind
  * to different images on purpose (e.g. mint on the pod that is the measured
  * triad, eval on a judge fixed afterwards). The two flags are exclusive.
+ * --manifest <path> is the run's RECEIPT file (required with --mint-only):
+ * for every cell the mint task's image + imageDigest + timings, read from
+ * DescribeTasks the moment mint.json lands, plus the operator-declared pod
+ * source sha and prompt digests (--mint-source-sha, --prompt-digest-*) that
+ * the verdict checks against the experiment's pins. --eval-only reads the
+ * same file to hand those values to the eval task.
  *
  * PRECONDITION: the mint image on the target env must run the pod's EXPERIMENT
  * mode (the inline-contract, S3-export contract of ggui#975 d1/d1f); against an
@@ -28,6 +36,8 @@
  * families, the SSM network parameter, the bucket, the app id) are per-env
  * inputs — flags or EXP008_* env — and are never defaults in this package.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { ECSClient, RunTaskCommand, DescribeTasksCommand, StopTaskCommand } from '@aws-sdk/client-ecs';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { S3Client, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
@@ -52,6 +62,16 @@ const concurrency = parseInt(getArg(['--concurrency'], '8'), 10);
 const dryRun = hasFlag(['--dry-run']);
 const evalOnly = hasFlag(['--eval-only']);
 const mintOnly = hasFlag(['--mint-only']);
+const manifestPath = getArg(['--manifest'], process.env.EXP008_MANIFEST ?? null);
+const declared = {
+  mintSourceSha: getArg(['--mint-source-sha'], null),
+  promptDigestConstrained: getArg(['--prompt-digest-constrained'], null),
+  promptDigestFree: getArg(['--prompt-digest-free'], null),
+};
+if (mintOnly && !manifestPath) {
+  console.error('exp008-drive: --mint-only requires --manifest <path> — a mint without its image/digest receipt is not a Stage 1 cell');
+  process.exit(2);
+}
 if (evalOnly && mintOnly) {
   console.error('exp008-drive: --eval-only and --mint-only are exclusive — one leg per invocation');
   process.exit(2);
@@ -160,6 +180,27 @@ async function readJson(bucket, key) {
   return JSON.parse(Buffer.from(await o.Body.transformToByteArray()).toString('utf8'));
 }
 
+function loadManifest() {
+  if (!manifestPath) return null;
+  if (fs.existsSync(manifestPath)) return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  return { runId, createdAt: new Date().toISOString(), lane: { cluster: cfg.cluster, mintFamily: cfg.mintFamily, evalFamily: cfg.evalFamily, bucket: cfg.bucket }, declared, cells: {} };
+}
+const manifest = loadManifest();
+function saveManifest() {
+  if (!manifest) return;
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  const tmp = `${manifestPath}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(manifest, null, 2)}\n`);
+  fs.renameSync(tmp, manifestPath);
+}
+async function describeMintTask(arn) {
+  const d = await ecs.send(new DescribeTasksCommand({ cluster: cfg.cluster, tasks: [arn] }));
+  const t = d.tasks?.[0];
+  const c = t?.containers?.[0];
+  if (!t || !c?.image) throw new Error(`mint task ${arn} vanished before its image could be recorded — no receipt, no cell`);
+  return { taskArn: arn, image: c.image, imageDigest: c.imageDigest ?? null, startedAt: t.startedAt?.toISOString() ?? null, stoppedAt: t.stoppedAt?.toISOString() ?? null, taskDefinitionArn: t.taskDefinitionArn ?? null };
+}
+
 async function driveCell(cell, network) {
   const prefix = `exp008/${cell.runId}/${cell.cellId}/`;
   const t0 = Date.now();
@@ -167,6 +208,10 @@ async function driveCell(cell, network) {
     const mintArn = await runTask(cfg.mintFamily, buildMintOverrides(cell, { appId: cfg.appId, bucket: cfg.bucket, modelEnvName }), network);
     console.log(`[exp008] ${cell.cellId}: mint ${mintArn.split('/').pop()}`);
     await awaitArtefact(mintArn, cfg.bucket, `${prefix}mint.json`, cfg.mintTimeoutMs, `${cell.cellId} mint`);
+    if (manifest) {
+      manifest.cells[cell.cellId] = { prefix, contractKey: cell.contractKey, mint: await describeMintTask(mintArn) };
+      saveManifest();
+    }
   }
   const contract = await readJson(cfg.bucket, `${prefix}contract.json`);
   if (contract.contractKey !== cell.contractKey) {
