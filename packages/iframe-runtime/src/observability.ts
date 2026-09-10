@@ -38,6 +38,7 @@ export type ObservabilityEvent =
   | SchemaVersionMismatchEvent
   | FontFaceBlockedEvent
   | AppThemeInvalidEvent
+  | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
@@ -360,6 +361,18 @@ export interface FontFaceBlockedEvent {
 export interface AppThemeInvalidEvent {
   readonly kind: 'app-theme-invalid';
   readonly issues: readonly string[];
+}
+
+/**
+ * The live re-injection on a host theme flip (ggui#987 §4) failed: the
+ * renderer's update rejected, so the card kept its previous overlay /
+ * ladder / `color-scheme`. `message` is the rejection's.
+ *
+ * @public
+ */
+export interface ThemeReinjectFailedEvent {
+  readonly kind: 'theme-reinject-failed';
+  readonly message: string;
 }
 
 export interface UnknownObservabilityEvent {

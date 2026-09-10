@@ -41,4 +41,16 @@ describe('installHostFonts', () => {
     fire();
     expect(posted).toEqual([{ kind: 'font-face-blocked', family: 'Blocked Sans', host: 'cdn.blocked.example' }]);
   });
+
+  it('a full-URL blockedURI (same-origin report) must match an installed src — another file on the same host is not ours', () => {
+    installHostFonts("@font-face { font-family: 'Acme'; src: url('https://cdn.acme.example/acme.woff2'); }");
+    const other = new Event('securitypolicyviolation');
+    Object.assign(other, { effectiveDirective: 'font-src', blockedURI: 'https://cdn.acme.example/component-font.woff2' });
+    document.dispatchEvent(other);
+    expect(posted).toEqual([]);
+    const ours = new Event('securitypolicyviolation');
+    Object.assign(ours, { effectiveDirective: 'font-src', blockedURI: 'https://cdn.acme.example/acme.woff2' });
+    document.dispatchEvent(ours);
+    expect(posted).toEqual([{ kind: 'font-face-blocked', family: 'Acme', host: 'cdn.acme.example' }]);
+  });
 });

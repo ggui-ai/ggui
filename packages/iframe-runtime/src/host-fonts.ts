@@ -23,6 +23,9 @@ export const HOST_FONTS_STYLE_ID = 'ggui-host-fonts';
 
 interface InstalledFace {
   readonly family: string;
+  /** The `src` URLs, verbatim — matched exactly when a report carries the full URL. */
+  readonly srcs: ReadonlySet<string>;
+  /** Their hosts — matched when a cross-origin report is origin-stripped. */
   readonly hosts: ReadonlySet<string>;
 }
 
@@ -55,11 +58,15 @@ function parseFaces(css: string): readonly InstalledFace[] {
     if (familyMatch === null) continue;
     const family = (familyMatch[2] ?? '').trim();
     const hosts = new Set<string>();
+    const srcs = new Set<string>();
     for (const src of body.matchAll(/url\(\s*(["']?)([^)"']+)\1\s*\)/g)) {
-      const host = hostOf((src[2] ?? '').trim());
-      if (host !== undefined) hosts.add(host);
+      const url = (src[2] ?? '').trim();
+      const host = hostOf(url);
+      if (host === undefined) continue;
+      hosts.add(host);
+      srcs.add(url);
     }
-    if (family.length > 0 && hosts.size > 0) faces.push({ family, hosts });
+    if (family.length > 0 && hosts.size > 0) faces.push({ family, srcs, hosts });
   }
   return faces;
 }
@@ -69,8 +76,13 @@ function onViolation(ev: Event): void {
   if (v.effectiveDirective !== 'font-src' || typeof v.blockedURI !== 'string') return;
   const host = hostOf(v.blockedURI);
   if (host === undefined) return;
+  // CSP strips a cross-origin `blockedURI` to its origin; a same-origin
+  // report carries the full URL. With a path in hand the report is
+  // ours only when it names one of OUR `src`s — another stylesheet's
+  // font on the same host is not this face's failure.
+  const carriesPath = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/./i.test(v.blockedURI);
   for (const face of installedFaces) {
-    if (!face.hosts.has(host)) continue;
+    if (carriesPath ? !face.srcs.has(v.blockedURI) : !face.hosts.has(host)) continue;
     const key = `${face.family}\u0000${host}`;
     if (reported.has(key)) continue;
     reported.add(key);

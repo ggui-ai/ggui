@@ -248,6 +248,7 @@ export function detach(_targetWindow: Window = window): void {
   // scenarios. Without this, a subscriber registered in test 1 leaks
   // into test 2's seed and fires against a stale closure.
   localSubscribers.clear();
+  themeSubscribers.clear();
 }
 
 /**
@@ -275,6 +276,37 @@ export function _peekCurrent(): HostContextProjection | undefined {
  * tests + the production mount can coexist.
  */
 const localSubscribers = new Set<(p: HostContextProjection) => void>();
+
+/**
+ * Which of the two theming fields a `host-context-changed` payload
+ * carried. `HostContextProjection` EXCLUDES `theme` and `styles` by
+ * design (they flow through ggui's own theming pipeline), so the
+ * projection's equality gate can never announce a theme flip — this is
+ * the trigger that can (ggui#987 §4: the host owns runtime mode and may
+ * flip it mid-session). The listener re-reads the App's pre-merged
+ * `getHostContext()` itself; the raw values are not forwarded.
+ */
+export interface HostThemeChange {
+  readonly theme: boolean;
+  readonly styles: boolean;
+}
+const themeSubscribers = new Set<(change: HostThemeChange) => void>();
+
+/**
+ * Subscribe to `host-context-changed` payloads that carry `theme` and/or
+ * `styles` — fired on the RAW payload, before and regardless of the
+ * projection's equality gate, once per payload. Returns an unsubscribe.
+ * `detach()` clears every theme subscriber with the rest of the state.
+ */
+export function subscribeThemeChange(
+  listener: (change: HostThemeChange) => void,
+): () => void {
+  themeSubscribers.add(listener);
+  return () => {
+    themeSubscribers.delete(listener);
+  };
+}
+
 export function subscribeLocal(
   listener: (projection: HostContextProjection) => void,
 ): () => void {
@@ -386,6 +418,20 @@ function handleHostContextChangedMessage(raw: unknown): void {
  */
 function handleHostContextChangedParams(params: Record<string, unknown>): void {
   if (state === null) return;
+
+  // The theming fields never reach the projection below — announce
+  // them here, on the raw payload, so a theme-only flip repaints
+  // (ggui#987 §4; the projection excludes theme/styles by design).
+  const change: HostThemeChange = { theme: 'theme' in params, styles: 'styles' in params };
+  if (change.theme || change.styles) {
+    for (const listener of themeSubscribers) {
+      try {
+        listener(change);
+      } catch {
+        // A subscriber throwing must not stop the DOM apply + echo.
+      }
+    }
+  }
 
   // Apply spec-canonical theme/styles/fonts to the iframe DOM BEFORE
   // the WS-echo path. The DOM-apply path covers fields the projection

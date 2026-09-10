@@ -571,6 +571,8 @@ export async function mountReactRoot(
     // the frameless silhouette suppression — the SAME rule text the
     // compiled path emits for `$metadata.frameless` — after
     // `cssOverrides`, so an override can never be shadowed by them.
+    // Keyframes ride VERBATIM: their admission is the write door's
+    // (`appThemeSchema.keyframes`), not re-checked here.
     const appTrailingCss = opts.appTheme
       ? `${opts.appTheme.keyframes?.[m] ?? ''}${
           opts.appTheme.frameless === true ? framelessSuppressionRule(scopeClass) : ''

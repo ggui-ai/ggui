@@ -78,7 +78,7 @@ import {
   applyHostContextStyling,
   attachListener as attachHostContextListener,
   seed as seedHostContext,
-  subscribeLocal as subscribeHostContext,
+  subscribeThemeChange as subscribeHostThemeChange,
 } from './host-context-emitter.js';
 import { mapHostPaletteToGguiVars } from './host-palette-bridge.js';
 import {
@@ -343,6 +343,12 @@ export function setCurrentApp(app: App): void {
 function getCurrentApp(): App | null {
   return currentApp;
 }
+
+/**
+ * The live theme re-injection's subscription (ggui#987 §4), held so a
+ * re-entered boot replaces it instead of stacking a second subscriber.
+ */
+let activeThemeUnsubscribe: (() => void) | null = null;
 
 /**
  * The host's announced color mode, read from the connected App's
@@ -4824,25 +4830,51 @@ async function bootProduction(opts: {
        * layer just calls `applyRender(render)` without owning
        * lifecycle state.
        */
+      // Every in-place update of the mounted slot goes through ONE
+      // chain: the WS render-frame / props_update path and the live
+      // theme re-injection below are independent callers, and the
+      // handle's `update` has no lock of its own — serializing them
+      // here is what keeps a host flip landing mid-render from
+      // interleaving two updates.
+      let updateChain: Promise<void> = Promise.resolve();
+      const queueUpdate = (opts: () => RenderItemOptions): Promise<void> => {
+        const run = updateChain.then(async () => {
+          if (renderHandle === null) return;
+          await renderHandle.update(opts());
+        });
+        updateChain = run.catch(() => undefined);
+        return run;
+      };
+
       const applyRender = async (render: GguiSession | GguiSessionSeedInput): Promise<void> => {
         currentRender = render;
         if (renderHandle === null) {
           renderHandle = await mountRender(renderInto, buildOpts(render));
           return;
         }
-        await renderHandle.update(buildOpts(render));
+        await queueUpdate(() => buildOpts(render));
       };
 
       // Live re-injection (ggui#987 §4): the host owns runtime mode and
-      // may flip it mid-session (`hostcontextchanged`). The App pre-
-      // merges the new hostContext before the emitter fans out, so
-      // re-running `buildOpts` on the CURRENT render re-resolves mode
-      // + palette and the renderer repaints from the retained other
-      // overlay — no fetch, no remount. Fires once on subscribe when
-      // seeded (before the first mount ⇒ no handle ⇒ no-op).
-      subscribeHostContext(() => {
+      // may flip it mid-session. The trigger is the emitter's THEME
+      // subscription — the raw `theme` / `styles` payload — because the
+      // host-context projection excludes both by design and its
+      // equality gate would never fire for a theme-only flip. The App
+      // pre-merges the new hostContext before the emitter fans out, so
+      // re-running `buildOpts` on the CURRENT render re-resolves mode +
+      // palette and the renderer repaints from the retained other
+      // overlay — no fetch, no remount. A rejection is reported to the
+      // embedding host, never dropped on the floor.
+      activeThemeUnsubscribe?.();
+      activeThemeUnsubscribe = subscribeHostThemeChange(() => {
         if (renderHandle === null || currentRender === null) return;
-        void renderHandle.update(buildOpts(currentRender));
+        const render = currentRender;
+        queueUpdate(() => buildOpts(render)).catch((err: unknown) => {
+          postObservabilityToParent({
+            kind: 'theme-reinject-failed',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
       });
 
       // Publish `applyRender` module-level. The persistent tool-result

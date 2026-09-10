@@ -23,6 +23,7 @@ import {
   seed,
   subscribeLocal,
 } from '../host-context-emitter.js';
+import { subscribeThemeChange } from '../host-context-emitter.js';
 
 type SentMsg = {
   readonly type: 'host_context_observed';
@@ -359,5 +360,56 @@ describe('applyHostContextStyling', () => {
     expect(document.getElementById('ggui-host-fonts')?.textContent).toContain("'Second'");
     expect(document.getElementById('ggui-host-fonts')?.textContent).not.toContain("'First'");
     expect(document.querySelectorAll('#ggui-host-fonts').length).toBe(1);
+  });
+});
+
+// ggui#987 §4 — the live re-injection trigger. `HostContextProjection`
+// EXCLUDES theme/styles by design, so the projection's equality gate
+// can never announce a theme flip; the theme-change subscription fires
+// on the RAW payload instead.
+describe('subscribeThemeChange — fires on theme/styles payloads regardless of the projection', () => {
+  beforeEach(() => {
+    detach();
+  });
+
+  it('a theme-only payload (projection unchanged) fires the theme subscriber ONCE, naming what changed', () => {
+    seed({ sessionId: 'sess_t', send: () => {}, initial: { currentDisplayMode: 'inline' } });
+    attachListener();
+    const seen: Array<{ theme: boolean; styles: boolean }> = [];
+    subscribeThemeChange((change) => seen.push(change));
+    dispatchHostContextChanged({ theme: 'dark' });
+    expect(seen).toEqual([{ theme: true, styles: false }]);
+  });
+
+  it('a projection-only payload (display mode) does NOT fire it; a styles payload does', () => {
+    seed({ sessionId: 'sess_t', send: () => {}, initial: { currentDisplayMode: 'inline' } });
+    attachListener();
+    const seen: Array<{ theme: boolean; styles: boolean }> = [];
+    subscribeThemeChange((change) => seen.push(change));
+    dispatchHostContextChanged({ displayMode: 'fullscreen' });
+    expect(seen).toEqual([]);
+    dispatchHostContextChanged({ styles: { variables: { '--color-background-primary': '#000' } } });
+    expect(seen).toEqual([{ theme: false, styles: true }]);
+  });
+
+  it('the returned unsubscribe stops it; detach() clears every theme subscriber', () => {
+    seed({ sessionId: 'sess_t', send: () => {}, initial: { currentDisplayMode: 'inline' } });
+    attachListener();
+    let fired = 0;
+    const off = subscribeThemeChange(() => {
+      fired += 1;
+    });
+    dispatchHostContextChanged({ theme: 'dark' });
+    off();
+    dispatchHostContextChanged({ theme: 'light' });
+    expect(fired).toBe(1);
+    subscribeThemeChange(() => {
+      fired += 1;
+    });
+    detach();
+    seed({ sessionId: 'sess_t', send: () => {}, initial: { currentDisplayMode: 'inline' } });
+    attachListener();
+    dispatchHostContextChanged({ theme: 'dark' });
+    expect(fired).toBe(1);
   });
 });
