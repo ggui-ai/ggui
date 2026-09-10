@@ -113,10 +113,23 @@ export function readGenerationFromGguiJson(
  *     backend enforces, so a deploy fails loud LOCALLY rather than with a
  *     confusing 422.
  */
+/** What `ggui.json#theme` resolves to for a deploy. */
+export interface ThemeRead {
+  /** The projection the PATCH ships. */
+  readonly theme: AppTheme;
+  /**
+   * The families the document's `typography.faces` declare, deduped in
+   * declaration order. The hosted path does not deliver them yet
+   * (ggui#990): the deploy names them so the fallback is visible, not
+   * silent.
+   */
+  readonly declaredFaceFamilies: readonly string[];
+}
+
 export async function readThemeFromGguiJson(
   projectRoot: string,
   gguiJson: unknown,
-): Promise<AppTheme | undefined> {
+): Promise<ThemeRead | undefined> {
   // Cheap pre-check on the raw value: no `theme` field → nothing to push,
   // and we avoid forcing a full-manifest parse on theme-less deploys.
   const presence = z
@@ -164,7 +177,10 @@ export async function readThemeFromGguiJson(
       }`,
     );
   }
-  return parsed.data;
+  const declaredFaceFamilies = [
+    ...new Set((loaded.document.typography?.faces ?? []).map((face) => face.family)),
+  ];
+  return { theme: parsed.data, declaredFaceFamilies };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +286,17 @@ export async function runConfigPushStep(
   try {
     // `loadTheme` resolves relative `theme.file` paths against the directory
     // containing ggui.json — the same root convention `storage.*.path` uses.
-    theme = await readThemeFromGguiJson(dirname(gguiJsonPath), readResult.value);
+    const read = await readThemeFromGguiJson(dirname(gguiJsonPath), readResult.value);
+    theme = read?.theme;
+    if (read !== undefined && read.declaredFaceFamilies.length > 0) {
+      // ggui#990: the PATCH carries the projection only — no faces slot
+      // on the wire, nothing composes them on the hosted path — so the
+      // declared families fall back to their stacks there. One line,
+      // every deploy, until #990 lands.
+      process.stderr.write(
+        `ggui deploy: theme declares font faces (${read.declaredFaceFamilies.join(', ')}) that are not delivered on the hosted path yet — the fallback stack applies (ggui-ai/ggui#990).\n`,
+      );
+    }
   } catch (err) {
     process.stderr.write(
       `ggui deploy: ${err instanceof Error ? err.message : String(err)}\n`,

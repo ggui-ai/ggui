@@ -206,8 +206,10 @@ describe('readThemeFromGguiJson', () => {
 
   it('resolves a preset theme to the v2 projection: both overlays, attestation, label, default mode', async () => {
     const manifest = makeThemeManifest({ preset: 'claudic', mode: 'dark' });
-    const theme = await readThemeFromGguiJson(projectRoot, manifest);
-    expect(theme).toBeDefined();
+    const read = await readThemeFromGguiJson(projectRoot, manifest);
+    expect(read).toBeDefined();
+    const theme = read!.theme;
+    expect(read!.declaredFaceFamilies).toEqual([]);
     expect(theme!.mode).toBe('dark');
     expect(theme!.name).toBe('claudic');
     expect(theme!.overlayHash).toMatch(/^[0-9a-f]{64}$/);
@@ -223,8 +225,8 @@ describe('readThemeFromGguiJson', () => {
   });
 
   it('the declared mode is the DEFAULT only — the same preset yields the same overlays either way', async () => {
-    const dark = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' }));
-    const light = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'light' }));
+    const dark = (await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' })))?.theme;
+    const light = (await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'light' })))?.theme;
     expect(dark!.mode).toBe('dark');
     expect(light!.mode).toBe('light');
     expect(dark!.overlays).toEqual(light!.overlays);
@@ -232,7 +234,7 @@ describe('readThemeFromGguiJson', () => {
   });
 
   it('produces a value that passes appThemeSchema and whose attestation recomputes (proves the write door admits it)', async () => {
-    const theme = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'ggui', mode: 'light' }));
+    const theme = (await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'ggui', mode: 'light' })))?.theme;
     const parsed = appThemeSchema.safeParse(theme);
     expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error?.issues)).toBe(true);
     expect(await canonicalOverlayHash({ overlays: theme!.overlays })).toBe(theme!.overlayHash);
@@ -492,5 +494,84 @@ describe('runConfigPushStep', () => {
 
     const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
     expect(output).toContain('claudic');
+  });
+});
+
+// ─── #990 — declared faces are not delivered on the hosted path yet ──────────
+describe('runConfigPushStep — declared font faces (ggui#990)', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ggui-config-push-faces-'));
+    mocks.patchAppConfig.mockReset();
+    mocks.patchAppConfig.mockResolvedValue({ updated: ['theme'] });
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  const color = (v: string) => ({ $type: 'color', $value: v });
+  const themeDoc = (faces?: readonly { family: string; src: string }[]) => ({
+    color: {
+      primary: { '500': color('#0ea5e9') },
+      success: { '500': color('#16a34a') },
+      warning: { '500': color('#f59e0b') },
+      error: { '500': color('#dc2626') },
+      info: { '500': color('#2563eb') },
+      ground: color('#ffffff'),
+      onGround: color('#111827'),
+      container: color('#ffffff'),
+      onContainer: color('#111827'),
+      sunken: color('#f3f4f6'),
+      onSunken: color('#374151'),
+    },
+    spacing: { '4': { $type: 'dimension', $value: '16px' } },
+    font: {
+      family: { sans: { $type: 'fontFamily', $value: 'Acme Sans' } },
+      weight: { regular: { $type: 'fontWeight', $value: 400 } },
+    },
+    shape: {
+      radius: { md: { $type: 'dimension', $value: '8px' } },
+      shadow: { sm: { $type: 'shadow', $value: '0 1px 2px 0 rgba(0,0,0,.05)' } },
+    },
+    ...(faces !== undefined ? { typography: { faces } } : {}),
+  });
+
+  it('prints ONE warning naming each declared family as not delivered on the hosted path, pointing at #990', async () => {
+    writeFileSync(
+      join(dir, 'theme.json'),
+      JSON.stringify(
+        themeDoc([
+          { family: 'Acme Sans', src: 'https://fonts.acme.example/sans.woff2' },
+          { family: 'Acme Sans', src: 'https://fonts.acme.example/sans-bold.woff2' },
+          { family: 'Acme Mono', src: 'https://fonts.acme.example/mono.woff2' },
+        ]),
+      ),
+    );
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(makeThemeManifest({ file: './theme.json', mode: 'light' })));
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+    const lines = stderrSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('#990'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('Acme Sans');
+    expect(lines[0]).toContain('Acme Mono');
+    expect(lines[0]).toMatch(/fallback/i);
+    expect(lines[0]).toMatch(/not delivered/i);
+    // The projection still ships.
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.theme).toBeDefined();
+  });
+
+  it('prints no such warning when the document declares no faces', async () => {
+    writeFileSync(join(dir, 'theme.json'), JSON.stringify(themeDoc()));
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(makeThemeManifest({ file: './theme.json', mode: 'light' })));
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    expect(await runConfigPushStep('app123', dir)).toBe(0);
+    expect(stderrSpy.mock.calls.map((c) => String(c[0])).some((l) => l.includes('#990'))).toBe(false);
   });
 });
