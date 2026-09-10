@@ -74,7 +74,14 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'is not rendered on this page; it is present, self-described by kind and ' +
       'diagnostic, in the public report JSON. Treat it as an instrument reading ' +
       'until an entry here announces the fix. Quality scores, the corpus, the ' +
-      'judge panel and every arm are unaffected; history is not rewritten.',
+      'judge panel and every arm are unaffected; history is not rewritten. ' +
+      'Same day, the fix: the validator now finds the control the way the ' +
+      'generation harness does — controls that name the action first ' +
+      '(data-action, aria-label, text), then every clickable, judged by the ' +
+      'dispatch actually observed for that action (#996). The column reads as ' +
+      'a measurement again from the first run on a runner image carrying the ' +
+      'fix — the change-triggered run that follows its landing; that run\'s ' +
+      'row will show the new source hash.',
   },
   {
     date: '2026-09-09',
