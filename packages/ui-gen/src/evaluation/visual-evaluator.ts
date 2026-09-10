@@ -123,6 +123,18 @@ export interface VisualEvalContext {
  * `<pkg>/dist/evaluation`) is `oss/packages/`; the design package is
  * its direct child.
  */
+/**
+ * The on-disk root of `@ggui-ai/ui-gen` itself. The bundle's entry lives
+ * in a temp dir, so bare imports in the GENERATED component (`@ggui-ai/wire`
+ * and every other allowlisted package) resolve nowhere from there — they
+ * resolve from this package's `node_modules` instead (`nodePaths`), the
+ * same place the harness's own imports come from.
+ */
+export function resolveUiGenPackageDir(): string {
+  const selfDir = dirname(fileURLToPath(import.meta.url));
+  return resolve(selfDir, '..', '..');
+}
+
 export function resolveDesignPackageDir(): string {
   const selfDir = dirname(fileURLToPath(import.meta.url));
   return resolve(selfDir, '..', '..', '..', 'design');
@@ -180,6 +192,10 @@ try {
         '@ggui-ai/design/compositions': resolve(designPkgDir, 'src', 'compositions', 'index.ts'),
         '@ggui-ai/design/interact': resolve(designPkgDir, 'src', 'interact', 'index.ts'),
       },
+      // Bare imports in the generated component resolve against ui-gen's
+      // own node_modules — the temp entry dir has none. Without this every
+      // wire-bearing component (`@ggui-ai/wire`) failed to bundle.
+      nodePaths: [resolve(resolveUiGenPackageDir(), 'node_modules')],
       logLevel: 'silent',
     });
 
