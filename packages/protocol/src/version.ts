@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Generator profile member `direction` (2026-09-11, additive, ggui#1027
+ * follower on the ggui#991 slot — MINOR, same draft stamp). A fourth
+ * optional member on `appGenerationProfileSchema`: one variant's
+ * COMPOSITION direction — what leads, what is left out, motion or none —
+ * free text under the same `profileText` rule, door-bounded at
+ * `APP_GENERATION_PROFILE_BOUNDS.direction = 600`, named by the refusal
+ * body. §3.6 (N−1): a door on the previous release validates with the
+ * `.strict()` schema that lacks the member and REFUSES a payload carrying
+ * it, so the WRITER emits `direction` only where the reader is on this
+ * line — the bootstrap lane composing variant profiles server-side in
+ * the same publication holds it by construction; a console or platform
+ * writer waits for the release carrying it. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Rendering-context vocabulary: `renderingContextSchema` (2026-09-11,
  * additive, ggui#1000 — MINOR). The `{ shell, device, viewport? }`
  * vocabulary that lived as two hand-declared unions (mcp-server-core
