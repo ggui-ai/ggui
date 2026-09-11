@@ -744,3 +744,69 @@ describe('PollingTransport — nextDelayMs subscription chain', () => {
     expect(fetchBody).toHaveBeenCalledTimes(callsAtFailure);
   });
 });
+
+// ggui#1029 — a failed tick paces through the descriptor's own failure
+// hook (with the consecutive-failure count) instead of a fixed
+// `intervalMs`, so a bridge rung can demote + back off on relay errors.
+describe('PollingTransport — nextDelayOnFailureMs (failed-tick pacing)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('consults the hook with the consecutive-failure count and waits what it returns; a success resets the count', async () => {
+    const seen: number[] = [];
+    let calls = 0;
+    const fetchBody = vi.fn(async () => {
+      calls += 1;
+      if (calls === 3) return { ok: true };
+      throw new Error('relay timeout');
+    });
+    const transport = new PollingTransport({
+      handlers: new Map(),
+      polling: {
+        intervalMs: 1000,
+        fetchBody,
+        parseSnapshot: () => null,
+        nextDelayMs: () => 0,
+        nextDelayOnFailureMs: (consecutiveFailures: number): number => {
+          seen.push(consecutiveFailures);
+          return 100 * consecutiveFailures;
+        },
+      },
+    });
+    transport.start();
+    await vi.advanceTimersByTimeAsync(0); // tick 1 fails → wait 100
+    expect(seen).toEqual([1]);
+    await vi.advanceTimersByTimeAsync(100); // tick 2 fails → wait 200
+    expect(seen).toEqual([1, 2]);
+    await vi.advanceTimersByTimeAsync(200); // tick 3 succeeds → nextDelayMs 0 schedules tick 4 at +0
+    // tick 4 is scheduled at +0 once tick 3's promise chain settles; a
+    // small flush (below the hook's next 100 ms) lets it fire.
+    await vi.advanceTimersByTimeAsync(50); // tick 4 fails — the count restarted at 1
+    expect(seen).toEqual([1, 2, 1]);
+    // No failure budget on this rung: still open.
+    expect(transport.status).toBe('open');
+    await transport.dispose();
+  });
+
+  it('absent hook → failed ticks pace at intervalMs (unchanged)', async () => {
+    const fetchBody = vi.fn(async () => {
+      throw new Error('relay timeout');
+    });
+    const transport = new PollingTransport({
+      handlers: new Map(),
+      polling: { intervalMs: 1000, fetchBody, parseSnapshot: () => null, nextDelayMs: () => 0 },
+    });
+    transport.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchBody).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchBody).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchBody).toHaveBeenCalledTimes(2);
+    await transport.dispose();
+  });
+});

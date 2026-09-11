@@ -587,3 +587,69 @@ describe('buildBridgePolling — bridge-pull terminal rung', () => {
     });
   });
 });
+
+// ggui#1029 — a relay error is not a live session: it counts toward
+// demotion, repeated errors back off geometrically (bounded by the idle
+// interval), and a delivered event promotes straight back to hot.
+describe('buildBridgePolling — relay errors demote and back off (ggui#1029)', () => {
+  function recordingCallTool() {
+    const calls: Array<Record<string, unknown>> = [];
+    const callTool = async (_name: string, args: Record<string, unknown>) => {
+      calls.push(args);
+      return { structuredContent: { events: [], lastSequence: 0, hasMore: false } };
+    };
+    return { callTool, calls };
+  }
+
+  it('after demoteAfterEmpties consecutive failures the next pull is UN-HELD (no `wait`)', async () => {
+    const { callTool, calls } = recordingCallTool();
+    const desc = buildBridgePolling({
+      callTool,
+      sessionId: 's1',
+      cursor: createSequenceCursor(0),
+      intervalMs: 3000,
+      holdSeconds: 20,
+      demoteAfterEmpties: 3,
+      idleIntervalMs: 15_000,
+    });
+    await desc.fetchBody!();
+    expect(calls[0]).toHaveProperty('wait', 20);
+    desc.nextDelayOnFailureMs!(1);
+    desc.nextDelayOnFailureMs!(2);
+    desc.nextDelayOnFailureMs!(3);
+    await desc.fetchBody!();
+    expect(calls[1]).not.toHaveProperty('wait');
+  });
+
+  it('backs off geometrically from intervalMs, capped at idleIntervalMs', () => {
+    const { callTool } = recordingCallTool();
+    const desc = buildBridgePolling({
+      callTool,
+      sessionId: 's1',
+      cursor: createSequenceCursor(0),
+      intervalMs: 3000,
+      idleIntervalMs: 15_000,
+    });
+    expect([1, 2, 3, 4, 5].map((n) => desc.nextDelayOnFailureMs!(n))).toEqual([3000, 6000, 12_000, 15_000, 15_000]);
+  });
+
+  it('a delivered event re-promotes to hot after failures demoted the card', async () => {
+    const { callTool, calls } = recordingCallTool();
+    const desc = buildBridgePolling({
+      callTool,
+      sessionId: 's1',
+      cursor: createSequenceCursor(0),
+      demoteAfterEmpties: 2,
+      holdSeconds: 20,
+    });
+    desc.nextDelayOnFailureMs!(1);
+    desc.nextDelayOnFailureMs!(2);
+    await desc.fetchBody!();
+    expect(calls[0]).not.toHaveProperty('wait');
+    expect(
+      desc.nextDelayMs!({ events: [{ sequence: 1, type: 'ui.updated', payload: {} }], lastSequence: 1, hasMore: false }),
+    ).toBe(0);
+    await desc.fetchBody!();
+    expect(calls[1]).toHaveProperty('wait', 20);
+  });
+});

@@ -122,14 +122,28 @@ export interface RegistryPollingOptions {
    * after each completed tick this callback receives the raw body and
    * returns the delay in ms before the NEXT tick (`0` = immediately —
    * correct for long-poll carriers whose pacing lives in the held
-   * request itself). Failed ticks pace at `intervalMs` instead of
-   * consulting the callback. `minPollIntervalMs` does NOT clamp chain
+   * request itself). Failed ticks pace through
+   * {@link nextDelayOnFailureMs} when it is set, else at `intervalMs`
+   * — never through this callback. `minPollIntervalMs` does NOT clamp chain
    * delays — a held call returning after 20s IS the interval, and the
    * composer owning this callback is trusted code, not wire input.
    * Absent → fixed-interval ticking (today's behavior, including its
    * overlap tolerance).
    */
   readonly nextDelayMs?: (body: unknown) => number;
+  /**
+   * Failed-tick pacing for the chain (ggui#1029). Called instead of
+   * `intervalMs` when a chained tick FAILS (carrier throw / reject or
+   * `!res.ok`) with the transport's consecutive-failure count (1 on
+   * the first failure; any successful tick resets it) and returns the
+   * delay in ms before the next tick. A long-poll descriptor uses it
+   * to treat a relay error as "not a live session" — count it toward
+   * demotion and back off — so a relay whose call timeout is shorter
+   * than the hold cannot keep the descriptor re-firing held calls at
+   * the hot cadence forever. Absent → failed ticks pace at
+   * `intervalMs` (today's behaviour).
+   */
+  readonly nextDelayOnFailureMs?: (consecutiveFailures: number) => number;
   /**
    * Parse the response body into a map of `type → frame` to dispatch.
    * Return `null` when nothing changed since the last poll — the

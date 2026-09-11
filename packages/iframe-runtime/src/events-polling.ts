@@ -422,6 +422,14 @@ export function buildBridgePolling(
   //     holds the card is presumed quiet; drop to sparse un-held
   //     pulls every `idleIntervalMs` so a dormant card doesn't pin
   //     the host's relay open forever.
+  //   - A FAILED pull (the relay's own `tools/call` timeout, `-32001`,
+  //     a transport error) is not a live session either (ggui#1029):
+  //     it counts toward demotion exactly like an empty hold, and
+  //     repeated failures back off geometrically from `intervalMs`
+  //     up to `idleIntervalMs` — a relay whose call timeout is shorter
+  //     than `holdSeconds` used to answer every held pull with an
+  //     error, which never advanced the counter, so a dormant card
+  //     re-fired a full hold every few seconds forever.
   // Any delivered event promotes straight back to subscription mode.
   let consecutiveEmpties = 0;
   const hot = (): boolean => consecutiveEmpties < demoteAfterEmpties;
@@ -437,6 +445,10 @@ export function buildBridgePolling(
       return unwrapCallToolResult(result);
     },
     parseSnapshot: createEventsSnapshotParser(cursor),
+    nextDelayOnFailureMs: (consecutiveFailures: number): number => {
+      consecutiveEmpties += 1;
+      return Math.min(idleIntervalMs, intervalMs * 2 ** Math.max(0, consecutiveFailures - 1));
+    },
     nextDelayMs: (body: unknown): number => {
       if (isEventsResponse(body)) {
         if (body.events.length > 0) {

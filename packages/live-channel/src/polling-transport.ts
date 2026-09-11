@@ -188,7 +188,9 @@ export class PollingTransport implements PollingTransportHandle {
     if (this.disposed || this.currentStatus === 'failed') return;
     const delay =
       outcome === TICK_FAILURE
-        ? failureIntervalMs
+        ? polling.nextDelayOnFailureMs !== undefined
+          ? Math.max(0, polling.nextDelayOnFailureMs(this.consecutiveFailures))
+          : failureIntervalMs
         : Math.max(0, nextDelayMs(outcome));
     this.chainTimer = setTimeout(() => {
       void this.chainTick(polling, nextDelayMs, failureIntervalMs);
