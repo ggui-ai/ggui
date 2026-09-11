@@ -47,6 +47,7 @@ import {
   OVERLAY_HASH_CASES,
   THEME_MODE_CASES,
 } from './theme-binding-conformance/index.js';
+import { N1_COMPAT_CASES } from './n1-compat-conformance/index.js';
 import * as kit from './index.js';
 
 /**
@@ -78,6 +79,8 @@ const DOMAIN_ROWS = domainErrorCases.map((c) => `domain-error/${c.name}`);
 const THEME_ROWS = [...THEME_MODE_CASES, ...APP_THEME_CASES, ...OVERLAY_HASH_CASES].map(
   (c) => `theme-binding/${c.name}`,
 );
+/** Row names the n1-compat catalog contributes (ggui#1014 §3.6) — no adopter input, graded on every run. */
+const N1_ROWS = N1_COMPAT_CASES.map((c) => `n1-compat/${c.name}`);
 
 /** A conformant tools/call driver, built from the catalog's own cases. */
 function catalogToolCallDriver(scenario: ToolCallScenario): RawToolCallResult | null {
@@ -199,7 +202,7 @@ describe('runConformance — pure-function catalog fold', () => {
 
   it('prints every pure-function catalog on the scorecard, skipped rows included', async () => {
     const result = await run({
-      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS, ...THEME_ROWS],
+      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS, ...THEME_ROWS, ...N1_ROWS],
     });
     const scorecard = formatScorecard(result);
     for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
@@ -333,5 +336,19 @@ describe('theme-binding catalog fold (ggui#987)', () => {
     expect(result.passed).toEqual([one]);
     expect(result.failed).toEqual([]);
     expect(result.skipped).toEqual([]);
+  });
+});
+
+describe('n1-compat catalog fold (ggui#1014 §3.6)', () => {
+  it('is a named pure-function catalog', () => {
+    expect(PURE_FUNCTION_CATALOG_SLUGS).toContain('n1-compat');
+  });
+
+  it('grades every previous-release payload on every run — no input to supply, never skipped', async () => {
+    expect(N1_ROWS).toHaveLength(2);
+    const result = await run({ only: N1_ROWS });
+    expect(result.failed).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect([...result.passed].sort()).toEqual([...N1_ROWS].sort());
   });
 });

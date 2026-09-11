@@ -153,6 +153,12 @@ const EXPECTED_PASSING = [
   'app-mismatch',
   'bootstrap-success',
   'host-context-observed-persists',
+  // The `n1-compat` catalog (ggui#1014 §3.6): previous-release payloads
+  // against today's protocol parsers — no server behaviour, no input; a
+  // vendor-neutral server passes them by construction. Named because the
+  // pass set is exact by design.
+  'n1-compat/release-2-app-theme-v2',
+  'n1-compat/release-2-render-meta',
   // The `registry-completeness` catalog (ggui#786). These four rows
   // grade the closed refusal-code REGISTRY — a protocol artifact this
   // server already embeds via `@ggui-ai/protocol` — not any server

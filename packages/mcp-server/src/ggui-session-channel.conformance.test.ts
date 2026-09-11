@@ -167,6 +167,10 @@ const EXPECTED_PASSING = [
   'registry-completeness/code-equals-key',
   'registry-completeness/retry-in-closed-set',
   'registry-completeness/surfaces-non-empty',
+  // The `n1-compat` catalog (ggui#1014 §3.6): previous-release payloads against
+  // today's protocol parsers — graded on every run, no input, never skipped.
+  'n1-compat/release-2-app-theme-v2',
+  'n1-compat/release-2-render-meta',
   // theme-binding — the kit's theme catalog folded into runConformance()
   // (ggui#987): 13 rows, graded on this server's own read door.
   'theme-binding/app-theme-v1-base',

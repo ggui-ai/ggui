@@ -320,3 +320,7 @@ export type {
   ThemeBindingResult,
   ThemeModeCase,
 } from './theme-binding-conformance/index.js';
+
+// ── n1-compat (ggui#1014 §3.6 — previous-release payloads against today's parsers) ──
+export { N1_COMPAT_CASES, N1_COMPAT_WIRES, runN1CompatConformance } from './n1-compat-conformance/index.js';
+export type { N1CompatCase, N1CompatRelease, N1CompatResult, N1CompatWire } from './n1-compat-conformance/index.js';

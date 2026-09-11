@@ -1,0 +1,24 @@
+{
+  "name": "release-2-app-theme-v2",
+  "description": "The app-theme overlay exactly as ggui Release 2 (24aacf8e2) writes it through putAppTheme and guuey 1.5 through forwardThemeWrite \u2014 both projections, the attestation, a default mode, a label. Today's appThemeSchema MUST accept it (VERSION-POLICY \u00a73.6).",
+  "release": {
+    "label": "ggui Release 2",
+    "sha": "24aacf8e2",
+    "pairedWith": "guuey 1.5 ceb3f59e9"
+  },
+  "wire": "app-theme",
+  "payload": {
+    "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-600": "#7c3aed"
+      },
+      "dark": {
+        "--ggui-color-primary-600": "#a78bfa"
+      }
+    },
+    "mode": "dark",
+    "name": "violet"
+  },
+  "expect": "accepted"
+}

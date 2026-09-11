@@ -1,0 +1,40 @@
+{
+  "name": "release-2-render-meta",
+  "description": "The `_meta[\"ai.ggui/render\"]` slice exactly as ggui Release 2 (24aacf8e2) emits it on a fully-populated render \u2014 auth, render state, contract pointer, the v2 theme overlay. Today's parseMcpAppAiGguiRenderMeta MUST accept it and keep the theme (VERSION-POLICY \u00a73.6).",
+  "release": {
+    "label": "ggui Release 2",
+    "sha": "24aacf8e2",
+    "pairedWith": "guuey 1.5 ceb3f59e9"
+  },
+  "wire": "render-meta",
+  "payload": {
+    "ai.ggui/render": {
+      "sessionId": "r-1",
+      "appId": "app-1",
+      "runtimeUrl": "/_ggui/iframe-runtime.js",
+      "wsUrl": "ws://x",
+      "wsToken": "t",
+      "expiresAt": "9999-12-31T23:59:59.999Z",
+      "themeId": "indigo",
+      "themeMode": "dark",
+      "propsJson": "{}",
+      "contractHash": "sha256:abc",
+      "validatorsUrl": "/contract/sha256:abc.js",
+      "kind": "loading",
+      "theme": {
+        "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "overlays": {
+          "light": {
+            "--ggui-color-primary-600": "#7c3aed"
+          },
+          "dark": {
+            "--ggui-color-primary-600": "#a78bfa"
+          }
+        },
+        "mode": "dark",
+        "name": "violet"
+      }
+    }
+  },
+  "expect": "accepted"
+}

@@ -102,6 +102,7 @@ import {
   type TransportRefusalInput,
 } from './transport-refusal-conformance/index.js';
 import { runThemeBindingConformance } from './theme-binding-conformance/index.js';
+import { runN1CompatConformance } from './n1-compat-conformance/index.js';
 import {
   domainErrorCases,
   runDomainErrorConformance,
@@ -190,6 +191,7 @@ export const PURE_FUNCTION_CATALOG_SLUGS = [
   'transport-refusal',
   'domain-error',
   'theme-binding',
+  'n1-compat',
 ] as const;
 
 /** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
@@ -447,6 +449,24 @@ async function runPureFunctionCatalogs(
         name,
         criterion: 'theme binding (SPEC "Theme binding — the normative total order", ggui#987)',
         expected: 'the case\u2019s expectation',
+        received: graded.detail,
+        message: graded.detail,
+      });
+    }
+  }
+
+  // ── n1-compat (ggui#1014 §3.6) ──
+  // Previous-release payloads against today's protocol parsers: no adopter
+  // input, never skipped; a failing row is a receiver that broke N−1.
+  for (const graded of runN1CompatConformance()) {
+    const name = `n1-compat/${graded.name}`;
+    if (graded.pass) {
+      pass(name);
+    } else {
+      fail({
+        name,
+        criterion: 'N−1 wire compatibility (VERSION-POLICY §3.6, ggui#1014)',
+        expected: 'the previous release\u2019s payload accepted by today\u2019s parser',
         received: graded.detail,
         message: graded.detail,
       });
