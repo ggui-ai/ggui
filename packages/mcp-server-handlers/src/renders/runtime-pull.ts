@@ -48,6 +48,15 @@
  *     retention window). Client recovery: re-mount from a fresh
  *     snapshot and reset the cursor to `currentSequence`.
  *
+ * **The puller's obligation (ggui#1030).** `wait` MUST NOT exceed the
+ * `tools/call` timeout of the host relaying the call, minus a margin; a
+ * host that relays a pull MUST clamp the forwarded `wait` to its own
+ * timeout − 1 s. A host timeout below the hold is a CALLER-side failure:
+ * the server's `success` after the socket closed is not a server fault,
+ * and the rung MUST demote to sparse un-held pulls on such failures as it
+ * does on consecutive empties — otherwise a hot `wait` under a short host
+ * timeout is a polling storm that never demotes.
+ *
  * **Failure modes:**
  *   - Unknown sessionId, cross-app sessionId, and a render deleted
  *     mid-read all surface uniformly as

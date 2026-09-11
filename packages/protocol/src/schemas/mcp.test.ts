@@ -56,6 +56,7 @@ import {
   runtimePullEventsPageSchema,
   runtimePullHorizonSchema,
   runtimePullInputSchema,
+  RUNTIME_PULL_MAX_WAIT_SECONDS,
   runtimePullOutputSchema,
   updateInputSchema,
   updateOutputSchema,
@@ -1144,6 +1145,19 @@ describe('ggui_runtime_pull — bridge-pull rung schemas', () => {
   };
 
   describe('runtimePullInputSchema', () => {
+    // ggui#1030 (prod #1026): the PULLER's obligation on `wait` is stated on the
+    // wire — a caller's hold MUST NOT exceed its host's tools/call timeout minus a
+    // margin, a relaying host clamps, and a host timeout below the hold is a
+    // caller-side failure. The text ships to every self-hoster's LLM via
+    // tools/list, so it names no product, host or relay.
+    it("states the caller's obligation on `wait` and the failure mode, product-free", () => {
+      const text = runtimePullInputSchema.shape.wait.description ?? '';
+      expect(text).toMatch(/MUST NOT exceed .*tools\/call timeout/);
+      expect(text).toMatch(/relay/i);
+      expect(text).toMatch(/caller-side/i);
+      expect(text).toMatch(new RegExp(String(RUNTIME_PULL_MAX_WAIT_SECONDS)));
+      expect(text).not.toMatch(/guuey|claude\.ai|lambda|publicapi|platform/i);
+    });
     it('accepts a minimal input — sessionId only (cursor + limit optional)', () => {
       const parsed = runtimePullInputSchema.parse({ sessionId: 'rnd_1' });
       expect(parsed).toEqual({ sessionId: 'rnd_1' });

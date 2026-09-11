@@ -1272,11 +1272,20 @@ export const declareToolCatalogOutputSchema = z
 export const RUNTIME_PULL_MAX_LIMIT = 100;
 
 /**
- * Server-side ceiling on `ggui_runtime_pull`'s `wait` hold, in seconds.
- * Chosen under `ggui_consume`'s proven 25-second host tolerance for
- * held tool calls — the hold must resolve before any host-side
- * `tools/call` timeout fires, or the transport counts a failure the
- * server intended as a quiet success.
+ * Server-side ceiling on `ggui_runtime_pull`'s `wait` hold, in seconds —
+ * the LONGEST hold the server will honour, never a promise that every
+ * host tolerates it (ggui#1030).
+ *
+ * The contract has two sides. SERVER: honour `wait` up to this ceiling,
+ * return the empty page as a normal result when the hold elapses, and
+ * end the hold when the caller's transport closes. CALLER (the pulling
+ * runtime): choose a `wait` that does not exceed the `tools/call`
+ * timeout of the host relaying the call, minus a margin; a host that
+ * relays a pull clamps the forwarded `wait` to its own timeout minus one
+ * second. A host timeout below the hold is a caller-side failure — the
+ * server's `success` after the socket closed is not a server fault, and
+ * a caller that keeps pulling through such failures must demote to
+ * sparse un-held pulls exactly as it does after consecutive empties.
  */
 export const RUNTIME_PULL_MAX_WAIT_SECONDS = 20;
 
@@ -1366,7 +1375,7 @@ export const runtimePullInputShape = {
     .min(0)
     .optional()
     .describe(
-      `Subscription-mode hold, in seconds. When set and the cursor page is empty, the server holds this call until an event lands or the hold elapses (values above ${RUNTIME_PULL_MAX_WAIT_SECONDS} are clamped to ${RUNTIME_PULL_MAX_WAIT_SECONDS}). An empty page after a full hold is a NORMAL result — immediately re-pull to stay subscribed, or back off to sparse un-held pulls after a few consecutive empties. Omit (= 0) for an immediate return.`,
+      `Subscription-mode hold, in seconds. When set and the cursor page is empty, the server holds this call until an event lands or the hold elapses (values above ${RUNTIME_PULL_MAX_WAIT_SECONDS} are clamped to ${RUNTIME_PULL_MAX_WAIT_SECONDS}). CALLER OBLIGATION: your \`wait\` MUST NOT exceed the tools/call timeout of the host relaying this call, minus a margin — a host that relays a pull MUST clamp the forwarded \`wait\` to its own timeout minus one second; a host timeout below the hold is a caller-side failure (the server's success after the socket closed is not a server fault), and a caller seeing such failures MUST demote to sparse un-held pulls as it would after consecutive empties. An empty page after a full hold is a NORMAL result — immediately re-pull to stay subscribed, or back off to sparse un-held pulls after a few consecutive empties. Omit (= 0) for an immediate return.`,
     ),
 } as const;
 
