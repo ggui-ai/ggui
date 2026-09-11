@@ -13,7 +13,7 @@ import {
   FREE_COLOR_RULE,
 } from './free-design-prompt.js';
 import { buildSystemPrompt as buildProductionPrompt } from '../harness/runtime.js';
-import { PIN_FIXTURES } from '../design-mode.pin.test.js';
+import { PIN_FIXTURES } from '../pin-fixtures.js';
 
 const manifest = new Set(consumedTokenManifest);
 /** Concrete `--ggui-*` mentions — a trailing `-` is a prefix pattern (`--ggui-color-*`), not a name. */
