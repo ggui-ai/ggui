@@ -62,6 +62,24 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-11',
+    text:
+      'Instrument reading, not a score change: the 2026-09-11 run (source hash ' +
+      '072705e0b79e) is the first on the fixed contract-behaviour check, and it ' +
+      'shows the next limit of a click-only probe — chat-interface, survey-form ' +
+      'and onboarding-wizard read "no clickable control" on every arm because ' +
+      'those components disable Send, Submit and Complete until something is ' +
+      'typed or chosen, and the check skipped disabled controls and never typed ' +
+      '(issue #1021). product-page and kanban-board readings on that row stand. ' +
+      'The check now primes inputs first — a value in each empty text field and ' +
+      'textarea, the first option of each select, the first radio of an ' +
+      'unchosen group — and, when every control is still disabled, says so ' +
+      'in words instead of "not rendered". Those three commits read as ' +
+      'measurements again from the first run on a runner image carrying the ' +
+      'fix; that run\'s row will show the new source hash. Scores, the corpus, ' +
+      'the judge panel and every arm are unaffected; history is not rewritten.',
+  },
+  {
     date: '2026-09-10',
     text:
       'Instrument reading, not a score change: the contract-behaviour check ' +
