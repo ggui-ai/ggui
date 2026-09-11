@@ -418,3 +418,30 @@ describe('createGguiRuntimePullHandler', () => {
     });
   });
 });
+
+// ggui#1026 — the hold observes the caller going away: an aborted request
+// (cancel notification or transport close) ends the hold at once with the
+// empty page, so a disconnected puller cannot keep the store probing.
+describe('createGguiRuntimePullHandler — abort ends the hold (ggui#1026)', () => {
+  it('resolves the empty page promptly on abort, without a throw and without further probes', async () => {
+    const store = new InMemoryGguiSessionStore();
+    await seedRender(store, { eventCount: 1 });
+    let probes = 0;
+    const unbounded = store.listEventsSince.bind(store);
+    store.listEventsSince = async (id, since, limit) => {
+      probes += 1;
+      return unbounded(id, since, limit);
+    };
+    const h = createGguiRuntimePullHandler({ renderStore: store, waitProbeIntervalMs: 10 });
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 30);
+    const started = Date.now();
+    const out = expectPage(
+      await h.handler({ sessionId: SESSION, sinceSequence: 1, wait: 5 }, { ...ctx, signal: ac.signal }),
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(out.events).toEqual([]);
+    expect(out.lastSequence).toBe(1);
+    expect(probes).toBeLessThanOrEqual(5);
+  });
+});

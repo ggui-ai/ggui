@@ -178,8 +178,14 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
 
       const deadline = Date.now() + waitMs;
       // Hold loop: one immediate read, then — empty page + time left —
-      // probe the store at `probeIntervalMs` until an event lands or
-      // the hold elapses. The probe is a STORE read on purpose: the
+      // probe the store at `probeIntervalMs` until an event lands, the
+      // hold elapses, or the CALLER GOES AWAY (`ctx.signal`: the MCP
+      // cancel notification or the transport closing — ggui#1026: a
+      // relay that times out its own call at 5 s used to leave this
+      // loop probing the store into a closed socket for the full hold).
+      // An aborted hold resolves the empty page — never a throw — so
+      // the caller-side contract is the same as a hold that elapsed.
+      // The probe is a STORE read on purpose: the
       // event that ends this hold may be committed by another replica, and
       // the store is the only cross-replica truth available here. Horizon
       // results and non-empty pages return immediately regardless of
@@ -213,7 +219,11 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
           };
         }
 
-        if (result.events.length > 0 || Date.now() >= deadline) {
+        if (
+          result.events.length > 0 ||
+          Date.now() >= deadline ||
+          ctx.signal?.aborted === true
+        ) {
           // Events to deliver, or the hold elapsed — an empty page
           // after a full hold is a NORMAL result (the client stays
           // subscribed by immediately re-pulling).
@@ -225,8 +235,22 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
           };
         }
 
+        // Sleep one probe interval, or less: the caller aborting ends
+        // the wait immediately (the loop then returns the empty page).
         await new Promise<void>((resolve) => {
-          setTimeout(resolve, probeIntervalMs);
+          const signal = ctx.signal;
+          const onAbort = (): void => {
+            clearTimeout(timer);
+            resolve();
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, probeIntervalMs);
+          if (signal !== undefined) {
+            if (signal.aborted) onAbort();
+            else signal.addEventListener('abort', onAbort, { once: true });
+          }
         });
       }
     },
