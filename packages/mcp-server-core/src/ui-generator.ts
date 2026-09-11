@@ -19,6 +19,7 @@ import type {
   GeneratorId,
   ModelRef,
   AppGenerationProfile,
+  JsonObject,
 } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
 
@@ -125,6 +126,13 @@ export interface UiGenerateInput {
    * byte-identical to today's prompts.
    */
   profile?: AppGenerationProfile;
+  /**
+   * Props for the in-loop render check and runtime probe; absent ⇒
+   * schema-first synthesis. Never part of the prompt text or the cache
+   * identity — the generated code is judged against these, not shaped by
+   * them.
+   */
+  fixtureProps?: JsonObject;
   /**
    * Optional rendering hint — device + shell + viewport. When present,
    * the generator surfaces a "Rendering Context" block in the user

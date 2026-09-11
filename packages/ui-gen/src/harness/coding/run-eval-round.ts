@@ -486,7 +486,9 @@ export async function runEvalRound(
               provider: mapProviderForEvaluator(visualEvalAgent.provider) as "claude" | "google",
               model: visualEvalAgent.model,
               passThreshold: visualThreshold,
-              sampleProps: visualEvaluation?.sampleProps,
+              // The in-loop visual round renders the same sample the runtime probe
+              // does (the caller's fixture) unless the config names its own.
+              sampleProps: visualEvaluation?.sampleProps ?? fixtureProps,
               viewport: visualEvaluation?.viewport,
               // Per-canvas judging (arm-neutral) — absent = single shot.
               ...(visualEvaluation?.canvases !== undefined

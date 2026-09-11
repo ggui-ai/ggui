@@ -271,6 +271,27 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
     return { ctx, input };
   }
 
+  it("the in-loop visual round renders the caller's fixtureProps as its sample unless the config names its own (the round judges the same sample the runtime probe renders)", async () => {
+    const fixture = { heading: 'Welcome', quickReplies: [{ id: 'a', label: 'A' }] };
+    const configSample = { heading: 'From config' };
+    const summary: VisualEvalSummary = { score: 84, passed: true, canvases: [] };
+    const captured: VisualEvalConfig[] = [];
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: (_context, config) => {
+        captured.push(config);
+        return Promise.resolve({ issues: [], summary });
+      },
+    };
+    const a = await buildCtx({ enabled: true }, fakeVisualMod);
+    await runEvalRound({ ...a.ctx, fixtureProps: fixture }, a.input);
+    const b = await buildCtx({ enabled: true, sampleProps: configSample }, fakeVisualMod);
+    await runEvalRound({ ...b.ctx, fixtureProps: fixture }, b.input);
+    const c = await buildCtx({ enabled: true }, fakeVisualMod);
+    await runEvalRound(c.ctx, c.input);
+    expect(captured.map((cfg) => cfg.sampleProps)).toEqual([fixture, configSample, undefined]);
+  });
+
   it('threads canvases into the visual config and stamps the summary on evalResult.visual', async () => {
     const summary: VisualEvalSummary = {
       score: 84,

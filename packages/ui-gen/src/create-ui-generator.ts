@@ -374,6 +374,8 @@ export function createUiGenerator(
           ...(designMode !== undefined ? { designMode } : {}),
           ...(canvas !== undefined ? { canvas } : {}),
           ...(input.profile !== undefined ? { profile: input.profile } : {}),
+          // Fixture props reach the in-loop probe + visual round only (never the prompt, never identity).
+          ...(input.fixtureProps !== undefined ? { fixtureProps: input.fixtureProps } : {}),
         });
 
         onGenerated?.(result);
