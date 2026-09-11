@@ -573,6 +573,40 @@ export interface VisualEvalDetailed {
   readonly canvas?: CanvasClass;
 }
 
+
+/** One judge call parsed, retried ONCE on a malformed answer (#1017); the FIRST reason is kept verbatim. */
+type JudgedAnswer =
+  | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
+  | { readonly kind: 'unparsable'; readonly reason: string };
+
+async function judgeAndParse(
+  judge: typeof callMultimodalLLM,
+  config: VisualEvalConfig,
+  model: string,
+  screenshot: Buffer,
+  originalPrompt: string,
+  profileBlock: string,
+  canvas?: CanvasClass,
+): Promise<JudgedAnswer> {
+  let firstReason: string | undefined;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, originalPrompt, profileBlock);
+    try {
+      const result = parseVisualResponse(response.text, config.passThreshold);
+      return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
+    } catch (e) {
+      const reason = `judge answer unparsable: ${e instanceof Error ? e.message : String(e)}`;
+      if (attempt === 1) {
+        firstReason = reason;
+        console.warn(`[visual-eval] visual_judge_retry${canvas ? ` canvas=${canvas}` : ''}: ${reason}`);
+      } else {
+        console.warn(`[visual-eval] visual_judge_retry failed again${canvas ? ` canvas=${canvas}` : ''}: ${reason}`);
+      }
+    }
+  }
+  return { kind: 'unparsable', reason: firstReason ?? 'judge answer unparsable' };
+}
+
 export async function runVisualEvaluation(
   context: VisualEvalContext,
   config: VisualEvalConfig,
@@ -617,17 +651,22 @@ export async function runVisualEvaluationDetailed(
         console.warn(`[visual-eval] ${unavailableReason} at canvas ${canvas} — skipping visual evaluation`);
         return { result: null, unavailableReason, canvas };
       }
-      const response = await judge(
+      const answer = await judgeAndParse(
+        judge,
         config,
         model,
-        VISUAL_EVAL_PROMPT,
         screenshot,
         context.originalPrompt,
         buildStylingProfileJudgeBlock(context.profile),
+        canvas,
       );
-      const result = parseVisualResponse(response.text, config.passThreshold);
-      result.inputTokens = response.inputTokens;
-      result.outputTokens = response.outputTokens;
+      if (answer.kind === 'unparsable') {
+        return { result: null, unavailableReason: answer.reason, canvas };
+      }
+      const result = answer.result;
+      result.inputTokens = answer.inputTokens;
+      result.outputTokens = answer.outputTokens;
+      const response = { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens };
       perCanvasResults.push(result);
       perCanvas.push({
         canvas,
@@ -660,20 +699,22 @@ export async function runVisualEvaluationDetailed(
   }
   console.log(`[visual-eval] screenshot: ${screenshot.length}B (${Date.now() - startTime}ms)`);
 
-  // Send to multimodal LLM
-  const response = await judge(
+  // Send to multimodal LLM (one retry on a malformed answer — #1017)
+  const answer = await judgeAndParse(
+    judge,
     config,
     model,
-    VISUAL_EVAL_PROMPT,
     screenshot,
     context.originalPrompt,
     buildStylingProfileJudgeBlock(context.profile),
   );
-
-  // Parse response
-  const result = parseVisualResponse(response.text, config.passThreshold);
-  result.inputTokens = response.inputTokens;
-  result.outputTokens = response.outputTokens;
+  if (answer.kind === 'unparsable') {
+    return { result: null, unavailableReason: answer.reason };
+  }
+  const result = answer.result;
+  result.inputTokens = answer.inputTokens;
+  result.outputTokens = answer.outputTokens;
+  const response = { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens };
 
   const elapsed = Date.now() - startTime;
   console.log(`[visual-eval] score=${result.finalScore} (${elapsed}ms) | in=${response.inputTokens} out=${response.outputTokens}`);
