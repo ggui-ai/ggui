@@ -1687,11 +1687,12 @@ export interface ImageProps extends BaseProps {
 }
 
 /**
- * Icon -- 185 Lucide icons + emoji passthrough.
+ * Icon -- a curated Lucide subset (~200 names) + emoji passthrough.
  *
  * Three resolution layers:
- * 1. **Lucide icon:** pass any common Lucide icon name (e.g. `sun`, `cloud-rain`, `heart`, `shopping-cart`).
- *    Accepts kebab-case, camelCase, or PascalCase. Renders as stroke SVG.
+ * 1. **Lucide icon:** pass a name from the curated subset (e.g. `sun`, `cloud-rain`, `heart`, `shopping-cart`, `sparkles`, `arrow-up-right`).
+ *    Accepts kebab-case, camelCase, or PascalCase. Renders as stroke SVG. ONLY the subset renders: an
+ *    unknown name renders an empty box (never a placeholder glyph) — the `get_available_icons` tool lists the exact names.
  * 2. **Emoji:** pass emoji/unicode directly (e.g. `☀️`, `🌧️`). Rendered as text.
  * 3. **Custom SVG:** pass children (`<svg>` element) for full control.
  *
@@ -1704,7 +1705,8 @@ export interface ImageProps extends BaseProps {
  */
 export interface IconProps extends BaseProps {
   /**
-   * Lucide icon name (kebab-case, camelCase, or PascalCase all work).
+   * Lucide icon name from the curated subset (kebab-case, camelCase, or
+   * PascalCase all work); a name outside the subset renders an empty box.
    * Also accepts emoji/unicode characters directly.
    */
   name?: string;

@@ -33,6 +33,7 @@ import {
   WRITE_PLAN_TOOL,
   type LLMToolDef,
 } from "../../tools.js";
+import { LUCIDE_ICON_NAMES } from "@ggui-ai/design";
 import { formatWithHashlines } from "../hashline.js";
 import {
   recordToolExchange,
@@ -592,20 +593,11 @@ ${closingInstruction}`;
   // Handle get_available_icons — return icon list without consuming a turn
   if (call.name === "get_available_icons") {
     if (!iconNamesCache) {
-      try {
-        // Dynamic import — resolve from design package dist
-        const iconDataPath = new URL(
-          "../../../../packages/design/dist/primitives/icon-data.js",
-          import.meta.url,
-        ).pathname;
-        const { LUCIDE_ICONS } = await import(iconDataPath);
-        iconNamesCache = Object.keys(LUCIDE_ICONS)
-          .map((n) => n.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase())
-          .join(", ");
-      } catch {
-        iconNamesCache =
-          "sun, moon, cloud, cloud-rain, heart, star, search, home, plus, minus, check, x, arrow-left, arrow-right, chevron-down, chevron-up, menu, user, settings, bell, mail, phone, shopping-cart, download, upload, edit, trash-2, save, eye, lock, globe, map-pin, calendar, clock, zap, alert-circle, info, help-circle";
-      }
+      // The one list the Icon primitive renders (ggui#1015) — the same
+      // export the check leg reads, so the tool never advertises a name
+      // the primitive does not know (the former dist-relative dynamic
+      // import fell back to a 40-name string whenever the path missed).
+      iconNamesCache = LUCIDE_ICON_NAMES.join(", ");
     }
     console.log(`[simple] turn ${turnsUsed}: get_available_icons`);
     let iconResult = `Available Lucide icon names (use with <Icon name="...">):\n${iconNamesCache}`;

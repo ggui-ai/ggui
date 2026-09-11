@@ -4,6 +4,7 @@
 // component. Dispatched via a "universal" gate that matches every render
 // value.
 
+import { LUCIDE_ICON_NAMES } from "@ggui-ai/design";
 import type { EvalIssue } from "../../types-public.js";
 import type { AxisCheck, AxisCheckInput } from "../types.js";
 import {
@@ -119,7 +120,58 @@ function runPropSeedNoResync(input: AxisCheckInput): EvalIssue[] {
   return issues;
 }
 
+// ── universal.icon_name_known (ggui#1015) ────────────────────────────
+// The Icon primitive renders ONLY its curated Lucide subset; an unknown
+// name renders an empty box. The model reaches for names from the full
+// Lucide set ("sparkles", "arrow-up-right" on the hello frames), so the
+// check flags every string-literal `<Icon name>` outside the subset —
+// the fix turn has `get_available_icons`. Dynamic names (`name={x}`)
+// and emoji/unicode (rendered as text) are outside the check's scope.
+
+/** Icon.tsx's resolver rule: exact key, else dashes/underscores stripped + lowercased. */
+const KNOWN_ICON_KEYS: ReadonlySet<string> = new Set(
+  LUCIDE_ICON_NAMES.map((n) => n.replace(/[-_]/g, "").toLowerCase()),
+);
+
+export function isKnownIconName(name: string): boolean {
+  return KNOWN_ICON_KEYS.has(name.replace(/[-_]/g, "").toLowerCase());
+}
+
+const ICON_NAME_LITERAL_RX =
+  /<Icon\b[^>]*?\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*"([^"]*)"\s*\}|\{\s*'([^']*)'\s*\})/g;
+
+export function findUnknownIconNames(sourceCode: string): string[] {
+  const unknown = new Set<string>();
+  for (const m of sourceCode.matchAll(ICON_NAME_LITERAL_RX)) {
+    const name = m[1] ?? m[2] ?? m[3] ?? m[4] ?? "";
+    if (name.length === 0) continue;
+    if (/[^\x20-\x7e]/.test(name)) continue; // emoji / unicode passthrough renders as text
+    if (!isKnownIconName(name)) unknown.add(name);
+  }
+  return [...unknown];
+}
+
+function runIconNameKnown(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const unknown = findUnknownIconNames(input.sourceCode);
+  if (unknown.length === 0) return [];
+  const list = unknown.map((n) => `"${n}"`).join(", ");
+  return [
+    mkIssue(
+      "universal.icon_name_known",
+      `<Icon name=…> uses ${unknown.length} name(s) outside the design system's Lucide subset: ${list} — an unknown name renders an empty box.`,
+      "Call get_available_icons and pick a listed name (kebab-case), or use an emoji directly.",
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
+  {
+    id: "universal.icon_name_known",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runIconNameKnown,
+  },
   {
     id: "universal.prop_coverage",
     axis: "render",

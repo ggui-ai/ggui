@@ -259,7 +259,8 @@ export const APPLY_CHANGES_HASHLINE_TOOL_FLAT: LLMToolDef = {
 /** Helper icon-lookup tool — not a patch grammar, attached to the same LLM turn. */
 export const GET_ICONS_TOOL: LLMToolDef = {
   name: "get_available_icons",
-  description: 'List all 185 available Lucide icon names for the <Icon name="..."> component.',
+  description:
+    'List every Lucide icon name the <Icon name="..."> component renders (kebab-case). A name outside this list renders nothing — check before choosing.',
   parameters: { type: "object", properties: {} },
 };
 

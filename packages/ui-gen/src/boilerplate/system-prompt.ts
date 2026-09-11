@@ -597,7 +597,7 @@ Don't render text-only metrics. A weather widget without a sun/cloud, a stock ca
 </Row>
 \`\`\`
 
-Use \`<Icon name="..." />\` (Lucide icon names in kebab-case) for line icons; emoji directly for status/weather/mood. Both are valid. For per-stat tiny accents, use a small icon next to the label.
+Use \`<Icon name="..." />\` for line icons — ONLY the curated Lucide subset renders (call \`get_available_icons\` for the exact kebab-case names; a name outside it renders an empty box and fails the check); emoji directly for status/weather/mood. Both are valid. For per-stat tiny accents, use a small icon next to the label.
 
 ### Spacing — generosity beats compactness
 

@@ -22,7 +22,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(__dirname, '..', 'src', 'primitives', 'icon-data.ts');
 
 // ---------------------------------------------------------------------------
-// Curated icon set — ~185 icons covering common LLM-generated UI needs
+// Curated icon set — ~200 icons covering common LLM-generated UI needs
 // ---------------------------------------------------------------------------
 
 const CURATED_ICONS = [
@@ -64,6 +64,13 @@ const CURATED_ICONS = [
   'Coffee', 'Lightbulb', 'Puzzle', 'Rocket', 'Code', 'Terminal', 'Braces', 'Hash',
   'Wifi', 'WifiOff', 'Bluetooth', 'Battery', 'BatteryCharging', 'Power',
   'Printer', 'QrCode', 'Fingerprint', 'Gauge',
+  // Greeting / conversational glyphs (ggui#1015): the names hello screens
+  // and reply chips reach for first — an AI spark, a bot, a wave, an
+  // outbound arrow. Missing names rendered the unknown-name placeholder
+  // on greeting screens in the field.
+  'Sparkles', 'Sparkle', 'Bot', 'BotMessageSquare', 'WandSparkles', 'Hand', 'PartyPopper', 'Smile',
+  'Brain', 'Trophy', 'Waves', 'Paperclip', 'Cpu',
+  'ArrowUpRight', 'ArrowDownRight', 'ArrowUpLeft', 'ArrowDownLeft',
 ];
 
 // ---------------------------------------------------------------------------
@@ -85,6 +92,11 @@ if (missing.length > 0) {
   console.error(`[icon-data] WARNING: ${missing.length} icons not found in lucide: ${missing.join(', ')}`);
 }
 
+// Lucide's own kebab spelling: `Trash2` → `trash-2`, `BarChart3` → `bar-chart-3`.
+const kebabNames = Object.keys(result)
+  .map((n) => n.replace(/([a-z])([A-Z0-9])/g, '$1-$2').replace(/([0-9])([A-Z])/g, '$1-$2').toLowerCase())
+  .sort();
+
 const ts = `// AUTO-GENERATED from lucide icons. Do not edit manually.
 // To regenerate: node packages/design/scripts/generate-icon-data.mjs
 // Source: https://lucide.dev/icons (MIT License)
@@ -93,6 +105,13 @@ const ts = `// AUTO-GENERATED from lucide icons. Do not edit manually.
 type IconNode = [string, Record<string, string>][];
 
 export const LUCIDE_ICONS: Record<string, IconNode> = ${JSON.stringify(result, null, 2)} as const;
+
+/**
+ * Every name the Icon primitive renders, kebab-case, sorted — the single
+ * list the generator's icon tool and the check leg read (ggui#1015). A
+ * name outside this list renders nothing.
+ */
+export const LUCIDE_ICON_NAMES: readonly string[] = ${JSON.stringify(kebabNames, null, 2)} as const;
 `;
 
 writeFileSync(OUTPUT, ts);

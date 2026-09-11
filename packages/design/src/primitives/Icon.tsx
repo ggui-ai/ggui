@@ -4,7 +4,7 @@ import type { IconProps } from './types';
 import { resolveToneCss } from './color-slots';
 
 /**
- * Icon - 185 curated Lucide icons + emoji/unicode passthrough.
+ * Icon - a curated Lucide subset (see `LUCIDE_ICON_NAMES`) + emoji/unicode passthrough.
  *
  * Accepts icon names in any casing convention:
  *   <Icon name="sun" />           — lowercase
@@ -114,7 +114,7 @@ export function Icon({
     );
   }
 
-  // 2. Lucide icon lookup (185 curated icons)
+  // 2. Lucide icon lookup (the curated subset in icon-data.ts)
   if (name) {
     const lucideKey = resolveLucideName(name);
     if (lucideKey) {
@@ -144,20 +144,18 @@ export function Icon({
     );
   }
 
-  // 4. Unknown — gray placeholder
+  // 4. Unknown name — an empty box of `size`, never a placeholder glyph
+  // (ggui#1015). A "?" box is a visible defect on a served frame; the
+  // empty box keeps the layout stable and the generator's check leg
+  // (`universal.icon_name_known`) flags the name at eval time so it is
+  // corrected at source instead of painted. The data attribute lets a
+  // runtime probe count unknown glyphs deterministically.
   return (
     <span
       className={className}
       {...a11yProps}
-      style={{
-        ...wrapStyle,
-        backgroundColor: 'var(--ggui-color-outlineVariant, #e4e4e7)',
-        borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
-        color: 'var(--ggui-color-outline, #d4d4d8)',
-        fontSize: size * 0.5,
-      }}
-    >
-      ?
-    </span>
+      style={wrapStyle}
+      data-ggui-icon-unknown={name ?? ''}
+    />
   );
 }

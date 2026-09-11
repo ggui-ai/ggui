@@ -34,6 +34,11 @@ export * from './components';
 export * from './compositions';
 export * from './interact';
 export * from './tokens';
+// The Icon primitive's curated Lucide subset, kebab-case (ggui#1015) — read
+// by the generator's icon tool and its check leg. Exported from the root
+// only: it is data, not a primitive, so it stays out of the `primitives`
+// subpath (the renderer shim's allowlist and the VALID_PRIMITIVES list).
+export { LUCIDE_ICON_NAMES } from './primitives/icon-data';
 export * from './themes';
 
 // Re-export types, excluding conflicts with tokens

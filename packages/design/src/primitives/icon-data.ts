@@ -1,6 +1,7 @@
 // AUTO-GENERATED from lucide icons. Do not edit manually.
-// To regenerate: node scripts/generate-icon-data.mjs
+// To regenerate: node packages/design/scripts/generate-icon-data.mjs
 // Source: https://lucide.dev/icons (MIT License)
+// Icons: 202 curated
 
 type IconNode = [string, Record<string, string>][];
 
@@ -3973,5 +3974,763 @@ export const LUCIDE_ICONS: Record<string, IconNode> = {
         "d": "M3.34 19a10 10 0 1 1 17.32 0"
       }
     ]
+  ],
+  "Sparkles": [
+    [
+      "path",
+      {
+        "d": "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 2v4"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M22 4h-4"
+      }
+    ],
+    [
+      "circle",
+      {
+        "cx": "4",
+        "cy": "20",
+        "r": "2"
+      }
+    ]
+  ],
+  "Sparkle": [
+    [
+      "path",
+      {
+        "d": "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      }
+    ]
+  ],
+  "Bot": [
+    [
+      "path",
+      {
+        "d": "M12 8V4H8"
+      }
+    ],
+    [
+      "rect",
+      {
+        "width": "16",
+        "height": "12",
+        "x": "4",
+        "y": "8",
+        "rx": "2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 14h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 14h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M15 13v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M9 13v2"
+      }
+    ]
+  ],
+  "BotMessageSquare": [
+    [
+      "path",
+      {
+        "d": "M12 6V2H8"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M15 11v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 12h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 12h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 16a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M9 11v2"
+      }
+    ]
+  ],
+  "WandSparkles": [
+    [
+      "path",
+      {
+        "d": "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "m14 7 3 3"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M5 6v4"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M19 14v4"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M10 2v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M7 8H3"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M21 16h-4"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M11 3H9"
+      }
+    ]
+  ],
+  "Hand": [
+    [
+      "path",
+      {
+        "d": "M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"
+      }
+    ]
+  ],
+  "PartyPopper": [
+    [
+      "path",
+      {
+        "d": "M5.8 11.3 2 22l10.7-3.79"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M4 3h.01"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M22 8h.01"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M15 2h.01"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M22 20h.01"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"
+      }
+    ]
+  ],
+  "Smile": [
+    [
+      "circle",
+      {
+        "cx": "12",
+        "cy": "12",
+        "r": "10"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M8 14s1.5 2 4 2 4-2 4-2"
+      }
+    ],
+    [
+      "line",
+      {
+        "x1": "9",
+        "x2": "9.01",
+        "y1": "9",
+        "y2": "9"
+      }
+    ],
+    [
+      "line",
+      {
+        "x1": "15",
+        "x2": "15.01",
+        "y1": "9",
+        "y2": "9"
+      }
+    ]
+  ],
+  "Brain": [
+    [
+      "path",
+      {
+        "d": "M12 18V5"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17.997 5.125a4 4 0 0 1 2.526 5.77"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M18 18a4 4 0 0 0 2-7.464"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M6 18a4 4 0 0 1-2-7.464"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M6.003 5.125a4 4 0 0 0-2.526 5.77"
+      }
+    ]
+  ],
+  "Trophy": [
+    [
+      "path",
+      {
+        "d": "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M18 9h1.5a1 1 0 0 0 0-5H18"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M4 22h16"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M6 9H4.5a1 1 0 0 1 0-5H6"
+      }
+    ]
+  ],
+  "Waves": [
+    [
+      "path",
+      {
+        "d": "M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"
+      }
+    ]
+  ],
+  "Paperclip": [
+    [
+      "path",
+      {
+        "d": "m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"
+      }
+    ]
+  ],
+  "Cpu": [
+    [
+      "path",
+      {
+        "d": "M12 20v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M12 2v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17 20v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17 2v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 12h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 17h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M2 7h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 12h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 17h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M20 7h2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M7 20v2"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M7 2v2"
+      }
+    ],
+    [
+      "rect",
+      {
+        "x": "4",
+        "y": "4",
+        "width": "16",
+        "height": "16",
+        "rx": "2"
+      }
+    ],
+    [
+      "rect",
+      {
+        "x": "8",
+        "y": "8",
+        "width": "8",
+        "height": "8",
+        "rx": "1"
+      }
+    ]
+  ],
+  "ArrowUpRight": [
+    [
+      "path",
+      {
+        "d": "M7 7h10v10"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M7 17 17 7"
+      }
+    ]
+  ],
+  "ArrowDownRight": [
+    [
+      "path",
+      {
+        "d": "m7 7 10 10"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17 7v10H7"
+      }
+    ]
+  ],
+  "ArrowUpLeft": [
+    [
+      "path",
+      {
+        "d": "M7 17V7h10"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17 17 7 7"
+      }
+    ]
+  ],
+  "ArrowDownLeft": [
+    [
+      "path",
+      {
+        "d": "M17 7 7 17"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "M17 17H7V7"
+      }
+    ]
   ]
 } as const;
+
+/**
+ * Every name the Icon primitive renders, kebab-case, sorted — the single
+ * list the generator's icon tool and the check leg read (ggui#1015). A
+ * name outside this list renders nothing.
+ */
+export const LUCIDE_ICON_NAMES: readonly string[] = [
+  "activity",
+  "alert-circle",
+  "alert-triangle",
+  "arrow-down",
+  "arrow-down-left",
+  "arrow-down-right",
+  "arrow-left",
+  "arrow-right",
+  "arrow-up",
+  "arrow-up-left",
+  "arrow-up-right",
+  "at-sign",
+  "award",
+  "ban",
+  "banknote",
+  "bar-chart-3",
+  "battery",
+  "battery-charging",
+  "bell",
+  "bell-off",
+  "bluetooth",
+  "bookmark",
+  "bot",
+  "bot-message-square",
+  "braces",
+  "brain",
+  "calendar",
+  "camera",
+  "check",
+  "check-circle",
+  "chevron-down",
+  "chevron-left",
+  "chevron-right",
+  "chevron-up",
+  "chevrons-down",
+  "chevrons-left",
+  "chevrons-right",
+  "chevrons-up",
+  "circle-dot",
+  "clipboard",
+  "clock",
+  "cloud",
+  "cloud-drizzle",
+  "cloud-fog",
+  "cloud-lightning",
+  "cloud-moon",
+  "cloud-rain",
+  "cloud-snow",
+  "cloud-sun",
+  "code",
+  "coffee",
+  "cog",
+  "columns",
+  "compass",
+  "copy",
+  "corner-down-left",
+  "corner-down-right",
+  "cpu",
+  "credit-card",
+  "database",
+  "dollar-sign",
+  "download",
+  "droplets",
+  "edit",
+  "external-link",
+  "eye",
+  "eye-off",
+  "file",
+  "file-text",
+  "film",
+  "filter",
+  "fingerprint",
+  "flag",
+  "flame",
+  "folder",
+  "folder-open",
+  "gauge",
+  "gift",
+  "globe",
+  "grid",
+  "hand",
+  "hard-drive",
+  "hash",
+  "headphones",
+  "heart",
+  "help-circle",
+  "home",
+  "hourglass",
+  "image",
+  "info",
+  "key",
+  "layout",
+  "lightbulb",
+  "line-chart",
+  "link",
+  "list",
+  "loader",
+  "loader-2",
+  "lock",
+  "log-in",
+  "log-out",
+  "mail",
+  "map",
+  "map-pin",
+  "maximize-2",
+  "menu",
+  "message-circle",
+  "message-square",
+  "mic",
+  "mic-off",
+  "minimize-2",
+  "minus",
+  "moon",
+  "more-horizontal",
+  "more-vertical",
+  "move-horizontal",
+  "move-vertical",
+  "music",
+  "package",
+  "panel-left",
+  "panel-right",
+  "paperclip",
+  "party-popper",
+  "pause",
+  "percent",
+  "phone",
+  "phone-call",
+  "pie-chart",
+  "play",
+  "plus",
+  "power",
+  "printer",
+  "puzzle",
+  "qr-code",
+  "rainbow",
+  "receipt",
+  "redo-2",
+  "refresh-cw",
+  "rocket",
+  "rotate-ccw",
+  "rotate-cw",
+  "save",
+  "search",
+  "send",
+  "server",
+  "settings",
+  "share-2",
+  "shield",
+  "shield-alert",
+  "shield-check",
+  "shopping-bag",
+  "shopping-cart",
+  "sidebar",
+  "skip-back",
+  "skip-forward",
+  "sliders",
+  "sliders-horizontal",
+  "smile",
+  "snowflake",
+  "sort-asc",
+  "sort-desc",
+  "sparkle",
+  "sparkles",
+  "square",
+  "star",
+  "store",
+  "sun",
+  "table",
+  "tag",
+  "target",
+  "terminal",
+  "thermometer",
+  "thumbs-down",
+  "thumbs-up",
+  "timer",
+  "trash-2",
+  "trending-down",
+  "trending-up",
+  "trophy",
+  "truck",
+  "umbrella",
+  "undo-2",
+  "unlock",
+  "upload",
+  "user",
+  "user-check",
+  "user-plus",
+  "users",
+  "video",
+  "volume-2",
+  "volume-x",
+  "wallet",
+  "wand-sparkles",
+  "waves",
+  "wifi",
+  "wifi-off",
+  "wind",
+  "x",
+  "xcircle",
+  "zap",
+  "zoom-in",
+  "zoom-out"
+] as const;
