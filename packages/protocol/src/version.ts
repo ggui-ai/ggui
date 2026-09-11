@@ -30,11 +30,8 @@
  * Generator profile slot: `appGenerationProfileSchema` (2026-09-10,
  * additive, ggui#991 — MINOR; the D7 mechanism of ggui#987). One new
  * schema on the app's `generation` section — `profile?: { styling?,
- * density?, layout?, direction? }`, free text, trimmed, door-bounded at
- * `APP_GENERATION_PROFILE_BOUNDS` (2000 / 200 / 200 / 600; `direction`
- * added 2026-09-11 as a ggui#1027 follower — additive, the same
- * MINOR line: a variant's composition direction, so variants are one
- * draft under one judge), control characters
+ * density?, layout? }`, free text, trimmed, door-bounded at
+ * `APP_GENERATION_PROFILE_BOUNDS` (2000 / 200 / 200), control characters
  * refused — plus its refusal body. A generation-time input, never a
  * token; absent or empty leaves the generator's prompts byte-identical.
  * No existing type changes; readers and doors land with the #991 set.
