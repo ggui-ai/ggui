@@ -40,7 +40,17 @@ if (panelPrompt !== 'default' && panelPrompt !== 'arm-neutral') {
 }
 const visualEnabled = !hasFlag(['--no-visual']);
 /** The pinned visual judge (rnd §5b): a vision-capable model that is NOT under test in Exp 008. */
-const VISUAL_JUDGE = { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 };
+// The judge prompt's version + digest are the evaluator's own declarations —
+// read at run time, never literals here (a literal drifts from the prompt it
+// names; the digest is sha256 of the prompt the evaluator actually ran).
+const { VISUAL_JUDGE_PROMPT_VERSION, VISUAL_JUDGE_PROMPT_DIGEST } = await import('@ggui-ai/ui-gen/evaluation');
+const VISUAL_JUDGE = {
+  provider: 'claude',
+  model: 'claude-sonnet-5',
+  passThreshold: 60,
+  ...(typeof VISUAL_JUDGE_PROMPT_VERSION === 'string' ? { promptVersion: VISUAL_JUDGE_PROMPT_VERSION } : {}),
+  ...(typeof VISUAL_JUDGE_PROMPT_DIGEST === 'string' ? { promptDigest: VISUAL_JUDGE_PROMPT_DIGEST } : {}),
+};
 const locator = parseCellLocator(locatorArg);
 
 async function syncDown(s3, bucket, prefix, dir) {

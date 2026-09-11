@@ -348,7 +348,12 @@ export interface VisualJudgeIdentity {
   readonly provider: VisualEvalConfig['provider'];
   readonly model: string;
   readonly passThreshold: number;
+  /** The judge prompt's version as the evaluator itself declares it (`VISUAL_JUDGE_PROMPT_VERSION`) — absent when the evaluator exports none. */
+  readonly promptVersion?: string;
+  /** sha256 of the judge prompt the evaluator ran (`VISUAL_JUDGE_PROMPT_DIGEST`, computed at its module load) — the receipt's quote; absent when the evaluator exports none. */
+  readonly promptDigest?: string;
 }
+export const VISUAL_PROMPT_UNSTAMPED_NOTE = 'visual judge prompt unstamped — the evaluator exports no VISUAL_JUDGE_PROMPT_VERSION / VISUAL_JUDGE_PROMPT_DIGEST';
 
 /** The visual judge's token cost, priced like the panel judges (same registry resolution). 0 when the judge reported no tokens. */
 export function visualJudgeCostUsd(judge: VisualJudgeIdentity, outcome: VisualOutcome | null): number {
@@ -434,6 +439,7 @@ const panelFor = (kind: PanelPrompt): PanelJudge => (sourceCode, prompt, contrac
 /** Run every EVAL-side judge for one cell and write `report.json` (+ PNGs) into `deps.dir`. */
 export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Promise<CellReport> {
   const notes: string[] = [];
+  if (deps.visual && deps.visualJudge && (deps.visualJudge.promptVersion === undefined || deps.visualJudge.promptDigest === undefined)) notes.push(VISUAL_PROMPT_UNSTAMPED_NOTE);
   if (inputs.bootstrap) notes.push(BOOTSTRAP_NOTE);
   if (inputs.propsSource === 'empty') notes.push(EMPTY_PROPS_NOTE);
   if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);

@@ -399,3 +399,24 @@ describe('app theme on a bootstrap cell (#1020)', () => {
     expect('themeApplied' in report.meta).toBe(false);
   });
 });
+
+describe('the visual judge identity names its prompt', () => {
+  it('a version + digest the evaluator declares are stamped on report.meta.visualJudge; neither = absent + the note', async () => {
+    const dir = cellDir();
+    const digest = 'a918b33c7b80ced3cbebe71bc750a74b9ff9f40655851c132f251a957f2b81b7';
+    const stamped = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel, visual: async () => null,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60, promptVersion: 'v2-bounded-issues', promptDigest: digest },
+    });
+    expect(stamped.meta.visualJudge?.promptVersion).toBe('v2-bounded-issues');
+    expect(stamped.meta.visualJudge?.promptDigest).toBe(digest);
+    expect(stamped.meta.notes.some((n) => n.startsWith('visual judge prompt unstamped'))).toBe(false);
+    const bare = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel, visual: async () => null,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
+    });
+    expect(bare.meta.visualJudge?.promptVersion).toBeUndefined();
+    expect(bare.meta.visualJudge?.promptDigest).toBeUndefined();
+    expect(bare.meta.notes.some((n) => n.startsWith('visual judge prompt unstamped'))).toBe(true);
+  });
+});
