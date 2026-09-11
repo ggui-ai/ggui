@@ -469,7 +469,7 @@ export async function captureScreenshot(
 // Multimodal LLM evaluation
 // ---------------------------------------------------------------------------
 
-const VISUAL_EVAL_PROMPT = `You are a visual quality evaluator for ggui — a platform where AI agents generate React UI components on demand.
+export const VISUAL_EVAL_PROMPT = `You are a visual quality evaluator for ggui — a platform where AI agents generate React UI components on demand.
 
 ## Context
 The screenshot shows a generated React component built from a design system with CSS variable theming. The component was created by an LLM to fulfill a user's request. Your job is to evaluate whether the generated UI achieves the user's goal AND looks professionally designed.
@@ -496,6 +496,8 @@ The screenshot shows a generated React component built from a design system with
 - Error messages like "Render error" or blank white space = rendering score 0
 - A component that renders but is just a wall of text with no structure should score low on layout and hierarchy
 
+List AT MOST 6 issues, most severe first, one sentence each for "description" and "fix" — a longer list is cut off and lost.
+
 Respond with ONLY a JSON object (no markdown, no explanation):
 {
   "completeness": <0-100>,
@@ -518,6 +520,15 @@ Respond with ONLY a JSON object (no markdown, no explanation):
  * governs credentials and model routing (including the Anthropic
  * Bedrock path) instead of `process.env`.
  */
+/**
+ * Output budget for the judge's answer. 1500 cut a board's issue list
+ * mid-array (`Expected ',' or ']' after array element`, six kanban cells
+ * on 2026-09-11) — deterministic on the content, so a same-prompt retry
+ * could never clear it. 4096 fits the bounded list the prompt now asks for
+ * with room; the salvage path covers the remainder.
+ */
+export const VISUAL_JUDGE_MAX_OUTPUT_TOKENS = 4096;
+
 async function callMultimodalLLM(
   config: VisualEvalConfig,
   model: string,
@@ -541,7 +552,7 @@ async function callMultimodalLLM(
     prompt,
     userPrompt,
     { mediaType: 'image/png', base64: screenshot.toString('base64') },
-    1500,
+    VISUAL_JUDGE_MAX_OUTPUT_TOKENS,
   );
 }
 
@@ -595,6 +606,14 @@ async function judgeAndParse(
       const result = parseVisualResponse(response.text, config.passThreshold);
       return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
     } catch (e) {
+      // A TRUNCATED answer (cut inside `issues` at the output cap) is deterministic on
+      // the content — retrying the same prompt reproduces it. The four dimensions are
+      // emitted before `issues`, so the score is recoverable from the closed prefix.
+      const salvaged = salvageTruncatedVisualAnswer(response.text, config.passThreshold);
+      if (salvaged !== null) {
+        console.warn(`[visual-eval] visual_judge_truncated${canvas ? ` canvas=${canvas}` : ''}: answer cut after ${response.text.length} chars — score recovered from the closed prefix, issues list partial`);
+        return { kind: 'ok', result: salvaged, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
+      }
       const reason = `judge answer unparsable: ${e instanceof Error ? e.message : String(e)}`;
       if (attempt === 1) {
         firstReason = reason;
@@ -787,6 +806,52 @@ export { bundleForRendering, buildRenderHTML, callMultimodalLLM };
 // ---------------------------------------------------------------------------
 // Response parsing
 // ---------------------------------------------------------------------------
+
+/**
+ * Recover a judge answer cut off inside its `issues` array: all four
+ * dimensions must be present in the prefix (else null); issue objects
+ * that closed are kept; `critique` (emitted last) is usually lost and is
+ * replaced by a truncation note so the receipt says what happened.
+ */
+export function salvageTruncatedVisualAnswer(text: string, passThreshold: number): EvaluationResult | null {
+  const dim = (name: string): number | null => {
+    const m = text.match(new RegExp(`"${name}"\\s*:\\s*(\\d+(?:\\.\\d+)?)`));
+    return m ? Number(m[1]) : null;
+  };
+  const completeness = dim('completeness');
+  const layout = dim('layout');
+  const hierarchy = dim('hierarchy');
+  const aesthetics = dim('aesthetics');
+  if (completeness === null || layout === null || hierarchy === null || aesthetics === null) return null;
+  const issues: Array<{ dimension: string; severity: string; description: string; fix: string }> = [];
+  const issuesAt = text.indexOf('"issues"');
+  if (issuesAt >= 0) {
+    for (const m of text.slice(issuesAt).matchAll(/\{[^{}]*\}/g)) {
+      try {
+        const o = JSON.parse(m[0]) as { dimension?: unknown; severity?: unknown; description?: unknown; fix?: unknown };
+        if (typeof o.description === 'string') {
+          issues.push({
+            dimension: typeof o.dimension === 'string' ? o.dimension : 'layout',
+            severity: typeof o.severity === 'string' ? o.severity : 'minor',
+            description: o.description,
+            fix: typeof o.fix === 'string' ? o.fix : '',
+          });
+        }
+      } catch {
+        // an unclosed object at the cut — skipped by construction
+      }
+    }
+  }
+  const rebuilt = JSON.stringify({
+    completeness,
+    layout,
+    hierarchy,
+    aesthetics,
+    issues,
+    critique: `[truncated judge answer — score recovered from the closed prefix; ${issues.length} issue(s) kept, the rest and the critique were cut]`,
+  });
+  return parseVisualResponse(rebuilt, passThreshold);
+}
 
 function parseVisualResponse(text: string, passThreshold: number): EvaluationResult {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
