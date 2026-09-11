@@ -98,6 +98,9 @@ export {
   VISUAL_JUDGE_PROMPT_DIGEST,
   VISUAL_EVAL_PROMPT,
   captureScreenshotDetailed,
+  canvasFitPolicy,
+  canvasOverflowIssue,
+  CONTENT_HEIGHT_EXPRESSION,
   runVisualEval,
   summarizeVisualResult,
 } from './visual-evaluator.js';
@@ -110,6 +113,8 @@ export type {
   VisualEvalDetailed,
   ScreenshotAttempt,
   CanvasVisualResult,
+  CanvasFitPolicy,
+  CaptureMode,
   ScreenshotDeps,
   ScreenshotLauncher,
   ScreenshotBrowser,

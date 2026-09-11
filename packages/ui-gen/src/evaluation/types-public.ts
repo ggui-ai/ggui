@@ -193,8 +193,12 @@ export interface CanvasVisualSummary {
   viewport: { width: number; height: number };
   /** The judge's weighted score at this canvas (0-100). */
   score: number;
-  /** `score >= passThreshold`. */
+  /** `score >= passThreshold`, and on the inline card: no overflow (ggui#1027). */
   passed: boolean;
+  /** The document's scroll height at this canvas, CSS px; `null` when unmeasurable (ggui#1027). */
+  contentHeight: number | null;
+  /** `contentHeight > viewport.height` — measured on every canvas, judged per `canvasFitPolicy`. */
+  overflow: boolean;
 }
 
 /** The visual leg's per-canvas summary — see `EvalResult.visual`. */

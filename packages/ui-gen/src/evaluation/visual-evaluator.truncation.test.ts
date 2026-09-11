@@ -37,6 +37,7 @@ function deps(answers: readonly string[]): VisualEvalDeps & { calls: number } {
         setContent: async () => {},
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
+        evaluate: async () => 0,
         screenshot: async () => new Uint8Array([1, 2]),
       }),
       close: async () => {},

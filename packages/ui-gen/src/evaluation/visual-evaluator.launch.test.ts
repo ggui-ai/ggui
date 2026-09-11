@@ -24,6 +24,7 @@ function fakeBrowser(closed: { count: number }): ScreenshotBrowser {
     setContent: async () => {},
     waitForNetworkIdle: async () => {},
     waitForSelector: async () => null,
+    evaluate: async () => 0,
     screenshot: async () => new Uint8Array(PNG),
   };
   return {

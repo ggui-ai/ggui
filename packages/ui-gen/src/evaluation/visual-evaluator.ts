@@ -79,6 +79,63 @@ export interface CanvasVisualResult {
   passed: boolean;
   /** The PNG the judge saw — kept for artefact persistence + the human look. */
   screenshotPng: Buffer;
+  /**
+   * The document's scroll height at this canvas's viewport, CSS px — what
+   * the box would have to be for nothing to be hidden (ggui#1027). `null`
+   * when the page could not be measured.
+   */
+  contentHeight: number | null;
+  /** `contentHeight > viewport.height` — a measurement; what it MEANS is {@link canvasFitPolicy}'s. */
+  overflow: boolean;
+}
+
+/** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
+export type CaptureMode = 'viewport' | 'full-page';
+export interface CanvasFitPolicy {
+  /** `viewport` = the judge sees the box the user sees; `full-page` = the whole scrolled document. */
+  readonly capture: CaptureMode;
+  /** The verdict an overflow earns on this canvas. */
+  readonly overflow: 'fail' | 'warn' | 'none';
+}
+
+/**
+ * The inline chat card is a BOX — the bubble bounds the component and it
+ * does not scroll — so the judge captures the viewport (a 1289 px hello on
+ * a 640 px card was scored 86 from a full-page capture that showed the
+ * judge what no user sees) and an overflow is a critical layout issue that
+ * fails the canvas. A phone's first screen may scroll, so the overflow is
+ * reported as a major issue and the score stands. Pages (`md`/`lg`/`xl`)
+ * scroll by design: measured, never judged.
+ */
+export function canvasFitPolicy(canvas: CanvasClass): CanvasFitPolicy {
+  switch (canvas) {
+    case 'xs-chat-card':
+      return { capture: 'viewport', overflow: 'fail' };
+    case 'mobile-fullscreen-small':
+      return { capture: 'full-page', overflow: 'warn' };
+    default:
+      return { capture: 'full-page', overflow: 'none' };
+  }
+}
+
+/** The deterministic fit issue — one per overflowing canvas, in the judge's issue shape so it rides the same channel. */
+export function canvasOverflowIssue(
+  canvas: CanvasClass,
+  viewport: CanvasViewport,
+  contentHeight: number,
+  verdict: 'fail' | 'warn',
+): EvaluationIssue {
+  const hidden = contentHeight - viewport.height;
+  return {
+    dimension: 'canvas-overflow',
+    severity: verdict === 'fail' ? 'critical' : 'major',
+    description:
+      `Rendered content is ${contentHeight}px tall on the ${canvas} canvas (${viewport.width}×${viewport.height}) — ` +
+      `${hidden}px ${verdict === 'fail' ? 'is cut off: the inline card does not scroll' : 'sits below the first screen'}.`,
+    fix:
+      'Fit the composition to the canvas: fewer and shorter sections, one compact row of chips, no hero taller than ' +
+      'a third of the box, no fixed min-heights or tall paddings — measure against the canvas, not the page.',
+  };
 }
 
 /**
@@ -337,6 +394,8 @@ export interface ScreenshotPage {
   setContent(html: string, options: { waitUntil: 'load'; timeout: number }): Promise<void>;
   waitForNetworkIdle(options: { idleTime: number; timeout: number }): Promise<void>;
   waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
+  /** Evaluates a JS expression in the page and returns its serialised value — the fit measurement (ggui#1027). */
+  evaluate(expression: string): Promise<unknown>;
   screenshot(options: { type: 'png'; fullPage: boolean }): Promise<Uint8Array>;
 }
 
@@ -426,12 +485,30 @@ async function launchWithPuppeteer(options: LaunchOptions): Promise<ScreenshotBr
 export interface ScreenshotAttempt {
   readonly png: Buffer | null;
   readonly reason?: string;
+  /** The document's scroll height at the viewport (ggui#1027); `null` when unmeasurable. */
+  readonly contentHeight: number | null;
+}
+
+/** The expression the fit measurement evaluates in the page — the taller of the two scroll heights. */
+export const CONTENT_HEIGHT_EXPRESSION =
+  'Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)';
+
+/** Measure the rendered document's height; a failed measurement is reported, never a failed capture. */
+async function measureContentHeight(page: ScreenshotPage): Promise<number | null> {
+  try {
+    const h = await page.evaluate(CONTENT_HEIGHT_EXPRESSION);
+    return typeof h === 'number' && Number.isFinite(h) ? Math.round(h) : null;
+  } catch (e) {
+    console.warn(`[visual-eval] content height unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 }
 
 export async function captureScreenshotDetailed(
   html: string,
   viewport: { width: number; height: number } = DEFAULT_SCREENSHOT_VIEWPORT,
   deps: ScreenshotDeps = {},
+  capture: CaptureMode = 'full-page',
 ): Promise<ScreenshotAttempt> {
   try {
     const launchOptions = await resolveLaunchOptions(viewport, deps);
@@ -446,15 +523,16 @@ export async function captureScreenshotDetailed(
       await page.waitForSelector('#root > *', { timeout: 10000 }).catch(() => {});
       // Wait a bit for CSS/fonts to settle
       await new Promise((r) => setTimeout(r, deps.settleMs ?? 1000));
-      const screenshot = await page.screenshot({ type: 'png', fullPage: true });
-      return { png: Buffer.from(screenshot) };
+      const contentHeight = await measureContentHeight(page);
+      const screenshot = await page.screenshot({ type: 'png', fullPage: capture === 'full-page' });
+      return { png: Buffer.from(screenshot), contentHeight };
     } finally {
       await browser.close();
     }
   } catch (e) {
     const reason = `screenshot failed: ${e instanceof Error ? e.message : String(e)}`;
     console.warn(`[visual-eval] ${reason}`);
-    return { png: null, reason };
+    return { png: null, reason, contentHeight: null };
   }
 }
 
@@ -674,7 +752,8 @@ export async function runVisualEvaluationDetailed(
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
       const viewport = CANVAS_VIEWPORTS[canvas];
-      const attempt = await captureScreenshotDetailed(html, viewport, deps);
+      const policy = canvasFitPolicy(canvas);
+      const attempt = await captureScreenshotDetailed(html, viewport, deps, policy.capture);
       const screenshot = attempt.png;
       if (!screenshot) {
         const unavailableReason = attempt.reason ?? 'no browser available';
@@ -697,6 +776,13 @@ export async function runVisualEvaluationDetailed(
       result.inputTokens = answer.inputTokens;
       result.outputTokens = answer.outputTokens;
       const response = { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens };
+      // The fit verdict (ggui#1027): deterministic, in the judge's issue channel.
+      const contentHeight = attempt.contentHeight;
+      const overflow = contentHeight !== null && contentHeight > viewport.height;
+      if (contentHeight !== null && contentHeight > viewport.height && policy.overflow !== 'none') {
+        result.issues.push(canvasOverflowIssue(canvas, viewport, contentHeight, policy.overflow));
+        if (policy.overflow === 'fail') result.passed = false;
+      }
       perCanvasResults.push(result);
       perCanvas.push({
         canvas,
@@ -704,10 +790,13 @@ export async function runVisualEvaluationDetailed(
         score: result.finalScore,
         passed: result.passed,
         screenshotPng: screenshot,
+        contentHeight,
+        overflow,
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore} ` +
-          `${result.passed ? 'pass' : 'FAIL'} | in=${response.inputTokens} out=${response.outputTokens}`,
+          `${result.passed ? 'pass' : 'FAIL'} | content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${policy.overflow})` : ''} ` +
+          `| in=${response.inputTokens} out=${response.outputTokens}`,
       );
     }
     const aggregate = aggregateCanvasResults(perCanvas, perCanvasResults);
@@ -803,6 +892,8 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     viewport: c.viewport,
     score: c.score,
     passed: c.passed,
+    contentHeight: c.contentHeight,
+    overflow: c.overflow,
   }));
   return { score: result.finalScore, passed: result.passed, canvases };
 }

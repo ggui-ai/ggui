@@ -338,7 +338,7 @@ describe('per-canvas visual summary reaches the published row (#973)', () => {
       ...run,
       tierEvaluation: {
         ...run.tierEvaluation!,
-        visual: { score: 74, passed: true, canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true }] },
+        visual: { score: 74, passed: true, canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true, contentHeight: 900, overflow: false }] },
       },
     };
     const d = toDisplayReport(generateReport([withVisual], 0), 'rep-v', 'test');

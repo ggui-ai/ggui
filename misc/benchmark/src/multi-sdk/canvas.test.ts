@@ -22,7 +22,7 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
     const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
     const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
     const out = persistCanvasScreenshots(dir, [
-      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png },
+      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false },
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true });
@@ -43,7 +43,7 @@ describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summar
   it('maps the evaluator summary and leaves artefact absent', () => {
     const te: EvalResult = {
       issues: [], pass: [],
-      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true }] },
+      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false }] },
     };
     expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true }]);
   });

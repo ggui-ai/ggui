@@ -33,6 +33,7 @@ function recordingDeps(scores: readonly number[]): VisualEvalDeps & { launched: 
         setContent: async () => {},
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
+        evaluate: async () => 0,
         screenshot: async () => new Uint8Array([width >> 8, width & 0xff]),
       }),
       close: async () => {},
@@ -100,8 +101,8 @@ describe('runVisualEvaluation — per-canvas mode', () => {
       score: 85,
       passed: true,
       canvases: [
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true },
-        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false },
+        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false },
       ],
     });
   });

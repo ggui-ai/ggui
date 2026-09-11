@@ -151,7 +151,7 @@ describe('toVisualOutcome — typed against ui-gen\'s VisualEvaluationResult (th
     issues: [],
     inputTokens: 3000,
     outputTokens: 200,
-    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex') }],
+    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 820, overflow: false }],
   };
   it('maps finalScore/passed/canvases/tokens; null stays null', () => {
     expect(toVisualOutcome(null)).toBeNull();
@@ -216,7 +216,7 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
       visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
       visual: async () => ({
         score: 80, passed: true,
-        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex') }],
+        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false }],
       }),
       now: () => new Date('2026-09-10T00:00:00.000Z'),
     });

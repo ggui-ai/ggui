@@ -30,6 +30,7 @@ function deps(): VisualEvalDeps & { bundled: string[] } {
       },
       waitForNetworkIdle: async () => {},
       waitForSelector: async () => null,
+      evaluate: async () => 0,
       screenshot: async () => new Uint8Array([0, 1]),
     }),
     close: async () => {},
