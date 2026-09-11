@@ -150,6 +150,23 @@ async function objectExists(bucket, key) {
   }
 }
 
+/**
+ * True only when the object exists AND was written at or after `sinceMs`. A
+ * re-run over a prefix that already carries an artefact from an earlier run
+ * must never read the old file (bought 2026-09-11: --eval-only returned the
+ * previous gate's report.json the instant each new task launched).
+ */
+async function objectNewerThan(bucket, key, sinceMs) {
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const lm = head.LastModified instanceof Date ? head.LastModified.getTime() : 0;
+    return lm >= sinceMs;
+  } catch (err) {
+    if (err?.$metadata?.httpStatusCode === 404 || err?.name === 'NotFound') return false;
+    throw err;
+  }
+}
+
 async function taskStopped(arn) {
   const d = await ecs.send(new DescribeTasksCommand({ cluster: cfg.cluster, tasks: [arn] }));
   const t = d.tasks?.[0];
@@ -159,10 +176,12 @@ async function taskStopped(arn) {
 }
 
 /** Wait for `key` under the cell prefix; fail fast if the task stops first without producing it. */
-async function awaitArtefact(arn, bucket, key, timeoutMs, label) {
+async function awaitArtefact(arn, bucket, key, timeoutMs, label, sinceMs) {
   const started = Date.now();
+  // S3 LastModified has second precision — accept anything from the launch second on.
+  const since = Math.floor(sinceMs / 1000) * 1000;
   while (Date.now() - started < timeoutMs) {
-    if (await objectExists(bucket, key)) return;
+    if (await objectNewerThan(bucket, key, since)) return;
     const stopped = await taskStopped(arn);
     if (stopped) {
       if (await objectExists(bucket, key)) return;
@@ -205,9 +224,10 @@ async function driveCell(cell, network) {
   const prefix = `exp008/${cell.runId}/${cell.cellId}/`;
   const t0 = Date.now();
   if (!evalOnly || !(await objectExists(cfg.bucket, `${prefix}mint.json`))) {
+    const mintLaunchedAt = Date.now();
     const mintArn = await runTask(cfg.mintFamily, buildMintOverrides(cell, { appId: cfg.appId, bucket: cfg.bucket, modelEnvName }), network);
     console.log(`[exp008] ${cell.cellId}: mint ${mintArn.split('/').pop()}`);
-    await awaitArtefact(mintArn, cfg.bucket, `${prefix}mint.json`, cfg.mintTimeoutMs, `${cell.cellId} mint`);
+    await awaitArtefact(mintArn, cfg.bucket, `${prefix}mint.json`, cfg.mintTimeoutMs, `${cell.cellId} mint`, mintLaunchedAt);
     if (manifest) {
       manifest.cells[cell.cellId] = { prefix, contractKey: cell.contractKey, mint: await describeMintTask(mintArn) };
       saveManifest();
@@ -226,9 +246,10 @@ async function driveCell(cell, network) {
     ? { image: rec.image, ...(rec.imageDigest ? { imageDigest: rec.imageDigest } : {}), sourceSha: manifest.declared.mintSourceSha, promptDigestConstrained: manifest.declared.promptDigestConstrained, promptDigestFree: manifest.declared.promptDigestFree }
     : undefined;
   if (!mintReceipt) console.warn(`[exp008] ${cell.cellId}: NO MINT RECEIPT in the manifest — the eval task runs without MINT_* env and the row will say so`);
+  const evalLaunchedAt = Date.now();
   const evalArn = await runTask(cfg.evalFamily, buildEvalOverrides(cell, { bucket: cfg.bucket, ...(mintReceipt ? { mintReceipt } : {}) }), network);
   console.log(`[exp008] ${cell.cellId}: eval ${evalArn.split('/').pop()}`);
-  await awaitArtefact(evalArn, cfg.bucket, `${prefix}report.json`, cfg.evalTimeoutMs, `${cell.cellId} eval`);
+  await awaitArtefact(evalArn, cfg.bucket, `${prefix}report.json`, cfg.evalTimeoutMs, `${cell.cellId} eval`, evalLaunchedAt);
   const report = await readJson(cfg.bucket, `${prefix}report.json`);
   const cb = report.contractBehavior?.status, rp = report.runtimeProbeVerdict?.status, vis = report.meta?.visual?.score;
   console.log(`[exp008] ${cell.cellId}: DONE ${Math.round((Date.now() - t0) / 1000)}s contractBehavior=${cb} probe=${rp} visual=${vis ?? 'n/a'} cost=$${(report.estimatedCostUsd ?? 0).toFixed(3)}`);
