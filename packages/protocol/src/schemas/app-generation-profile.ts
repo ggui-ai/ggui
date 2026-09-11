@@ -4,9 +4,15 @@ import { z } from 'zod';
  * The generator PROFILE slot on an app's `generation` section (ggui#991;
  * the D7 mechanism of ggui#987 — "chosen at generation time, like layout").
  *
- * Three members of free text the app's operator writes and the generator
+ * Four members of free text the app's operator writes and the generator
  * reads when it composes a component: `styling` is the brief (voice,
- * mood, references), `density` and `layout` are one line each. The slot
+ * mood, references), `density` and `layout` are one line each, and
+ * `direction` (2026-09-11, ggui#1027 follower) is the COMPOSITION
+ * direction of one variant — what leads (a hero panel, rows with arrows,
+ * a compact row of chips, a split panel), what is left out (icons,
+ * helper text, status lines), motion or none — one short paragraph, so
+ * a family of variants is one draft under one judge with the direction
+ * as the only arm. The slot
  * is a GENERATION-TIME input: it is not a theme-document field, not a
  * consumed token, and MUST never be projected into the `--ggui-*`
  * vocabulary the card reads. An absent or empty profile MUST leave the
@@ -31,6 +37,7 @@ export const APP_GENERATION_PROFILE_BOUNDS = {
   styling: 2000,
   density: 200,
   layout: 200,
+  direction: 600,
 } as const;
 
 export type AppGenerationProfileMember = keyof typeof APP_GENERATION_PROFILE_BOUNDS;
@@ -64,6 +71,7 @@ export const appGenerationProfileSchema = z
     styling: profileText('styling').optional(),
     density: profileText('density').optional(),
     layout: profileText('layout').optional(),
+    direction: profileText('direction').optional(),
   })
   .strict();
 
@@ -80,6 +88,7 @@ export const appGenerationProfileRefusalBodySchema = z
         styling: appGenerationProfileRefusalReasonSchema.optional(),
         density: appGenerationProfileRefusalReasonSchema.optional(),
         layout: appGenerationProfileRefusalReasonSchema.optional(),
+        direction: appGenerationProfileRefusalReasonSchema.optional(),
       })
       .strict()
       .refine((p) => Object.keys(p).length > 0, 'a profile refusal names at least one member'),

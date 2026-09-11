@@ -10,27 +10,29 @@ import {
 // free text the app's operator writes, the generator reads at generation
 // time; never a token, never projected into the card vocabulary.
 describe('appGenerationProfileSchema (ggui#991)', () => {
-  it('accepts the empty profile and all three members as free text, trimmed', () => {
+  it('accepts the empty profile and all four members as free text, trimmed', () => {
     expect(appGenerationProfileSchema.parse({})).toEqual({});
     expect(
       appGenerationProfileSchema.parse({
         styling: '  Editorial, warm neutrals.\n\tSerif display, generous whitespace.  ',
         density: ' compact ',
         layout: ' dashboard: KPIs on top, table below ',
+        direction: ' brand hero panel, then rows with arrows; no icons, no helper text ',
       }),
     ).toEqual({
       styling: 'Editorial, warm neutrals.\n\tSerif display, generous whitespace.',
       density: 'compact',
       layout: 'dashboard: KPIs on top, table below',
+      direction: 'brand hero panel, then rows with arrows; no icons, no helper text',
     });
   });
 
-  it('exports the three door bounds as the ONE set of numbers readers cap at', () => {
-    expect(APP_GENERATION_PROFILE_BOUNDS).toEqual({ styling: 2000, density: 200, layout: 200 });
+  it('exports the four door bounds as the ONE set of numbers readers cap at', () => {
+    expect(APP_GENERATION_PROFILE_BOUNDS).toEqual({ styling: 2000, density: 200, layout: 200, direction: 600 });
   });
 
   it('accepts a member at its bound and refuses one character over, naming the member', () => {
-    for (const member of ['styling', 'density', 'layout'] as const) {
+    for (const member of ['styling', 'density', 'layout', 'direction'] as const) {
       const max = APP_GENERATION_PROFILE_BOUNDS[member];
       expect(appGenerationProfileSchema.safeParse({ [member]: 'a'.repeat(max) }).success).toBe(true);
       const over = appGenerationProfileSchema.safeParse({ [member]: 'a'.repeat(max + 1) });
@@ -75,7 +77,7 @@ describe('appGenerationProfileRefusalBodySchema (ggui#991)', () => {
   it('names the member and one reason per refusal', () => {
     expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { styling: 'too-long' } }).success).toBe(true);
     expect(
-      appGenerationProfileRefusalBodySchema.safeParse({ profile: { density: 'not-text', layout: 'control-chars' } })
+      appGenerationProfileRefusalBodySchema.safeParse({ profile: { density: 'not-text', layout: 'control-chars', direction: 'too-long' } })
         .success,
     ).toBe(true);
     expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: {} }).success).toBe(false);

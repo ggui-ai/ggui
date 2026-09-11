@@ -28,6 +28,7 @@ const PROFILE = {
   styling: "dense data-ops console: flat surfaces, compact rows, monospace figures, one accent",
   density: "compact",
   layout: "two-pane master/detail",
+  direction: "brand hero panel, then rows with arrows; no icons, no helper text",
 };
 const ARMS: readonly DesignMode[] = ["constrained", "free"];
 
@@ -36,7 +37,7 @@ describe("styling profile — INVARIANT 1: no profile ⇒ byte-identical prompts
     it(`${designMode}: absent ≡ {} ≡ whitespace-only ≡ empty strings`, () => {
       const absent = buildSystemPrompt({ ...BASE, designMode });
       expect(buildSystemPrompt({ ...BASE, designMode, profile: {} })).toBe(absent);
-      expect(buildSystemPrompt({ ...BASE, designMode, profile: { styling: "   ", density: "\n", layout: "" } })).toBe(absent);
+      expect(buildSystemPrompt({ ...BASE, designMode, profile: { styling: "   ", density: "\n", layout: "", direction: " " } })).toBe(absent);
       expect(absent.includes(STYLING_PROFILE_HEADING)).toBe(false);
     });
   }
@@ -64,6 +65,7 @@ describe("styling profile — one positioned section when set", () => {
     expect(p.includes("> " + PROFILE.styling)).toBe(true);
     expect(p.includes("> **Density**: compact")).toBe(true);
     expect(p.includes("> **Layout**: two-pane master/detail")).toBe(true);
+    expect(p.includes("> **Direction**: brand hero panel, then rows with arrows; no icons, no helper text")).toBe(true);
   });
   it("free: exactly one section, after Accessibility and before the Quality Checklist", () => {
     const p = buildSystemPrompt({ ...BASE, designMode: "free", profile: PROFILE });
@@ -93,7 +95,7 @@ describe("styling profile — the text is data", () => {
     expect(sanitizeProfileMember(42, "styling")).toBe("");
   });
   it("caps every member at protocol's bound with the marker — the same numbers as the door", () => {
-    for (const member of ["styling", "density", "layout"] as const) {
+    for (const member of ["styling", "density", "layout", "direction"] as const) {
       const bound = APP_GENERATION_PROFILE_BOUNDS[member];
       const atBound = "x".repeat(bound);
       expect(sanitizeProfileMember(atBound, member)).toBe(atBound);
