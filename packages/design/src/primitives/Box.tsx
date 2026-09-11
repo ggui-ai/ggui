@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BoxProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -60,10 +60,15 @@ export function Box(props: WithTrait<BoxProps>) {
       ? resolveSurfaceCss(surface)
       : undefined;
 
+  // The surface owns its on-colour (ggui#1019): an `inverted` surface sets
+  // the `inverse` ink on its root; an asset fill keeps the page ink.
+  const resolvedOnColor = !validAsset && surface ? resolveSurfaceOnColorCss(surface) : undefined;
+
   const composedStyle: CSSProperties = {
     padding: computedPadding,
     margin: resolveSpacing(margin),
     background: resolvedBackground,
+    ...(resolvedOnColor !== undefined ? { color: resolvedOnColor } : {}),
     borderRadius: resolveRadius(radius),
     ...style,
   };

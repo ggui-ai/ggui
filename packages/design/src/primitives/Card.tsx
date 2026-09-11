@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CardProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -53,9 +53,13 @@ export function Card(props: WithTrait<CardProps>) {
   // 'accent' for branded fills, etc. Default = 'default' = the theme's
   // `--ggui-color-container`.
   const resolvedSurface = resolveSurfaceCss(surface ?? 'default');
+  // The surface owns its on-colour (ggui#1019): `inverted` sets the
+  // `inverse` ink on its root so inherited text is never ink-on-ink.
+  const resolvedOnColor = resolveSurfaceOnColorCss(surface ?? 'default');
 
   const composedStyle: CSSProperties = {
     backgroundColor: resolvedSurface,
+    ...(resolvedOnColor !== undefined ? { color: resolvedOnColor } : {}),
     borderRadius: resolveRadius(radius),
     padding: resolvedPadding,
     boxShadow: shadowMap[shadow] || shadow,

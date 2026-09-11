@@ -160,6 +160,21 @@ export type SurfaceSlot =
  *
  * @public
  */
+/**
+ * The on-colour a surface OWNS. Theme v2 pairs `inverted` with its ink
+ * explicitly: the inverted surface paints `--ggui-color-onContainer` (the
+ * ink role) as its background, so text that inherits the page ink is
+ * invisible on it — the surface root must set `color` to the `inverse`
+ * text slot (`--ggui-color-container`). Every other surface keeps the
+ * page ink (returns undefined) — a `tone` on the text still wins by
+ * cascade. Bought on ggui#1019: under a theme whose page ink equals that
+ * role, inherited text rendered rgb(26,26,26) on rgb(26,26,26) — invisible —
+ * while the same code under the default tokens read fine.
+ */
+export function resolveSurfaceOnColorCss(surface: SurfaceSlot): string | undefined {
+  return surface === 'inverted' ? resolveToneCss('inverse') : undefined;
+}
+
 export function resolveSurfaceCss(surface: SurfaceSlot): string {
   switch (surface) {
     case 'default':
