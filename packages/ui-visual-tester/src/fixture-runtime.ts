@@ -186,12 +186,15 @@ function collectActionCandidates(
   root: HTMLElement,
   name: string,
   label: string,
-): { readonly named: readonly HTMLElement[]; readonly fallback: readonly HTMLElement[] } {
-  const all = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
-    (el): el is HTMLElement =>
-      el instanceof HTMLElement &&
-      !el.hasAttribute('disabled') &&
-      el.getAttribute('aria-disabled') !== 'true' &&
+): { readonly named: readonly HTMLElement[]; readonly fallback: readonly HTMLElement[]; readonly disabled: number } {
+  const every = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
+    (el): el is HTMLElement => el instanceof HTMLElement,
+  );
+  const isDisabled = (el: HTMLElement): boolean => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true';
+  const disabled = every.filter(isDisabled).length;
+  const all = every.filter(
+    (el) =>
+      !isDisabled(el) &&
       // an already-checked radio fires no change on click — nothing to observe
       !(el instanceof HTMLInputElement && el.type === 'radio' && el.checked),
   );
@@ -219,7 +222,84 @@ function collectActionCandidates(
         (labelKey.length > 0 && norm(txt).includes(labelKey)));
     (ariaNames || textNames ? byText : rest).push(el);
   }
-  return { named: [...byValue, ...byText], fallback: rest };
+  return { named: [...byValue, ...byText], fallback: rest, disabled };
+}
+
+const TEXT_LIKE_INPUT_TYPES = new Set(['text', 'email', 'search', 'url', 'tel', 'number', 'password', '']);
+
+function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
+  const type = el instanceof HTMLInputElement ? el.type : 'textarea';
+  switch (type) {
+    case 'number':
+      return '1';
+    case 'email':
+      return 'probe@example.com';
+    case 'url':
+      return 'https://example.com';
+    case 'tel':
+      return '5550100';
+    default:
+      return 'probe';
+  }
+}
+
+/** Set a value the way React notices it: through the prototype's native setter, then an input + change event. */
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string): void {
+  const proto = el instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : el instanceof HTMLSelectElement
+      ? HTMLSelectElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (setter) setter.call(el, value);
+  else el.value = value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * The generic minimum a user does before pressing Send / Submit / Complete
+ * (#1021): give every empty text-like input and textarea a value, every
+ * unset select its first real option, every unchecked radio group its first
+ * radio. Checkboxes are never touched — they are often the action itself.
+ * Returns how many controls were primed.
+ */
+function primeInputs(root: HTMLElement): number {
+  let primed = 0;
+  const editable = (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): boolean =>
+    !el.disabled && !(el instanceof HTMLSelectElement) ? !(el as HTMLInputElement | HTMLTextAreaElement).readOnly : !el.disabled;
+  for (const el of Array.from(root.querySelectorAll('input, textarea'))) {
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || !editable(el)) continue;
+    if (el instanceof HTMLInputElement && !TEXT_LIKE_INPUT_TYPES.has(el.type)) continue;
+    if (el.value.trim().length > 0) continue;
+    setNativeValue(el, sampleValueFor(el));
+    primed += 1;
+  }
+  for (const el of Array.from(root.querySelectorAll('select'))) {
+    if (!(el instanceof HTMLSelectElement) || el.disabled) continue;
+    const current = el.options[el.selectedIndex];
+    if (current !== undefined && current.value.trim().length > 0) continue;
+    const first = Array.from(el.options).find((o) => o.value.trim().length > 0 && !o.disabled);
+    if (first === undefined) continue;
+    setNativeValue(el, first.value);
+    primed += 1;
+  }
+  const seenGroups = new Set<string>();
+  for (const el of Array.from(root.querySelectorAll('input[type="radio"]'))) {
+    if (!(el instanceof HTMLInputElement) || el.disabled) continue;
+    const group = el.name || '';
+    if (seenGroups.has(group)) continue;
+    seenGroups.add(group);
+    const members = group
+      ? Array.from(root.querySelectorAll(`input[type="radio"][name="${CSS.escape(group)}"]`)).filter((m): m is HTMLInputElement => m instanceof HTMLInputElement)
+      : [el];
+    if (members.some((m) => m.checked)) continue;
+    const first = members.find((m) => !m.disabled);
+    if (first === undefined) continue;
+    first.click();
+    primed += 1;
+  }
+  return primed;
 }
 
 interface Snapshot {
@@ -461,8 +541,20 @@ async function run(input: RunInput): Promise<RunOutcome> {
 
     const req = signalRequirement(input.classification);
     const container = handles.container;
+    // Prime inputs first (#1021): Send/Submit/Complete are commonly disabled
+    // until something is typed or chosen — the minimum a user does before them.
+    const primed = primeInputs(container);
+    if (primed > 0) await delay(150);
     const first = collectActionCandidates(container, input.actionName, entry.label);
     if (first.named.length === 0 && first.fallback.length === 0) {
+      if (first.disabled > 0) {
+        return {
+          status: 'action-no-effect',
+          diagnostic:
+            `${first.disabled} control(s) rendered, all disabled — the action is gated on input the probe did not provide ` +
+            `(primed ${primed} input(s)); actionSpec.${input.actionName} (label "${entry.label}")`,
+        };
+      }
       return {
         status: 'action-not-rendered',
         diagnostic: `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")`,
@@ -521,7 +613,7 @@ async function run(input: RunInput): Promise<RunOutcome> {
     return {
       status: 'action-no-effect',
       diagnostic:
-        `${req.description}; clicked ${clicked} control(s) (${tried.size} distinct; first collection ${first.named.length} named, ${first.fallback.length} fallback` +
+        `${req.description}; clicked ${clicked} control(s) (${tried.size} distinct; first collection ${first.named.length} named, ${first.fallback.length} fallback, ${first.disabled} disabled; primed ${primed} input(s)` +
         `${exhausted ? '; budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
         `missing=${missing.join('+')}${others}`,
     };

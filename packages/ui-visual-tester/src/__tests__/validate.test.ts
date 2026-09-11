@@ -436,6 +436,59 @@ describe('a controlled design Checkbox wired to useAction dispatches on click', 
   }, 60_000);
 });
 
+// #1021 — input-gated actions: a chat's Send is disabled until the textarea has
+// text, a survey's Submit until answers exist. A probe that never types and
+// skips disabled controls reads them as "nothing to click".
+const GATED_SEND_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+export default function Chat() {
+  const send = useAction('sendMessage');
+  const [text, setText] = useState('');
+  return (
+    <div>
+      <textarea aria-label="Message" value={text} onChange={(e) => setText(e.target.value)} />
+      <button disabled={text.trim().length === 0} onClick={() => send({ text })}>Send</button>
+    </div>
+  );
+}
+`;
+
+const ONLY_DISABLED_SRC = `
+import { useAction } from '@ggui-ai/wire';
+export default function Wizard() {
+  const complete = useAction('complete');
+  return (
+    <div>
+      <p>Step 3 of 3 — waiting on an upload that never comes.</p>
+      <button disabled onClick={() => complete({})}>Complete Setup</button>
+    </div>
+  );
+}
+`;
+
+const COMPLETE_CONTRACT: DataContract = {
+  actionSpec: { complete: { label: 'Complete Setup', nextStep: 'finish' } },
+  agentCapabilities: { tools: { finish: { toolInfo: { inputSchema: { type: 'object' }, description: 'Finish onboarding' } } } },
+};
+
+describe('#1021 — input-gated controls are primed, and an all-disabled render is named, never "not rendered"', () => {
+  it('#1021 a Send disabled until the textarea has text passes: the probe types before it clicks', async () => {
+    const code = await compile(GATED_SEND_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SEND_CONTRACT, timeoutMs: 2000, playwright });
+    expect(result.failures).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#1021 a render whose only control is disabled reads action-no-effect naming the gate, not action-not-rendered', async () => {
+    const code = await compile(ONLY_DISABLED_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1000, playwright });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]?.kind).toBe('action-no-effect');
+    expect(result.failures[0]?.diagnostic).toMatch(/1 control\(s\) rendered, all disabled/);
+  }, 60_000);
+});
+
 describe('#996 — the control is found the way the harness finds it, not by the label text', () => {
   it('#996 a button named by data-action passes even though its text ("Send") is not the label ("Send Message")', async () => {
     const code = await compile(SEND_DATA_ACTION_SRC);
