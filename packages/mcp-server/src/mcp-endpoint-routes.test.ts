@@ -472,8 +472,8 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
   });
 });
 
-// ggui#1028 — the belt's term for a client that closes the connection before
-// the response finished (a relay whose timeout is shorter than the hold it
+// ggui#1028 — the event an operator alerts on when a client closes the
+// connection before the response finished (a relay whose timeout is shorter than the hold it
 // asked for; a tab gone away). Logged at the route, before auth, so an abort
 // at ANY stage counts whatever the transport mode or the tool.
 describe('mcp_client_aborted (ggui#1028) — the client closes before the response finished', () => {

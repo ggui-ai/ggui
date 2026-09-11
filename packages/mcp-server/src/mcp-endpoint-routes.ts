@@ -270,9 +270,9 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       // The client closed the connection before the response finished — a
       // relay whose timeout is shorter than the hold it asked for, a tab
       // gone away. Observed here, before auth, so an abort at ANY stage
-      // counts whatever the transport mode or the tool; the operator's
-      // belt reads this term (its rate is the signal, one line is the
-      // diagnosis: elapsedMs against the hold the caller requested).
+      // counts whatever the transport mode or the tool. An operator's
+      // alerting reads this event: its rate is the signal, one line is the
+      // diagnosis (elapsedMs against the hold the caller requested).
       const startedAt = Date.now();
       res.on("close", () => {
         if (res.writableFinished) return;
