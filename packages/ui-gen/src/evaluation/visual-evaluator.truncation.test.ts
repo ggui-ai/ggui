@@ -6,8 +6,11 @@
  * the retry path; the cap and the bounded-list instruction are pinned.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   VISUAL_JUDGE_MAX_OUTPUT_TOKENS,
+  VISUAL_JUDGE_PROMPT_VERSION,
+  VISUAL_JUDGE_PROMPT_DIGEST,
   VISUAL_EVAL_PROMPT,
   runVisualEvaluationDetailed,
   salvageTruncatedVisualAnswer,
@@ -54,6 +57,12 @@ describe('visual judge — truncated answers', () => {
   it('cap ≥ 4096 and the prompt bounds the issues list', () => {
     expect(VISUAL_JUDGE_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(4096);
     expect(VISUAL_EVAL_PROMPT).toContain('AT MOST 6 issues');
+  });
+  it('the instrument name is tied to the bounded-list text and the digest to the prompt bytes', () => {
+    expect(VISUAL_JUDGE_PROMPT_VERSION).toBe('v2-bounded-issues');
+    expect(VISUAL_EVAL_PROMPT.includes('AT MOST 6 issues')).toBe(true); // the name promises this text
+    expect(VISUAL_JUDGE_PROMPT_DIGEST).toBe(createHash('sha256').update(VISUAL_EVAL_PROMPT, 'utf8').digest('hex'));
+    expect(VISUAL_JUDGE_PROMPT_DIGEST).toMatch(/^[0-9a-f]{64}$/);
   });
   it('salvage: all four dimensions + the closed issues, the critique replaced by a truncation note', () => {
     const r = salvageTruncatedVisualAnswer(TRUNCATED, 60);

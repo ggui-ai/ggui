@@ -18,6 +18,7 @@ import { getCssTokens } from '@ggui-ai/design/rendering';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
@@ -528,6 +529,16 @@ Respond with ONLY a JSON object (no markdown, no explanation):
  * with room; the salvage path covers the remainder.
  */
 export const VISUAL_JUDGE_MAX_OUTPUT_TOKENS = 4096;
+
+/**
+ * The judge instrument's name and content digest, for the record a run
+ * stamps beside every visual score. The NAME is for readers; the DIGEST
+ * is computed from the prompt text at module load, so a stamped row can
+ * never claim a prompt version it did not run — change the prompt and the
+ * digest moves with it (the pin ties the name to the bounded-list text).
+ */
+export const VISUAL_JUDGE_PROMPT_VERSION = 'v2-bounded-issues';
+export const VISUAL_JUDGE_PROMPT_DIGEST = createHash('sha256').update(VISUAL_EVAL_PROMPT, 'utf8').digest('hex');
 
 async function callMultimodalLLM(
   config: VisualEvalConfig,
