@@ -96,11 +96,12 @@ async function main() {
   // it (report.meta.visualUnavailableReason) — never a silent pass, never a
   // bare null when a reason exists.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps, profile }) => {
-        const { runVisualEvaluationDetailed, CANVAS_CLASSES } = await import('@ggui-ai/ui-gen/evaluation');
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme }) => {
+        const { runVisualEvaluationDetailed, CANVAS_CLASSES, cssTokensForAppTheme } = await import('@ggui-ai/ui-gen/evaluation');
         try {
           const d = await runVisualEvaluationDetailed(
-            { compiledCode, originalPrompt, ...(profile ? { profile } : {}) },
+            // theme → the ONE theme→CSS composer the iframe runtime uses; absent = the design defaults (no cssTokens key)
+            { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(theme ? { cssTokens: cssTokensForAppTheme(theme) } : {}) },
             { ...VISUAL_JUDGE, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
           );
           if (d.result !== null) return toVisualOutcome(d.result);

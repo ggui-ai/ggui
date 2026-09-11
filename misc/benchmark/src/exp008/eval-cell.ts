@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DataContract, JsonObject, AppGenerationProfile } from '@ggui-ai/protocol';
-import { appGenerationProfileSchema } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject, AppGenerationProfile, AppTheme } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeSchema } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
@@ -98,6 +98,8 @@ export interface BootstrapJudgeInput {
   readonly sampleProps?: JsonObject;
   /** The app's generation profile (styling / density / layout), when the app row carries one — the judge scores against it. */
   readonly profile?: AppGenerationProfile;
+  /** The app's theme overlay, when the app carries one — the judge renders under it (the visitor's paint), not the design defaults. */
+  readonly theme?: AppTheme;
 }
 export const JUDGE_INPUT_FILE = 'judge-input.json';
 export const BOOTSTRAP_NOTE =
@@ -118,6 +120,8 @@ export interface CellInputs {
   readonly bootstrap: boolean;
   /** The app's generation profile from judge-input.json — absent on corpus cells and on bootstrap cells whose app carries none. */
   readonly profile?: AppGenerationProfile;
+  /** The app's theme from judge-input.json — the judge renders under it; absent on corpus cells and on themeless apps. */
+  readonly theme?: AppTheme;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -173,10 +177,21 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     }
     profile = parsed.data;
   }
+  let theme: AppTheme | undefined;
+  if (raw.theme !== undefined) {
+    const parsed = appThemeSchema.safeParse(raw.theme);
+    if (!parsed.success) {
+      throw new Error(
+        `eval-cell: ${JUDGE_INPUT_FILE} "theme" is not an app theme — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
+      );
+    }
+    theme = parsed.data;
+  }
   return {
     prompt: raw.prompt,
     ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
     ...(profile !== undefined ? { profile } : {}),
+    ...(theme !== undefined ? { theme } : {}),
   };
 }
 
@@ -237,13 +252,16 @@ export function readCellInputs(dir: string): CellInputs {
   const bootstrap = ref === null;
   let commit: BenchmarkCommit;
   let profile: AppGenerationProfile | undefined;
+  let theme: AppTheme | undefined;
   if (ref === null) {
     const judge = readJudgeInput(dir);
     commit = bootstrapCommit(judge, contractJson.contract);
     profile = judge.profile;
+    theme = judge.theme;
   } else {
     commit = commitForRef(ref);
     profile = undefined;
+    theme = undefined;
   }
   const variant = bootstrap ? bootstrapVariant(mint.model) : variantForModel(mint.model);
   const sampleProps = commit.props;
@@ -258,6 +276,7 @@ export function readCellInputs(dir: string): CellInputs {
     propsSource,
     bootstrap,
     ...(profile !== undefined ? { profile } : {}),
+    ...(theme !== undefined ? { theme } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -313,6 +332,8 @@ export type VisualJudge = (ctx: {
   originalPrompt: string;
   /** The app's generation profile, when the cell carries one — the judge scores against it (absent = today's path). */
   profile?: AppGenerationProfile;
+  /** The app's theme, when the cell carries one — the judge renders under its overlay (absent = the design defaults, today's path). */
+  theme?: AppTheme;
   contract: DataContract;
   /** The commit's fixture props — what the harness passes the judge (`runner.ts:423`). */
   sampleProps?: JsonObject;
@@ -381,6 +402,8 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly propsSource: PropsSource;
     /** The generation profile the visual judge was told to score against, verbatim — absent when the cell carried none. */
     readonly profile?: AppGenerationProfile;
+    /** True when the judge rendered under the app's theme overlay (judge-input.json.theme) — absent when it rendered the design defaults. */
+    readonly themeApplied?: true;
     /** Why the visual judge could not judge (verbatim from the judge), and at which canvas — present only when it could not. */
     readonly visualUnavailableReason?: string;
     readonly visualUnavailableCanvas?: string;
@@ -447,6 +470,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       compiledCode: inputs.compiledCode,
       originalPrompt: inputs.prompt,
       ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
+      ...(inputs.theme !== undefined ? { theme: inputs.theme } : {}),
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
     });
@@ -528,6 +552,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
       propsSource: inputs.propsSource,
       ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
+      ...(inputs.theme !== undefined ? { themeApplied: true as const } : {}),
       ...(visualUnavailable !== undefined
         ? {
             visualUnavailableReason: visualUnavailable.unavailableReason,

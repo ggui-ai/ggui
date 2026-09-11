@@ -367,3 +367,35 @@ describe('the visual judge says why it could not judge', () => {
     expect(report.meta.notes).toContain('visual judge returned null');
   });
 });
+
+describe('app theme on a bootstrap cell (#1020)', () => {
+  const THEME = { overlayHash: 'a'.repeat(64), overlays: { light: { '--ggui-color-onContainer': '#f4f1ea' }, dark: { '--ggui-color-onContainer': '#15181d' } } };
+
+  it('judge-input.json.theme is validated by the protocol schema, handed to the judge context, and stamped as themeApplied', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'Hello card', theme: THEME }));
+    const inputs = readCellInputs(dir);
+    expect(inputs.theme).toEqual(THEME);
+    let seen: unknown = 'not called';
+    const report = await evaluateCell(inputs, { dir, playwright: neverLaunch, panel, visual: async (ctx) => { seen = ctx.theme; return null; } });
+    expect(seen).toEqual(THEME);
+    expect(report.meta.themeApplied).toBe(true);
+  });
+
+  it('a theme the schema refuses is loud (bad overlayHash, unknown member)', () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', theme: { overlayHash: 'nope', overlays: { light: {}, dark: {} } } }));
+    expect(() => readCellInputs(dir)).toThrow(/"theme" is not an app theme/);
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', theme: { ...THEME, palette: 'blue' } }));
+    expect(() => readCellInputs(dir)).toThrow(/"theme" is not an app theme/);
+  });
+
+  it('absent theme = today: no theme key handed to the judge, no themeApplied on the row', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x' }));
+    let keys: string[] = [];
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel, visual: async (ctx) => { keys = Object.keys(ctx); return null; } });
+    expect(keys).not.toContain('theme');
+    expect('themeApplied' in report.meta).toBe(false);
+  });
+});
