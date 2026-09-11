@@ -27,6 +27,7 @@
  * "designed for fullscreen, rendered in a chat bubble" bugs.
  */
 import { STYLING_PROFILE_PRECEDENCE_NOTE } from './boilerplate/styling-profile.js';
+import type { RenderingContext as ProtocolRenderingContext } from '@ggui-ai/protocol';
 import type {
   ActionEntry,
   BlueprintVariance,
@@ -44,17 +45,11 @@ import {
 
 /**
  * Rendering context — how and where the component will be displayed.
- * Affects layout strategy, sizing, and interaction patterns. Mirrors the
- * shape cloud's harness passes through `dispatchGeneration`.
+ * Affects layout strategy, sizing, and interaction patterns. The ONE
+ * vocabulary is `@ggui-ai/protocol`'s `renderingContextSchema` (ggui#1000);
+ * this is its type, derived — never re-declared here.
  */
-export interface RenderingContext {
-  /** Device category — affects touch targets, column count, density. */
-  readonly device: 'mobile' | 'tablet' | 'desktop' | 'spatial';
-  /** Shell type — the container the component renders in. */
-  readonly shell: 'chat' | 'fullscreen' | 'partial';
-  /** Viewport dimensions in CSS pixels (optional). */
-  readonly viewport?: { readonly width: number; readonly height: number };
-}
+export type RenderingContext = ProtocolRenderingContext;
 
 const SHELL_HINTS: Record<string, string> = {
   chat: `**Chat Shell — Inline card in scrolling conversation**

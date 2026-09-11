@@ -6,6 +6,14 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Rendering-context vocabulary: `renderingContextSchema` (2026-09-11,
+ * additive, ggui#1000 — MINOR). The `{ shell, device, viewport? }`
+ * vocabulary that lived as two hand-declared unions (mcp-server-core
+ * `UiGenerateInput.rendering`, ui-gen `RenderingContext`) becomes ONE
+ * schema here; both consumers now derive their type from it, and the
+ * bootstrap door validates `items[].rendering?` with it. No existing wire
+ * changes shape; no `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Generator profile slot: `appGenerationProfileSchema` (2026-09-10,
  * additive, ggui#991 — MINOR; the D7 mechanism of ggui#987). One new
  * schema on the app's `generation` section — `profile?: { styling?,

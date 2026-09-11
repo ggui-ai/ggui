@@ -21,6 +21,7 @@ import type {
   AppGenerationProfile,
   JsonObject,
 } from '@ggui-ai/protocol';
+import type { RenderingContext } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
 
 /**
@@ -139,15 +140,11 @@ export interface UiGenerateInput {
    * prompt so the LLM picks an appropriate sizing strategy (e.g., a
    * `chat` shell sized 300-600px vs a `fullscreen` shell at 100vh).
    *
-   * Mirrors the shape the hosted runtime's dispatch path passes through
-   * `harness/result-types.RenderingContext`. Optional — callers without
-   * a hint produce universal-shell components.
+   * The ONE rendering-context vocabulary — `@ggui-ai/protocol`'s
+   * `renderingContextSchema` (ggui#1000), derived here, never re-declared.
+   * Optional — callers without a hint produce universal-shell components.
    */
-  rendering?: {
-    device: 'mobile' | 'tablet' | 'desktop' | 'spatial';
-    shell: 'chat' | 'fullscreen' | 'partial';
-    viewport?: { width: number; height: number };
-  };
+  rendering?: RenderingContext;
   /**
    * Operator-registered gadget catalog (`App.gadgets`)
    * to surface in the code-gen system prompt's `clientCapabilities —
