@@ -292,6 +292,24 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
     expect(captured.map((cfg) => cfg.sampleProps)).toEqual([fixture, configSample, undefined]);
   });
 
+  it("the caller's cssTokens reach the visual round's config verbatim; absent ⇒ no key", async () => {
+    const summary: VisualEvalSummary = { score: 84, passed: true, canvases: [] };
+    const captured: Parameters<typeof realVisualEvaluator.runVisualEval>[0][] = [];
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: (context, _config) => {
+        captured.push(context);
+        return Promise.resolve({ issues: [], summary });
+      },
+    };
+    const themed = await buildCtx({ enabled: true, cssTokens: ':root{--ggui-color-onContainer:#fff}' }, fakeVisualMod);
+    await runEvalRound(themed.ctx, themed.input);
+    const plain = await buildCtx({ enabled: true }, fakeVisualMod);
+    await runEvalRound(plain.ctx, plain.input);
+    expect(captured[0]?.cssTokens).toBe(':root{--ggui-color-onContainer:#fff}');
+    expect('cssTokens' in captured[1]!).toBe(false);
+  });
+
   it('threads canvases into the visual config and stamps the summary on evalResult.visual', async () => {
     const summary: VisualEvalSummary = {
       score: 84,

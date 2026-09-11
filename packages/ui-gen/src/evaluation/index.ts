@@ -138,3 +138,4 @@ export type {
   CanvasDisplayMode,
   CanvasDescriptor,
 } from '../design-mode.js';
+export { cssTokensForAppTheme } from './theme-css.js';

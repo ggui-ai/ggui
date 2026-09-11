@@ -481,7 +481,13 @@ export async function runEvalRound(
         : null,
       visualMod
         ? visualMod.runVisualEval(
-            { compiledCode, originalPrompt: userPrompt, profile: harness.profile },
+            {
+              compiledCode,
+              originalPrompt: userPrompt,
+              profile: harness.profile,
+              // The caller's theme, when named — the round paints what the app paints.
+              ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
+            },
             {
               provider: mapProviderForEvaluator(visualEvalAgent.provider) as "claude" | "google",
               model: visualEvalAgent.model,

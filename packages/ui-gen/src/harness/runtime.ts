@@ -91,6 +91,12 @@ export interface SingleComponentParams {
      * today's single screenshot at `viewport`.
      */
     canvases?: readonly CanvasClass[];
+    /**
+     * The stylesheet the in-loop visual round renders under (a caller's
+     * theme composed by `cssTokensForAppTheme`); absent = the design's
+     * default tokens. Never part of the prompt or the identity.
+     */
+    cssTokens?: string;
   };
   onProgress?: (event: unknown) => void;
   onInitialResult?: (result: {

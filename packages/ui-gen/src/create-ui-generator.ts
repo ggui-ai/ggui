@@ -31,6 +31,7 @@
  * Callers who want a lightweight single-shot path can build it
  * themselves.
  */
+import type { SingleComponentParams } from './harness/runtime.js';
 import type {
   GadgetDescriptor,
   GenerationError,
@@ -99,6 +100,12 @@ export interface CreateUiGeneratorOptions {
    * a serving deployment leaves it unset; offline minting jobs set a round.
    */
   readonly evaluation?: EvaluationConfig;
+  /**
+   * In-loop visual round config (per-canvas judging, a sample, the
+   * stylesheet to render under). Forwarded verbatim; never part of the
+   * prompt or the identity. Default: none — the round runs as today.
+   */
+  readonly visualEvaluation?: SingleComponentParams['visualEvaluation'];
   /** Quality config controlling eval tiers + improvement behavior. */
   readonly qualityConfig?: QualityConfig;
   /**
@@ -219,6 +226,7 @@ export function createUiGenerator(
     maxAttempts,
     maxEvalRounds,
     evaluation,
+    visualEvaluation,
     qualityConfig,
     gadgetCatalog,
     disableEnvMutation = false,
@@ -357,6 +365,7 @@ export function createUiGenerator(
           ...(maxAttempts !== undefined ? { maxAttempts } : {}),
           ...(maxEvalRounds !== undefined ? { maxEvalRounds } : {}),
           ...(evaluation !== undefined ? { evaluation } : {}),
+          ...(visualEvaluation !== undefined ? { visualEvaluation } : {}),
           ...(qualityConfig !== undefined ? { qualityConfig } : {}),
           ...(resolvedAppGadgets !== undefined
             ? { appGadgets: resolvedAppGadgets }

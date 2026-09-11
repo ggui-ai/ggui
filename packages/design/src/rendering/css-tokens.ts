@@ -409,3 +409,87 @@ function buildGradientTokens(
   const modernBlock = `${COLOR_MIX_SUPPORTS} {\n  ${selector} {\n${surfaceGradientModern}\n${glowModern}\n${glowStrongModern}\n  }\n}`;
   return `${baseBlock}\n${modernBlock}`;
 }
+
+/**
+ * The per-app theme's variable layers as the wire carries them (the
+ * protocol's `AppTheme` is assignable): the derived `--ggui-*` projection per
+ * mode, the mode-agnostic `cssVariables` above it, per-mode `@keyframes`, and
+ * the frameless silhouette flag.
+ */
+export interface ThemeOverlayLayers {
+  readonly overlays: {
+    readonly light?: Readonly<Record<string, string>>;
+    readonly dark?: Readonly<Record<string, string>>;
+  };
+  readonly cssVariables?: Readonly<Record<string, string>>;
+  readonly keyframes?: { readonly light?: string; readonly dark?: string };
+  readonly frameless?: boolean;
+}
+
+export interface ComposeThemeCssOptions {
+  /** A registered theme id — the compiled ladder; absent ⇒ the default theme. */
+  readonly themeId?: string;
+  /** The effective mode (the host owns it); absent ⇒ light. */
+  readonly mode?: ThemeMode;
+  /**
+   * Which stylesheet is being composed:
+   *  - `tree`  — the scoped block that mounts INSIDE the scope div (needs
+   *    `scopeClass`): ladder < hostPalette < overlays[mode] < cssVariables <
+   *    cssOverrides, then the mode's keyframes and the frameless rule;
+   *  - `chrome` — the `:root` block for the embedding shell's body chrome
+   *    (`color-scheme` + the same variable layers; no keyframes, no overrides);
+   *  - `page`  — a standalone document with no scope (an evaluator's shell):
+   *    `chrome` plus the mode's keyframes, so the page paints what the tree
+   *    would.
+   */
+  readonly layer: 'tree' | 'chrome' | 'page';
+  readonly scopeClass?: string;
+  /** Host-announced palette, already on `--ggui-*` keys — the fallback layer under the app theme. */
+  readonly hostPalette?: Readonly<Record<string, string>>;
+  readonly appTheme?: ThemeOverlayLayers;
+  /** Verbatim CSS the caller appends between the variable layers and the trailing rules (`tree` only). */
+  readonly cssOverrides?: string;
+}
+
+/** `{ '--ggui-a': '1', '--ggui-b': '2' }` → `--ggui-a: 1;--ggui-b: 2;` */
+export function toCssDecls(vars: Readonly<Record<string, string>>): string {
+  return Object.entries(vars)
+    .map(([k, v]) => `${k}: ${v};`)
+    .join('');
+}
+
+/**
+ * The ONE composition of a theme into CSS — the iframe runtime's scoped block
+ * and its `:root` chrome block, and an evaluator's page, are three calls of
+ * this function, never three compositions. A judge that composed its own
+ * would drift from the runtime again (that drift painted an ink-on-ink hero
+ * that a judge scored readable).
+ */
+export function composeThemeCss(opts: ComposeThemeCssOptions): string {
+  const m: ThemeMode = opts.mode ?? 'light';
+  const layers = opts.appTheme
+    ? [opts.appTheme.overlays[m], opts.appTheme.cssVariables].filter(
+        (vars): vars is Readonly<Record<string, string>> => vars !== undefined
+      )
+    : [];
+  if (opts.layer === 'tree') {
+    const scope = opts.scopeClass;
+    if (scope === undefined || scope === '') {
+      throw new Error("composeThemeCss: layer 'tree' needs a scopeClass");
+    }
+    let css = opts.themeId ? getScopedThemeCss(opts.themeId, scope, m) : getScopedCssTokens(scope, m);
+    if (opts.hostPalette) css += `.${scope}{${toCssDecls(opts.hostPalette)}}`;
+    css += layers.map((vars) => `.${scope}{${toCssDecls(vars)}}`).join('');
+    css += opts.cssOverrides ?? '';
+    if (opts.appTheme) {
+      css += `${opts.appTheme.keyframes?.[m] ?? ''}${opts.appTheme.frameless === true ? framelessSuppressionRule(scope) : ''}`;
+    }
+    return css;
+  }
+  let css = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);
+  if (opts.hostPalette) css += `:root{${toCssDecls(opts.hostPalette)}}`;
+  css += `:root{color-scheme:${m};${layers.map(toCssDecls).join('')}}`;
+  if (opts.layer === 'page' && opts.appTheme) css += opts.appTheme.keyframes?.[m] ?? '';
+  return css;
+}
+

@@ -45,11 +45,7 @@ import type { AppTheme } from '@ggui-ai/protocol/wire';
 import {
   stripMarkers,
   rewriteImports,
-  getScopedThemeCss,
-  getScopedCssTokens,
-  framelessSuppressionRule,
-  getThemeCss,
-  getCssTokens,
+  composeThemeCss,
 } from '@ggui-ai/design/rendering';
 import {
   hoistImports,
@@ -95,11 +91,6 @@ function makeScopeClass(): string {
  * bridge's sanitizer), so the string-join is safe — do NOT
  * re-sanitize here.
  */
-function toCssDecls(vars: Readonly<Record<string, string>>): string {
-  return Object.entries(vars)
-    .map(([k, v]) => `${k}: ${v};`)
-    .join('');
-}
 
 
 // =============================================================================
@@ -536,48 +527,22 @@ export async function mountReactRoot(
     // below selects with the same `m`, so the ladder, the overlay, the
     // keyframes and `color-scheme` can never disagree.
     const m: 'light' | 'dark' = opts.themeMode ?? 'light';
-    let themeCss = opts.themeId
-      ? getScopedThemeCss(opts.themeId, scopeClass, m)
-      : getScopedCssTokens(scopeClass, m);
-    if (opts.hostPalette) {
-      // Host palette = the fallback layer (ggui#572, #573 ruling):
-      // after the base scoped block so it can repaint at all (the base
-      // re-specifies every token), BEFORE the appTheme overlay so the
-      // slice's stamped theme wins by document order. Keys + values
-      // arrive pre-sanitized from the host-palette bridge.
-      themeCss += `.${scopeClass}{${toCssDecls(opts.hostPalette)}}`;
-    }
-    // The per-app theme's two variable layers, in this order: the
-    // derived projection for the effective mode, then the mode-agnostic
-    // `cssVariables` above it. Both must be merged HERE, into the
-    // scoped style that mounts INSIDE the scope div — the `:root`
-    // append below is cascade-dead for tree content: the in-scope block
-    // sits later in document order than anything in `<head>`, so at
-    // equal specificity the base scoped tokens always win over a head-
-    // level override (browser-verified in rnd/gen-ui/beauty/
-    // experiments/001, the probe sequence that found this). Appended
-    // AFTER the base block + host palette and BEFORE `cssOverrides`:
-    // compiled < host palette < overlays[m] < cssVariables < overrides
-    // (ggui#573: slice wins, host fallback). Values validated
-    // injection-safe upstream (same guarantee the `:root` append cites).
-    const appVarBlocks = opts.appTheme
-      ? [opts.appTheme.overlays[m], opts.appTheme.cssVariables]
-          .filter((vars): vars is Record<string, string> => vars !== undefined)
-          .map((vars) => `.${scopeClass}{${toCssDecls(vars)}}`)
-          .join('')
-      : '';
-    themeCss += appVarBlocks;
-    // Trailing rules (§3.3): the effective mode's `@keyframes` block and
-    // the frameless silhouette suppression — the SAME rule text the
-    // compiled path emits for `$metadata.frameless` — after
-    // `cssOverrides`, so an override can never be shadowed by them.
-    // Keyframes ride VERBATIM: their admission is the write door's
-    // (`appThemeSchema.keyframes`), not re-checked here.
-    const appTrailingCss = opts.appTheme
-      ? `${opts.appTheme.keyframes?.[m] ?? ''}${
-          opts.appTheme.frameless === true ? framelessSuppressionRule(scopeClass) : ''
-        }`
-      : '';
+    // ONE composition (`@ggui-ai/design/rendering` `composeThemeCss`): the
+    // scoped tree block — compiled ladder < host palette < overlays[m] <
+    // cssVariables < cssOverrides, then the mode's keyframes and the
+    // frameless rule. The `:root` chrome block below and an evaluator's
+    // page are the same function's other layers, so no two paints can
+    // disagree on a token (ggui#1020: a judge that composed its own
+    // scored an ink-on-ink hero readable).
+    const themeCss = composeThemeCss({
+      layer: 'tree',
+      scopeClass,
+      mode: m,
+      ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
+      ...(opts.hostPalette !== undefined ? { hostPalette: opts.hostPalette } : {}),
+      ...(opts.appTheme !== undefined ? { appTheme: opts.appTheme } : {}),
+      ...(opts.cssOverrides !== undefined ? { cssOverrides: opts.cssOverrides } : {}),
+    });
 
     // Also inject theme CSS at `:root` on `document.head`. The scoped
     // injection above isolates token resolution to the React tree, but
@@ -592,31 +557,17 @@ export async function mountReactRoot(
       // Same ladder, same mode as the scoped block above — the
       // standalone viewer's body chrome and its tree content resolve
       // the same values.
-      let rootCss = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);
-      if (opts.hostPalette) {
-        // BODY-CHROME ONLY, same as the appTheme `:root` append below —
-        // and beneath it, mirroring the scoped-block order (#573:
-        // slice wins, host fallback). Keeps the embedding shell's
-        // body font/color/background coherent with the tree.
-        rootCss += `:root{${toCssDecls(opts.hostPalette)}}`;
-      }
-      // BODY-CHROME ONLY. `color-scheme` follows the effective mode so
-      // native controls / scrollbars / canvas agree with the ladder
-      // painted; the app theme's two variable layers ride the same
-      // block, in the scoped order. None of this reaches tree content —
-      // the scoped in-body token block wins by document order (see the
-      // scoped merge above, and rnd/gen-ui/beauty/experiments/001 for
-      // the probe that falsified the old "inherits into the tree"
-      // claim). Values were validated injection-safe upstream (write-
-      // side `appThemeSchema` + the wire parser re-validates), so the
-      // string-join here is safe — do NOT re-sanitize.
-      const rootAppDecls = opts.appTheme
-        ? [opts.appTheme.overlays[m], opts.appTheme.cssVariables]
-            .filter((vars): vars is Record<string, string> => vars !== undefined)
-            .map(toCssDecls)
-            .join('')
-        : '';
-      rootCss += `:root{color-scheme:${m};${rootAppDecls}}`;
+      // BODY-CHROME ONLY — the same composer's `chrome` layer: the ladder,
+      // the host palette, `color-scheme` + the app theme's variable layers
+      // (no keyframes, no overrides); tree content resolves the scoped block
+      // above, which wins by document order.
+      const rootCss = composeThemeCss({
+        layer: 'chrome',
+        mode: m,
+        ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
+        ...(opts.hostPalette !== undefined ? { hostPalette: opts.hostPalette } : {}),
+        ...(opts.appTheme !== undefined ? { appTheme: opts.appTheme } : {}),
+      });
       const styleId = 'ggui-theme-vars';
       let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
       if (!styleEl) {
@@ -646,7 +597,7 @@ export async function mountReactRoot(
       createElement(
         'div',
         { className: scopeClass },
-        createElement('style', null, `${themeCss}${opts.cssOverrides ?? ''}${appTrailingCss}`),
+        createElement('style', null, themeCss),
         createElement(
           RcrErrorBoundary,
           {

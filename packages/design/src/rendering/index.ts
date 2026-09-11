@@ -15,7 +15,10 @@ export {
   getThemeCss,
   getScopedThemeCss,
   framelessSuppressionRule,
+  composeThemeCss,
+  toCssDecls,
 } from './css-tokens';
+export type { ComposeThemeCssOptions, ThemeOverlayLayers } from './css-tokens';
 export {
   rewriteImports,
   buildStaticShimModules,
