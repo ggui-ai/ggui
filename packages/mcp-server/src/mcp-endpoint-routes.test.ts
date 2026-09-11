@@ -23,7 +23,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
-import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
+import type { AuthAdapter, AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import type { Logger } from './logger.js';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -469,5 +469,52 @@ describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC 
     const { status } = await initializeAgainst(fx.url, 'fine');
     expect(status).toBe(200);
     expect(consulted).toBe(0);
+  });
+});
+
+// ggui#1028 — the belt's term for a client that closes the connection before
+// the response finished (a relay whose timeout is shorter than the hold it
+// asked for; a tab gone away). Logged at the route, before auth, so an abort
+// at ANY stage counts whatever the transport mode or the tool.
+describe('mcp_client_aborted (ggui#1028) — the client closes before the response finished', () => {
+  let fx: BootedFixture;
+  afterEach(async () => {
+    await fx.server.close();
+  });
+  const hangingAuth = (): AuthAdapter => ({
+    authenticate: () => new Promise(() => undefined),
+    getIdentity: () => new Promise(() => undefined),
+  });
+
+  it('logs the term with the URL app id and the elapsed time when the client aborts mid-request (here: during auth)', async () => {
+    const cap = capturingLogger();
+    fx = await boot({ auth: hangingAuth(), perAppRouting: perApp, logger: cap.logger });
+    const ac = new AbortController();
+    const attempt = fetch(`${fx.url}/apps/beitvdgu`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${AGENT_TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE),
+      signal: ac.signal,
+    });
+    setTimeout(() => ac.abort(), 80);
+    await expect(attempt).rejects.toThrow();
+    await new Promise((r) => setTimeout(r, 150));
+    const hit = cap.warns.find((w) => w.event === 'mcp_client_aborted');
+    expect(hit).toBeDefined();
+    expect(hit!.fields).toMatchObject({ appId: 'beitvdgu', headersSent: false });
+    expect(Number(hit!.fields!['elapsedMs'])).toBeGreaterThanOrEqual(50);
+  });
+
+  it('a request served to completion never logs it', async () => {
+    const cap = capturingLogger();
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp, logger: cap.logger });
+    const { status } = await initializeAgainst(fx.url, 'beitvdgu');
+    expect(status).toBe(200);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(cap.warns.filter((w) => w.event === 'mcp_client_aborted')).toEqual([]);
   });
 });

@@ -267,6 +267,24 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           : randomUUID();
       const reqLogger = logger.child({ requestId });
 
+      // The client closed the connection before the response finished — a
+      // relay whose timeout is shorter than the hold it asked for, a tab
+      // gone away. Observed here, before auth, so an abort at ANY stage
+      // counts whatever the transport mode or the tool; the operator's
+      // belt reads this term (its rate is the signal, one line is the
+      // diagnosis: elapsedMs against the hold the caller requested).
+      const startedAt = Date.now();
+      res.on("close", () => {
+        if (res.writableFinished) return;
+        const urlApp = perAppRouting !== undefined ? req.params[perAppRouting.paramName] : undefined;
+        reqLogger.warn("mcp_client_aborted", {
+          ...(typeof urlApp === "string" && urlApp.length > 0 ? { appId: urlApp } : {}),
+          path: req.path,
+          elapsedMs: Date.now() - startedAt,
+          headersSent: res.headersSent,
+        });
+      });
+
       // Auth is OPTIONAL on anonymous surfaces and REQUIRED otherwise.
       // Always attempt to resolve a presented credential: an anonymous
       // surface with a valid bearer still resolves to the real identity
