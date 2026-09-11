@@ -175,6 +175,79 @@ export function resolveSurfaceOnColorCss(surface: SurfaceSlot): string | undefin
   return surface === 'inverted' ? resolveToneCss('inverse') : undefined;
 }
 
+/**
+ * The class an `inverted` root carries so {@link INVERTED_SCOPE_CSS} can
+ * re-map the surface-layering pair for its subtree (ggui#1024).
+ *
+ * @public
+ */
+export const INVERTED_SCOPE_CLASS = 'ggui-surface-inverted';
+
+/**
+ * A surface owns ALL its on-colours (ggui#1024, the ggui#1019 family one
+ * step further). ggui#1019 gave the inverted root its PRIMARY ink; every
+ * `tone="muted"` label, `neutral-500` hint, chip and outline inside it
+ * still resolved the light-surface tokens by cascade — grey-on-black at
+ * 2.4–3.5:1 on served greeting cards.
+ *
+ * The root records the pair it inverts as two scoped aliases (its own
+ * background = the page ink role, its own ink = the page container) and
+ * this rule re-maps the surface-layering vocabulary for the root's
+ * DIRECT children — custom properties then inherit to every descendant:
+ *
+ *   container ↔ onContainer swap; elevated / sunken are the inverted
+ *   ground tinted a step toward the ink; onSunken / neutral-500 (the
+ *   `muted` / `subtle` inks) are the inverted ink stepped toward the
+ *   ground; outline / outlineVariant are ink at low mix.
+ *
+ * Two tiers per the package's `color-mix()` convention: a static tier
+ * every browser applies (pair swap; secondary inks = the primary ink;
+ * outlines untouched — the light outline stays visible on a dark ground),
+ * then the mixed values inside `@supports`. Derived, never authored — no
+ * theme role is added, and the aliases live under the package's own
+ * `--ggui-surface-*` namespace, which is not a theme family.
+ *
+ * Nested inversion flips back: an inverted root inside an inverted scope
+ * reads the already-swapped pair, so its aliases invert it again.
+ *
+ * The rule is co-rendered as a `<style>` child by Card / Box (the Grid
+ * precedent: `display:none` by UA default, never a layout child), so it
+ * holds in every rendering context — preview, iframe, SSR — without a
+ * theme stylesheet.
+ *
+ * @public
+ */
+export const INVERTED_SCOPE_CSS =
+  `.${INVERTED_SCOPE_CLASS}{` +
+  '--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);' +
+  '--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff)}' +
+  `.${INVERTED_SCOPE_CLASS}>*{` +
+  '--ggui-color-container:var(--ggui-surface-inverted-bg);' +
+  '--ggui-color-onContainer:var(--ggui-surface-inverted-ink);' +
+  '--ggui-color-elevated:var(--ggui-surface-inverted-bg);' +
+  '--ggui-color-onElevated:var(--ggui-surface-inverted-ink);' +
+  '--ggui-color-sunken:var(--ggui-surface-inverted-bg);' +
+  '--ggui-color-onSunken:var(--ggui-surface-inverted-ink);' +
+  '--ggui-color-neutral-500:var(--ggui-surface-inverted-ink)}' +
+  '@supports (color: color-mix(in srgb, red, blue)){' +
+  `.${INVERTED_SCOPE_CLASS}>*{` +
+  '--ggui-color-elevated:color-mix(in srgb, var(--ggui-surface-inverted-bg) 92%, var(--ggui-surface-inverted-ink));' +
+  '--ggui-color-sunken:color-mix(in srgb, var(--ggui-surface-inverted-bg) 88%, var(--ggui-surface-inverted-ink));' +
+  '--ggui-color-onSunken:color-mix(in srgb, var(--ggui-surface-inverted-ink) 76%, var(--ggui-surface-inverted-bg));' +
+  '--ggui-color-neutral-500:color-mix(in srgb, var(--ggui-surface-inverted-ink) 62%, var(--ggui-surface-inverted-bg));' +
+  '--ggui-color-outline:color-mix(in srgb, var(--ggui-surface-inverted-ink) 32%, var(--ggui-surface-inverted-bg));' +
+  '--ggui-color-outlineVariant:color-mix(in srgb, var(--ggui-surface-inverted-ink) 18%, var(--ggui-surface-inverted-bg))}}';
+
+/** The mix percentages above, exported so the contrast pin reads the same numbers. */
+export const INVERTED_SCOPE_MIX = {
+  elevatedBg: 92,
+  sunkenBg: 88,
+  onSunkenInk: 76,
+  neutral500Ink: 62,
+  outlineInk: 32,
+  outlineVariantInk: 18,
+} as const;
+
 export function resolveSurfaceCss(surface: SurfaceSlot): string {
   switch (surface) {
     case 'default':

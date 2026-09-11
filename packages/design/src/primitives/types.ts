@@ -382,8 +382,10 @@ export interface BoxProps extends BaseProps {
    * - `'sunken'` — recessed / inset region (`surfaceVariant` token)
    * - `'accent'` — highlighted / branded fill (`primary-50` token)
    * - `'inverted'` — dark surface in light mode, light in dark
-   *   (testimonials, code-snippet cards). Pair with
-   *   {@link TextProps.tone} `'inverse'` for legible text.
+   *   (testimonials, code-snippet cards, hero panels). The surface owns
+   *   ALL its inks: body text, `muted` / `subtle` labels, chips and
+   *   outlines inside it re-map to inverse-derived values by cascade —
+   *   no `tone="inverse"` needed, and no hand-picked greys.
    * - `'transparent'` — explicit "no fill"
    *
    * For non-theme-mapped brand colors (e.g. a partner's exact brand

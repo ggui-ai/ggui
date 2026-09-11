@@ -185,8 +185,11 @@ function renderFreeBoilerplates(): string {
 // moved in the SAME slice (the free prompt carries the doc as its optional
 // catalog reference), so INVARIANT 1 holds across the re-record; the
 // boilerplate digests did not move.
+// Re-recorded 2026-09-12 for ggui#1024: the primitives doc's `surface`
+// bullet now says an inverted surface owns ALL its inks (no
+// `tone="inverse"`) — doc text only, both arms again, boilerplates unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '8d2df1afbb112b7c85cbcf46182557fcd3fb07bf68ed1e4ab0847400aa6b27f1';
+  '95989add8c2a2bcf6188437f8d02547059c24c85ff3dd3df034c95a032e7bcfb';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -197,8 +200,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // is untouched here (INVARIANT 1 holds across the re-record).
 // Re-recorded 2026-09-12 for ggui#1015 (see the constrained note above):
 // the optional component-catalog reference carries the Icon blurb.
+// Re-recorded 2026-09-12 for ggui#1024 (the `surface` bullet, see above).
 export const FREE_PROMPT_SHA256 =
-  'f12e30950bdbf7e4dffde4371bf083cc0084b41dcc8e4b4722c6ca61382bc84e';
+  '5ccd3b013467666b8bdfb1f146ea8b9b7f544aeb48c1db2ceac195dd7641ace8';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

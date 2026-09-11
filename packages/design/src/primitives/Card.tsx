@@ -1,7 +1,12 @@
 import type { CSSProperties } from 'react';
 import type { CardProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss, resolveSurfaceOnColorCss } from './color-slots';
+import {
+  INVERTED_SCOPE_CLASS,
+  INVERTED_SCOPE_CSS,
+  resolveSurfaceCss,
+  resolveSurfaceOnColorCss,
+} from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -68,6 +73,25 @@ export function Card(props: WithTrait<CardProps>) {
       : undefined,
     ...style,
   };
+
+  // An inverted surface owns ALL its on-colours (ggui#1024): the root
+  // carries the scope class and co-renders the remap rule for its
+  // subtree, so `muted` labels, chips and outlines inside it read
+  // inverse-derived inks instead of the light-surface tokens.
+  if (surface === 'inverted') {
+    return renderWithTrait(
+      Trait,
+      traitProps,
+      {
+        className: className ? `${className} ${INVERTED_SCOPE_CLASS}` : INVERTED_SCOPE_CLASS,
+        style: composedStyle,
+      },
+      <>
+        <style>{INVERTED_SCOPE_CSS}</style>
+        {children}
+      </>,
+    );
+  }
 
   return renderWithTrait(
     Trait,
