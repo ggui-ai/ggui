@@ -22,7 +22,7 @@ describe('resolveToneCss', () => {
     ['default', 'var(--ggui-color-onContainer, #18181b)'],
     ['muted', 'var(--ggui-color-onSunken, #52525b)'],
     ['subtle', 'var(--ggui-color-neutral-500, #71717a)'],
-    ['emphasized', 'var(--ggui-color-primary-700, #0369a1)'],
+    ['emphasized', 'var(--ggui-color-link, var(--ggui-color-primary-700, #0369a1))'], // ggui#1039: the readable accent ink, 700 beneath
     ['loud', 'var(--ggui-color-link, var(--ggui-color-primary-500, #0ea5e9))'],
     ['success', 'var(--ggui-color-success-500, #15803d)'],
     ['warning', 'var(--ggui-color-warning-500, #b45309)'],
