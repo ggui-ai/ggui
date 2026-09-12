@@ -351,6 +351,9 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // carries an accent walked against ITS ground — the scopes remap `link` to it.
   V['--ggui-color-heroLink'] = readableAccent(V, V['--ggui-color-heroGround']!, V['--ggui-color-onHeroGround']!);
   V['--ggui-color-inverseLink'] = readableAccent(V, onContainer, container);
+  // The ink `tone="inverse"` reads (ggui#1047): the page's container at page level; every
+  // inverted / hero scope root re-declares it as that surface's ink for its subtree.
+  V['--ggui-color-onInverted'] = container;
 
   // Typography.
   const family = doc.font.family;
@@ -460,5 +463,6 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
   const onHeroGround = get('onHeroGround');
   if (heroGround !== undefined && onHeroGround !== undefined) put('heroLink', readableAccent(V, heroGround, onHeroGround));
   put('inverseLink', readableAccent(V, onContainer, container));
+  put('onInverted', container);
   return V;
 }

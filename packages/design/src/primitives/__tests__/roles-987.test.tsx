@@ -25,7 +25,7 @@ describe('tone slots read the on-roles (ggui#987 §2.1)', () => {
   it('default text is onContainer, muted text is onSunken, inverse text is container', () => {
     expect(resolveToneCss('default')).toMatch(/^var\(--ggui-color-onContainer,/);
     expect(resolveToneCss('muted')).toMatch(/^var\(--ggui-color-onSunken,/);
-    expect(resolveToneCss('inverse')).toMatch(/^var\(--ggui-color-container,/);
+    expect(resolveToneCss('inverse')).toMatch(/^var\(--ggui-color-onInverted, var\(--ggui-color-container,/);
   });
 });
 

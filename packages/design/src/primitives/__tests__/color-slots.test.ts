@@ -29,7 +29,7 @@ describe('resolveToneCss', () => {
     // ggui#983: the flat --ggui-color-error reads first (a host or override sets it), the 500 stop beneath it.
     ['error', 'var(--ggui-color-error, var(--ggui-color-error-500, #b91c1c))'],
     ['info', 'var(--ggui-color-info-500, #0e7490)'],
-    ['inverse', 'var(--ggui-color-container, #ffffff)'],
+    ['inverse', 'var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))'],
     ['inherit', 'inherit'],
   ] as readonly [ToneSlot, string][])(
     'tone "%s" → "%s"',

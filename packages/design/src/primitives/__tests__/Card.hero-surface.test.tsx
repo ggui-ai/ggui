@@ -18,12 +18,12 @@ describe('surface="hero" (ggui#1031 L2)', () => {
     expect(resolveSurfaceCss('hero')).toBe('var(--ggui-color-heroGround, #e0f2fe)');
     expect(resolveSurfaceOnColorCss('hero')).toBe('var(--ggui-color-onHeroGround, #0c4a6e)');
     expect(resolveSurfaceCss('inverted')).toBe('var(--ggui-color-onContainer, #18181b)');
-    expect(resolveSurfaceOnColorCss('inverted')).toBe('var(--ggui-color-container, #ffffff)');
+    expect(resolveSurfaceOnColorCss('inverted')).toBe('var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
     expect(INVERTED_SCOPE_CSS).toContain(
-      `.${INVERTED_SCOPE_CLASS}{--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff)}`,
+      `.${INVERTED_SCOPE_CLASS}{--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff);--ggui-color-onInverted:var(--ggui-color-container, #ffffff)}`,
     );
     expect(HERO_SCOPE_CSS).toContain(
-      `.${HERO_SCOPE_CLASS}{--ggui-surface-hero-bg:var(--ggui-color-heroGround, #e0f2fe);--ggui-surface-hero-ink:var(--ggui-color-onHeroGround, #0c4a6e)}`,
+      `.${HERO_SCOPE_CLASS}{--ggui-surface-hero-bg:var(--ggui-color-heroGround, #e0f2fe);--ggui-surface-hero-ink:var(--ggui-color-onHeroGround, #0c4a6e);--ggui-color-onInverted:var(--ggui-color-onHeroGround, #0c4a6e)}`,
     );
     expect(HERO_SCOPE_CSS).toContain(`.${HERO_SCOPE_CLASS}>*{--ggui-color-container:var(--ggui-surface-hero-bg);--ggui-color-onContainer:var(--ggui-surface-hero-ink);`);
   });

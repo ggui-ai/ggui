@@ -116,7 +116,12 @@ export function resolveToneCss(tone: ToneSlot): string {
       // (found by the beauty/002 understand pass, 2026-08-19).
       return `var(--ggui-color-${tone}-500, ${SEMANTIC_TONE_FALLBACK[tone]})`;
     case 'inverse':
-      return 'var(--ggui-color-container, #ffffff)';
+      // Text on an inverted / hero surface reads that surface's INK (ggui#1047): inside a
+      // scope, `container` is swapped to the surface's own ground (#1024), so a bare
+      // `var(--ggui-color-container)` here put ink on ink — the served Mosaic hello's hero
+      // text computed equal to its ground (1:1). `onInverted` is derived = the page's
+      // container and re-declared on every scope root as that surface's ink.
+      return 'var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))';
     case 'inherit':
       return 'inherit';
   }
@@ -247,7 +252,9 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, acc
   return (
     `.${cls}{` +
     `${bgAlias}:${bg};` +
-    `${inkAlias}:${ink}}` +
+    `${inkAlias}:${ink};` +
+    // The ink every `tone="inverse"` beneath this root reads (ggui#1047).
+    `--ggui-color-onInverted:${ink}}` +
     `.${cls}>*{` +
     `--ggui-color-container:${B};` +
     `--ggui-color-onContainer:${I};` +

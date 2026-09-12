@@ -28,7 +28,7 @@ import {
 
 describe('inverted surface owns its on-colour (ggui#1019)', () => {
   it('resolveSurfaceOnColorCss: inverted → the inverse ink; every other surface → undefined', () => {
-    expect(resolveSurfaceOnColorCss('inverted')).toBe('var(--ggui-color-container, #ffffff)');
+    expect(resolveSurfaceOnColorCss('inverted')).toBe('var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
     for (const s of ['default', 'elevated', 'sunken', 'accent', 'transparent'] as const) {
       expect(resolveSurfaceOnColorCss(s)).toBeUndefined();
     }
@@ -36,14 +36,14 @@ describe('inverted surface owns its on-colour (ggui#1019)', () => {
   it('Card surface="inverted" paints the ink background AND sets the inverse text colour on its root', () => {
     const html = renderToStaticMarkup(<Card surface="inverted">hello</Card>);
     expect(html).toContain('background-color:var(--ggui-color-onContainer, #18181b)');
-    expect(html).toContain('color:var(--ggui-color-container, #ffffff)');
+    expect(html).toContain('color:var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
   });
   it('a default Card sets no colour (inherits the page ink)', () => {
     const html = renderToStaticMarkup(<Card>hello</Card>);
     expect(html).not.toMatch(/;color:|"color:/);
   });
   it('Box surface="inverted" sets the inverse ink; an asset fill keeps the page ink', () => {
-    expect(renderToStaticMarkup(<Box surface="inverted">x</Box>)).toContain('color:var(--ggui-color-container, #ffffff)');
+    expect(renderToStaticMarkup(<Box surface="inverted">x</Box>)).toContain('color:var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
     expect(renderToStaticMarkup(<Box assetColor="#ff0000" assetSemantic="brand">x</Box>)).not.toContain('color:var(--ggui-color-container');
   });
 });
@@ -51,7 +51,7 @@ describe('inverted surface owns its on-colour (ggui#1019)', () => {
 describe('inverted surface owns its SECONDARY ink too (ggui#1024)', () => {
   it('the scope rule records the inverted pair on the root and swaps it for the direct children', () => {
     expect(INVERTED_SCOPE_CSS).toContain(
-      `.${INVERTED_SCOPE_CLASS}{--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff)}`,
+      `.${INVERTED_SCOPE_CLASS}{--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff);--ggui-color-onInverted:var(--ggui-color-container, #ffffff)}`,
     );
     expect(INVERTED_SCOPE_CSS).toContain(
       `.${INVERTED_SCOPE_CLASS}>*{--ggui-color-container:var(--ggui-surface-inverted-bg);--ggui-color-onContainer:var(--ggui-surface-inverted-ink);`,

@@ -11,9 +11,17 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Card } from '../Card';
 import { Box } from '../Box';
-import { HERO_SCOPE_CSS, INVERTED_SCOPE_CSS, withoutBackground } from '../color-slots';
+import { HERO_SCOPE_CSS, INVERTED_SCOPE_CSS, resolveToneCss, withoutBackground } from '../color-slots';
+import { Text } from '../Text';
 
 describe('a scoped surface owns its ground (ggui#1047)', () => {
+  it('`tone="inverse"` INSIDE an inverted card reads the scope\'s ink, not the swapped container (the served Mosaic 1:1)', () => {
+    const html = renderToStaticMarkup(<Card surface="inverted"><Text tone="inverse">A new conversation</Text></Card>);
+    expect(html).toContain('--ggui-color-onInverted:var(--ggui-color-container, #ffffff)');
+    expect(html).toContain('color:var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
+    expect(resolveToneCss('inverse')).toBe('var(--ggui-color-onInverted, var(--ggui-color-container, #ffffff))');
+  });
+
   it('withoutBackground strips background / backgroundColor / backgroundImage and nothing else', () => {
     expect(withoutBackground({ background: 'red', backgroundColor: 'blue', backgroundImage: 'url(x)', padding: 4, color: 'ink' })).toEqual({ padding: 4, color: 'ink' });
     expect(withoutBackground(undefined)).toBeUndefined();

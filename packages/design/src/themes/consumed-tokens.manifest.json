@@ -41,6 +41,7 @@
     "--ggui-color-onGround",
     "--ggui-color-onHeroGround",
     "--ggui-color-onInfoContainer",
+    "--ggui-color-onInverted",
     "--ggui-color-onPrimary",
     "--ggui-color-onPrimaryContainer",
     "--ggui-color-onSuccessContainer",
