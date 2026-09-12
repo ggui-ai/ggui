@@ -300,3 +300,15 @@ export function mkIssue(
 export function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/**
+ * Trace flag (ggui#1046): `GGUI_AXIS_CHECK_TRACE=1` makes the dispatcher and the checks
+ * that opt in print one JSON line per evaluation round with the facts their verdict was
+ * built from — what a reader of a served cell cannot recover from the round's result
+ * alone (the source the checks saw, the prompt, the design mode, the classification,
+ * the contract's prop keys, which gates matched, which issues came out). Off by default;
+ * a diagnostic channel, never part of the result.
+ */
+export function axisCheckTraceEnabled(): boolean {
+  return process.env["GGUI_AXIS_CHECK_TRACE"] === "1";
+}

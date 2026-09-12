@@ -15,7 +15,7 @@
 
 import type { EvalIssue } from "../../types-public.js";
 import type { AxisCheck, AxisCheckInput } from "../types.js";
-import { mkIssue } from "../helpers.js";
+import { axisCheckTraceEnabled, mkIssue } from "../helpers.js";
 
 /** Prop names a board's column array goes by. */
 const BOARD_PROP_RX = /^(columns?|lanes?|stages?|lists?|buckets?|swimlanes?)$/i;
@@ -71,8 +71,21 @@ export function enclosingLayoutTag(sourceCode: string, pos: number): string | un
   return stack[stack.length - 1];
 }
 
-/** Board maps composed under something other than <Grid> / <Row>: `[propName, enclosing tag or "nothing"]`. */
-export function findStackedBoardColumns(input: AxisCheckInput): Array<readonly [string, string]> {
+/** What the check read (ggui#1046): the board names it walked and, per name, every JSX map's enclosing layout tag. */
+export interface BoardRead {
+  readonly declared: readonly string[];
+  readonly names: readonly string[];
+  readonly perName: ReadonlyArray<{ readonly name: string; readonly maps: number; readonly enclosing: readonly string[] }>;
+}
+
+/** The board check's own trace line (ggui#1046). */
+export interface BoardColumnsTrace extends BoardRead {
+  readonly designMode: string;
+  readonly standDown: boolean;
+  readonly result: "pass" | "fail" | "stand-down";
+}
+
+export function describeBoardRead(input: AxisCheckInput): BoardRead {
   // Which array the board's columns are: the contract names it; else the prompt says
   // "board" / "kanban"; else the SOURCE itself does — a JSX map over a board-shaped name
   // (ggui#1046: on candidate 20 the check flagged every stacked source locally and none on
@@ -84,20 +97,36 @@ export function findStackedBoardColumns(input: AxisCheckInput): Array<readonly [
     : BOARD_PROMPT_RX.test(input.originalPrompt)
       ? [...BOARD_NAMES]
       : BOARD_NAMES.filter((n) => jsxMapPositions(input.sourceCode, n).length > 0);
+  const perName = names.map((name) => {
+    const positions = jsxMapPositions(input.sourceCode, name);
+    return { name, maps: positions.length, enclosing: positions.map((pos) => enclosingLayoutTag(input.sourceCode, pos) ?? "nothing") };
+  });
+  return { declared, names, perName };
+}
+
+/** Board maps composed under something other than <Grid> / <Row>: `[propName, enclosing tag or "nothing"]`. */
+export function findStackedBoardColumns(input: AxisCheckInput): Array<readonly [string, string]> {
   const stacked: Array<readonly [string, string]> = [];
-  for (const name of names) {
-    for (const pos of jsxMapPositions(input.sourceCode, name)) {
-      const tag = enclosingLayoutTag(input.sourceCode, pos);
-      if (tag === undefined || !SIDE_BY_SIDE.has(tag)) stacked.push([name, tag ?? "nothing"]);
-    }
+  for (const { name, enclosing } of describeBoardRead(input).perName) {
+    for (const tag of enclosing) if (!SIDE_BY_SIDE.has(tag)) stacked.push([name, tag]);
   }
   return stacked;
 }
 
 function runBoardColumnsSideBySide(input: AxisCheckInput): EvalIssue[] {
   if (input.compiledCode === null) return [];
-  if (input.designMode === "free") return [];
-  const stacked = findStackedBoardColumns(input);
+  const standDown = input.designMode === "free";
+  const stacked = standDown ? [] : findStackedBoardColumns(input);
+  if (axisCheckTraceEnabled()) {
+    // The check's own line beside the dispatcher's (ggui#1046): what it read, PASS and stand-down included.
+    const line: BoardColumnsTrace = {
+      ...describeBoardRead(input),
+      designMode: input.designMode ?? "constrained",
+      standDown,
+      result: standDown ? "stand-down" : stacked.length > 0 ? "fail" : "pass",
+    };
+    console.log(JSON.stringify({ boardColumnsTrace: line }));
+  }
   if (stacked.length === 0) return [];
   const [name, tag] = stacked[0]!;
   return [
