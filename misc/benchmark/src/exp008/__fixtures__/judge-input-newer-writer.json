@@ -1,0 +1,15 @@
+{
+  "prompt": "Welcome screen for Loops: greet a first-time visitor with one short line about what Loops does, then offer quick-reply choices as chips. Nothing else on the screen.",
+  "sampleProps": {
+    "message": "Ask me what you can send with Loops, how it connects to your product, and how to get started.",
+    "quickReplies": [
+      { "label": "What can I send with Loops?", "id": "send" },
+      { "id": "connect", "label": "How do I connect my product?" },
+      { "id": "start", "label": "How do I get started?" }
+    ],
+    "heading": "Welcome to Loops"
+  },
+  "profile": {
+    "direction": "Card ground = the page surface (never the ink role as a container surface); the host's ink for type, rows and arrows; the greeting as a compact brand band at most one third of the card (eyebrow in the primary colour, heading, one-line message), then the quick replies as tight full-width rows separated by hairlines, each with a trailing arrow in the primary colour; no icons elsewhere, no helper text, no status line; fit a 400×560 card without scrolling."
+  }
+}

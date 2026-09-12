@@ -13,6 +13,8 @@ import {
   visualJudgeCostUsd,
   EXP008_CELL_REPORT_VERSION,
   MINT_RECEIPT_ABSENT_NOTE,
+  readJudgeInput,
+  JUDGE_INPUT_FILE,
 } from './eval-cell';
 import type { VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import { calculateCost, resolveJudgeCostModelId, resolveCostModelId } from '../multi-sdk/runner.js';
@@ -327,12 +329,12 @@ describe('generation profile on a bootstrap cell', () => {
     expect(report.meta.profile).toEqual({ styling: 'warm, editorial', density: 'airy' });
   });
 
-  it('a profile the schema refuses is loud (unknown member, non-text member)', () => {
+  it('a profile with a wrong-typed known member is loud; an unknown member is dropped, not refused (N-1, #1014)', () => {
     const dir = cellDir({ commit: null });
-    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', profile: { palette: 'blue' } }));
-    expect(() => readCellInputs(dir)).toThrow(/"profile" is not a generation profile/);
     writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', profile: { styling: 42 } }));
     expect(() => readCellInputs(dir)).toThrow(/"profile" is not a generation profile/);
+    writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', profile: { palette: 'blue' } }));
+    expect(readCellInputs(dir).profile).toEqual({});
   });
 
   it('absent profile = today\'s path: no profile on the inputs, no profile key handed to the judge, none on the row', async () => {
@@ -383,12 +385,12 @@ describe('app theme on a bootstrap cell (#1020)', () => {
     expect(report.meta.themeApplied).toBe(true);
   });
 
-  it('a theme the schema refuses is loud (bad overlayHash, unknown member)', () => {
+  it('a theme with a bad known member is loud; an unknown top-level member is dropped, not refused (N-1, #1014)', () => {
     const dir = cellDir({ commit: null });
     writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', theme: { overlayHash: 'nope', overlays: { light: {}, dark: {} } } }));
     expect(() => readCellInputs(dir)).toThrow(/"theme" is not an app theme/);
     writeFileSync(join(dir, 'judge-input.json'), JSON.stringify({ prompt: 'x', theme: { ...THEME, palette: 'blue' } }));
-    expect(() => readCellInputs(dir)).toThrow(/"theme" is not an app theme/);
+    expect(readCellInputs(dir).theme).toEqual(THEME);
   });
 
   it('absent theme = today: no theme key handed to the judge, no themeApplied on the row', async () => {
@@ -419,5 +421,25 @@ describe('the visual judge identity names its prompt', () => {
     expect(bare.meta.visualJudge?.promptVersion).toBeUndefined();
     expect(bare.meta.visualJudge?.promptDigest).toBeUndefined();
     expect(bare.meta.notes.some((n) => n.startsWith('visual judge prompt unstamped'))).toBe(true);
+  });
+});
+
+describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejects an additive member from a newer writer', () => {
+  const fixture = JSON.parse(readFileSync(new URL('./__fixtures__/judge-input-newer-writer.json', import.meta.url), 'utf8')) as {
+    prompt: string; sampleProps?: Record<string, never>; profile: { direction: string };
+  };
+  it("parses the newer writer's real hello judge-input (profile.direction) as a bootstrap input", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify(fixture));
+    const j = readJudgeInput(dir);
+    expect(j.prompt).toBe(fixture.prompt);
+    expect(j.profile?.direction).toBe(fixture.profile.direction);
+  });
+  it('drops a profile member this reader cannot know yet instead of failing the cell', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify({ ...fixture, profile: { ...fixture.profile, aMemberFromTheNextRelease: 'ignored by this reader' } }));
+    const j = readJudgeInput(dir);
+    expect(j.profile).toEqual(fixture.profile);
+    expect(Object.keys(j.profile ?? {})).not.toContain('aMemberFromTheNextRelease');
   });
 });

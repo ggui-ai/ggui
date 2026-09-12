@@ -169,7 +169,12 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
   }
   let profile: AppGenerationProfile | undefined;
   if (raw.profile !== undefined) {
-    const parsed = appGenerationProfileSchema.safeParse(raw.profile);
+    // N−1 (#1014): this reader may be OLDER than the writer — a pinned eval
+    // image that predates a protocol addition must keep judging. Strip mode
+    // drops top-level members it cannot know and validates the rest as before.
+    // Limit: nested objects in the schema stay strict, so an additive member
+    // INSIDE one of them still rejects here.
+    const parsed = appGenerationProfileSchema.strip().safeParse(raw.profile);
     if (!parsed.success) {
       throw new Error(
         `eval-cell: ${JUDGE_INPUT_FILE} "profile" is not a generation profile — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
@@ -179,7 +184,7 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
   }
   let theme: AppTheme | undefined;
   if (raw.theme !== undefined) {
-    const parsed = appThemeSchema.safeParse(raw.theme);
+    const parsed = appThemeSchema.strip().safeParse(raw.theme); // N−1 (#1014), same limit as profile above
     if (!parsed.success) {
       throw new Error(
         `eval-cell: ${JUDGE_INPUT_FILE} "theme" is not an app theme — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
