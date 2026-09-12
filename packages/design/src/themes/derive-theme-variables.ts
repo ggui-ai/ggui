@@ -212,12 +212,22 @@ function stated(group: Tokens, key: string): string | undefined {
 
 /** Synthesise a family's ten stops from its `500` anchor (stated stops win). */
 function familyRamp(group: Tokens, anchor: string): Record<string, string> {
+  const statedStops: Record<string, string> = {};
+  for (const stop of STOPS) {
+    const v = stated(group, stop);
+    if (v !== undefined) statedStops[stop] = v;
+  }
+  return rampFrom(statedStops, anchor);
+}
+
+/** A family's ten stops from the ones stated + the OKLCH scale around the anchor for the rest. */
+function rampFrom(statedStops: Readonly<Record<string, string>>, anchor: string): Record<string, string> {
   const a = hexToOklch(anchor);
   const out: Record<string, string> = {};
   STOPS.forEach((stop, i) => {
-    const s = stated(group, stop);
-    if (s !== undefined) {
-      out[stop] = s;
+    const v = statedStops[stop];
+    if (v !== undefined) {
+      out[stop] = v;
       return;
     }
     out[stop] = stop === '500' ? anchor : oklchToHex({ l: RAMP_L[i]!, c: a.c * RAMP_C[i]!, h: a.h });
@@ -239,13 +249,19 @@ const ACCENT_WALK: Readonly<Record<ThemeMode, readonly (typeof STOPS)[number][]>
   dark: ['600', '500', '400', '300', '200', '100'],
 };
 
-/** The first primary stop at ≥ 4.5:1 on `container`, else the container's own ink — derived, never authored. */
-function readableAccent(V: Readonly<Record<string, string>>, container: string, onContainer: string, mode: ThemeMode): string {
-  for (const stop of ACCENT_WALK[mode]) {
+/**
+ * The first primary stop at ≥ 4.5:1 on `surface`, else the surface's own ink —
+ * derived, never authored. The walk follows the SURFACE's darkness, not the
+ * mode (ggui#1043): a dark host's hero ground is the light ink pair, so its
+ * accent walks toward the dark stops exactly as a light container's does.
+ */
+function readableAccent(V: Readonly<Record<string, string>>, surface: string, ink: string): string {
+  const light = contrastRatio('#000000', surface) >= contrastRatio('#ffffff', surface);
+  for (const stop of light ? ACCENT_WALK.light : ACCENT_WALK.dark) {
     const hex = V[`--ggui-color-primary-${stop}`];
-    if (hex !== undefined && contrastRatio(hex, container) >= 4.5) return hex;
+    if (hex !== undefined && contrastRatio(hex, surface) >= 4.5) return hex;
   }
-  return onContainer;
+  return ink;
 }
 
 function parseSize(value: string): { n: number; unit: string } | undefined {
@@ -325,11 +341,16 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // the container (600 → 700 → 800 → 900 in light, 600 → … → 100 in dark),
   // else the container's ink. `primary-600` alone read 2.55:1 on the brand
   // theme's light container and every anchor with it.
-  V['--ggui-color-link'] = single('link') ?? readableAccent(V, container, onContainer, mode);
+  V['--ggui-color-link'] = single('link') ?? readableAccent(V, container, onContainer);
   // The hero ground pair (ggui#1031 L2) — derived, never authored: light host →
   // the primary container pair; dark host → the ink pair (as `inverted`).
   V['--ggui-color-heroGround'] = mode === 'light' ? V['--ggui-color-primaryContainer']! : onContainer;
   V['--ggui-color-onHeroGround'] = mode === 'light' ? V['--ggui-color-onPrimaryContainer']! : container;
+  // Accent text on a swapped ground (ggui#1043): `link` is walked against the
+  // container; a hero card and an inverted card paint other grounds, so each
+  // carries an accent walked against ITS ground — the scopes remap `link` to it.
+  V['--ggui-color-heroLink'] = readableAccent(V, V['--ggui-color-heroGround']!, V['--ggui-color-onHeroGround']!);
+  V['--ggui-color-inverseLink'] = readableAccent(V, onContainer, container);
 
   // Typography.
   const family = doc.font.family;
@@ -377,4 +398,67 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   }
   if (gaps.length > 0) throw new Error(`deriveThemeVariables: no rule for manifest token(s) ${gaps.join(', ')} — extend the §2.4 table`);
   return out;
+}
+
+/**
+ * Complete a partial `--ggui-*` colour map — an app theme's per-mode overlay
+ * as another surface derived it — with every role it does NOT state, derived
+ * from ITS OWN values by the rules registry themes get above (ggui#1043). An
+ * overlay written to an older vocabulary thus gets the newer roles in its own
+ * brand, never the base ladder's: `primaryContainer` from its primary ramp,
+ * the tone container pairs, the hero pair, `link`, `heroLink`, `inverseLink`.
+ * A stated key is never overridden; a role that cannot be derived from what is
+ * stated (no surfaces, no family anchor) stays absent so the ladder beneath
+ * still paints it. Pure — returns a new map.
+ */
+export function completeThemeVariables(vars: Readonly<Record<string, string>>, mode: ThemeMode): Record<string, string> {
+  const V: Record<string, string> = { ...vars };
+  const get = (k: string): string | undefined => V[`--ggui-color-${k}`];
+  const put = (k: string, v: string): void => {
+    if (V[`--ggui-color-${k}`] === undefined) V[`--ggui-color-${k}`] = v;
+  };
+  const ground = get('ground');
+  const onGround = get('onGround');
+  const container = get('container');
+  const onContainer = get('onContainer');
+  if (ground === undefined || onGround === undefined || container === undefined || onContainer === undefined) return V;
+  put('elevated', mode === 'light' ? container : mixOklch(container, onContainer, 0.08));
+  put('onElevated', onContainer);
+  STOPS.forEach((stop, i) => put(`neutral-${stop}`, mixOklch(ground, onGround, NEUTRAL_T[i]!)));
+  put('outline', get('neutral-300')!);
+  put('outlineVariant', get('neutral-200')!);
+  for (const fam of FAMILIES) {
+    const statedStops: Record<string, string> = {};
+    for (const stop of STOPS) {
+      const v = get(`${fam}-${stop}`);
+      if (v !== undefined) statedStops[stop] = v;
+    }
+    const anchor = statedStops['500'] ?? (fam === 'tertiary' ? (get('tertiary') ?? get('primary-500')) : undefined);
+    if (anchor === undefined) continue;
+    const ramp = rampFrom(statedStops, anchor);
+    for (const stop of STOPS) put(`${fam}-${stop}`, ramp[stop]!);
+    const cap = fam[0]!.toUpperCase() + fam.slice(1);
+    put(`on${cap}`, onColourFor(ramp['500']!));
+    put(`${fam}Container`, mode === 'light' ? ramp['100']! : ramp['800']!);
+    put(`on${cap}Container`, mode === 'light' ? ramp['900']! : ramp['100']!);
+  }
+  const error500 = get('error-500');
+  if (error500 !== undefined) put('error', error500);
+  put('link', readableAccent(V, container, onContainer));
+  if (mode === 'light') {
+    const primaryContainer = get('primaryContainer');
+    const onPrimaryContainer = get('onPrimaryContainer');
+    if (primaryContainer !== undefined && onPrimaryContainer !== undefined) {
+      put('heroGround', primaryContainer);
+      put('onHeroGround', onPrimaryContainer);
+    }
+  } else {
+    put('heroGround', onContainer);
+    put('onHeroGround', container);
+  }
+  const heroGround = get('heroGround');
+  const onHeroGround = get('onHeroGround');
+  if (heroGround !== undefined && onHeroGround !== undefined) put('heroLink', readableAccent(V, heroGround, onHeroGround));
+  put('inverseLink', readableAccent(V, onContainer, container));
+  return V;
 }

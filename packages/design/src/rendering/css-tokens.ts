@@ -33,6 +33,7 @@
  */
 
 import { getTheme, getDefaultThemeId } from '../themes/index';
+import { completeThemeVariables } from '../themes/derive-theme-variables';
 import type { ThemeMode } from '../themes/types';
 
 /**
@@ -467,8 +468,14 @@ export function toCssDecls(vars: Readonly<Record<string, string>>): string {
  */
 export function composeThemeCss(opts: ComposeThemeCssOptions): string {
   const m: ThemeMode = opts.mode ?? 'light';
+  // The mode overlay is COMPLETED from its own colours before it is layered
+  // (ggui#1043): a role the overlay does not state — the hero pair, the
+  // primary / tone container pairs, an accent for a swapped ground — is
+  // derived from what it does state, never left to the ladder beneath, which
+  // painted the default theme's hero ground under a rep app's brand.
+  const overlay = opts.appTheme?.overlays[m];
   const layers = opts.appTheme
-    ? [opts.appTheme.overlays[m], opts.appTheme.cssVariables].filter(
+    ? [overlay === undefined ? undefined : completeThemeVariables(overlay, m), opts.appTheme.cssVariables].filter(
         (vars): vars is Readonly<Record<string, string>> => vars !== undefined
       )
     : [];

@@ -27,6 +27,11 @@ describe('surface="hero" (ggui#1031 L2)', () => {
     );
     expect(HERO_SCOPE_CSS).toContain(`.${HERO_SCOPE_CLASS}>*{--ggui-color-container:var(--ggui-surface-hero-bg);--ggui-color-onContainer:var(--ggui-surface-hero-ink);`);
   });
+  it('the scopes remap `link` to an accent walked against THEIR ground (ggui#1043)', () => {
+    expect(HERO_SCOPE_CSS).toContain('--ggui-color-link:var(--ggui-color-heroLink, var(--ggui-color-onHeroGround, #0c4a6e))}');
+    expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-link:var(--ggui-color-inverseLink, var(--ggui-color-container, #ffffff))}');
+  });
+
   it('Card / Box hero roots carry the scope class, the rule and the on-colour', () => {
     for (const html of [renderToStaticMarkup(<Card surface="hero">hi</Card>), renderToStaticMarkup(<Box surface="hero">hi</Box>)]) {
       expect(html).toContain(HERO_SCOPE_CLASS);

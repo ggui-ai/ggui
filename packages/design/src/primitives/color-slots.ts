@@ -236,7 +236,7 @@ export const INVERTED_SCOPE_CLASS = 'ggui-surface-inverted';
  * re-maps the surface-layering roles for the root's direct children (which
  * then inherit). Two tiers per the package's `color-mix()` convention.
  */
-function surfaceScopeCss(cls: string, name: string, bg: string, ink: string): string {
+function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, accent: string): string {
   // The aliases live under the package's own `--ggui-surface-*` namespace (not a
   // theme family); composed outside any `var(--ggui-` literal so the consumed-
   // token scan sees no dynamic token construction here.
@@ -255,7 +255,9 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string): st
     `--ggui-color-onElevated:${I};` +
     `--ggui-color-sunken:${B};` +
     `--ggui-color-onSunken:${I};` +
-    `--ggui-color-neutral-500:${I}}` +
+    `--ggui-color-neutral-500:${I};` +
+    // Accent text walks against THIS ground (ggui#1043), never the container's.
+    `--ggui-color-link:${accent}}` +
     '@supports (color: color-mix(in srgb, red, blue)){' +
     `.${cls}>*{` +
     `--ggui-color-elevated:color-mix(in srgb, ${B} 92%, ${I});` +
@@ -272,6 +274,7 @@ export const INVERTED_SCOPE_CSS = surfaceScopeCss(
   'inverted',
   'var(--ggui-color-onContainer, #18181b)',
   'var(--ggui-color-container, #ffffff)',
+  'var(--ggui-color-inverseLink, var(--ggui-color-container, #ffffff))',
 );
 
 /** The class a `hero` root carries (ggui#1031 L2) — the same remap over the hero ground pair. */
@@ -281,6 +284,7 @@ export const HERO_SCOPE_CSS = surfaceScopeCss(
   'hero',
   'var(--ggui-color-heroGround, #e0f2fe)',
   'var(--ggui-color-onHeroGround, #0c4a6e)',
+  'var(--ggui-color-heroLink, var(--ggui-color-onHeroGround, #0c4a6e))',
 );
 
 /** The scope a surface root carries, when the surface owns its subtree's inks. */

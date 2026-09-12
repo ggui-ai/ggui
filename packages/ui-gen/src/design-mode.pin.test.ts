@@ -126,8 +126,10 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1036: the free prompt renders the consumed-token manifest, which grew by the tone container pairs Tag now reads.
 // Re-recorded 2026-09-12 for ggui#1031 L2 (the hero ground pair in the token docs + manifest).
 // Re-recorded 2026-09-12 for ggui#1039: the free roles prose gains the `link` row (accent TEXT), see above.
+// Re-recorded 2026-09-12 for ggui#1043: the consumed-token manifest grew by `heroLink` + `inverseLink` (the accents the hero /
+// inverted scopes walk against their own ground); the free colour vocabulary renders the manifest — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  '3338b2c03bee948f5832d815a3f4d0befc8b504e09ce4403255c69408e259460';
+  '6ede4a7559f69ea767aae4dab4a3708765fae5c35d515b1a7ce4b3693fd9517d';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

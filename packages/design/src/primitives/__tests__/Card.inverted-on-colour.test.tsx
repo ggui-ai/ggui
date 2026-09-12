@@ -58,7 +58,7 @@ describe('inverted surface owns its SECONDARY ink too (ggui#1024)', () => {
     );
     // static tier: the muted / subtle inks fall back to the primary ink …
     expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-onSunken:var(--ggui-surface-inverted-ink);');
-    expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-neutral-500:var(--ggui-surface-inverted-ink)}');
+    expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-neutral-500:var(--ggui-surface-inverted-ink);--ggui-color-link:var(--ggui-color-inverseLink, var(--ggui-color-container, #ffffff))}');
     // … and the mixed values sit inside the package's color-mix @supports tier.
     const supports = INVERTED_SCOPE_CSS.indexOf('@supports (color: color-mix(in srgb, red, blue))');
     expect(supports).toBeGreaterThan(0);
