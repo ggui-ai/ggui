@@ -110,6 +110,33 @@ describe('the fit measurement in the per-canvas round (ggui#1027)', () => {
     ]);
   });
 
+  it("the judge's end of the sentence: per canvas, passed === (score >= passThreshold) && !(overflow && fit policy 'fail'); the score is never touched by the fit", async () => {
+    // The pin both ends of the wire now state (ggui#1027): a reader of `passed` on a
+    // cell must be able to say WHY from the canvas's own numbers — score vs threshold,
+    // overflow vs the canvas's fit policy. A future change to the policy or the
+    // threshold reds this test instead of reading as a smell on a served cell.
+    const passThreshold = 70;
+    const canvases = ['xs-chat-card', 'mobile-fullscreen-small', 'md'] as const;
+    for (const score of [passThreshold - 1, passThreshold]) {
+      for (const contentHeight of [600, 1289]) {
+        const deps = fitDeps(contentHeight, score);
+        const { result } = await runVisualEvaluationDetailed(
+          { compiledCode: COMPONENT, originalPrompt: 'a greeting card' },
+          { provider: 'claude', passThreshold, canvases: [...canvases] },
+          deps,
+        );
+        expect(result).not.toBeNull();
+        for (const c of result!.canvases!) {
+          const overflow = contentHeight > CANVAS_VIEWPORTS[c.canvas].height;
+          const expected = score >= passThreshold && !(overflow && canvasFitPolicy(c.canvas).overflow === 'fail');
+          expect([c.canvas, score, contentHeight, c.score, c.overflow, c.passed]).toEqual([c.canvas, score, contentHeight, score, overflow, expected]);
+        }
+        expect(result!.finalScore).toBe(score);
+        expect(result!.passed).toBe(result!.canvases!.every((c) => c.passed));
+      }
+    }
+  });
+
   it('a 600px card fits everywhere: no overflow, no issue, passed by the score', async () => {
     const deps = fitDeps(600);
     const { result } = await runVisualEvaluationDetailed(
