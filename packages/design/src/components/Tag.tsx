@@ -1,38 +1,42 @@
 import type { CSSProperties } from 'react';
 import type { TagProps } from './types';
-import { colors } from '../tokens/colors';
 import { fontSize, fontWeight } from '../tokens/typography';
 
+// Every variant paints the THEME's roles (ggui#1036): the neutral tag is the
+// sunken surface pair, the toned tags their tone's container pair, the border
+// the tone's 200 stop — with the default palette's literal only as the `var()`
+// fallback, so an un-themed render is byte-identical to before and a themed
+// one follows the app's theme in both modes. Nothing here reads tokens/colors.
 const variantStyles: Record<string, CSSProperties> = {
   default: {
-    backgroundColor: colors.gray[100],
-    color: colors.gray[700],
-    border: `1px solid ${colors.gray[200]}`,
+    backgroundColor: 'var(--ggui-color-sunken, #f3f4f6)',
+    color: 'var(--ggui-color-onSunken, #374151)',
+    border: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
   },
   primary: {
-    backgroundColor: colors.primary[50],
-    color: colors.primary[700],
-    border: `1px solid ${colors.primary[200]}`,
+    backgroundColor: 'var(--ggui-color-primaryContainer, #f0f9ff)',
+    color: 'var(--ggui-color-onPrimaryContainer, #0369a1)',
+    border: '1px solid var(--ggui-color-primary-200, #bae6fd)',
   },
   success: {
-    backgroundColor: colors.success[50],
-    color: colors.success[700],
-    border: `1px solid ${colors.success[200]}`,
+    backgroundColor: 'var(--ggui-color-successContainer, #f0fdf4)',
+    color: 'var(--ggui-color-onSuccessContainer, #15803d)',
+    border: '1px solid var(--ggui-color-success-200, #bbf7d0)',
   },
   warning: {
-    backgroundColor: colors.warning[50],
-    color: colors.warning[700],
-    border: `1px solid ${colors.warning[200]}`,
+    backgroundColor: 'var(--ggui-color-warningContainer, #fffbeb)',
+    color: 'var(--ggui-color-onWarningContainer, #b45309)',
+    border: '1px solid var(--ggui-color-warning-200, #fde68a)',
   },
   error: {
-    backgroundColor: colors.error[50],
-    color: colors.error[700],
-    border: `1px solid ${colors.error[200]}`,
+    backgroundColor: 'var(--ggui-color-errorContainer, #fef2f2)',
+    color: 'var(--ggui-color-onErrorContainer, #b91c1c)',
+    border: '1px solid var(--ggui-color-error-200, #fecaca)',
   },
   info: {
-    backgroundColor: colors.info[50],
-    color: colors.info[700],
-    border: `1px solid ${colors.info[200]}`,
+    backgroundColor: 'var(--ggui-color-infoContainer, #ecfeff)',
+    color: 'var(--ggui-color-onInfoContainer, #0e7490)',
+    border: '1px solid var(--ggui-color-info-200, #a5f3fc)',
   },
 };
 

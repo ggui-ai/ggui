@@ -115,8 +115,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1024 (the `surface` bullet, see above).
 // Re-recorded 2026-09-12 for ggui#1034 (the Button `outline` doc line, see above).
 // Re-recorded 2026-09-12 for ggui#1035 (the `loud` doc line, see above).
+// Re-recorded 2026-09-12 for ggui#1036: the free prompt renders the consumed-token manifest, which grew by the tone container pairs Tag now reads.
 export const FREE_PROMPT_SHA256 =
-  '2b380cbd2c112788cc2c038d84e72d67921f1da69df381ac2dc714fd240f9899';
+  '7a6f519bd980e42d5f644db04ac0c9cb5341e7d6d676eaf2a6047d29c8e042c9';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
