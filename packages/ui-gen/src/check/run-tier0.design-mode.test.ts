@@ -214,7 +214,7 @@ export function NotDefault() {
 }`;
     const issues = await runTier0Checks(src, {}, undefined, undefined, 'free');
     const f = fails(issues);
-    expect(f).toContain('imports:');
+    expect(f).toContain('imports:disallowed-package');
     expect(f).toContain('security:fetch');
     expect(f).toContain('types:props-interface');
     expect(f).toContain('compile:default-export');
