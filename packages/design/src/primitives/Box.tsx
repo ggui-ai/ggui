@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BoxProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, withoutBackground } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -64,17 +64,19 @@ export function Box(props: WithTrait<BoxProps>) {
   // the `inverse` ink on its root; an asset fill keeps the page ink.
   const resolvedOnColor = !validAsset && surface ? resolveSurfaceOnColorCss(surface) : undefined;
 
+  // An inverted surface owns ALL its on-colours (ggui#1024) — see Card.
+  const scope = !validAsset && surface ? resolveSurfaceScope(surface) : undefined;
+  // A scoped surface owns its ground too — the author's style may not repaint it (see Card).
+  const authorStyle = scope !== undefined ? withoutBackground(style) : style;
+
   const composedStyle: CSSProperties = {
     padding: computedPadding,
     margin: resolveSpacing(margin),
     background: resolvedBackground,
     ...(resolvedOnColor !== undefined ? { color: resolvedOnColor } : {}),
     borderRadius: resolveRadius(radius),
-    ...style,
+    ...authorStyle,
   };
-
-  // An inverted surface owns ALL its on-colours (ggui#1024) — see Card.
-  const scope = !validAsset && surface ? resolveSurfaceScope(surface) : undefined;
   if (scope !== undefined) {
     return renderWithTrait(
       Trait,

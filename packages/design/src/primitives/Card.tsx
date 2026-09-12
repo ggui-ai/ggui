@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CardProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, withoutBackground } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -57,6 +57,17 @@ export function Card(props: WithTrait<CardProps>) {
   // `inverse` ink on its root so inherited text is never ink-on-ink.
   const resolvedOnColor = resolveSurfaceOnColorCss(surface ?? 'default');
 
+  // An inverted surface owns ALL its on-colours (ggui#1024): the root
+  // carries the scope class and co-renders the remap rule for its
+  // subtree, so `muted` labels, chips and outlines inside it read
+  // inverse-derived inks instead of the light-surface tokens.
+  const scope = resolveSurfaceScope(surface ?? 'default');
+
+  // A scoped surface owns its GROUND too (ggui#1047): the author's style may
+  // not repaint it — a generated `background: var(--ggui-color-ground)` on an
+  // inverted card put the page's ground under the scope's swapped inks (1:1).
+  // Non-scoped surfaces keep the author's background, last, as before.
+  const authorStyle = scope !== undefined ? withoutBackground(style) : style;
   const composedStyle: CSSProperties = {
     backgroundColor: resolvedSurface,
     ...(resolvedOnColor !== undefined ? { color: resolvedOnColor } : {}),
@@ -66,14 +77,8 @@ export function Card(props: WithTrait<CardProps>) {
     border: border
       ? '1px solid var(--ggui-color-outlineVariant, #e4e4e7)'
       : undefined,
-    ...style,
+    ...authorStyle,
   };
-
-  // An inverted surface owns ALL its on-colours (ggui#1024): the root
-  // carries the scope class and co-renders the remap rule for its
-  // subtree, so `muted` labels, chips and outlines inside it read
-  // inverse-derived inks instead of the light-surface tokens.
-  const scope = resolveSurfaceScope(surface ?? 'default');
   if (scope !== undefined) {
     return renderWithTrait(
       Trait,

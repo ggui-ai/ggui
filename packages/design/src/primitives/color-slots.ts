@@ -256,6 +256,10 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, acc
     `--ggui-color-sunken:${B};` +
     `--ggui-color-onSunken:${I};` +
     `--ggui-color-neutral-500:${I};` +
+    // A scoped surface IS its subtree's ground (ggui#1047): text painted with the page's
+    // `onGround` inside an inverted card read ink-on-ink on a theme whose ground is its container.
+    `--ggui-color-ground:${B};` +
+    `--ggui-color-onGround:${I};` +
     // Accent text walks against THIS ground (ggui#1043), never the container's.
     `--ggui-color-link:${accent}}` +
     '@supports (color: color-mix(in srgb, red, blue)){' +
@@ -288,6 +292,21 @@ export const HERO_SCOPE_CSS = surfaceScopeCss(
 );
 
 /** The scope a surface root carries, when the surface owns its subtree's inks. */
+/**
+ * An author's `style` with its background declarations removed — a SCOPED surface
+ * (`inverted`, `hero`) owns its ground (ggui#1047): a generated
+ * `style={{ background: 'var(--ggui-color-ground)' }}` on an inverted card painted the
+ * page's ground under the scope's swapped inks and read 1:1. Non-scoped surfaces keep
+ * the author's background as before.
+ *
+ * @public
+ */
+export function withoutBackground<T extends { background?: unknown; backgroundColor?: unknown; backgroundImage?: unknown }>(style: T | undefined): Omit<T, 'background' | 'backgroundColor' | 'backgroundImage'> | undefined {
+  if (style === undefined) return undefined;
+  const { background: _background, backgroundColor: _backgroundColor, backgroundImage: _backgroundImage, ...rest } = style;
+  return rest;
+}
+
 export function resolveSurfaceScope(surface: SurfaceSlot): { readonly className: string; readonly css: string } | undefined {
   if (surface === 'inverted') return { className: INVERTED_SCOPE_CLASS, css: INVERTED_SCOPE_CSS };
   if (surface === 'hero') return { className: HERO_SCOPE_CLASS, css: HERO_SCOPE_CSS };
