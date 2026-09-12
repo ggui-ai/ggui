@@ -588,7 +588,7 @@ export interface TextProps extends BaseProps {
    *
    * Available slots: `'default'` (primary body text), `'muted'`
    * (secondary / metadata), `'subtle'` (very-low-emphasis hint),
-   * `'emphasized'` (branded accent), `'loud'` (strongest accent),
+   * `'emphasized'` (branded accent), `'loud'` (strongest accent — the theme's readable accent ink),
    * `'success'` / `'warning'` / `'error'` / `'info'` (status text),
    * `'inverse'` (text on dark surface), `'inherit'` (parent's color).
    *

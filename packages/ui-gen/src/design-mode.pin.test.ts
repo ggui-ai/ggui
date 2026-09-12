@@ -99,8 +99,9 @@ function renderFreeBoilerplates(): string {
 // `tone="inverse"`) — doc text only, both arms again, boilerplates unchanged.
 // Re-recorded 2026-09-12 for ggui#1034: the Button `outline` variant's doc line (label in the
 // surface's on-colour, brand on the border) — doc text only, both arms, boilerplates unchanged.
+// Re-recorded 2026-09-12 for ggui#1035: the `loud` tone doc line (the theme's readable accent ink) — doc text only, both arms.
 export const CONSTRAINED_PROMPT_SHA256 =
-  'f322c07524ea6569071249982e9c4e33e6c74b493d4a136e8f590a72f59fb9ed';
+  '39a53d61c69aaef44bc733b35703f5f904e79d20d5aa8141e58c2cd81aa32154';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -113,8 +114,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // the optional component-catalog reference carries the Icon blurb.
 // Re-recorded 2026-09-12 for ggui#1024 (the `surface` bullet, see above).
 // Re-recorded 2026-09-12 for ggui#1034 (the Button `outline` doc line, see above).
+// Re-recorded 2026-09-12 for ggui#1035 (the `loud` doc line, see above).
 export const FREE_PROMPT_SHA256 =
-  '2cf39106b7d452700dfa8547b1ca0dc180f12c9e7fa4911edf7ac3e0defbfa13';
+  '2b380cbd2c112788cc2c038d84e72d67921f1da69df381ac2dc714fd240f9899';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

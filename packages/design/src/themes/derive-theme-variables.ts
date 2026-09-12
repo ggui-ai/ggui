@@ -224,6 +224,25 @@ function onColourFor(base: string): string {
   return contrastRatio('#ffffff', base) >= contrastRatio('#000000', base) ? '#ffffff' : '#000000';
 }
 
+/**
+ * The primary stops an unstated accent-text ink walks, per mode, from the
+ * mode's natural stop toward the ink end (ggui#1035). Accent TEXT must read
+ * on the container it sits on: a stop chosen for its hue is not an ink.
+ */
+const ACCENT_WALK: Readonly<Record<ThemeMode, readonly (typeof STOPS)[number][]>> = {
+  light: ['600', '700', '800', '900'],
+  dark: ['600', '500', '400', '300', '200', '100'],
+};
+
+/** The first primary stop at ≥ 4.5:1 on `container`, else the container's own ink — derived, never authored. */
+function readableAccent(V: Readonly<Record<string, string>>, container: string, onContainer: string, mode: ThemeMode): string {
+  for (const stop of ACCENT_WALK[mode]) {
+    const hex = V[`--ggui-color-primary-${stop}`];
+    if (hex !== undefined && contrastRatio(hex, container) >= 4.5) return hex;
+  }
+  return onContainer;
+}
+
 function parseSize(value: string): { n: number; unit: string } | undefined {
   const m = /^([0-9.]+)\s*(rem|px|em)$/.exec(value.trim());
   return m ? { n: Number(m[1]), unit: m[2]! } : undefined;
@@ -296,7 +315,12 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
     V[`--ggui-color-on${cap}Container`] = single(`on${cap}Container`) ?? (mode === 'light' ? ramp['900']! : ramp['100']!);
   }
   V['--ggui-color-error'] = V['--ggui-color-error-500']!;
-  V['--ggui-color-link'] = single('link') ?? V['--ggui-color-primary-600']!;
+  // Accent text reads on its surface (ggui#1035): a stated `link` is honoured
+  // as before; an unstated one is the first primary stop that clears 4.5:1 on
+  // the container (600 → 700 → 800 → 900 in light, 600 → … → 100 in dark),
+  // else the container's ink. `primary-600` alone read 2.55:1 on the brand
+  // theme's light container and every anchor with it.
+  V['--ggui-color-link'] = single('link') ?? readableAccent(V, container, onContainer, mode);
 
   // Typography.
   const family = doc.font.family;

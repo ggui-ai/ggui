@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveThemeVariables, hexToOklch, oklchToHex } from './derive-theme-variables';
+import { contrastRatio, deriveThemeVariables, hexToOklch, oklchToHex } from './derive-theme-variables';
 import { consumedTokenManifest } from './consumed-tokens';
 import { NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
 import { lightTheme } from './defaults/light';
@@ -29,9 +29,11 @@ describe('deriveThemeVariables — the ONE producer (ggui#987 §2.4)', () => {
     }
   });
 
-  it('link: unstated → primary-600; stated → the stated value wins, never an alias appended over it', () => {
+  it('link: unstated → the first primary stop at ≥ 4.5:1 on the container (ggui#1035 — the default light theme\'s 600 reads 4.10:1, so it walks to 700); stated → the stated value wins, never an alias appended over it', () => {
     const unstated = deriveThemeVariables(lightTheme, 'light');
-    expect(unstated['--ggui-color-link']).toBe(unstated['--ggui-color-primary-600']);
+    expect(contrastRatio(unstated['--ggui-color-primary-600']!, unstated['--ggui-color-container']!)).toBeLessThan(4.5);
+    expect(unstated['--ggui-color-link']).toBe(unstated['--ggui-color-primary-700']);
+    expect(contrastRatio(unstated['--ggui-color-link']!, unstated['--ggui-color-container']!)).toBeGreaterThanOrEqual(4.5);
     const stated = deriveThemeVariables({ ...lightTheme, color: { ...lightTheme.color, link: { $type: 'color', $value: '#123456' } } }, 'light');
     expect(stated['--ggui-color-link']).toBe('#123456');
   });

@@ -34,7 +34,7 @@
  * | `muted`       | `--ggui-color-onSunken`            | secondary / metadata / captions             |
  * | `subtle`      | `--ggui-color-neutral-500`         | very-low-emphasis labels, hint text          |
  * | `emphasized`  | `--ggui-color-primary-700`         | accent text (branded label, tagline)         |
- * | `loud`        | `--ggui-color-primary-500`         | the strongest accent (call-to-action label)  |
+ * | `loud`        | `--ggui-color-link` (500 beneath)  | the strongest accent (call-to-action label) — the theme's READABLE accent ink |
  * | `success`     | `--ggui-color-success`             | success status text (semantic flat token)    |
  * | `warning`     | `--ggui-color-warning`             | warning status text (semantic flat token)    |
  * | `error`       | `--ggui-color-error`               | error status text (semantic flat token)      |
@@ -82,7 +82,11 @@ export function resolveToneCss(tone: ToneSlot): string {
     case 'emphasized':
       return 'var(--ggui-color-primary-700, #0369a1)';
     case 'loud':
-      return 'var(--ggui-color-primary-500, #0ea5e9)';
+      // Accent TEXT reads through the theme's readable accent ink (ggui#1035):
+      // the bare 500 stop read 1.60:1 on the brand theme's light container.
+      // `link` is derived per mode to clear 4.5:1; the 500 stop sits beneath
+      // it only for un-themed contexts.
+      return 'var(--ggui-color-link, var(--ggui-color-primary-500, #0ea5e9))';
     case 'error':
       // The flat `--ggui-color-error` is the one semantic slot a host
       // palette or a theme override addresses directly (ggui#983); it

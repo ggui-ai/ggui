@@ -94,13 +94,13 @@ describe('themeToCssVarReferences', () => {
 });
 
 describe('the file-format path is the same producer (ggui#987 §2.4)', () => {
-  it('a document with a stated link emits it as stated; an unstated link aliases primary-600', () => {
+  it('a document with a stated link emits it as stated; an unstated link is the readable accent stop (ggui#1035: the first primary stop at ≥ 4.5:1 on the container — 700 for the default light theme)', () => {
     const stated = generateCssVariables({ ...lightTheme, color: { ...lightTheme.color, link: { $value: '#123456', $type: 'color' } } }, 'light');
     expect(stated).toContain('--ggui-color-link: #123456;');
     const unstated = generateCssVariables(lightTheme, 'light');
-    const primary600 = /--ggui-color-primary-600: (#[0-9a-f]{6});/.exec(unstated)?.[1];
-    expect(primary600).toBeDefined();
-    expect(unstated).toContain(`--ggui-color-link: ${primary600};`);
+    const primary700 = /--ggui-color-primary-700: (#[0-9a-f]{6});/.exec(unstated)?.[1];
+    expect(primary700).toBeDefined();
+    expect(unstated).toContain(`--ggui-color-link: ${primary700};`);
   });
 
   it('the flat error is the error-500 stop, in both modes', () => {
