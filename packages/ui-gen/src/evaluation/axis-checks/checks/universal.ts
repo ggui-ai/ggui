@@ -210,6 +210,44 @@ function runAccentTextInk(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.scoped_surface_owns_ground (ggui#1047) ─────────────────
+// A SCOPED surface — `surface="inverted"` or `"hero"` on Card / Box — owns its
+// ground: the primitive paints it, the scope rule swaps every ink beneath it.
+// The served Mosaic hello repainted an inverted card's ground with the page's
+// (`style={{ background: 'var(--ggui-color-ground)' }}`) and its hero text
+// read 1:1 — the swapped inks over a ground the scope did not own. The design
+// package now strips that background at render; this check makes the fix turn
+// remove it at the source, so the author's intent never silently vanishes.
+// Stands down in `free` design mode (the primitive is optional there).
+
+const SCOPED_SURFACE_TAG_RX = /<(Card|Box)\b([^<>]*?)surface\s*=\s*["'](inverted|hero)["']([^<>]*?)>/g;
+const STYLE_BACKGROUND_RX = /\bstyle\s*=\s*\{\{[^}]*\b(background|backgroundColor|backgroundImage)\s*:/;
+
+/** `[tag, surface]` for every scoped Card / Box whose own `style` sets a background. */
+export function findScopedSurfaceBackgrounds(sourceCode: string): Array<readonly [string, string]> {
+  const hits: Array<readonly [string, string]> = [];
+  for (const m of sourceCode.matchAll(SCOPED_SURFACE_TAG_RX)) {
+    const attrs = `${m[2] ?? ""} ${m[4] ?? ""}`;
+    if (STYLE_BACKGROUND_RX.test(attrs)) hits.push([m[1] ?? "", m[3] ?? ""]);
+  }
+  return hits;
+}
+
+function runScopedSurfaceOwnsGround(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  if (input.designMode === "free") return [];
+  const hits = findScopedSurfaceBackgrounds(input.sourceCode);
+  if (hits.length === 0) return [];
+  const [tag, surface] = hits[0]!;
+  return [
+    mkIssue(
+      "universal.scoped_surface_owns_ground",
+      `<${tag} surface="${surface}"> sets its own background in style — a scoped surface owns its ground; repainting it puts the scope's swapped inks over the wrong ground (ink on ink).`,
+      `Remove the background from that ${tag}'s style — surface="${surface}" paints the ground; pick another surface if a different ground is wanted.`,
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -222,6 +260,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runAccentTextInk,
+  },
+  {
+    id: "universal.scoped_surface_owns_ground",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runScopedSurfaceOwnsGround,
   },
   {
     id: "universal.prop_coverage",

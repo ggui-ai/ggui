@@ -108,8 +108,10 @@ function renderFreeBoilerplates(): string {
 // splits its accent row; the stale duplicate container rows leave — doc text only, both arms, boilerplates unchanged.
 // Re-recorded 2026-09-12 for ggui#1031 L2's drift-guard follower: the guidance's `surface` span teaches
 // `hero` (the catalog union already carried it; `prompt-type-drift.test.ts` was red on that) — constrained only.
+// Re-recorded 2026-09-12 for ggui#1047: the surface span says `inverted` and `hero` OWN their ground — never a
+// `background` in their `style` (tier-0 `universal.scoped_surface_owns_ground` fails it) — constrained only.
 export const CONSTRAINED_PROMPT_SHA256 =
-  'c2c500248e2d6ef45c28ff8f8c4a94be3cf7984dfd476df34b6f8d85dbaaed36';
+  '1e081ec53970c3d81148b4c3c25f9c2ac423d40df1b3e09976380b6b8c61d362';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
