@@ -62,6 +62,21 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-12',
+    text:
+      'Instrument reading, not a score change: the 2026-09-12 run (source hash ' +
+      '187de87f53cf, runner f30ad85) is the first on the primed contract-behaviour ' +
+      'check announced below. chat-interface reads as a measurement again (11/11 ' +
+      'arms ok). survey-form (0/11) and onboarding-wizard (1/11) now read ' +
+      '"action-no-effect" on every arm: the check primes inputs and clicks, but ' +
+      'those components put Submit and Complete behind form completion or step ' +
+      'navigation the static probe does not perform. That is a limit of the ' +
+      'instrument, symmetric across every arm — not a finding about any model — ' +
+      'and issue #1040 tracks it. Read those two rows as "not measured" until it ' +
+      'closes. Scores, the corpus, the judge panel and every arm are unaffected; ' +
+      'history is not rewritten.',
+  },
+  {
     date: '2026-09-11',
     text:
       'Instrument reading, not a score change: the 2026-09-11 run (source hash ' +
