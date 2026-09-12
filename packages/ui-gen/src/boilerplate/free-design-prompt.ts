@@ -89,6 +89,7 @@ const SEMANTIC_ROLES: ReadonlyArray<{ readonly names: readonly string[]; readonl
   { names: ["elevated", "onElevated"], role: "popover, menu, modal, toast — floats above a container" },
   { names: ["heroGround", "onHeroGround"], role: "a hero / greeting panel — brand-tinted on a light host, the ink pair on a dark one" },
   { names: ["sunken", "onSunken"], role: "wells, inputs at rest, code blocks + secondary text" },
+  { names: ["link"], role: "accent TEXT — eyebrows, taglines, links, labels, inline arrows: the brand's readable ink per mode; a bare primary-300…600 as a text color fails tier-0 (universal.accent_text_ink)" },
   { names: ["ground-subtle", "ground-gradient"], role: "quiet canvas fills" },
   { names: ["onPrimary"], role: "text on the brand color" },
   { names: ["outline", "outlineVariant"], role: "borders + dividers" },

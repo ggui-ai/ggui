@@ -135,6 +135,7 @@ export interface EvalContext {
  */
 const FREE_STYLING_RULES = `## Styling Rules (important for evaluation)
 - Color: every color must be a bare \`var(--ggui-color-*)\` token — a hardcoded #hex, rgb()/hsl() or CSS named color is a fail, and so is a literal fallback inside \`var(--ggui-*, …)\`.
+- Accent text (eyebrow, tagline, link, label) painted with a bare \`var(--ggui-color-primary-300…600)\` is a readability fail — the accent ink is \`var(--ggui-color-link)\`; a tint as text on a primary fill and a deep stop (700–900) on a light tint are fine
 - Spacing, typography, radius, shadow geometry and layout values MAY be literals (\`padding: '20px'\`, \`fontSize: 18\`, \`borderRadius: 12\`) — NEVER flag them.
 - Raw HTML elements with inline styles or \`<style>\` blocks are a first-class choice — never flag "not using the design system" or reward using it.
 - When \`@ggui-ai/design\` primitives ARE used, their enum/scale props (\`variant="primary"\`, \`size="lg"\`, \`gap="md"\`, \`tone="muted"\`, \`surface="accent"\`) are valid.
@@ -142,7 +143,8 @@ const FREE_STYLING_RULES = `## Styling Rules (important for evaluation)
 
 const CONSTRAINED_STYLING_RULES = `## Design System Rules (important for evaluation)
 - Spacing props (\`gap\`, \`padding\`, \`margin\`) take a t-shirt-scale name: \`gap="md"\`, \`padding="lg"\` (\`none|xs|sm|md|lg|xl|2xl\`). **These ARE design tokens** — each resolves to a \`--ggui-spacing-*\` variable. A raw \`var(--ggui-spacing-*)\` string is an accepted escape hatch. NEVER flag a scale name as "hardcoded". Only a numeric prop (\`padding={24}\`) or a raw CSS length (\`gap="13px"\`) bypasses the scale and should be warned.
-- All colors must use CSS variables: \`color="var(--ggui-color-primary-600)"\` — hardcoded #hex or rgb() is a fail
+- All colors must use CSS variables: \`color="var(--ggui-color-onContainer)"\` — hardcoded #hex or rgb() is a fail
+- Accent text (eyebrow, tagline, link, label) painted with a bare \`primary-300…600\` stop is a readability fail — the accent ink is \`var(--ggui-color-link)\` (or \`tone="emphasized"\`); tints as text on a primary fill and deep stops on a light tint are fine
 - Component props that take enum/scale values — \`variant="primary"\`, \`size="lg"\`, \`gap="md"\`, \`padding="lg"\`, \`shadow="md"\`, \`radius="lg"\`, \`tone="muted"\`, \`surface="accent"\` — are all design system tokens and are always valid
 - One \`export default function Component\` — helper components as named functions above it are fine`;
 

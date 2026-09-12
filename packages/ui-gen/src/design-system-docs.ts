@@ -26,7 +26,7 @@ export const DEFAULT_DESIGN_SYSTEM_DOCS = `# Design System - Default Light Theme
 - var(--ggui-color-primary-300) - #7dd3fc
 - var(--ggui-color-primary-400) - #38bdf8
 - var(--ggui-color-primary-500) - #0ea5e9
-- var(--ggui-color-primary-600) - #0284c7 (main action color)
+- var(--ggui-color-primary-600) - #0284c7 (main action FILL — buttons, borders, icon fills; accent TEXT takes the link role below)
 - var(--ggui-color-primary-700) - #0369a1
 - var(--ggui-color-primary-800) - #075985
 - var(--ggui-color-primary-900) - #0c4a6e
@@ -46,8 +46,7 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 | onHeroGround | var(--ggui-color-onHeroGround) | Text on the hero ground |
 | sunken | var(--ggui-color-sunken) | Wells, inputs at rest, code blocks — recessed inside a card |
 | onSunken | var(--ggui-color-onSunken) | Muted / secondary text |
-| container | var(--ggui-color-container) | Primary-branded containers |
-| onContainer | var(--ggui-color-onContainer) | Text on branded containers |
+| link | var(--ggui-color-link) | Accent TEXT — eyebrows, taglines, links, labels, inline arrows: the brand's readable ink, derived per mode to clear 4.5:1 on the container and the ground |
 | outline | var(--ggui-color-outline) | Borders, dividers |
 | outlineVariant | var(--ggui-color-outlineVariant) | Subtle borders |
 
@@ -56,6 +55,7 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 - Body text → \`var(--ggui-color-onContainer)\`
 - Card/panel background → \`var(--ggui-color-container)\`; recessed wells / inputs → \`var(--ggui-color-sunken)\`
 - Secondary/muted text → \`var(--ggui-color-onSunken)\`
+- Accent / branded text (eyebrow, tagline, link, label, inline arrow) → \`var(--ggui-color-link)\` or \`<Text tone="emphasized">\` — never a bare \`primary-<stop>\` as a text color
 - Branded section/header → \`var(--ggui-color-container)\` bg + \`var(--ggui-color-onContainer)\` text
 - Borders/dividers → \`var(--ggui-color-outline)\` or \`var(--ggui-color-outlineVariant)\`
 
@@ -174,7 +174,8 @@ Use \`var(--ggui-spacing-N)\` for all padding, gap, and margin values. **Never u
 - **Layering roles** (ground, container, elevated, sunken + their on* inks; outline): one kind of AREA each — use them for every background/text/border decision; they adapt to any theme
 - **primary-50/100**: Section backgrounds, highlight strips, card headers
 - **primary-200/300**: Borders, dividers, focus rings, input outlines
-- **primary-500/600**: Icons, links, labels, badges, buttons, CTAs
+- **primary-500/600**: Filled buttons, CTAs, badges, icon fills, active indicators — fills and borders, NOT a text color
+- **link**: Accent TEXT — eyebrows, taglines, links, labels, inline arrows; the brand's readable ink per mode (a bare \`primary-300…600\` as a text color fails tier-0: \`universal.accent_text_ink\`)
 - **primary-700/800/900**: Headings and text on light primary backgrounds
 - **neutral-***: Only when you need a specific shade that semantic tokens don't cover
 

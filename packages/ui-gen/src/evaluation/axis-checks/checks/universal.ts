@@ -165,12 +165,63 @@ function runIconNameKnown(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.accent_text_ink (ggui#1039) ────────────────────────────
+// The brand ladder's mid stops (300–600) are FILL colours. On a
+// low-saturation brand the 600 stop is mid-grey on the surface, and every
+// one of four brand-directed hello frames painted its eyebrow and inline
+// arrows with it — two of them at 3.5:1 and 2.91:1 on the ground. Accent
+// TEXT is the theme's readable ink `--ggui-color-link` (derived per mode to
+// clear 4.5:1, ggui#1035) or `<Text tone="emphasized">`; `link` resolves to
+// the very same 600 wherever 600 already reads, so the fix never regresses a
+// saturated brand. Out of scope by design: tints as text (50–200 — the
+// on-fill idiom, `primary-50` on a `primary-600` bubble) and the deep stops
+// (700–900 — text on a light primary tint), both documented uses. Matches the
+// `color` property in every spelling the model writes — JSX prop, style
+// object (source and compiled), CSS declaration — and never a compound
+// property (`backgroundColor`, `border-color`, `accent-color`).
+
+const LADDER_STOP_AS_TEXT_RX =
+  /(?<![\w-])color\s*(?:=\s*\{?\s*|:\s*)["'`]?\s*var\(--ggui-color-primary-(\d{2,3})\s*[,)]/g;
+const TEXT_INK_STOP_MIN = 300;
+const TEXT_INK_STOP_MAX = 600;
+
+/** Distinct `primary-<stop>` tokens (300–600) the source paints as a text `color`, in source order. */
+export function findLadderStopsAsText(sourceCode: string): string[] {
+  const found = new Set<string>();
+  for (const m of sourceCode.matchAll(LADDER_STOP_AS_TEXT_RX)) {
+    const digits = m[1] ?? "";
+    const stop = Number(digits);
+    if (stop >= TEXT_INK_STOP_MIN && stop <= TEXT_INK_STOP_MAX) found.add(`primary-${digits}`);
+  }
+  return [...found];
+}
+
+function runAccentTextInk(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const stops = findLadderStopsAsText(input.sourceCode);
+  if (stops.length === 0) return [];
+  const list = stops.map((s) => `\`${s}\``).join(", ");
+  return [
+    mkIssue(
+      "universal.accent_text_ink",
+      `Text is painted with a brand-ladder fill stop as its color (${list}) — on a low-saturation brand these stops are mid-grey on the surface and the text fails readability.`,
+      'Accent text (eyebrows, taglines, links, labels, inline arrows) takes var(--ggui-color-link) or <Text tone="emphasized">; body text takes var(--ggui-color-onContainer); keep primary-* stops on fills and borders.',
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runIconNameKnown,
+  },
+  {
+    id: "universal.accent_text_ink",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runAccentTextInk,
   },
   {
     id: "universal.prop_coverage",

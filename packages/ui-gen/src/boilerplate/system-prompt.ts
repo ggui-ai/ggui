@@ -479,7 +479,8 @@ MANDATORY:
 4. NEVER include literal fallback values in ANY token reference — colors, spacing, typography, radius, shadows alike. Write \`var(--ggui-spacing-4)\` bare, never \`var(--ggui-spacing-4, 16px)\`; \`var(--ggui-color-primary-600)\` bare, never \`var(--ggui-color-primary-600, #0284c7)\`. The runtime injects every token; a literal fallback paints the wrong value exactly when the operator's theme matters most.
 
 Token categories:
-- Brand: \`var(--ggui-color-primary-600)\`, \`var(--ggui-color-primary-50)\`
+- Brand fills: \`var(--ggui-color-primary-600)\`, \`var(--ggui-color-primary-50)\`
+- Accent text: \`var(--ggui-color-link)\` — eyebrows, taglines, links, labels; readable per mode (never a bare \`primary-<stop>\` as a text color)
 - Text: \`var(--ggui-color-onContainer)\`, \`var(--ggui-color-onSunken)\`
 - Backgrounds: \`var(--ggui-color-container)\`, \`var(--ggui-color-sunken)\`
 - Borders: \`var(--ggui-color-outline)\`
@@ -498,7 +499,8 @@ Use the FULL primary palette throughout the component — NOT only on submit but
 |---------|-------|---------|
 | Section headers, hero areas, highlight strips | \`primary-50\` / \`primary-100\` | Subtle branded backgrounds |
 | Borders, dividers, focus rings, input focus | \`primary-200\` / \`primary-300\` | Branded structure |
-| Icons, links, labels, active indicators | \`primary-500\` / \`primary-600\` | Core accent color |
+| Accent TEXT — eyebrows, taglines, links, labels, inline arrows | \`link\` (\`var(--ggui-color-link)\`) or \`<Text tone="emphasized">\` | The brand's READABLE ink, derived per mode to clear 4.5:1 — a bare \`primary-300…600\` as a text color fails tier-0 |
+| Icon fills, badges, active indicators | \`primary-500\` / \`primary-600\` | Core accent fill |
 | Buttons, CTAs, filled interactive elements | \`primary-600\` / \`primary-700\` | Primary actions |
 | Headings on light primary backgrounds | \`primary-800\` / \`primary-900\` | High-contrast branded text |
 
@@ -522,7 +524,7 @@ Visual hierarchy via tokens:
 - Elevated sections: \`var(--ggui-shape-shadow-md)\` + \`var(--ggui-shape-radius-lg)\`
 - Highlighted regions: \`var(--ggui-color-primary-50)\` background
 - Active/selected: \`var(--ggui-color-primary-100)\` background
-- Section headers: \`var(--ggui-color-primary-600)\` text or border-bottom
+- Section headers / eyebrows: \`var(--ggui-color-link)\` text, or a \`var(--ggui-color-primary-600)\` border-bottom
 
 ## Responsive Design (CRITICAL)
 

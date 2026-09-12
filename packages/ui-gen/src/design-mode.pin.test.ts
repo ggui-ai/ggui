@@ -103,8 +103,11 @@ function renderFreeBoilerplates(): string {
 // Re-recorded 2026-09-12 for ggui#1031 L2 (the hero ground): the Hero recipe names `surface="hero"`
 // (the one prompt line the pre-registration allows), the token docs gain the heroGround pair, the
 // primitives reference gains the `hero` surface — both arms, boilerplates unchanged.
+// Re-recorded 2026-09-12 for ggui#1039: the token docs name `link` as the accent-TEXT role (eyebrows,
+// taglines, links, labels, inline arrows) and primary-500/600 as fills; the Branded Color Strategy table
+// splits its accent row; the stale duplicate container rows leave — doc text only, both arms, boilerplates unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  'bab0c02328d94c088c349a6ec2eebfb0e881b140405f94d998bdf75ef6ac0378';
+  'e31e35a1bef950070c44faf0094e9143aaf51e9da8bdde6c7401a6de6bdb39a8';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -120,8 +123,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1035 (the `loud` doc line, see above).
 // Re-recorded 2026-09-12 for ggui#1036: the free prompt renders the consumed-token manifest, which grew by the tone container pairs Tag now reads.
 // Re-recorded 2026-09-12 for ggui#1031 L2 (the hero ground pair in the token docs + manifest).
+// Re-recorded 2026-09-12 for ggui#1039: the free roles prose gains the `link` row (accent TEXT), see above.
 export const FREE_PROMPT_SHA256 =
-  '2217c1f53088f43df109e4c4e870c1738579755e38a5b5330b43272f72ea1db2';
+  '3338b2c03bee948f5832d815a3f4d0befc8b504e09ce4403255c69408e259460';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
