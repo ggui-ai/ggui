@@ -1,7 +1,6 @@
 import { Fragment } from 'react';
 import type { BreadcrumbProps } from './types';
 import { Link } from '../primitives/Link';
-import { colors } from '../tokens/colors';
 import { fontSize } from '../tokens/typography';
 
 /**
@@ -32,14 +31,14 @@ export function Breadcrumb({
         return (
           <Fragment key={index}>
             {index > 0 && (
-              <span style={{ color: colors.gray[400] }}>{separator}</span>
+              <span style={{ color: 'var(--ggui-color-neutral-400, #9ca3af)' }}>{separator}</span>
             )}
             {item.icon && (
               <span
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  color: isLast ? colors.gray[900] : colors.gray[500],
+                  color: isLast ? 'var(--ggui-color-onContainer, #111827)' : 'var(--ggui-color-neutral-500, #6b7280)',
                 }}
               >
                 {item.icon}
@@ -48,7 +47,7 @@ export function Breadcrumb({
             {isLast ? (
               <span
                 style={{
-                  color: colors.gray[900],
+                  color: 'var(--ggui-color-onContainer, #111827)',
                   fontWeight: 500,
                 }}
                 aria-current="page"
@@ -76,7 +75,7 @@ export function Breadcrumb({
                   background: 'none',
                   border: 'none',
                   padding: 0,
-                  color: colors.gray[500],
+                  color: 'var(--ggui-color-neutral-500, #6b7280)',
                   cursor: 'pointer',
                   fontSize: 'inherit',
                 }}

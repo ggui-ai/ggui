@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import type { AutocompleteProps, AutocompleteOption } from './types';
 import { Input } from '../primitives/Input';
 import { Spinner } from '../primitives/Spinner';
-import { colors } from '../tokens/colors';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
 
@@ -123,8 +122,8 @@ export function Autocomplete({
             left: 0,
             right: 0,
             marginTop: '4px',
-            backgroundColor: colors.white,
-            border: `1px solid ${colors.gray[200]}`,
+            backgroundColor: 'var(--ggui-color-elevated, #ffffff)',
+            border: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
             borderRadius: radius.lg,
             boxShadow: shadow.lg,
             zIndex: zIndex.dropdown,
@@ -141,7 +140,7 @@ export function Autocomplete({
               style={{
                 padding: '12px',
                 textAlign: 'center',
-                color: colors.gray[500],
+                color: 'var(--ggui-color-neutral-500, #6b7280)',
                 fontSize: fontSize.sm,
               }}
             >
@@ -156,8 +155,8 @@ export function Autocomplete({
                   padding: '8px 12px',
                   cursor: option.disabled ? 'not-allowed' : 'pointer',
                   backgroundColor:
-                    highlightedIndex === index ? colors.gray[100] : 'transparent',
-                  color: option.disabled ? colors.gray[400] : colors.gray[900],
+                    highlightedIndex === index ? 'var(--ggui-color-sunken, #f3f4f6)' : 'transparent',
+                  color: option.disabled ? 'var(--ggui-color-neutral-400, #9ca3af)' : 'var(--ggui-color-onElevated, #111827)',
                   fontSize: fontSize.sm,
                   display: 'flex',
                   alignItems: 'center',
@@ -169,7 +168,7 @@ export function Autocomplete({
                 <div style={{ flex: 1 }}>
                   <div>{option.label}</div>
                   {option.description && (
-                    <div style={{ fontSize: fontSize.xs, color: colors.gray[500] }}>
+                    <div style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
                       {option.description}
                     </div>
                   )}

@@ -1,7 +1,6 @@
 import type { PaginationProps } from './types';
 import { Button } from '../primitives/Button';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { fontSize, fontWeight } from '../tokens/typography';
 
 /**
@@ -79,8 +78,8 @@ export function Pagination({
         padding: '0 8px',
         border: 'none',
         borderRadius: '6px',
-        backgroundColor: active ? colors.primary[600] : 'transparent',
-        color: active ? colors.white : colors.gray[700],
+        backgroundColor: active ? 'var(--ggui-color-primary-600, #0284c7)' : 'transparent',
+        color: active ? 'var(--ggui-color-onPrimary, #ffffff)' : 'var(--ggui-color-onContainer, #374151)',
         fontSize: size === 'sm' ? fontSize.xs : fontSize.sm,
         fontWeight: active ? fontWeight.medium : fontWeight.normal,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -131,7 +130,7 @@ export function Pagination({
             key={`ellipsis-${index}`}
             style={{
               padding: '0 4px',
-              color: colors.gray[400],
+              color: 'var(--ggui-color-neutral-400, #9ca3af)',
             }}
           >
             ...

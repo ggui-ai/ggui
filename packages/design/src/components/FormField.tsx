@@ -1,5 +1,4 @@
 import type { FormFieldProps } from './types';
-import { colors } from '../tokens/colors';
 import { fontSize, fontWeight } from '../tokens/typography';
 
 /**
@@ -31,19 +30,19 @@ export function FormField({
         style={{
           fontSize: fontSize.sm,
           fontWeight: fontWeight.medium,
-          color: colors.gray[700],
+          color: 'var(--ggui-color-onContainer, #374151)',
         }}
       >
         {label}
         {required && (
-          <span style={{ color: colors.error[500], marginLeft: '2px' }}>*</span>
+          <span style={{ color: 'var(--ggui-color-error-500, #ef4444)', marginLeft: '2px' }}>*</span>
         )}
       </label>
       {description && (
         <span
           style={{
             fontSize: fontSize.xs,
-            color: colors.gray[500],
+            color: 'var(--ggui-color-neutral-500, #6b7280)',
             marginBottom: '4px',
           }}
         >
@@ -55,7 +54,7 @@ export function FormField({
         <span
           style={{
             fontSize: fontSize.xs,
-            color: hasError ? colors.error[500] : colors.gray[500],
+            color: hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-neutral-500, #6b7280)',
           }}
         >
           {error || helperText}

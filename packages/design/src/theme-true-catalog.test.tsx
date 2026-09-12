@@ -18,19 +18,8 @@ import { Tag } from './components/Tag';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DIRS = ['primitives', 'components', 'compositions'];
 
-/** Files still painting from `tokens/colors` on 2026-09-12 — shrink this list, never grow it. */
-const KNOWN_THEME_BLIND: ReadonlySet<string> = new Set([
-  'components/Autocomplete.tsx',
-  'components/Breadcrumb.tsx',
-  'components/Dropdown.tsx',
-  'components/FormField.tsx',
-  'components/MenuItem.tsx',
-  'components/Pagination.tsx',
-  'components/SearchField.tsx',
-  'compositions/ChatWindow.tsx',
-  'compositions/CommentThread.tsx',
-  'compositions/FileUploader.tsx',
-]);
+/** Files still painting from `tokens/colors` — empty since 2026-09-12 (twenty cut under ggui#1036); a file can never re-enter. */
+const KNOWN_THEME_BLIND: ReadonlySet<string> = new Set([]);
 
 function sourceFiles(): string[] {
   const out: string[] = [];

@@ -4,7 +4,6 @@ import { Avatar } from '../primitives/Avatar';
 import { Button } from '../primitives/Button';
 import { TextArea } from '../primitives/TextArea';
 import { Spinner } from '../primitives/Spinner';
-import { colors } from '../tokens/colors';
 import { fontSize } from '../tokens/typography';
 
 function CommentItem({
@@ -46,11 +45,11 @@ function CommentItem({
             <span style={{ fontWeight: 500, fontSize: fontSize.sm }}>
               {comment.author.name}
             </span>
-            <span style={{ color: colors.gray[500], fontSize: fontSize.xs }}>
+            <span style={{ color: 'var(--ggui-color-neutral-500, #6b7280)', fontSize: fontSize.xs }}>
               {timestamp}
             </span>
           </div>
-          <p style={{ margin: '4px 0 8px', fontSize: fontSize.sm, color: colors.gray[700] }}>
+          <p style={{ margin: '4px 0 8px', fontSize: fontSize.sm, color: 'var(--ggui-color-onContainer, #374151)' }}>
             {comment.content}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -60,9 +59,9 @@ function CommentItem({
                 onClick={() => onReaction?.(comment.id, reaction.emoji)}
                 style={{
                   padding: '2px 8px',
-                  border: `1px solid ${colors.gray[200]}`,
+                  border: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
                   borderRadius: '12px',
-                  backgroundColor: colors.gray[50],
+                  backgroundColor: 'var(--ggui-color-sunken, #f9fafb)',
                   fontSize: fontSize.xs,
                   cursor: 'pointer',
                 }}
@@ -75,7 +74,7 @@ function CommentItem({
               style={{
                 background: 'none',
                 border: 'none',
-                color: colors.gray[500],
+                color: 'var(--ggui-color-neutral-500, #6b7280)',
                 fontSize: fontSize.xs,
                 cursor: 'pointer',
               }}

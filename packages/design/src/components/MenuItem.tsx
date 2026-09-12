@@ -1,5 +1,4 @@
 import type { MenuItemProps } from './types';
-import { colors } from '../tokens/colors';
 import { radius } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
 
@@ -37,7 +36,7 @@ export function MenuItem({
         border: 'none',
         borderRadius: radius.md,
         backgroundColor: active ? activeBg : 'transparent',
-        color: disabled ? colors.gray[400] : baseColor,
+        color: disabled ? 'var(--ggui-color-neutral-400, #9ca3af)' : baseColor,
         fontSize: fontSize.sm,
         fontWeight: active ? fontWeight.medium : fontWeight.normal,
         textAlign: 'left',
@@ -61,7 +60,7 @@ export function MenuItem({
       )}
       <span style={{ flex: 1 }}>{label}</span>
       {rightElement && (
-        <span style={{ display: 'flex', flexShrink: 0, color: colors.gray[400] }}>
+        <span style={{ display: 'flex', flexShrink: 0, color: 'var(--ggui-color-neutral-400, #9ca3af)' }}>
           {rightElement}
         </span>
       )}

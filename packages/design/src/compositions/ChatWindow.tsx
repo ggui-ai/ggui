@@ -4,7 +4,6 @@ import { Avatar } from '../primitives/Avatar';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { radius } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
 
@@ -51,9 +50,9 @@ export function ChatWindow({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        border: `1px solid ${colors.gray[200]}`,
+        border: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
         borderRadius: radius.lg,
-        backgroundColor: colors.white,
+        backgroundColor: 'var(--ggui-color-container, #ffffff)',
         overflow: 'hidden',
         ...style,
       }}
@@ -62,7 +61,7 @@ export function ChatWindow({
         <div
           style={{
             padding: '12px 16px',
-            borderBottom: `1px solid ${colors.gray[200]}`,
+            borderBottom: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
           }}
         >
           {header}
@@ -113,8 +112,8 @@ export function ChatWindow({
                     maxWidth: '70%',
                     padding: '10px 14px',
                     borderRadius: radius.lg,
-                    backgroundColor: isOwn ? colors.primary[600] : colors.gray[100],
-                    color: isOwn ? colors.white : colors.gray[900],
+                    backgroundColor: isOwn ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-sunken, #f3f4f6)',
+                    color: isOwn ? 'var(--ggui-color-onPrimary, #ffffff)' : 'var(--ggui-color-onSunken, #111827)',
                   }}
                 >
                   <p style={{ margin: 0, fontSize: fontSize.sm }}>{message.content}</p>
@@ -147,7 +146,7 @@ export function ChatWindow({
 
         {typing && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: fontSize.xs, color: colors.gray[500] }}>
+            <span style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
               {typing.name} is typing...
             </span>
           </div>
@@ -159,7 +158,7 @@ export function ChatWindow({
       <div
         style={{
           padding: '12px 16px',
-          borderTop: `1px solid ${colors.gray[200]}`,
+          borderTop: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
           display: 'flex',
           gap: '8px',
         }}
@@ -173,7 +172,7 @@ export function ChatWindow({
           style={{
             flex: 1,
             padding: '10px 14px',
-            border: `1px solid ${colors.gray[300]}`,
+            border: `1px solid var(--ggui-color-outline, #d1d5db)`,
             borderRadius: radius.full,
             fontSize: fontSize.sm,
             outline: 'none',

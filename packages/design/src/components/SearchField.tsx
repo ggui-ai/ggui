@@ -3,7 +3,6 @@ import type { SearchFieldProps } from './types';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 
 /**
  * SearchField - An input with search icon and optional submit button
@@ -64,7 +63,7 @@ export function SearchField({
             left: '12px',
             top: '50%',
             transform: 'translateY(-50%)',
-            color: colors.gray[400],
+            color: 'var(--ggui-color-neutral-400, #9ca3af)',
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
@@ -89,9 +88,9 @@ export function SearchField({
             paddingLeft: '36px',
             fontSize: size === 'lg' ? '16px' : '14px',
             borderRadius: '6px',
-            border: `1px solid ${colors.gray[300]}`,
-            backgroundColor: disabled ? colors.gray[50] : colors.white,
-            color: colors.gray[900],
+            border: `1px solid var(--ggui-color-outline, #d1d5db)`,
+            backgroundColor: disabled ? 'var(--ggui-color-sunken, #f9fafb)' : 'var(--ggui-color-container, #ffffff)',
+            color: 'var(--ggui-color-onContainer, #111827)',
             outline: 'none',
             boxSizing: 'border-box',
           }}

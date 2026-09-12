@@ -3,7 +3,6 @@ import type { FileUploaderProps } from './types';
 import { Button } from '../primitives/Button';
 import { Progress } from '../primitives/Progress';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { radius } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
 
@@ -79,11 +78,11 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         style={{
-          border: `2px dashed ${isDragOver ? colors.primary[400] : colors.gray[300]}`,
+          border: `2px dashed ${isDragOver ? 'var(--ggui-color-primary-400, #38bdf8)' : 'var(--ggui-color-outline, #d1d5db)'}`,
           borderRadius: radius.lg,
           padding: '32px',
           textAlign: 'center',
-          backgroundColor: isDragOver ? colors.primary[50] : colors.gray[50],
+          backgroundColor: isDragOver ? 'var(--ggui-color-primaryContainer, #f0f9ff)' : 'var(--ggui-color-sunken, #f9fafb)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           transition: 'all 0.2s',
           opacity: disabled ? 0.5 : 1,
@@ -99,10 +98,10 @@ export function FileUploader({
           style={{ display: 'none' }}
         />
         <Icon name="plus" size={32} tone="subtle" />
-        <p style={{ margin: '12px 0 4px', color: colors.gray[700], fontSize: fontSize.sm }}>
+        <p style={{ margin: '12px 0 4px', color: 'var(--ggui-color-onContainer, #374151)', fontSize: fontSize.sm }}>
           {dragDrop ? 'Drag and drop files here, or click to browse' : 'Click to browse files'}
         </p>
-        <p style={{ margin: 0, color: colors.gray[500], fontSize: fontSize.xs }}>
+        <p style={{ margin: 0, color: 'var(--ggui-color-neutral-500, #6b7280)', fontSize: fontSize.xs }}>
           {accept && `Accepted: ${accept}`}
           {maxSize && ` • Max size: ${formatFileSize(maxSize)}`}
           {maxFiles && ` • Max files: ${maxFiles}`}
@@ -119,9 +118,9 @@ export function FileUploader({
                 alignItems: 'center',
                 gap: '12px',
                 padding: '12px',
-                border: `1px solid ${colors.gray[200]}`,
+                border: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
                 borderRadius: radius.md,
-                backgroundColor: colors.white,
+                backgroundColor: 'var(--ggui-color-container, #ffffff)',
               }}
             >
               <Icon name="menu" size={20} tone="subtle" />
@@ -130,7 +129,7 @@ export function FileUploader({
                   style={{
                     margin: 0,
                     fontSize: fontSize.sm,
-                    color: colors.gray[900],
+                    color: 'var(--ggui-color-onContainer, #111827)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -138,10 +137,10 @@ export function FileUploader({
                 >
                   {file.name}
                 </p>
-                <p style={{ margin: '2px 0 0', fontSize: fontSize.xs, color: colors.gray[500] }}>
+                <p style={{ margin: '2px 0 0', fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
                   {formatFileSize(file.size)}
                   {file.error && (
-                    <span style={{ color: colors.error[500], marginLeft: '8px' }}>
+                    <span style={{ color: 'var(--ggui-color-error-500, #ef4444)', marginLeft: '8px' }}>
                       {file.error}
                     </span>
                   )}

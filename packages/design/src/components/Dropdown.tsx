@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { DropdownProps } from './types';
 import { MenuItem } from './MenuItem';
-import { colors } from '../tokens/colors';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 
 /**
@@ -92,7 +91,7 @@ export function Dropdown({
             minWidth: '160px',
             backgroundColor: 'var(--ggui-color-elevated, #ffffff)',
             color: 'var(--ggui-color-onElevated, #18181b)',
-            border: `1px solid ${colors.gray[200]}`,
+            border: `1px solid var(--ggui-color-outlineVariant, #e5e7eb)`,
             borderRadius: radius.lg,
             boxShadow: shadow.lg,
             zIndex: zIndex.dropdown,
