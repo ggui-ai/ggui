@@ -56,6 +56,31 @@ const GREEN_GRID = RED_STACKED.replace(
   '        <Grid columns={{ base: 1, sm: 2, md: Math.min(columns.length, 4) }} gap="md">{columns.map((column, idx) => (',
 ).replace("        ))\n      )}", "        ))}</Grid>\n      )}");
 
+/** b-att2's shape on candidate 18: a block-body arrow, the column returned from inside braces, under the outer <Stack>. */
+const RED_BLOCK_BODY = `
+export default function Component(props: Props) {
+  const columns = props.columns ?? [];
+  const totalCards = columns.reduce((n, c) => n + (c.cards?.length ?? 0), 0);
+  return (
+    <Stack gap="lg">
+      <Row justify="between"><Heading level={2}>Board</Heading><Text tone="muted">{totalCards} cards</Text></Row>
+      {columns.length === 0 ? (
+        <EmptyState title="No columns yet" description="The board has no columns to display." />
+      ) : (
+        columns.map((col) => {
+          const count = col.cards?.length ?? 0;
+          return (
+            <Stack key={col.id} gap="sm">
+              <Row justify="between"><Text weight="semibold">{col.title}</Text><Badge>{count}</Badge></Row>
+              {(col.cards ?? []).map((card) => <Card key={card.id} padding="sm">{card.title}</Card>)}
+            </Stack>
+          );
+        })
+      )}
+    </Stack>
+  );
+}`;
+
 const GREEN_ROW = `
 export default function Component(props: Props) {
   const { lanes } = props;
@@ -84,6 +109,11 @@ describe("grid.board_columns_side_by_side", () => {
     expect(enclosingLayoutTag(RED_STACKED, pos)).toBe("Stack");
     const gpos = GREEN_GRID.indexOf("{columns.map((column, idx)");
     expect(enclosingLayoutTag(GREEN_GRID, gpos)).toBe("Grid");
+  });
+
+  it("fails a block-body map too (the candidate-18 b-att2 shape) — the column returned from inside braces under the outer <Stack>", () => {
+    expect(findStackedBoardColumns(input(RED_BLOCK_BODY))).toEqual([["columns", "Stack"]]);
+    expect(check.run(input(RED_BLOCK_BODY))).toHaveLength(1);
   });
 
   it("fails the stacked board (the run18 shape) with the Grid wrap as the fix; the non-JSX map is not counted", () => {

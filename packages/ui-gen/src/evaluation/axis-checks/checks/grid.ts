@@ -38,9 +38,17 @@ export function boardPropNames(contract: AxisCheckInput["contract"]): string[] {
     .map(([name]) => name);
 }
 
-/** Every JSX map over `name` (`name.map((col) => (<…` / `props.name.map(…`), by index. */
+/**
+ * Every JSX map over `name`, by index — an expression-body arrow (`name.map((col) => (<…`)
+ * or a block-body one (`name.map((col) => { … return (<…`); the serving deployment's candidate-18 kanban
+ * mints composed two of three stacked boards through the block form (ggui#1046), which the
+ * first reader never matched.
+ */
 function jsxMapPositions(sourceCode: string, name: string): number[] {
-  const rx = new RegExp(`\\b${name}(?:\\?\\.)?\\.map\\(\\s*\\(?\\s*\\w+(?:\\s*,\\s*\\w+)?\\s*\\)?\\s*=>\\s*\\(?\\s*<`, "g");
+  const rx = new RegExp(
+    `\\b${name}(?:\\?\\.)?\\.map\\(\\s*\\(?\\s*\\w+(?:\\s*,\\s*\\w+)?\\s*\\)?\\s*=>\\s*(?:\\(?\\s*<|\\{[^{}]{0,600}?\\breturn\\s*\\(?\\s*<)`,
+    "g",
+  );
   return [...sourceCode.matchAll(rx)].map((m) => m.index ?? 0);
 }
 
