@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeThemeCss, getCssTokens, getScopedCssTokens, toCssDecls } from './css-tokens';
+import { composeThemeCss, fillFitRule, getCssTokens, getScopedCssTokens, toCssDecls } from './css-tokens';
 
 const APP = {
   overlays: { light: { '--ggui-color-onContainer': '#ffffff', '--ggui-color-primary-500': '#006c60' }, dark: { '--ggui-color-onContainer': '#111111' } },
@@ -8,6 +8,14 @@ const APP = {
 };
 
 describe('composeThemeCss — one composition, three callers', () => {
+  it("'tree' + fit: 'fill' ends with the fill rule (ggui#1041: the host's canvas is the chrome); chrome / page ignore fit", () => {
+    const tree = composeThemeCss({ layer: 'tree', scopeClass: 's9', mode: 'light', appTheme: APP, fit: 'fill' });
+    expect(tree.endsWith(fillFitRule('s9'))).toBe(true);
+    expect(tree.indexOf(APP.keyframes.light)).toBeLessThan(tree.indexOf(fillFitRule('s9')));
+    expect(composeThemeCss({ layer: 'tree', scopeClass: 's9', mode: 'light', appTheme: APP })).not.toContain('border-radius: 0 !important');
+    expect(composeThemeCss({ layer: 'page', mode: 'light', appTheme: APP, fit: 'fill' })).not.toContain('border-radius: 0 !important');
+  });
+
   it("'tree' = scoped ladder < hostPalette < overlays[mode] < cssVariables < overrides, then keyframes (+ frameless)", () => {
     const css = composeThemeCss({ layer: 'tree', scopeClass: 's1', mode: 'light', hostPalette: { '--ggui-color-ground': '#fafafa' }, appTheme: { ...APP, frameless: true }, cssOverrides: '.s1 h1{margin:0}' });
     const base = getScopedCssTokens('s1', 'light');

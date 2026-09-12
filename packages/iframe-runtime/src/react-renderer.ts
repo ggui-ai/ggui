@@ -360,6 +360,8 @@ export interface ReactRootMountOptions {
    */
   readonly hostPalette?: Readonly<Record<string, string>>;
   readonly cssOverrides?: string;
+  /** `fill` — the root is the whole canvas: no silhouette, fills the page (ggui#1041; from the host's `displayMode`). */
+  readonly fit?: 'fill';
   readonly onError?: (error: Error) => void;
   /**
    * Children injected BETWEEN the mount DOM (scope + CSS) and the
@@ -542,6 +544,7 @@ export async function mountReactRoot(
       ...(opts.hostPalette !== undefined ? { hostPalette: opts.hostPalette } : {}),
       ...(opts.appTheme !== undefined ? { appTheme: opts.appTheme } : {}),
       ...(opts.cssOverrides !== undefined ? { cssOverrides: opts.cssOverrides } : {}),
+      ...(opts.fit !== undefined ? { fit: opts.fit } : {}),
     });
 
     // Also inject theme CSS at `:root` on `document.head`. The scoped

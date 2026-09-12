@@ -102,6 +102,12 @@ export interface RenderItemOptions {
    */
   readonly themeMode?: 'light' | 'dark';
   /**
+   * The mounted root fills its surface without a silhouette of its own (ggui#1041):
+   * set when the host's context says `displayMode: 'fullscreen'` — a canvas panel
+   * is the chrome. Absent for inline mounts.
+   */
+  readonly fit?: 'fill';
+  /**
    * The per-app theme (protocol's `AppTheme`, ggui#987 v2) forwarded
    * verbatim to {@link ReactRootMountOptions.appTheme}: the renderer
    * injects the overlay for the effective `themeMode` into the scoped

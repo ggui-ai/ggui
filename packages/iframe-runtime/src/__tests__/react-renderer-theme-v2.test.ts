@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
-import { framelessSuppressionRule } from '@ggui-ai/design/rendering';
+import { fillFitRule, framelessSuppressionRule } from '@ggui-ai/design/rendering';
 import { mountReactRoot } from '../react-renderer.js';
 
 function makeContainer(): HTMLElement {
@@ -97,6 +97,33 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
     expect(css).not.toContain('#0a0a0f');
     expect(rootCss()).toContain('color-scheme:light;');
     mount!.unmount();
+  });
+
+  it("fit: 'fill' ends the cascade with the fill rule after the frameless rule (ggui#1041: the host's canvas is the chrome); absent fit leaves the card its silhouette", async () => {
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        themeMode: 'light',
+        appTheme: { ...THEME, frameless: true },
+        fit: 'fill',
+      });
+    });
+    const { scopeClass, css } = scopedStyleOf(container);
+    const frameless = css.indexOf(framelessSuppressionRule(scopeClass));
+    const fill = css.indexOf(fillFitRule(scopeClass));
+    expect(frameless).toBeGreaterThan(-1);
+    expect(fill).toBeGreaterThan(frameless);
+    expect(css.endsWith(fillFitRule(scopeClass))).toBe(true);
+    await flush(async () => {
+      await mount!.unmount();
+    });
+    const plain = makeContainer();
+    await flush(async () => {
+      mount = await mountReactRoot(plain, { render: { id: 'y', componentCode: '' }, themeMode: 'light', appTheme: THEME });
+    });
+    expect(scopedStyleOf(plain).css).not.toContain('border-radius: 0 !important');
   });
 
   it('one cascade: compiled < hostPalette < overlays[mode] < cssVariables < cssOverrides < keyframes[mode] < frameless rule', async () => {

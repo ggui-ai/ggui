@@ -65,6 +65,7 @@ import type {
 } from './types.js';
 import { projectHostContext } from '@ggui-ai/protocol/wire';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 // Type-only contract on `@modelcontextprotocol/sdk` — no runtime
 // import (the esbuild bundle carries no sdk code). Declared as a
 // peerDependency (+ devDependency for local typecheck) because the
@@ -376,6 +377,17 @@ let activeThemeUnsubscribe: (() => void) | null = null;
 export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
   const theme = currentApp?.getHostContext()?.theme;
   return theme === 'light' || theme === 'dark' ? theme : undefined;
+}
+
+/**
+ * The host's announced display mode, from the same pre-merged host context the
+ * theme mode reads (ggui#1041). `fullscreen` means the host shows this page as
+ * the whole of a canvas — the runtime then composes the tree with `fit: 'fill'`
+ * so the mounted root drops its own silhouette and fills the page; anything
+ * else (or an absent context) keeps the inline card.
+ */
+export function hostAnnouncedDisplayMode(): McpUiDisplayMode | undefined {
+  return currentApp?.getHostContext()?.displayMode;
 }
 
 /**
@@ -4798,6 +4810,10 @@ async function bootProduction(opts: {
             const themeMode = resolveMountThemeMode(meta);
             return themeMode !== undefined ? { themeMode } : {};
           })(),
+          // The host's canvas is the chrome (ggui#1041): a `fullscreen` display mode
+          // composes the tree with `fit: 'fill'`; the hostcontextchanged re-injection
+          // below picks up a flip exactly as it does the theme mode.
+          ...(hostAnnouncedDisplayMode() === 'fullscreen' ? { fit: 'fill' as const } : {}),
           // Per-app theme (ggui#987 v2). Threaded straight from the
           // bootstrap's `_meta["ai.ggui/render"].theme` (typed `AppTheme`,
           // already injection-validated by the wire parser) onto the mount

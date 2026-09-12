@@ -15,6 +15,7 @@ export {
   getThemeCss,
   getScopedThemeCss,
   framelessSuppressionRule,
+  fillFitRule,
   composeThemeCss,
   toCssDecls,
 } from './css-tokens';

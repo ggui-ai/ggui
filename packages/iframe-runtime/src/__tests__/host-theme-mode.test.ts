@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import {
   __resetAppForTest,
+  hostAnnouncedDisplayMode,
   hostAnnouncedThemeMode,
   resolveMountThemeId,
   resolveMountThemeMode,
@@ -122,5 +123,28 @@ describe('hostAnnouncedThemeMode — the #551 input leg', () => {
     expect(resolve('light')).toBe('light'); // operator layer stamped light → light, host dark ignored
     expect(resolve('dark')).toBe('dark');
     expect(resolve(undefined)).toBe('dark'); // no operator opinion → host's dark
+  });
+});
+
+describe('hostAnnouncedDisplayMode — the ggui#1041 fill leg (the host\'s canvas is the chrome)', () => {
+  beforeEach(() => {
+    __resetAppForTest();
+  });
+  afterEach(() => {
+    __resetAppForTest();
+  });
+  it('is undefined before any App is connected', () => {
+    expect(hostAnnouncedDisplayMode()).toBeUndefined();
+  });
+  it("returns 'fullscreen' when the host's ui/initialize hostContext announces it — the canvas-panel mount", async () => {
+    await connectWithHostContext({ ...DEFAULT_HOST_CONTEXT, displayMode: 'fullscreen' });
+    expect(hostAnnouncedDisplayMode()).toBe('fullscreen');
+  });
+  it("returns 'inline' for the chat column's mount, and undefined when the host sends no display mode", async () => {
+    await connectWithHostContext({ ...DEFAULT_HOST_CONTEXT, displayMode: 'inline' });
+    expect(hostAnnouncedDisplayMode()).toBe('inline');
+    __resetAppForTest();
+    await connectWithHostContext({ ...DEFAULT_HOST_CONTEXT });
+    expect(hostAnnouncedDisplayMode()).toBeUndefined();
   });
 });

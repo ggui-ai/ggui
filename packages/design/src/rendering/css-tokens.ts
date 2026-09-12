@@ -333,6 +333,15 @@ export function framelessSuppressionRule(scopeClass: string): string {
 }
 
 /**
+ * The `fit: 'fill'` rule (ggui#1041): inside a host's canvas the mounted root
+ * is the whole surface — no border, radius or shadow of its own, and it fills
+ * the page. The host's panel carries the one chrome.
+ */
+export function fillFitRule(scopeClass: string): string {
+  return `\n.${scopeClass} { min-height: 100%; }\n.${scopeClass} > :where(:not(style)) { border: none !important; border-radius: 0 !important; box-shadow: none !important; min-height: 100%; }`;
+}
+
+/**
  * The structural scaffolding EVERY scoped ladder needs regardless of
  * where its variables came from: border-box sizing and the
  * font-family inherit for elements user-agent stylesheets would
@@ -450,6 +459,14 @@ export interface ComposeThemeCssOptions {
   readonly appTheme?: ThemeOverlayLayers;
   /** Verbatim CSS the caller appends between the variable layers and the trailing rules (`tree` only). */
   readonly cssOverrides?: string;
+  /**
+   * How the mounted root sits on its surface (`tree` only). `fill` — the host
+   * shows this page as the whole of a canvas (an MCP Apps `displayMode` of
+   * `fullscreen`): the root loses its own silhouette (border, radius, shadow)
+   * and fills the page, because the host's panel is the chrome (ggui#1041).
+   * Absent — the root keeps its card silhouette, as an inline mount needs.
+   */
+  readonly fit?: 'fill';
 }
 
 /** `{ '--ggui-a': '1', '--ggui-b': '2' }` → `--ggui-a: 1;--ggui-b: 2;` */
@@ -491,6 +508,7 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
     if (opts.appTheme) {
       css += `${opts.appTheme.keyframes?.[m] ?? ''}${opts.appTheme.frameless === true ? framelessSuppressionRule(scope) : ''}`;
     }
+    if (opts.fit === 'fill') css += fillFitRule(scope);
     return css;
   }
   let css = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);
