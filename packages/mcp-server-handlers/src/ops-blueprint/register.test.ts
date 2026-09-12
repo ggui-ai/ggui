@@ -5,7 +5,7 @@ import {
   MockEmbeddingProvider,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { DataContract } from "@ggui-ai/protocol";
-import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import { blueprintKey, variantKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { findBlueprintExact } from "../renders/blueprint-registry.js";
@@ -93,7 +93,10 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
     );
 
     const expectedKey = blueprintKey(SAMPLE_CONTRACT);
-    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", expectedKey);
+    // `seedPrompt` is a variance key: the cache row carries the SAME variance as
+    // the MVB row, so the exact-key probe must ask under that variant key — the
+    // default-variant key holds nothing for this registration.
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", expectedKey, variantKey({ seedPrompt: "a small register-test card" }));
     expect(found).not.toBeNull();
     expect(found!.contractKey).toBe(expectedKey);
     expect(found!.componentCode).toBe(SAMPLE_CODE);
@@ -101,6 +104,49 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
     // One handler call, ONE provenance claim across both stores — the
     // cache mirror carries the same user arm as the MVB row.
     expect(found!.source).toEqual({ kind: "user" });
+    await expect(findBlueprintExact({ vectorStore, index }, "app-1", "template", expectedKey)).resolves.toBeNull();
+  });
+
+  it("binds the cache index under the registration's OWN variance key — a variant registers beside the base, never on top of it", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const vectorStore = new InMemoryVectorStore();
+    const embedding = new MockEmbeddingProvider();
+    const index = new InMemoryBlueprintIndex();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      putCode: (codeHash, body) => {
+        blueprintStore.putCode(codeHash, body);
+      },
+      cacheRegistry: { embedding, vectorStore, index },
+    });
+    const contractKey = blueprintKey(SAMPLE_CONTRACT);
+    const baseKey = `template:${contractKey}:${variantKey(undefined)}`;
+    const variantKeyOf = (v: { aesthetic: string }) => `template:${contractKey}:${variantKey(v)}`;
+
+    // The base take holds the default-variant key. (Two ids per registration by
+    // design: the handler returns the durable row's id, the cache index binds the
+    // cache row's own — so the index is read for WHAT it holds, not for the handler's id.)
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE }, makeCtx("app-1"));
+    const baseCacheId = await index.getId("app-1", baseKey);
+    expect(baseCacheId).not.toBeNull();
+    await expect(index.getId("app-1", variantKeyOf({ aesthetic: "hero-fill" }))).resolves.toBeNull();
+
+    // A second take of the SAME contract under a named variance registers at ITS key;
+    // the base keeps its binding, and the durable row and the cache row agree on the variance.
+    await handler.handler(
+      { contract: SAMPLE_CONTRACT, componentCode: "export default function V() { return null; }", aesthetic: "hero-fill" },
+      makeCtx("app-1")
+    );
+    const variantCacheId = await index.getId("app-1", variantKeyOf({ aesthetic: "hero-fill" }));
+    expect(variantCacheId).not.toBeNull();
+    expect(variantCacheId).not.toBe(baseCacheId);
+    await expect(index.getId("app-1", baseKey)).resolves.toBe(baseCacheId);
+    const cached = await findBlueprintExact({ vectorStore, index }, "app-1", "template", contractKey, variantKey({ aesthetic: "hero-fill" }));
+    expect(cached).not.toBeNull();
+    expect(cached!.variance).toEqual({ aesthetic: "hero-fill" });
+    expect(cached!.componentCode).toBe("export default function V() { return null; }");
+    const baseCached = await findBlueprintExact({ vectorStore, index }, "app-1", "template", contractKey);
+    expect(baseCached!.componentCode).toBe(SAMPLE_CODE);
   });
 
   it("rejects a `generator` input key — the slug-stamping surface is gone", async () => {

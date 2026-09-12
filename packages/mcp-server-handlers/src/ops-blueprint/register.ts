@@ -228,6 +228,18 @@ export function createGguiOpsRegisterBlueprintHandler(
       const codeHash = createHash("sha256").update(componentCode).digest("hex");
 
       const blueprintId = mintBlueprintId();
+      // ONE variance for BOTH stores. The cache row's exact key is
+      // `variantKey(variance)`; omitting it on the cache call filed every
+      // variant under the default-variant key, where an earlier registration
+      // of the same contract already sat — the mirror then returned THAT row
+      // and the new variant was never bound (the durable row said one thing,
+      // the served index another). Same rule as ops_generate.
+      const variance = {
+        ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
+        ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
+        ...(parsed.context !== undefined ? { context: parsed.context } : {}),
+        ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
+      };
       const blueprint: Blueprint = {
         blueprintId,
         contractHash,
@@ -237,12 +249,7 @@ export function createGguiOpsRegisterBlueprintHandler(
         // user arm on BOTH stores this handler writes (MVB row here,
         // cache mirror below). No engine claim exists to record.
         source: USER_SOURCE,
-        variance: {
-          ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
-          ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
-          ...(parsed.context !== undefined ? { context: parsed.context } : {}),
-          ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
-        },
+        variance,
         createdAt: now(),
         createdBy: "operator",
         contract,
@@ -272,6 +279,9 @@ export function createGguiOpsRegisterBlueprintHandler(
             // Same user-arm provenance as the MVB row above — one
             // handler call, one provenance claim across both stores.
             source: USER_SOURCE,
+            // The cache row MUST carry the same variance as the MVB row —
+            // its exact key is `variantKey(variance)`.
+            variance,
             // An operator invoked this tool. Without it the durable
             // record would claim the standard agent flow minted a row
             // that is retained permanently.
