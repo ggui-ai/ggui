@@ -443,3 +443,32 @@ describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejec
     expect(Object.keys(j.profile ?? {})).not.toContain('aMemberFromTheNextRelease');
   });
 });
+
+describe("a canvas row's passed flag (ggui#1027 fit + the judge's threshold), pinned on the served shape", () => {
+  // The judge (ui-gen visual-evaluator) computes passed; eval-cell copies it onto the row with score + overflow.
+  const overflowRow = { canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 720 }, score: 83, passed: false, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 1180, overflow: true };
+  const lowRow = { canvas: 'md' as const, viewport: { width: 768, height: 1024 }, score: 67, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false };
+  const serve = async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
+      visual: async () => ({ score: 75, passed: false, canvases: [overflowRow, lowRow] }),
+    });
+    return report.visualCanvases ?? [];
+  };
+  it('the naive reading (passed === score >= passThreshold) is false on an overflow row — the flag carries the fit', async () => {
+    const [xs] = await serve();
+    expect(xs?.score).toBe(83);
+    expect(xs?.passed).not.toBe(xs!.score >= 60); // 83 >= 60, yet the card overflows the chat-card container
+  });
+  it('passed means score >= the judge threshold AND fits — and the row carries enough to recompute either half', async () => {
+    const rows = await serve();
+    const fitFails = (r: { canvas: string; overflow?: boolean }) => r.overflow === true && r.canvas === 'xs-chat-card'; // overflow is optional on the display type (rows judged before #1027)
+    for (const r of rows) expect(r.passed).toBe(r.score >= 60 && !fitFails(r));
+    const xs = rows.find((r) => r.canvas === 'xs-chat-card')!;
+    expect(xs).toMatchObject({ score: 83, passed: false, overflow: true, contentHeight: 1180 }); // why false at 83 is on the row
+    const md = rows.find((r) => r.canvas === 'md')!;
+    expect(md).toMatchObject({ score: 67, passed: true, overflow: false }); // a 70-bar consumer recomputes from score
+  });
+});

@@ -29,6 +29,14 @@ export interface VisualCanvasArtefact {
   readonly canvas: CanvasClass;
   readonly viewport: Viewport;
   readonly score: number;
+  /**
+   * The JUDGE's verdict for this canvas: `score >= the judge's passThreshold`
+   * AND the canvas fits per `canvasFitPolicy` (ggui#1027: an `xs-chat-card`
+   * overflow sets this false with the score untouched). It is NOT a bar of the
+   * consumer's (the bootstrap binder's 70/70 is applied downstream, on `score`
+   * and this flag together). A reader wanting "score ≥ N" recomputes from
+   * `score`; a reader wanting "why false at 83" reads `overflow`.
+   */
   readonly passed: boolean;
   /** The document's scroll height at this canvas, CSS px; `null` when unmeasurable (ggui#1027 — the fit is on the receipt). */
   readonly contentHeight: number | null;

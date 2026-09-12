@@ -325,6 +325,7 @@ export interface VisualCanvasArtefactDisplay {
   canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl';
   viewport: { width: number; height: number };
   score: number;
+  /** The judge's verdict: `score >= its passThreshold` AND the canvas fits (ggui#1027 — an `xs-chat-card` overflow is `false` at any score). Not a consumer's bar; recompute from `score` for one. */
   passed: boolean;
   /** Document scroll height at this canvas (CSS px; `null` = unmeasurable). Absent on rows judged before ggui#1027. */
   contentHeight?: number | null;
