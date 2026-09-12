@@ -3,7 +3,6 @@ import type { ModalProps } from './types';
 import { Button } from '../primitives/Button';
 import { Icon } from '../primitives/Icon';
 import { Heading } from '../primitives/Heading';
-import { colors } from '../tokens/colors';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 import { animation } from '../tokens/motion';
 
@@ -114,7 +113,7 @@ export function Modal({
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '16px 20px',
-              borderBottom: `1px solid ${colors.gray[200]}`,
+              borderBottom: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
             }}
           >
             {title && <Heading level={4}>{title}</Heading>}
@@ -152,7 +151,7 @@ export function Modal({
               justifyContent: 'flex-end',
               gap: '8px',
               padding: '16px 20px',
-              borderTop: `1px solid ${colors.gray[200]}`,
+              borderTop: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
             }}
           >
             {footer}

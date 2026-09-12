@@ -2,15 +2,14 @@ import type { NotificationCenterProps, Notification } from './types';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { radius } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
 
 const variantColors: Record<string, string> = {
-  info: colors.info[500],
-  success: colors.success[500],
-  warning: colors.warning[500],
-  error: colors.error[500],
+  info: 'var(--ggui-color-info-500, #06b6d4)',
+  success: 'var(--ggui-color-success-500, #22c55e)',
+  warning: 'var(--ggui-color-warning-500, #f59e0b)',
+  error: 'var(--ggui-color-error-500, #ef4444)',
 };
 
 function NotificationItem({
@@ -35,7 +34,7 @@ function NotificationItem({
         display: 'flex',
         gap: '12px',
         padding: '12px',
-        backgroundColor: notification.read ? 'transparent' : colors.primary[50],
+        backgroundColor: notification.read ? 'transparent' : 'var(--ggui-color-primaryContainer, #f0f9ff)',
         borderRadius: radius.md,
         transition: 'background-color 0.15s',
       }}
@@ -56,7 +55,7 @@ function NotificationItem({
             style={{
               margin: 0,
               fontWeight: fontWeight.medium,
-              color: colors.gray[900],
+              color: 'var(--ggui-color-onContainer, #111827)',
               fontSize: fontSize.sm,
             }}
           >
@@ -69,7 +68,7 @@ function NotificationItem({
               border: 'none',
               padding: '2px',
               cursor: 'pointer',
-              color: colors.gray[400],
+              color: 'var(--ggui-color-neutral-400, #9ca3af)',
               flexShrink: 0,
             }}
           >
@@ -80,7 +79,7 @@ function NotificationItem({
           <p
             style={{
               margin: '4px 0 0',
-              color: colors.gray[600],
+              color: 'var(--ggui-color-onSunken, #4b5563)',
               fontSize: fontSize.xs,
             }}
           >
@@ -88,7 +87,7 @@ function NotificationItem({
           </p>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
-          <span style={{ color: colors.gray[400], fontSize: fontSize.xs }}>{timestamp}</span>
+          <span style={{ color: 'var(--ggui-color-neutral-400, #9ca3af)', fontSize: fontSize.xs }}>{timestamp}</span>
           {!notification.read && (
             <button
               onClick={() => onMarkAsRead?.(notification.id)}
@@ -96,7 +95,7 @@ function NotificationItem({
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                color: colors.primary[600],
+                color: 'var(--ggui-color-link, #0284c7)',
                 fontSize: fontSize.xs,
                 cursor: 'pointer',
               }}
@@ -111,7 +110,7 @@ function NotificationItem({
                 background: 'none',
                 border: 'none',
                 padding: 0,
-                color: colors.primary[600],
+                color: 'var(--ggui-color-link, #0284c7)',
                 fontSize: fontSize.xs,
                 cursor: 'pointer',
               }}
@@ -156,11 +155,11 @@ export function NotificationCenter({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '12px 16px',
-          borderBottom: `1px solid ${colors.gray[200]}`,
+          borderBottom: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontWeight: fontWeight.semibold, color: colors.gray[900] }}>
+          <span style={{ fontWeight: fontWeight.semibold, color: 'var(--ggui-color-onContainer, #111827)' }}>
             Notifications
           </span>
           {unreadCount > 0 && (
@@ -168,8 +167,8 @@ export function NotificationCenter({
               style={{
                 padding: '2px 8px',
                 borderRadius: '12px',
-                backgroundColor: colors.primary[100],
-                color: colors.primary[700],
+                backgroundColor: 'var(--ggui-color-primaryContainer, #e0f2fe)',
+                color: 'var(--ggui-color-onPrimaryContainer, #0369a1)',
                 fontSize: fontSize.xs,
                 fontWeight: fontWeight.medium,
               }}
@@ -198,7 +197,7 @@ export function NotificationCenter({
             <Spinner size={24} />
           </div>
         ) : notifications.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: colors.gray[500] }}>
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
             {emptyText}
           </div>
         ) : (

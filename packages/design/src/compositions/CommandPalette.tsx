@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { CommandPaletteProps, Command } from './types';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
 
@@ -149,7 +148,7 @@ export function CommandPalette({
           width: '560px',
           maxWidth: 'calc(100vw - 48px)',
           maxHeight: '60vh',
-          backgroundColor: colors.white,
+          backgroundColor: 'var(--ggui-color-elevated, #ffffff)',
           borderRadius: radius.xl,
           boxShadow: shadow['2xl'],
           overflow: 'hidden',
@@ -159,7 +158,7 @@ export function CommandPalette({
         }}
       >
         {/* Search input */}
-        <div style={{ padding: '12px', borderBottom: `1px solid ${colors.gray[200]}` }}>
+        <div style={{ padding: '12px', borderBottom: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)' }}>
           <div style={{ position: 'relative' }}>
             <Icon
               name="search"
@@ -197,7 +196,7 @@ export function CommandPalette({
               <Spinner size={24} />
             </div>
           ) : flatCommands.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px', color: colors.gray[500] }}>
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
               No commands found
             </div>
           ) : (
@@ -208,7 +207,7 @@ export function CommandPalette({
                     padding: '8px 12px',
                     fontSize: fontSize.xs,
                     fontWeight: fontWeight.semibold,
-                    color: colors.gray[500],
+                    color: 'var(--ggui-color-neutral-500, #6b7280)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                   }}
@@ -237,21 +236,21 @@ export function CommandPalette({
                         padding: '10px 12px',
                         border: 'none',
                         borderRadius: radius.md,
-                        backgroundColor: isSelected ? colors.gray[100] : 'transparent',
-                        color: cmd.disabled ? colors.gray[400] : colors.gray[900],
+                        backgroundColor: isSelected ? 'var(--ggui-color-sunken, #f3f4f6)' : 'transparent',
+                        color: cmd.disabled ? 'var(--ggui-color-neutral-400, #9ca3af)' : 'var(--ggui-color-onElevated, #111827)',
                         textAlign: 'left',
                         cursor: cmd.disabled ? 'not-allowed' : 'pointer',
                       }}
                     >
                       {cmd.icon && (
-                        <span style={{ display: 'flex', color: colors.gray[500] }}>
+                        <span style={{ display: 'flex', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
                           {cmd.icon}
                         </span>
                       )}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: fontSize.sm }}>{cmd.label}</div>
                         {cmd.description && (
-                          <div style={{ fontSize: fontSize.xs, color: colors.gray[500] }}>
+                          <div style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
                             {cmd.description}
                           </div>
                         )}
@@ -260,10 +259,10 @@ export function CommandPalette({
                         <kbd
                           style={{
                             padding: '2px 6px',
-                            backgroundColor: colors.gray[100],
+                            backgroundColor: 'var(--ggui-color-sunken, #f3f4f6)',
                             borderRadius: radius.sm,
                             fontSize: fontSize.xs,
-                            color: colors.gray[500],
+                            color: 'var(--ggui-color-neutral-500, #6b7280)',
                             fontFamily: 'inherit',
                           }}
                         >
@@ -282,12 +281,12 @@ export function CommandPalette({
         <div
           style={{
             padding: '8px 12px',
-            borderTop: `1px solid ${colors.gray[200]}`,
+            borderTop: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
             display: 'flex',
             alignItems: 'center',
             gap: '16px',
             fontSize: fontSize.xs,
-            color: colors.gray[500],
+            color: 'var(--ggui-color-neutral-500, #6b7280)',
           }}
         >
           <span>↑↓ Navigate</span>

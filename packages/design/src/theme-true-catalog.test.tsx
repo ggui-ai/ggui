@@ -28,12 +28,8 @@ const KNOWN_THEME_BLIND: ReadonlySet<string> = new Set([
   'components/Pagination.tsx',
   'components/SearchField.tsx',
   'compositions/ChatWindow.tsx',
-  'compositions/CommandPalette.tsx',
   'compositions/CommentThread.tsx',
-  'compositions/DataTable.tsx',
   'compositions/FileUploader.tsx',
-  'compositions/Modal.tsx',
-  'compositions/NotificationCenter.tsx',
 ]);
 
 function sourceFiles(): string[] {

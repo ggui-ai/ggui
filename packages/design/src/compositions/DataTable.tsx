@@ -2,7 +2,6 @@ import type { DataTableProps } from './types';
 import { Checkbox } from '../primitives/Checkbox';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
-import { colors } from '../tokens/colors';
 import { fontSize, fontWeight } from '../tokens/typography';
 
 /**
@@ -54,7 +53,7 @@ export function DataTable<T extends Record<string, unknown>>({
     <div
       className={className}
       style={{
-        border: `1px solid ${colors.gray[200]}`,
+        border: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
         borderRadius: '8px',
         overflow: 'hidden',
         ...style,
@@ -68,7 +67,7 @@ export function DataTable<T extends Record<string, unknown>>({
         }}
       >
         <thead>
-          <tr style={{ backgroundColor: colors.gray[50] }}>
+          <tr style={{ backgroundColor: 'var(--ggui-color-sunken, #f9fafb)' }}>
             {selectable && (
               <th style={{ width: '40px', padding: '12px' }}>
                 <Checkbox
@@ -85,8 +84,8 @@ export function DataTable<T extends Record<string, unknown>>({
                   padding: '12px 16px',
                   textAlign: col.align || 'left',
                   fontWeight: fontWeight.semibold,
-                  color: colors.gray[700],
-                  borderBottom: `1px solid ${colors.gray[200]}`,
+                  color: 'var(--ggui-color-onSunken, #374151)',
+                  borderBottom: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
                   cursor: col.sortable ? 'pointer' : undefined,
                   width: col.width,
                 }}
@@ -119,7 +118,7 @@ export function DataTable<T extends Record<string, unknown>>({
             <tr>
               <td
                 colSpan={columns.length + (selectable ? 1 : 0)}
-                style={{ padding: '48px', textAlign: 'center', color: colors.gray[500] }}
+                style={{ padding: '48px', textAlign: 'center', color: 'var(--ggui-color-neutral-500, #6b7280)' }}
               >
                 {emptyText}
               </td>
@@ -134,7 +133,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   key={key}
                   onClick={() => onRowClick?.(row, index)}
                   style={{
-                    backgroundColor: isSelected ? colors.primary[50] : undefined,
+                    backgroundColor: isSelected ? 'var(--ggui-color-primaryContainer, #f0f9ff)' : undefined,
                     cursor: onRowClick ? 'pointer' : undefined,
                     transition: 'background-color 0.15s',
                   }}
@@ -153,8 +152,8 @@ export function DataTable<T extends Record<string, unknown>>({
                       style={{
                         padding: '12px 16px',
                         textAlign: col.align || 'left',
-                        color: colors.gray[900],
-                        borderBottom: `1px solid ${colors.gray[100]}`,
+                        color: 'var(--ggui-color-onContainer, #111827)',
+                        borderBottom: '1px solid var(--ggui-color-neutral-100, #f3f4f6)',
                       }}
                     >
                       {col.render
