@@ -11,6 +11,7 @@ import { REALTIME_CHECKS } from "./checks/realtime.js";
 import { WRITES_CHECKS } from "./checks/writes.js";
 import { STATE_PAYLOAD_CHECKS } from "./checks/state-payload.js";
 import { TOOLING_CHECKS } from "./checks/tooling.js";
+import { GRID_CHECKS } from "./checks/grid.js";
 import { EXTRA_CHECKS } from "./extras.js";
 
 export const REGISTRY: readonly AxisCheck[] = [
@@ -21,5 +22,6 @@ export const REGISTRY: readonly AxisCheck[] = [
   ...WRITES_CHECKS,
   ...STATE_PAYLOAD_CHECKS,
   ...TOOLING_CHECKS,
+  ...GRID_CHECKS,
   ...EXTRA_CHECKS,
 ];

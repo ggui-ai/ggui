@@ -27,7 +27,7 @@ export const renderFragments: Record<string, HarnessFragment> = {
     value: "grid",
     cacheTier: "axisDelta",
     promptText:
-      "## Render: grid\n2D tile layout. Use <CardGrid> or CSS `display: grid` with `grid-template-columns: repeat(N, 1fr)`. If items carry row/col fields, position each tile at (row, col). Do not scroll horizontally.",
+      "## Render: grid\nTwo shapes share this axis — read the contract:\n- A TILE grid (a gallery, a stat grid, items that may carry row/col fields): `<Grid columns={N} gap=\"md\">` (or `<CardGrid>`); if items carry row/col fields, position each tile at (row, col).\n- A BOARD (a columns / lanes / stages array whose items are cards — a kanban): the columns sit SIDE BY SIDE at md and wider — `<Grid columns={{ base: 1, md: columns.length }} gap=\"md\">` wrapping the columns map, each column its own `<Stack>` of `<Card>`s with its header and count; NEVER a `<Stack>` of column sections (that is a list — tier-0 fails it).\nNever hand-roll `display: grid`. Do not scroll horizontally.",
   },
   spatial: {
     axis: "render",

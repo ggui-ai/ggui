@@ -28,9 +28,12 @@ function shapeGuidance(i: number): { readonly vector: string; readonly text: str
 // ── Recorded on the clean tree, 2026-09-11. Exp 004's board cut (dormant sha 39f2325e8, rule
 // not met) moved fixture B alone (render=board, 7e6b370f…) and left fixture A byte-identical —
 // the receipt this pin exists to give. ──
+// Re-recorded 2026-09-12 for ggui#1046: the render=grid guidance names BOTH shapes (tile grid; board = the
+// columns map wrapped in <Grid columns={{ base: 1, md: columns.length }}> of <Stack> columns) and drops the
+// `display: grid` sentence that contradicted the prompt's NEVER rule — fixture B (render=grid) moves, fixture A stays.
 export const SHAPE_GUIDANCE_SHA256: readonly string[] = [
   '15abd0fa3944eba787a286fb5cd39a78bef42c80559a4d234222becd5b3d3a80',
-  '84c7280db69e4db61def133e5d618e2bee0bd815ae4a47c1f2c08125fec999ba',
+  'a3ac98059b5242994b3954764d0ad9a950bd860f87a41d58f7f94f0a0dbba1d5',
 ];
 export const SHAPE_GUIDANCE_VECTOR: readonly string[] = [
   '{"render":"list","state":"ui-affordance","writes":"commit","writeTrigger":"click","realtime":"none","fetch":"none","layout":"single","tooling":"none"}',
