@@ -28,6 +28,8 @@ describe('accent ink reads on its surface (ggui#1035)', () => {
         expect(contrastRatio(v['--ggui-color-primary-700']!, container), `${id} ${mode} emphasized on container`).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(v['--ggui-color-heroLink']!, v['--ggui-color-heroGround']!), `${id} ${mode} heroLink on heroGround (ggui#1043)`).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(v['--ggui-color-inverseLink']!, v['--ggui-color-onContainer']!), `${id} ${mode} inverseLink on the inverted ground (ggui#1043)`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(v['--ggui-color-inverseOutline']!, v['--ggui-color-onContainer']!), `${id} ${mode} inverseOutline on the inverted ground (ggui#1051)`).toBeGreaterThanOrEqual(3);
+        expect(contrastRatio(v['--ggui-color-heroOutline']!, v['--ggui-color-heroGround']!), `${id} ${mode} heroOutline on the hero ground (ggui#1051)`).toBeGreaterThanOrEqual(3);
       });
     }
   }

@@ -54,6 +54,8 @@ describe('an app overlay is completed from its own colours (ggui#1043)', () => {
     expect(contrastRatio(painted(css, 'heroLink')!, painted(css, 'heroGround')!)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(painted(css, 'inverseLink')!, '#141914')).toBeGreaterThanOrEqual(4.5);
     expect(painted(css, 'link')).toBe('#b83e12'); // stated, never overridden
+    expect(contrastRatio(painted(css, 'inverseOutline')!, '#141914')).toBeGreaterThanOrEqual(3); // the served chips' border (ggui#1051); the 32 % mix read 2.7:1
+    expect(contrastRatio(painted(css, 'heroOutline')!, painted(css, 'heroGround')!)).toBeGreaterThanOrEqual(3);
   });
 
   it('dark: the hero ground is the overlay\'s ink pair; the accent walked against that LIGHT ground clears 4.5:1 (the 4.40:1 RED)', () => {

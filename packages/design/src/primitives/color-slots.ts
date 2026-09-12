@@ -241,7 +241,7 @@ export const INVERTED_SCOPE_CLASS = 'ggui-surface-inverted';
  * re-maps the surface-layering roles for the root's direct children (which
  * then inherit). Two tiers per the package's `color-mix()` convention.
  */
-function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, accent: string): string {
+function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, accent: string, outlineOpen: string): string {
   // The aliases live under the package's own `--ggui-surface-*` namespace (not a
   // theme family); composed outside any `var(--ggui-` literal so the consumed-
   // token scan sees no dynamic token construction here.
@@ -271,11 +271,15 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, acc
     `--ggui-color-link:${accent}}` +
     '@supports (color: color-mix(in srgb, red, blue)){' +
     `.${cls}>*{` +
+    // A nested `default` container inside the scope reads a whisper of ink over the scope ground (ggui#1051):
+    // at the bare ground it was invisible — the served card's after-click panel vanished into the card.
+    `--ggui-color-container:color-mix(in srgb, ${B} 94%, ${I});` +
     `--ggui-color-elevated:color-mix(in srgb, ${B} 92%, ${I});` +
     `--ggui-color-sunken:color-mix(in srgb, ${B} 88%, ${I});` +
     `--ggui-color-onSunken:color-mix(in srgb, ${I} 76%, ${B});` +
     `--ggui-color-neutral-500:color-mix(in srgb, ${I} 62%, ${B});` +
-    `--ggui-color-outline:color-mix(in srgb, ${I} 32%, ${B});` +
+    // The outline is DERIVED per theme to clear 3:1 on this ground (ggui#1051); the 32 % mix is the un-themed fallback.
+    `--ggui-color-outline:${outlineOpen}color-mix(in srgb, ${I} 32%, ${B}));` +
     `--ggui-color-outlineVariant:color-mix(in srgb, ${I} 18%, ${B})}}`
   );
 }
@@ -286,6 +290,8 @@ export const INVERTED_SCOPE_CSS = surfaceScopeCss(
   'var(--ggui-color-onContainer, #18181b)',
   'var(--ggui-color-container, #ffffff)',
   'var(--ggui-color-inverseLink, var(--ggui-color-container, #ffffff))',
+  // The derived outline for this ground (ggui#1051), the 32 % mix beneath it; a literal so the manifest sees it.
+  'var(--ggui-color-inverseOutline, ',
 );
 
 /** The class a `hero` root carries (ggui#1031 L2) — the same remap over the hero ground pair. */
@@ -296,6 +302,7 @@ export const HERO_SCOPE_CSS = surfaceScopeCss(
   'var(--ggui-color-heroGround, #e0f2fe)',
   'var(--ggui-color-onHeroGround, #0c4a6e)',
   'var(--ggui-color-heroLink, var(--ggui-color-onHeroGround, #0c4a6e))',
+  'var(--ggui-color-heroOutline, ',
 );
 
 /** The scope a surface root carries, when the surface owns its subtree's inks. */

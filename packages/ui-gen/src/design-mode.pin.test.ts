@@ -132,8 +132,10 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // inverted scopes walk against their own ground); the free colour vocabulary renders the manifest — constrained unmoved.
 // Re-recorded 2026-09-12 for ggui#1047: the manifest gains `onInverted` (the ink `tone="inverse"` reads — the page's
 // container, re-declared on every inverted / hero scope root as that surface's ink) — constrained unmoved.
+// Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
+// draws on its own ground, derived to clear 3:1) — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  '7e2b88e8e535c0fd5bbfd6e2134ea4f268caae7c61b02943ffb927a990365d2a';
+  'da780d396d6270f732911b74606c8791b49c027ad3c92615b73002ee3a507550';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

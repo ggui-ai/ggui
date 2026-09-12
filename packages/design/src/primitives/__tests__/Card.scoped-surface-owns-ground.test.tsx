@@ -42,6 +42,11 @@ describe('a scoped surface owns its ground (ggui#1047)', () => {
     expect(plain).toContain('background:var(--ggui-color-ground)');
   });
 
+  it('the scopes draw their outline from the derived per-theme role, the 32 % mix beneath it (ggui#1051)', () => {
+    expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-outline:var(--ggui-color-inverseOutline, color-mix(in srgb, var(--ggui-surface-inverted-ink) 32%, var(--ggui-surface-inverted-bg)));');
+    expect(HERO_SCOPE_CSS).toContain('--ggui-color-outline:var(--ggui-color-heroOutline, color-mix(in srgb, var(--ggui-surface-hero-ink) 32%, var(--ggui-surface-hero-bg)));');
+  });
+
   it('the scopes remap ground / onGround for their subtree', () => {
     expect(INVERTED_SCOPE_CSS).toContain('--ggui-color-ground:var(--ggui-surface-inverted-bg);--ggui-color-onGround:var(--ggui-surface-inverted-ink);');
     expect(HERO_SCOPE_CSS).toContain('--ggui-color-ground:var(--ggui-surface-hero-bg);--ggui-color-onGround:var(--ggui-surface-hero-ink);');

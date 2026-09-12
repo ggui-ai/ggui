@@ -249,6 +249,31 @@ const ACCENT_WALK: Readonly<Record<ThemeMode, readonly (typeof STOPS)[number][]>
   dark: ['600', '500', '400', '300', '200', '100'],
 };
 
+/** CSS `color-mix(in srgb, ink p%, bg)` — the mix the scope rules emit, computed here for the same numbers. */
+function mixSrgb(ink: string, bg: string, p: number): string {
+  const a = parseHex(ink);
+  const b = parseHex(bg);
+  const ch = (i: number): string => Math.round(a[i]! * p + b[i]! * (1 - p)).toString(16).padStart(2, '0');
+  return `#${ch(0)}${ch(1)}${ch(2)}`;
+}
+
+/** The ink-mix steps a scope's outline walks toward the ink (ggui#1051); the scope rule's own 32 % is the first. */
+const OUTLINE_WALK = [0.32, 0.4, 0.48, 0.56, 0.64, 0.72, 0.8, 0.9, 1] as const;
+
+/**
+ * The outline a scoped surface draws on its own ground (ggui#1051): the first ink-mix
+ * step that clears WCAG's 3:1 non-text bar on `bg`, else the ink. A fixed 32 % mix read
+ * ≈2.7:1 on a dark inverted card and no single percentage clears 3:1 on every theme's
+ * hero ground — so it is derived per theme, like the accents.
+ */
+function readableOutline(bg: string, ink: string): string {
+  for (const p of OUTLINE_WALK) {
+    const hex = mixSrgb(ink, bg, p);
+    if (contrastRatio(hex, bg) >= 3) return hex;
+  }
+  return ink;
+}
+
 /**
  * The first primary stop at ≥ 4.5:1 on `surface`, else the surface's own ink —
  * derived, never authored. The walk follows the SURFACE's darkness, not the
@@ -354,6 +379,9 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // The ink `tone="inverse"` reads (ggui#1047): the page's container at page level; every
   // inverted / hero scope root re-declares it as that surface's ink for its subtree.
   V['--ggui-color-onInverted'] = container;
+  // The outline each scope draws on its own ground (ggui#1051) — ≥ 3:1 by derivation.
+  V['--ggui-color-inverseOutline'] = readableOutline(onContainer, container);
+  V['--ggui-color-heroOutline'] = readableOutline(V['--ggui-color-heroGround']!, V['--ggui-color-onHeroGround']!);
 
   // Typography.
   const family = doc.font.family;
@@ -464,5 +492,7 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
   if (heroGround !== undefined && onHeroGround !== undefined) put('heroLink', readableAccent(V, heroGround, onHeroGround));
   put('inverseLink', readableAccent(V, onContainer, container));
   put('onInverted', container);
+  put('inverseOutline', readableOutline(onContainer, container));
+  if (heroGround !== undefined && onHeroGround !== undefined) put('heroOutline', readableOutline(heroGround, onHeroGround));
   return V;
 }
