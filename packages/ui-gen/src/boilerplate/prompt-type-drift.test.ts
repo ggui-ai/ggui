@@ -36,8 +36,9 @@ const TONE = [
   'default', 'muted', 'subtle', 'emphasized', 'loud',
   'success', 'warning', 'error', 'info', 'inverse', 'inherit',
 ] as const;
+// `hero` = the hero ground pair (ggui#1031 L2): the Hero recipe teaches `<Card surface="hero">`.
 const SURFACE = [
-  'default', 'elevated', 'sunken', 'accent', 'inverted', 'transparent',
+  'default', 'elevated', 'sunken', 'accent', 'inverted', 'hero', 'transparent',
 ] as const;
 const SPACING_SCALE = ['none', 'xs', 'sm', 'md', 'lg', 'xl', '2xl'] as const;
 const RADIUS_SCALE = ['none', 'sm', 'md', 'lg', 'xl'] as const;
