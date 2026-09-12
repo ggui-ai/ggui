@@ -16,6 +16,11 @@
  *
  *   - `elevated` is never authored: light = `container`; dark =
  *     `container` mixed 8% toward `onContainer`; `onElevated` = `onContainer`.
+ *   - `heroGround` / `onHeroGround` are never authored (ggui#1031 L2): on a
+ *     light host the primary container pair (a brand-tinted ground the page
+ *     keeps its paper around); on a dark host the ink pair (`onContainer` /
+ *     `container`) — the hello's ground follows the host's darkness by
+ *     construction, and `inverted` stays what it says.
  *   - the neutral ramp interpolates `ground → onGround` at fixed stops;
  *     `outline` / `outlineVariant` are its 300 / 200 stops.
  *   - each accent / tone family is synthesised from its `500` anchor:
@@ -321,6 +326,10 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // else the container's ink. `primary-600` alone read 2.55:1 on the brand
   // theme's light container and every anchor with it.
   V['--ggui-color-link'] = single('link') ?? readableAccent(V, container, onContainer, mode);
+  // The hero ground pair (ggui#1031 L2) — derived, never authored: light host →
+  // the primary container pair; dark host → the ink pair (as `inverted`).
+  V['--ggui-color-heroGround'] = mode === 'light' ? V['--ggui-color-primaryContainer']! : onContainer;
+  V['--ggui-color-onHeroGround'] = mode === 'light' ? V['--ggui-color-onPrimaryContainer']! : container;
 
   // Typography.
   const family = doc.font.family;

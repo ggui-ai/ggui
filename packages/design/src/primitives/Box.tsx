@@ -1,12 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BoxProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import {
-  INVERTED_SCOPE_CLASS,
-  INVERTED_SCOPE_CSS,
-  resolveSurfaceCss,
-  resolveSurfaceOnColorCss,
-} from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -79,16 +74,17 @@ export function Box(props: WithTrait<BoxProps>) {
   };
 
   // An inverted surface owns ALL its on-colours (ggui#1024) — see Card.
-  if (!validAsset && surface === 'inverted') {
+  const scope = !validAsset && surface ? resolveSurfaceScope(surface) : undefined;
+  if (scope !== undefined) {
     return renderWithTrait(
       Trait,
       traitProps,
       {
-        className: className ? `${className} ${INVERTED_SCOPE_CLASS}` : INVERTED_SCOPE_CLASS,
+        className: className ? `${className} ${scope.className}` : scope.className,
         style: composedStyle,
       },
       <>
-        <style>{INVERTED_SCOPE_CSS}</style>
+        <style>{scope.css}</style>
         {children}
       </>,
     );

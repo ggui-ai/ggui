@@ -1,12 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CardProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import {
-  INVERTED_SCOPE_CLASS,
-  INVERTED_SCOPE_CSS,
-  resolveSurfaceCss,
-  resolveSurfaceOnColorCss,
-} from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -78,16 +73,17 @@ export function Card(props: WithTrait<CardProps>) {
   // carries the scope class and co-renders the remap rule for its
   // subtree, so `muted` labels, chips and outlines inside it read
   // inverse-derived inks instead of the light-surface tokens.
-  if (surface === 'inverted') {
+  const scope = resolveSurfaceScope(surface ?? 'default');
+  if (scope !== undefined) {
     return renderWithTrait(
       Trait,
       traitProps,
       {
-        className: className ? `${className} ${INVERTED_SCOPE_CLASS}` : INVERTED_SCOPE_CLASS,
+        className: className ? `${className} ${scope.className}` : scope.className,
         style: composedStyle,
       },
       <>
-        <style>{INVERTED_SCOPE_CSS}</style>
+        <style>{scope.css}</style>
         {children}
       </>,
     );

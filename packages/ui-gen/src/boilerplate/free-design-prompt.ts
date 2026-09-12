@@ -87,6 +87,7 @@ const SEMANTIC_ROLES: ReadonlyArray<{ readonly names: readonly string[]; readonl
   { names: ["ground", "onGround"], role: "the page / chat canvas behind everything + its text" },
   { names: ["container", "onContainer"], role: "a card, a bubble, a panel + body text on it" },
   { names: ["elevated", "onElevated"], role: "popover, menu, modal, toast — floats above a container" },
+  { names: ["heroGround", "onHeroGround"], role: "a hero / greeting panel — brand-tinted on a light host, the ink pair on a dark one" },
   { names: ["sunken", "onSunken"], role: "wells, inputs at rest, code blocks + secondary text" },
   { names: ["ground-subtle", "ground-gradient"], role: "quiet canvas fills" },
   { names: ["onPrimary"], role: "text on the brand color" },

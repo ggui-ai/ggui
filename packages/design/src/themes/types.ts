@@ -92,6 +92,7 @@ export interface DtcgTheme {
     sunken: DtcgToken;
     onSunken: DtcgToken;
     // `elevated` / `onElevated` are never authored — derived (§2.4).
+    // `heroGround` / `onHeroGround` likewise (ggui#1031 L2): light = the primary container pair, dark = the ink pair.
     // Everything below is OPTIONAL to author: the one producer
     // (`deriveThemeVariables`) derives it from the roles + anchors above
     // — the neutral ladder from ground/onGround, outlines from it, each

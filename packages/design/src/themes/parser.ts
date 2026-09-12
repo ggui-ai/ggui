@@ -194,6 +194,7 @@ export function generateThemeReferenceDocumentation(theme: DtcgTheme): string {
     '- `--ggui-color-ground` with `--ggui-color-onGround` (the page canvas)',
     '- `--ggui-color-sunken` with `--ggui-color-onSunken` (inputs at rest, wells, code)',
     '- `--ggui-color-elevated` with `--ggui-color-onElevated` (menus, popovers, modals, toasts)',
+    '- `--ggui-color-heroGround` with `--ggui-color-onHeroGround` (a hero panel: brand-tinted on a light host, the ink pair on a dark one)',
     '- `--ggui-color-primary-500` with `--ggui-color-onPrimary`; `--ggui-color-primaryContainer` with `--ggui-color-onPrimaryContainer`',
     '- `--ggui-color-error-500` with `--ggui-color-onError`; `--ggui-color-errorContainer` with `--ggui-color-onErrorContainer`',
     '- `--ggui-color-tertiaryContainer` with `--ggui-color-onTertiaryContainer` (the second accent)',

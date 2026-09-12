@@ -42,6 +42,8 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 | onContainer | var(--ggui-color-onContainer) | Body text on a card |
 | elevated | var(--ggui-color-elevated) | Menus, popovers, modals, toasts — floats above a card |
 | onElevated | var(--ggui-color-onElevated) | Text on an elevated surface |
+| heroGround | var(--ggui-color-heroGround) | A hero / greeting panel's ground — brand-tinted on a light host, the ink pair on a dark one (Card surface="hero") |
+| onHeroGround | var(--ggui-color-onHeroGround) | Text on the hero ground |
 | sunken | var(--ggui-color-sunken) | Wells, inputs at rest, code blocks — recessed inside a card |
 | onSunken | var(--ggui-color-onSunken) | Muted / secondary text |
 | container | var(--ggui-color-container) | Primary-branded containers |

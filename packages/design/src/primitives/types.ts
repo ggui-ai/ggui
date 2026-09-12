@@ -131,12 +131,13 @@ export interface CardProps extends BaseProps {
    * Semantic surface slot. Same vocabulary as {@link BoxProps.surface};
    * see that prop's docs for the full slot table. Default Card surface
    * is `'default'` (the active theme's `--ggui-color-container`); pair
-   * with `shadow="md"|"lg"` for elevated cards, or use `'inverted'`
-   * for a dark testimonial-style card on a light theme.
+   * with `shadow="md"|"lg"` for elevated cards, `'hero'` for a greeting or
+   * hero card (the theme's hero ground, right on a light or a dark host), or
+   * `'inverted'` for a dark testimonial-style card on a light theme.
    *
    * @default 'default'
    */
-  surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'transparent';
+  surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'hero' | 'transparent';
 }
 
 /**
@@ -386,6 +387,10 @@ export interface BoxProps extends BaseProps {
    *   ALL its inks: body text, `muted` / `subtle` labels, chips and
    *   outlines inside it re-map to inverse-derived values by cascade —
    *   no `tone="inverse"` needed, and no hand-picked greys.
+   * - `'hero'` — the hero panel's ground: brand-tinted on a light host, the
+   *   ink pair on a dark one (`heroGround` / `onHeroGround`, derived per mode)
+   *   — reach for it for a greeting or hero card instead of guessing the
+   *   host's darkness with `'inverted'`; it owns its subtree's inks likewise.
    * - `'transparent'` — explicit "no fill"
    *
    * For non-theme-mapped brand colors (e.g. a partner's exact brand
@@ -395,7 +400,7 @@ export interface BoxProps extends BaseProps {
    *
    * @default undefined (transparent)
    */
-  surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'transparent';
+  surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'hero' | 'transparent';
   /**
    * Asset color escape — the typed valve for legitimate non-theme
    * color values (a partner's exact brand hex, a fixed product

@@ -577,7 +577,7 @@ If your component is 100% purple text on purple backgrounds, you've lost the eye
 ### Visual rhythm — vary your card treatments
 
 A row of identical flat tiles feels monotone. Use card-treatment variation to create rhythm:
-- **Hero card**: \`<Card padding="xl" shadow="lg" radius="xl">\` with branded gradient background — anchors the eye
+- **Hero card**: \`<Card surface="hero" padding="xl" shadow="lg" radius="xl">\` — the theme's hero ground (brand-tinted on a light host, the ink pair on a dark one); anchors the eye
 - **Stat tiles**: \`<Card padding="md" shadow="sm" radius="md">\` with surface bg — secondary
 - **Inline rows / list items**: no card chrome at all, just \`<Stack gap="sm">\` with dividers — tertiary
 

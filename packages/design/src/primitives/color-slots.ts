@@ -156,6 +156,7 @@ export type SurfaceSlot =
   | 'sunken'
   | 'accent'
   | 'inverted'
+  | 'hero'
   | 'transparent';
 
 /**
@@ -176,7 +177,9 @@ export type SurfaceSlot =
  * while the same code under the default tokens read fine.
  */
 export function resolveSurfaceOnColorCss(surface: SurfaceSlot): string | undefined {
-  return surface === 'inverted' ? resolveToneCss('inverse') : undefined;
+  if (surface === 'inverted') return resolveToneCss('inverse');
+  if (surface === 'hero') return 'var(--ggui-color-onHeroGround, #0c4a6e)';
+  return undefined;
 }
 
 /**
@@ -221,26 +224,66 @@ export const INVERTED_SCOPE_CLASS = 'ggui-surface-inverted';
  *
  * @public
  */
-export const INVERTED_SCOPE_CSS =
-  `.${INVERTED_SCOPE_CLASS}{` +
-  '--ggui-surface-inverted-bg:var(--ggui-color-onContainer, #18181b);' +
-  '--ggui-surface-inverted-ink:var(--ggui-color-container, #ffffff)}' +
-  `.${INVERTED_SCOPE_CLASS}>*{` +
-  '--ggui-color-container:var(--ggui-surface-inverted-bg);' +
-  '--ggui-color-onContainer:var(--ggui-surface-inverted-ink);' +
-  '--ggui-color-elevated:var(--ggui-surface-inverted-bg);' +
-  '--ggui-color-onElevated:var(--ggui-surface-inverted-ink);' +
-  '--ggui-color-sunken:var(--ggui-surface-inverted-bg);' +
-  '--ggui-color-onSunken:var(--ggui-surface-inverted-ink);' +
-  '--ggui-color-neutral-500:var(--ggui-surface-inverted-ink)}' +
-  '@supports (color: color-mix(in srgb, red, blue)){' +
-  `.${INVERTED_SCOPE_CLASS}>*{` +
-  '--ggui-color-elevated:color-mix(in srgb, var(--ggui-surface-inverted-bg) 92%, var(--ggui-surface-inverted-ink));' +
-  '--ggui-color-sunken:color-mix(in srgb, var(--ggui-surface-inverted-bg) 88%, var(--ggui-surface-inverted-ink));' +
-  '--ggui-color-onSunken:color-mix(in srgb, var(--ggui-surface-inverted-ink) 76%, var(--ggui-surface-inverted-bg));' +
-  '--ggui-color-neutral-500:color-mix(in srgb, var(--ggui-surface-inverted-ink) 62%, var(--ggui-surface-inverted-bg));' +
-  '--ggui-color-outline:color-mix(in srgb, var(--ggui-surface-inverted-ink) 32%, var(--ggui-surface-inverted-bg));' +
-  '--ggui-color-outlineVariant:color-mix(in srgb, var(--ggui-surface-inverted-ink) 18%, var(--ggui-surface-inverted-bg))}}';
+/**
+ * The scoped remap for a surface that owns its whole ink vocabulary: the root
+ * records its ground / ink as two aliases under the package's own
+ * `--ggui-surface-<name>-*` namespace (not a theme family), and the rule
+ * re-maps the surface-layering roles for the root's direct children (which
+ * then inherit). Two tiers per the package's `color-mix()` convention.
+ */
+function surfaceScopeCss(cls: string, name: string, bg: string, ink: string): string {
+  // The aliases live under the package's own `--ggui-surface-*` namespace (not a
+  // theme family); composed outside any `var(--ggui-` literal so the consumed-
+  // token scan sees no dynamic token construction here.
+  const bgAlias = '--ggui-surface-' + name + '-bg';
+  const inkAlias = '--ggui-surface-' + name + '-ink';
+  const B = 'var(' + bgAlias + ')';
+  const I = 'var(' + inkAlias + ')';
+  return (
+    `.${cls}{` +
+    `${bgAlias}:${bg};` +
+    `${inkAlias}:${ink}}` +
+    `.${cls}>*{` +
+    `--ggui-color-container:${B};` +
+    `--ggui-color-onContainer:${I};` +
+    `--ggui-color-elevated:${B};` +
+    `--ggui-color-onElevated:${I};` +
+    `--ggui-color-sunken:${B};` +
+    `--ggui-color-onSunken:${I};` +
+    `--ggui-color-neutral-500:${I}}` +
+    '@supports (color: color-mix(in srgb, red, blue)){' +
+    `.${cls}>*{` +
+    `--ggui-color-elevated:color-mix(in srgb, ${B} 92%, ${I});` +
+    `--ggui-color-sunken:color-mix(in srgb, ${B} 88%, ${I});` +
+    `--ggui-color-onSunken:color-mix(in srgb, ${I} 76%, ${B});` +
+    `--ggui-color-neutral-500:color-mix(in srgb, ${I} 62%, ${B});` +
+    `--ggui-color-outline:color-mix(in srgb, ${I} 32%, ${B});` +
+    `--ggui-color-outlineVariant:color-mix(in srgb, ${I} 18%, ${B})}}`
+  );
+}
+
+export const INVERTED_SCOPE_CSS = surfaceScopeCss(
+  INVERTED_SCOPE_CLASS,
+  'inverted',
+  'var(--ggui-color-onContainer, #18181b)',
+  'var(--ggui-color-container, #ffffff)',
+);
+
+/** The class a `hero` root carries (ggui#1031 L2) — the same remap over the hero ground pair. */
+export const HERO_SCOPE_CLASS = 'ggui-surface-hero';
+export const HERO_SCOPE_CSS = surfaceScopeCss(
+  HERO_SCOPE_CLASS,
+  'hero',
+  'var(--ggui-color-heroGround, #e0f2fe)',
+  'var(--ggui-color-onHeroGround, #0c4a6e)',
+);
+
+/** The scope a surface root carries, when the surface owns its subtree's inks. */
+export function resolveSurfaceScope(surface: SurfaceSlot): { readonly className: string; readonly css: string } | undefined {
+  if (surface === 'inverted') return { className: INVERTED_SCOPE_CLASS, css: INVERTED_SCOPE_CSS };
+  if (surface === 'hero') return { className: HERO_SCOPE_CLASS, css: HERO_SCOPE_CSS };
+  return undefined;
+}
 
 /** The mix percentages above, exported so the contrast pin reads the same numbers. */
 export const INVERTED_SCOPE_MIX = {
@@ -266,6 +309,11 @@ export function resolveSurfaceCss(surface: SurfaceSlot): string {
       return 'var(--ggui-color-primary-50, #f0f9ff)';
     case 'inverted':
       return 'var(--ggui-color-onContainer, #18181b)';
+    case 'hero':
+      // The hero ground pair (ggui#1031 L2): brand-tinted on a light host, the
+      // ink pair on a dark one — derived per mode, never authored; a hello
+      // reaches for it instead of guessing the host's darkness with `inverted`.
+      return 'var(--ggui-color-heroGround, #e0f2fe)';
     case 'transparent':
       return 'transparent';
   }

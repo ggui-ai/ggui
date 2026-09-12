@@ -100,8 +100,11 @@ function renderFreeBoilerplates(): string {
 // Re-recorded 2026-09-12 for ggui#1034: the Button `outline` variant's doc line (label in the
 // surface's on-colour, brand on the border) — doc text only, both arms, boilerplates unchanged.
 // Re-recorded 2026-09-12 for ggui#1035: the `loud` tone doc line (the theme's readable accent ink) — doc text only, both arms.
+// Re-recorded 2026-09-12 for ggui#1031 L2 (the hero ground): the Hero recipe names `surface="hero"`
+// (the one prompt line the pre-registration allows), the token docs gain the heroGround pair, the
+// primitives reference gains the `hero` surface — both arms, boilerplates unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '39a53d61c69aaef44bc733b35703f5f904e79d20d5aa8141e58c2cd81aa32154';
+  'bab0c02328d94c088c349a6ec2eebfb0e881b140405f94d998bdf75ef6ac0378';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -116,8 +119,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1034 (the Button `outline` doc line, see above).
 // Re-recorded 2026-09-12 for ggui#1035 (the `loud` doc line, see above).
 // Re-recorded 2026-09-12 for ggui#1036: the free prompt renders the consumed-token manifest, which grew by the tone container pairs Tag now reads.
+// Re-recorded 2026-09-12 for ggui#1031 L2 (the hero ground pair in the token docs + manifest).
 export const FREE_PROMPT_SHA256 =
-  '7a6f519bd980e42d5f644db04ac0c9cb5341e7d6d676eaf2a6047d29c8e042c9';
+  '2217c1f53088f43df109e4c4e870c1738579755e38a5b5330b43272f72ea1db2';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 
