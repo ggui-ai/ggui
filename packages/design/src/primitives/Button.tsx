@@ -42,7 +42,12 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   outline: {
     backgroundColor: 'transparent',
-    color: 'var(--ggui-color-primary-600, #0284c7)',
+    // A transparent control paints text on whatever ground it sits, so the
+    // label is the surface's own on-colour, never a brand-ladder stop
+    // (ggui#1034): `primary-600` as the label read mid-grey on a monochrome
+    // dark theme's ground — 2.41:1 / 3.5:1 on served reply chips. The brand
+    // stays on the border, where contrast is decorative.
+    color: 'var(--ggui-color-onContainer, #18181b)',
     border: '1px solid var(--ggui-color-primary-600, #0284c7)',
   },
   ghost: {

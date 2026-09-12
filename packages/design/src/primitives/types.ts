@@ -739,7 +739,8 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
    * Visual style. Maps to CSS variables:
    * - `'primary'` -- `var(--ggui-color-primary-600)` background, white text, no border
    * - `'secondary'` -- `var(--ggui-color-sunken)` background, `var(--ggui-color-onSunken)` text, no border
-   * - `'outline'` -- transparent background, `1px solid var(--ggui-color-primary-600)` border, primary-600 text
+   * - `'outline'` -- transparent background, `1px solid var(--ggui-color-primary-600)` border, label in the surface's
+   *   on-colour (`onContainer`) so it reads on any ground — the brand shows on the border, never as label ink on a dark theme
    * - `'ghost'` -- transparent background, `var(--ggui-color-onSunken)` text, no border
    * - `'danger'` -- `var(--ggui-color-error-600)` background, white text, no border
    * @default 'primary'
