@@ -32,13 +32,8 @@ const KNOWN_THEME_BLIND: ReadonlySet<string> = new Set([
   'compositions/CommentThread.tsx',
   'compositions/DataTable.tsx',
   'compositions/FileUploader.tsx',
-  'compositions/Footer.tsx',
-  'compositions/Header.tsx',
-  'compositions/Hero.tsx',
   'compositions/Modal.tsx',
-  'compositions/NavigationBar.tsx',
   'compositions/NotificationCenter.tsx',
-  'compositions/Sidebar.tsx',
 ]);
 
 function sourceFiles(): string[] {

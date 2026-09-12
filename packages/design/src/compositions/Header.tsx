@@ -1,5 +1,4 @@
 import type { HeaderProps } from './types';
-import { colors } from '../tokens/colors';
 import { shadow, zIndex } from '../tokens/spacing';
 
 /**
@@ -23,8 +22,8 @@ export function Header({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '12px 24px',
-        backgroundColor: background || colors.white,
-        borderBottom: bordered ? `1px solid ${colors.gray[200]}` : undefined,
+        backgroundColor: background || 'var(--ggui-color-container, #ffffff)',
+        borderBottom: bordered ? '1px solid var(--ggui-color-outlineVariant, #e5e7eb)' : undefined,
         ...(sticky && {
           position: 'sticky',
           top: 0,

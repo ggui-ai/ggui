@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { SidebarProps, SidebarItem as SidebarItemType } from './types';
-import { colors } from '../tokens/colors';
 import { radius } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
 import { Icon } from '../primitives/Icon';
@@ -43,8 +42,8 @@ function SidebarItem({
           paddingLeft: collapsed ? '10px' : `${12 + depth * 16}px`,
           border: 'none',
           borderRadius: radius.md,
-          backgroundColor: isActive ? colors.primary[50] : 'transparent',
-          color: item.disabled ? colors.gray[400] : isActive ? colors.primary[700] : colors.gray[700],
+          backgroundColor: isActive ? 'var(--ggui-color-primaryContainer, #f0f9ff)' : 'transparent',
+          color: item.disabled ? 'var(--ggui-color-neutral-400, #9ca3af)' : isActive ? 'var(--ggui-color-onPrimaryContainer, #0369a1)' : 'var(--ggui-color-onContainer, #374151)',
           fontSize: fontSize.sm,
           fontWeight: isActive ? fontWeight.medium : fontWeight.normal,
           textAlign: 'left',
@@ -114,8 +113,8 @@ export function Sidebar({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: colors.white,
-        borderRight: `1px solid ${colors.gray[200]}`,
+        backgroundColor: 'var(--ggui-color-container, #ffffff)',
+        borderRight: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
         transition: 'width 0.2s',
         overflow: 'hidden',
         ...style,
@@ -125,7 +124,7 @@ export function Sidebar({
         <div
           style={{
             padding: collapsed ? '16px 8px' : '16px',
-            borderBottom: `1px solid ${colors.gray[200]}`,
+            borderBottom: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
           }}
         >
           {header}
@@ -155,7 +154,7 @@ export function Sidebar({
         <div
           style={{
             padding: collapsed ? '16px 8px' : '16px',
-            borderTop: `1px solid ${colors.gray[200]}`,
+            borderTop: '1px solid var(--ggui-color-outlineVariant, #e5e7eb)',
           }}
         >
           {footer}

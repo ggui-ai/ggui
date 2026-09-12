@@ -1,5 +1,4 @@
 import type { HeroProps } from './types';
-import { colors } from '../tokens/colors';
 import { fontSize, fontWeight, lineHeight, letterSpacing } from '../tokens/typography';
 
 /**
@@ -38,7 +37,7 @@ export function Hero({
       className={className}
       style={{
         position: 'relative',
-        backgroundColor: background || (hasImage ? undefined : colors.white),
+        backgroundColor: background || (hasImage ? undefined : 'var(--ggui-color-container, #ffffff)'),
         ...(hasImage && {
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
@@ -87,7 +86,8 @@ export function Hero({
                 fontWeight: fontWeight.bold,
                 lineHeight: lineHeight.tight,
                 letterSpacing: letterSpacing.tight,
-                color: showOverlay ? colors.white : colors.gray[900],
+                // Over an image scrim the ink is white whatever the theme (the scrim is fixed dark); on the container it is the theme's ink (ggui#1036).
+                color: showOverlay ? '#ffffff' : 'var(--ggui-color-onContainer, #111827)',
                 margin: '0 0 16px 0',
                 padding: 0,
               }}
@@ -101,7 +101,7 @@ export function Hero({
               style={{
                 fontSize: sizeConfig.descSize,
                 lineHeight: lineHeight.relaxed,
-                color: showOverlay ? 'rgba(255,255,255,0.9)' : colors.gray[600],
+                color: showOverlay ? 'rgba(255,255,255,0.9)' : 'var(--ggui-color-onSunken, #4b5563)',
                 margin: '0 0 32px 0',
                 padding: 0,
                 maxWidth: align === 'center' ? '640px' : undefined,
@@ -129,8 +129,8 @@ export function Hero({
                     padding: '12px 28px',
                     fontSize: fontSize.base,
                     fontWeight: fontWeight.semibold,
-                    color: colors.white,
-                    backgroundColor: colors.primary[600],
+                    color: 'var(--ggui-color-onPrimary, #ffffff)',
+                    backgroundColor: 'var(--ggui-color-primary-600, #0284c7)',
                     border: 'none',
                     borderRadius: '8px',
                     cursor: 'pointer',
@@ -149,9 +149,9 @@ export function Hero({
                     padding: '12px 28px',
                     fontSize: fontSize.base,
                     fontWeight: fontWeight.semibold,
-                    color: showOverlay ? colors.white : colors.gray[700],
+                    color: showOverlay ? '#ffffff' : 'var(--ggui-color-onContainer, #374151)',
                     backgroundColor: 'transparent',
-                    border: `1px solid ${showOverlay ? 'rgba(255,255,255,0.3)' : colors.gray[300]}`,
+                    border: `1px solid ${showOverlay ? 'rgba(255,255,255,0.3)' : 'var(--ggui-color-outline, #d1d5db)'}`,
                     borderRadius: '8px',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
