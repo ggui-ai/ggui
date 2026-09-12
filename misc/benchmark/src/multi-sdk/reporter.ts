@@ -861,6 +861,8 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
               viewport: c.viewport,
               score: c.score,
               passed: c.passed,
+              contentHeight: c.contentHeight,
+              overflow: c.overflow,
             })),
           },
         }

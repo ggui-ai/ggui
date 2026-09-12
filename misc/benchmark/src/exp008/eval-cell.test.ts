@@ -232,6 +232,7 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
     expect(report.contractBehavior).toMatchObject({ status: 'ran', ok: true }); // weather-card has no actionSpec
     expect(report.runtimeProbeVerdict?.status).toBe('ran');
     expect(report.visualCanvases?.[0]?.artefact?.path).toBe('canvas-md.png');
+    expect(report.visualCanvases?.[0]).toMatchObject({ contentHeight: 900, overflow: false }); // #1032 — the fit is on the row
     expect(report.timestamp).toBe('2026-09-10T00:00:00.000Z');
     // the cell's own record
     expect(report.meta).toMatchObject({

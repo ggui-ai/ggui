@@ -255,7 +255,7 @@ export interface TierEvaluationDisplay {
   visual?: {
     score: number;
     passed: boolean;
-    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean }>;
+    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean }>;
   };
   issues: Array<{
     tier: number;
@@ -326,6 +326,10 @@ export interface VisualCanvasArtefactDisplay {
   viewport: { width: number; height: number };
   score: number;
   passed: boolean;
+  /** Document scroll height at this canvas (CSS px; `null` = unmeasurable). Absent on rows judged before ggui#1027. */
+  contentHeight?: number | null;
+  /** `contentHeight > viewport.height`. Absent on rows judged before ggui#1027. */
+  overflow?: boolean;
   /** Absent on the harness path (summary only); present when the EVAL task persisted the PNG. */
   artefact?: { path: string; sha256: string; bytes: number };
 }

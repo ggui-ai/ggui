@@ -30,6 +30,10 @@ export interface VisualCanvasArtefact {
   readonly viewport: Viewport;
   readonly score: number;
   readonly passed: boolean;
+  /** The document's scroll height at this canvas, CSS px; `null` when unmeasurable (ggui#1027 — the fit is on the receipt). */
+  readonly contentHeight: number | null;
+  /** `contentHeight > viewport.height`, judged per the evaluator's `canvasFitPolicy` (ggui#1027). */
+  readonly overflow: boolean;
   readonly artefact?: { readonly path: string; readonly sha256: string; readonly bytes: number };
 }
 
@@ -46,6 +50,8 @@ export function persistCanvasScreenshots(
       viewport: c.viewport,
       score: c.score,
       passed: c.passed,
+      contentHeight: c.contentHeight,
+      overflow: c.overflow,
       artefact: {
         path,
         sha256: createHash('sha256').update(c.screenshotPng).digest('hex'),
@@ -65,5 +71,12 @@ export function visualCanvasesFromTierEvaluation(
 ): VisualCanvasArtefact[] | undefined {
   const canvases = tierEvaluation?.visual?.canvases;
   if (!canvases || canvases.length === 0) return undefined;
-  return canvases.map((c) => ({ canvas: c.canvas, viewport: c.viewport, score: c.score, passed: c.passed }));
+  return canvases.map((c) => ({
+    canvas: c.canvas,
+    viewport: c.viewport,
+    score: c.score,
+    passed: c.passed,
+    contentHeight: c.contentHeight,
+    overflow: c.overflow,
+  }));
 }

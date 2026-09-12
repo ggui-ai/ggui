@@ -25,7 +25,7 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
       { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false },
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true });
+    expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true, contentHeight: 1000, overflow: false });
     expect(out[0]!.artefact?.path).toBe('canvas-md.png');
     expect(out[0]!.artefact?.bytes).toBe(png.length);
     expect(out[0]!.artefact?.sha256).toBe(createHash('sha256').update(png).digest('hex'));
@@ -45,7 +45,7 @@ describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summar
       issues: [], pass: [],
       visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false }] },
     };
-    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true }]);
+    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false }]);
   });
   it('is undefined without a per-canvas summary', () => {
     expect(visualCanvasesFromTierEvaluation(undefined)).toBeUndefined();
