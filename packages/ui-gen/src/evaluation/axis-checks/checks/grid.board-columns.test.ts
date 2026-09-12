@@ -126,6 +126,13 @@ describe("grid.board_columns_side_by_side", () => {
     expect(issues[0]!.fix).toContain("<Grid columns={{ base: 1, md: columns.length }}");
   });
 
+  it("with no contract and a prompt that never says board or kanban, the SOURCE's own columns map still names the board (the serving deployment's input shape cannot empty the check)", () => {
+    const bare = input(RED_STACKED, { contract: undefined, originalPrompt: "this week's work, laid out" });
+    expect(findStackedBoardColumns(bare)).toEqual([["columns", "Stack"]]);
+    expect(check.run(bare)).toHaveLength(1);
+    expect(check.run(input(TILE_GALLERY, { contract: undefined, originalPrompt: "this week's work, laid out" }))).toEqual([]);
+  });
+
   it("stays silent on a <Grid>-wrapped board, a <Row>-wrapped board (contract-less, prompt names the board) and a tile gallery", () => {
     expect(check.run(input(GREEN_GRID))).toEqual([]);
     expect(check.run(input(GREEN_ROW, { contract: undefined, originalPrompt: "a kanban board with lanes" }))).toEqual([]);

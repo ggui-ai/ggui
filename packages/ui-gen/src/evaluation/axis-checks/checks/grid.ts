@@ -20,6 +20,8 @@ import { mkIssue } from "../helpers.js";
 /** Prop names a board's column array goes by. */
 const BOARD_PROP_RX = /^(columns?|lanes?|stages?|lists?|buckets?|swimlanes?)$/i;
 const BOARD_PROMPT_RX = /\b(kanban|board)\b/i;
+/** The names a board's column array goes by, for the prompt and source paths. */
+const BOARD_NAMES = ["columns", "lanes", "stages", "lists", "buckets", "swimlanes"] as const;
 /** Layout primitives whose nesting decides side-by-side vs stacked. */
 const LAYOUT_TAG_RX = /<(\/?)(Grid|Row|Stack|Card|Box|Container|ScrollArea|div|section)\b([^<>]*?)>/g;
 const SIDE_BY_SIDE = new Set(["Grid", "Row"]);
@@ -71,12 +73,17 @@ export function enclosingLayoutTag(sourceCode: string, pos: number): string | un
 
 /** Board maps composed under something other than <Grid> / <Row>: `[propName, enclosing tag or "nothing"]`. */
 export function findStackedBoardColumns(input: AxisCheckInput): Array<readonly [string, string]> {
+  // Which array the board's columns are: the contract names it; else the prompt says
+  // "board" / "kanban"; else the SOURCE itself does — a JSX map over a board-shaped name
+  // (ggui#1046: on candidate 20 the check flagged every stacked source locally and none on
+  // the serving deployment, where the contract and prompt reach it in another shape; the
+  // source is the one input every path hands over verbatim).
   const declared = boardPropNames(input.contract);
   const names = declared.length > 0
     ? declared
     : BOARD_PROMPT_RX.test(input.originalPrompt)
-      ? ["columns", "lanes", "stages", "lists", "buckets", "swimlanes"]
-      : [];
+      ? [...BOARD_NAMES]
+      : BOARD_NAMES.filter((n) => jsxMapPositions(input.sourceCode, n).length > 0);
   const stacked: Array<readonly [string, string]> = [];
   for (const name of names) {
     for (const pos of jsxMapPositions(input.sourceCode, name)) {
