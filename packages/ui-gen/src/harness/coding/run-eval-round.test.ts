@@ -350,3 +350,85 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
     expect('visual' in round.evalResult!).toBe(false);
   });
 });
+
+/**
+ * Pin (ggui#1046 / #1053): the cap check runs BEFORE the feedback turn. With
+ * `maxEvalRounds: 1` a blocking tier-0 issue found in round 1 is recorded and
+ * the round breaks — no feedback turn is ever sent, so the fail is a report,
+ * never a fix. With 2 the same issue buys the feedback turn. This is the
+ * order that made a serving deployment's minting lane (round cap 1) leave a
+ * flagged board stacked while a local run (default 2) composed it — the
+ * lane's cap is a config choice, and this pin is the contract it chooses on.
+ */
+describe('runEvalRound — the round cap is checked before the feedback turn (ggui#1046 / #1053)', () => {
+  beforeEach(() => {
+    mockRunCheck.mockReset();
+  });
+
+  async function roundWithBlockingFail(maxEvalRounds: number) {
+    const classification = { ...classifyAxes({ contract: {}, prompt: 'a kanban board' }), riskTier: 'medium' as const };
+    const harness = createHarness({ classification, contract: {}, prompt: 'a kanban board' });
+    const workspace = new AgentWorkspace();
+    await workspace.init();
+    const compiledCode = 'export default function C() { return null; }';
+    workspace.write(compiledCode);
+    mockRunCheck.mockResolvedValue({
+      issues: [
+        {
+          tier: 0,
+          result: 'fail',
+          category: 'mode',
+          priority: 'P0',
+          subcategory: 'grid.board_columns_side_by_side',
+          description: 'The board\'s `columns` are composed under <Stack>.',
+          fix: 'Wrap the columns map in <Grid columns={{ base: 1, md: columns.length }}>.',
+        },
+      ],
+    });
+    const fakeLlmEvalMod: typeof realLlmEvaluator = {
+      ...realLlmEvaluator,
+      runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], inputTokens: 0, outputTokens: 0 }),
+    };
+    const evaluationAgent: AgentSpec = { provider: 'anthropic', model: 'claude-haiku-4-5' };
+    const ctx: EvalRoundContext = {
+      workspace,
+      harness,
+      contract: undefined,
+      userPrompt: 'a kanban board',
+      fixtureProps: undefined,
+      classification,
+      evaluationAgent,
+      visualEvalAgent: evaluationAgent,
+      visualEvaluation: undefined,
+      visualThreshold: 0.7,
+      qualityMode: 'fast',
+      maxEvalRounds,
+      costTracker: new CostTracker(null),
+      llmEvalMod: fakeLlmEvalMod,
+      visualMod: null,
+      preWarmPromise: undefined,
+    };
+    const input: EvalRoundInput = {
+      compiledCode,
+      evalRoundsUsed: 0,
+      preWarmedContext: undefined,
+      prevModeSubcats: new Set(),
+      prevFailFingerprints: new Set(),
+    };
+    return runEvalRound(ctx, input);
+  }
+
+  it('maxEvalRounds 1: the blocking tier-0 fail is recorded and the round BREAKS — no feedback turn', async () => {
+    const out = await roundWithBlockingFail(1);
+    expect(out.control).toBe('break');
+    expect(out.evalRoundsUsed).toBe(1);
+    expect(out.evalResult).toBeDefined();
+    expect(out.evalResult?.issues.some((i) => i.subcategory === 'grid.board_columns_side_by_side' && i.result === 'fail')).toBe(true);
+  });
+
+  it('maxEvalRounds 2: the same fail buys the feedback turn', async () => {
+    const out = await roundWithBlockingFail(2);
+    expect(out.control).toBe('feedback');
+    expect(out.evalRoundsUsed).toBe(1);
+  });
+});
