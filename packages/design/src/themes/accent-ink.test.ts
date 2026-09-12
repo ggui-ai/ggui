@@ -34,6 +34,10 @@ describe('accent ink reads on its surface (ggui#1035)', () => {
     expect(resolveToneCss('loud')).toBe('var(--ggui-color-link, var(--ggui-color-primary-500, #0ea5e9))');
   });
 
+  it('`emphasized` resolves through the readable accent (`link`) with the 700 stop beneath it (ggui#1039)', () => {
+    expect(resolveToneCss('emphasized')).toBe('var(--ggui-color-link, var(--ggui-color-primary-700, #0369a1))');
+  });
+
   it('a stated `link` is honoured verbatim; an unstated one is the first primary stop that clears 4.5:1 on the container, else the on-colour', () => {
     const base = getRawTheme('guuey-brand-v1', 'light')!;
     const stated = deriveThemeVariables({ ...base, color: { ...base.color, link: { $type: 'color', $value: '#123456' } } }, 'light');

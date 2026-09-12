@@ -33,7 +33,7 @@
  * | `default`     | `--ggui-color-onContainer`         | primary body text (most common)              |
  * | `muted`       | `--ggui-color-onSunken`            | secondary / metadata / captions             |
  * | `subtle`      | `--ggui-color-neutral-500`         | very-low-emphasis labels, hint text          |
- * | `emphasized`  | `--ggui-color-primary-700`         | accent text (branded label, tagline)         |
+ * | `emphasized`  | `--ggui-color-link` (700 beneath)  | accent text (branded label, tagline, eyebrow) — the theme's READABLE accent ink |
  * | `loud`        | `--ggui-color-link` (500 beneath)  | the strongest accent (call-to-action label) — the theme's READABLE accent ink |
  * | `success`     | `--ggui-color-success`             | success status text (semantic flat token)    |
  * | `warning`     | `--ggui-color-warning`             | warning status text (semantic flat token)    |
@@ -80,7 +80,12 @@ export function resolveToneCss(tone: ToneSlot): string {
       // Stays "barely visible" for hint-text usage but readable.
       return 'var(--ggui-color-neutral-500, #71717a)';
     case 'emphasized':
-      return 'var(--ggui-color-primary-700, #0369a1)';
+      // Accent TEXT reads through the theme's readable accent ink (ggui#1039 —
+      // the #1035 rule for every accent-text slot): the registry audit cleared
+      // the 700 stop on the registry's themes only; an app theme derived from a
+      // low-saturation brand puts its 700 mid-grey on a dark ground. The 700
+      // stop sits beneath it only for un-themed contexts.
+      return 'var(--ggui-color-link, var(--ggui-color-primary-700, #0369a1))';
     case 'loud':
       // Accent TEXT reads through the theme's readable accent ink (ggui#1035):
       // the bare 500 stop read 1.60:1 on the brand theme's light container.
