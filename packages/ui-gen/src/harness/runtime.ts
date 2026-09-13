@@ -24,7 +24,7 @@
 // directly to the coding agent in the system prompt — there is no
 // separate planner stage.
 
-import type { AppGenerationProfile } from "@ggui-ai/protocol";
+import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 import type { QualityConfig } from "../evaluation/types-public.js";
 import { DEFAULT_DESIGN_SYSTEM_DOCS } from "../design-system-docs.js";
 import { PRIMITIVES_DOCUMENTATION } from "../validation/index.js";
@@ -157,7 +157,7 @@ export function buildSystemPrompt(
   /** Rendering canvas class (`free` mode) — see `SystemPromptInputs.canvas`. */
   canvas?: CanvasClass,
   /** The app's generation profile (#991). */
-  profile?: AppGenerationProfile,
+  profile?: GenerationProfileInput,
 ): string {
   return buildSystemPromptSkeleton({
     userRequest,

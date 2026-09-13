@@ -12,7 +12,7 @@
 // poor visual hierarchy, missing whitespace.
 
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
-import type { AppGenerationProfile } from '@ggui-ai/protocol';
+import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import { build } from 'esbuild';
 import { getCssTokens } from '@ggui-ai/design/rendering';
 import { resolve, dirname } from 'path';
@@ -162,7 +162,7 @@ export interface VisualEvalContext {
   /** Design system CSS tokens */
   cssTokens?: string;
   /** The app's generation profile (#991) — judged relative to, never against. */
-  profile?: AppGenerationProfile;
+  profile?: GenerationProfileInput;
 }
 
 // ---------------------------------------------------------------------------

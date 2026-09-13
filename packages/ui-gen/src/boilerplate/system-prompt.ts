@@ -14,7 +14,7 @@
 // string — the skeleton still renders cleanly for OSS callers who don't
 // pass doc blocks.
 
-import type { AppGenerationProfile } from "@ggui-ai/protocol";
+import type { GenerationProfileInput } from "./styling-profile.js";
 import { buildStylingProfileSection, withStylingProfile } from "./styling-profile.js";
 import { resolveAppGadgets } from "@ggui-ai/protocol";
 import type {
@@ -129,7 +129,7 @@ export interface SystemPromptInputs {
    */
   canvas?: CanvasClass;
   /** The app's generation profile (#991) — one bounded section, both arms; absent = byte-identical. */
-  profile?: AppGenerationProfile;
+  profile?: GenerationProfileInput;
 }
 
 const SHELL_DESCRIPTIONS: Record<string, string> = {

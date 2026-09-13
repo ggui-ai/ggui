@@ -15,7 +15,7 @@
 // Same system prompt across all 7 calls → first call caches, 6 remaining hit cache.
 
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
-import type { AppGenerationProfile } from '@ggui-ai/protocol';
+import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import type {
   EvalIssue,
   EvalResult,
@@ -78,7 +78,7 @@ export interface LLMEvalContext {
    */
   designMode?: DesignMode;
   /** The app's generation profile (#991) — the judge reads the same text the coder was given. */
-  profile?: AppGenerationProfile;
+  profile?: GenerationProfileInput;
 }
 
 export interface LLMEvalConfig {
@@ -124,7 +124,7 @@ export interface EvalContext {
   /** See `LLMEvalContext.designMode`. */
   designMode?: DesignMode;
   /** See `LLMEvalContext.profile`. */
-  profile?: AppGenerationProfile;
+  profile?: GenerationProfileInput;
 }
 
 /**

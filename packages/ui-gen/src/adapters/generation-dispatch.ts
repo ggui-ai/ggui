@@ -59,7 +59,7 @@ import {
   type JsonObject,
 } from "@ggui-ai/protocol";
 import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
-import type { AppGenerationProfile } from "@ggui-ai/protocol";
+import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -182,7 +182,7 @@ export interface GenerationDispatchParams {
   /** Rendering canvas class for the `free` prompt — see `CreateHarnessInput.canvas`. */
   canvas?: CanvasClass;
   /** The app's generation profile (#991). */
-  profile?: AppGenerationProfile;
+  profile?: GenerationProfileInput;
 }
 
 /**

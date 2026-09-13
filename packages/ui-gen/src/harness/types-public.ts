@@ -18,7 +18,7 @@
 // types hub for the harness module. `AxisCheck` + `AxisCheckInput` live
 // in `@ggui-ai/ui-gen/evaluation`.
 
-import type { AppGenerationProfile } from "@ggui-ai/protocol";
+import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 import type { GadgetDescriptor, DataContract, JsonValue } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/axes.js";
 import type { EvalIssue, EvalTier, AxisCheck, RuntimeProbeStatus } from "../evaluation/types-public.js";
@@ -304,7 +304,7 @@ export interface Harness {
    */
   readonly designMode: DesignMode;
   /** The app's generation profile in force for this harness (#991), if any. */
-  readonly profile?: AppGenerationProfile;
+  readonly profile?: GenerationProfileInput;
 
   readonly how: HowLeg;
   readonly what: WhatLeg;
@@ -400,7 +400,7 @@ export type SystemPromptBuilder = (input: {
   /** Rendering canvas class (`free` mode) — see `CreateHarnessInput.canvas`. */
   readonly canvas?: CanvasClass;
   /** The app's generation profile (#991) — see `CreateHarnessInput.profile`. */
-  readonly profile?: AppGenerationProfile;
+  readonly profile?: GenerationProfileInput;
 }) => string;
 
 export interface CreateHarnessInput {
@@ -429,7 +429,7 @@ export interface CreateHarnessInput {
    * HOW leg renders as one bounded section and every judge reads under its
    * own frame. Absent = byte-identical prompts.
    */
-  readonly profile?: AppGenerationProfile;
+  readonly profile?: GenerationProfileInput;
   /**
    * Pre-resolved static harness policy. When omitted, `createHarness`
    * falls back to `DEFAULT_HARNESS_POLICY` from `@ggui-ai/ui-gen/policy`.

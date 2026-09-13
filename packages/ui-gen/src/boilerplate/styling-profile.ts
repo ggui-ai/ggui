@@ -45,15 +45,40 @@ export const STYLING_PROFILE_JUDGE_FRAME =
   "composition is not missing what its Direction leaves out; completeness, hierarchy, accessibility and " +
   "correctness are unchanged by it.";
 
+/**
+ * The profile as ui-gen RECEIVES it: the wire members plus the caller's
+ * resolution of `aesthetic` — the referenced preset's text. ui-gen never
+ * resolves the reference itself (the catalogue is the caller's data); a
+ * caller that cannot resolve it omits `aestheticBrief` and the other
+ * members still render. `effort` renders NO prompt text — it is read as
+ * dials (turn cap, eval rounds, bar, judge model, tier request), so the
+ * prompt is byte-identical under any level.
+ */
+export interface GenerationProfileInput extends AppGenerationProfile {
+  readonly aestheticBrief?: string;
+}
+
+/** Bound on the resolved aesthetic brief, in characters — the same order as `styling`'s, owned here. */
+export const AESTHETIC_BRIEF_MAX_CHARS = 2000;
+
 export interface SanitizedProfile {
   readonly styling: string;
   readonly density: string;
   readonly layout: string;
   readonly direction: string;
+  /** The resolved aesthetic brief — empty unless BOTH the reference and its text are present. */
+  readonly aesthetic: string;
+  /** `id@version` (or `id`) of the reference the brief resolves — the header the section and the caller's receipt share. */
+  readonly aestheticRef: string;
 }
 
 /** Sanitize one member: data in, bounded quotable text out. */
 export function sanitizeProfileMember(text: unknown, member: AppGenerationProfileMember): string {
+  return sanitizeProfileText(text, APP_GENERATION_PROFILE_BOUNDS[member]);
+}
+
+/** Sanitize one piece of profile text: data in, bounded quotable text out. */
+export function sanitizeProfileText(text: unknown, bound: number): string {
   if (typeof text !== "string") return "";
   const lines: string[] = [];
   let inFence = false;
@@ -67,46 +92,59 @@ export function sanitizeProfileMember(text: unknown, member: AppGenerationProfil
     lines.push(line);
   }
   let out = lines.join("\n").replace(/`/g, "");
-  const bound = APP_GENERATION_PROFILE_BOUNDS[member];
   if (out.length > bound) out = out.slice(0, bound) + STYLING_PROFILE_TRUNCATION_MARKER;
   return out;
 }
 
-export function sanitizeProfile(profile: AppGenerationProfile | undefined): SanitizedProfile {
+/** `id@version` (or `id`) of a resolved aesthetic reference; empty when the brief is absent. */
+export function aestheticRefLabel(profile: GenerationProfileInput | undefined): string {
+  const ref = profile?.aesthetic;
+  if (ref === undefined || sanitizeProfileText(profile?.aestheticBrief, AESTHETIC_BRIEF_MAX_CHARS).length === 0) return "";
+  return ref.version !== undefined ? `${ref.id}@${ref.version}` : ref.id;
+}
+
+export function sanitizeProfile(profile: GenerationProfileInput | undefined): SanitizedProfile {
+  const aestheticRef = aestheticRefLabel(profile);
   return {
     styling: sanitizeProfileMember(profile?.styling, "styling"),
     density: sanitizeProfileMember(profile?.density, "density"),
     layout: sanitizeProfileMember(profile?.layout, "layout"),
     direction: sanitizeProfileMember(profile?.direction, "direction"),
+    aesthetic: aestheticRef.length > 0 ? sanitizeProfileText(profile?.aestheticBrief, AESTHETIC_BRIEF_MAX_CHARS) : "",
+    aestheticRef,
   };
 }
 
 /** True when at least one member survives sanitization. */
-export function hasProfile(profile: AppGenerationProfile | undefined): boolean {
+export function hasProfile(profile: GenerationProfileInput | undefined): boolean {
   const p = sanitizeProfile(profile);
-  return p.styling.length > 0 || p.density.length > 0 || p.layout.length > 0 || p.direction.length > 0;
+  return p.styling.length > 0 || p.density.length > 0 || p.layout.length > 0 || p.direction.length > 0 || p.aesthetic.length > 0;
 }
 
 /** The quoted members only — shared by the system prompt and both judges. */
-export function renderProfileQuote(profile: AppGenerationProfile | undefined): string {
+export function renderProfileQuote(profile: GenerationProfileInput | undefined): string {
   const p = sanitizeProfile(profile);
   const parts: string[] = [];
   if (p.styling.length > 0) parts.push(p.styling.split("\n").map((line) => `> ${line}`).join("\n"));
   if (p.density.length > 0) parts.push(`> **Density**: ${p.density}`);
   if (p.layout.length > 0) parts.push(`> **Layout**: ${p.layout}`);
   if (p.direction.length > 0) parts.push(`> **Direction**: ${p.direction}`);
+  if (p.aesthetic.length > 0) {
+    const [first, ...rest] = p.aesthetic.split("\n");
+    parts.push([`> **Aesthetic** (\`${p.aestheticRef}\`): ${first ?? ""}`, ...rest.map((line) => `> ${line}`)].join("\n"));
+  }
   return parts.join("\n>\n");
 }
 
 /** The system-prompt section; empty string when there is nothing to say. */
-export function buildStylingProfileSection(profile: AppGenerationProfile | undefined): string {
+export function buildStylingProfileSection(profile: GenerationProfileInput | undefined): string {
   const quote = renderProfileQuote(profile);
   if (quote.length === 0) return "";
   return [STYLING_PROFILE_HEADING, "", STYLING_PROFILE_FRAME, "", quote].join("\n");
 }
 
 /** The judges' block; empty string when there is nothing to say. */
-export function buildStylingProfileJudgeBlock(profile: AppGenerationProfile | undefined): string {
+export function buildStylingProfileJudgeBlock(profile: GenerationProfileInput | undefined): string {
   const quote = renderProfileQuote(profile);
   if (quote.length === 0) return "";
   return ["## Declared styling profile", "", STYLING_PROFILE_JUDGE_FRAME, "", quote].join("\n");

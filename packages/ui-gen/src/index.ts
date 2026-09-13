@@ -82,3 +82,4 @@ export type {
 // go through this helper instead of `new Anthropic(...)` so future
 // header / baseURL tweaks land in one place.
 export { createAnthropicClient } from './adapters/claude/client.js';
+export { AESTHETIC_BRIEF_MAX_CHARS, type GenerationProfileInput } from './boilerplate/styling-profile.js';
