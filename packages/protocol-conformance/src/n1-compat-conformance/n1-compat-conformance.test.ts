@@ -9,7 +9,11 @@ import { N1_COMPAT_CASES, runN1CompatConformance } from './index.js';
 // release's sha, accepted by today's parsers. A case failing = a receiver broke N−1.
 describe('n1-compat conformance (ggui#1014 §3.6)', () => {
   it('ships the catalog — every case names its release sha and expects acceptance', () => {
-    expect(N1_COMPAT_CASES.map((c) => c.name)).toEqual(['release-2-app-theme-v2', 'release-2-render-meta']);
+    expect(N1_COMPAT_CASES.map((c) => c.name)).toEqual([
+      'release-2-app-theme-v2',
+      'release-2-render-meta',
+      'release-2-generation-profile',
+    ]);
     for (const c of N1_COMPAT_CASES) {
       expect(c.release.sha).toMatch(/^[0-9a-f]{9,40}$/);
       expect(c.expect).toBe('accepted');
@@ -23,7 +27,7 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
 
   it('is on the package surface — root barrel and its own exports subpath', () => {
     expect(typeof root.runN1CompatConformance).toBe('function');
-    expect(root.N1_COMPAT_CASES.length).toBe(2);
+    expect(root.N1_COMPAT_CASES.length).toBe(3);
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string; default?: string }>;
     };

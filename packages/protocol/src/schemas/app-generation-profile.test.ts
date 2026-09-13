@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   APP_GENERATION_PROFILE_BOUNDS,
+  APP_GENERATION_PROFILE_EFFORTS,
   appGenerationProfileRefusalBodySchema,
   appGenerationProfileSchema,
 } from './app-generation-profile';
@@ -83,5 +84,69 @@ describe('appGenerationProfileRefusalBodySchema (ggui#991)', () => {
     expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: {} }).success).toBe(false);
     expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { styling: 'bad' } }).success).toBe(false);
     expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { tone: 'too-long' } }).success).toBe(false);
+  });
+});
+
+// ggui#1058 (A2 contract half) — `effort`: one name over the reader's dials; the
+// wire carries ONLY the name. Absent ⇒ the deployment's default (today's fixed
+// options, byte-identical prompt); an unavailable level is REFUSED at the door
+// (`{ profile: { effort: 'unavailable' } }`), never downgraded.
+describe('appGenerationProfileSchema.effort (ggui#1058)', () => {
+  it('names the five levels exactly, in order, and accepts each', () => {
+    expect(APP_GENERATION_PROFILE_EFFORTS).toEqual(['low', 'medium', 'high', 'xhigh', 'ultra']);
+    for (const effort of APP_GENERATION_PROFILE_EFFORTS) {
+      expect(appGenerationProfileSchema.parse({ effort })).toEqual({ effort });
+    }
+  });
+
+  it('refuses a level outside the vocabulary and a non-string, naming the member', () => {
+    for (const bad of ['max', 'HIGH', '', 3, null]) {
+      const r = appGenerationProfileSchema.safeParse({ effort: bad });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual(['effort']);
+    }
+  });
+
+  it('is absent-safe: `{}` and the four text members alone parse without an effort', () => {
+    expect(appGenerationProfileSchema.parse({ styling: 'x' })).toEqual({ styling: 'x' });
+    expect('effort' in appGenerationProfileSchema.parse({})).toBe(false);
+  });
+
+  it('the refusal body can name an unavailable level, member-scoped', () => {
+    expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { effort: 'unavailable' } }).success).toBe(true);
+    expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { effort: 'too-long' } }).success).toBe(true);
+    expect(appGenerationProfileRefusalBodySchema.safeParse({ profile: { effort: 'downgraded' } }).success).toBe(false);
+  });
+
+  it('is representable as JSON Schema with the enum surfaced', () => {
+    const js = z.toJSONSchema(appGenerationProfileSchema) as { properties?: Record<string, { enum?: string[] }> };
+    expect(js.properties?.['effort']?.enum).toEqual(['low', 'medium', 'high', 'xhigh', 'ultra']);
+  });
+});
+
+// ggui#1058 — `aesthetic`: a reference into the aesthetic/variance catalogue
+// (data, elsewhere). The door validates GRAMMAR only; resolution is at read
+// and an unresolvable reference is NON-FATAL (`profile_aesthetic_unresolved`).
+describe('appGenerationProfileSchema.aesthetic (ggui#1058)', () => {
+  it('accepts a slug id with an optional version and keeps both verbatim', () => {
+    expect(appGenerationProfileSchema.parse({ aesthetic: { id: 'hero-fill' } })).toEqual({ aesthetic: { id: 'hero-fill' } });
+    expect(appGenerationProfileSchema.parse({ aesthetic: { id: 'a1', version: '2026-09-13.1' } })).toEqual({
+      aesthetic: { id: 'a1', version: '2026-09-13.1' },
+    });
+  });
+
+  it('refuses a non-slug id, a missing id, an unknown key, and a version with whitespace or over 32 chars', () => {
+    for (const bad of [{ id: 'Hero Fill' }, { id: '-lead' }, { id: 'a' }, { id: 'x'.repeat(65) }, { version: '1' }, { id: 'hero', tone: 'warm' }, { id: 'hero', version: 'v 1' }, { id: 'hero', version: 'v'.repeat(33) }]) {
+      const r = appGenerationProfileSchema.safeParse({ aesthetic: bad });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path[0]).toBe('aesthetic');
+    }
+  });
+
+  it('is representable as JSON Schema with the id pattern surfaced', () => {
+    const js = z.toJSONSchema(appGenerationProfileSchema) as {
+      properties?: Record<string, { properties?: Record<string, { pattern?: string }> }>;
+    };
+    expect(js.properties?.['aesthetic']?.properties?.['id']?.pattern).toBe('^[a-z0-9][a-z0-9-]{1,63}$');
   });
 });

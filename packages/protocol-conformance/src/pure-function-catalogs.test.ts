@@ -345,7 +345,7 @@ describe('n1-compat catalog fold (ggui#1014 §3.6)', () => {
   });
 
   it('grades every previous-release payload on every run — no input to supply, never skipped', async () => {
-    expect(N1_ROWS).toHaveLength(2);
+    expect(N1_ROWS).toHaveLength(3);
     const result = await run({ only: N1_ROWS });
     expect(result.failed).toEqual([]);
     expect(result.skipped).toEqual([]);

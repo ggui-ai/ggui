@@ -6,6 +6,16 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Generator profile widened (2026-09-13, additive, ggui#1058 — MINOR, same
+ * draft stamp; founder's A2 "profile OVER engine"). Two optional members on
+ * `appGenerationProfileSchema`: `effort` (one of five names — the wire
+ * carries the name, the reader owns the dials table; an unavailable level
+ * is refused `{ profile: { effort: 'unavailable' } }`, never downgraded) and
+ * `aesthetic { id, version? }` (a grammar-checked reference into the
+ * deployment's catalogue, resolved at read, unresolvable = non-fatal +
+ * `profile_aesthetic_unresolved`). The kit's `n1-compat` catalog gains the
+ * `generation-profile` wire (Release 2's three-member payload accepted).
+ * --------------------------------------------------------------------
  * Generator profile member `direction` (2026-09-11, additive, ggui#1027
  * follower on the ggui#991 slot — MINOR, same draft stamp). A fourth
  * optional member on `appGenerationProfileSchema`: one variant's

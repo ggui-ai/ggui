@@ -66,19 +66,56 @@ function profileText(member: AppGenerationProfileMember) {
     .refine((s) => !hasForbiddenControlChars(s), `generation.profile.${member} contains control characters`);
 }
 
+/**
+ * The effort level (ggui#1058, founder's A2): ONE name over the reader's
+ * dials (model tier × turn cap × eval rounds × visual bar × judge model).
+ * The wire carries only the name; the name → dials table is the reader's
+ * (versioned by it), so a price line can move without a wire change.
+ * Absent ⇒ the deployment's default level, which MUST equal today's fixed
+ * options. A level the deployment has not enabled is REFUSED at the write
+ * door (`{ profile: { effort: 'unavailable' } }`) — never downgraded.
+ */
+export const APP_GENERATION_PROFILE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'ultra'] as const;
+export type AppGenerationProfileEffort = (typeof APP_GENERATION_PROFILE_EFFORTS)[number];
+
+/** Catalogue entry ids are slugs: trace-line and path safe, 2–64 chars. */
+export const APP_GENERATION_AESTHETIC_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+/** A preset content version: no whitespace, ≤ 32 chars. */
+export const APP_GENERATION_AESTHETIC_VERSION_RE = /^[A-Za-z0-9._-]{1,32}$/;
+
+/**
+ * A reference INTO the aesthetic/variance catalogue (data, kept by the
+ * deployment, never inside the generator): `id` is the catalogue entry — the
+ * same slug a draft carries as its variance `aesthetic` when both are
+ * present — and `version` pins the preset's content so a preset can be
+ * re-authored without re-keying served takes. The door validates GRAMMAR
+ * only; resolution happens at read, and an unresolvable reference is
+ * NON-FATAL: the generator proceeds without the aesthetic section and
+ * reports `profile_aesthetic_unresolved`.
+ */
+export const appGenerationAestheticRefSchema = z
+  .object({
+    id: z.string().regex(APP_GENERATION_AESTHETIC_ID_RE, 'aesthetic id must be a slug (2–64 chars, lowercase, digits, dashes)'),
+    version: z.string().regex(APP_GENERATION_AESTHETIC_VERSION_RE, 'aesthetic version: 1–32 chars, no whitespace').optional(),
+  })
+  .strict();
+export type AppGenerationAestheticRef = z.infer<typeof appGenerationAestheticRefSchema>;
+
 export const appGenerationProfileSchema = z
   .object({
     styling: profileText('styling').optional(),
     density: profileText('density').optional(),
     layout: profileText('layout').optional(),
     direction: profileText('direction').optional(),
+    effort: z.enum(APP_GENERATION_PROFILE_EFFORTS).optional(),
+    aesthetic: appGenerationAestheticRefSchema.optional(),
   })
   .strict();
 
 export type AppGenerationProfile = z.infer<typeof appGenerationProfileSchema>;
 
 /** Why the door refused one member — one reason per member, at least one member named. */
-export const appGenerationProfileRefusalReasonSchema = z.enum(['too-long', 'not-text', 'control-chars']);
+export const appGenerationProfileRefusalReasonSchema = z.enum(['too-long', 'not-text', 'control-chars', 'unavailable']);
 export type AppGenerationProfileRefusalReason = z.infer<typeof appGenerationProfileRefusalReasonSchema>;
 
 export const appGenerationProfileRefusalBodySchema = z
@@ -89,6 +126,8 @@ export const appGenerationProfileRefusalBodySchema = z
         density: appGenerationProfileRefusalReasonSchema.optional(),
         layout: appGenerationProfileRefusalReasonSchema.optional(),
         direction: appGenerationProfileRefusalReasonSchema.optional(),
+        effort: appGenerationProfileRefusalReasonSchema.optional(),
+        aesthetic: appGenerationProfileRefusalReasonSchema.optional(),
       })
       .strict()
       .refine((p) => Object.keys(p).length > 0, 'a profile refusal names at least one member'),

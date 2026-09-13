@@ -1,0 +1,16 @@
+{
+  "name": "release-2-generation-profile",
+  "description": "The app's `generation.profile` exactly as ggui Release 2 (24aacf8e2) wrote it through the app-config door \u2014 the three text members styling / density / layout (direction, effort and aesthetic came later). Today's appGenerationProfileSchema MUST accept it (VERSION-POLICY \u00a73.6).",
+  "release": {
+    "label": "ggui Release 2",
+    "sha": "24aacf8e2",
+    "pairedWith": "guuey 1.5 ceb3f59e9"
+  },
+  "wire": "generation-profile",
+  "payload": {
+    "styling": "Editorial, warm neutrals; serif display, generous whitespace.",
+    "density": "comfortable",
+    "layout": "dashboard: KPIs on top, table below"
+  },
+  "expect": "accepted"
+}

@@ -11,7 +11,7 @@
  * Pure-function catalog: no transport, no adopter input — graded on every
  * `runConformance()` and by the kit's own unit lane.
  */
-import { appThemeSchema } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeSchema } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
@@ -19,9 +19,10 @@ import {
 
 import release2AppThemeV2 from './cases/release-2-app-theme-v2.json' with { type: 'json' };
 import release2RenderMeta from './cases/release-2-render-meta.json' with { type: 'json' };
+import release2GenerationProfile from './cases/release-2-generation-profile.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'render-meta'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'render-meta', 'generation-profile'] as const;
 export type N1CompatWire = (typeof N1_COMPAT_WIRES)[number];
 
 export interface N1CompatRelease {
@@ -85,13 +86,20 @@ function n1CompatCase(raw: unknown): N1CompatCase {
   };
 }
 
-export const N1_COMPAT_CASES: readonly N1CompatCase[] = [release2AppThemeV2, release2RenderMeta].map(n1CompatCase);
+export const N1_COMPAT_CASES: readonly N1CompatCase[] = [release2AppThemeV2, release2RenderMeta, release2GenerationProfile].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
   const r = appThemeSchema.safeParse(payload);
   return r.success
     ? { pass: true, detail: 'appThemeSchema: accepted' }
     : { pass: false, detail: `appThemeSchema refused the previous release's theme: ${r.error.issues.map((i) => i.message).join('; ')}` };
+}
+
+function gradeGenerationProfile(payload: unknown): { pass: boolean; detail: string } {
+  const r = appGenerationProfileSchema.safeParse(payload);
+  return r.success
+    ? { pass: true, detail: 'appGenerationProfileSchema: accepted' }
+    : { pass: false, detail: `appGenerationProfileSchema refused the previous release's profile: ${r.error.issues.map((i) => i.message).join('; ')}` };
 }
 
 function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
@@ -110,7 +118,8 @@ function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
 /** Grade every N−1 case against the protocol as shipped. */
 export function runN1CompatConformance(): readonly N1CompatResult[] {
   return N1_COMPAT_CASES.map((c) => {
-    const graded = c.wire === 'app-theme' ? gradeAppTheme(c.payload) : gradeRenderMeta(c.payload);
+    const graded =
+      c.wire === 'app-theme' ? gradeAppTheme(c.payload) : c.wire === 'render-meta' ? gradeRenderMeta(c.payload) : gradeGenerationProfile(c.payload);
     return { name: c.name, pass: graded.pass, detail: `${c.release.label} (${c.release.sha}) → ${graded.detail}` };
   });
 }
