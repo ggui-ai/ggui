@@ -17,7 +17,7 @@
  * read doors validate shape only.
  */
 import { consumedTokenManifest } from './consumed-tokens';
-import { hexToOklch } from './derive-theme-variables';
+import { completeThemeVariables, hexToOklch } from './derive-theme-variables';
 
 /**
  * Manifest names no projection is obliged to carry — consumption-site
@@ -81,7 +81,16 @@ export function validateOverlayCoverage(
   const floor = new Set(excluded);
   const manifest = new Set(manifestTokens.filter((t) => !floor.has(t)));
   const keys = new Set(Object.keys(overlay));
-  const uncovered = [...manifest].filter((t) => !keys.has(t)).sort();
+  // Coverage is judged AFTER completion: a manifest name the renderer
+  // derives from this overlay (`completeThemeVariables` — the same
+  // completion `composeThemeCss` runs before painting) is covered, so a
+  // payload the renderer paints in full is never refused for not
+  // carrying what the renderer would have derived. The derivable SET is
+  // the same in both modes (only the values differ), so one completion
+  // answers the question of names. `unknown` stays a judgement on the
+  // RAW keys — a projected name nothing reads is still the projector's bug.
+  const covered = new Set(Object.keys(completeThemeVariables(overlay, 'light')));
+  const uncovered = [...manifest].filter((t) => !covered.has(t)).sort();
   const unknown = [...keys].filter((k) => !manifest.has(k) && !floor.has(k)).sort();
   return { uncovered, unknown, warnings: rampWarnings(overlay) };
 }

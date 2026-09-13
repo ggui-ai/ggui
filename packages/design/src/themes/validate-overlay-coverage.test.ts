@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateOverlayCoverage, NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
-import { deriveThemeVariables } from './derive-theme-variables';
+import { completeThemeVariables, deriveThemeVariables } from './derive-theme-variables';
+import { darkTheme } from './defaults/dark';
 import { consumedTokenManifest } from './consumed-tokens';
 import { lightTheme } from './defaults/light';
 
@@ -41,5 +42,62 @@ describe('validateOverlayCoverage', () => {
     const r = validateOverlayCoverage({ '--ggui-color-a': '#000' }, ['--ggui-color-a', '--ggui-color-b'], ['--ggui-color-b']);
     expect(r).toEqual({ uncovered: [], unknown: [], warnings: [] });
     expect(consumedTokenManifest.length).toBeGreaterThan(0);
+  });
+});
+
+// The roles the renderer DERIVES at paint time (the hero pair, the inverse
+// family, the per-family container pairs). A projector from the previous
+// release never sent them; the door must not refuse what the renderer
+// completes.
+const DERIVED_AT_RENDER = [
+  '--ggui-color-errorContainer',
+  '--ggui-color-heroGround',
+  '--ggui-color-heroLink',
+  '--ggui-color-heroOutline',
+  '--ggui-color-infoContainer',
+  '--ggui-color-inverseLink',
+  '--ggui-color-inverseOutline',
+  '--ggui-color-onErrorContainer',
+  '--ggui-color-onHeroGround',
+  '--ggui-color-onInfoContainer',
+  '--ggui-color-onInverted',
+  '--ggui-color-onPrimaryContainer',
+  '--ggui-color-onSuccessContainer',
+  '--ggui-color-onWarningContainer',
+  '--ggui-color-primaryContainer',
+  '--ggui-color-successContainer',
+  '--ggui-color-warningContainer',
+] as const;
+
+function previousReleaseOverlay(mode: 'light' | 'dark'): Record<string, string> {
+  const full = { ...deriveThemeVariables(mode === 'light' ? lightTheme : darkTheme, mode) } as Record<string, string>;
+  for (const name of DERIVED_AT_RENDER) delete full[name];
+  return full;
+}
+
+describe('validateOverlayCoverage — coverage is judged after completion (N−1: the previous release\'s projection)', () => {
+  it.each(['light', 'dark'] as const)('%s: an overlay without the render-derived roles is fully covered', (mode) => {
+    const overlay = previousReleaseOverlay(mode);
+    for (const name of DERIVED_AT_RENDER) expect(overlay[name]).toBeUndefined();
+    const r = validateOverlayCoverage(overlay);
+    expect(r.uncovered).toEqual([]);
+    expect(r.unknown).toEqual([]);
+  });
+
+  it('the derivable set is the same in both modes — one completion answers the question of names', () => {
+    const overlay = previousReleaseOverlay('light');
+    const light = Object.keys(completeThemeVariables(overlay, 'light')).sort();
+    const dark = Object.keys(completeThemeVariables(overlay, 'dark')).sort();
+    expect(light).toEqual(dark);
+    for (const name of DERIVED_AT_RENDER) expect(light).toContain(name);
+  });
+
+  it('completion needs its base: without `container` nothing derives, and the base role is reported beside the derived ones', () => {
+    const overlay = previousReleaseOverlay('light');
+    delete overlay['--ggui-color-container'];
+    const r = validateOverlayCoverage(overlay);
+    expect(r.uncovered).toContain('--ggui-color-container');
+    expect(r.uncovered).toContain('--ggui-color-heroGround');
+    expect(r.unknown).toEqual([]);
   });
 });
