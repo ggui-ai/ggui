@@ -314,6 +314,10 @@ export async function mountRender(
       ...(currentOpts.cssOverrides !== undefined
         ? { cssOverrides: currentOpts.cssOverrides }
         : {}),
+      // The host's canvas is the chrome (ggui#1041): `fit` MUST cross this
+      // boundary like every other compose option — ggui#1073 shipped
+      // without it, and every served hello composed as an inline card.
+      ...(currentOpts.fit !== undefined ? { fit: currentOpts.fit } : {}),
       ...(currentOpts.onError !== undefined ? { onError: currentOpts.onError } : {}),
       renderWrapper: wrapInScopedProvider,
     });
@@ -388,6 +392,7 @@ export async function mountRender(
           ...(next.appTheme !== undefined ? { appTheme: next.appTheme } : {}),
           ...(next.hostPalette !== undefined ? { hostPalette: next.hostPalette } : {}),
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
+          ...(next.fit !== undefined ? { fit: next.fit } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
           renderWrapper: wrapInScopedProvider,
         });
