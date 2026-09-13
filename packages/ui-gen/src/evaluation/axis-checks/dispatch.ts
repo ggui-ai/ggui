@@ -6,7 +6,7 @@ import type { DataContract } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { EvalIssue } from "../types-public.js";
 import { REGISTRY } from "./registry.js";
-import { matches, type AxisCheckInput } from "./types.js";
+import { matches, type AxisCheck, type AxisCheckInput } from "./types.js";
 import { axisCheckTraceEnabled } from "./helpers.js";
 import { createHash } from "node:crypto";
 import type { DesignMode } from "../../design-mode.js";
@@ -24,42 +24,66 @@ export function runAxisChecks(
   classification: Classification,
   input: RunAxisChecksInput,
 ): EvalIssue[] {
-  if (input.compiledCode === null) {
-    if (axisCheckTraceEnabled()) {
-      const line: AxisCheckTrace = { ...traceFacts(classification, input), matched: [], issues: [], note: "compiledCode null — no check ran" };
-      console.log(JSON.stringify({ axisCheckTrace: line }));
-    }
-    return [];
-  }
-
-  const axisInput: AxisCheckInput = {
+  const facts: AxisTraceFacts = {
     sourceCode: input.sourceCode,
-    compiledCode: input.compiledCode,
     ...(input.contract !== undefined ? { contract: input.contract } : {}),
     originalPrompt: input.originalPrompt,
     classification,
     ...(input.designMode !== undefined ? { designMode: input.designMode } : {}),
   };
+  if (input.compiledCode === null) {
+    traceAxisChecksSkipped(facts, "compiledCode null — no check ran");
+    return [];
+  }
+  const axisInput: AxisCheckInput = { ...facts, compiledCode: input.compiledCode };
+  return runGatedAxisChecks(
+    REGISTRY.filter((check) => matches(classification.vector, check)),
+    axisInput,
+  ).issues;
+}
 
+export interface AxisRunResult {
+  readonly issues: EvalIssue[];
+  /** Check ids run, in registry order, each once. */
+  readonly firedIds: string[];
+}
+
+/**
+ * Run a PRE-GATED list of checks once each — the one runner the served
+ * loop (`run-check.ts`, over the harness's pre-filtered `axisChecks`) and
+ * `runAxisChecks` (gate + run) share, so the ggui#1046 trace line prints on
+ * both paths.
+ */
+export function runGatedAxisChecks(checks: readonly AxisCheck[], input: AxisCheckInput): AxisRunResult {
   const issues: EvalIssue[] = [];
-  const firedIds = new Set<string>();
-  for (const check of REGISTRY) {
-    if (!matches(classification.vector, check)) continue;
-    // Dedup by id — a check may be registered under multiple gates.
-    if (firedIds.has(check.id)) continue;
-    firedIds.add(check.id);
-    issues.push(...check.run(axisInput));
+  const firedIds: string[] = [];
+  const seen = new Set<string>();
+  for (const check of checks) {
+    if (seen.has(check.id)) continue;
+    seen.add(check.id);
+    firedIds.push(check.id);
+    issues.push(...check.run(input));
   }
   if (axisCheckTraceEnabled()) {
     const line: AxisCheckTrace = {
-      ...traceFacts(classification, input),
+      ...traceFacts(input),
       matched: [...firedIds],
       issues: issues.map((i) => ({ id: i.subcategory ?? i.category, result: i.result })),
     };
     console.log(JSON.stringify({ axisCheckTrace: line }));
   }
-  return issues;
+  return { issues, firedIds };
 }
+
+/** The dispatcher's line for a round where no check could run (a null compile), flag-gated like the rest. */
+export function traceAxisChecksSkipped(facts: AxisTraceFacts, note: string): void {
+  if (!axisCheckTraceEnabled()) return;
+  const line: AxisCheckTrace = { ...traceFacts(facts), matched: [], issues: [], note };
+  console.log(JSON.stringify({ axisCheckTrace: line }));
+}
+
+/** The input facts a round's verdict is built from — `AxisCheckInput` minus the compile. */
+export type AxisTraceFacts = Omit<AxisCheckInput, "compiledCode">;
 
 /** One trace line per round (ggui#1046): the input facts a verdict was built from, the gates that matched, the issues that came out. */
 export interface AxisCheckTrace {
@@ -74,13 +98,13 @@ export interface AxisCheckTrace {
   readonly note?: string;
 }
 
-function traceFacts(classification: Classification, input: RunAxisChecksInput): Omit<AxisCheckTrace, "matched" | "issues"> {
+function traceFacts(input: AxisTraceFacts): Omit<AxisCheckTrace, "matched" | "issues"> {
   const propsSpec = input.contract?.propsSpec;
   return {
     sourceSha256: createHash("sha256").update(input.sourceCode, "utf8").digest("hex"),
     originalPrompt: input.originalPrompt,
     designMode: input.designMode ?? "constrained",
-    classification: classification.vector,
+    classification: input.classification.vector,
     propsSpecKeys: Object.keys(propsSpec ?? {}),
     propsSpecPropertyKeys: Object.keys(propsSpec?.properties ?? {}),
   };

@@ -22,6 +22,7 @@ import {
   newValidatorTraceId,
   truncateSourceForTrace,
 } from "./harness/validator-trace-sink.js";
+import { runGatedAxisChecks, traceAxisChecksSkipped } from "./evaluation/axis-checks/dispatch.js";
 
 export interface RunCheckInput {
   readonly sourceCode: string;
@@ -66,6 +67,10 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
   const startedAt = Date.now();
 
   if (compiledCode === null) {
+    traceAxisChecksSkipped(
+      { sourceCode, contract, originalPrompt: prompt, classification: harness.classification, designMode: harness.designMode },
+      "compiledCode null — no check ran",
+    );
     const result: CheckResult = {
       issues: [],
       axisIssueCount: 0,
@@ -115,16 +120,11 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
     classification: harness.classification,
     designMode: harness.designMode,
   };
-  let axisIssueCount = 0;
-  const seenAxisIds = new Set<string>();
-  for (const axisCheck of check.axisChecks) {
-    if (seenAxisIds.has(axisCheck.id)) continue;
-    seenAxisIds.add(axisCheck.id);
-    firedIds.push(axisCheck.id);
-    const axisIssues = axisCheck.run(axisInput);
-    issues.push(...axisIssues);
-    axisIssueCount += axisIssues.length;
-  }
+  // The one runner `runAxisChecks` shares (ggui#1046 trace prints here, on the served path).
+  const axisRun = runGatedAxisChecks(check.axisChecks, axisInput);
+  issues.push(...axisRun.issues);
+  firedIds.push(...axisRun.firedIds);
+  const axisIssueCount = axisRun.issues.length;
 
   // ── Tier checks (deterministic, harness-owned) ────────────────────────
   let tierIssueCount = 0;

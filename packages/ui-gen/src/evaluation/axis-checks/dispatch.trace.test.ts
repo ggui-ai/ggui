@@ -1,11 +1,18 @@
-// Pin (ggui#1046): under GGUI_AXIS_CHECK_TRACE=1 the dispatcher prints ONE JSON line per
+// Pin (ggui#1046): under GGUI_AXIS_CHECK_TRACE=1 the axis runner prints ONE JSON line per
 // round with the facts a verdict was built from, and the board check prints its own line
-// beside it (PASS and stand-down included); off by default, no line at all.
+// beside it (PASS and stand-down included); off by default, no line at all. The SERVED
+// path is `runCheck` over the harness's pre-filtered `axisChecks` — the first cut traced
+// only `runAxisChecks`, which nothing served calls, and printed nothing on eight lane
+// attempts; both paths now share `runGatedAxisChecks`.
 import type { DataContract } from "@ggui-ai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { classifyAxes } from "../../classifier/index.js";
+import { createHarness } from "../../create-harness.js";
+import { runCheck } from "../../run-check.js";
 import type { BoardColumnsTrace } from "./checks/grid.js";
 import { runAxisChecks, type AxisCheckTrace } from "./dispatch.js";
+import { REGISTRY } from "./registry.js";
+import { matches } from "./types.js";
 
 const SRC = `
 export default function Component(props: Props) {
@@ -62,6 +69,31 @@ describe("axis-check trace (ggui#1046)", () => {
     expect(dispatcher?.issues).toContainEqual({ id: "grid.board_columns_side_by_side", result: "fail" });
     expect(board).toMatchObject({ declared: ["columns"], names: ["columns"], designMode: "constrained", standDown: false, result: "fail" });
     expect(board?.perName).toEqual([{ name: "columns", maps: 1, enclosing: ["Stack"] }]);
+  });
+
+  it("SERVED PATH: runCheck over the harness's pre-filtered axisChecks prints the same two lines; a null compile prints the note", async () => {
+    process.env["GGUI_AXIS_CHECK_TRACE"] = "1";
+    const classification = classifyAxes({ contract: {}, prompt: PROMPT });
+    const harness = createHarness({
+      classification,
+      contract: CONTRACT,
+      prompt: PROMPT,
+      axisChecks: REGISTRY.filter((check) => matches(classification.vector, check)),
+    });
+    const result = await runCheck({ harness, sourceCode: SRC, compiledCode: "x", contract: CONTRACT, prompt: PROMPT, skipRuntimeRender: true });
+    expect(result.firedCheckIds).toContain("grid.board_columns_side_by_side");
+    expect(result.issues.some((i) => i.subcategory === "grid.board_columns_side_by_side")).toBe(true);
+    const lines = traceLines(spy);
+    const dispatcher = lines.find((l) => l.axisCheckTrace !== undefined)?.axisCheckTrace;
+    expect(lines.filter((l) => l.axisCheckTrace !== undefined)).toHaveLength(1);
+    expect(dispatcher).toMatchObject({ originalPrompt: PROMPT, designMode: "constrained", propsSpecPropertyKeys: ["columns"] });
+    expect(dispatcher?.classification).toMatchObject({ render: "grid" });
+    expect(dispatcher?.matched).toEqual(result.firedCheckIds);
+    expect(dispatcher?.issues).toContainEqual({ id: "grid.board_columns_side_by_side", result: "fail" });
+    expect(lines.find((l) => l.boardColumnsTrace !== undefined)?.boardColumnsTrace).toMatchObject({ names: ["columns"], result: "fail" });
+    spy.mockClear();
+    await runCheck({ harness, sourceCode: SRC, compiledCode: null, contract: CONTRACT, prompt: PROMPT, skipRuntimeRender: true });
+    expect(traceLines(spy).find((l) => l.axisCheckTrace !== undefined)?.axisCheckTrace).toMatchObject({ matched: [], issues: [], note: "compiledCode null — no check ran" });
   });
 
   it("on, free mode: the board check's line says stand-down and no board issue is emitted; a null compile prints the dispatcher's note and runs nothing", () => {
