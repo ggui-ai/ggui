@@ -20,6 +20,7 @@ import {
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { findBlueprintExact } from '../renders/blueprint-registry.js';
+import type { TelemetryEvent } from "@ggui-ai/mcp-server-core";
 import { describe, expect, it, vi } from "vitest";
 import { GadgetNotRegisteredError } from "../renders/assert-gadgets.js";
 import type { GenerationCredentials } from "../renders/index.js";
@@ -616,5 +617,81 @@ describe("createGguiOpsGenerateBlueprintHandler — appMetadataStore gadget gate
       },
     };
     await expect(handler.handler({ contract }, makeCtx("app-1"))).resolves.toBeDefined();
+  });
+});
+
+describe("createGguiOpsGenerateBlueprintHandler — the generation prompt (#1046)", () => {
+  /** A generator that records every input it is dispatched with. */
+  function capturingGenerator(): { generator: UiGenerator; seen: UiGenerateInput[] } {
+    const base = makeMockGenerator();
+    const seen: UiGenerateInput[] = [];
+    return {
+      seen,
+      generator: {
+        ...base,
+        async generate(input: UiGenerateInput) {
+          seen.push(input);
+          return base.generate(input);
+        },
+      },
+    };
+  }
+  function sink(): { telemetry: { emit(event: TelemetryEvent): void }; events: TelemetryEvent[] } {
+    const events: TelemetryEvent[] = [];
+    return { events, telemetry: { emit: (event) => { events.push(event); } } };
+  }
+  const BOARD: DataContract = {
+    propsSpec: { properties: { columns: { required: true, schema: { type: "array", items: { type: "object" } } } } },
+  };
+
+  it("`intent` is the generation prompt, and is never written into the persisted variance", async () => {
+    const { generator, seen } = capturingGenerator();
+    const { telemetry, events } = sink();
+    const deps = { ...defaultDeps({ generator }), telemetry };
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const result = await handler.handler(
+      { contract: BOARD, persona: "planner", intent: "a kanban board for this week" },
+      makeCtx("app-1")
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.request.prompt).toBe("a kanban board for this week");
+    expect(events.map((e) => e.name)).not.toContain("blueprint.generate_prompt_placeholder");
+    const persisted = await deps.blueprintStore.get(result.blueprintId);
+    expect(persisted?.variance).toEqual({ persona: "planner" });
+    expect("intent" in (persisted?.variance ?? {})).toBe(false);
+  });
+
+  it("identity is untouched: the same call with and without `intent` persists the same variantKey", async () => {
+    const depsA = defaultDeps();
+    const withIntent = await createGguiOpsGenerateBlueprintHandler(depsA).handler(
+      { contract: BOARD, persona: "planner", intent: "a kanban board for this week" },
+      makeCtx("app-1")
+    );
+    const depsB = defaultDeps();
+    const without = await createGguiOpsGenerateBlueprintHandler(depsB).handler({ contract: BOARD, persona: "planner" }, makeCtx("app-1"));
+    const rowA = await depsA.blueprintStore.get(withIntent.blueprintId);
+    const rowB = await depsB.blueprintStore.get(without.blueprintId);
+    expect(rowA?.variance).toEqual(rowB?.variance);
+    expect(variantKey(rowA?.variance ?? {})).toBe(variantKey(rowB?.variance ?? {}));
+  });
+
+  it("falls back to the variance's `seedPrompt` when no `intent` is given", async () => {
+    const { generator, seen } = capturingGenerator();
+    const { telemetry, events } = sink();
+    const handler = createGguiOpsGenerateBlueprintHandler({ ...defaultDeps({ generator }), telemetry });
+    await handler.handler({ contract: BOARD, seedPrompt: "make it red" }, makeCtx("app-1"));
+    expect(seen[0]?.request.prompt).toBe("make it red");
+    expect(events.map((e) => e.name)).not.toContain("blueprint.generate_prompt_placeholder");
+  });
+
+  it("neither: the placeholder prompt is used and ONE observable event says so", async () => {
+    const { generator, seen } = capturingGenerator();
+    const { telemetry, events } = sink();
+    const handler = createGguiOpsGenerateBlueprintHandler({ ...defaultDeps({ generator }), telemetry });
+    await handler.handler({ contract: BOARD }, makeCtx("app-1"));
+    expect(seen[0]?.request.prompt).toBe("Operator-authored blueprint variant");
+    const placeholder = events.filter((e) => e.name === "blueprint.generate_prompt_placeholder");
+    expect(placeholder).toHaveLength(1);
+    expect(placeholder[0]?.attributes).toMatchObject({ appId: "app-1", requestId: "req-1", reason: "no-intent-no-seedPrompt" });
   });
 });

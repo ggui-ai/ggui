@@ -247,6 +247,14 @@ function resolveGenerator(registry: GeneratorRegistry, slug: string | undefined)
   return found;
 }
 
+/**
+ * The generation prompt when a call carries neither `intent` nor
+ * `seedPrompt`. Kept for one release with the observable
+ * `blueprint.generate_prompt_placeholder` event; the following release
+ * refuses such a call (`prompt_required`) instead.
+ */
+const GENERATION_PROMPT_PLACEHOLDER = "Operator-authored blueprint variant";
+
 export function createGguiOpsGenerateBlueprintHandler(
   deps: GguiOpsGenerateBlueprintDeps
 ) {
@@ -350,11 +358,29 @@ export function createGguiOpsGenerateBlueprintHandler(
         throw new MissingCredentialsError();
       }
 
-      // 5. Dispatch through the generator.
+      // 5. Dispatch through the generator. The generation prompt is the
+      // request's own sentence: `intent` (prompt-only, never persisted —
+      // not a variance member, so the cache identity is unchanged), else
+      // the variance's `seedPrompt`. Neither present: the placeholder,
+      // made observable — the classifier reads the render axis from THIS
+      // prompt, and a placeholder reads every board as a list.
+      const generationPrompt = parsed.intent ?? parsed.seedPrompt;
+      if (generationPrompt === undefined) {
+        try {
+          deps.telemetry?.emit({
+            name: "blueprint.generate_prompt_placeholder",
+            at: Date.now(),
+            attributes: { appId, requestId: ctx.requestId, reason: "no-intent-no-seedPrompt" },
+          });
+        } catch {
+          // Swallow telemetry-side throws — they MUST NOT affect
+          // handler correctness.
+        }
+      }
       const generateInput: UiGenerateInput = {
         request: {
           sessionId: `ops_gen_${randomUUID()}`,
-          prompt: parsed.seedPrompt ?? "Operator-authored blueprint variant",
+          prompt: generationPrompt ?? GENERATION_PROMPT_PLACEHOLDER,
         },
         blueprints: deps.blueprints,
         contract,
@@ -438,6 +464,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       if (deps.cacheRegistry) {
         try {
           const intentForCache =
+            parsed.intent ??
             parsed.seedPrompt ??
             normalizedPersona ??
             `operator-authored blueprint (${blueprintId})`;
