@@ -83,3 +83,4 @@ export type {
 // header / baseURL tweaks land in one place.
 export { createAnthropicClient } from './adapters/claude/client.js';
 export { AESTHETIC_BRIEF_MAX_CHARS, type GenerationProfileInput } from './boilerplate/styling-profile.js';
+export { EFFORT_DIALS, EFFORT_TABLE_VERSION, effortDials, type EffortDials } from './effort.js';

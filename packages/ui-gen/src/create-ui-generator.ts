@@ -57,6 +57,7 @@ import {
 import { createGeneratorTools } from './adapters/index.js';
 import { dispatchGeneration } from './adapters/generation-dispatch.js';
 import { hasProfile } from './boilerplate/styling-profile.js';
+import { effortDials } from './effort.js';
 import type { ProviderName } from './adapters/types.js';
 import type { GenerationResult } from './harness/result-types.js';
 import {
@@ -355,6 +356,19 @@ export function createUiGenerator(
           resolvedAppGadgets,
         );
 
+        // `effort` (ggui#1059): a named level's dials override the
+        // deployment's options for THIS generation; absent ⇒ untouched.
+        // Prompt bytes never move with it (dials only).
+        const dials = effortDials(input.profile?.effort);
+        const effectiveMaxAttempts = dials?.maxAttempts ?? maxAttempts;
+        const effectiveMaxEvalRounds = dials?.maxEvalRounds ?? maxEvalRounds;
+        const effectiveEvaluation =
+          dials !== undefined && evaluation !== undefined ? { ...evaluation, maxRounds: dials.maxEvalRounds } : evaluation;
+        const effectiveVisualEvaluation =
+          dials !== undefined && visualEvaluation !== undefined
+            ? { ...visualEvaluation, passThreshold: dials.selfEvalPassThreshold }
+            : visualEvaluation;
+
         const result = await dispatchGeneration({
           provider,
           userPrompt,
@@ -362,10 +376,10 @@ export function createUiGenerator(
           tools,
           ...(input.contract ? { contract: input.contract } : {}),
           originalPrompt: input.request.prompt,
-          ...(maxAttempts !== undefined ? { maxAttempts } : {}),
-          ...(maxEvalRounds !== undefined ? { maxEvalRounds } : {}),
-          ...(evaluation !== undefined ? { evaluation } : {}),
-          ...(visualEvaluation !== undefined ? { visualEvaluation } : {}),
+          ...(effectiveMaxAttempts !== undefined ? { maxAttempts: effectiveMaxAttempts } : {}),
+          ...(effectiveMaxEvalRounds !== undefined ? { maxEvalRounds: effectiveMaxEvalRounds } : {}),
+          ...(effectiveEvaluation !== undefined ? { evaluation: effectiveEvaluation } : {}),
+          ...(effectiveVisualEvaluation !== undefined ? { visualEvaluation: effectiveVisualEvaluation } : {}),
           ...(qualityConfig !== undefined ? { qualityConfig } : {}),
           ...(resolvedAppGadgets !== undefined
             ? { appGadgets: resolvedAppGadgets }
