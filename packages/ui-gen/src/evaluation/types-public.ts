@@ -188,6 +188,24 @@ export interface EvalResult {
 }
 
 /** One canvas's visual verdict, PNG-free — see `EvalResult.visual`. */
+/**
+ * How one canvas's `score` was reached (ggui#1072): `k` vision calls on the
+ * SAME captured frame, aggregated by `rule`. Always present — `k: 1` ⇒
+ * `samples: [score]`, `sigma: 0`, `notes: [critique]` — so one shape serves
+ * a single judgement and a median of many. `samples`/`notes` carry only the
+ * calls the judge could parse (in call order); `k` stays the requested count,
+ * so a short `samples` is visible on the row rather than filled in.
+ */
+export interface CanvasJudgeRecord {
+  readonly k: number;
+  readonly rule: 'median';
+  readonly samples: number[];
+  /** Population σ of `samples` (0 when one sample). */
+  readonly sigma: number;
+  /** The judge's per-canvas critique per sample — the words beside a swing. */
+  readonly notes: string[];
+}
+
 export interface CanvasVisualSummary {
   canvas: CanvasClass;
   viewport: { width: number; height: number };
@@ -199,6 +217,8 @@ export interface CanvasVisualSummary {
   contentHeight: number | null;
   /** `contentHeight > viewport.height` — measured on every canvas, judged per `canvasFitPolicy`. */
   overflow: boolean;
+  /** How `score` was reached — always present (ggui#1072). */
+  judge: CanvasJudgeRecord;
 }
 
 /** The visual leg's per-canvas summary — see `EvalResult.visual`. */

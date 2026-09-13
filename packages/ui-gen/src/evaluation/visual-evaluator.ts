@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { CanvasVisualSummary, EvalIssue, VisualEvalSummary } from './types-public.js';
+import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualEvalSummary } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
@@ -59,6 +59,15 @@ export interface VisualEvalConfig {
    * evaluator constructs so its multimodal call never falls back to
    * `process.env` for credentials or model routing.
    */
+  /**
+   * Vision calls per judged canvas on the SAME captured frame, aggregated by
+   * the median (ggui#1072). Default 1 — a single judgement, byte-identical to
+   * the instrument before this option existed. K is an instrument dial: a
+   * run mixes K at its own peril.
+   */
+  judgeK?: number;
+  /** The canvases sampled `judgeK` times; default = every judged canvas when `judgeK > 1`. */
+  judgeKCanvases?: readonly CanvasClass[];
   routeOverride?: AgentConfig['routeOverride'];
   /**
    * Provider-429-retry observer — see `AgentConfig.onRetry`.
@@ -87,6 +96,8 @@ export interface CanvasVisualResult {
   contentHeight: number | null;
   /** `contentHeight > viewport.height` — a measurement; what it MEANS is {@link canvasFitPolicy}'s. */
   overflow: boolean;
+  /** How `score` was reached — always present (ggui#1072). */
+  judge: CanvasJudgeRecord;
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
@@ -679,6 +690,27 @@ type JudgedAnswer =
   | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
   | { readonly kind: 'unparsable'; readonly reason: string };
 
+/** How many vision calls this canvas gets (ggui#1072): `judgeK` when the canvas is sampled, else 1. */
+function judgeCountFor(config: VisualEvalConfig, canvas: CanvasClass): number {
+  const k = Math.max(1, Math.floor(config.judgeK ?? 1));
+  if (k === 1) return 1;
+  return config.judgeKCanvases === undefined || config.judgeKCanvases.includes(canvas) ? k : 1;
+}
+
+/** The median of a non-empty list — the lower middle for an even count, so the decision is always one judge's number. */
+function medianOf(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)]!;
+}
+
+/** Population σ, rounded to one decimal; 0 for one sample. */
+function populationSigma(values: readonly number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+  return Math.round(Math.sqrt(variance) * 10) / 10;
+}
+
 async function judgeAndParse(
   judge: typeof callMultimodalLLM,
   config: VisualEvalConfig,
@@ -760,22 +792,33 @@ export async function runVisualEvaluationDetailed(
         console.warn(`[visual-eval] ${unavailableReason} at canvas ${canvas} — skipping visual evaluation`);
         return { result: null, unavailableReason, canvas };
       }
-      const answer = await judgeAndParse(
-        judge,
-        config,
-        model,
-        screenshot,
-        context.originalPrompt,
-        buildStylingProfileJudgeBlock(context.profile),
-        canvas,
+      // ggui#1072: k vision calls on the SAME frame; the decision value is the median.
+      const k = judgeCountFor(config, canvas);
+      const profileBlock = buildStylingProfileJudgeBlock(context.profile);
+      const answers = await Promise.all(
+        Array.from({ length: k }, () => judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas)),
       );
-      if (answer.kind === 'unparsable') {
-        return { result: null, unavailableReason: answer.reason, canvas };
+      const parsed = answers.filter((a): a is Extract<JudgedAnswer, { kind: 'ok' }> => a.kind === 'ok');
+      if (parsed.length === 0) {
+        const first = answers.find((a): a is Extract<JudgedAnswer, { kind: 'unparsable' }> => a.kind === 'unparsable');
+        return { result: null, unavailableReason: first?.reason ?? 'judge answer unparsable', canvas };
       }
-      const result = answer.result;
-      result.inputTokens = answer.inputTokens;
-      result.outputTokens = answer.outputTokens;
-      const response = { inputTokens: answer.inputTokens, outputTokens: answer.outputTokens };
+      const samples = parsed.map((a) => a.result.finalScore);
+      const median = medianOf(samples);
+      const representative = parsed[samples.indexOf(median)]!;
+      const result = representative.result;
+      result.finalScore = median;
+      result.passed = median >= config.passThreshold;
+      result.inputTokens = parsed.reduce((sum, a) => sum + a.inputTokens, 0);
+      result.outputTokens = parsed.reduce((sum, a) => sum + a.outputTokens, 0);
+      const response = { inputTokens: result.inputTokens, outputTokens: result.outputTokens };
+      const judgeRecord: CanvasJudgeRecord = {
+        k,
+        rule: 'median',
+        samples,
+        sigma: populationSigma(samples),
+        notes: parsed.map((a) => a.result.critique ?? ''),
+      };
       // The fit verdict (ggui#1027): deterministic, in the judge's issue channel.
       const contentHeight = attempt.contentHeight;
       const overflow = contentHeight !== null && contentHeight > viewport.height;
@@ -792,9 +835,10 @@ export async function runVisualEvaluationDetailed(
         screenshotPng: screenshot,
         contentHeight,
         overflow,
+        judge: judgeRecord,
       });
       console.log(
-        `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore} ` +
+        `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
           `${result.passed ? 'pass' : 'FAIL'} | content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${policy.overflow})` : ''} ` +
           `| in=${response.inputTokens} out=${response.outputTokens}`,
       );
@@ -894,6 +938,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     passed: c.passed,
     contentHeight: c.contentHeight,
     overflow: c.overflow,
+    judge: c.judge,
   }));
   return { score: result.finalScore, passed: result.passed, canvases };
 }

@@ -101,8 +101,8 @@ describe('runVisualEvaluation — per-canvas mode', () => {
       score: 85,
       passed: true,
       canvases: [
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false },
-        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
+        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [90], sigma: 0, notes: [expect.any(String)] } },
       ],
     });
   });

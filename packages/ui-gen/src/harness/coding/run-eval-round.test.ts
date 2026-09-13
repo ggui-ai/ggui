@@ -315,8 +315,8 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
       score: 84,
       passed: true,
       canvases: [
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 600, overflow: false },
-        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 88, passed: true, contentHeight: 1200, overflow: true },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 600, overflow: false, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [] } },
+        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 88, passed: true, contentHeight: 1200, overflow: true, judge: { k: 1, rule: 'median', samples: [88], sigma: 0, notes: [] } },
       ],
     };
     const captured: VisualEvalConfig[] = [];
