@@ -159,6 +159,7 @@ const EXPECTED_PASSING = [
   // pass set is exact by design.
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
+  'n1-compat/release-2-ops-generate-blueprint',
   'n1-compat/release-2-render-meta',
   // The `registry-completeness` catalog (ggui#786). These four rows
   // grade the closed refusal-code REGISTRY — a protocol artifact this

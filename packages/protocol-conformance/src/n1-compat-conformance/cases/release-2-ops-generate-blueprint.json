@@ -1,0 +1,33 @@
+{
+  "name": "release-2-ops-generate-blueprint",
+  "description": "The `ggui_ops_generate_blueprint` input exactly as ggui Release 2 (24aacf8e2) accepted it \u2014 the contract plus a `seedPrompt` and no `intent` (added later as a non-identity prompt carrier). Today's opsGenerateBlueprintInputSchema MUST accept it (VERSION-POLICY \u00a73.6).",
+  "release": {
+    "label": "ggui Release 2",
+    "sha": "24aacf8e2",
+    "pairedWith": "control-plane operators + older mint images"
+  },
+  "wire": "ops-generate-blueprint",
+  "payload": {
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "note": {
+            "schema": {
+              "description": "free-text note"
+            }
+          }
+        }
+      },
+      "streamSpec": {
+        "ticks": {
+          "schema": {
+            "description": "local timer ticks"
+          }
+        }
+      }
+    },
+    "seedPrompt": "weekly kanban board",
+    "aesthetic": "calm"
+  },
+  "expect": "accepted"
+}

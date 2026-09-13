@@ -51,6 +51,13 @@ import {
  * caller's bound app identity; cross-app calls are subject to the
  * deployment's authorization policy.
  */
+/**
+ * Bound on `intent` (ggui#1046), in characters — one exported number the
+ * door checks and readers may cap at; standalone (not tied to any other
+ * text bound: they move independently).
+ */
+export const OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS = 2000;
+
 export const opsGenerateBlueprintInputSchema = z
   .object({
     appId: z
@@ -93,6 +100,14 @@ export const opsGenerateBlueprintInputSchema = z
       .optional()
       .describe(
         "The raw operator prompt that produced this variant. Round-trip input for the variant-selector + audit trail.",
+      ),
+    intent: z
+      .string()
+      .trim()
+      .max(OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS)
+      .optional()
+      .describe(
+        `What the operator wants generated for this contract, in plain words — the prompt the generator composes from (at most ${OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS} characters). Not part of the cache identity: two calls that differ only in \`intent\` share a variant key. When omitted, the generator falls back to \`seedPrompt\`; omitting both is a caller gap that a future release refuses.`,
       ),
     setAsOperatorDefault: z
       .boolean()

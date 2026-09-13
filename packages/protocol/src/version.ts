@@ -6,6 +6,14 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_ops_generate_blueprint` gains `intent` (2026-09-13, additive,
+ * ggui#1046 — MINOR, same draft stamp): the generation prompt as a
+ * NON-identity field, bounded at `OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS`
+ * (2000); `seedPrompt` stays a variance key (cache identity). The handler's
+ * silent placeholder is observable this release and refused next
+ * (`prompt_required`). The kit's `n1-compat` catalog pins Release 2's
+ * input (contract + seedPrompt, no intent).
+ * --------------------------------------------------------------------
  * Generator profile widened (2026-09-13, additive, ggui#1058 — MINOR, same
  * draft stamp; founder's A2 "profile OVER engine"). Two optional members on
  * `appGenerationProfileSchema`: `effort` (one of five names — the wire
