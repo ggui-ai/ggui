@@ -23,6 +23,7 @@ export type {
   EvalCategory,
   EvalResult,
   VisualEvalSummary,
+  CanvasJudgeRecord,
   CanvasVisualSummary,
   EvalCriterion,
   CriterionCoverage,
