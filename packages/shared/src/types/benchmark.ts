@@ -255,7 +255,7 @@ export interface TierEvaluationDisplay {
   visual?: {
     score: number;
     passed: boolean;
-    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean }>;
+    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean; judge?: CanvasJudgeRecordDisplay }>;
   };
   issues: Array<{
     tier: number;
@@ -320,6 +320,17 @@ export interface ContractBehaviorDisplay {
   durationMs?: number;
 }
 
+/** Mirrors `CanvasJudgeRecord` in `@ggui-ai/ui-gen/evaluation` (ggui#1072): the judge's aggregation record per canvas. */
+export interface CanvasJudgeRecordDisplay {
+  k: number;
+  rule: 'median';
+  /** Every vision call's score on the same frame, in call order; shorter than `k` when a sample was unparsable. */
+  samples: number[];
+  sigma: number;
+  /** The judge's per-canvas critique per sample. */
+  notes: string[];
+}
+
 /** Mirrors `VisualCanvasArtefact` in `@ggui-ai/benchmark/multi-sdk/canvas` — the PNG itself is never in the report. */
 export interface VisualCanvasArtefactDisplay {
   canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl';
@@ -331,6 +342,8 @@ export interface VisualCanvasArtefactDisplay {
   contentHeight?: number | null;
   /** `contentHeight > viewport.height`. Absent on rows judged before ggui#1027. */
   overflow?: boolean;
+  /** How `score` was reached (ggui#1072): `score` is the median of `samples` when `k > 1`. Absent on rows judged before ggui#1072 (one judgement = `score`). */
+  judge?: CanvasJudgeRecordDisplay;
   /** Absent on the harness path (summary only); present when the EVAL task persisted the PNG. */
   artefact?: { path: string; sha256: string; bytes: number };
 }

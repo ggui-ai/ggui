@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { loadPlaywright } from './lib/load-playwright.mjs';
-import { parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome } from '../src/exp008/eval-cell.ts';
+import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome } from '../src/exp008/eval-cell.ts';
 
 function getArg(names, fallback) {
   const i = process.argv.findIndex((a) => names.includes(a));
@@ -43,13 +43,27 @@ const visualEnabled = !hasFlag(['--no-visual']);
 // The judge prompt's version + digest are the evaluator's own declarations —
 // read at run time, never literals here (a literal drifts from the prompt it
 // names; the digest is sha256 of the prompt the evaluator actually ran).
-const { VISUAL_JUDGE_PROMPT_VERSION, VISUAL_JUDGE_PROMPT_DIGEST } = await import('@ggui-ai/ui-gen/evaluation');
-const VISUAL_JUDGE = {
+const { VISUAL_JUDGE_PROMPT_VERSION, VISUAL_JUDGE_PROMPT_DIGEST, CANVAS_CLASSES: KNOWN_CANVASES } = await import('@ggui-ai/ui-gen/evaluation');
+// The evaluator's config: provider, model, threshold, and K (ggui#1072 —
+// JUDGE_K vision calls on the same frame for JUDGE_K_CANVASES; default 1).
+const judgeK = parseJudgeKEnv({ JUDGE_K: process.env.JUDGE_K, JUDGE_K_CANVASES: process.env.JUDGE_K_CANVASES }, KNOWN_CANVASES);
+const JUDGE_CONFIG = {
   provider: 'claude',
   model: 'claude-sonnet-5',
   passThreshold: 60,
+  judgeK: judgeK.k,
+  ...(judgeK.kCanvases ? { judgeKCanvases: judgeK.kCanvases } : {}),
+};
+// The identity stamped on report.meta.visualJudge: the config's decision
+// dials + the prompt's version/digest as the evaluator declares them.
+const VISUAL_JUDGE = {
+  provider: JUDGE_CONFIG.provider,
+  model: JUDGE_CONFIG.model,
+  passThreshold: JUDGE_CONFIG.passThreshold,
   ...(typeof VISUAL_JUDGE_PROMPT_VERSION === 'string' ? { promptVersion: VISUAL_JUDGE_PROMPT_VERSION } : {}),
   ...(typeof VISUAL_JUDGE_PROMPT_DIGEST === 'string' ? { promptDigest: VISUAL_JUDGE_PROMPT_DIGEST } : {}),
+  k: judgeK.k,
+  ...(judgeK.kCanvases ? { kCanvases: judgeK.kCanvases } : {}),
 };
 const locator = parseCellLocator(locatorArg);
 
@@ -112,7 +126,7 @@ async function main() {
           const d = await runVisualEvaluationDetailed(
             // theme → the ONE theme→CSS composer the iframe runtime uses; absent = the design defaults (no cssTokens key)
             { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(theme ? { cssTokens: cssTokensForAppTheme(theme) } : {}) },
-            { ...VISUAL_JUDGE, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
+            { ...JUDGE_CONFIG, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
           );
           if (d.result !== null) return toVisualOutcome(d.result);
           const unavailableReason = d.unavailableReason ?? 'visual judge returned no result and no reason';

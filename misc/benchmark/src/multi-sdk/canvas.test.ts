@@ -22,10 +22,10 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
     const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
     const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
     const out = persistCanvasScreenshots(dir, [
-      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false },
+      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } },
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true, contentHeight: 1000, overflow: false });
+    expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true, contentHeight: 1000, overflow: false, judge: { k: 1, rule: 'median', samples: [81], sigma: 0, notes: ['ok'] } });
     expect(out[0]!.artefact?.path).toBe('canvas-md.png');
     expect(out[0]!.artefact?.bytes).toBe(png.length);
     expect(out[0]!.artefact?.sha256).toBe(createHash('sha256').update(png).digest('hex'));
@@ -43,9 +43,9 @@ describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summar
   it('maps the evaluator summary and leaves artefact absent', () => {
     const te: EvalResult = {
       issues: [], pass: [],
-      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false }] },
+      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] } }] },
     };
-    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false }]);
+    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, judge: { k: 1, rule: 'median', samples: [72], sigma: 0, notes: ['ok'] } }]);
   });
   it('is undefined without a per-canvas summary', () => {
     expect(visualCanvasesFromTierEvaluation(undefined)).toBeUndefined();

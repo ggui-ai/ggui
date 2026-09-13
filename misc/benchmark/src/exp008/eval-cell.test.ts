@@ -15,6 +15,7 @@ import {
   MINT_RECEIPT_ABSENT_NOTE,
   readJudgeInput,
   JUDGE_INPUT_FILE,
+  parseJudgeKEnv,
 } from './eval-cell';
 import type { VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import { calculateCost, resolveJudgeCostModelId, resolveCostModelId } from '../multi-sdk/runner.js';
@@ -153,7 +154,7 @@ describe('toVisualOutcome — typed against ui-gen\'s VisualEvaluationResult (th
     issues: [],
     inputTokens: 3000,
     outputTokens: 200,
-    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 820, overflow: false }],
+    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 820, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } }],
   };
   it('maps finalScore/passed/canvases/tokens; null stays null', () => {
     expect(toVisualOutcome(null)).toBeNull();
@@ -218,7 +219,7 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
       visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
       visual: async () => ({
         score: 80, passed: true,
-        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false }],
+        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [80], sigma: 0, notes: ['ok'] } }],
       }),
       now: () => new Date('2026-09-10T00:00:00.000Z'),
     });
@@ -446,8 +447,8 @@ describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejec
 
 describe("a canvas row's passed flag (ggui#1027 fit + the judge's threshold), pinned on the served shape", () => {
   // The judge (ui-gen visual-evaluator) computes passed; eval-cell copies it onto the row with score + overflow.
-  const overflowRow = { canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 720 }, score: 83, passed: false, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 1180, overflow: true };
-  const lowRow = { canvas: 'md' as const, viewport: { width: 768, height: 1024 }, score: 67, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false };
+  const overflowRow = { canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 720 }, score: 83, passed: false, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 1180, overflow: true, judge: { k: 1, rule: 'median' as const, samples: [83], sigma: 0, notes: ['ok'] } };
+  const lowRow = { canvas: 'md' as const, viewport: { width: 768, height: 1024 }, score: 67, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [67], sigma: 0, notes: ['ok'] } };
   const serve = async () => {
     const dir = cellDir();
     const report = await evaluateCell(readCellInputs(dir), {
@@ -470,5 +471,33 @@ describe("a canvas row's passed flag (ggui#1027 fit + the judge's threshold), pi
     expect(xs).toMatchObject({ score: 83, passed: false, overflow: true, contentHeight: 1180 }); // why false at 83 is on the row
     const md = rows.find((r) => r.canvas === 'md')!;
     expect(md).toMatchObject({ score: 67, passed: true, overflow: false }); // a 70-bar consumer recomputes from score
+  });
+});
+
+describe('#1072 — K on the eval task and the aggregation record on the row', () => {
+  it('parseJudgeKEnv: absent = 1; integers >= 1 with a validated canvas list; anything else is loud', () => {
+    const known = ['xs-chat-card', 'md', 'lg'] as const;
+    expect(parseJudgeKEnv({}, known)).toEqual({ k: 1 });
+    expect(parseJudgeKEnv({ JUDGE_K: '3', JUDGE_K_CANVASES: 'xs-chat-card, md,md' }, known)).toEqual({ k: 3, kCanvases: ['xs-chat-card', 'md'] });
+    expect(() => parseJudgeKEnv({ JUDGE_K: '0' }, known)).toThrow(/JUDGE_K must be an integer >= 1/);
+    expect(() => parseJudgeKEnv({ JUDGE_K: 'three' }, known)).toThrow(/JUDGE_K must be an integer >= 1/);
+    expect(() => parseJudgeKEnv({ JUDGE_K: '3', JUDGE_K_CANVASES: 'xs-chat-card,tablet' }, known)).toThrow(/unknown canvas class "tablet"/);
+    // K is spend: capped, and k > 1 must name its canvases (a typo cannot buy 5× calls on every cell)
+    expect(() => parseJudgeKEnv({ JUDGE_K: '30', JUDGE_K_CANVASES: 'md' }, known)).toThrow(/exceeds JUDGE_K_MAX=9/);
+    expect(() => parseJudgeKEnv({ JUDGE_K: '3' }, known)).toThrow(/requires JUDGE_K_CANVASES/);
+    expect(parseJudgeKEnv({ JUDGE_K: '9', JUDGE_K_CANVASES: 'md' }, known)).toEqual({ k: 9, kCanvases: ['md'] });
+    expect(parseJudgeKEnv({ JUDGE_K: '1', JUDGE_K_CANVASES: 'md' }, known)).toEqual({ k: 1, kCanvases: ['md'] });
+  });
+  it("a k=3 row carries the evaluator's judge record verbatim (median as score, samples, σ, notes) and meta.visualJudge carries k + kCanvases", async () => {
+    const dir = cellDir();
+    const judge = { k: 3, rule: 'median' as const, samples: [82, 66, 78], sigma: 6.8, notes: ['tight', 'band clipped', 'fine'] };
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60, k: 3, kCanvases: ['xs-chat-card', 'md'] },
+      visual: async () => ({ score: 78, passed: true, canvases: [{ canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 640 }, score: 78, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 600, overflow: false, judge }] }),
+    });
+    expect(report.visualCanvases?.[0]?.judge).toEqual(judge);
+    expect(report.visualCanvases?.[0]?.score).toBe(78);
+    expect(report.meta.visualJudge).toMatchObject({ k: 3, kCanvases: ['xs-chat-card', 'md'] });
   });
 });

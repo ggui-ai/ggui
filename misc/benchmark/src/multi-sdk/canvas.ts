@@ -15,6 +15,9 @@ export type { CanvasClass } from '@ggui-ai/ui-gen/evaluation';
 
 export type Viewport = CanvasVisualSummary['viewport'];
 
+/** The judge's aggregation record per canvas (ggui#1072) — derived from the evaluator's exported summary; the barrel does not re-export `CanvasJudgeRecord` itself. */
+export type CanvasJudgeRecord = CanvasVisualSummary['judge'];
+
 /** One canvas's visual-judge output as the evaluator hands it over — PNG still in memory (direct `runVisualEvaluation` call). */
 export type CanvasScreenshot = CanvasVisualResult;
 
@@ -42,6 +45,8 @@ export interface VisualCanvasArtefact {
   readonly contentHeight: number | null;
   /** `contentHeight > viewport.height`, judged per the evaluator's `canvasFitPolicy` (ggui#1027). */
   readonly overflow: boolean;
+  /** How `score` was reached (ggui#1072): k vision calls on the same frame, the median as `score`, every sample, σ, and the critique per sample — verbatim from the evaluator. */
+  readonly judge: CanvasJudgeRecord;
   readonly artefact?: { readonly path: string; readonly sha256: string; readonly bytes: number };
 }
 
@@ -60,6 +65,7 @@ export function persistCanvasScreenshots(
       passed: c.passed,
       contentHeight: c.contentHeight,
       overflow: c.overflow,
+      judge: c.judge,
       artefact: {
         path,
         sha256: createHash('sha256').update(c.screenshotPng).digest('hex'),
@@ -86,5 +92,6 @@ export function visualCanvasesFromTierEvaluation(
     passed: c.passed,
     contentHeight: c.contentHeight,
     overflow: c.overflow,
+    judge: c.judge,
   }));
 }

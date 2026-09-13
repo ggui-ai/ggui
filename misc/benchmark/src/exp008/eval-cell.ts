@@ -357,6 +357,44 @@ export interface VisualJudgeIdentity {
   readonly promptVersion?: string;
   /** sha256 of the judge prompt the evaluator ran (`VISUAL_JUDGE_PROMPT_DIGEST`, computed at its module load) — the receipt's quote; absent when the evaluator exports none. */
   readonly promptDigest?: string;
+  /** Vision calls per sampled canvas (ggui#1072) — an INSTRUMENT dial: a mixed `k` within a run is a mixed instrument. Absent ⇒ 1 (a script before #1072). */
+  readonly k?: number;
+  /** The canvases sampled `k` times; absent ⇒ every judged canvas when `k > 1`. */
+  readonly kCanvases?: readonly CanvasClass[];
+}
+
+/** The most vision calls per canvas the eval task accepts from its environment — K is spend: past this a change of code (and a spend clearance) is the only way. */
+export const JUDGE_K_MAX = 9;
+
+/**
+ * `JUDGE_K` / `JUDGE_K_CANVASES` from the eval task's environment (ggui#1072) —
+ * loud on anything that is not an integer in 1..JUDGE_K_MAX or a known canvas
+ * class, and loud when `k > 1` names no canvases: sampling every canvas k times
+ * is a spend decision the lane must write down, never a default it falls into.
+ */
+export function parseJudgeKEnv(
+  env: { readonly JUDGE_K?: string; readonly JUDGE_K_CANVASES?: string },
+  knownCanvases: readonly CanvasClass[],
+): { readonly k: number; readonly kCanvases?: readonly CanvasClass[] } {
+  const rawK = env.JUDGE_K;
+  let k = 1;
+  if (rawK !== undefined && rawK.trim() !== '') {
+    if (!/^\d+$/.test(rawK.trim()) || Number(rawK) < 1) throw new Error(`eval-cell: JUDGE_K must be an integer >= 1 (got ${JSON.stringify(rawK)})`);
+    k = Number(rawK);
+    if (k > JUDGE_K_MAX) throw new Error(`eval-cell: JUDGE_K=${k} exceeds JUDGE_K_MAX=${JUDGE_K_MAX} — K is vision calls per canvas per cell; raise the cap in code with the spend cleared, not from the environment`);
+  }
+  const rawList = env.JUDGE_K_CANVASES;
+  if (rawList === undefined || rawList.trim() === '') {
+    if (k > 1) throw new Error(`eval-cell: JUDGE_K=${k} requires JUDGE_K_CANVASES (the canvases the bar reads) — sampling every canvas ${k}× is a spend decision, name it`);
+    return { k };
+  }
+  const isKnown = (v: string): v is CanvasClass => (knownCanvases as readonly string[]).includes(v);
+  const kCanvases: CanvasClass[] = [];
+  for (const part of rawList.split(',').map((p) => p.trim()).filter((p) => p !== '')) {
+    if (!isKnown(part)) throw new Error(`eval-cell: JUDGE_K_CANVASES names an unknown canvas class ${JSON.stringify(part)} (known: ${knownCanvases.join(', ')})`);
+    if (!kCanvases.includes(part)) kCanvases.push(part);
+  }
+  return { k, kCanvases };
 }
 export const VISUAL_PROMPT_UNSTAMPED_NOTE = 'visual judge prompt unstamped — the evaluator exports no VISUAL_JUDGE_PROMPT_VERSION / VISUAL_JUDGE_PROMPT_DIGEST';
 
