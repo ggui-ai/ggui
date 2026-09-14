@@ -535,3 +535,16 @@ describe('#1042 — design@judge on the row', () => {
     expect(o?.themeMode).toBe('light');
   });
 });
+
+describe('#1100 — fit on the eval-cell row', () => {
+  it("a fullscreen canvas judged under fill carries fit: 'fill' on visualCanvases[]", async () => {
+    const dir = cellDir();
+    const judge = { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] };
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
+      visual: async () => ({ score: 72, passed: true, canvases: [{ canvas: 'lg' as const, viewport: { width: 1024, height: 768 }, score: 72, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 768, overflow: false, judge, fit: 'fill' as const }] }),
+    });
+    expect(report.visualCanvases?.[0]).toMatchObject({ canvas: 'lg', fit: 'fill' });
+  });
+});

@@ -259,7 +259,7 @@ export interface TierEvaluationDisplay {
     design?: { src: string; srcSha256: string };
     /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
     themeMode?: 'light' | 'dark';
-    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean; judge?: CanvasJudgeRecordDisplay }>;
+    canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean; judge?: CanvasJudgeRecordDisplay; fit?: 'fill' }>;
   };
   issues: Array<{
     tier: number;
@@ -357,6 +357,8 @@ export interface VisualCanvasArtefactDisplay {
   overflow?: boolean;
   /** How `score` was reached (ggui#1072): `score` is the median of `samples` when `k > 1`. Absent on rows judged before ggui#1072 (one judgement = `score`). */
   judge?: CanvasJudgeRecordDisplay;
+  /** How the judge composed the mount (ggui#1100): `'fill'` on a fullscreen canvas; absent on the inline card and on rows judged before it. */
+  fit?: 'fill';
   /** Absent on the harness path (summary only); present when the EVAL task persisted the PNG. */
   artefact?: { path: string; sha256: string; bytes: number };
 }

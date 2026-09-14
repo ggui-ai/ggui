@@ -52,3 +52,19 @@ describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summar
     expect(visualCanvasesFromTierEvaluation({ issues: [], pass: [] })).toBeUndefined();
   });
 });
+
+describe('#1100 — the row carries how the judge composed each canvas', () => {
+  it("fit: 'fill' rides the summary onto the row; a canvas without it (the inline card) carries no fit key", () => {
+    const j = { k: 1, rule: 'median' as const, samples: [70], sigma: 0, notes: ['ok'] };
+    const te: EvalResult = {
+      issues: [], pass: [],
+      visual: { score: 70, passed: true, canvases: [
+        { canvas: 'md', viewport: { width: 768, height: 1024 }, score: 70, passed: true, contentHeight: 1024, overflow: false, judge: j, fit: 'fill' },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 70, passed: true, contentHeight: 600, overflow: false, judge: j },
+      ] },
+    };
+    const rows = visualCanvasesFromTierEvaluation(te) ?? [];
+    expect(rows[0]?.fit).toBe('fill');
+    expect(rows[1] !== undefined && 'fit' in rows[1]).toBe(false);
+  });
+});

@@ -867,6 +867,7 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
               contentHeight: c.contentHeight,
               overflow: c.overflow,
               judge: c.judge,
+              ...(c.fit !== undefined ? { fit: c.fit } : {}),
             })),
           },
         }

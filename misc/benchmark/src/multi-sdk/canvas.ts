@@ -47,6 +47,8 @@ export interface VisualCanvasArtefact {
   readonly overflow: boolean;
   /** How `score` was reached (ggui#1072): k vision calls on the same frame, the median as `score`, every sample, σ, and the critique per sample — verbatim from the evaluator. */
   readonly judge: CanvasJudgeRecord;
+  /** How the judge composed the mount (ggui#1100): `'fill'` on a fullscreen canvas (root stretched to the frame under the design's fill rule); absent on the inline card. */
+  readonly fit?: CanvasVisualSummary['fit'];
   readonly artefact?: { readonly path: string; readonly sha256: string; readonly bytes: number };
 }
 
@@ -66,6 +68,7 @@ export function persistCanvasScreenshots(
       contentHeight: c.contentHeight,
       overflow: c.overflow,
       judge: c.judge,
+      ...(c.fit !== undefined ? { fit: c.fit } : {}),
       artefact: {
         path,
         sha256: createHash('sha256').update(c.screenshotPng).digest('hex'),
@@ -93,5 +96,6 @@ export function visualCanvasesFromTierEvaluation(
     contentHeight: c.contentHeight,
     overflow: c.overflow,
     judge: c.judge,
+    ...(c.fit !== undefined ? { fit: c.fit } : {}),
   }));
 }
