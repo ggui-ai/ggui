@@ -1,17 +1,20 @@
 /**
  * N−1 wire compatibility — the §3.6 drift gate (ggui#1014).
  *
- * Every case is the PREVIOUS release's payload for a protocol-owned wire,
- * tagged with that release's sha, and passes iff today's parser accepts
- * it. A case that starts failing is a receiver that broke N−1 across a
- * rolling release — the fix is the receiver, never the fixture; a fixture
- * changes only when the pairing of record moves
+ * Every BACKWARD case is the PREVIOUS release's payload for a protocol-owned
+ * wire, tagged with that release's sha, and passes iff today's parser accepts
+ * it. Every FORWARD case (ggui#1093 belt) is a LATER release's payload —
+ * today's shape plus a top-level member today does not name, synthetic by
+ * construction — and passes iff today's READ door keeps it, overlays intact,
+ * stripping and naming the member. A case that starts failing is a receiver
+ * that broke N−1 across a rolling release — the fix is the receiver, never
+ * the fixture; a fixture changes only when the pairing of record moves
  * (`docs/protocol/VERSION-POLICY.md` §3.6).
  *
  * Pure-function catalog: no transport, no adopter input — graded on every
  * `runConformance()` and by the kit's own unit lane.
  */
-import { appGenerationProfileSchema, appThemeSchema, opsGenerateBlueprintInputSchema } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
@@ -21,9 +24,14 @@ import release2AppThemeV2 from './cases/release-2-app-theme-v2.json' with { type
 import release2RenderMeta from './cases/release-2-render-meta.json' with { type: 'json' };
 import release2GenerationProfile from './cases/release-2-generation-profile.json' with { type: 'json' };
 import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-blueprint.json' with { type: 'json' };
+import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
+
+/** `backward`: the previous release's payload against today's parser. `forward`: a later release's payload against today's READ door. */
+export const N1_COMPAT_DIRECTIONS = ['backward', 'forward'] as const;
+export type N1CompatDirection = (typeof N1_COMPAT_DIRECTIONS)[number];
 export type N1CompatWire = (typeof N1_COMPAT_WIRES)[number];
 
 export interface N1CompatRelease {
@@ -39,8 +47,10 @@ export interface N1CompatCase {
   readonly name: string;
   readonly description: string;
   readonly release: N1CompatRelease;
+  /** Absent in a case file ⇒ `backward`. */
+  readonly direction: N1CompatDirection;
   readonly wire: N1CompatWire;
-  /** The previous release's payload, verbatim. */
+  /** The other release's payload, verbatim (previous for `backward`, later for `forward`). */
   readonly payload: unknown;
   /** Always `accepted` — a rejected N−1 payload is the violation this catalog exists to catch. */
   readonly expect: 'accepted';
@@ -73,9 +83,12 @@ function n1CompatCase(raw: unknown): N1CompatCase {
   if (raw['expect'] !== 'accepted') throw new Error(`${where}: \`expect\` must be "accepted"`);
   if (!('payload' in raw)) throw new Error(`${where}: \`payload\` missing`);
   const pairedWith = release['pairedWith'];
+  const direction = raw['direction'] ?? 'backward';
+  if (!(N1_COMPAT_DIRECTIONS as readonly unknown[]).includes(direction)) throw new Error(`${where}: unknown direction \`${String(direction)}\``);
   return {
     name,
     description: str(raw, 'description', where),
+    direction: direction as N1CompatDirection,
     release: {
       label: str(release, 'label', `${where}.release`),
       sha: str(release, 'sha', `${where}.release`),
@@ -87,13 +100,28 @@ function n1CompatCase(raw: unknown): N1CompatCase {
   };
 }
 
-export const N1_COMPAT_CASES: readonly N1CompatCase[] = [release2AppThemeV2, release2RenderMeta, release2GenerationProfile, release2OpsGenerateBlueprint].map(n1CompatCase);
+export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
+  release2AppThemeV2,
+  release2RenderMeta,
+  release2GenerationProfile,
+  release2OpsGenerateBlueprint,
+  forwardAppThemeUnknownMember,
+].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
   const r = appThemeSchema.safeParse(payload);
   return r.success
     ? { pass: true, detail: 'appThemeSchema: accepted' }
     : { pass: false, detail: `appThemeSchema refused the previous release's theme: ${r.error.issues.map((i) => i.message).join('; ')}` };
+}
+
+function gradeAppThemeRead(payload: unknown): { pass: boolean; detail: string } {
+  const r = parseAppThemeAtReadDoor(payload);
+  if (!r.ok) return { pass: false, detail: `the read door REFUSED a later release's theme: ${r.issues.join('; ')}` };
+  if (r.stripped.length === 0) return { pass: false, detail: 'the read door stripped nothing — the case must carry a member today does not name' };
+  const sent = isRecord(payload) ? payload['overlays'] : undefined;
+  if (JSON.stringify(r.theme.overlays) !== JSON.stringify(sent)) return { pass: false, detail: 'the read door changed the overlays while stripping' };
+  return { pass: true, detail: `parseAppThemeAtReadDoor: kept, stripped [${r.stripped.join(', ')}]` };
 }
 
 function gradeGenerationProfile(payload: unknown): { pass: boolean; detail: string } {
@@ -129,6 +157,8 @@ export function runN1CompatConformance(): readonly N1CompatResult[] {
     const graded =
       c.wire === 'app-theme'
         ? gradeAppTheme(c.payload)
+        : c.wire === 'app-theme-read'
+          ? gradeAppThemeRead(c.payload)
         : c.wire === 'render-meta'
           ? gradeRenderMeta(c.payload)
           : c.wire === 'generation-profile'

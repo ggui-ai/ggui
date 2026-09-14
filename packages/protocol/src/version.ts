@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * AppTheme read-door posture (2026-09-15, additive, ggui#1093 belt —
+ * MINOR, same draft stamp; VERSION-POLICY §3.6 forward twin, ruled with
+ * cloud). `appThemeReadSchema` + `parseAppThemeAtReadDoor`: READ doors
+ * strip unknown TOP-LEVEL members, keep the overlays, name the stripped
+ * keys; WRITE doors stay on the strict `appThemeSchema`. The render-meta
+ * reader adopts it (`onStrippedThemeMembers`). The kit's `n1-compat`
+ * catalog gains its first FORWARD case (`app-theme-read`). Wire bytes
+ * unchanged; the belt under the #1093 carrier (`fonts?` / `imagery?`).
+ * --------------------------------------------------------------------
  * `ggui_ops_generate_blueprint` gains `intent` (2026-09-13, additive,
  * ggui#1046 — MINOR, same draft stamp): the generation prompt as a
  * NON-identity field, bounded at `OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS`

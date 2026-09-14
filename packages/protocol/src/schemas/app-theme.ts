@@ -142,6 +142,52 @@ export const appThemeSchema = z
 export type AppTheme = z.infer<typeof appThemeSchema>;
 
 /**
+ * The READ-door posture (ggui#1093 belt, 2026-09-15; VERSION-POLICY §3.6).
+ *
+ * `appThemeSchema` is the WRITE door: strict, an unknown top-level member is
+ * refused (`invalid_app_config`). A READ door — a stored row turned into
+ * paint, a carried `_meta["ai.ggui/render"].theme` slice — parses with THIS
+ * schema instead: an unknown TOP-LEVEL member is stripped, the overlays are
+ * kept, and the caller reports what it stripped (one line per read, keys
+ * only, never theme content). Everything below the top level is unchanged —
+ * nested objects stay strict, token grammar and value safety still refuse,
+ * the v1 shape still refuses — and the attestation is untouched because
+ * `overlayHash` covers `{ overlays, cssVariables, keyframes }` only.
+ *
+ * Why: a reader on release N−1 meeting a member release N added would
+ * otherwise drop the WHOLE theme — colours and all — until it rolled
+ * (guuey#1266's class). Parties: every read door of an `AppTheme` MUST use
+ * this variant (or {@link parseAppThemeAtReadDoor}); every write door MUST
+ * stay on `appThemeSchema`. Observable violation: a read door dropping a
+ * theme whose overlays are valid because of an unknown top-level member —
+ * the kit's `n1-compat` forward case grades it.
+ */
+export const appThemeReadSchema = z.object(appThemeSchema.shape);
+
+export type AppThemeReadDoorResult =
+  | { readonly ok: true; readonly theme: AppTheme; readonly stripped: readonly string[] }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+/**
+ * Parse a stored or carried theme at a READ door: `ok` with the theme and
+ * the top-level members that were stripped (payload order, `[]` when none),
+ * or the issues in `path: message` form when the theme is refused for a
+ * reason the write door would also refuse.
+ */
+export function parseAppThemeAtReadDoor(input: unknown): AppThemeReadDoorResult {
+  const r = appThemeReadSchema.safeParse(input);
+  if (!r.success) {
+    return { ok: false, issues: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) };
+  }
+  const known = new Set(Object.keys(appThemeSchema.shape));
+  const stripped =
+    typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? Object.keys(input).filter((k) => !known.has(k))
+      : [];
+  return { ok: true, theme: r.data, stripped };
+}
+
+/**
  * The ONE refusal body every write door returns for an overlay it will not
  * store (ggui#987 §3.4): REST 422 `invalid_app_config`, the AppSync
  * `errorInfo`, the MCP ops door's `{ ok: false }` structured content. A

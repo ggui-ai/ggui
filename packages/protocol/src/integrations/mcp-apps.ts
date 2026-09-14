@@ -33,7 +33,7 @@ import type {
   JsonSchema,
   JsonValue,
 } from '../types/data-contract.js';
-import { appThemeSchema, type AppTheme } from '../schemas/app-theme.js';
+import { parseAppThemeAtReadDoor, type AppTheme } from '../schemas/app-theme.js';
 import { isRecord } from '../validation/is-record.js';
 import type { z } from 'zod';
 import type { gguiSessionSummaryWireSchema } from '../schemas/mcp';
@@ -450,11 +450,19 @@ export type ParseMcpAppAiGguiRenderMetaResult =
  */
 export interface ParseMcpAppAiGguiRenderMetaOptions {
   /**
-   * Called when a `theme` is present but fails `appThemeSchema` — the read
-   * door drops it (tolerant degrade) but MUST NOT be silent (ggui#987 §3.4):
-   * the caller logs or emits its observability event with the issues.
+   * Called when a `theme` is present but the read door refuses it
+   * (`parseAppThemeAtReadDoor`: a reason the write door would refuse too) —
+   * the slice drops it (tolerant degrade) but MUST NOT be silent
+   * (ggui#987 §3.4): the caller logs or emits its observability event.
    */
   readonly onInvalidTheme?: ((issues: readonly string[]) => void) | undefined;
+  /**
+   * Called when the read door KEPT the theme but stripped top-level members
+   * this release does not name (ggui#1093 belt, VERSION-POLICY §3.6) — the
+   * caller logs the keys (never theme content). The theme in the slice is
+   * the stripped one; nothing else changes.
+   */
+  readonly onStrippedThemeMembers?: ((keys: readonly string[]) => void) | undefined;
 }
 
 export function parseMcpAppAiGguiRenderMeta(
@@ -567,16 +575,19 @@ export function parseMcpAppAiGguiRenderMeta(
     typeof vUrl === 'string' &&
     vUrl.length > 0;
 
-  // Theme overlay — validated via the complete `appThemeSchema` so the
-  // parsed value is typed `AppTheme` without an unguarded cast. A
-  // malformed/absent overlay yields `undefined` and is dropped from the
-  // slice (tolerant degrade, consistent with the other optional fields).
-  const themeParse =
-    s.theme !== undefined ? appThemeSchema.safeParse(s.theme) : undefined;
-  const parsedTheme: AppTheme | undefined =
-    themeParse?.success === true ? themeParse.data : undefined;
-  if (themeParse !== undefined && !themeParse.success) {
-    options.onInvalidTheme?.(themeParse.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
+  // Theme overlay — parsed at the READ door (`parseAppThemeAtReadDoor`,
+  // ggui#1093 belt): unknown top-level members are stripped and reported,
+  // the overlays kept, so a slice from a later release never loses its
+  // theme here; anything the write door would refuse is refused and
+  // reported, and the theme is dropped from the slice (tolerant degrade,
+  // consistent with the other optional fields).
+  const themeRead = s.theme !== undefined ? parseAppThemeAtReadDoor(s.theme) : undefined;
+  const parsedTheme: AppTheme | undefined = themeRead?.ok === true ? themeRead.theme : undefined;
+  if (themeRead !== undefined && !themeRead.ok) {
+    options.onInvalidTheme?.(themeRead.issues);
+  }
+  if (themeRead?.ok === true && themeRead.stripped.length > 0) {
+    options.onStrippedThemeMembers?.(themeRead.stripped);
   }
 
   const slice: McpAppAiGguiRenderMeta = {

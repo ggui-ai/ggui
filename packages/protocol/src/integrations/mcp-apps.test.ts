@@ -553,6 +553,37 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     }
   });
 
+  it('KEEPS a `theme` carrying a top-level member this release does not name — strips it, keeps the overlays, reports the stripped keys, and is not an invalid theme (ggui#1093 belt, VERSION-POLICY §3.6)', () => {
+    const theme = {
+      overlayHash: 'a'.repeat(64),
+      overlays: {
+        light: { '--ggui-color-primary-600': '#7c3aed' },
+        dark: { '--ggui-color-primary-600': '#a78bfa' },
+      },
+      name: 'violet',
+    };
+    const invalid: string[][] = [];
+    const stripped: string[][] = [];
+    const result = parseMcpAppAiGguiRenderMeta(
+      {
+        [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+          ...minimalRender,
+          theme: { ...theme, fonts: [{ family: 'Neue Montreal', src: 'https://fonts.example/neue-montreal.woff2' }] },
+        },
+      },
+      {
+        onInvalidTheme: (issues) => invalid.push([...issues]),
+        onStrippedThemeMembers: (keys) => stripped.push([...keys]),
+      },
+    );
+    expect(invalid).toEqual([]);
+    expect(stripped).toEqual([['fonts']]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.theme).toEqual(theme);
+    }
+  });
+
   it('preserves sseUrl beside pollingUrl (SSE middle rung)', () => {
     const result = parseMcpAppAiGguiRenderMeta({
       [MCP_APP_AI_GGUI_RENDER_META_KEY]: {

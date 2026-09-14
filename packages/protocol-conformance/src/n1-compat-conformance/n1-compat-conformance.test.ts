@@ -14,11 +14,16 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
       'release-2-render-meta',
       'release-2-generation-profile',
       'release-2-ops-generate-blueprint',
+      'forward-app-theme-unknown-member',
     ]);
     for (const c of N1_COMPAT_CASES) {
-      expect(c.release.sha).toMatch(/^[0-9a-f]{9,40}$/);
       expect(c.expect).toBe('accepted');
+      if (c.direction === 'backward') expect(c.release.sha).toMatch(/^[0-9a-f]{9,40}$/);
+      else expect(c.release.sha).toBe('synthetic');
     }
+    // ggui#1093 belt — the one FORWARD case grades the read door, not the write door.
+    const forward = N1_COMPAT_CASES.filter((c) => c.direction === 'forward');
+    expect(forward.map((c) => [c.name, c.wire])).toEqual([['forward-app-theme-unknown-member', 'app-theme-read']]);
   });
 
   it("every previous-release payload passes today's parser", () => {
@@ -28,7 +33,7 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
 
   it('is on the package surface — root barrel and its own exports subpath', () => {
     expect(typeof root.runN1CompatConformance).toBe('function');
-    expect(root.N1_COMPAT_CASES.length).toBe(4);
+    expect(root.N1_COMPAT_CASES.length).toBe(5);
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string; default?: string }>;
     };

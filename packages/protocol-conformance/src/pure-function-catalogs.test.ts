@@ -344,8 +344,8 @@ describe('n1-compat catalog fold (ggui#1014 §3.6)', () => {
     expect(PURE_FUNCTION_CATALOG_SLUGS).toContain('n1-compat');
   });
 
-  it('grades every previous-release payload on every run — no input to supply, never skipped', async () => {
-    expect(N1_ROWS).toHaveLength(4);
+  it('grades every backward (previous-release) and forward (later-release) payload on every run — no input to supply, never skipped', async () => {
+    expect(N1_ROWS).toHaveLength(5); // 4 backward (Release 2) + 1 FORWARD (ggui#1093 belt: a later release's top-level member against today's read door)
     const result = await run({ only: N1_ROWS });
     expect(result.failed).toEqual([]);
     expect(result.skipped).toEqual([]);

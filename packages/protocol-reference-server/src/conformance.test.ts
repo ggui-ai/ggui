@@ -8,7 +8,7 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 19 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *   - 20 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
  *     fixtures, the 4 `registry-completeness` catalog rows, which
  *     grade the closed refusal-code registry this server embeds from
  *     `@ggui-ai/protocol` (ggui#786), and the 6 `refusal-envelope`
@@ -156,7 +156,9 @@ const EXPECTED_PASSING = [
   // The `n1-compat` catalog (ggui#1014 §3.6): previous-release payloads
   // against today's protocol parsers — no server behaviour, no input; a
   // vendor-neutral server passes them by construction. Named because the
-  // pass set is exact by design.
+  // pass set is exact by design. The FORWARD case (ggui#1093 belt) grades
+  // the read door's tolerance of a later release's top-level member.
+  'n1-compat/forward-app-theme-unknown-member',
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',

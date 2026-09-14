@@ -1,0 +1,31 @@
+{
+  "name": "forward-app-theme-unknown-member",
+  "description": "FORWARD tolerance (ggui#1093 belt, VERSION-POLICY §3.6): an AppTheme exactly as ggui Release 3 writes it PLUS a top-level member this release does not name (`fonts`, the #1093 carrier's slot). A READ door on this release MUST keep the theme — overlays byte-identical — strip the member and name it; dropping the whole theme over the unknown member is the violation (guuey#1266's class). Synthetic by construction: the payload is the NEXT release's, so it carries no landed sha.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): Release 3's theme plus `fonts`",
+    "sha": "synthetic"
+  },
+  "wire": "app-theme-read",
+  "payload": {
+    "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "overlays": {
+      "light": {
+        "--ggui-color-primary-600": "#7c3aed"
+      },
+      "dark": {
+        "--ggui-color-primary-600": "#a78bfa"
+      }
+    },
+    "mode": "dark",
+    "name": "violet",
+    "fonts": [
+      {
+        "family": "Neue Montreal",
+        "src": "https://fonts.example/neue-montreal.woff2",
+        "weight": 500
+      }
+    ]
+  },
+  "expect": "accepted"
+}
