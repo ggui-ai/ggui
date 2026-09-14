@@ -177,6 +177,6 @@ export function describeCanvas(canvas: CanvasClass): string {
   return (
     `This component renders on the \`${canvas}\` canvas (${d.label}): ` +
     `${d.minWidthPx}–${d.maxWidthPx}px wide, ${d.host}. ` +
-    `Design for the whole range — the host may size the iframe anywhere inside it.`
+    `Design for the whole range — the host may size the iframe anywhere inside it, and the host owns the height: size to your content, never to the viewport.`
   );
 }

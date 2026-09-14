@@ -110,8 +110,16 @@ function renderFreeBoilerplates(): string {
 // `hero` (the catalog union already carried it; `prompt-type-drift.test.ts` was red on that) — constrained only.
 // Re-recorded 2026-09-12 for ggui#1047: the surface span says `inverted` and `hero` OWN their ground — never a
 // `background` in their `style` (tier-0 `universal.scoped_surface_owns_ground` fails it) — constrained only.
+// Re-recorded 2026-09-14 for ggui#1075 Track A/B (receipted on #1096): the shared HARD section
+// `FRAME_SIZING` (the frame owns the height — never `100vh` / `100dvh` as a height) lands after
+// DATA_PARAMETERIZATION in BOTH arms, the constrained shell sentence says the frame stretches the
+// root (size to content, never to the viewport), the free canvas sentence says the host owns the
+// height, and DATA_PARAMETERIZATION's duplicated rule number is fixed (4, 4 → 4, 5) — both prompt
+// digests move together (constrained 9f0fd697… → 8e90aa7e…, free 6be6526c… → dc5a2f4d…); the
+// boilerplate digests are untouched. INVARIANT 1 holds across the re-record; the eval leg gained
+// tier-0 `universal.viewport_sized` in the same cut.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '9f0fd697e3e5143c42780c0b1cae7e0d0361efe10a396ee95bcfd4bc947da09e';
+  '8e90aa7e2e8430544b253d6e708fe2cee9a530a23ffec9ae7bb1b74b623c4022';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -142,7 +150,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  '6be6526c8f1490a568aca9a71fb106b7a957009c2e4e81c5c927d6bcd6ea675a';
+  'dc5a2f4d5e0df54dcadeeded804c08d1ded4bb58970fcfae6d2dcba9cdbe3eb7';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

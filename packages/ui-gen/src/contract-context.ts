@@ -62,9 +62,9 @@ const SHELL_HINTS: Record<string, string> = {
 - Width: width: 100% (fills parent bubble). Do NOT set max-width.`,
 
   fullscreen: `**Fullscreen Shell — Takes over entire viewport**
-- Container: width: 100vw, height: 100vh (100dvh on mobile for safe areas)
+- Container: the whole viewport, edge to edge — the frame stretches your root to its full height (you never set a viewport height yourself)
 - Chrome: NONE — your component IS the entire UI. You own all visual chrome.
-- Sizing: fill the viewport. Use min-height: 100vh or height: 100%. Edge-to-edge.
+- Sizing: size to content; to fill a parent that has a height use height: 100% or flex: 1. NEVER min-height: 100vh / 100dvh — the frame already stretches the root, and a viewport height only fights it (tier-0 fail).
 - Padding: component owns ALL padding. Use var(--ggui-spacing-6) or larger for breathing room.
 - Scrolling: component manages its own scroll if content exceeds viewport (overflow-y: auto)
 - Layout: can use multi-column, sidebars, headers/footers. Full creative control.

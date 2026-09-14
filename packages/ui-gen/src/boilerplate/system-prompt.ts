@@ -39,6 +39,7 @@ import {
   CROSS_REFERENCE_RULES,
   DATA_PARAMETERIZATION,
   DEFENSIVE_CODING,
+  FRAME_SIZING,
   GESTURE_ROUTING,
   INTERACTIVE_TRAITS,
   PROTOCOL_NOTES,
@@ -134,7 +135,8 @@ export interface SystemPromptInputs {
 
 const SHELL_DESCRIPTIONS: Record<string, string> = {
   chat: "inline component inside ChatShell message bubble (~400px wide, compact)",
-  fullscreen: "full viewport, responsive layout",
+  fullscreen:
+    "the full host viewport, responsive layout — the frame stretches your root to its height; size to content, never to the viewport",
   spatial: "floating AR/VR panel (~600px, touch-friendly)",
 };
 
@@ -633,6 +635,7 @@ Hero sections should feel airy. Use \`padding="xl"\` (32px) on the main card, no
 export const DESIGN_SYSTEM_GUIDANCE = [
   DESIGN_SYSTEM_GUIDANCE_SURFACE_AND_TOKENS,
   DATA_PARAMETERIZATION,
+  FRAME_SIZING,
   COMPONENT_STRUCTURE,
   DESIGN_SYSTEM_GUIDANCE_AESTHETICS_AND_CHECKLIST,
 ].join("\n\n");

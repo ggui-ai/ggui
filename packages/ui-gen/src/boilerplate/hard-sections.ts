@@ -214,7 +214,21 @@ Rules:
 2. Layout and styling are universal. Colors, spacing, structure — these are the reusable part.
 3. Default values come from the current request — so the component renders correctly standalone.
 4. Copy comes from the props. NEVER invent display text the contract does not carry — no eyebrow / kicker / overline (a \`<Text caps>\` label), no helper line, no status text, no tagline. A caps label exists only when a prop supplies its text (\`<Text caps>{props.section}</Text>\`); a heading's fallback is the request's own words, never a slogan of your own. Text the agent cannot change is chatter on every render.
-4. Props interface must be typed and exported.`;
+5. Props interface must be typed and exported.`;
+
+/**
+ * The frame owns the height — the component never sizes itself to the
+ * viewport (ggui#1075 Track A/B; receipted on #1096: 20 of 48 minted cells
+ * carried `minHeight: "100vh"` on their root, one of them an inline chat
+ * card told "compact"). Identical in both modes; the eval leg's tier-0
+ * `universal.viewport_sized` fails what slips through.
+ */
+export const FRAME_SIZING = `## Sizing — the frame owns the height
+
+The host sizes the iframe; the component never sizes itself to the viewport. NEVER write \`100vh\` / \`100dvh\` / \`100svh\` (or an \`h-screen\` / \`min-h-screen\` class) as a height on any element:
+- An inline card takes its natural height. A content-sized frame is measured FROM the content, so a \`100vh\` root can never shrink and grows the frame on every re-measure.
+- Under fullscreen the frame already stretches your root to its full height. Centre inside it with flex (\`display: flex; flex-direction: column; justify-content: center\`), never with a viewport height.
+- To fill a parent that has a height use \`height: 100%\` or \`flex: 1\`; a viewport unit is only ever a \`max-height\` cap on a scroll region.`;
 
 /** Helper-component structure guidance (JSX depth 3–5, helpers above `Component`). Identical in both modes. */
 export const COMPONENT_STRUCTURE = `## Component Structure

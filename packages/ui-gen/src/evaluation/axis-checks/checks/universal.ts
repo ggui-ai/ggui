@@ -285,6 +285,54 @@ function runCapsLabelInvented(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.viewport_sized (ggui#1075 Track A/B, receipted on #1096) ─
+// An element sized to the viewport — `100vh` / `100dvh` / `100svh` / `100lvh`
+// (bare or inside `calc()`) as a `height` / `min-height`, or the `h-screen` /
+// `min-h-screen` utility classes. The frame owns the height: a content-sized
+// frame is measured FROM the content, so a viewport-sized root can never
+// shrink and grows the frame on every re-measure; under fullscreen the frame
+// already stretches the root to its height. 20 of 48 minted cells in one
+// sample carried `minHeight: "100vh"` on their root — one an inline chat
+// card told "compact". A `max-height` cap on a scroll region is not sizing
+// and passes; so do `height: 100%`, `flex: 1` and pixel heights.
+// The unit, with a `calc(…)` wrapper closed when present — so the quoted
+// snippet reads whole (`height: "calc(100dvh - 64px)"`).
+const VIEWPORT_UNIT = String.raw`(?:calc\(\s*)?100(?:vh|dvh|svh|lvh)\b(?:[^)"'\x60;\n]*\))?`;
+const VIEWPORT_STYLE_OBJECT_RX = new RegExp(
+  String.raw`\b(?:minHeight|height|minBlockSize|blockSize)\s*:\s*["'\x60]\s*${VIEWPORT_UNIT}["'\x60]?`,
+  "g",
+);
+const VIEWPORT_CSS_RX = new RegExp(
+  String.raw`(?<![\w-])(?:min-)?(?:height|block-size)\s*:\s*${VIEWPORT_UNIT}`,
+  "g",
+);
+const VIEWPORT_CLASS_RX = /(?<![\w-])(?:min-)?h-(?:screen|dvh|svh|lvh)\b/g;
+
+/** Every viewport-sized height in the source, as written (trimmed, ≤ 60 chars), in order. */
+export function findViewportSizing(sourceCode: string): string[] {
+  const hits: Array<{ at: number; text: string }> = [];
+  for (const rx of [VIEWPORT_STYLE_OBJECT_RX, VIEWPORT_CSS_RX, VIEWPORT_CLASS_RX]) {
+    for (const m of sourceCode.matchAll(rx)) {
+      hits.push({ at: m.index ?? 0, text: m[0].replace(/\s+/g, " ").trim().slice(0, 60) });
+    }
+  }
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.text);
+}
+
+function runViewportSized(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const sized = findViewportSizing(input.sourceCode);
+  if (sized.length === 0) return [];
+  const list = sized.map((t) => "`" + t + "`").join(", ");
+  return [
+    mkIssue(
+      "universal.viewport_sized",
+      `${sized.length} element(s) are sized to the viewport: ${list} — the frame owns the height; a content-sized frame is measured from the content, so a viewport-sized root never shrinks and grows the frame on every re-measure.`,
+      "Remove the viewport height — size to content, never to the viewport. Under fullscreen the frame stretches your root already (centre inside it with `display: flex; flex-direction: column; justify-content: center`); to fill a parent that has a height use `height: 100%` or `flex: 1`.",
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -297,6 +345,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runCapsLabelInvented,
+  },
+  {
+    id: "universal.viewport_sized",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runViewportSized,
   },
   {
     id: "universal.accent_text_ink",
