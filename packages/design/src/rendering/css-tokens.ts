@@ -356,8 +356,11 @@ export function fillFitRule(scopeClass: string): string {
     // A root that is only a wrapper around ONE surface (a centring <div> round
     // a hero card) hands the fill through: the wrapper becomes a column and
     // the surface inside it is the one stripped and stretched (ggui#1073).
-    `.${s} > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; }`,
-    `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} flex: 1 1 auto; }`,
+    // The wrapper's own inset goes with its margins, and the surface's own
+    // viewport sizing (a cell's inline `min-height: 100vh`) yields to the
+    // frame — the flex column fills it (ggui#1096: 884 px in an 836 frame).
+    `.${s} > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; padding: 0 !important; }`,
+    `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} min-height: 0 !important; flex: 1 1 auto; }`,
   ].join('\n');
 }
 
