@@ -149,6 +149,12 @@ for (const provider of PROVIDERS) {
           await page.goto(host.url, { waitUntil: 'networkidle' });
           const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
           const bodyText = async () => await appFrame.locator('body').innerText();
+          // The footer regexes are whitespace-TOLERANT (`\s*`): this scenario asserts
+          // that the amended VALUES reach the iframe, not how the generated markup
+          // spaces them. Chrome's innerText separates flex items with "\n" and joins
+          // adjacent inline elements with nothing — a `<span>0</span><span>of</span>…`
+          // footer reads "0of2done" (ggui#1099, candidate 34: the tokens were present
+          // and in order; the visual read of the phrase belongs to the judge).
 
           // 3. Initial render check.
           await expect
@@ -162,7 +168,7 @@ for (const provider of PROVIDERS) {
             .toMatch(/walk dog/i);
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
-            .toMatch(/0 of 2 done/i);
+            .toMatch(/0\s*of\s*2\s*done/i);
 
           // Allow the post-mount WS subscribe to settle.
           await new Promise((r) => setTimeout(r, 500));
@@ -182,7 +188,7 @@ for (const provider of PROVIDERS) {
           });
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
-            .toMatch(/1 of 2 done/i);
+            .toMatch(/1\s*of\s*2\s*done/i);
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
             .toMatch(/walk the dog/i);
@@ -198,7 +204,7 @@ for (const provider of PROVIDERS) {
             .toMatch(/updated todos/i);
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
-            .toMatch(/1 of 2 done/i);
+            .toMatch(/1\s*of\s*2\s*done/i);
 
           // ── PHASE 3 — kind: 'merge' nested-deep ─────────────────────
           await callTool(MCP_URL, 'ggui_amend', {
@@ -208,7 +214,7 @@ for (const provider of PROVIDERS) {
           });
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
-            .toMatch(/2 of 2 done/i);
+            .toMatch(/2\s*of\s*2\s*done/i);
           await expect
             .poll(bodyText, { timeout: 5_000, interval: 200 })
             .toMatch(/updated todos/i);
@@ -239,7 +245,7 @@ for (const provider of PROVIDERS) {
           // DOM remains on phase-3 state.
           await expect
             .poll(bodyText, { timeout: 2_000, interval: 200 })
-            .toMatch(/2 of 2 done/i);
+            .toMatch(/2\s*of\s*2\s*done/i);
         },
         // The render call itself blocks on cold-gen (observed typical
         // ~2-3s) — the 240s ceiling covers gen + mount + the four
