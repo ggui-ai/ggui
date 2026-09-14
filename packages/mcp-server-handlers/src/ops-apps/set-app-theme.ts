@@ -68,7 +68,7 @@ const inputSchema = {
       'Target `GguiApp.appId` — must be one the calling user owns. Discover via `ggui_ops_list_apps`.',
     ),
   theme: appThemeSchema.describe(
-    'The app theme: `overlays.light` / `overlays.dark` are the derived `--ggui-*` sets (every consumed token, minus the floor the renderer owns), `overlayHash` = canonicalOverlayHash({ overlays, cssVariables, keyframes }); optional `mode` (the default when no host announces one), `name` (a label), `cssVariables` (mode-agnostic overrides), `keyframes` (per mode), `frameless`. Refused with `invalid_app_config` when a mode leaves a token uncovered, names a token outside the manifest, the attestation mismatches, or the body is the retired one-palette shape.',
+    'The app theme: `overlays.light` / `overlays.dark` are the derived `--ggui-*` sets (every consumed token, minus the floor the renderer owns), `overlayHash` = canonicalOverlayHash({ overlays, cssVariables, keyframes }); optional `mode` (the default when no host announces one), `name` (a label), `cssVariables` (mode-agnostic overrides), `keyframes` (per mode), `frameless`. Refused with `invalid_app_config` when a mode leaves a token uncovered, names a token outside the manifest, the attestation mismatches, or the body is the retired one-palette shape. Optional declared assets (ggui#1093): `fonts` — 1..16 faces, https-only `src`, the host admits their origins and the shell inlines them — and `imagery` — `mark` / `hero` / `pattern`, each `{ src, alt?, tone? }`, https-only; both outside the attestation.',
   ),
 } as const;
 

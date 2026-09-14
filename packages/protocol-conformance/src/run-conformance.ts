@@ -466,7 +466,10 @@ async function runPureFunctionCatalogs(
       fail({
         name,
         criterion: 'N−1 wire compatibility (VERSION-POLICY §3.6, ggui#1014)',
-        expected: 'the previous release\u2019s payload accepted by today\u2019s parser',
+        expected:
+          graded.direction === 'forward'
+            ? 'a later release\u2019s payload KEPT by today\u2019s read door — the unknown top-level member stripped and named'
+            : 'the previous release\u2019s payload accepted by today\u2019s parser',
         received: graded.detail,
         message: graded.detail,
       });

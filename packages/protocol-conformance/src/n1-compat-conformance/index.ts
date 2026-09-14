@@ -37,7 +37,7 @@ export type N1CompatWire = (typeof N1_COMPAT_WIRES)[number];
 export interface N1CompatRelease {
   /** Human label of the release that emitted the payload (e.g. "ggui Release 2"). */
   readonly label: string;
-  /** The release's sha — the receipt that the payload is that release's, not a guess. */
+  /** The release's sha — the receipt that the payload is that release's, not a guess. A FORWARD case has no landed release and carries the literal `synthetic`. */
   readonly sha: string;
   /** The pairing of record on the other side, when the wire crosses fleets. */
   readonly pairedWith?: string;
@@ -58,8 +58,17 @@ export interface N1CompatCase {
 
 export interface N1CompatResult {
   readonly name: string;
+  readonly direction: N1CompatDirection;
   readonly pass: boolean;
   readonly detail: string;
+}
+
+function isN1CompatWire(v: unknown): v is N1CompatWire {
+  return typeof v === 'string' && (N1_COMPAT_WIRES as readonly string[]).includes(v);
+}
+
+function isN1CompatDirection(v: unknown): v is N1CompatDirection {
+  return typeof v === 'string' && (N1_COMPAT_DIRECTIONS as readonly string[]).includes(v);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -79,22 +88,22 @@ function n1CompatCase(raw: unknown): N1CompatCase {
   const release = raw['release'];
   if (!isRecord(release)) throw new Error(`${where}: \`release\` must be an object`);
   const wire = str(raw, 'wire', where);
-  if (!(N1_COMPAT_WIRES as readonly string[]).includes(wire)) throw new Error(`${where}: unknown wire \`${wire}\``);
+  if (!isN1CompatWire(wire)) throw new Error(`${where}: unknown wire \`${wire}\``);
   if (raw['expect'] !== 'accepted') throw new Error(`${where}: \`expect\` must be "accepted"`);
   if (!('payload' in raw)) throw new Error(`${where}: \`payload\` missing`);
   const pairedWith = release['pairedWith'];
   const direction = raw['direction'] ?? 'backward';
-  if (!(N1_COMPAT_DIRECTIONS as readonly unknown[]).includes(direction)) throw new Error(`${where}: unknown direction \`${String(direction)}\``);
+  if (!isN1CompatDirection(direction)) throw new Error(`${where}: unknown direction \`${String(direction)}\``);
   return {
     name,
     description: str(raw, 'description', where),
-    direction: direction as N1CompatDirection,
+    direction,
     release: {
       label: str(release, 'label', `${where}.release`),
       sha: str(release, 'sha', `${where}.release`),
       ...(typeof pairedWith === 'string' ? { pairedWith } : {}),
     },
-    wire: wire as N1CompatWire,
+    wire,
     payload: raw['payload'],
     expect: 'accepted',
   };
@@ -164,6 +173,6 @@ export function runN1CompatConformance(): readonly N1CompatResult[] {
           : c.wire === 'generation-profile'
             ? gradeGenerationProfile(c.payload)
             : gradeOpsGenerateBlueprint(c.payload);
-    return { name: c.name, pass: graded.pass, detail: `${c.release.label} (${c.release.sha}) → ${graded.detail}` };
+    return { name: c.name, direction: c.direction, pass: graded.pass, detail: `${c.release.label} (${c.release.sha}) → ${graded.detail}` };
   });
 }

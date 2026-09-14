@@ -8,12 +8,15 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 20 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *   - 37 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
  *     fixtures, the 4 `registry-completeness` catalog rows, which
  *     grade the closed refusal-code registry this server embeds from
- *     `@ggui-ai/protocol` (ggui#786), and the 6 `refusal-envelope`
+ *     `@ggui-ai/protocol` (ggui#786), the 6 `refusal-envelope`
  *     rows, graded through the protocol's own `projectRenderRefusal`
- *     (ggui#803 leg 9) — no tool plane needed for a pure projection.
+ *     (ggui#803 leg 9) — no tool plane needed for a pure projection —
+ *     the 13 `theme-binding` rows (ggui#987) and the 5 `n1-compat` rows
+ *     (4 backward + 1 forward; ggui#1014 §3.6, ggui#1093): pure-function
+ *     catalogs a vendor-neutral server passes by construction.
  *   - 11 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`), the matcher's

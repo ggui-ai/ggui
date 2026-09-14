@@ -11,7 +11,7 @@
  */
 import type { AppTheme } from '../schemas/app-theme.js';
 
-/** The attested part of an overlay — never `mode`, `name` or `frameless`. */
+/** The attested part of an overlay — never `mode`, `name`, `frameless`, nor the declared assets `fonts` / `imagery` (ggui#1093). */
 export type OverlayHashInput = Pick<AppTheme, 'overlays' | 'cssVariables' | 'keyframes'>;
 
 type Json = string | number | boolean | null | Json[] | { readonly [k: string]: Json | undefined };

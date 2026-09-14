@@ -34,6 +34,8 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
   it('is on the package surface — root barrel and its own exports subpath', () => {
     expect(typeof root.runN1CompatConformance).toBe('function');
     expect(root.N1_COMPAT_CASES.length).toBe(5);
+    expect(root.N1_COMPAT_DIRECTIONS).toEqual(['backward', 'forward']);
+    expect(runN1CompatConformance().map((r) => r.direction)).toEqual(['backward', 'backward', 'backward', 'backward', 'forward']);
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string; default?: string }>;
     };

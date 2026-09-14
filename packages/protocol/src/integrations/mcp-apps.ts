@@ -341,11 +341,17 @@ export interface McpAppAiGguiRenderMeta {
    * Resolved per-app theme overlay (ggui#987): the projection for BOTH
    * modes (`overlays.light` / `overlays.dark`), the mode-agnostic
    * `cssVariables` on top, per-mode keyframes, the `overlayHash`
-   * attestation, and an optional default `mode` — snapshotted from
-   * `App.theme`. Distinct from `themeId` (a compiled-theme reference) and
-   * `themeMode` (the bare light/dark discriminator): the iframe injects
-   * `overlays[effectiveMode]` then `cssVariables` as `:root` declarations.
-   * Absent ⇒ no per-app overlay; the renderer applies its default theme.
+   * attestation, an optional default `mode`, and (ggui#1093) the declared
+   * assets — `fonts` (faces the host admits under `font-src` and the shell
+   * inlines) and `imagery` (mark / hero / pattern), both outside the
+   * attestation — snapshotted from `App.theme`. Distinct from `themeId`
+   * (a compiled-theme reference) and `themeMode` (the bare light/dark
+   * discriminator): the iframe injects `overlays[effectiveMode]` then
+   * `cssVariables` as `:root` declarations. Absent ⇒ no per-app overlay;
+   * the renderer applies its default theme. Parsed at the READ door
+   * (`parseAppThemeAtReadDoor`, VERSION-POLICY §3.6): a top-level member
+   * this release does not name is stripped and reported, never dropped
+   * with the theme.
    */
   readonly theme?: AppTheme;
 
@@ -606,9 +612,10 @@ export function parseMcpAppAiGguiRenderMeta(
     ...(s.themeMode !== undefined
       ? { themeMode: s.themeMode as 'light' | 'dark' }
       : {}),
-    // `theme` is the only structured optional field on the slice, so
-    // it gets the schema as its parser (the rest are scalar/array
-    // casts). `appThemeSchema` is the complete validator — a malformed
+    // `theme` is the only structured optional field on the slice, so it
+    // gets a parser (the rest are scalar/array casts): the READ door
+    // `parseAppThemeAtReadDoor` — unknown top-level members stripped and
+    // reported, everything the write door would refuse refused. A refused
     // overlay degrades to "no overlay" rather than failing the whole
     // slice, matching the tolerant posture of the other optional fields.
     ...(parsedTheme !== undefined ? { theme: parsedTheme } : {}),

@@ -332,8 +332,9 @@ export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBa
    */
   readonly gadgetDescriptors?: readonly GadgetDescriptor[];
   /**
-   * Theme sidecar — the resolved per-app theme overlay (mode +
-   * `--ggui-*` CSS-variable map) snapshotted from `App.theme` at
+   * Theme sidecar — the resolved per-app theme overlay (the two-mode
+   * `--ggui-*` projection, its attestation, and since ggui#1093 the
+   * declared assets `fonts` / `imagery`) snapshotted from `App.theme` at
    * render-commit time. Sibling to {@link ComponentGguiSession.gadgetDescriptors}:
    * a render-time snapshot the slice-meta derivation reads without
    * re-resolving against the App record. The bootstrap projection

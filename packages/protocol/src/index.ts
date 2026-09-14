@@ -24,8 +24,11 @@ export * from "./schemas/render-input-envelope";
 export type { DeepReadonly } from "./types/readonly";
 export * from "./schemas/invoke";
 export * from "./schemas/data-contract";
-// Per-app theme overlay — `AppTheme` + injection-safe `appThemeSchema`
-// (`--ggui-*` css-var map). Consumed by the deploy/persist path (ggui.json
+// Per-app theme overlay — `AppTheme` + the injection-safe WRITE schema
+// `appThemeSchema` (`--ggui-*` css-var map), the READ-door variant
+// `appThemeReadSchema` / `parseAppThemeAtReadDoor` (VERSION-POLICY §3.6,
+// ggui#1093) and the declared-asset grammar (`fontFaceDeclarationSchema`,
+// `appThemeImagerySchema`). Consumed by the deploy/persist path (ggui.json
 // → managed cloud app) and projected into the rendered iframe's `:root`.
 export * from "./schemas/app-theme";
 export * from "./integrations/overlay-hash";
