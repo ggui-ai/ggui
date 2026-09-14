@@ -266,6 +266,11 @@ export interface DtcgTheme {
      * (ggui#1093 P1c): the document door stamps nothing — absent stays
      * absent — and the COMPOSER's default is `respect`, emitting the
      * reduced-motion rule unless a document explicitly says `ignore`.
+     *
+     * CONTRACTED, NOT YET CONSUMED (ggui#1106): the primitives express
+     * motion as build-time constants, so no `--ggui-motion-*` variable
+     * exists to project onto and a stated tempo changes nothing visible
+     * until that row lands. Declaring it today is correct and stored.
      */
     reduce?: 'respect' | 'ignore';
   };

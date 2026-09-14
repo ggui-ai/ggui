@@ -266,6 +266,19 @@ const TypeScaleRole = z.strictObject({
  * Nothing is lost by it: a document needing one bespoke step states no
  * rhythm, and an app needing one pinned value has `AppTheme.cssVariables`,
  * which overrides the whole projection at the overlay layer.
+ *
+ * CONTRACTED AHEAD OF THEIR CONSUMERS — read this before assuming a stated
+ * member changes a pixel. A member may be contracted before its consumer
+ * exists; a VARIABLE may not enter the consumed-token manifest before its
+ * consumer exists (a name nothing reads is coverage debt, not a feature).
+ * Today that makes three of these members STATED, STORED and NOT YET
+ * VISIBLE: the role-named type families and `scrim` arrive with their
+ * consumers (ggui#1075 Track C (b), ggui#1083), and `motion` with
+ * **ggui#1106** — the card's motion is build-time constants in the
+ * primitives, so no `--ggui-motion-*` variable exists to project onto yet
+ * (the manifest carries 122 tokens and none of them is motion). A writer
+ * may declare all of them now, which is the point of contracting first;
+ * nobody should read the contract as shipping the behaviour.
  */
 
 /** The five type roles; `display` is the poster-scale role a host page leads with. */
