@@ -70,3 +70,17 @@ describe('composeThemeCss — one composition, three callers', () => {
     expect(composeThemeCss({ layer: 'chrome', mode: 'light' })).toBe(`${getCssTokens('light')}:root{color-scheme:light;}`);
   });
 });
+
+describe('fillFitRule (ggui#1041 / #1073)', () => {
+  it('anchors the scope on the frame (100vh, flex column), zeroes the chain above it, strips the root, and reaches an only-child surface through a wrapper', () => {
+    const rule = fillFitRule('ggui-rcr-9');
+    expect(rule).toContain('.ggui-rcr-9 { min-height: 100vh; display: flex; flex-direction: column; }');
+    expect(rule).toContain(':has(> .ggui-rcr-9) { margin: 0; padding: 0; list-style: none; }');
+    expect(rule).toContain('html:has(.ggui-rcr-9), html:has(.ggui-rcr-9) body { margin: 0; }');
+    expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)) { border: none !important; border-radius: 0 !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; flex: 1 1 auto; }');
+    expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; }');
+    expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)) > :where(:only-child) { border: none !important; border-radius: 0 !important; box-shadow: none !important; flex: 1 1 auto; }');
+    // Never a percentage height anywhere in the chain — that was the 414-of-836 bug.
+    expect(rule).not.toContain('min-height: 100%');
+  });
+});

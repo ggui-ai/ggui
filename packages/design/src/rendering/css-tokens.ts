@@ -338,7 +338,27 @@ export function framelessSuppressionRule(scopeClass: string): string {
  * the page. The host's panel carries the one chrome.
  */
 export function fillFitRule(scopeClass: string): string {
-  return `\n.${scopeClass} { min-height: 100%; }\n.${scopeClass} > :where(:not(style)) { border: none !important; border-radius: 0 !important; box-shadow: none !important; min-height: 100%; }`;
+  const s = scopeClass;
+  const strip = 'border: none !important; border-radius: 0 !important; box-shadow: none !important;';
+  return [
+    '',
+    // The chain above the scope is the host's frame: the runtime's mount list
+    // (a bare <ul>: 16 px margins, padding, bullets) and the document margins
+    // must not add to the canvas (ggui#1073 — the fill measured 414 px in an
+    // 836 px frame because 100 % resolved against a content-sized list).
+    `html:has(.${s}), html:has(.${s}) body { margin: 0; }`,
+    `:has(> .${s}) { margin: 0; padding: 0; list-style: none; }`,
+    // The scope is the viewport — anchored on the frame's own height, never on
+    // a parent's, and a flex column so the root grows with it.
+    `.${s} { min-height: 100vh; display: flex; flex-direction: column; }`,
+    // The root drops its own silhouette and centring; it fills the column.
+    `.${s} > :where(:not(style)) { ${strip} margin: 0 !important; max-width: none !important; flex: 1 1 auto; }`,
+    // A root that is only a wrapper around ONE surface (a centring <div> round
+    // a hero card) hands the fill through: the wrapper becomes a column and
+    // the surface inside it is the one stripped and stretched (ggui#1073).
+    `.${s} > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; }`,
+    `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} flex: 1 1 auto; }`,
+  ].join('\n');
 }
 
 /**
