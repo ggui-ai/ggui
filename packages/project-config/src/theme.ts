@@ -38,6 +38,7 @@
  * keys fail parse, the same discipline as `ggui.json`.
  */
 import { z } from 'zod';
+import { fontFaceDeclarationSchema } from '@ggui-ai/protocol';
 import { lightTheme } from '@ggui-ai/design/themes';
 import type { DtcgTheme, DtcgToken } from '@ggui-ai/design/themes';
 
@@ -130,27 +131,6 @@ const StringToken = z.strictObject({
   $value: z.string().min(1),
   $description: z.string().optional(),
 });
-/** A declared font face (ggui#987 §5): `src` MUST be `https:` with a
- *  well-formed host — the same rule the design package asserts. */
-const FontFaceDeclarationSchema = z.strictObject({
-  family: z.string().min(1).refine((f) => !/[\r\n]/.test(f), 'family must be one line'),
-  src: z
-    .string()
-    .min(1)
-    .refine((src) => {
-      let url: URL;
-      try {
-        url = new URL(src);
-      } catch {
-        return false;
-      }
-      return url.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(url.hostname) && url.hostname.includes('.');
-    }, 'src must be an https: URL with a well-formed host'),
-  weight: z.union([z.string().min(1), z.number().int().min(1).max(1000)]).optional(),
-  style: z.string().min(1).optional(),
-  display: z.string().min(1).optional(),
-});
-
 // ─── Groups ──────────────────────────────────────────────────────────
 
 /**
@@ -226,7 +206,8 @@ const FontGroup = z.strictObject({
 });
 /** Declared font faces (ggui#987 §5). */
 const TypographyGroup = z.strictObject({
-  faces: z.array(FontFaceDeclarationSchema).optional(),
+  /** The ONE face grammar — `@ggui-ai/protocol`'s `fontFaceDeclarationSchema` (ggui#1093): the document door and the AppTheme wire's `fonts` validate identically. */
+  faces: z.array(fontFaceDeclarationSchema).optional(),
 });
 
 /**

@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { appThemeReadSchema, appThemeRefusalBodySchema, appThemeSchema, parseAppThemeAtReadDoor, type AppTheme } from './app-theme.js';
+import {
+  APP_THEME_FONTS_MAX,
+  appThemeImagerySchema,
+  appThemeReadSchema,
+  appThemeRefusalBodySchema,
+  appThemeSchema,
+  fontFaceDeclarationSchema,
+  parseAppThemeAtReadDoor,
+  type AppTheme,
+} from './app-theme.js';
+import { canonicalOverlayJson } from '../integrations/overlay-hash.js';
 
 const HASH = 'a'.repeat(64);
 
@@ -116,7 +126,7 @@ describe('appThemeReadSchema + parseAppThemeAtReadDoor — the read-door posture
     },
     name: 'violet',
   };
-  const later = { ...valid, fonts: [{ family: 'Neue Montreal', src: 'https://fonts.example/neue-montreal.woff2' }] };
+  const later = { ...valid, futureMember: { any: 'shape' } };
 
   it('the WRITE schema still refuses an unknown top-level member', () => {
     expect(appThemeSchema.safeParse(later).success).toBe(false);
@@ -129,11 +139,11 @@ describe('appThemeReadSchema + parseAppThemeAtReadDoor — the read-door posture
   });
 
   it('the read helper names the stripped members, in payload order, and reports none when nothing was stripped', () => {
-    const r = parseAppThemeAtReadDoor({ ...later, imagery: { mark: { src: 'https://cdn.example/mark.svg' } } });
+    const r = parseAppThemeAtReadDoor({ ...later, anotherFutureMember: 1 });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.theme).toEqual(valid);
-      expect(r.stripped).toEqual(['fonts', 'imagery']);
+      expect(r.stripped).toEqual(['futureMember', 'anotherFutureMember']);
     }
     const clean = parseAppThemeAtReadDoor(valid);
     expect(clean.ok).toBe(true);
@@ -148,5 +158,86 @@ describe('appThemeReadSchema + parseAppThemeAtReadDoor — the read-door posture
     if (!badToken.ok) expect(badToken.issues.some((i) => i.startsWith('overlays.light'))).toBe(true);
     expect(parseAppThemeAtReadDoor({ mode: 'light', cssVariables: {} }).ok).toBe(false);
     expect(parseAppThemeAtReadDoor('violet').ok).toBe(false);
+  });
+});
+
+// ggui#1093 P1a — the host-design-language CARRIER, wire half (#1075 Track C (a), #990):
+// `fonts?` (the document's `typography.faces` grammar, lifted — one schema, two
+// doors) and `imagery?` (mark / hero / pattern, https-only, tone word). Grammar at
+// the door, never fetched; the render host unions origins into CSP, the shell
+// inlines the faces; neither is inside the attestation.
+describe('AppTheme carrier — fonts + imagery (ggui#1093 P1a)', () => {
+  const valid: AppTheme = {
+    overlayHash: HASH,
+    overlays: {
+      light: { '--ggui-color-primary-600': '#7c3aed' },
+      dark: { '--ggui-color-primary-600': '#a78bfa' },
+    },
+  };
+  const face = { family: 'Neue Montreal', src: 'https://fonts.example/neue-montreal.woff2', weight: 500, style: 'normal', display: 'swap' };
+
+  it('fontFaceDeclarationSchema is the document grammar, verbatim: one-line family, https src with a well-formed host, weight string|int 1..1000, style, display; strict', () => {
+    expect(fontFaceDeclarationSchema.parse(face)).toEqual(face);
+    expect(fontFaceDeclarationSchema.parse({ family: 'X', src: 'https://f.example/x.woff2', weight: 'bold' }).weight).toBe('bold');
+    for (const bad of [
+      { family: 'X', src: 'http://f.example/x.woff2' },
+      { family: 'X', src: 'https://localhost/x.woff2' },
+      { family: 'X', src: 'not a url' },
+      { family: 'two\nlines', src: 'https://f.example/x.woff2' },
+      { family: 'X', src: 'https://f.example/x.woff2', weight: 0 },
+      { family: 'X', src: 'https://f.example/x.woff2', weight: 1001 },
+      { family: 'X', src: 'https://f.example/x.woff2', unicodeRange: 'U+0000-00FF' },
+      { src: 'https://f.example/x.woff2' },
+    ]) {
+      expect(fontFaceDeclarationSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('accepts `fonts` up to APP_THEME_FONTS_MAX faces; refuses an empty array, one over the max, and a face with a non-https src — naming the path', () => {
+    expect(APP_THEME_FONTS_MAX).toBe(16);
+    expect(appThemeSchema.parse({ ...valid, fonts: [face] })).toEqual({ ...valid, fonts: [face] });
+    expect(appThemeSchema.safeParse({ ...valid, fonts: Array.from({ length: APP_THEME_FONTS_MAX }, () => face) }).success).toBe(true);
+    expect(appThemeSchema.safeParse({ ...valid, fonts: [] }).success).toBe(false);
+    expect(appThemeSchema.safeParse({ ...valid, fonts: Array.from({ length: APP_THEME_FONTS_MAX + 1 }, () => face) }).success).toBe(false);
+    const bad = appThemeSchema.safeParse({ ...valid, fonts: [face, { family: 'Y', src: 'http://f.example/y.woff2' }] });
+    expect(bad.success).toBe(false);
+    expect(bad.error?.issues[0]?.path).toEqual(['fonts', 1, 'src']);
+  });
+
+  it('accepts `imagery` — mark / hero / pattern, each { src https, alt? ≤ 200, tone? light|dark }; refuses http, an unknown kind, an unknown key, a long alt, a tone outside the pair', () => {
+    const imagery = {
+      mark: { src: 'https://cdn.example/mark.svg', alt: 'Mosaic' },
+      hero: { src: 'https://cdn.example/hero.jpg', tone: 'dark' },
+      pattern: { src: 'https://cdn.example/pattern.png', tone: 'light' },
+    };
+    expect(appThemeImagerySchema.parse(imagery)).toEqual(imagery);
+    expect(appThemeSchema.parse({ ...valid, imagery })).toEqual({ ...valid, imagery });
+    expect(appThemeSchema.parse({ ...valid, imagery: { mark: { src: 'https://cdn.example/m.svg' } } }).imagery?.mark?.src).toBe('https://cdn.example/m.svg');
+    for (const bad of [
+      { mark: { src: 'http://cdn.example/mark.svg' } },
+      { logo: { src: 'https://cdn.example/mark.svg' } },
+      { mark: { src: 'https://cdn.example/mark.svg', width: 10 } },
+      { mark: { src: 'https://cdn.example/mark.svg', alt: 'a'.repeat(201) } },
+      { hero: { src: 'https://cdn.example/hero.jpg', tone: 'sepia' } },
+      { mark: 'https://cdn.example/mark.svg' },
+    ]) {
+      expect(appThemeSchema.safeParse({ ...valid, imagery: bad }).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('the read door now NAMES fonts and imagery — kept, nothing stripped — and still strips a member no release names beside them', () => {
+    const imagery = { mark: { src: 'https://cdn.example/mark.svg' } };
+    const r = parseAppThemeAtReadDoor({ ...valid, fonts: [face], imagery, futureMember: 1 });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.theme).toEqual({ ...valid, fonts: [face], imagery });
+      expect(r.stripped).toEqual(['futureMember']);
+    }
+    expect(appThemeReadSchema.parse({ ...valid, fonts: [face] })).toEqual({ ...valid, fonts: [face] });
+  });
+
+  it('fonts and imagery are OUTSIDE the attestation — the canonical overlay JSON is byte-identical with and without them', () => {
+    const withAssets: AppTheme = { ...valid, fonts: [face], imagery: { mark: { src: 'https://cdn.example/mark.svg' } } };
+    expect(canonicalOverlayJson(withAssets)).toBe(canonicalOverlayJson(valid));
   });
 });

@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * AppTheme carrier, wire half (2026-09-15, additive, ggui#1093 P1a —
+ * MINOR, same draft stamp; #1075 Track C (a), closes #990's wire half).
+ * Two OPTIONAL members on `appThemeSchema`: `fonts` (1..16 faces on
+ * `fontFaceDeclarationSchema` — #987 §5's document grammar lifted into
+ * the protocol; `@ggui-ai/project-config` imports it back, one grammar
+ * for the document door and the wire) and `imagery` (`mark` / `hero` /
+ * `pattern`, each `{ src https, alt? ≤ 200, tone? light|dark }`). Grammar
+ * at the door, never fetched; outside the attestation (`OverlayHashInput`
+ * unchanged). Belt fixtures moved to a synthetic `futureMember` because
+ * `fonts` is now a named member.
+ * --------------------------------------------------------------------
  * AppTheme read-door posture (2026-09-15, additive, ggui#1093 belt —
  * MINOR, same draft stamp; VERSION-POLICY §3.6 forward twin, ruled with
  * cloud). `appThemeReadSchema` + `parseAppThemeAtReadDoor`: READ doors

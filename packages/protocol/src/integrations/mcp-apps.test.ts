@@ -568,7 +568,7 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
       {
         [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
           ...minimalRender,
-          theme: { ...theme, fonts: [{ family: 'Neue Montreal', src: 'https://fonts.example/neue-montreal.woff2' }] },
+          theme: { ...theme, futureMember: { any: 'shape' } },
         },
       },
       {
@@ -577,7 +577,7 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
       },
     );
     expect(invalid).toEqual([]);
-    expect(stripped).toEqual([['fonts']]);
+    expect(stripped).toEqual([['futureMember']]);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.meta?.theme).toEqual(theme);

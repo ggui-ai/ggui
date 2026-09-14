@@ -98,6 +98,73 @@ const keyframesText = z
   .max(8192)
   .refine(isKeyframesText, 'keyframes must be `@keyframes <name> { … }` blocks and nothing else');
 
+/**
+ * https-only asset URL with a well-formed host — the theme document's rule
+ * for a declared face (ggui#987 §5), now the wire's rule for every asset an
+ * AppTheme names. Grammar only: nothing here is fetched.
+ */
+function isHttpsAssetUrl(src: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(src);
+  } catch {
+    return false;
+  }
+  return url.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(url.hostname) && url.hostname.includes('.');
+}
+const httpsAssetUrl = z.string().min(1).refine(isHttpsAssetUrl, 'src must be an https: URL with a well-formed host');
+
+/**
+ * One declared font face (ggui#987 §5; lifted here for ggui#1093 / #990 so the
+ * theme DOCUMENT's `typography.faces` and the AppTheme WIRE's `fonts` share
+ * ONE grammar — `@ggui-ai/project-config` imports this schema for the
+ * document door). `src` MUST be `https:` with a well-formed host; the face is
+ * DECLARED, never fetched by any door: the render host unions the origin into
+ * its `font-src`, the shell renders the `@font-face` rule, and a face that
+ * fails to load in the browser falls back down the family's stack.
+ */
+export const fontFaceDeclarationSchema = z.strictObject({
+  family: z.string().min(1).refine((f) => !/[\r\n]/.test(f), 'family must be one line'),
+  src: httpsAssetUrl,
+  weight: z.union([z.string().min(1), z.number().int().min(1).max(1000)]).optional(),
+  style: z.string().min(1).optional(),
+  display: z.string().min(1).optional(),
+});
+export type FontFaceDeclaration = z.infer<typeof fontFaceDeclarationSchema>;
+
+/** The most faces one theme may declare on the wire — a CSP and a `<style>` block stay bounded. */
+export const APP_THEME_FONTS_MAX = 16;
+
+/** The imagery slots a theme may fill (ggui#1093): a brand mark, a hero image, a repeating pattern. */
+export const APP_THEME_IMAGERY_KINDS = ['mark', 'hero', 'pattern'] as const;
+export type AppThemeImageryKind = (typeof APP_THEME_IMAGERY_KINDS)[number];
+
+/**
+ * One image asset: https-only `src` (never fetched by a door), an optional
+ * `alt` (≤ 200) and an optional `tone` — the image's own tonality (`light` /
+ * `dark`), so a composer can place ink over it without sampling pixels.
+ */
+export const appThemeImageAssetSchema = z.strictObject({
+  src: httpsAssetUrl,
+  alt: z.string().max(200).optional(),
+  tone: z.enum(['light', 'dark']).optional(),
+});
+export type AppThemeImageAsset = z.infer<typeof appThemeImageAssetSchema>;
+
+/**
+ * The host's imagery, by slot (ggui#1093, #1075 Track C (a)). Parties: a
+ * WRITER (an operator's design tooling, or a harvest of the host page) declares; the WRITE door
+ * validates this grammar and nothing more; the render host unions every
+ * `src` origin into its `img-src`; the composer reads the slots through
+ * the design primitives. Absent ⇒ no imagery, today's card.
+ */
+export const appThemeImagerySchema = z.strictObject({
+  mark: appThemeImageAssetSchema.optional(),
+  hero: appThemeImageAssetSchema.optional(),
+  pattern: appThemeImageAssetSchema.optional(),
+});
+export type AppThemeImagery = z.infer<typeof appThemeImagerySchema>;
+
 export const appThemeSchema = z
   .object({
     /**
@@ -136,6 +203,19 @@ export const appThemeSchema = z
      * root-children border-suppression rule.
      */
     frameless: z.boolean().optional(),
+    /**
+     * Declared font faces (ggui#1093 / #990 — the hosted carrier for the
+     * document's `typography.faces`): 1..{@link APP_THEME_FONTS_MAX} faces,
+     * each {@link fontFaceDeclarationSchema}. OUTSIDE the attestation:
+     * `overlayHash` covers `{ overlays, cssVariables, keyframes }` only
+     * (`integrations/overlay-hash.ts`, `OverlayHashInput`) — a face is a
+     * declared asset, not a derived projection. A reader on a release that
+     * does not name this member strips it at its read door and paints the
+     * colours without the faces (`appThemeReadSchema`, VERSION-POLICY §3.6).
+     */
+    fonts: z.array(fontFaceDeclarationSchema).min(1).max(APP_THEME_FONTS_MAX).optional(),
+    /** The host's imagery by slot — {@link appThemeImagerySchema}; outside the attestation, same as `fonts`. */
+    imagery: appThemeImagerySchema.optional(),
   })
   .strict();
 
