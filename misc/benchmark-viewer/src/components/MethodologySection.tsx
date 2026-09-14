@@ -62,6 +62,21 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-14',
+    text:
+      'One batch, two things, from the first run on a runner image carrying ' +
+      'commit c2f7a4e63 (Track A of #1075): the generator now takes its copy ' +
+      'from the props — no invented eyebrow, kicker, helper or status text — ' +
+      'which is a change in what the bench measures, not in how; and the ' +
+      'in-loop evaluation gained a universal check (a caps-label rule) that ' +
+      'feeds the published pass, which IS an instrument change: a cell can ' +
+      'fail that check today that passed yesterday with no model having ' +
+      'changed, so pass readings before and after this line are not ' +
+      'comparable on that check. The judge panel prompts and the visual ' +
+      'judge prompt are byte-identical; the source hash on the row moves as ' +
+      'the recipe says. History is not rewritten.',
+  },
+  {
     date: '2026-09-13',
     text:
       'Recipe change, not a score change: from the next run the source hash ' +
