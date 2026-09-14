@@ -79,6 +79,13 @@ export function ensureStatusDom(doc: Document): StatusRefs {
     (() => {
       const el = doc.createElement('ul');
       el.setAttribute('data-ggui-session-root', '');
+      // The list is the runtime's mount target, not a list: without this
+      // reset the browser's defaults (16 px margins, a 40 px indent, disc
+      // bullets) sat inside every compact card's iframe — the card 40 px
+      // right of the pane edge and 32 px taller than its box (ggui#1096).
+      el.style.margin = '0';
+      el.style.padding = '0';
+      el.style.listStyle = 'none';
       doc.body.appendChild(el);
       return el;
     })();
