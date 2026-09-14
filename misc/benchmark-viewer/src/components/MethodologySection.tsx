@@ -62,6 +62,18 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-13',
+    text:
+      'Recipe change, not a score change: from the next run the source hash ' +
+      'printed on each row also covers the design package the runner renders ' +
+      'with (its tokens and theme-to-CSS rules), and a change to that package ' +
+      'now rebuilds the runner image — so a judge that paints differently is ' +
+      'a different instrument on the page, never a silent one. Earlier rows ' +
+      'keep the hashes they were published with; a design-only change before ' +
+      'this line did not move them. Scores, the corpus, the judge panel and ' +
+      'every arm are unaffected; history is not rewritten.',
+  },
+  {
     date: '2026-09-12',
     text:
       'Instrument reading, not a score change: the 2026-09-12 run (source hash ' +
