@@ -14,7 +14,7 @@
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import { build } from 'esbuild';
-import { getCssTokens } from '@ggui-ai/design/rendering';
+import { fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,7 +25,7 @@ import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
 import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualEvalSummary } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
-import { CANVAS_VIEWPORTS, type CanvasClass, type CanvasViewport } from '../design-mode.js';
+import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,6 +107,8 @@ export interface CanvasVisualResult {
   overflow: boolean;
   /** How `score` was reached — always present (ggui#1072). */
   judge: CanvasJudgeRecord;
+  /** How the judge composed the mount (ggui#1100): `'fill'` on every fullscreen canvas, absent on the inline card. */
+  fit?: 'fill';
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
@@ -136,6 +138,23 @@ export function canvasFitPolicy(canvas: CanvasClass): CanvasFitPolicy {
     default:
       return { capture: 'full-page', overflow: 'none' };
   }
+}
+
+/**
+ * The mount element of the judge page (ggui#1100). Its class is the scope
+ * `fillFitRule` targets — the judge's counterpart of the runtime's mount list.
+ */
+export const JUDGE_SCOPE_CLASS = 'ggui-judge-scope';
+
+/**
+ * How the judge composes a canvas (ggui#1100): the served runtime stretches
+ * the mounted root to the frame on every fullscreen surface (`fit: 'fill'`,
+ * ggui#1041/#1073/#1096) and leaves the inline card at its natural height —
+ * the judge does the same, or it scores a picture the user never sees (a
+ * content-sized hello on an empty 768×1024 page; candidate 34's hellos).
+ */
+export function canvasFit(canvas: CanvasClass): 'fill' | undefined {
+  return displayModeForCanvas(canvas) === 'fullscreen' ? 'fill' : undefined;
 }
 
 /** The deterministic fit issue — one per overflowing canvas, in the judge's issue shape so it rides the same channel. */
@@ -366,6 +385,7 @@ try {
 function buildRenderHTML(
   bundledCode: string,
   cssTokens?: string,
+  fit?: 'fill',
 ): string {
   // Default to the design tokens production's no-theme branch injects
   // (getCssTokens → default theme, light) — ggui#613: under the s4
@@ -389,10 +409,11 @@ function buildRenderHTML(
       color: var(--ggui-color-neutral-900, #111827);
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
+    ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) : ''}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>
   <script type="importmap">
   {
     "imports": {
@@ -803,7 +824,10 @@ export async function runVisualEvaluationDetailed(
     for (const canvas of config.canvases) {
       const viewport = CANVAS_VIEWPORTS[canvas];
       const policy = canvasFitPolicy(canvas);
-      const attempt = await captureScreenshotDetailed(html, viewport, deps, policy.capture);
+      // ggui#1100: the page is composed per canvas with the runtime's fit — fullscreen canvases fill, the inline card does not.
+      const fit = canvasFit(canvas);
+      const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit) : html;
+      const attempt = await captureScreenshotDetailed(canvasHtml, viewport, deps, policy.capture);
       const screenshot = attempt.png;
       if (!screenshot) {
         const unavailableReason = attempt.reason ?? 'no browser available';
@@ -854,6 +878,7 @@ export async function runVisualEvaluationDetailed(
         contentHeight,
         overflow,
         judge: judgeRecord,
+        ...(fit !== undefined ? { fit } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
@@ -957,6 +982,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     contentHeight: c.contentHeight,
     overflow: c.overflow,
     judge: c.judge,
+    ...(c.fit !== undefined ? { fit: c.fit } : {}),
   }));
   return {
     score: result.finalScore,

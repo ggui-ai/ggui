@@ -219,6 +219,12 @@ export interface CanvasVisualSummary {
   overflow: boolean;
   /** How `score` was reached — always present (ggui#1072). */
   judge: CanvasJudgeRecord;
+  /**
+   * How the judge composed the mount (ggui#1100): `'fill'` on every
+   * fullscreen canvas — the served runtime's fit, the root stretched to
+   * the frame; absent on the inline card, which keeps its natural height.
+   */
+  fit?: 'fill';
 }
 
 /** The visual leg's per-canvas summary — see `EvalResult.visual`. */

@@ -77,6 +77,16 @@ export type CanvasDisplayMode = "inline" | "fullscreen";
  * canvas display mode. Only `chat` and `inline` are the inline card;
  * everything else is width-governed.
  */
+/**
+ * The display mode a JUDGE canvas stands for (ggui#1100): the inline chat
+ * card is `xs-chat-card`; every other canvas is a surface the component
+ * owns edge to edge, which the served runtime composes with `fit: 'fill'`
+ * — so the judge must too, or it scores a picture the user never sees.
+ */
+export function displayModeForCanvas(canvas: CanvasClass): CanvasDisplayMode {
+  return canvas === "xs-chat-card" ? "inline" : "fullscreen";
+}
+
 export function canvasDisplayModeForShell(shell: string | undefined): CanvasDisplayMode {
   return shell === "chat" || shell === "inline" ? "inline" : "fullscreen";
 }
