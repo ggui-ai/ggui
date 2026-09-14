@@ -1,0 +1,53 @@
+{
+  "_": "ggui#1040 / ggui#1014 \u2014 the contract-behaviour failure kinds as two releases send them. `current` = the four kinds every reader knows; `next` = the five kinds after action-unreachable. The report reader copies failures verbatim and never inspects kinds: both render on N; the five-kind payload renders on N-1 as rows of unknown kind (red), never as success.",
+  "current": {
+    "status": "ran",
+    "ok": false,
+    "durationMs": 1200,
+    "failures": [
+      {
+        "kind": "action-no-effect",
+        "actionName": "submit",
+        "diagnostic": "clicking actionSpec.submit produced no required signal"
+      },
+      {
+        "kind": "action-not-rendered",
+        "actionName": "addItem",
+        "diagnostic": "no clickable control in the rendered DOM"
+      },
+      {
+        "kind": "render-failed",
+        "diagnostic": "fixture threw during mount"
+      },
+      {
+        "kind": "timeout",
+        "actionName": "send",
+        "diagnostic": "no signal within 5000ms"
+      }
+    ]
+  },
+  "next": {
+    "status": "ran",
+    "ok": false,
+    "durationMs": 1300,
+    "failures": [
+      {
+        "kind": "action-unreachable",
+        "reason": "behind-navigation",
+        "actionName": "complete",
+        "diagnostic": "actionSpec.complete rendered disabled on every observation and was never clicked enabled; new controls appeared after a click=true"
+      },
+      {
+        "kind": "action-unreachable",
+        "reason": "disabled-after-priming",
+        "actionName": "submit",
+        "diagnostic": "1 control(s) rendered, all disabled (1 naming the action)"
+      },
+      {
+        "kind": "action-no-effect",
+        "actionName": "toggle",
+        "diagnostic": "clicking actionSpec.toggle produced no required signal"
+      }
+    ]
+  }
+}

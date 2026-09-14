@@ -19,7 +19,7 @@ import type {
   Page as PlaywrightPage,
 } from 'playwright-core';
 import type { DataContract, JsonObject } from '@ggui-ai/protocol';
-import type {
+import type { BehaviorUnreachableReason,
   BehaviorFailure,
   BehaviorFailureKind,
   PlaywrightModule,
@@ -59,6 +59,7 @@ type RunOutcome =
   | { readonly status: 'render-failed'; readonly diagnostic: string }
   | { readonly status: 'action-not-rendered'; readonly diagnostic: string }
   | { readonly status: 'action-no-effect'; readonly diagnostic: string }
+  | { readonly status: 'action-unreachable'; readonly reason: BehaviorUnreachableReason; readonly diagnostic: string }
   | {
       readonly status: 'ok';
       readonly dispatchFired: boolean;
@@ -144,6 +145,21 @@ function parseRunOutcome(value: unknown): RunOutcome {
         diagnostic: typeof diagnostic === 'string' ? diagnostic : 'no signal',
       };
     }
+    case 'action-unreachable': {
+      const diagnostic = (value as { diagnostic?: unknown }).diagnostic;
+      const reason = (value as { reason?: unknown }).reason;
+      if (reason !== 'disabled-after-priming' && reason !== 'behind-navigation') {
+        return {
+          status: 'render-failed',
+          diagnostic: `fixture returned action-unreachable with an unknown reason: ${JSON.stringify(reason)}`,
+        };
+      }
+      return {
+        status: 'action-unreachable',
+        reason,
+        diagnostic: typeof diagnostic === 'string' ? diagnostic : 'the action could not be reached',
+      };
+    }
     case 'ok': {
       const dispatchFired =
         (value as { dispatchFired?: unknown }).dispatchFired === true;
@@ -224,6 +240,13 @@ function classify(
         diagnostic:
           `clicking actionSpec.${actionName} produced no required signal — ` +
           outcome.diagnostic,
+      };
+    case 'action-unreachable':
+      return {
+        kind: 'action-unreachable' as BehaviorFailureKind,
+        actionName,
+        reason: outcome.reason,
+        diagnostic: `actionSpec.${actionName} could not be reached by the static probe (not measured) — ${outcome.diagnostic}`,
       };
   }
 }

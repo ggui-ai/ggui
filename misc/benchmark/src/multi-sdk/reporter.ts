@@ -848,6 +848,7 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
       tier: i.tier,
       result: i.result,
       category: i.category,
+      ...(i.subcategory !== undefined ? { subcategory: i.subcategory } : {}),
       description: i.description,
     })),
     pass: [...r.tierEvaluation.pass],

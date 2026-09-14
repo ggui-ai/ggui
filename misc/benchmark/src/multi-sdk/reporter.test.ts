@@ -1,3 +1,5 @@
+import type { ContractBehaviorResult } from './contract-behavior.js';
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   generateReport,
@@ -346,5 +348,19 @@ describe('per-canvas visual summary reaches the published row (#973)', () => {
       score: 74, passed: true, design: { src: '/d/src', srcSha256: 'ab'.repeat(32) }, themeMode: 'dark',
       canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true, contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median', samples: [74], sigma: 0, notes: ['ok'] } }],
     });
+  });
+});
+
+describe('#1040 / #1014 — the contract-behaviour failure kinds are an extensibly-closed set the report reader never inspects', () => {
+  const payloads: { current: ContractBehaviorResult; next: ContractBehaviorResult } = JSON.parse(
+    readFileSync(new URL('./__fixtures__/contract-behavior-kinds.json', import.meta.url), 'utf8'),
+  );
+  it('the four-kind report (the previous release) and the five-kind report (action-unreachable + reason) both pass through the display copy verbatim', () => {
+    for (const cb of [payloads.current, payloads.next]) {
+      const run: BenchmarkRunResult = { ...tierEvaluatedRun('a', ALL_RAN), contractBehavior: cb };
+      const d = toDisplayReport(generateReport([run], 0), 'rep-n1', 'test');
+      expect(d.results[0]?.contractBehavior).toEqual(cb);
+    }
+    expect(payloads.next.failures?.some((f) => f.kind === 'action-unreachable' && f.reason === 'behind-navigation')).toBe(true);
   });
 });

@@ -265,6 +265,8 @@ export interface TierEvaluationDisplay {
     tier: number;
     result: string;
     category: string;
+    /** The tier-0 check that spoke, when the evaluator names one (ggui#1056). */
+    subcategory?: string;
     description: string;
   }>;
   pass: string[];
@@ -319,7 +321,14 @@ export interface BenchmarkRunResultDisplay {
 export interface ContractBehaviorDisplay {
   status: 'ran' | 'skipped';
   ok?: boolean;
-  failures?: ReadonlyArray<{ kind: 'action-no-effect' | 'action-not-rendered' | 'render-failed' | 'timeout'; actionName?: string; diagnostic: string }>;
+  failures?: ReadonlyArray<{
+    /** `action-unreachable` (ggui#1040) = NOT MEASURED: the probe could not reach the named control enabled; never a miss. */
+    kind: 'action-no-effect' | 'action-not-rendered' | 'action-unreachable' | 'render-failed' | 'timeout';
+    actionName?: string;
+    diagnostic: string;
+    /** Why, when `kind` is `action-unreachable`. */
+    reason?: 'disabled-after-priming' | 'behind-navigation';
+  }>;
   reason?: string;
   durationMs?: number;
 }

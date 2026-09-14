@@ -84,6 +84,8 @@ type RunOutcome =
   | { readonly status: 'render-failed'; readonly diagnostic: string }
   | { readonly status: 'action-not-rendered'; readonly diagnostic: string }
   | { readonly status: 'action-no-effect'; readonly diagnostic: string }
+  /** #1040: the named control was never reachable enabled — not measured; `reason` says why. */
+  | { readonly status: 'action-unreachable'; readonly reason: 'disabled-after-priming' | 'behind-navigation'; readonly diagnostic: string }
   | {
       readonly status: 'ok';
       readonly dispatchFired: boolean;
@@ -186,31 +188,27 @@ function collectActionCandidates(
   root: HTMLElement,
   name: string,
   label: string,
-): { readonly named: readonly HTMLElement[]; readonly fallback: readonly HTMLElement[]; readonly disabled: number } {
+): {
+  readonly named: readonly HTMLElement[];
+  readonly fallback: readonly HTMLElement[];
+  readonly disabled: number;
+  /** Disabled controls that NAME the action (#1040) — the gate, as opposed to some other disabled control. */
+  readonly namedDisabled: number;
+  /** Every clickable the tree offers, enabled or not — what "new controls appeared" is measured over (#1040). */
+  readonly allClickables: readonly HTMLElement[];
+} {
   const every = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
     (el): el is HTMLElement => el instanceof HTMLElement,
   );
   const isDisabled = (el: HTMLElement): boolean => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true';
-  const disabled = every.filter(isDisabled).length;
-  const all = every.filter(
-    (el) =>
-      !isDisabled(el) &&
-      // an already-checked radio fires no change on click — nothing to observe
-      !(el instanceof HTMLInputElement && el.type === 'radio' && el.checked),
-  );
   const lcName = name.toLowerCase();
   const lcLabel = label.toLowerCase();
   const nameKey = norm(name);
   const labelKey = norm(label);
-  const byValue: HTMLElement[] = [];
-  const byText: HTMLElement[] = [];
-  const rest: HTMLElement[] = [];
-  for (const el of all) {
+  // How the harness names a control: `data-action` by value first (#996), then the aria label or the text.
+  const namesAction = (el: HTMLElement): 'value' | 'text' | null => {
     const dataAction = (el.getAttribute('data-action') ?? '').toLowerCase();
-    if (dataAction === lcName) {
-      byValue.push(el);
-      continue;
-    }
+    if (dataAction === lcName) return 'value';
     const aria = (el.getAttribute('aria-label') ?? '').toLowerCase();
     const txt = (el.textContent ?? '').trim().toLowerCase();
     const ariaNames =
@@ -220,9 +218,27 @@ function collectActionCandidates(
       (txt.includes(lcLabel) ||
         (nameKey.length > 0 && norm(txt).includes(nameKey)) ||
         (labelKey.length > 0 && norm(txt).includes(labelKey)));
-    (ariaNames || textNames ? byText : rest).push(el);
+    return ariaNames || textNames ? 'text' : null;
+  };
+  const disabledEls = every.filter(isDisabled);
+  const disabled = disabledEls.length;
+  const namedDisabled = disabledEls.filter((el) => namesAction(el) !== null).length;
+  const all = every.filter(
+    (el) =>
+      !isDisabled(el) &&
+      // an already-checked radio fires no change on click — nothing to observe
+      !(el instanceof HTMLInputElement && el.type === 'radio' && el.checked),
+  );
+  const byValue: HTMLElement[] = [];
+  const byText: HTMLElement[] = [];
+  const rest: HTMLElement[] = [];
+  for (const el of all) {
+    const how = namesAction(el);
+    if (how === 'value') byValue.push(el);
+    else if (how === 'text') byText.push(el);
+    else rest.push(el);
   }
-  return { named: [...byValue, ...byText], fallback: rest, disabled };
+  return { named: [...byValue, ...byText], fallback: rest, disabled, namedDisabled, allClickables: every };
 }
 
 const TEXT_LIKE_INPUT_TYPES = new Set(['text', 'email', 'search', 'url', 'tel', 'number', 'password', '']);
@@ -547,17 +563,22 @@ async function run(input: RunInput): Promise<RunOutcome> {
     if (primed > 0) await delay(150);
     const first = collectActionCandidates(container, input.actionName, entry.label);
     if (first.named.length === 0 && first.fallback.length === 0) {
-      if (first.disabled > 0) {
+      if (first.namedDisabled > 0) {
+        // #1040: the action's own control is there, disabled, and nothing else is clickable —
+        // the action is gated on input the probe did not provide. Not missing, not a miss: not measured.
         return {
-          status: 'action-no-effect',
+          status: 'action-unreachable',
+          reason: 'disabled-after-priming',
           diagnostic:
-            `${first.disabled} control(s) rendered, all disabled — the action is gated on input the probe did not provide ` +
+            `${first.disabled} control(s) rendered, all disabled (${first.namedDisabled} naming the action) — the action is gated on input the probe did not provide ` +
             `(primed ${primed} input(s)); actionSpec.${input.actionName} (label "${entry.label}")`,
         };
       }
       return {
         status: 'action-not-rendered',
-        diagnostic: `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")`,
+        diagnostic:
+          `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")` +
+          (first.disabled > 0 ? ` — ${first.disabled} control(s) rendered disabled, none naming the action` : ''),
       };
     }
     // One deadline for the whole action. Named controls get the caller's wait
@@ -586,18 +607,31 @@ async function run(input: RunInput): Promise<RunOutcome> {
     // by its DOM path; a detached node is never the one clicked.
     const tried = new Set<string>();
     let exhausted = false;
+    // #1040: was the NAMED control ever clicked enabled (a real attempt), was it ever seen disabled (a
+    // gate), and did a click make NEW controls appear (a step, a tab, a revealed section — navigation,
+    // as distinct from a re-render of what was already there)?
+    let namedAttempted = false;
+    let namedDisabledSeen = first.namedDisabled;
+    let navigated = false;
+    let knownSignatures = new Set<string>(first.allClickables.map((el) => signatureOf(container, el)));
     for (;;) {
       if (remaining() === 0) {
         exhausted = true;
         break;
       }
       const live = collectActionCandidates(container, input.actionName, entry.label);
+      namedDisabledSeen = Math.max(namedDisabledSeen, live.namedDisabled);
+      // Disabled controls count: a step that reveals a disabled Complete IS navigation into the gate.
+      const liveSignatures = live.allClickables.map((el) => signatureOf(container, el));
+      if (clicked > 0 && liveSignatures.some((sig) => !knownSignatures.has(sig))) navigated = true;
+      knownSignatures = new Set<string>([...knownSignatures, ...liveSignatures]);
       const untried = (list: readonly HTMLElement[]): HTMLElement | undefined =>
         list.find((el) => el.isConnected && !tried.has(signatureOf(container, el)));
       const nextNamed = untried(live.named);
       const next = nextNamed ?? untried(live.fallback);
       if (next === undefined) break;
       const via: 'named' | 'fallback' = nextNamed !== undefined ? 'named' : 'fallback';
+      if (via === 'named') namedAttempted = true;
       tried.add(signatureOf(container, next));
       const hit = await attempt(
         next,
@@ -610,6 +644,21 @@ async function run(input: RunInput): Promise<RunOutcome> {
     if (req.requireDispatch && !bestDispatch) missing.push('dispatch');
     if (req.requireDom && !bestDom) missing.push('DOM change');
     const others = otherActions.size > 0 ? `; other actions dispatched: ${[...otherActions].join(', ')}` : '';
+    // #1040: the named control was seen only disabled and never clicked enabled — the probe could not
+    // reach the action. Not measured, with the reason: a click made new controls appear (the gate sits
+    // behind navigation the probe walked into but could not finish) or none did (the gate is input the
+    // probe did not provide). An enabled named control that was clicked and did nothing stays the miss.
+    if (!namedAttempted && namedDisabledSeen > 0) {
+      const reason = navigated ? 'behind-navigation' : 'disabled-after-priming';
+      return {
+        status: 'action-unreachable',
+        reason,
+        diagnostic:
+          `actionSpec.${input.actionName} (label "${entry.label}") rendered disabled on every observation (${namedDisabledSeen} matching control(s)) and was never clicked enabled; ` +
+          `clicked ${clicked} other control(s) (${tried.size} distinct; primed ${primed} input(s)); new controls appeared after a click=${navigated}; DOM changed=${bestDom}` +
+          `${exhausted ? '; budget exhausted' : ''}${others}`,
+      };
+    }
     return {
       status: 'action-no-effect',
       diagnostic:

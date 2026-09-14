@@ -64,6 +64,24 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-14',
     text:
+      'Reading change, announced (issue #1040): from the first run on a runner ' +
+      'image carrying it, a cell whose terminal control the static ' +
+      'contract-behaviour probe cannot reach — it rendered disabled after the ' +
+      'probe primed the inputs, or it sits behind step navigation the probe ' +
+      'does not walk — reads "action-unreachable" with that reason, and it ' +
+      'means NOT MEASURED: never a failure of the model, never "not rendered". ' +
+      'Where the probe finds the control only disabled — the survey-form and ' +
+      'onboarding-wizard readings of 2026-09-12 to 09-14 were of this shape — ' +
+      'the row reads "not measured" from this run on; the run\'s own receipt ' +
+      'says which rows did. An enabled control that is clicked and does ' +
+      'nothing is still "action-no-effect" — the miss the check exists to find. Symmetric across arms by construction; the ' +
+      'row keeps the diagnostic; the report shape is unchanged (one more word ' +
+      'in the failure kinds). Scores and the judge panel are unaffected; ' +
+      'history is not rewritten.',
+  },
+  {
+    date: '2026-09-14',
+    text:
       'One batch, two things, from the first run on a runner image carrying ' +
       'commit c2f7a4e63 (Track A of #1075): the generator now takes its copy ' +
       'from the props — no invented eyebrow, kicker, helper or status text — ' +

@@ -480,12 +480,69 @@ describe('#1021 — input-gated controls are primed, and an all-disabled render 
     expect(result.ok).toBe(true);
   }, 60_000);
 
-  it('#1021 a render whose only control is disabled reads action-no-effect naming the gate, not action-not-rendered', async () => {
+  it('#1040 a render whose only control is disabled after priming reads action-unreachable (disabled-after-priming) — not measured, never a miss, never "not rendered"', async () => {
     const code = await compile(ONLY_DISABLED_SRC);
     const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1000, playwright });
     expect(result.ok).toBe(false);
-    expect(result.failures[0]?.kind).toBe('action-no-effect');
+    expect(result.failures[0]?.kind).toBe('action-unreachable');
+    expect(result.failures[0]?.reason).toBe('disabled-after-priming');
     expect(result.failures[0]?.diagnostic).toMatch(/1 control\(s\) rendered, all disabled/);
+  }, 60_000);
+});
+
+// #1040 — the terminal action sits behind step navigation: Next is clickable, the
+// step it reveals gates Complete on an input the probe never primed (priming
+// happens once, before the first click). The probe walks into the step (the DOM
+// changes), sees Complete disabled, and has nothing else to click.
+const WIZARD_GATED_STEP_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+export default function Wizard() {
+  const complete = useAction('complete');
+  const [step, setStep] = useState(1);
+  const [team, setTeam] = useState('');
+  if (step === 1) return <div><p>Step 1 of 2</p><button onClick={() => setStep(2)}>Next</button></div>;
+  return (
+    <div>
+      <p>Step 2 of 2</p>
+      <input aria-label="Team name" value={team} onChange={(e) => setTeam(e.target.value)} />
+      <button disabled={team.trim().length === 0} onClick={() => complete({ team })}>Complete Setup</button>
+    </div>
+  );
+}
+`;
+
+// #1040 — the true miss stays a miss: the named control is enabled, gets clicked, and nothing happens.
+const NAMED_BUT_INERT_SRC = `
+export default function Wizard() {
+  return <div><button onClick={() => { /* wired to nothing */ }}>Complete Setup</button></div>;
+}
+`;
+
+describe('#1040 — unreachable is named as not measured, with its reason; a real miss stays a miss', () => {
+  it('#1040 a Complete gated on a step-2 input the probe never primed reads action-unreachable (behind-navigation)', async () => {
+    const code = await compile(WIZARD_GATED_STEP_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]?.kind).toBe('action-unreachable');
+    expect(result.failures[0]?.reason).toBe('behind-navigation');
+    expect(result.failures[0]?.diagnostic).toMatch(/Complete Setup|complete/);
+  }, 60_000);
+
+  it('#1040 a lone disabled control that does not name the action reads action-not-rendered (with the disabled count), not unreachable', async () => {
+    const code = await compile(`export default function Panel() { return <div><button disabled>Export</button></div>; }`);
+    const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1000, playwright });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]?.kind).toBe('action-not-rendered');
+    expect(result.failures[0]?.diagnostic).toMatch(/1 control\(s\) rendered disabled, none naming the action/);
+  }, 60_000);
+
+  it('#1040 an enabled named control that dispatches nothing is still action-no-effect — the miss the check exists to find', async () => {
+    const code = await compile(NAMED_BUT_INERT_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1000, playwright });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0]?.kind).toBe('action-no-effect');
+    expect(result.failures[0]?.reason).toBeUndefined();
   }, 60_000);
 });
 

@@ -43,7 +43,8 @@ const visualEnabled = !hasFlag(['--no-visual']);
 // The judge prompt's version + digest are the evaluator's own declarations —
 // read at run time, never literals here (a literal drifts from the prompt it
 // names; the digest is sha256 of the prompt the evaluator actually ran).
-const { VISUAL_JUDGE_PROMPT_VERSION, VISUAL_JUDGE_PROMPT_DIGEST, CANVAS_CLASSES: KNOWN_CANVASES } = await import('@ggui-ai/ui-gen/evaluation');
+const { VISUAL_JUDGE_PROMPT_VERSION, VISUAL_JUDGE_PROMPT_DIGEST, CANVAS_CLASSES: KNOWN_CANVASES, resolveDesignPackageDir } = await import('@ggui-ai/ui-gen/evaluation');
+const { resolve: resolvePath } = await import('node:path');
 // The evaluator's config: provider, model, threshold, and K (ggui#1072 —
 // JUDGE_K vision calls on the same frame for JUDGE_K_CANVASES; default 1).
 const judgeK = parseJudgeKEnv({ JUDGE_K: process.env.JUDGE_K, JUDGE_K_CANVASES: process.env.JUDGE_K_CANVASES }, KNOWN_CANVASES);
@@ -53,6 +54,9 @@ const JUDGE_CONFIG = {
   passThreshold: 60,
   judgeK: judgeK.k,
   ...(judgeK.kCanvases ? { judgeKCanvases: judgeK.kCanvases } : {}),
+  // ggui#1042: name the design tree the judge bundles against and hashes (design@judge) —
+  // the deployed @ggui-ai/design package's src, an explicit input rather than an alias found beside ui-gen.
+  designSrcDir: resolvePath(resolveDesignPackageDir(), 'src'),
 };
 // The identity stamped on report.meta.visualJudge: the config's decision
 // dials + the prompt's version/digest as the evaluator declares them.

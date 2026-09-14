@@ -120,16 +120,43 @@ export interface ValidateContractBehaviorInput {
   readonly playwright: PlaywrightModule;
 }
 
+/**
+ * Extensibly-closed (docs/protocol/VERSION-POLICY.md §1.2): members are added
+ * in MINOR releases of this package. A reader that meets a kind it does not
+ * name MUST treat it as a failure of unknown kind — never as success, never
+ * as "not rendered". An exhaustive `switch` over this union stops compiling
+ * at the next member; that is the intended nudge at upgrade, not a wire
+ * break. The report wire (`benchmark-report.v2`) carries the kind as a
+ * string and its readers copy it verbatim (ggui#1014, ggui#1040).
+ */
 export type BehaviorFailureKind =
   | 'action-no-effect'
   | 'action-not-rendered'
+  /**
+   * The named action's control was present but the static probe could not reach it enabled
+   * (ggui#1040). NOT MEASURED — never a miss, never "not rendered"; symmetric across arms by
+   * construction. `BehaviorFailure.reason` says why.
+   */
+  | 'action-unreachable'
   | 'render-failed'
   | 'timeout';
+
+/**
+ * Why an action was unreachable (ggui#1040). `disabled-after-priming`: the action's control rendered
+ * disabled and no click of the probe's made new controls appear — the gate is input the probe did not
+ * provide. `behind-navigation`: a click made new controls appear (a step, a tab, a revealed section)
+ * and the action's control was still never observed enabled — the gate sits behind navigation the
+ * probe walked into but could not finish. Measured by the clickable-candidate set changing, not by a
+ * DOM diff.
+ */
+export type BehaviorUnreachableReason = 'disabled-after-priming' | 'behind-navigation';
 
 export interface BehaviorFailure {
   readonly kind: BehaviorFailureKind;
   readonly actionName?: string;
   readonly diagnostic: string;
+  /** Present when `kind` is `action-unreachable` (ggui#1040). */
+  readonly reason?: BehaviorUnreachableReason;
 }
 
 export interface ValidateContractBehaviorResult {
