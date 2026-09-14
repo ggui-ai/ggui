@@ -588,23 +588,48 @@ export function deriveBundleOrigins(
  */
 export function composeContentSecurityPolicy(
   origins: ReturnType<typeof deriveBundleOrigins>,
+  /**
+   * The render's stored theme (ggui#1093): a declared face's origin is
+   * admitted under `font-src`, an imagery slot's under `img-src`. The
+   * schema already guarantees `https:` + a well-formed host, so the
+   * origin is read, never re-validated. Absent, or a theme declaring
+   * neither, leaves the CSP byte-identical to the gadget-only form.
+   */
+  theme?: Pick<AppTheme, 'fonts' | 'imagery'>,
 ): string | undefined {
-  if (origins === undefined) return undefined;
   const directives: string[] = [];
-  if (origins.script.length > 0) {
+  if (origins !== undefined && origins.script.length > 0) {
     directives.push(
       `script-src 'self' 'unsafe-inline' ${origins.script.join(' ')}`,
     );
   }
-  if (origins.style.length > 0) {
+  if (origins !== undefined && origins.style.length > 0) {
     directives.push(`style-src 'self' 'unsafe-inline' ${origins.style.join(' ')}`);
   }
-  if (origins.connect.length > 0) {
+  if (origins !== undefined && origins.connect.length > 0) {
     directives.push(`connect-src 'self' ${origins.connect.join(' ')}`);
-    directives.push(`img-src 'self' data: ${origins.connect.join(' ')}`);
+  }
+  // `img-src` is the union of the connect origins (a gadget's tiles)
+  // and the theme's imagery origins — deduped, declaration order.
+  const imageOrigins = dedupe([
+    ...(origins?.connect ?? []),
+    ...Object.values(theme?.imagery ?? {}).flatMap((slot) =>
+      slot !== undefined ? [new URL(slot.src).origin] : [],
+    ),
+  ]);
+  if (imageOrigins.length > 0) {
+    directives.push(`img-src 'self' data: ${imageOrigins.join(' ')}`);
+  }
+  const fontOrigins = dedupe((theme?.fonts ?? []).map((face) => new URL(face.src).origin));
+  if (fontOrigins.length > 0) {
+    directives.push(`font-src 'self' data: ${fontOrigins.join(' ')}`);
   }
   if (directives.length === 0) return undefined;
   return directives.join('; ');
+}
+
+function dedupe(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 /**
@@ -1022,14 +1047,17 @@ export function deriveRenderMeta(
   // Component variant.
   const slots = deriveContextSlots(item);
   const permissionsPolicy = derivePermissionsPolicy(item);
-  const contentSecurityPolicy = composeContentSecurityPolicy(
-    deriveBundleOrigins(item),
-  );
-  const gadgets = deriveGadgetRegistrations(item);
   // Per-app theme overlay (sidecar). Component-only for this stage —
   // system cards theme via the SystemCardHost→ThemeProvider path, not
   // this slice, so `SystemGguiSession` never carries a `theme` sidecar.
+  // Derived before the CSP: the theme's faces and imagery are inputs to
+  // it (ggui#1093).
   const theme = deriveTheme(item);
+  const contentSecurityPolicy = composeContentSecurityPolicy(
+    deriveBundleOrigins(item),
+    theme,
+  );
+  const gadgets = deriveGadgetRegistrations(item);
   const codeB64 = deriveCodeB64(item);
   return {
     // History head epoch (#483) — the mount reads this as its OWN

@@ -2661,16 +2661,29 @@ export function registerGguiRenderResourceTemplate(
     // in the mounted iframe (#479, observed as the cloud-render
     // capstone's CSP block). Same-origin stamps dedupe to the
     // registration-time declaration.
+    // ggui#1093 O1b — the STORED theme's faces and imagery are delivered
+    // by the hosted shell too: its `@font-face` rules ride the same
+    // `<style data-ggui-fonts>` as the deployment's, and every face /
+    // imagery origin is admitted in this render's CSP meta.
+    const themeFaces = view.theme?.fonts ?? [];
+    const themeSrcs = [
+      ...themeFaces.map((face) => face.src),
+      ...Object.values(view.theme?.imagery ?? {}).flatMap((slot) =>
+        slot !== undefined ? [slot.src] : [],
+      ),
+    ];
+    const renderFontsCss =
+      themeFaces.length > 0 ? fontFaceRules([...(opts.fontFaces ?? []), ...themeFaces]) : fontFacesCss;
     const renderCspBase =
-      sessionApiUrls !== undefined || wsUrl !== undefined
+      sessionApiUrls !== undefined || wsUrl !== undefined || themeSrcs.length > 0
         ? buildCspMeta(
             opts.publicBaseUrl,
             opts.runtimeUrl,
             [wsUrl, sessionApiUrls?.sseUrl, sessionApiUrls?.pollingUrl],
-            faceSrcs,
+            [...faceSrcs, ...themeSrcs],
           )
         : templateCspMeta;
-    return shellContents(uri, withFontFaces(html, fontFacesCss), augmentCspMeta(gadgetOrigins, renderCspBase));
+    return shellContents(uri, withFontFaces(html, renderFontsCss), augmentCspMeta(gadgetOrigins, renderCspBase));
   }
 
   /**

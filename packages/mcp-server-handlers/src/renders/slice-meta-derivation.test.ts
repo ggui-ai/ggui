@@ -1364,3 +1364,59 @@ describe('resolveSliceTheme — THE layered theme resolution every transport sta
     expect('themeMode' in base).toBe(false);
   });
 });
+
+// ggui#1093 O1 — the stored theme is an input to the hosted CSP: a
+// declared face's origin is admitted under `font-src`, an imagery slot's
+// origin under `img-src`; a theme without either leaves the CSP
+// byte-identical.
+describe('composeContentSecurityPolicy — the stored theme is an input (ggui#1093)', () => {
+  const fonts = [
+    { family: 'Stored Sans', src: 'https://fonts.acme.example/sans.woff2' },
+    { family: 'Stored Sans', src: 'https://fonts.acme.example/sans-bold.woff2', weight: 700 },
+  ];
+  const imagery = {
+    mark: { src: 'https://cdn.acme.example/mark.svg' },
+    hero: { src: 'https://img.acme.example/hero.jpg' },
+  };
+  const origins = {
+    script: ['https://bundles.example.com'],
+    style: [],
+    connect: ['https://tile.openstreetmap.org'],
+  };
+
+  it("fonts → `font-src 'self' data:` + the faces' origins, deduped", () => {
+    const csp = composeContentSecurityPolicy(origins, { fonts });
+    expect(csp).toContain("font-src 'self' data: https://fonts.acme.example");
+    expect((csp ?? '').match(/fonts\.acme\.example/g)).toHaveLength(1);
+  });
+
+  it('imagery → img-src widened by the slots\' origins — also when no connect origin exists', () => {
+    const csp = composeContentSecurityPolicy(origins, { imagery });
+    expect(csp).toContain(
+      "img-src 'self' data: https://tile.openstreetmap.org https://cdn.acme.example https://img.acme.example",
+    );
+    const alone = composeContentSecurityPolicy({ script: [], style: [], connect: [] }, { imagery });
+    expect(alone).toBe("img-src 'self' data: https://cdn.acme.example https://img.acme.example");
+  });
+
+  it('no gadget origins but a theme with fonts → a CSP carrying font-src alone', () => {
+    expect(composeContentSecurityPolicy(undefined, { fonts })).toBe(
+      "font-src 'self' data: https://fonts.acme.example",
+    );
+  });
+
+  it('a theme without fonts / imagery, or no theme, leaves the CSP byte-identical', () => {
+    const today = composeContentSecurityPolicy(origins);
+    const bare: AppTheme = { overlayHash: 'ab'.repeat(32), overlays: { light: {}, dark: {} } };
+    expect(composeContentSecurityPolicy(origins, bare)).toBe(today);
+    expect(composeContentSecurityPolicy(origins, undefined)).toBe(today);
+    expect(composeContentSecurityPolicy(undefined, undefined)).toBeUndefined();
+  });
+
+  it("deriveRenderMeta threads the stored theme into the slice's contentSecurityPolicy", () => {
+    const theme: AppTheme = { overlayHash: 'ab'.repeat(32), overlays: { light: {}, dark: {} }, fonts, imagery };
+    const meta = deriveRenderMeta(componentItem({ theme }));
+    expect(meta.contentSecurityPolicy).toContain("font-src 'self' data: https://fonts.acme.example");
+    expect(meta.contentSecurityPolicy).toContain('https://img.acme.example');
+  });
+});
