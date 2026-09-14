@@ -195,6 +195,18 @@ const FAMILIES = ['primary', 'tertiary', 'success', 'warning', 'error', 'info'] 
 /** The named spacing steps primitives read beside the numeric ladder — layer-1 defaults. */
 const NAMED_SPACING: Readonly<Record<string, string>> = { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '32px', '2xl': '48px' };
 const SIZE_EXP: Readonly<Record<string, number>> = { xs: -2, sm: -1, base: 0, lg: 1, xl: 2, '2xl': 3, '3xl': 4, '4xl': 5 };
+/**
+ * The host design language's type ROLES, projected onto the vocabulary a card
+ * already reads (ggui#1093 R1): a role's stated `size` IS that ramp stop, and
+ * an unstated role falls to the ramp — protocol's precedence, so a harvest
+ * that measured only `h1` and `body` never blanks the rest of the scale. The
+ * role-NAMED family (`--ggui-font-size-h1` …) arrives with the primitives
+ * that read it (#1075 Track C (b)); emitting it before a consumer exists
+ * would put a variable in the manifest that nothing consumes.
+ */
+const ROLE_STOP: Readonly<Record<string, string>> = { display: '4xl', h1: '3xl', h2: '2xl', body: 'base', label: 'xs' };
+/** Layer-1's spacing unit — the step `rhythm.base` replaces (ggui#1093 R1). */
+const LAYER1_SPACING_UNIT_PX = 4;
 
 type Tokens = Readonly<Record<string, DtcgToken<unknown> | undefined>> | undefined;
 
@@ -406,10 +418,62 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
         : fontSize[stop as keyof typeof fontSize];
   }
 
-  // Spacing, shape — stated, else the layer-1 ladders.
+  // The host's type ROLES (ggui#1093 R1) — projected onto the read vocabulary.
+  // `body.size` moves the ramp's base so the WHOLE scale follows the host's
+  // body copy; a stated role then wins its own stop outright. Weight, tracking
+  // and leading land on the tokens the primitives already read.
+  const typeScale = doc.typeScale;
+  if (typeScale !== undefined) {
+    const bodySize = parseSize(tokenValue(typeScale.body?.size) ?? '');
+    if (bodySize !== undefined) {
+      const r = Number.isFinite(ratio) && ratio > 0 ? ratio : 1.25;
+      for (const [stop, exp] of Object.entries(SIZE_EXP)) {
+        V[`--ggui-font-size-${stop}`] = `${Math.round(bodySize.n * r ** exp * 1000) / 1000}${bodySize.unit}`;
+      }
+    }
+    for (const [role, stop] of Object.entries(ROLE_STOP)) {
+      const size = tokenValue(typeScale[role as keyof typeof typeScale]?.size);
+      if (size !== undefined) V[`--ggui-font-size-${stop}`] = size;
+    }
+    const headingWeight = tokenValue(typeScale.h1?.weight);
+    if (headingWeight !== undefined) V['--ggui-font-weight-heading'] = headingWeight;
+    const bodyWeight = tokenValue(typeScale.body?.weight);
+    if (bodyWeight !== undefined) V['--ggui-font-weight-normal'] = bodyWeight;
+    const headingTracking = tokenValue(typeScale.h1?.tracking);
+    if (headingTracking !== undefined) V['--ggui-letter-spacing-heading'] = headingTracking;
+    const bodyTracking = tokenValue(typeScale.body?.tracking);
+    if (bodyTracking !== undefined) V['--ggui-letter-spacing-body'] = bodyTracking;
+    // `leading` is a RATIO (protocol P1b, rnd's amendment): `line-height: <ratio>`
+    // survives a size change, which a length does not.
+    const bodyLeading = tokenValue(typeScale.body?.leading);
+    if (bodyLeading !== undefined) V['--ggui-font-lineHeight-normal'] = bodyLeading;
+  }
+
+  // Spacing, shape — the host's RHYTHM, else a stated step, else the layer-1 ladders.
+  //
+  // `rhythm.base` (ggui#1093 R1) re-derives the whole scale: every layer-1 step
+  // is a multiple of a 4px unit, so a host whose page breathes on a 6px rhythm
+  // gets every step multiplied by 6/4 and keeps its own unit. It changes the
+  // VALUES of the family the card already reads — no new token, no manifest move.
+  //
+  // PRECEDENCE, stated because it is the opposite of the colour groups':
+  // `rhythm` OUTRANKS the document's own `spacing` stops. `rhythm` is a
+  // statement about the SCALE, while the stops are that scale's rungs — and
+  // every document carries stops already (the default theme states them), so
+  // the other order would make the member inert on every real document. A
+  // document that needs a bespoke step therefore does not declare `rhythm`.
+  // Same shape as the type roles above, where a stated role outranks the ramp.
   const sp = doc.spacing as Tokens;
-  for (const [key, value] of Object.entries(spacingLadder)) V[`--ggui-spacing-${key}`] = stated(sp, key) ?? String(value);
-  for (const [key, value] of Object.entries(NAMED_SPACING)) V[`--ggui-spacing-${key}`] = stated(sp, key) ?? value;
+  const rhythmBase = doc.rhythm ? parseSize(tokenValue(doc.rhythm.base) ?? '') : undefined;
+  const onRhythm = (layer1: string): string | undefined => {
+    if (rhythmBase === undefined) return undefined;
+    const step = parseSize(layer1);
+    if (step === undefined) return undefined; // '0' and anything unparsed keep the ladder's own text
+    const scaled = (step.n / LAYER1_SPACING_UNIT_PX) * rhythmBase.n;
+    return `${Math.round(scaled * 1000) / 1000}${rhythmBase.unit}`;
+  };
+  for (const [key, value] of Object.entries(spacingLadder)) V[`--ggui-spacing-${key}`] = onRhythm(String(value)) ?? stated(sp, key) ?? String(value);
+  for (const [key, value] of Object.entries(NAMED_SPACING)) V[`--ggui-spacing-${key}`] = onRhythm(value) ?? stated(sp, key) ?? value;
   const rad = doc.shape?.radius as Tokens;
   for (const [key, value] of Object.entries(radiusLadder)) V[`--ggui-shape-radius-${key}`] = stated(rad, key) ?? String(value);
   const sh = doc.shape?.shadow as Tokens;
