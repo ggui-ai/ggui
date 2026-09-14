@@ -93,6 +93,7 @@ export {
   captureScreenshot,
   resolveLaunchOptions,
   runVisualEvaluation,
+  resolveDesignPackageDir,
   runVisualEvaluationDetailed,
   VISUAL_JUDGE_MAX_OUTPUT_TOKENS,
   VISUAL_JUDGE_PROMPT_VERSION,
