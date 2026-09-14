@@ -66,6 +66,7 @@ export type {
   SchemaVersionMismatchEvent,
   FontFaceBlockedEvent,
   AppThemeInvalidEvent,
+  AppThemeMemberStrippedEvent,
   ThemeReinjectFailedEvent,
   SubscribeFailedEvent,
   ChannelTransportPickedEvent,

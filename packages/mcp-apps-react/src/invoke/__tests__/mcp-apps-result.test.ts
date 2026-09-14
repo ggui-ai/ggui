@@ -11,7 +11,7 @@
  * Post-Phase-B: the two-slice `{session, stackItem}` shape collapses
  * into a single flat `McpAppAiGguiRenderMeta` slice keyed by `sessionId`.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { InvokeEvent } from '@ggui-ai/protocol';
@@ -144,5 +144,51 @@ describe('SSE round-trip: parseSseStream → extractMcpAppAiGguiMeta', () => {
     }
     const recovered = extractMcpAppAiGguiMeta(toolResultFrame.content_block.content);
     expect(recovered).toEqual(FIXTURE_META);
+  });
+});
+
+// ggui#1093 O2 — the host helper's read door is never silent: a theme the
+// door refuses (#987 §3.4) and members it strips (#1093 belt, §3.6) reach
+// the caller's observability, and warn when the caller wires none.
+describe('extractMcpAppAiGguiMeta — the read door reports what it dropped', () => {
+  const base = {
+    sessionId: 'sess-1',
+    appId: 'app-1',
+    runtimeUrl: 'https://runtime.example/bundle.js',
+    codeUrl: 'https://code.example/component.js',
+  };
+  const withTheme = (theme: unknown) => ({ _meta: { 'ai.ggui/render': { ...base, theme } } });
+
+  it('calls onInvalidTheme with the issues and mounts without the theme', () => {
+    const issues: string[][] = [];
+    const meta = extractMcpAppAiGguiMeta(
+      withTheme({ mode: 'dark', cssVariables: { '--ggui-color-ground': '#fff' } }),
+      { onInvalidTheme: (i) => issues.push([...i]) },
+    );
+    expect(meta?.sessionId).toBe('sess-1');
+    expect(meta?.theme).toBeUndefined();
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.length).toBeGreaterThan(0);
+  });
+
+  it('calls onStrippedThemeMembers with the keys and keeps the theme', () => {
+    const keys: string[][] = [];
+    const meta = extractMcpAppAiGguiMeta(
+      withTheme({ overlayHash: 'ab'.repeat(32), overlays: { light: {}, dark: {} }, sparkle: 1 }),
+      { onStrippedThemeMembers: (k) => keys.push([...k]) },
+    );
+    expect(meta?.theme?.overlayHash).toBe('ab'.repeat(32));
+    expect(keys).toEqual([['sparkle']]);
+  });
+
+  it('with no callbacks wired it WARNS rather than dropping in silence', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    extractMcpAppAiGguiMeta(withTheme({ mode: 'dark', cssVariables: {} }));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('theme');
+    warn.mockClear();
+    extractMcpAppAiGguiMeta(withTheme({ overlayHash: 'ab'.repeat(32), overlays: { light: {}, dark: {} } }));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

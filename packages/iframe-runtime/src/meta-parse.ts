@@ -364,6 +364,17 @@ export function reportInvalidAppTheme(issues: readonly string[]): void {
 }
 
 /**
+ * The read door KEPT the slice's theme but stripped top-level members
+ * this release does not name (ggui#1093 belt, VERSION-POLICY §3.6):
+ * report the member names to the embedding host so a newer writer's
+ * member is visible, not swallowed. Passed as `onStrippedThemeMembers`
+ * on every `parseMcpAppAiGguiRenderMeta` call in this package.
+ */
+export function reportStrippedThemeMembers(keys: readonly string[]): void {
+  postObservabilityToParent({ kind: 'app-theme-member-stripped', keys: [...keys] });
+}
+
+/**
  * Parse the render slice from `globalThis.__GGUI_META__` — the
  * synchronous self-contained shell delivery channel.
  *
@@ -385,7 +396,10 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
   if (!isPlainObject(raw)) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiRenderMeta(raw, { onInvalidTheme: reportInvalidAppTheme });
+  const parsed = parseMcpAppAiGguiRenderMeta(raw, {
+    onInvalidTheme: reportInvalidAppTheme,
+    onStrippedThemeMembers: reportStrippedThemeMembers,
+  });
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
@@ -441,7 +455,10 @@ export function parseMetaFromToolResult(
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   const meta: Record<string, unknown> = topMeta;
-  const parsed = parseMcpAppAiGguiRenderMeta(meta, { onInvalidTheme: reportInvalidAppTheme });
+  const parsed = parseMcpAppAiGguiRenderMeta(meta, {
+    onInvalidTheme: reportInvalidAppTheme,
+    onStrippedThemeMembers: reportStrippedThemeMembers,
+  });
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }

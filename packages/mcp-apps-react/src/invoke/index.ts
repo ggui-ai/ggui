@@ -8,6 +8,7 @@ export type {
 export { parseSseStream } from './sse-parse';
 export {
   extractMcpAppAiGguiMeta,
+  type ExtractMcpAppAiGguiMetaOptions,
   buildAppRendererToolResult,
 } from './mcp-apps-result';
 export { extractUiMoments } from './ui-moments';

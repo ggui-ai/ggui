@@ -38,6 +38,7 @@ export type ObservabilityEvent =
   | SchemaVersionMismatchEvent
   | FontFaceBlockedEvent
   | AppThemeInvalidEvent
+  | AppThemeMemberStrippedEvent
   | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
@@ -361,6 +362,20 @@ export interface FontFaceBlockedEvent {
 export interface AppThemeInvalidEvent {
   readonly kind: 'app-theme-invalid';
   readonly issues: readonly string[];
+}
+
+/**
+ * The render slice's `theme` carried top-level members THIS release does
+ * not name (ggui#1093 belt, VERSION-POLICY §3.6): the read door kept the
+ * theme and stripped them, and the card says which — a newer writer's
+ * member is never silently swallowed. `keys` are the member names only,
+ * never their content.
+ *
+ * @public
+ */
+export interface AppThemeMemberStrippedEvent {
+  readonly kind: 'app-theme-member-stripped';
+  readonly keys: readonly string[];
 }
 
 /**

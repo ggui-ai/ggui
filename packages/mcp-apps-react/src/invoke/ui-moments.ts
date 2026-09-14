@@ -43,7 +43,10 @@
  * `/api/sessions/<sessionId>/resource`.
  */
 import type { ConversationMessage } from './useInvoke';
-import { extractMcpAppAiGguiMeta } from './mcp-apps-result';
+import {
+  extractMcpAppAiGguiMeta,
+  type ExtractMcpAppAiGguiMetaOptions,
+} from './mcp-apps-result';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
@@ -98,6 +101,12 @@ export interface ExtractUiMomentsOptions {
    * platform iframe) MUST have network access to this origin.
    */
   readonly renderResourceOrigin?: string;
+  /**
+   * Read-door observability for the inline meta slice (ggui#1093):
+   * forwarded verbatim to {@link extractMcpAppAiGguiMeta}. Unset ⇒ its
+   * warn defaults — a refused or stripped theme is never silent.
+   */
+  readonly theme?: ExtractMcpAppAiGguiMetaOptions;
 }
 
 /**
@@ -119,7 +128,7 @@ export function extractUiMoments(
       // Inline meta first — it is the richer signal. An agent
       // that emitted `toolResultPush` carries everything needed, so
       // the server round-trip can be skipped.
-      const meta = extractMcpAppAiGguiMeta(block.content);
+      const meta = extractMcpAppAiGguiMeta(block.content, options.theme ?? {});
       if (meta !== null) {
         out.push({
           key: block.tool_use_id,

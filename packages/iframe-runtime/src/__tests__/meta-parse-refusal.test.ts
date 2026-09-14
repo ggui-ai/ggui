@@ -47,3 +47,52 @@ describe('parseMetaFromGlobal — a refused theme is reported, not swallowed', (
     expect(posted).toEqual([]);
   });
 });
+
+// ggui#1093 belt (VERSION-POLICY §3.6) — the read door KEEPS a theme whose
+// top-level members this release does not name, strips them, and the card
+// says which: a newer writer's member is never silently swallowed.
+describe('parseMetaFromGlobal — a stripped theme member is reported, not swallowed', () => {
+  beforeEach(() => {
+    posted.length = 0;
+  });
+
+  it('keeps the theme, drops the unknown member, posts app-theme-member-stripped with its key', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        theme: {
+          overlayHash: 'ab'.repeat(32),
+          overlays: { light: {}, dark: {} },
+          sparkle: { intensity: 3 },
+        },
+      },
+    };
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.theme?.overlayHash).toBe('ab'.repeat(32));
+    expect('sparkle' in (result.meta.theme ?? {})).toBe(false);
+    expect(posted).toEqual([{ kind: 'app-theme-member-stripped', keys: ['sparkle'] }]);
+  });
+
+  it('a theme this release names entirely posts nothing', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        theme: {
+          overlayHash: 'ab'.repeat(32),
+          overlays: { light: {}, dark: {} },
+          fonts: [{ family: 'Acme', src: 'https://fonts.acme.example/a.woff2' }],
+        },
+      },
+    };
+    expect(parseMetaFromGlobal().ok).toBe(true);
+    expect(posted).toEqual([]);
+  });
+});

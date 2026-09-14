@@ -149,6 +149,7 @@ export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
 export {
   extractMcpAppAiGguiMeta,
+  type ExtractMcpAppAiGguiMetaOptions,
   buildAppRendererToolResult,
   extractUiMoments,
 } from './invoke/index';

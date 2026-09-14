@@ -48,12 +48,40 @@ import {
  * }
  * ```
  */
+export interface ExtractMcpAppAiGguiMetaOptions {
+  /**
+   * The read door refused the slice's `theme` (ggui#987 §3.4): the slice
+   * is kept, the theme dropped. Wire this to the host's observability —
+   * a refusal a write door should have caught must not be silent.
+   * Unset ⇒ one `console.warn` naming the issues (never silence).
+   */
+  readonly onInvalidTheme?: ((issues: readonly string[]) => void) | undefined;
+  /**
+   * The read door KEPT the theme and stripped top-level members this
+   * release does not name (ggui#1093 belt, VERSION-POLICY §3.6) — the
+   * member names, never their content. Unset ⇒ one `console.warn`.
+   */
+  readonly onStrippedThemeMembers?: ((keys: readonly string[]) => void) | undefined;
+}
+
 export function extractMcpAppAiGguiMeta(
   content: unknown,
+  options: ExtractMcpAppAiGguiMetaOptions = {},
 ): McpAppAiGguiRenderMeta | null {
   if (content === null || typeof content !== 'object') return null;
   const meta = (content as { _meta?: unknown })._meta;
-  const parsed = parseMcpAppAiGguiRenderMeta(meta);
+  const parsed = parseMcpAppAiGguiRenderMeta(meta, {
+    onInvalidTheme:
+      options.onInvalidTheme ??
+      ((issues): void => {
+        console.warn('[ggui] tool_result theme refused by the read door — rendering without it', issues);
+      }),
+    onStrippedThemeMembers:
+      options.onStrippedThemeMembers ??
+      ((keys): void => {
+        console.warn('[ggui] tool_result theme carried members this release does not name — stripped', keys);
+      }),
+  });
   if (!parsed.ok) return null;
   // Key absent ⇒ no `ai.ggui/render` slice on this tool_result.
   if (parsed.meta === undefined) {
