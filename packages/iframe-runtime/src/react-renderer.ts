@@ -42,6 +42,7 @@ import { createRoot } from 'react-dom/client';
 // (ggui#987 v2) — never a hand mirror, so a schema change cannot
 // silently diverge here.
 import type { AppTheme } from '@ggui-ai/protocol/wire';
+import { postObservabilityToParent } from './observability.js';
 import {
   stripMarkers,
   rewriteImports,
@@ -613,12 +614,49 @@ export async function mountReactRoot(
     );
   }
 
+  /**
+   * The mount painted NOTHING (ggui#1103). `wrapped` is `null` whenever the
+   * renderer holds no component, so the scope element carries only its
+   * `<style>`: height 0, no text, and the error boundary never engages —
+   * it wraps a null child. Every such moment is reported on all three
+   * channels (an operator-visible console line, the caller's `onError`, the
+   * host's observability seam), because until now the two empty-code paths
+   * were silent on ALL of them and an empty card could not be told apart
+   * from a card whose module threw. Never carries the code or the props.
+   */
+  function reportNoComponent(
+    where: 'mount' | 'update',
+    reason: 'no-code' | 'eval-failed',
+    error: Error,
+    onError: ((e: Error) => void) | undefined,
+  ): void {
+    if (reason === 'eval-failed') {
+      // eslint-disable-next-line no-console -- operator-visible failure signal
+      console.error(`[ggui] mountReactRoot: the ${where} painted nothing (eval-failed) —`, error);
+    } else {
+      // A payload that carried no code is not an exception — nothing threw,
+      // and `onError` stays the caller's "the component failed" channel, so a
+      // host that paints an error panel does not paint one here. It is still
+      // operator-visible, and the host still hears it on the seam below.
+      // eslint-disable-next-line no-console -- operator-visible failure signal
+      console.warn(`[ggui] mountReactRoot: the ${where} painted nothing (no-code) — ${error.message}`);
+    }
+    try {
+      postObservabilityToParent({ kind: 'component-empty', where, reason });
+    } catch {
+      // The host seam is best-effort: a blocked postMessage must not turn a
+      // blank card into a thrown mount.
+    }
+    if (reason === 'eval-failed') onError?.(error);
+  }
+
   async function initialEvaluate(): Promise<void> {
     const code = currentOpts.render.componentCode ?? '';
     if (code.trim().length === 0) {
       currentComponent = null;
       currentCode = null;
       renderTree(currentOpts);
+      reportNoComponent('mount', 'no-code', new Error('mount carried no component code'), currentOpts.onError);
       return;
     }
     try {
@@ -631,12 +669,10 @@ export async function mountReactRoot(
       // not enough on its own — not every mount path wires one, so
       // without this log a mount with a broken component renders a
       // blank iframe and emits nothing.
-      // eslint-disable-next-line no-console -- operator-visible failure signal
-      console.error('[ggui] mountReactRoot: component evaluation failed —', e);
       currentComponent = null;
       currentCode = null;
       renderTree(currentOpts);
-      currentOpts.onError?.(e);
+      reportNoComponent('mount', 'eval-failed', e, currentOpts.onError);
     }
   }
 
@@ -661,6 +697,7 @@ export async function mountReactRoot(
         currentComponent = null;
         currentCode = null;
         renderTree(currentOpts);
+        reportNoComponent('update', 'no-code', new Error('update carried no component code'), next.onError);
         return;
       }
 
@@ -673,7 +710,7 @@ export async function mountReactRoot(
         currentComponent = null;
         currentCode = null;
         renderTree(currentOpts);
-        next.onError?.(e);
+        reportNoComponent('update', 'eval-failed', e, next.onError);
       }
     },
     unmount() {
