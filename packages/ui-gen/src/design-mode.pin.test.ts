@@ -111,7 +111,7 @@ function renderFreeBoilerplates(): string {
 // Re-recorded 2026-09-12 for ggui#1047: the surface span says `inverted` and `hero` OWN their ground — never a
 // `background` in their `style` (tier-0 `universal.scoped_surface_owns_ground` fails it) — constrained only.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '1e081ec53970c3d81148b4c3c25f9c2ac423d40df1b3e09976380b6b8c61d362';
+  '9f0fd697e3e5143c42780c0b1cae7e0d0361efe10a396ee95bcfd4bc947da09e';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
 
@@ -120,6 +120,13 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // roles) — the free color rule renders the consumed-token manifest, so the free prompt
 // moved with it; the constrained digest was re-recorded for the same change by #989 and
 // is untouched here (INVARIANT 1 holds across the re-record).
+// 2026-09-14 (ggui#1075 Track A): DATA_PARAMETERIZATION gained rule 4 — copy
+// comes from the props; no invented eyebrow / kicker / helper / status text
+// — a HARD section both arms share, so BOTH prompt digests move together
+// (constrained 1e081ec5… → 9f0fd697…, free da780d39… → 6be6526c…); the
+// boilerplate digests are untouched. INVARIANT 1 (constrained ≡ free's
+// shared text) holds across the re-record; the eval leg gained
+// `universal.caps_label_invented` in the same cut.
 // Re-recorded 2026-09-12 for ggui#1015 (see the constrained note above):
 // the optional component-catalog reference carries the Icon blurb.
 // Re-recorded 2026-09-12 for ggui#1024 (the `surface` bullet, see above).
@@ -135,7 +142,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  'da780d396d6270f732911b74606c8791b49c027ad3c92615b73002ee3a507550';
+  '6be6526c8f1490a568aca9a71fb106b7a957009c2e4e81c5c927d6bcd6ea675a';
 export const FREE_BOILERPLATE_SHA256 =
   '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
 

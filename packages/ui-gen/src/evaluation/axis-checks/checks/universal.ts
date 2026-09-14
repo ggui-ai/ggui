@@ -248,12 +248,55 @@ function runScopedSurfaceOwnsGround(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.caps_label_invented (ggui#1075 Track A) ─────────────────
+// A caps label (`<Text caps>` — the eyebrow / kicker / overline treatment)
+// whose entire content is a string literal is copy the model INVENTED: the
+// contract carries no such member, so nothing the agent sends can change
+// it, and every served card wears it ("LET'S BEGIN", "WELCOME" — 59 of 63
+// generated sources in one sample, none bound to a prop). Copy comes from the
+// props; a caps label exists only when a prop supplies its text. A label
+// whose content is an expression (`{props.section}`, `{label ?? …}`) is
+// bound and passes; a `<Text caps>` with no text children is not a label.
+const CAPS_TEXT_RX = /<Text\b(?=[^>]*\bcaps\b)[^>]*>([\s\S]*?)<\/Text>/g;
+
+/** Every `<Text caps>` whose content is nothing but literal text: `[literal]`. */
+export function findInventedCapsLabels(sourceCode: string): string[] {
+  const out: string[] = [];
+  for (const m of sourceCode.matchAll(CAPS_TEXT_RX)) {
+    const inner = (m[1] ?? "").trim();
+    if (inner.length === 0) continue;
+    if (inner.includes("{")) continue; // bound to an expression — the props speak
+    out.push(inner.replace(/\s+/g, " ").slice(0, 60));
+  }
+  return out;
+}
+
+function runCapsLabelInvented(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const invented = findInventedCapsLabels(input.sourceCode);
+  if (invented.length === 0) return [];
+  const list = invented.map((t) => `"${t}"`).join(", ");
+  return [
+    mkIssue(
+      "universal.caps_label_invented",
+      `${invented.length} caps label(s) carry invented copy the props do not supply: ${list} — an eyebrow, kicker or overline the agent cannot change is chatter on every render.`,
+      "Remove the label, or bind its text to a prop (`<Text caps>{props.section}</Text>`); copy comes from the contract, never from the component.",
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runIconNameKnown,
+  },
+  {
+    id: "universal.caps_label_invented",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runCapsLabelInvented,
   },
   {
     id: "universal.accent_text_ink",

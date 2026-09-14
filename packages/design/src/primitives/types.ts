@@ -536,14 +536,16 @@ export interface SpacerProps extends BaseProps {
  * composed from three orthogonal axes: `size` (font size, with a
  * matching line-height built in), `weight`, and `tone` (semantic
  * color). `caps` adds the uppercase, letter-spaced treatment for tiny
- * section labels (the classic overline/eyebrow look).
+ * section labels (the classic overline/eyebrow look) — the label's text
+ * comes from a prop, never from the component: an invented eyebrow is copy
+ * nothing can change.
  *
  * Default text color: `var(--ggui-color-onContainer)`.
  * All text renders with `margin: 0` (no default paragraph spacing).
  *
  * @example
  * <Stack gap="var(--ggui-spacing-1)">
- *   <Text size="xs" weight="semibold" caps tone="muted">Account</Text>
+ *   <Text size="xs" weight="semibold" caps tone="muted">{props.section}</Text>
  *   <Text size="lg">Welcome back, Jane.</Text>
  *   <Text size="xs" tone="muted">
  *     Last login: 2 hours ago
