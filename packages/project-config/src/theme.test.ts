@@ -120,7 +120,15 @@ describe('parseThemeDocument — required groups', () => {
     ).toThrow();
   });
 
-  it('rejects the retired ladders: font.size, font.lineHeight, motion.duration, motion.easing', () => {
+  // ggui#1093 P1c (2026-09-16, protocol + rnd) REVERSED the motion half of
+  // this guard, and the rule it now enforces is narrower, not gone: layer-1
+  // keeps the motion SCALE (what the design system ships, which no app
+  // redefines wholesale); a document may stat a BOUNDED tempo override —
+  // three duration steps, three easing roles, `reduce` — the way `palette`
+  // has always been per-app. The FREE-MAP ladders stay refused, and that is
+  // what this test pins. `font.size` / `font.lineHeight` are unchanged:
+  // the one size knob is `font.ramp` (ggui#987 §2.2).
+  it('rejects the retired FREE-MAP ladders: font.size, font.lineHeight, and motion duration/easing maps outside the bounded roles', () => {
     expect(() =>
       parseThemeDocument({ ...baseTheme, font: { ...baseTheme.font, size: { md: dim('16px') } } }),
     ).toThrow();
@@ -133,7 +141,7 @@ describe('parseThemeDocument — required groups', () => {
     expect(() =>
       parseThemeDocument({
         ...baseTheme,
-        motion: { duration: { fast: { $type: 'duration', $value: '150ms' } }, transition: {} },
+        motion: { duration: { xfast: { $type: 'duration', $value: '150ms' } }, transition: {} },
       }),
     ).toThrow();
     expect(() =>
@@ -336,12 +344,12 @@ describe('safeParseThemeDocument', () => {
 });
 
 // ggui#1093 P1b — the host design language's DOCUMENT members (#1075 Track C (a)).
-// THREE of the four: motion is P1c (see the note below).
+// All four: the three of P1b plus motion, reversed and re-admitted as P1c.
 // Grammar co-signed with rnd 2026-09-15 (their amendment: `leading` is a RATIO,
 // NumberToken only). These are DOCUMENT tokens, not wire members: they reach the
 // card through `deriveThemeVariables` → the overlay, which stays the ONE
 // projection. All four groups OPTIONAL; absent ⇒ today's document, byte-identical.
-describe('ThemeDocumentV2 — typeScale / rhythm / scrim (ggui#1093 P1b)', () => {
+describe('ThemeDocumentV2 — typeScale / rhythm / scrim / motion (ggui#1093 P1b + P1c)', () => {
   const dim = (v: string) => ({ $type: 'dimension', $value: v });
   const num = (v: number) => ({ $type: 'number', $value: v });
   const weight = (v: number) => ({ $type: 'fontWeight', $value: v });
@@ -378,14 +386,35 @@ describe('ThemeDocumentV2 — typeScale / rhythm / scrim (ggui#1093 P1b)', () =>
     }
   });
 
-  // MOTION IS NOT IN P1b. `motion.duration` / `motion.easing` are retired
-  // ladders — the theming spec §2.3 rules them LAYER-1, never per app, and
-  // the guard above ("rejects the retired ladders") enforces it. ggui#1093's
-  // host-motion member would REVERSE that ruling, so it is cut as P1c once
-  // rnd co-signs the reversal in writing (the retirement's stated ground —
-  // "zero consumers today", audit G51 — is what #1075 changes). The grammar
-  // is drafted and the tests are written; they land with the reversal, not
-  // under it.
+  it('extends the ONE motion group with the bounded tempo override — duration / easing / reduce beside transition and keyframes (ggui#1093 P1c)', () => {
+    const dur = (v: string) => ({ $type: 'duration', $value: v });
+    const ease = (v: string) => ({ $type: 'cubicBezier', $value: v });
+    const motion = {
+      transition: { base: { $type: 'transition', $value: { duration: '200ms', timingFunction: 'ease-out' } } },
+      duration: { fast: dur('120ms'), base: dur('200ms'), slow: dur('320ms') },
+      easing: { standard: ease('cubic-bezier(0.4, 0, 0.2, 1)'), emphasized: ease('ease-in-out'), exit: ease('steps(4, end)') },
+      reduce: 'respect',
+    };
+    const parsed = parseThemeDocument({ ...baseTheme, motion });
+    expect(parsed.motion?.duration?.base?.$value).toBe('200ms');
+    expect(parsed.motion?.easing?.exit?.$value).toBe('steps(4, end)');
+    expect(parsed.motion?.reduce).toBe('respect');
+    // today's document still parses alone — the override adds no requirement
+    expect(parseThemeDocument({ ...baseTheme, motion: { transition: motion.transition } }).motion?.duration).toBeUndefined();
+  });
+
+  it('validates easing AT THE DOOR: CSS keywords, well-formed cubic-bezier and steps; nothing else (ggui#1093 P1c)', () => {
+    const ease = (v: string) => ({ $type: 'cubicBezier', $value: v });
+    for (const v of ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end', 'cubic-bezier(0,0,1,1)', 'cubic-bezier(0.4, 0, 0.2, 1)', 'steps(4)', 'steps(4, end)', 'steps(2, jump-both)']) {
+      expect(() => parseThemeDocument({ ...baseTheme, motion: { transition: {}, easing: { standard: ease(v) } } }), v).not.toThrow();
+    }
+    for (const bad of ['swoosh', 'cubic-bezier(0.4, 0, 0.2)', 'cubic-bezier(a, 0, 0.2, 1)', 'steps()', 'steps(4, sideways)', 'ease(', 'url(javascript:0)', 'linear;color:red', '']) {
+      expect(() => parseThemeDocument({ ...baseTheme, motion: { transition: {}, easing: { standard: ease(bad) } } }), JSON.stringify(bad)).toThrow();
+    }
+    for (const bad of ['fast', 'never']) {
+      expect(() => parseThemeDocument({ ...baseTheme, motion: { transition: {}, reduce: bad } }), bad).toThrow();
+    }
+  });
 
   it('accepts scrim as a tone word or a colour token, with opacity 0..1 and a blur length', () => {
     expect(parseThemeDocument({ ...baseTheme, scrim: { tone: 'dark', opacity: num(0.6), blur: dim('12px') } }).scrim?.tone).toBe('dark');
@@ -406,5 +435,8 @@ describe('ThemeDocumentV2 — typeScale / rhythm / scrim (ggui#1093 P1b)', () =>
   it('INVARIANT 1 door twin: a document without the four groups parses to exactly what it parsed before them', () => {
     const parsed = parseThemeDocument(baseTheme);
     for (const member of ['typeScale', 'rhythm', 'scrim'] as const) expect(member in parsed).toBe(false);
+    expect(parsed.motion?.duration).toBeUndefined();
+    expect(parsed.motion?.easing).toBeUndefined();
+    expect(parsed.motion?.reduce).toBeUndefined();
   });
 });

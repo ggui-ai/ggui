@@ -237,9 +237,37 @@ export interface DtcgTheme {
      */
     transition: Record<string, DtcgToken>;
     keyframes: Record<string, DtcgToken>;
-    // `duration` / `easing` are LAYER-1 and deliberately absent (theming
-    // spec §2.3). ggui#1093 P1c decides whether the host's motion tempo
-    // reverses that; nothing re-adds them here until it does.
+    /**
+     * The per-app motion TEMPO OVERRIDE (ggui#1093 P1c). Layer-1 keeps the
+     * motion SCALE — the durations and easings the design system ships,
+     * which no app redefines wholesale; these three bounded steps are the
+     * override a card uses to sit inside someone else's site, exactly the
+     * standing `palette` has. Absent ⇒ the shipped scale, unchanged.
+     */
+    duration?: {
+      fast?: DtcgToken;
+      base?: DtcgToken;
+      slow?: DtcgToken;
+    };
+    /**
+     * Easings by intent. The document door validates each value as a CSS
+     * keyword, `cubic-bezier(a,b,c,d)` or `steps(n[, position])`, so a
+     * projection emits it verbatim and never clamps.
+     */
+    easing?: {
+      standard?: DtcgToken;
+      emphasized?: DtcgToken;
+      exit?: DtcgToken;
+    };
+    /**
+     * What the composer does under `prefers-reduced-motion: reduce`.
+     *
+     * Two defaults, stated together so they never read as disagreeing
+     * (ggui#1093 P1c): the document door stamps nothing — absent stays
+     * absent — and the COMPOSER's default is `respect`, emitting the
+     * reduced-motion rule unless a document explicitly says `ignore`.
+     */
+    reduce?: 'respect' | 'ignore';
   };
 
   /**

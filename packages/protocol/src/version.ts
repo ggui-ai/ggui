@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Motion tempo override (2026-09-16, additive, ggui#1093 P1c — MINOR,
+ * same draft stamp; no WIRE change). The theming spec's §2.3 retirement
+ * of per-app motion is AMENDED (protocol + rnd): layer-1 keeps the motion
+ * SCALE, and the document may state a BOUNDED tempo override — `duration`
+ * (fast/base/slow), `easing` (standard/emphasized/exit, each validated at
+ * the door as a CSS keyword, cubic-bezier or steps) and `reduce` — the
+ * standing `palette` has always had. The retired FREE-MAP ladders stay
+ * refused and the door's guard test pins the narrower rule. Reversed, not
+ * widened: §2.3's stated ground ("zero consumers today") expired when
+ * ggui#1075 created the consumer.
+ * --------------------------------------------------------------------
  * Theme DOCUMENT members (2026-09-16, additive, ggui#1093 P1b — MINOR,
  * same draft stamp; no WIRE change at all). `ThemeDocumentV2` and design's
  * `DtcgTheme` gain optional `typeScale` (five roles; `leading` is a ratio),

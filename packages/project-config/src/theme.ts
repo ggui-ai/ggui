@@ -281,6 +281,49 @@ const RhythmGroup = z.strictObject({
   inset: DimensionToken.optional(),
 });
 
+/** The CSS easing keywords a document may name. */
+const CSS_EASING_KEYWORDS = new Set(['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end']);
+const CUBIC_BEZIER_RE = /^cubic-bezier\(\s*-?\d*\.?\d+\s*(?:,\s*-?\d*\.?\d+\s*){3}\)$/;
+const STEPS_RE = /^steps\(\s*\d+\s*(?:,\s*(?:jump-start|jump-end|jump-none|jump-both|start|end)\s*)?\)$/;
+
+/**
+ * An easing a projection can emit verbatim: a CSS keyword, a well-formed
+ * `cubic-bezier(a,b,c,d)`, or `steps(n[, position])`. Validated HERE so no
+ * reader has to clamp a string it cannot trust.
+ */
+function isCssEasing(value: string): boolean {
+  return CSS_EASING_KEYWORDS.has(value) || CUBIC_BEZIER_RE.test(value) || STEPS_RE.test(value);
+}
+const EasingToken = z.strictObject({
+  $type: z.string().min(1),
+  $value: z.string().min(1).refine(isCssEasing, 'easing must be a CSS keyword, cubic-bezier(a,b,c,d) or steps(n[, position])'),
+  $description: z.string().optional(),
+});
+
+/**
+ * The per-app motion TEMPO OVERRIDE (ggui#1093 P1c; reverses the layer-1
+ * retirement of the theming spec §2.3, co-signed with rnd 2026-09-16).
+ *
+ * Layer-1 keeps the motion SCALE — the durations and easings the design
+ * system ships, which every card gets by default and no app may redefine
+ * wholesale. What a document may state is a BOUNDED tempo override, for a
+ * card that has to sit inside someone else's site: exactly the standing
+ * `palette` has (per-app forever, without that making colour "not
+ * layer-1"). The retired FREE-MAP ladders stay refused — three duration
+ * steps and three easing roles are admitted, and nothing else.
+ */
+const MotionDurationGroup = z.strictObject({
+  fast: DurationToken.optional(),
+  base: DurationToken.optional(),
+  slow: DurationToken.optional(),
+});
+
+const MotionEasingGroup = z.strictObject({
+  standard: EasingToken.optional(),
+  emphasized: EasingToken.optional(),
+  exit: EasingToken.optional(),
+});
+
 /**
  * The scrim a host page's ground shows through (ggui#1083): `tone` is a word
  * (`light` / `dark`) or a stated colour token, `opacity` a 0..1 ratio, `blur` a
@@ -296,6 +339,21 @@ const ScrimGroup = z.strictObject({
 const MotionGroup = z.strictObject({
   transition: z.record(z.string(), TransitionToken),
   keyframes: z.record(z.string(), StringToken).optional(),
+  /** Per-app tempo override — three steps, bounded (ggui#1093 P1c). */
+  duration: MotionDurationGroup.optional(),
+  /** Per-app easing override — three roles, each value validated at the door (ggui#1093 P1c). */
+  easing: MotionEasingGroup.optional(),
+  /**
+   * What the composer does under `prefers-reduced-motion: reduce`.
+   *
+   * Two defaults that must never be read as disagreeing (rnd, ggui#1093
+   * P1c): the DOOR does not stamp a value — absent stays absent, so the
+   * document never carries something its author did not write — and the
+   * COMPOSER's default is `respect`: it emits the reduced-motion rule
+   * unless a document explicitly says `ignore`. Absence therefore means
+   * "respect" downstream, without the wire inventing it.
+   */
+  reduce: z.enum(['respect', 'ignore']).optional(),
 });
 
 const AccessibilityGroup = z.strictObject({
@@ -402,10 +460,10 @@ export const ThemeDocumentV2 = z.strictObject({
    *  `section` / `inset` are named steps. Optional. */
   rhythm: RhythmGroup.optional(),
 
-  /** Motion tokens — `transition` (required sub-record) + `keyframes`.
-   *  `duration` / `easing` stay LAYER-1 and are refused here (theming spec
-   *  §2.3); ggui#1093 P1c decides whether the host's motion tempo reverses
-   *  that ruling, and nothing re-adds them until it does. Optional. */
+  /** Motion tokens — `transition` (required sub-record), `keyframes`, and
+   *  the bounded per-app TEMPO OVERRIDE (ggui#1093 P1c): `duration`
+   *  (fast/base/slow), `easing` (standard/emphasized/exit) and `reduce`.
+   *  The motion SCALE stays layer-1; the free-map ladders stay refused. */
   motion: MotionGroup.optional(),
 
   /** The scrim between the host page's ground and the card (ggui#1093 P1b,

@@ -98,9 +98,19 @@ describe('DtcgTheme required fields', () => {
     expectTypeOf<DtcgTheme['color']['outlineVariant']>().toEqualTypeOf<DtcgToken | undefined>();
   });
 
-  it('motion carries transition + keyframes only — durations and easings are layer-1 (ggui#987 §2.3)', () => {
-    expectTypeOf<DtcgTheme['motion']>().not.toHaveProperty('duration');
-    expectTypeOf<DtcgTheme['motion']>().not.toHaveProperty('easing');
+  // ggui#1093 P1c (2026-09-16, protocol + rnd) amends ggui#987 §2.3, and this
+  // guard is rewritten to the narrower rule rather than removed: layer-1 keeps
+  // the motion SCALE (what the design system ships, which no app redefines
+  // wholesale), and the document may state a BOUNDED per-app tempo override —
+  // three duration steps, three easing roles, `reduce`. A free map of
+  // arbitrary stops is still not a thing the type admits.
+  it('motion carries transition + keyframes plus the BOUNDED tempo override — three steps, three roles, reduce (ggui#1093 P1c amends ggui#987 §2.3)', () => {
+    expectTypeOf<DtcgTheme['motion']>().toHaveProperty('duration');
+    expectTypeOf<DtcgTheme['motion']>().toHaveProperty('easing');
+    expectTypeOf<DtcgTheme['motion']>().toHaveProperty('reduce');
+    expectTypeOf<NonNullable<DtcgTheme['motion']['reduce']>>().toEqualTypeOf<'respect' | 'ignore'>();
+    expectTypeOf<NonNullable<DtcgTheme['motion']['duration']>>().not.toHaveProperty('xfast');
+    expectTypeOf<NonNullable<DtcgTheme['motion']['easing']>>().not.toHaveProperty('d');
     expectTypeOf<DtcgTheme['motion']>().toHaveProperty('transition');
     expectTypeOf<DtcgTheme['motion']>().toHaveProperty('keyframes');
     expectTypeOf<DtcgTheme['motion']['transition']>().toEqualTypeOf<
