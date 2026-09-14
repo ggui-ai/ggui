@@ -305,7 +305,12 @@ export interface VisualOutcome {
   readonly canvases?: readonly CanvasScreenshot[];
   /** The judge's own token use (all canvas calls), priced into `estimatedCostUsd`. */
   readonly tokens?: { readonly input: number; readonly output: number };
+  /** The design tree the judge bundled against — `design@judge` (ggui#1042); absent from a judge before it. */
+  readonly design?: NonNullable<VisualEvaluationResult['design']>;
+  /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
+  readonly themeMode?: NonNullable<VisualEvaluationResult['themeMode']>;
 }
+export const VISUAL_DESIGN_UNSTAMPED_NOTE = 'visual judge design tree unstamped — the evaluator returned no design receipt (a judge before #1042)';
 
 /**
  * ui-gen's visual result → the outcome the core records. TYPED against
@@ -319,6 +324,8 @@ export function toVisualOutcome(r: VisualEvaluationResult | null): VisualOutcome
     passed: r.passed,
     ...(r.canvases !== undefined ? { canvases: r.canvases } : {}),
     ...(r.inputTokens !== undefined && r.outputTokens !== undefined ? { tokens: { input: r.inputTokens, output: r.outputTokens } } : {}),
+    ...(r.design !== undefined ? { design: r.design } : {}),
+    ...(r.themeMode !== undefined ? { themeMode: r.themeMode } : {}),
   };
 }
 
@@ -361,6 +368,10 @@ export interface VisualJudgeIdentity {
   readonly k?: number;
   /** The canvases sampled `k` times; absent ⇒ every judged canvas when `k > 1`. */
   readonly kCanvases?: readonly CanvasClass[];
+  /** sha256 of the design tree the judge painted with — `design@judge` (ggui#1042), stamped from the judgement itself; absent when the judge returned no receipt. */
+  readonly designSrcSha256?: string;
+  /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
+  readonly themeMode?: 'light' | 'dark';
 }
 
 /** The most vision calls per canvas the eval task accepts from its environment — K is spend: past this a change of code (and a spend clearance) is the only way. */
@@ -572,6 +583,8 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   });
   const panelUsd = judgePanelCostUsd(panel);
   const visualUsd = deps.visualJudge ? visualJudgeCostUsd(deps.visualJudge, visualOutcome) : 0;
+  // ggui#1042: a judge that ran but returned no design receipt is named, never assumed.
+  if (visualOutcome !== null && visualOutcome.design === undefined) notes.push(VISUAL_DESIGN_UNSTAMPED_NOTE);
   if (deps.visual && visualOutcome !== null && visualOutcome.tokens === undefined) notes.push('visual judge reported no token counts (visual cost 0 recorded)');
   const estimatedCostUsd = codingUsd + panelUsd + visualUsd;
 
@@ -619,7 +632,15 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
           }
         : {}),
       ...(visual !== undefined ? { visual } : {}),
-      ...(deps.visual && deps.visualJudge ? { visualJudge: deps.visualJudge } : {}),
+      ...(deps.visual && deps.visualJudge
+        ? {
+            visualJudge: {
+              ...deps.visualJudge,
+              ...(visualOutcome?.design !== undefined ? { designSrcSha256: visualOutcome.design.srcSha256 } : {}),
+              ...(visualOutcome?.themeMode !== undefined ? { themeMode: visualOutcome.themeMode } : {}),
+            },
+          }
+        : {}),
       panelPromptVersion: panel?.promptVersion ?? selectPanelPrompt(panelPrompt).promptVersion,
       costs: { codingUsd, panelUsd, visualUsd },
       notes,

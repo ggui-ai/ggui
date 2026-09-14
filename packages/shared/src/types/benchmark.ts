@@ -255,6 +255,10 @@ export interface TierEvaluationDisplay {
   visual?: {
     score: number;
     passed: boolean;
+    /** The design tree the judge painted with — `design@judge` (ggui#1042). Absent on rows judged before it. */
+    design?: { src: string; srcSha256: string };
+    /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
+    themeMode?: 'light' | 'dark';
     canvases: Array<{ canvas: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl'; viewport: { width: number; height: number }; score: number; passed: boolean; contentHeight?: number | null; overflow?: boolean; judge?: CanvasJudgeRecordDisplay }>;
   };
   issues: Array<{

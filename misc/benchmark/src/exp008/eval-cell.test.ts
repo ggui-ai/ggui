@@ -501,3 +501,37 @@ describe('#1072 — K on the eval task and the aggregation record on the row', (
     expect(report.meta.visualJudge).toMatchObject({ k: 3, kCanvases: ['xs-chat-card', 'md'] });
   });
 });
+
+describe('#1042 — design@judge on the row', () => {
+  const design = { src: '/deploy/node_modules/@ggui-ai/design/src', srcSha256: 'f00d'.repeat(16) };
+  it("the judge's design receipt and themeMode ride the outcome onto meta.visualJudge (designSrcSha256, themeMode)", async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
+      visual: async () => ({ score: 80, passed: true, design, themeMode: 'dark' as const }),
+    });
+    expect(report.meta.visualJudge).toMatchObject({ designSrcSha256: design.srcSha256, themeMode: 'dark' });
+    expect(report.meta.notes.some((n) => n.startsWith('visual judge design tree unstamped'))).toBe(false);
+  });
+  it('a judge that returns no design receipt is named on the row, and nothing is invented', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
+      visual: async () => ({ score: 80, passed: true }),
+    });
+    expect(report.meta.visualJudge?.designSrcSha256).toBeUndefined();
+    expect(report.meta.notes.some((n) => n.startsWith('visual judge design tree unstamped'))).toBe(true);
+  });
+  it('toVisualOutcome carries design + themeMode from the evaluator result', () => {
+    const r: VisualEvaluationResult = {
+      finalScore: 81, passed: true, issues: [], inputTokens: 3000, outputTokens: 200,
+      dimensions: { completeness: 80, visualPolish: 82, interactivity: 81, accessibility: 81, codeQuality: 81 },
+      design, themeMode: 'light',
+    };
+    const o = toVisualOutcome(r);
+    expect(o?.design).toEqual(design);
+    expect(o?.themeMode).toBe('light');
+  });
+});

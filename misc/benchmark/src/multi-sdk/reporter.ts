@@ -856,6 +856,8 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
           visual: {
             score: r.tierEvaluation.visual.score,
             passed: r.tierEvaluation.visual.passed,
+            ...(r.tierEvaluation.visual.design !== undefined ? { design: r.tierEvaluation.visual.design } : {}),
+            ...(r.tierEvaluation.visual.themeMode !== undefined ? { themeMode: r.tierEvaluation.visual.themeMode } : {}),
             canvases: r.tierEvaluation.visual.canvases.map((c) => ({
               canvas: c.canvas,
               viewport: c.viewport,
