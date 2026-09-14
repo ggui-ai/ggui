@@ -66,6 +66,26 @@ describe('composeThemeCss — one composition, three callers', () => {
     for (const k of Object.keys(APP.overlays.light)) expect(tree.get(k)).toBe(page.get(k));
   });
 
+  it("the DECLARED faces ride the document-level layers only (ggui#1093): page + chrome carry the @font-face rules, the scoped tree does not, absent ⇒ byte-identical", () => {
+    const FACES = [
+      { family: 'Neue Montreal', src: 'https://fonts.example.com/nm-400.woff2', weight: 400 },
+      { family: 'Neue Montreal', src: 'https://fonts.example.com/nm-700.woff2', weight: 700, style: 'normal', display: 'swap' },
+    ];
+    const themed = { ...APP, fonts: FACES };
+    const page = composeThemeCss({ layer: 'page', mode: 'light', appTheme: themed });
+    const chrome = composeThemeCss({ layer: 'chrome', mode: 'light', appTheme: themed });
+    for (const css of [page, chrome]) {
+      expect(css).toContain("@font-face { font-family: 'Neue Montreal'; src: url('https://fonts.example.com/nm-400.woff2') format('woff2'); font-weight: 400; }");
+      expect(css).toContain("src: url('https://fonts.example.com/nm-700.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap;");
+    }
+    // The at-rule is document-level: the SCOPED block never carries it (the runtime injects
+    // both blocks into one document — emitting it twice would duplicate every face).
+    expect(composeThemeCss({ layer: 'tree', scopeClass: 's7', mode: 'light', appTheme: themed })).not.toContain('@font-face');
+    // Absent / empty ⇒ exactly the CSS composed before the member existed (INVARIANT 1).
+    expect(composeThemeCss({ layer: 'page', mode: 'light', appTheme: { ...APP, fonts: [] } })).toBe(composeThemeCss({ layer: 'page', mode: 'light', appTheme: APP }));
+    expect(chrome.indexOf('@font-face')).toBeGreaterThan(chrome.indexOf('color-scheme:light'));
+  });
+
   it('no app theme ⇒ chrome is the ladder plus a bare color-scheme block', () => {
     expect(composeThemeCss({ layer: 'chrome', mode: 'light' })).toBe(`${getCssTokens('light')}:root{color-scheme:light;}`);
   });

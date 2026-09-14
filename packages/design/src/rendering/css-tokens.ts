@@ -34,7 +34,8 @@
 
 import { getTheme, getDefaultThemeId } from '../themes/index';
 import { completeThemeVariables } from '../themes/derive-theme-variables';
-import type { ThemeMode } from '../themes/types';
+import type { FontFaceDeclaration, ThemeMode } from '../themes/types';
+import { fontFaceRules } from '../themes/font-faces';
 
 /**
  * `@supports` query that gates the modern `color-mix()` tier of every
@@ -457,6 +458,15 @@ export interface ThemeOverlayLayers {
   readonly cssVariables?: Readonly<Record<string, string>>;
   readonly keyframes?: { readonly light?: string; readonly dark?: string };
   readonly frameless?: boolean;
+  /**
+   * The faces the theme DECLARES (ggui#1093 / #990 — protocol's
+   * `AppTheme.fonts`): rendered as `@font-face` rules by the two
+   * DOCUMENT-level layers (`page`, `chrome`) and never by the scoped
+   * `tree` block, because `@font-face` is a top-level at-rule no scope
+   * contains. Nothing is fetched here: a face whose `src` the document's
+   * CSP refuses falls back down the family's stack.
+   */
+  readonly fonts?: ReadonlyArray<FontFaceDeclaration>;
 }
 
 export interface ComposeThemeCssOptions {
@@ -538,6 +548,13 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
   if (opts.hostPalette) css += `:root{${toCssDecls(opts.hostPalette)}}`;
   css += `:root{color-scheme:${m};${layers.map(toCssDecls).join('')}}`;
   if (opts.layer === 'page' && opts.appTheme) css += opts.appTheme.keyframes?.[m] ?? '';
+  // The declared faces ride the DOCUMENT-level layers (ggui#1093): the family
+  // the theme names loads wherever the theme is composed — the runtime's
+  // `:root` chrome block when a theme arrives or changes after the shell was
+  // served, and an evaluator's page, which until now painted a fallback family
+  // and scored typography the visitor never saw. Absent ⇒ byte-identical.
+  const faces = opts.appTheme?.fonts;
+  if (faces !== undefined && faces.length > 0) css += fontFaceRules(faces);
   return css;
 }
 
