@@ -15,6 +15,7 @@ import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import { build } from 'esbuild';
 import { getCssTokens } from '@ggui-ai/design/rendering';
+import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
@@ -68,6 +69,14 @@ export interface VisualEvalConfig {
   judgeK?: number;
   /** The canvases sampled `judgeK` times; default = every judged canvas when `judgeK > 1`. */
   judgeKCanvases?: readonly CanvasClass[];
+  /**
+   * The design `src` tree the judge bundles the component against
+   * (ggui#1042): an explicit input, so a judge-only re-judge names the tree
+   * it painted with. Default: the design package beside this one.
+   */
+  designSrcDir?: string;
+  /** The mode the caller composed `cssTokens` in — a receipt on the row, never a switch (ggui#1076: judge and runtime must name the same mode). */
+  themeMode?: 'light' | 'dark';
   routeOverride?: AgentConfig['routeOverride'];
   /**
    * Provider-429-retry observer — see `AgentConfig.onRetry`.
@@ -157,6 +166,10 @@ export function canvasOverflowIssue(
  */
 export interface VisualEvaluationResult extends EvaluationResult {
   canvases?: CanvasVisualResult[];
+  /** The design tree the judge painted with (ggui#1042) — present on every per-canvas judgement. */
+  design?: JudgeDesignIdentity;
+  /** The mode `cssTokens` were composed in, when the caller said (ggui#1076). */
+  themeMode?: 'light' | 'dark';
 }
 
 /** Injection points for `runVisualEvaluation` — screenshot deps plus the judge call (tests). */
@@ -250,6 +263,7 @@ export function resolveDesignPackageDir(): string {
 async function bundleForRendering(
   compiledCode: string,
   sampleProps: Record<string, unknown>,
+  designSrc: string = resolve(resolveDesignPackageDir(), 'src'),
 ): Promise<string> {
   // Write component + entry to temp files for esbuild
   const tmpDir = resolve(tmpdir(), 'ggui-visual-eval-' + Date.now());
@@ -257,7 +271,7 @@ async function bundleForRendering(
   const componentFile = resolve(tmpDir, 'component.tsx');
   const entryFile = resolve(tmpDir, 'entry.tsx');
 
-  const designPkgDir = resolveDesignPackageDir();
+  const designPkgDir = resolve(designSrc, '..');
   const wirePkgDir = resolveWirePackageDir();
 
   // Write the compiled component as a separate module
@@ -762,11 +776,15 @@ export async function runVisualEvaluationDetailed(
 ): Promise<VisualEvalDetailed> {
   const startTime = Date.now();
   const judge = deps.judge ?? callMultimodalLLM;
+  // ggui#1042: the design tree is an input and a part of the judgement's identity.
+  const designSrc = config.designSrcDir ?? resolve(resolveDesignPackageDir(), 'src');
+  const design = judgeDesignIdentity(designSrc);
+  const stamp = <T extends VisualEvaluationResult>(r: T): T => ({ ...r, design, ...(config.themeMode !== undefined ? { themeMode: config.themeMode } : {}) });
 
   // Bundle component + design system into a single JS file
   let bundledCode: string;
   try {
-    bundledCode = await bundleForRendering(context.compiledCode, config.sampleProps ?? {});
+    bundledCode = await bundleForRendering(context.compiledCode, config.sampleProps ?? {}, designSrc);
   } catch (e) {
     const unavailableReason = `bundle failed: ${e instanceof Error ? e.message : String(e)}`;
     console.warn(`[visual-eval] ${unavailableReason}`);
@@ -849,7 +867,7 @@ export async function runVisualEvaluationDetailed(
       `[visual-eval] score=${aggregate.finalScore} (mean of ${perCanvas.length} canvases; ` +
         `${aggregate.passed ? 'every canvas passed' : `${perCanvas.filter((c) => !c.passed).length} failed`}) (${elapsed}ms)`,
     );
-    return { result: aggregate };
+    return { result: stamp(aggregate) };
   }
 
   // ── Single-shot mode (today's path) ──
@@ -882,7 +900,7 @@ export async function runVisualEvaluationDetailed(
   const elapsed = Date.now() - startTime;
   console.log(`[visual-eval] score=${result.finalScore} (${elapsed}ms) | in=${response.inputTokens} out=${response.outputTokens}`);
 
-  return { result };
+  return { result: stamp(result) };
 }
 
 /**
@@ -940,7 +958,13 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     overflow: c.overflow,
     judge: c.judge,
   }));
-  return { score: result.finalScore, passed: result.passed, canvases };
+  return {
+    score: result.finalScore,
+    passed: result.passed,
+    canvases,
+    ...(result.design !== undefined ? { design: result.design } : {}),
+    ...(result.themeMode !== undefined ? { themeMode: result.themeMode } : {}),
+  };
 }
 
 /**

@@ -145,3 +145,4 @@ export type {
   CanvasDescriptor,
 } from '../design-mode.js';
 export { cssTokensForAppTheme } from './theme-css.js';
+export { designTreeSha256, judgeDesignIdentity, resetJudgeDesignIdentityCache, type JudgeDesignIdentity } from './design-identity.js';

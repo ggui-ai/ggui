@@ -100,6 +100,8 @@ describe('runVisualEvaluation — per-canvas mode', () => {
     expect(summarizeVisualResult(result!)).toEqual({
       score: 85,
       passed: true,
+      // ggui#1042: the summary names the design tree the judge painted with.
+      design: { src: expect.stringMatching(/design\/src$/), srcSha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
       canvases: [
         { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
         { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [90], sigma: 0, notes: [expect.any(String)] } },

@@ -228,6 +228,10 @@ export interface VisualEvalSummary {
   /** Every canvas passed. */
   passed: boolean;
   canvases: CanvasVisualSummary[];
+  /** The design tree the judge painted with (ggui#1042): `src` + `srcSha256` — `design@judge`. */
+  design?: { readonly src: string; readonly srcSha256: string };
+  /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
+  themeMode?: 'light' | 'dark';
 }
 
 // ─── Quality mode ──────────────────────────────────────────────────────────
