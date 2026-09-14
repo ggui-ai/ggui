@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { LaunchOptions } from 'puppeteer-core';
 import { describe, expect, it } from 'vitest';
-import { designTreeSha256, judgeDesignIdentity, resetJudgeDesignIdentityCache } from './design-identity.js';
+import { designTreeSha256, isDesignRenderingInput, judgeDesignIdentity, resetJudgeDesignIdentityCache } from './design-identity.js';
 import {
   resolveDesignPackageDir,
   runVisualEvaluationDetailed,
@@ -55,6 +55,25 @@ describe('designTreeSha256', () => {
     expect(designTreeSha256(a)).toBe(first);
     writeFileSync(join(a, 'primitives', 'Card.tsx'), 'export const Card = 2;');
     expect(designTreeSha256(a)).not.toBe(first);
+  });
+  it('hashes rendering inputs only: tests, stories and docs neither move nor make the identity (ggui#1042 — a built image ships without them)', () => {
+    const a = mkdtempSync(join(tmpdir(), 'ggui-design-inputs-'));
+    mkdirSync(join(a, 'primitives'));
+    writeFileSync(join(a, 'primitives', 'Card.tsx'), 'export const Card = 1;');
+    writeFileSync(join(a, 'index.ts'), 'export * from "./primitives/Card";');
+    const inputsOnly = designTreeSha256(a);
+    mkdirSync(join(a, '__tests__'));
+    writeFileSync(join(a, '__tests__', 'card.test.ts'), 'test');
+    writeFileSync(join(a, 'primitives', 'Card.test.tsx'), 'test');
+    writeFileSync(join(a, 'primitives', 'Card.stories.tsx'), 'story');
+    writeFileSync(join(a, 'README.md'), '# docs');
+    expect(designTreeSha256(a)).toBe(inputsOnly);
+    writeFileSync(join(a, 'primitives', 'Card.tsx'), 'export const Card = 2;');
+    expect(designTreeSha256(a)).not.toBe(inputsOnly);
+    expect(isDesignRenderingInput('primitives/Card.tsx')).toBe(true);
+    expect(isDesignRenderingInput('rendering/css-tokens.ts')).toBe(true);
+    for (const rel of ['__tests__/x.ts', 'a/__tests__/x.tsx', 'primitives/Card.test.tsx', 'x.test.ts', 'primitives/Card.stories.tsx', 'README.md'])
+      expect(isDesignRenderingInput(rel)).toBe(false);
   });
   it('the identity is cached per path and forgets on reset', () => {
     resetJudgeDesignIdentityCache();
