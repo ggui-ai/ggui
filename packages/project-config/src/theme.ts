@@ -247,6 +247,27 @@ const TypeScaleRole = z.strictObject({
   leading: NumberToken.optional(),
 });
 
+/**
+ * PRECEDENCE, and the ONE sentence that governs every member in this group
+ * (ggui#1093 R1, ruled with rnd 2026-09-16): **a host-design-language member
+ * overrides the base document's corresponding ladder.** A stated `typeScale`
+ * role beats the `font.ramp` stop that would have generated it; a stated
+ * `rhythm.base` beats the `spacing` stops it re-derives. Those two read as
+ * opposite directions (role over scale, scale over rungs) and are not: in
+ * both, the member the HOST measured wins over the ladder ggui supplied.
+ *
+ * The asymmetry that makes the sentence necessary: a `typeScale` role IS a
+ * rung, so it wins its own stop and leaves the others to the ramp — a harvest
+ * that measured only `h1` and `body` must not blank the rest. A `rhythm.base`
+ * is a statement about the SCALE, and every real document already carries
+ * spacing stops (the base theme supplies them), so "stated stop wins" would
+ * make the member inert on every document a harvest can produce.
+ *
+ * Nothing is lost by it: a document needing one bespoke step states no
+ * rhythm, and an app needing one pinned value has `AppTheme.cssVariables`,
+ * which overrides the whole projection at the overlay layer.
+ */
+
 /** The five type roles; `display` is the poster-scale role a host page leads with. */
 const TypeScaleGroup = z.strictObject({
   display: TypeScaleRole.optional(),
