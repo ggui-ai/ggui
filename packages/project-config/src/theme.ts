@@ -226,6 +226,73 @@ const ShapeGroup = z.strictObject({
  * (optional). Durations and easings are not ladders any more: they ride
  * each transition's own value.
  */
+/**
+ * The HOST DESIGN LANGUAGE's document members (ggui#1093 P1b, #1075 Track C (a);
+ * grammar co-signed with rnd 2026-09-15). These are DOCUMENT tokens, never wire
+ * members: they reach the card through `deriveThemeVariables` → the overlay,
+ * which stays the ONE projection (`docs/principles/mcp-apps-compliance.md`).
+ * Every group is OPTIONAL and absent ⇒ the document parses exactly as before
+ * (INVARIANT 1: no declaration, byte-identical output).
+ */
+
+/**
+ * One type role. `size` is required; `leading` is a RATIO (`NumberToken`) and
+ * never a length — the projection writes `line-height: <ratio>`, which survives
+ * a size change, while a length leading breaks the moment the role's size moves.
+ */
+const TypeScaleRole = z.strictObject({
+  size: DimensionToken,
+  weight: FontWeightToken.optional(),
+  tracking: DimensionToken.optional(),
+  leading: NumberToken.optional(),
+});
+
+/** The five type roles; `display` is the poster-scale role a host page leads with. */
+const TypeScaleGroup = z.strictObject({
+  display: TypeScaleRole.optional(),
+  h1: TypeScaleRole.optional(),
+  h2: TypeScaleRole.optional(),
+  body: TypeScaleRole.optional(),
+  label: TypeScaleRole.optional(),
+});
+
+/**
+ * The spacing base a rhythm re-derives its scale from: a positive length in
+ * `px` (2–16) or `rem` / `em` (0.125–1, the same range at a 16px root). Other
+ * units and `calc()` are refused at the door — a base the reader cannot
+ * multiply is not a base.
+ */
+const RHYTHM_BASE_RE = /^(\d+(?:\.\d+)?)(px|rem|em)$/;
+function isRhythmBase(value: string): boolean {
+  const m = RHYTHM_BASE_RE.exec(value);
+  if (m === null) return false;
+  const n = Number(m[1]);
+  return m[2] === 'px' ? n >= 2 && n <= 16 : n >= 0.125 && n <= 1;
+}
+const RhythmBaseToken = DimensionToken.refine(
+  (t) => isRhythmBase(t.$value),
+  'rhythm.base must be a length in px (2–16) or rem/em (0.125–1)',
+);
+
+/** `base` re-derives the spacing scale; `section` and `inset` are named steps. */
+const RhythmGroup = z.strictObject({
+  base: RhythmBaseToken,
+  section: DimensionToken.optional(),
+  inset: DimensionToken.optional(),
+});
+
+/**
+ * The scrim a host page's ground shows through (ggui#1083): `tone` is a word
+ * (`light` / `dark`) or a stated colour token, `opacity` a 0..1 ratio, `blur` a
+ * length. Absent ⇒ the completion derives it from the ground pair, so a
+ * builder who declares nothing still gets a scrim that matches their page.
+ */
+const ScrimGroup = z.strictObject({
+  tone: z.union([z.enum(['light', 'dark']), ColorToken]),
+  opacity: NumberToken.refine((t) => t.$value >= 0 && t.$value <= 1, 'scrim.opacity must be a ratio between 0 and 1'),
+  blur: DimensionToken,
+});
+
 const MotionGroup = z.strictObject({
   transition: z.record(z.string(), TransitionToken),
   keyframes: z.record(z.string(), StringToken).optional(),
@@ -324,9 +391,26 @@ export const ThemeDocumentV2 = z.strictObject({
   /** Shape tokens — `radius` + `shadow`. Required. */
   shape: ShapeGroup,
 
-  /** Motion tokens — `duration` + `transition` (required sub-records),
-   *  `easing` + `keyframes` (optional sub-records). Optional. */
+  /** The five type ROLES of the host's design language (ggui#1093 P1b):
+   *  display / h1 / h2 / body / label, each `size` + optional weight,
+   *  tracking and a RATIO leading. Role-based, beside `font.ramp`'s
+   *  size-stop ladder — the projection reads a role when it is stated and
+   *  falls to the ramp when it is not. Optional. */
+  typeScale: TypeScaleGroup.optional(),
+
+  /** The host's spacing rhythm (ggui#1093 P1b): `base` re-derives the scale,
+   *  `section` / `inset` are named steps. Optional. */
+  rhythm: RhythmGroup.optional(),
+
+  /** Motion tokens — `transition` (required sub-record) + `keyframes`.
+   *  `duration` / `easing` stay LAYER-1 and are refused here (theming spec
+   *  §2.3); ggui#1093 P1c decides whether the host's motion tempo reverses
+   *  that ruling, and nothing re-adds them until it does. Optional. */
   motion: MotionGroup.optional(),
+
+  /** The scrim between the host page's ground and the card (ggui#1093 P1b,
+   *  ggui#1083). Absent ⇒ derived from the ground pair. Optional. */
+  scrim: ScrimGroup.optional(),
 
   /** Accessibility tokens (focus ring, reduced motion, high contrast).
    *  Optional. */

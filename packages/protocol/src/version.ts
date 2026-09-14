@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Theme DOCUMENT members (2026-09-16, additive, ggui#1093 P1b — MINOR,
+ * same draft stamp; no WIRE change at all). `ThemeDocumentV2` and design's
+ * `DtcgTheme` gain optional `typeScale` (five roles; `leading` is a ratio),
+ * `rhythm` (bounded `base` + named steps) and `scrim`; they reach the card
+ * through `deriveThemeVariables` → the overlay, so the wire's `AppTheme`
+ * is untouched and this entry moves no stamp. Motion is NOT here: it would
+ * reverse the theming spec's §2.3 layer-1 ruling and lands as ggui#1093
+ * P1c with that reversal, co-signed.
+ * --------------------------------------------------------------------
  * AppTheme carrier, wire half (2026-09-15, additive, ggui#1093 P1a —
  * MINOR, same draft stamp; #1075 Track C (a), closes #990's wire half).
  * Two OPTIONAL members on `appThemeSchema`: `fonts` (1..16 faces on

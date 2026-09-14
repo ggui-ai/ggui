@@ -334,3 +334,77 @@ describe('safeParseThemeDocument', () => {
     if (!result.success) expect(result.error.issues.length).toBeGreaterThan(0);
   });
 });
+
+// ggui#1093 P1b — the host design language's DOCUMENT members (#1075 Track C (a)).
+// THREE of the four: motion is P1c (see the note below).
+// Grammar co-signed with rnd 2026-09-15 (their amendment: `leading` is a RATIO,
+// NumberToken only). These are DOCUMENT tokens, not wire members: they reach the
+// card through `deriveThemeVariables` → the overlay, which stays the ONE
+// projection. All four groups OPTIONAL; absent ⇒ today's document, byte-identical.
+describe('ThemeDocumentV2 — typeScale / rhythm / scrim (ggui#1093 P1b)', () => {
+  const dim = (v: string) => ({ $type: 'dimension', $value: v });
+  const num = (v: number) => ({ $type: 'number', $value: v });
+  const weight = (v: number) => ({ $type: 'fontWeight', $value: v });
+
+  it('accepts a full typeScale — five roles, size required, weight / tracking / leading optional', () => {
+    const typeScale = {
+      display: { size: dim('48px'), weight: weight(700), tracking: dim('-0.02em'), leading: num(1.05) },
+      h1: { size: dim('32px'), weight: weight(600) },
+      h2: { size: dim('24px') },
+      body: { size: dim('16px'), leading: num(1.5) },
+      label: { size: dim('13px'), tracking: dim('0.04em') },
+    };
+    const parsed = parseThemeDocument({ ...baseTheme, typeScale });
+    expect(parsed.typeScale).toEqual(typeScale);
+  });
+
+  it('refuses an unknown role, a missing size, a non-token value, and a leading given as a LENGTH (rnd: leading is a ratio)', () => {
+    for (const bad of [
+      { display: { size: dim('48px') }, hero: { size: dim('60px') } },
+      { body: { weight: weight(400) } },
+      { body: { size: '16px' } },
+      { body: { size: dim('16px'), leading: dim('1.5em') } },
+      { body: { size: dim('16px'), tracking: num(0.04) } },
+    ]) {
+      expect(() => parseThemeDocument({ ...baseTheme, typeScale: bad }), JSON.stringify(bad)).toThrow();
+    }
+  });
+
+  it('accepts rhythm with a base in the door\'s bounds and refuses one outside them or in a unit the door does not take', () => {
+    expect(parseThemeDocument({ ...baseTheme, rhythm: { base: dim('4px') } }).rhythm?.base.$value).toBe('4px');
+    expect(parseThemeDocument({ ...baseTheme, rhythm: { base: dim('0.25rem'), section: dim('48px'), inset: dim('12px') } }).rhythm?.section?.$value).toBe('48px');
+    for (const bad of [dim('1px'), dim('17px'), dim('2rem'), dim('50%'), dim('4vw'), dim('calc(4px + 1em)'), dim('px'), dim('-4px')]) {
+      expect(() => parseThemeDocument({ ...baseTheme, rhythm: { base: bad } }), bad.$value).toThrow();
+    }
+  });
+
+  // MOTION IS NOT IN P1b. `motion.duration` / `motion.easing` are retired
+  // ladders — the theming spec §2.3 rules them LAYER-1, never per app, and
+  // the guard above ("rejects the retired ladders") enforces it. ggui#1093's
+  // host-motion member would REVERSE that ruling, so it is cut as P1c once
+  // rnd co-signs the reversal in writing (the retirement's stated ground —
+  // "zero consumers today", audit G51 — is what #1075 changes). The grammar
+  // is drafted and the tests are written; they land with the reversal, not
+  // under it.
+
+  it('accepts scrim as a tone word or a colour token, with opacity 0..1 and a blur length', () => {
+    expect(parseThemeDocument({ ...baseTheme, scrim: { tone: 'dark', opacity: num(0.6), blur: dim('12px') } }).scrim?.tone).toBe('dark');
+    const tonal = { tone: { $type: 'color', $value: '#101014' }, opacity: num(0), blur: dim('0px') };
+    expect(parseThemeDocument({ ...baseTheme, scrim: tonal }).scrim?.opacity.$value).toBe(0);
+    for (const bad of [
+      { tone: 'sepia', opacity: num(0.5), blur: dim('8px') },
+      { tone: 'dark', opacity: num(1.2), blur: dim('8px') },
+      { tone: 'dark', opacity: num(-0.1), blur: dim('8px') },
+      { tone: 'dark', opacity: 0.5, blur: dim('8px') },
+      { tone: 'dark', opacity: num(0.5) },
+      { tone: 'dark', opacity: num(0.5), blur: dim('8px'), spread: dim('2px') },
+    ]) {
+      expect(() => parseThemeDocument({ ...baseTheme, scrim: bad }), JSON.stringify(bad)).toThrow();
+    }
+  });
+
+  it('INVARIANT 1 door twin: a document without the four groups parses to exactly what it parsed before them', () => {
+    const parsed = parseThemeDocument(baseTheme);
+    for (const member of ['typeScale', 'rhythm', 'scrim'] as const) expect(member in parsed).toBe(false);
+  });
+});

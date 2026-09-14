@@ -27,6 +27,15 @@ export interface FontFaceDeclaration {
   readonly display?: string;
 }
 
+/** One type role of the host's design language (ggui#1093 P1b). */
+export interface TypeScaleRole {
+  readonly size: DtcgToken;
+  readonly weight?: DtcgToken;
+  readonly tracking?: DtcgToken;
+  /** A RATIO, never a length: the projection writes `line-height: <ratio>`. */
+  readonly leading?: DtcgToken<number>;
+}
+
 export interface DtcgToken<T = string> {
   $value: T;
   $type: string;
@@ -169,6 +178,40 @@ export interface DtcgTheme {
     faces?: ReadonlyArray<FontFaceDeclaration>;
   };
 
+  /**
+   * The host design language's five type ROLES (ggui#1093 P1b): `size`
+   * required, `leading` a RATIO (never a length — `line-height: <ratio>`
+   * survives a size change). Role-based, beside `font.ramp`'s stop ladder.
+   */
+  typeScale?: {
+    display?: TypeScaleRole;
+    h1?: TypeScaleRole;
+    h2?: TypeScaleRole;
+    body?: TypeScaleRole;
+    label?: TypeScaleRole;
+  };
+
+  /**
+   * The host's spacing rhythm (ggui#1093 P1b): `base` re-derives the scale
+   * (px 2–16, or rem/em 0.125–1 at the document door); `section` / `inset`
+   * are named steps.
+   */
+  rhythm?: {
+    base: DtcgToken;
+    section?: DtcgToken;
+    inset?: DtcgToken;
+  };
+
+  /**
+   * The scrim between the host page's ground and the card (ggui#1093 P1b,
+   * ggui#1083). Absent ⇒ derived from the ground pair by the completion.
+   */
+  scrim?: {
+    tone: 'light' | 'dark' | DtcgToken;
+    opacity: DtcgToken<number>;
+    blur: DtcgToken;
+  };
+
   spacing: Record<string, DtcgToken>;
 
   shape: {
@@ -194,6 +237,9 @@ export interface DtcgTheme {
      */
     transition: Record<string, DtcgToken>;
     keyframes: Record<string, DtcgToken>;
+    // `duration` / `easing` are LAYER-1 and deliberately absent (theming
+    // spec §2.3). ggui#1093 P1c decides whether the host's motion tempo
+    // reverses that; nothing re-adds them here until it does.
   };
 
   /**
