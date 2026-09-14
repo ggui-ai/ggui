@@ -159,10 +159,16 @@ export async function readThemeFromGguiJson(
   // derived sets, attested; the declared mode is the default the card
   // paints when no host announces one; the preset id is the label.
   const overlays = loaded.overlays;
+  // The document's declared faces ride the wire verbatim (ggui#1093):
+  // `typography.faces` and `AppTheme.fonts` are ONE grammar now, so the
+  // deploy carries what the author declared instead of dropping it.
+  // Absence stays absence — no faces, no `fonts` member.
+  const fonts = loaded.document.typography?.faces ?? [];
   const theme: AppTheme = {
     overlayHash: await canonicalOverlayHash({ overlays }),
     overlays,
     mode: loaded.mode,
+    ...(fonts.length > 0 ? { fonts: [...fonts] } : {}),
     ...(loaded.source === 'preset' ? { name: loaded.preset } : {}),
   };
 
@@ -289,12 +295,12 @@ export async function runConfigPushStep(
     const read = await readThemeFromGguiJson(dirname(gguiJsonPath), readResult.value);
     theme = read?.theme;
     if (read !== undefined && read.declaredFaceFamilies.length > 0) {
-      // ggui#990: the PATCH carries the projection only — no faces slot
-      // on the wire, nothing composes them on the hosted path — so the
-      // declared families fall back to their stacks there. One line,
-      // every deploy, until #990 lands.
+      // ggui#990/#1093: the PATCH now CARRIES the faces (`AppTheme.fonts`)
+      // and a server on this release inlines them in the shell it serves.
+      // A deployment still running an older release cannot — so the deploy
+      // names the families once, as the version-skew line it is.
       process.stderr.write(
-        `ggui deploy: theme declares font faces (${read.declaredFaceFamilies.join(', ')}) that are not delivered on the hosted path yet — the fallback stack applies (ggui-ai/ggui#990).\n`,
+        `ggui deploy: theme declares font faces (${read.declaredFaceFamilies.join(', ')}) — carried on the wire; a deployment older than this release paints the fallback stack until it rolls (ggui-ai/ggui#990).\n`,
       );
     }
   } catch (err) {

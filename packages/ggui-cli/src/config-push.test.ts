@@ -497,7 +497,7 @@ describe('runConfigPushStep', () => {
   });
 });
 
-// ─── #990 — declared faces are not delivered on the hosted path yet ──────────
+// ─── #990/#1093 — the faces ride the wire; the line is version skew ──────────
 describe('runConfigPushStep — declared font faces (ggui#990)', () => {
   let dir: string;
 
@@ -539,7 +539,7 @@ describe('runConfigPushStep — declared font faces (ggui#990)', () => {
     ...(faces !== undefined ? { typography: { faces } } : {}),
   });
 
-  it('prints ONE warning naming each declared family as not delivered on the hosted path, pointing at #990', async () => {
+  it('prints ONE version-skew line naming each declared family — the faces ARE carried now (ggui#1093)', async () => {
     writeFileSync(
       join(dir, 'theme.json'),
       JSON.stringify(
@@ -560,10 +560,14 @@ describe('runConfigPushStep — declared font faces (ggui#990)', () => {
     expect(lines[0]).toContain('Acme Sans');
     expect(lines[0]).toContain('Acme Mono');
     expect(lines[0]).toMatch(/fallback/i);
-    expect(lines[0]).toMatch(/not delivered/i);
-    // The projection still ships.
+    expect(lines[0]).toMatch(/carried on the wire/i);
+    expect(lines[0]).not.toMatch(/not delivered/i);
+    // The projection still ships — and now CARRIES the faces (ggui#1093
+    // O1c), which is why the line above is about an older deployment, not
+    // about a missing wire slot.
     const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
     expect(patch.theme).toBeDefined();
+    expect(patch.theme!.fonts).toHaveLength(3);
   });
 
   it('prints no such warning when the document declares no faces', async () => {
@@ -573,5 +577,59 @@ describe('runConfigPushStep — declared font faces (ggui#990)', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(await runConfigPushStep('app123', dir)).toBe(0);
     expect(stderrSpy.mock.calls.map((c) => String(c[0])).some((l) => l.includes('#990'))).toBe(false);
+  });
+});
+
+// ggui#1093 O1c / #990 — the deploy CARRIES the document's declared faces:
+// the wire has a `fonts` slot now and the grammars are identical, so a
+// theme.json face reaches the app's stored theme verbatim.
+describe('readThemeFromGguiJson — the document\'s faces ride the wire (ggui#1093)', () => {
+  const projectRoot = tmpdir();
+
+  it('carries typography.faces onto AppTheme.fonts, verbatim, when the document declares them', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ggui-fonts-wire-'));
+    try {
+      const faces = [
+        { family: 'Acme Sans', src: 'https://fonts.acme.example/sans.woff2', weight: 400 },
+        { family: 'Acme Mono', src: 'https://fonts.acme.example/mono.woff2' },
+      ];
+      const color = (v: string) => ({ $type: 'color', $value: v });
+      const doc = {
+        color: {
+          primary: { '500': color('#0ea5e9') },
+          success: { '500': color('#16a34a') },
+          warning: { '500': color('#f59e0b') },
+          error: { '500': color('#dc2626') },
+          info: { '500': color('#2563eb') },
+          ground: color('#ffffff'),
+          onGround: color('#111827'),
+          container: color('#ffffff'),
+          onContainer: color('#111827'),
+          sunken: color('#f3f4f6'),
+          onSunken: color('#374151'),
+        },
+        spacing: { '4': { $type: 'dimension', $value: '16px' } },
+        font: {
+          family: { sans: { $type: 'fontFamily', $value: 'Acme Sans' } },
+          weight: { regular: { $type: 'fontWeight', $value: 400 } },
+        },
+        shape: {
+          radius: { md: { $type: 'dimension', $value: '8px' } },
+          shadow: { sm: { $type: 'shadow', $value: '0 1px 2px 0 rgba(0,0,0,.05)' } },
+        },
+        typography: { faces },
+      };
+      writeFileSync(join(dir, 'theme.json'), JSON.stringify(doc));
+      const read = await readThemeFromGguiJson(dir, makeThemeManifest({ file: './theme.json', mode: 'light' }));
+      expect(read!.theme.fonts).toEqual(faces);
+      expect(appThemeSchema.safeParse(read!.theme).success).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits `fonts` entirely when the document declares none (absence stays absence)', async () => {
+    const read = await readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' }));
+    expect(read!.theme).not.toHaveProperty('fonts');
   });
 });
