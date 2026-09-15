@@ -348,6 +348,20 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * the app has no theme between those two writes, because that is the kind
  * of fact a caller must not discover in production.
  *
+ * The CLEAR half names an OUTCOME, not a mechanism, and that is deliberate
+ * (ggui#1124, from cloud's per-door measurement): `theme: null` clears on
+ * exactly ONE of the four doors that write a theme — the provisioning theme
+ * door. On the other three a writer following a universal `theme: null`
+ * instruction gets a SECOND refusal, which is the verdict-without-a-path
+ * this ruling exists to prevent, reintroduced by the text meant to prevent
+ * it. The CARRY half needs no such hedge: it is implementable on every
+ * door, which is why it is stated first and unconditionally.
+ *
+ * The better end state is uniform — `theme: null` clearing at the shared
+ * writer so all four doors honour one mechanism — but that is a change to
+ * three doors' semantics and belongs to its own decision with cloud, not to
+ * a wording fix.
+ *
  * Throws on an empty list: a refusal that names nothing is not an
  * instruction.
  */
@@ -360,8 +374,10 @@ export function appThemeWouldDropRefusalText(wouldDrop: readonly string[]): stri
     `this write would drop stored theme members it does not carry — [${members}]. ` +
     `If you did not mean to drop them: read the stored theme and carry every member this write does not own, ` +
     `then recompute the attestation over the result. ` +
-    `If you DID mean to drop them: send \`theme: null\` to clear the theme, then write the theme you want — ` +
-    `the app has NO theme between those two writes.`
+    `If you DID mean to drop them: CLEAR the stored theme first, then write the theme you want — ` +
+    `the app has NO theme between those two writes. How you clear DEPENDS ON THE DOOR: the provisioning ` +
+    `theme door clears on \`theme: null\`; other doors differ, so use the clear operation of the door you ` +
+    `are calling rather than assuming this one.`
   );
 }
 
