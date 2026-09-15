@@ -241,12 +241,19 @@ YOU decide which actions are terminal, from the request and the contract's own w
  * card told "compact"). Identical in both modes; the eval leg's tier-0
  * `universal.viewport_sized` fails what slips through.
  */
-export const FRAME_SIZING = `## Sizing — the frame owns the height
+export const FRAME_SIZING = `## Sizing — the frame owns the height and the width
 
 The host sizes the iframe; the component never sizes itself to the viewport. NEVER write \`100vh\` / \`100dvh\` / \`100svh\` (or an \`h-screen\` / \`min-h-screen\` class) as a height on any element:
 - An inline card takes its natural height. A content-sized frame is measured FROM the content, so a \`100vh\` root can never shrink and grows the frame on every re-measure.
 - Under fullscreen the frame already stretches your root to its full height. Centre inside it with flex (\`display: flex; flex-direction: column; justify-content: center\`), never with a viewport height.
-- To fill a parent that has a height use \`height: 100%\` or \`flex: 1\`; a viewport unit is only ever a \`max-height\` cap on a scroll region.`;
+- To fill a parent that has a height use \`height: 100%\` or \`flex: 1\`; a viewport unit is only ever a \`max-height\` cap on a scroll region.
+
+The width works the same way, and the mistake is the mirror image: **your outermost element FILLS the frame; a width cap belongs INSIDE it, on the column that holds text.**
+
+- Never put \`maxWidth\` (or a \`max-w-*\` class) on the element you return at the top. On a wide canvas that turns your card into a narrow strip with the frame's ground on either side of it, and on a narrow one it does nothing — the same composition reading differently at two sizes.
+- DO cap the reading measure inside: a column of prose is easiest to read at 60–70 characters, so wrap the TEXT in a \`<Container maxWidth="sm">\` (or your own \`max-width\`) and leave the root filling. A hero band, a toolbar, a table or an image then still uses the whole width, which is what makes a wide card look composed rather than padded.
+- Centre that inner column with the container's own centring, not by shrinking the root.
+- **They are two different elements.** Even when the whole card is one column of text, the root still fills and the column sits INSIDE it — \`<Box padding="lg"><Container maxWidth="sm">…</Container></Box>\`, never a root that is itself the container. A centred card is centring inside a filled frame, not a shrunken frame.`;
 
 /** Helper-component structure guidance (JSX depth 3–5, helpers above `Component`). Identical in both modes. */
 export const COMPONENT_STRUCTURE = `## Component Structure

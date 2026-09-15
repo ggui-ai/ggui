@@ -127,10 +127,26 @@ function renderFreeBoilerplates(): string {
 // site the model writes the handler (`— if this is meant ONCE, disable its control after it
 // fires`). INVARIANT 1 holds across the re-record; the eval leg gained the WARN-level
 // `universal.terminal_action_unguarded` in the same cut.
+// Re-recorded 2026-09-15 for ggui#1113, the CONSTRAINED BOILERPLATE too — and that is the
+// load-bearing half. The prompt rule alone measured ZERO: an A/B on the `lg` canvas (haiku,
+// n=4 per arm) produced a width-capped ROOT in 4/4 takes both before and after, because the
+// fullscreen LAYOUT SCAFFOLD the model fills in was literally `<Container maxWidth="xl"
+// padding="lg">`. The prompt said "never cap the root" while the boilerplate handed it a
+// capped root — the two legs disagreeing, which is the thing the triad rule exists to catch.
+// The three fullscreen scaffolds now open `<Box padding="…">` with the measure-cap advice at
+// the site. Free-arm boilerplate unmoved (it ships no layout scaffold).
+// Re-recorded 2026-09-15 for ggui#1113: `FRAME_SIZING` gains the WIDTH half — the frame owns
+// the width too, so the outermost element FILLS it and a width cap belongs INSIDE, on the column
+// that holds text (60–70 characters), never on the root. Both prompt digests move together
+// (constrained 3ea37864… → 8ba350be…, free 66667f5f… → 8b963ccb…); the boilerplates are
+// untouched. Bought by a served take: a hello whose root was `<Container maxWidth="sm">` read as
+// a centred 480 px column on the 768 px canvas and flush-left at 400 — one composition, two
+// pictures, chosen by a preset the model reached for with nothing telling it what the canvas was
+// for. INVARIANT 1 holds across the re-record.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '3ea37864a3939817748a59968b437da1c5903309c6ea20fb9ba19292e4bcc037';
+  '5a9e5f57c63c5cf5baa50d16207a2012c8cca1c85ae89285f9732db2ef6b5773';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  'ee6561f257f8dbc233dc89f3f8f08bfb8043b7ad413b458b2015973bc575da5e';
+  'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
@@ -159,7 +175,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  '66667f5f2e5f05fceaa20e6cd1f0b4a91da812be8de44b9c39af5e7e4b2bfbc8';
+  '733b49160ad30f403991062650ab646eb362af31db1efcca4b3e7d2a66cafc66';
 export const FREE_BOILERPLATE_SHA256 =
   '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 
