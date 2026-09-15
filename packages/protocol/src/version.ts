@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui:dismiss` (2026-09-16, additive, ggui#1109 — MINOR, same draft
+ * stamp): a user dismiss GESTURE forwarded from the card to its host as
+ * an INTENT, on a new protocol-owned tag in the `ggui:` postMessage
+ * family beside `ggui:lifecycle`. The card MUST NOT act on it (the host
+ * owns what dismissal means) and emits at most one intent per gesture;
+ * the host decides, and ignoring is CONFORMANT — so adoption breaks no
+ * host. `reason` is extensibly-closed ('escape' today), and the type
+ * guard validates SHAPE only: checking today's reason set would make a
+ * release-N host silently drop a release-N+1 intent (§3.6). Not on
+ * `ggui:observe` (a host may ignore telemetry by contract) and not a
+ * `ui/notifications/*` name (a frozen external namespace).
+ * --------------------------------------------------------------------
  * Motion tempo override (2026-09-16, additive, ggui#1093 P1c — MINOR,
  * same draft stamp; no WIRE change). The theming spec's §2.3 retirement
  * of per-app motion is AMENDED (protocol + rnd): layer-1 keeps the motion

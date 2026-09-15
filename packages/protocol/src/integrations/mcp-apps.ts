@@ -1283,6 +1283,13 @@ export function isMcpAppLifecycleMessage(
 //     it carries is renderer-internal telemetry vocabulary
 //     (`ObservabilityEvent` in the renderer package); hosts treat it
 //     as extensibly-closed.
+//   - `ggui:dismiss` — protocol-owned end to end (ggui#1109): a user
+//     GESTURE forwarded to the host as an intent, with an obligation
+//     on the CARD (never act on it) and a stated freedom for the host
+//     (ignoring is conformant). It is deliberately NOT on
+//     `ggui:observe`: that tag's contract lets a host ignore its
+//     payload as telemetry, and an intent a host may ignore *by
+//     contract* cannot carry the card's obligation not to act.
 // =============================================================================
 
 /** Envelope tag: renderer alive + bundle evaluated (pre-`ui/initialize`). */
@@ -1293,6 +1300,9 @@ export const MCP_APP_BOOTSTRAP_FAILED_TYPE = 'ggui:bootstrap-failed';
 
 /** Envelope tag: renderer-internal observability event (telemetry). */
 export const MCP_APP_OBSERVE_TYPE = 'ggui:observe';
+
+/** Envelope tag: a user dismiss GESTURE, forwarded to the host as an intent (ggui#1109). */
+export const MCP_APP_DISMISS_TYPE = 'ggui:dismiss';
 
 /**
  * Envelope tag: mount-lifecycle transition. Constant twin of the
@@ -2018,4 +2028,82 @@ export function readGguiShellEnvelope(html: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The dismiss reasons this release names. **Extensibly-closed** (SPEC §11.4):
+ * members are added in MINOR releases, and a host that meets a reason it does
+ * not recognize MUST treat the message as a dismiss request of unknown cause —
+ * never as nothing. The tuple exists so hosts and conformance tests can
+ * iterate the known set; it is deliberately NOT a validation whitelist (see
+ * {@link isMcpAppDismissMessage}).
+ *
+ * @public
+ */
+export const MCP_APP_DISMISS_REASONS: readonly McpAppDismissReason[] = ['escape'] as const;
+
+/** A named dismiss cause. Open by design — see {@link MCP_APP_DISMISS_REASONS}. */
+export type McpAppDismissReason = 'escape' | (string & {});
+
+/**
+ * `ggui:dismiss` — the user asked to dismiss the card, and the card is
+ * telling the surface it is embedded in (ggui#1109).
+ *
+ * **It is an INTENT, not a command, and that word is the whole design.** The
+ * card reports the gesture; the HOST decides what dismiss means — close the
+ * panel, return focus, collapse to a chip, or nothing. A card that dismissed
+ * itself would be answering a question that belongs to the surface around it,
+ * and it would be wrong in the first host that wanted focus returned instead.
+ *
+ * Parties and obligations (ggui#1109, the contract bar):
+ *   - The RENDERER (emitter) MUST emit this on a dismiss gesture made with
+ *     focus inside the card document, MUST emit **at most one intent per
+ *     gesture** — a held key auto-repeating is ONE gesture, so an emitter
+ *     skips events where the platform marks the keypress as a repeat — and
+ *     MUST NOT act on it: no unmount, no visual dismissal, no state change.
+ *     The card does not learn whether the host honoured it, and MUST NOT
+ *     wait to find out.
+ *   - The HOST (receiver) decides. **Ignoring is CONFORMANT**: the host owns
+ *     its surface, and a host that does nothing behaves exactly as hosts did
+ *     before this message existed — which is also why adopting it breaks no
+ *     one. This is stated so the first host to drop it is not reported as a
+ *     bug by the second.
+ *
+ * Failure mode: a gesture the user made that no surface can see — today an
+ * `Escape` pressed with focus inside the card dies there, because the card
+ * has no keydown handler and the MCP-Apps surface has no dismiss
+ * notification. Observable violation: a card that unmounts or visually
+ * dismisses itself on the gesture, or a renderer that emits nothing when the
+ * gesture is made with focus inside the card.
+ *
+ * @public
+ */
+export interface McpAppDismissMessage {
+  readonly type: typeof MCP_APP_DISMISS_TYPE;
+  readonly reason: McpAppDismissReason;
+}
+
+/**
+ * Type guard for {@link McpAppDismissMessage}. Trust-boundary helper for a
+ * host reading raw postMessage data.
+ *
+ * **It accepts any non-empty `reason` string, and that is not an oversight.**
+ * {@link isMcpAppLifecycleMessage} checks its `state` against a closed set
+ * because lifecycle states are a closed union; dismiss reasons are
+ * EXTENSIBLY-closed, so validating against today's tuple would make a host on
+ * release N silently drop an intent sent by a card on release N+1 — the exact
+ * N−1 failure the reason's openness exists to prevent
+ * (`docs/protocol/VERSION-POLICY.md` §3.6). The guard proves the envelope's
+ * SHAPE; the host classifies the cause, defaulting an unknown one to "dismiss
+ * requested, cause unknown".
+ *
+ * @public
+ */
+export function isMcpAppDismissMessage(
+  message: unknown,
+): message is McpAppDismissMessage {
+  if (message === null || typeof message !== 'object') return false;
+  const m = message as { type?: unknown; reason?: unknown };
+  if (m.type !== MCP_APP_DISMISS_TYPE) return false;
+  return typeof m.reason === 'string' && m.reason.length > 0;
 }

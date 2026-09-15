@@ -23,6 +23,9 @@ import {
   deriveContextName,
   isMcpAppsGguiSession,
   isMcpAppLifecycleMessage,
+  isMcpAppDismissMessage,
+  MCP_APP_DISMISS_TYPE,
+  MCP_APP_DISMISS_REASONS,
   isGguiSubmitActionInput,
   validateMcpAppsGguiSession,
   type McpAppAiGguiRenderMeta,
@@ -893,5 +896,42 @@ describe('renderer → host envelope tags', () => {
         event: { state: 'mounting' },
       }),
     ).toBe(true);
+  });
+});
+
+// ggui#1109 — `ggui:dismiss`: the card forwards a dismiss GESTURE to the host
+// as an INTENT. The host owns the surface and decides what dismiss means; the
+// card never acts on it. A new tag in the protocol-owned `ggui:` family beside
+// `ggui:lifecycle` — NOT `ggui:observe`, whose contract lets a host ignore it,
+// and NOT a `ui/notifications/*` name, which is a frozen external namespace.
+describe('ggui:dismiss — the host-bound dismiss intent (ggui#1109)', () => {
+  it('names the tag and ships the known reasons as an iterable tuple', () => {
+    expect(MCP_APP_DISMISS_TYPE).toBe('ggui:dismiss');
+    expect(MCP_APP_DISMISS_REASONS).toEqual(['escape']);
+  });
+
+  it('recognizes a well-formed intent', () => {
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss', reason: 'escape' })).toBe(true);
+  });
+
+  it('ACCEPTS a reason this release does not name — the union is extensibly-closed, so the guard is not a whitelist', () => {
+    // A host on an older release meeting a later reason must still recognize
+    // the intent (a dismiss request of unknown cause), never silently drop it.
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss', reason: 'back-gesture' })).toBe(true);
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss', reason: 'host-chrome-close' })).toBe(true);
+  });
+
+  it('refuses a malformed envelope: wrong tag, missing/empty/non-string reason, non-object', () => {
+    expect(isMcpAppDismissMessage({ type: 'ggui:lifecycle', reason: 'escape' })).toBe(false);
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss' })).toBe(false);
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss', reason: '' })).toBe(false);
+    expect(isMcpAppDismissMessage({ type: 'ggui:dismiss', reason: 3 })).toBe(false);
+    expect(isMcpAppDismissMessage(null)).toBe(false);
+    expect(isMcpAppDismissMessage('ggui:dismiss')).toBe(false);
+  });
+
+  it('does not collide with the lifecycle guard in either direction', () => {
+    expect(isMcpAppLifecycleMessage({ type: 'ggui:dismiss', reason: 'escape' })).toBe(false);
+    expect(isMcpAppDismissMessage({ type: 'ggui:lifecycle', event: { state: 'mounting' } })).toBe(false);
   });
 });
