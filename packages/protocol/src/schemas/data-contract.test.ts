@@ -23,6 +23,7 @@ import {
   registeredGadgetDescriptorSchema,
   strictGadgetDescriptorSchema,
   strictGadgetExportSchema,
+  actionEntrySchema,
   parseDataContractAtReadDoor,
 } from './data-contract';
 import { PUBLIC_ENV_APP_KEY_RE } from './public-env-key';
@@ -967,6 +968,10 @@ describe('dataContractSchema — agentCapabilities serverInfo identity', () => {
 // `return null` — the row leaves the candidate set, the pod regenerates, and
 // nothing says a stored blueprint was skipped. A silent cache miss, not a
 // failure. The read door strips unknown ENTRY members and NAMES them.
+// FIXTURE RULE, bought twice: the "unknown member" in a read-door test must
+// be a key NO release will ever name (`futureMember`), never a real member
+// that is merely unlanded. ggui#1093 used `fonts` and the test expired the
+// day `fonts` landed; this suite used `oneShot` and expired within the hour.
 describe('parseDataContractAtReadDoor — stored contracts survive a newer release (ggui#1115)', () => {
   const base = {
     actionSpec: { submit: { label: 'Submit' } },
@@ -977,24 +982,24 @@ describe('parseDataContractAtReadDoor — stored contracts survive a newer relea
   it('strips an unknown member on an action entry and names its path', () => {
     const r = parseDataContractAtReadDoor({
       ...base,
-      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+      actionSpec: { submit: { label: 'Submit', futureMember: true } },
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.stripped).toEqual(['actionSpec.submit.oneShot']);
+    expect(r.stripped).toEqual(['actionSpec.submit.futureMember']);
     expect(r.contract.actionSpec?.['submit']).toEqual({ label: 'Submit' });
   });
 
   it('names every stripped path across the entry-bearing specs, not just the first', () => {
     const r = parseDataContractAtReadDoor({
-      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+      actionSpec: { submit: { label: 'Submit', futureMember: true } },
       propsSpec: { properties: { title: { schema: { type: 'string' }, sparkle: 1 } } },
       contextSpec: { cursor: { schema: { type: 'string' }, futureThing: 'x' } },
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect([...r.stripped].sort()).toEqual([
-      'actionSpec.submit.oneShot',
+      'actionSpec.submit.futureMember',
       'contextSpec.cursor.futureThing',
       'propsSpec.properties.title.sparkle',
     ]);
@@ -1020,5 +1025,40 @@ describe('parseDataContractAtReadDoor — stored contracts survive a newer relea
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.stripped).toEqual([]);
+  });
+});
+
+// ggui#1108 — one-shot-ness is DECLARED, never inferred. The runtime cannot
+// infer it, the server cannot tell a double-fire from a legitimate second
+// "add item", and the component cannot GUARANTEE it (whether a generated
+// control disables itself is decided afresh by a model every generation).
+// So the contract declares it and the runtime enforces it.
+describe('actionEntrySchema.oneShot — the declared at-most-once marker (ggui#1108)', () => {
+  it('accepts an action declared one-shot and one that is not, and leaves it absent when unstated', () => {
+    expect(actionEntrySchema.parse({ label: 'Confirm', oneShot: true })).toEqual({ label: 'Confirm', oneShot: true });
+    expect(actionEntrySchema.parse({ label: 'Add item', oneShot: false })).toEqual({ label: 'Add item', oneShot: false });
+    expect('oneShot' in actionEntrySchema.parse({ label: 'Add item' })).toBe(false);
+  });
+
+  it('refuses a non-boolean — terminality is a fact, not a hint to be graded', () => {
+    for (const bad of ['true', 1, null, {}]) {
+      expect(actionEntrySchema.safeParse({ label: 'Confirm', oneShot: bad }).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('is independent of `confirm` — they are siblings in intent, not a pair', () => {
+    // `confirm` asks BEFORE firing; `oneShot` bounds how often it may fire.
+    // An action may be either, both, or neither (ggui#1112 owns `confirm`).
+    expect(actionEntrySchema.safeParse({ label: 'Delete', confirm: true, oneShot: true }).success).toBe(true);
+    expect(actionEntrySchema.safeParse({ label: 'Delete', confirm: true }).success).toBe(true);
+    expect(actionEntrySchema.safeParse({ label: 'Delete', oneShot: true }).success).toBe(true);
+  });
+
+  it('survives the contract READ door like any other named member (ggui#1115)', () => {
+    const r = parseDataContractAtReadDoor({ actionSpec: { confirm: { label: 'Confirm', oneShot: true } } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual([]);
+    expect(r.contract.actionSpec?.['confirm']).toEqual({ label: 'Confirm', oneShot: true });
   });
 });

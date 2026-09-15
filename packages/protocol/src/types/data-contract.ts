@@ -387,6 +387,14 @@ export interface ActionEntry {
   /** Label shown on the UI element */
   label: string;
   /**
+   * This action may fire AT MOST ONCE per render (ggui#1108) — declared by
+   * the contract's author, never inferred, because only the author knows.
+   * The runtime suppresses a second dispatch for the render's lifetime: a
+   * fresh `ggui_render` re-arms it, a `ggui_update` of the same render does
+   * not. Sibling of `confirm` (which asks before firing), not a pair.
+   */
+  oneShot?: boolean;
+  /**
    * JSON Schema for the callback payload. Optional — actions without a
    * `schema` have void payload (fire-and-forget).
    *

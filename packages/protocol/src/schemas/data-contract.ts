@@ -178,6 +178,40 @@ export const actionEntrySchema = z
     example: jsonValueSchema.optional(),
     icon: z.string().optional(),
     confirm: z.boolean().optional(),
+    /**
+     * This action may fire AT MOST ONCE per render (ggui#1108).
+     *
+     * DECLARED, never inferred — that is the whole design. The runtime
+     * cannot infer terminality; the server cannot tell a double-fire from a
+     * legitimate second "add item"; and the component cannot GUARANTEE it,
+     * because whether a generated control disables itself is decided afresh
+     * by a model on every generation. Only the contract's author knows, so
+     * the contract is where it is said.
+     *
+     * Obligations: the RUNTIME suppresses a second dispatch of a declared
+     * one-shot action for the render's lifetime; the RELAY never collapses
+     * distinct `actionId`s — two gestures are two facts and the relay stays
+     * honest about them; the AGENT treats `actionId` as an idempotency key
+     * for EVERY action, which buys at-most-once per DISPATCH (a replay, a
+     * re-delivered buffer) and explicitly NOT per intent, since a second
+     * gesture mints a new `actionId`.
+     *
+     * THE WINDOW, stated because "the render's lifetime" is ambiguous
+     * otherwise: a fresh `ggui_render` RE-ARMS the action; a `ggui_update`
+     * or props amend of the SAME render does NOT. So an agent re-sending
+     * props after a submit ("confirmed, here is your receipt") cannot
+     * silently re-arm a terminal action. A flow that legitimately
+     * re-submits either does not declare the action one-shot, or renders a
+     * new card — the declarer's choice, which is the point of declaring.
+     *
+     * Sibling, not a pair: `confirm` asks BEFORE firing; `oneShot` bounds
+     * how often it may fire. An action may be either, both or neither.
+     *
+     * Failure mode: a duplicated side effect — a confirm card that writes
+     * twice. Observable violation: two consume entries with distinct
+     * `actionId`s for the same declared one-shot action inside one render.
+     */
+    oneShot: z.boolean().optional(),
     nextStep: z.string().min(1).optional(),
   })
   .strict();
