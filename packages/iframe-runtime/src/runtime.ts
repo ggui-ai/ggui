@@ -65,6 +65,7 @@ import type {
   McpAppAiGguiMetaParseResult,
 } from './types.js';
 import { projectHostContext } from '@ggui-ai/protocol/wire';
+import { installDismissIntentListener } from './dismiss-intent.js';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 // Type-only contract on `@modelcontextprotocol/sdk` — no runtime
@@ -893,6 +894,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   };
 
   const refs = ensureStatusDom(doc);
+  // ggui#1109: a key pressed inside the card's document never reaches the page
+  // around it, so a dismiss gesture died here — which is the moment a user who
+  // just clicked the card presses Escape. The card forwards the INTENT and
+  // never acts on it; the host owns what dismissal means, and ignoring is
+  // conformant. Installed before any mount, because the gesture can precede
+  // the first frame.
+  installDismissIntentListener(doc);
   // Live regions up BEFORE anything can announce through them
   // (ggui#447). A region created in the same tick as its first message
   // is a region no screen reader was watching yet, and that first
