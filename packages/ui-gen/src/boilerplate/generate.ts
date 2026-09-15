@@ -252,7 +252,14 @@ export function generateBoilerplate(
     // Inline signature tells the LLM exactly how to call this action
     const callSig = tsType === "void" ? "() => void — fire and forget" : `(data: ${tsType}) => void`;
     const toolHint = tool ? ` → nextStep: ${tool}` : "";
-    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}`);
+    // ggui#1108 (mitigation): the reminder sits at the EXACT site the model
+    // writes the handler. It is a hint, not the rule — the rule is the prompt's
+    // `TERMINAL_ACTIONS` section, because only the request and the contract say
+    // which actions are meant once. A site comment alone moves generation by
+    // roughly nothing (Exp 002b: adoption 1/36), which is why it is the
+    // smallest of the three legs and never the one relied on.
+    const onceHint = " — if this is meant ONCE, disable its control after it fires";
+    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
     actionReturnFields.push(key);
   }
 

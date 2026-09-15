@@ -333,6 +333,64 @@ function runViewportSized(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.terminal_action_unguarded (ggui#1108, mitigation) ────────
+// A control whose action the user means ONCE — submit, confirm, approve,
+// schedule, reserve, book, pay, checkout, place order — that stays armed after
+// it fires is one double-click away from doing it twice. The check is a WARN,
+// deliberately: terminality lives in the request and the contract, not in a
+// name, so a static rule can suspect it and must not refuse over it. It fires
+// only when a terminal-sounding action or control exists AND the source guards
+// nothing at all (no `disabled=`, no `aria-disabled`), which is the shape with
+// no reading under which the control is safe.
+/** The words that make an action read as meant-once. Matched as WORDS, never as substrings. */
+const TERMINAL_WORDS = new Set([
+  "submit", "confirm", "approve", "schedule", "reserve", "book", "pay", "checkout", "purchase", "order",
+]);
+/** In prose (a control's label) the same words, with real boundaries. */
+const TERMINAL_LABEL_RX = /\b(submit|confirm|approve|schedule|reserve|book|pay|checkout|purchase|place\s+order)\b/i;
+const GUARD_RX = /\b(disabled|aria-disabled)\s*=/;
+
+/** `submitBooking` → ['submit','booking']; `place_order` → ['place','order']. A NAME is words, not a string to search. */
+function nameWords(name: string): string[] {
+  return name
+    .split(/(?=[A-Z])|[_\-\s]+/)
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length > 0);
+}
+
+/** The terminal-sounding action names and control labels a source carries, deduped, in order. */
+export function findUnguardedTerminalControls(sourceCode: string): string[] {
+  if (GUARD_RX.test(sourceCode)) return [];
+  const names = new Set<string>();
+  for (const m of sourceCode.matchAll(/useAction(?:<[^>]*>)?\(\s*['"`]([^'"`]+)['"`]/g)) {
+    const name = m[1] ?? "";
+    if (nameWords(name).some((w) => TERMINAL_WORDS.has(w))) names.add(name);
+  }
+  // A control's own words, taken as the plain text immediately before its close
+  // tag — attributes can carry `=>`, so a label is read from the text, never by
+  // trying to skip an attribute list with a regex.
+  for (const m of sourceCode.matchAll(/>([^<>{}]{1,60})<\/Button>/g)) {
+    const label = (m[1] ?? "").replace(/\s+/g, " ").trim();
+    if (label.length > 0 && TERMINAL_LABEL_RX.test(label)) names.add(label.slice(0, 40));
+  }
+  return [...names];
+}
+
+function runTerminalActionUnguarded(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const found = findUnguardedTerminalControls(input.sourceCode);
+  if (found.length === 0) return [];
+  const list = found.map((t) => `"${t}"`).join(", ");
+  return [
+    mkIssue(
+      "universal.terminal_action_unguarded",
+      `${list} reads as an action the user means once, and nothing in this component disables the control after it fires — a double-click sends it twice.`,
+      "Hold the fired state (`const [submitted, setSubmitted] = useState(false)`), set it in the handler, and pass `disabled={submitted}` to that control with a word that says so (\"Submitted\"). If the action IS meant to repeat — sending a message, adding an item — leave it armed and ignore this.",
+      "warn",
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -351,6 +409,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runViewportSized,
+  },
+  {
+    id: "universal.terminal_action_unguarded",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runTerminalActionUnguarded,
   },
   {
     id: "universal.accent_text_ink",

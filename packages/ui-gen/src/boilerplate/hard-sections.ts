@@ -217,6 +217,24 @@ Rules:
 5. Props interface must be typed and exported.`;
 
 /**
+ * A control that fires an action the user would not mean to repeat must not
+ * stay armed (ggui#1108 MITIGATION — the fix is one-shot-ness DECLARED on the
+ * action and enforced by the runtime; this reduces exposure meanwhile). Both
+ * arms, one HARD section: the model knows from the request and the contract
+ * which actions are terminal, which no static rule of ours can infer.
+ */
+export const TERMINAL_ACTIONS = `## Actions the user means once
+
+Some actions are meant to happen ONCE — submitting a form, confirming a booking, approving a change, placing an order. A control that fires one MUST NOT stay armed after it fires, or the same request is one double-click away from happening twice.
+
+- Hold a small piece of state for it and set it in the handler: \`const [submitted, setSubmitted] = useState(false)\`.
+- \`disabled={submitted}\` on the control that fires it, and say so in the label or beside it ("Submitted", "Request sent") — a control that is disabled without explanation reads as broken.
+- Actions the user CAN mean repeatedly — sending a message, adding an item, toggling a row, refreshing — stay armed. Only the ones whose repetition would be a mistake are disabled.
+- A card re-rendered with new props starts fresh; the state above lives with the component, not with the request.
+
+YOU decide which actions are terminal, from the request and the contract's own words. Nothing in the wire tells you.`;
+
+/**
  * The frame owns the height — the component never sizes itself to the
  * viewport (ggui#1075 Track A/B; receipted on #1096: 20 of 48 minted cells
  * carried `minHeight: "100vh"` on their root, one of them an inline chat

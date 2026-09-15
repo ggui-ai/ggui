@@ -118,10 +118,19 @@ function renderFreeBoilerplates(): string {
 // digests move together (constrained 9f0fd697… → 8e90aa7e…, free 6be6526c… → dc5a2f4d…); the
 // boilerplate digests are untouched. INVARIANT 1 holds across the re-record; the eval leg gained
 // tier-0 `universal.viewport_sized` in the same cut.
+// Re-recorded 2026-09-15 for ggui#1108's MITIGATION (the triad leg; protocol's contract +
+// runtime halves are the fix): a shared HARD section `TERMINAL_ACTIONS` — an action the user
+// means once disables its control after it fires, with a word that says so, and an action they
+// can mean repeatedly stays armed — moves BOTH prompt digests together (constrained 8e90aa7e…
+// → 3ea37864…, free dc5a2f4d… → 66667f5f…). BOTH BOILERPLATE digests move too, which is rarer
+// and deliberate: the action-hook scaffold's inline comment gains the reminder at the exact
+// site the model writes the handler (`— if this is meant ONCE, disable its control after it
+// fires`). INVARIANT 1 holds across the re-record; the eval leg gained the WARN-level
+// `universal.terminal_action_unguarded` in the same cut.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '8e90aa7e2e8430544b253d6e708fe2cee9a530a23ffec9ae7bb1b74b623c4022';
+  '3ea37864a3939817748a59968b437da1c5903309c6ea20fb9ba19292e4bcc037';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  '1e381757a28da471fcc3ba0b380da852d9955733b71c6ced72110444a079a9f1';
+  'ee6561f257f8dbc233dc89f3f8f08bfb8043b7ad413b458b2015973bc575da5e';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
@@ -150,9 +159,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 export const FREE_PROMPT_SHA256 =
-  'dc5a2f4d5e0df54dcadeeded804c08d1ded4bb58970fcfae6d2dcba9cdbe3eb7';
+  '66667f5f2e5f05fceaa20e6cd1f0b4a91da812be8de44b9c39af5e7e4b2bfbc8';
 export const FREE_BOILERPLATE_SHA256 =
-  '193dc2bed1cb963ad2e9eb30005d6402ba9cfe5d8fa0184e93cbe2594b0c0743';
+  '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [
