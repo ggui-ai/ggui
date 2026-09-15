@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   APP_GENERATION_PROFILE_BOUNDS,
+  appGenerationProfileReadSchema,
+  parseAppGenerationProfileAtReadDoor,
   APP_GENERATION_PROFILE_EFFORTS,
   appGenerationProfileRefusalBodySchema,
   appGenerationProfileSchema,
@@ -148,5 +150,55 @@ describe('appGenerationProfileSchema.aesthetic (ggui#1058)', () => {
       properties?: Record<string, { properties?: Record<string, { pattern?: string }> }>;
     };
     expect(js.properties?.['aesthetic']?.properties?.['id']?.pattern).toBe('^[a-z0-9][a-z0-9-]{1,63}$');
+  });
+});
+
+// ggui#1105 — the profile READ door. The same stored profile is read two ways
+// today: the mint parses it strictly and THROWS on an unknown member
+// (`bootstrap-styling.ts:237` — the mint dies), while the judge hand-rolls a
+// `.strip()` (`eval-cell.ts:177`). One stored document, two postures, and the
+// strict one fails on exactly the member a later release adds. This is the
+// third instance of the posture ruled in ggui#1093 / ggui#1115 / ggui#1124:
+// a read whose purpose is to INTERPRET state strips unknown members and names
+// what it stripped; a read whose purpose is to REPRODUCE state must not strip.
+describe('parseAppGenerationProfileAtReadDoor (ggui#1105)', () => {
+  const stored = { styling: 'Editorial, warm neutrals.', density: 'compact', effort: 'high' as const };
+
+  it('strips a member this release does not name, keeps the rest, and names what it stripped', () => {
+    const r = parseAppGenerationProfileAtReadDoor({ ...stored, futureMember: { any: 'shape' } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.profile).toEqual(stored);
+    expect(r.stripped).toEqual(['futureMember']);
+  });
+
+  it('reports nothing stripped for a profile this release fully names', () => {
+    const r = parseAppGenerationProfileAtReadDoor(stored);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual([]);
+    expect(r.profile).toEqual(stored);
+  });
+
+  it('still REFUSES what the write door refuses — a bound, a control character, an unavailable level shape', () => {
+    const tooLong = { styling: 'a'.repeat(APP_GENERATION_PROFILE_BOUNDS.styling + 1) };
+    expect(parseAppGenerationProfileAtReadDoor(tooLong).ok).toBe(false);
+    expect(parseAppGenerationProfileAtReadDoor({ styling: `a${String.fromCharCode(7)}b` }).ok).toBe(false);
+    expect(parseAppGenerationProfileAtReadDoor({ effort: 'max' }).ok).toBe(false);
+    expect(parseAppGenerationProfileAtReadDoor('profile').ok).toBe(false);
+    expect(parseAppGenerationProfileAtReadDoor(null).ok).toBe(false);
+  });
+
+  it('accepts the empty profile — absent members are not stripped members', () => {
+    const r = parseAppGenerationProfileAtReadDoor({});
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual([]);
+    expect(r.profile).toEqual({});
+  });
+
+  it('exports the read SCHEMA too, so a reader that needs the parser alone matches the theme door', () => {
+    expect(appGenerationProfileReadSchema.parse({ ...stored, futureMember: 1 })).toEqual(stored);
+    expect(appGenerationProfileSchema.safeParse({ ...stored, futureMember: 1 }).success).toBe(false);
   });
 });

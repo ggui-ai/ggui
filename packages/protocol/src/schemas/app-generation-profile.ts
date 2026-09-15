@@ -114,6 +114,62 @@ export const appGenerationProfileSchema = z
 
 export type AppGenerationProfile = z.infer<typeof appGenerationProfileSchema>;
 
+/**
+ * The READ-door variant of {@link appGenerationProfileSchema} (ggui#1105).
+ *
+ * The write door is strict and MUST stay so — it is what bounds each member
+ * and refuses control characters before a profile is stored. A READ door has
+ * the opposite job: a stored profile written by a LATER release carries a
+ * member this one cannot name, and refusing it there does not protect
+ * anything — it destroys a mint. Today the same stored profile is read two
+ * ways: the mint parses it strictly and THROWS (the mint dies), while the
+ * judge hand-rolls a `.strip()`. One document, two postures, diverging on
+ * exactly the member a later release adds.
+ *
+ * Third instance of one posture — see `schemas/app-theme.ts`
+ * (`parseAppThemeAtReadDoor`) and `schemas/data-contract.ts`
+ * (`parseDataContractAtReadDoor`). The rule they share:
+ *
+ *   **a read whose purpose is to INTERPRET state strips unknown members and
+ *   names what it stripped; a read whose purpose is to REPRODUCE state must
+ *   not strip at all.**
+ *
+ * This is an INTERPRET door. Only members this release does not NAME are
+ * stripped — never members it finds INVALID: a bound, a control character or
+ * a level outside the vocabulary is refused exactly as the write door refuses
+ * it.
+ */
+export const appGenerationProfileReadSchema = z.object(appGenerationProfileSchema.shape);
+
+export type AppGenerationProfileReadDoorResult =
+  | { readonly ok: true; readonly profile: AppGenerationProfile; readonly stripped: readonly string[] }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+/**
+ * Parse a stored generation profile at a READ door: `ok` with the profile and
+ * the top-level members that were stripped (payload order, `[]` when none), or
+ * the issues in `path: message` form when the profile is refused for a reason
+ * the write door would also refuse.
+ *
+ * Every reader of a STORED profile should use this — the mint and the judge
+ * reading one document two ways is the defect ggui#1105 exists for, and one
+ * exported door is how that stops being possible rather than being noticed.
+ */
+export function parseAppGenerationProfileAtReadDoor(
+  input: unknown,
+): AppGenerationProfileReadDoorResult {
+  const parsed = appGenerationProfileReadSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) };
+  }
+  const known = new Set(Object.keys(appGenerationProfileSchema.shape));
+  const stripped =
+    typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? Object.keys(input).filter((k) => !known.has(k))
+      : [];
+  return { ok: true, profile: parsed.data, stripped };
+}
+
 /** Why the door refused one member — one reason per member, at least one member named. */
 export const appGenerationProfileRefusalReasonSchema = z.enum(['too-long', 'not-text', 'control-chars', 'unavailable']);
 export type AppGenerationProfileRefusalReason = z.infer<typeof appGenerationProfileRefusalReasonSchema>;
