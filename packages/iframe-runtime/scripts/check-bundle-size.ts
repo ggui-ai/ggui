@@ -392,7 +392,13 @@ if (raw.byteLength > budget.rawBytesMax) {
   console.error(
     `[check-bundle-size] FAIL — raw ${rawKb} KB exceeds budget ${budgetKb} KB. ` +
       `Either trim the growth or, if intentional, update ` +
-      `bundle-size.budget.json#rawBytesMax in the same commit and say why in #note.`,
+      `bundle-size.budget.json#rawBytesMax in the same commit and say why in #note.\n` +
+      `  MEASURE THE TIP FIRST: this headroom is a SHARED resource — several seats spend it ` +
+      `without seeing each other, and the gate only ever charges the last commit. Build this ` +
+      `package at the tip WITHOUT your change to learn what was already spent; your own delta is ` +
+      `the difference, and a budget note that blames your commit for other commits' growth leaves ` +
+      `the next reader a wrong story (ggui#1093 R1: the tip had 73 bytes left and the change ` +
+      `itself was 993).`,
   );
   process.exit(1);
 }
