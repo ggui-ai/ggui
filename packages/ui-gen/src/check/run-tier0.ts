@@ -353,6 +353,137 @@ function isGadgetExportImported(
 }
 
 /**
+ * AST-precise detector for the compiles-but-renders-nothing class: the
+ * default-exported component's body never returns a tree.
+ *
+ * The boilerplate HANDS the model the wrapper — `base.tsx.tmpl` and
+ * `base-free.tsx.tmpl` both emit `return (` … `);` around `{{LAYOUT}}`.
+ * A model rewriting the root block can delete those two lines with it,
+ * leaving the JSX as a bare expression statement. That is legal TSX: it
+ * parses, esbuild compiles it, `typecheck()` passes it, and the
+ * component renders a blank frame. Seen once in twenty takes of the
+ * ggui#1113 A/B (`xs-chat-card`, run 2 — the judge spent a screenshot
+ * and an LLM call to report "completely blank").
+ *
+ * `compile/default-export` already guards the scaffold's
+ * `export default function` line and `types/props-interface` its
+ * `interface Props` line. The `return (` was the third scaffold line
+ * with nothing watching it.
+ *
+ * Conservative by construction — it reports ONLY when it positively
+ * identified a block-bodied default-export component:
+ *   - a concise arrow body (`export default () => <X/>`) returns by
+ *     construction → silent
+ *   - `export default memo(Component)` or any other expression it
+ *     cannot resolve to a function → silent
+ *   - a `return` inside a nested helper is not the component's own (the
+ *     walk stops at every nested function boundary), but ONE own-level
+ *     `return <value>` anywhere — an early `return null` included —
+ *     satisfies it.
+ *
+ * Returns `null` when the component returns (or could not be
+ * identified), else the 1-based line of the first bare JSX expression
+ * statement in its body — the line the fix belongs on — or `undefined`
+ * when the body has no JSX statement to point at either.
+ */
+function detectComponentNeverReturns(
+  sourceCode: string,
+): { jsxStatementLine: number | undefined } | null {
+  const sf = ts.createSourceFile(
+    'source.tsx',
+    sourceCode,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TSX,
+  );
+
+  const isFunctionLike = (n: ts.Node): boolean =>
+    ts.isFunctionDeclaration(n) ||
+    ts.isFunctionExpression(n) ||
+    ts.isArrowFunction(n) ||
+    ts.isMethodDeclaration(n) ||
+    ts.isClassDeclaration(n) ||
+    ts.isClassExpression(n);
+
+  /** The top-level declaration `name` binds to, when it is a function. */
+  function resolveTopLevel(
+    name: string,
+  ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | undefined {
+    for (const st of sf.statements) {
+      if (ts.isFunctionDeclaration(st) && st.name?.text === name) return st;
+      if (ts.isVariableStatement(st)) {
+        for (const decl of st.declarationList.declarations) {
+          if (
+            ts.isIdentifier(decl.name) &&
+            decl.name.text === name &&
+            decl.initializer !== undefined &&
+            (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
+          ) {
+            return decl.initializer;
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  let component:
+    | ts.FunctionDeclaration
+    | ts.FunctionExpression
+    | ts.ArrowFunction
+    | undefined;
+  for (const st of sf.statements) {
+    if (
+      ts.isFunctionDeclaration(st) &&
+      st.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
+    ) {
+      component = st;
+      break;
+    }
+    if (ts.isExportAssignment(st) && st.isExportEquals !== true) {
+      const expr = st.expression;
+      if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) component = expr;
+      else if (ts.isIdentifier(expr)) component = resolveTopLevel(expr.text);
+      break;
+    }
+  }
+  // No default export at all, or one this detector cannot resolve to a
+  // function — `compile/default-export` owns the first case and the
+  // second is not ours to guess at.
+  if (component === undefined) return null;
+
+  const body = component.body;
+  // A concise arrow body IS the returned value.
+  if (body === undefined || !ts.isBlock(body)) return null;
+
+  let returnsValue = false;
+  let jsxStatementLine: number | undefined;
+  const visit = (node: ts.Node): void => {
+    if (returnsValue) return;
+    if (ts.isReturnStatement(node)) {
+      if (node.expression !== undefined) returnsValue = true;
+      return;
+    }
+    if (
+      jsxStatementLine === undefined &&
+      ts.isExpressionStatement(node) &&
+      (ts.isJsxElement(node.expression) ||
+        ts.isJsxFragment(node.expression) ||
+        ts.isJsxSelfClosingElement(node.expression))
+    ) {
+      jsxStatementLine = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+    }
+    node.forEachChild((child) => {
+      // A helper component's own `return` is not this component's.
+      if (!isFunctionLike(child)) visit(child);
+    });
+  };
+  for (const st of body.statements) if (!isFunctionLike(st)) visit(st);
+
+  return returnsValue ? null : { jsxStatementLine };
+}
+
+/**
  * Run all tier 0 (deterministic, no-LLM) checks against component source.
  *
  * Wraps the same logic as runSelfChecks (adapters/tools.ts) but emits EvalIssue[].
@@ -979,6 +1110,27 @@ export async function runTier0Checks(
       severity: 'critical',
       description: 'Missing default export function',
       fix: 'Add export default function Component(props: Props) { ... }',
+    });
+  }
+
+  // ── Component never returns its tree ──────────────────────
+  // The scaffold hands the model `return (` … `);` around the layout.
+  // A root-block rewrite can delete them with it, and bare JSX at
+  // statement position compiles, type-checks and renders NOTHING.
+  const neverReturns = detectComponentNeverReturns(sourceCode);
+  if (neverReturns !== null) {
+    issues.push({
+      tier: 0,
+      result: 'fail',
+      category: 'compile',
+      subcategory: 'renders-nothing',
+      severity: 'critical',
+      description:
+        neverReturns.jsxStatementLine === undefined
+          ? 'The component never returns its tree — it renders a blank frame'
+          : `The component never returns its tree: the JSX at line ${neverReturns.jsxStatementLine} sits at statement position, so it is built and thrown away and the frame renders blank`,
+      fix: 'Wrap the tree in the return the boilerplate gave you: `return (` before the root element and `);` after it.',
+      ...(neverReturns.jsxStatementLine === undefined ? {} : { line: neverReturns.jsxStatementLine }),
     });
   }
 
