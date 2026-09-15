@@ -8,6 +8,8 @@ import {
   fontFaceDeclarationSchema,
   parseAppThemeAtReadDoor,
   type AppTheme,
+  appThemeDroppedMembers,
+  appThemeWouldDropRefusalText,
 } from './app-theme.js';
 import { canonicalOverlayJson } from '../integrations/overlay-hash.js';
 
@@ -239,5 +241,97 @@ describe('AppTheme carrier — fonts + imagery (ggui#1093 P1a)', () => {
   it('fonts and imagery are OUTSIDE the attestation — the canonical overlay JSON is byte-identical with and without them', () => {
     const withAssets: AppTheme = { ...valid, fonts: [face], imagery: { mark: { src: 'https://cdn.example/mark.svg' } } };
     expect(canonicalOverlayJson(withAssets)).toBe(canonicalOverlayJson(valid));
+  });
+});
+
+// ggui#1124 — the destructive-write rule. `putAppTheme` REPLACES the whole
+// `theme` attribute, so a writer composing fewer members than the stored
+// document destroys the rest (26 rows lost their theme outright on
+// 2026-09-10; ~20 more lost members nobody can now name). The RULE lives
+// here — what makes a write destructive is a fact about the wire shape, not
+// about DynamoDB — and the shared writer enforces it at the choke point.
+describe('appThemeDroppedMembers — what makes a theme write destructive (ggui#1124)', () => {
+  const stored = {
+    overlayHash: HASH,
+    overlays: { light: { '--ggui-color-primary-600': '#7c3aed' }, dark: { '--ggui-color-primary-600': '#a78bfa' } },
+    name: 'violet',
+    cssVariables: { '--ggui-color-ground': '#fff' },
+    frameless: true,
+  };
+
+  it('names the top-level members the incoming write would drop, in the stored order', () => {
+    const incoming = { overlayHash: HASH, overlays: stored.overlays, name: 'violet' };
+    expect(appThemeDroppedMembers(stored, incoming)).toEqual(['cssVariables', 'frameless']);
+  });
+
+  it('is EMPTY when the write carries everything the stored document holds — a changed VALUE is not a drop', () => {
+    const carried = { ...stored, name: 'indigo', cssVariables: { '--ggui-color-ground': '#000' } };
+    expect(appThemeDroppedMembers(stored, carried)).toEqual([]);
+  });
+
+  it('names a member this release does not know — the rule protects what it cannot validate', () => {
+    // The point of the guard: a member written by a LATER release is exactly
+    // what a strict schema cannot see and a whole-column write destroys.
+    expect(appThemeDroppedMembers({ ...stored, sparkles: { on: true } }, stored)).toEqual(['sparkles']);
+  });
+
+  it('treats an explicit `undefined` in the incoming object as a drop — absent and undefined are the same wire fact', () => {
+    expect(appThemeDroppedMembers(stored, { ...stored, frameless: undefined })).toEqual(['frameless']);
+  });
+
+  it('is empty against an absent or empty stored document — a first write drops nothing', () => {
+    expect(appThemeDroppedMembers(undefined, stored)).toEqual([]);
+    expect(appThemeDroppedMembers(null, stored)).toEqual([]);
+    expect(appThemeDroppedMembers({}, stored)).toEqual([]);
+  });
+
+  it('refuses to guess about a non-object on either side — it reports nothing rather than inventing a drop', () => {
+    expect(appThemeDroppedMembers('theme', stored)).toEqual([]);
+    expect(appThemeDroppedMembers(stored, 'theme')).toEqual([]);
+    expect(appThemeDroppedMembers(stored, [])).toEqual([]);
+  });
+});
+
+describe('appThemeRefusalBodySchema — the wouldDrop arm (ggui#1124)', () => {
+  it('accepts a refusal naming the members the write would have destroyed', () => {
+    expect(appThemeRefusalBodySchema.safeParse({ wouldDrop: ['cssVariables', 'frameless'] }).success).toBe(true);
+  });
+
+  it('refuses an empty or malformed wouldDrop — a refusal that names nothing is not a teaching error', () => {
+    expect(appThemeRefusalBodySchema.safeParse({ wouldDrop: [] }).success).toBe(false);
+    expect(appThemeRefusalBodySchema.safeParse({ wouldDrop: 'cssVariables' }).success).toBe(false);
+    expect(appThemeRefusalBodySchema.safeParse({ wouldDrop: ['a'], refused: 'v1 shape' }).success).toBe(false);
+  });
+});
+
+// ggui#1124 — the founder's ruling: the refusal must name the COMPLIANCE
+// PATH in itself, because "a refusal with no compliance path converts 'we
+// protected your data' into 'we broke your write', and the writer cannot
+// tell which happened". Naming the path turns a verdict into an instruction.
+// ONE wording, exported, so every door carries it instead of paraphrasing.
+describe('appThemeWouldDropRefusalText — the refusal is an instruction, not a verdict (ggui#1124)', () => {
+  const text = appThemeWouldDropRefusalText(['cssVariables', 'frameless']);
+
+  it('names the members that would have been dropped, so a writer can see whether they meant it', () => {
+    expect(text).toContain('cssVariables');
+    expect(text).toContain('frameless');
+  });
+
+  it('gives the carry path for a writer that did NOT mean to drop them', () => {
+    expect(text).toMatch(/carry/i);
+  });
+
+  it('gives the clear-then-set path EXPLICITLY for a writer that DID mean to drop them', () => {
+    expect(text).toContain('theme: null');
+    expect(text).toMatch(/then/i);
+  });
+
+  it('says the app is themeless BETWEEN the two writes — nobody discovers that in production', () => {
+    expect(text).toMatch(/themeless|no theme/i);
+    expect(text).toMatch(/between/i);
+  });
+
+  it('refuses to render an empty list — a refusal that names nothing is not an instruction', () => {
+    expect(() => appThemeWouldDropRefusalText([])).toThrow();
   });
 });

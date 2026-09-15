@@ -253,6 +253,22 @@ export type AppThemeReadDoorResult =
  * the top-level members that were stripped (payload order, `[]` when none),
  * or the issues in `path: message` form when the theme is refused for a
  * reason the write door would also refuse.
+ *
+ * TWO READ PATHS, OPPOSITE OBLIGATIONS — they sit next to each other and
+ * they are NOT the same door (ggui#1124; do not "tidy" them into one):
+ *
+ *   **a read whose purpose is to INTERPRET state strips unknown members
+ *   and names what it stripped; a read whose purpose is to REPRODUCE
+ *   state must not strip at all.**
+ *
+ * This function is the INTERPRET side — a server painting a theme, an
+ * operator surface rendering one — and a reader must not be handed data it
+ * cannot validate.
+ * The REPRODUCE side is a writer's CARRY path, which receives the stored
+ * document VERBATIM, including members this release does not name: its job
+ * is fidelity, not interpretation. Applying THIS strip to a carry path is
+ * the ggui#1124 defect exactly — the writer carries a stripped document,
+ * writes it back, and destroys the members the belt exists to protect.
  */
 export function parseAppThemeAtReadDoor(input: unknown): AppThemeReadDoorResult {
   const r = appThemeReadSchema.safeParse(input);
@@ -273,10 +289,94 @@ export function parseAppThemeAtReadDoor(input: unknown): AppThemeReadDoorResult 
  * `errorInfo`, the MCP ops door's `{ ok: false }` structured content. A
  * discriminated union by key — exactly one of the four.
  */
+/**
+ * The top-level members the STORED theme holds that an incoming write does
+ * not carry — i.e. exactly what the write would destroy (ggui#1124).
+ *
+ * `putAppTheme` REPLACES the whole `theme` attribute (the shared writer's
+ * `SET theme = :theme`), so a writer that composes fewer members than the
+ * stored document silently deletes the rest. On 2026-09-10, 26 rows lost
+ * their theme outright and ~20 more lost members nobody can now name,
+ * because a writer believed the door merged. **The rule lives here because
+ * what makes a write destructive is a fact about the wire shape, not about
+ * a storage engine** — the shared writer enforces it at the choke point, so
+ * safety does not depend on each door remembering.
+ *
+ * Deliberately total and deliberately dumb: it compares TOP-LEVEL keys and
+ * nothing else. A changed VALUE is not a drop. An explicit `undefined` IS a
+ * drop, because absent and undefined are the same wire fact. A member this
+ * release does not name still counts — that is the whole point, since a
+ * strict schema cannot see the member a later release wrote, and a
+ * whole-column write is exactly what destroys it. Given anything that is not
+ * a plain object on either side it reports nothing rather than inventing a
+ * drop: a guard that guesses is worse than one that abstains.
+ *
+ * Parties: the SHARED WRITER calls this before writing and refuses a
+ * non-empty result with {@link appThemeRefusalBodySchema}'s `wouldDrop` arm,
+ * naming the members; the WRITER retries carrying them (read the stored
+ * document, carry what it does not own by REST OMISSION — never by
+ * enumerating what it knows — and hash after the carry). Observable
+ * violation: a stored member absent after a write that did not name it.
+ */
+export function appThemeDroppedMembers(
+  stored: unknown,
+  incoming: unknown,
+): readonly string[] {
+  if (!isPlainObject(stored) || !isPlainObject(incoming)) return [];
+  return Object.keys(stored).filter((key) => incoming[key] === undefined);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The ONE wording for a `wouldDrop` refusal (ggui#1124, founder's ruling
+ * 2026-09-16: *"the refusal names the clear-then-set path"*). Exported so
+ * every door that refuses a destructive theme write carries the SAME words
+ * rather than paraphrasing them — a writer meeting two different
+ * explanations of one rule learns neither.
+ *
+ * Why the wording is part of the contract and not decoration: **a refusal
+ * with no compliance path converts "we protected your data" into "we broke
+ * your write", and the writer cannot tell which happened to them.** Naming
+ * the path collapses that ambiguity — it turns the refusal from a VERDICT
+ * into an INSTRUCTION. So the text MUST do three things, and the tests pin
+ * each: name the members that would have been dropped (so a writer can see
+ * whether they meant it), give the carry path for a writer who did not, and
+ * give the clear-then-set path for a writer who did — stating plainly that
+ * the app has no theme between those two writes, because that is the kind
+ * of fact a caller must not discover in production.
+ *
+ * Throws on an empty list: a refusal that names nothing is not an
+ * instruction.
+ */
+export function appThemeWouldDropRefusalText(wouldDrop: readonly string[]): string {
+  if (wouldDrop.length === 0) {
+    throw new Error('appThemeWouldDropRefusalText: a refusal must name at least one dropped member');
+  }
+  const members = wouldDrop.join(', ');
+  return (
+    `this write would drop stored theme members it does not carry — [${members}]. ` +
+    `If you did not mean to drop them: read the stored theme and carry every member this write does not own, ` +
+    `then recompute the attestation over the result. ` +
+    `If you DID mean to drop them: send \`theme: null\` to clear the theme, then write the theme you want — ` +
+    `the app has NO theme between those two writes.`
+  );
+}
+
 export const appThemeRefusalBodySchema = z.union([
   z.object({ uncovered: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),
   z.object({ unknown: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),
   z.object({ overlayHash: z.literal('mismatch') }).strict(),
   z.object({ refused: z.literal('v1 shape') }).strict(),
+  /**
+   * The write would have DESTROYED stored members it did not carry
+   * (ggui#1124) — the refusal names them so the writer can carry them on
+   * the retry. A refusal that named nothing would be an error message
+   * instead of a teaching one, which is why the list may not be empty:
+   * naming the members is how the console got fixed.
+   */
+  z.object({ wouldDrop: z.array(z.string().min(1)).min(1) }).strict(),
 ]);
 export type AppThemeRefusalBody = z.infer<typeof appThemeRefusalBodySchema>;

@@ -37,6 +37,7 @@ import {
   canonicalOverlayHash,
   type AppTheme,
   type AppThemeRefusalBody,
+  appThemeWouldDropRefusalText,
 } from '@ggui-ai/protocol';
 import { z } from 'zod';
 import {
@@ -148,6 +149,14 @@ function refusalText(admission: Exclude<AppThemeAdmission, { ok: true }>): strin
   const r = admission.refusal;
   if ('refused' in r) return 'invalid_app_config: the one-palette theme body is retired — send { overlays: { light, dark }, overlayHash, … }';
   if ('overlayHash' in r) return 'invalid_app_config: overlayHash does not match canonicalOverlayHash({ overlays, cssVariables, keyframes })';
+  if ('wouldDrop' in r) {
+    // ggui#1124 — the write would have DESTROYED stored members it did not
+    // carry. The wording is the protocol's ONE text, not this handler's:
+    // every door that refuses a destructive write says the same words, and
+    // the refusal names the compliance path so it is an instruction rather
+    // than a verdict (founder's ruling, 2026-09-16).
+    return `invalid_app_config: ${appThemeWouldDropRefusalText(r.wouldDrop)}`;
+  }
   if ('unknown' in r) return `invalid_app_config: keys outside the consumed-token manifest — light: [${r.unknown.light.join(', ')}] dark: [${r.unknown.dark.join(', ')}]`;
   return `invalid_app_config: consumed tokens left uncovered — light: [${r.uncovered.light.join(', ')}] dark: [${r.uncovered.dark.join(', ')}]`;
 }
