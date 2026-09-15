@@ -17,6 +17,7 @@
  * `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` flips skip → hard-fail.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import type { Locator } from 'playwright-core';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
@@ -27,6 +28,56 @@ import {
 } from '../fixtures/mcp-app-host.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
+
+/**
+ * `save` is a REPEATABLE action, and both halves of that are declared by
+ * the fixture rather than assumed here: it is absent from ui-gen's
+ * `TERMINAL_WORDS` (`submit|confirm|approve|schedule|reserve|book|pay|
+ * checkout|purchase|order`), and {@link SHARED_INTENT} says the click
+ * "fires the save action immediately". So its control MUST survive its
+ * own gesture.
+ *
+ * Why this assertion exists at all (ggui#1108, Exp 005): over-guarding
+ * has **no lexical signal**. Terminality does — the action's name — which
+ * is why `universal.terminal_action_unguarded` can be keyword-shaped.
+ * Nothing in generated source distinguishes a correctly guarded terminal
+ * control from a wrongly guarded repeatable one; the only distinguishing
+ * act is interacting a SECOND time, which is what the click loop below
+ * already does. That made the loop an accidental detector. This makes it
+ * an explicit one.
+ *
+ * It buys LEGIBILITY, not coverage: the loop already fails when the
+ * control is guarded, but it fails as a 30s `element is not enabled`
+ * timeout that cost a bisect to interpret. A detector whose output has to
+ * be decoded gets misread by whoever meets it first.
+ *
+ * Scope, deliberately: ONE spec asserts this, not three. 01 and 10 share
+ * the fixture and keep the bare loop, so this claim has a single owner.
+ * And it sees exactly one shape — a single-action Save contract — so a
+ * model that over-guards only book/pay-shaped repeatables passes here
+ * clean. This is a regression tripwire, never the acceptance criterion
+ * for a prompt change.
+ */
+async function expectSaveStillRepeatable(controls: Locator): Promise<void> {
+  const visible = controls.filter({ visible: true });
+  expect(
+    await visible.count(),
+    'repeatable action `save` lost its control after firing — no visible /save/i ' +
+      'control remains. `save` is not in ui-gen TERMINAL_WORDS and SHARED_INTENT ' +
+      'declares the click fires it immediately, so the control must survive its ' +
+      'own gesture.',
+  ).toBeGreaterThan(0);
+
+  const first = visible.first();
+  const label = (await first.innerText({ timeout: 1_000 }).catch(() => '')).trim();
+  expect(
+    await first.isEnabled({ timeout: 1_000 }),
+    `repeatable action \`save\` was guarded after firing — the control now reads ` +
+      `"${label}" and is disabled. \`save\` is not in ui-gen TERMINAL_WORDS and ` +
+      `SHARED_INTENT declares the click fires it immediately, so it must still ` +
+      `accept a second interaction.`,
+  ).toBe(true);
+}
 
 for (const provider of PROVIDERS) {
   const hasKey = !!process.env[provider.apiKey];
@@ -91,6 +142,9 @@ for (const provider of PROVIDERS) {
               (await exact.count()) > 0 ? exact.first() : visible.first();
             await target.click();
             await page.waitForTimeout(300);
+            // First gesture only: the loop's remaining iterations are the
+            // drive path, not the assertion.
+            if (i === 0) await expectSaveStillRepeatable(buttons);
           }
 
           const consumed = unwrapStructured<{
