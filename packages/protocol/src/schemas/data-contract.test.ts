@@ -23,6 +23,7 @@ import {
   registeredGadgetDescriptorSchema,
   strictGadgetDescriptorSchema,
   strictGadgetExportSchema,
+  parseDataContractAtReadDoor,
 } from './data-contract';
 import { PUBLIC_ENV_APP_KEY_RE } from './public-env-key';
 
@@ -955,5 +956,69 @@ describe('dataContractSchema — agentCapabilities serverInfo identity', () => {
       },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ggui#1115 — the contract READ-door belt. `dataContractSchema`'s OUTER object
+// is `.passthrough()`, but its ENTRY schemas are `.strict()` (21 of them), and
+// contracts are STORED — in blueprint rows and artifact manifests. So a release
+// that adds a member to an action / prop / stream / context / tool ENTRY makes
+// every older reader fail the parse, and `blueprint-matcher.ts` turns that into
+// `return null` — the row leaves the candidate set, the pod regenerates, and
+// nothing says a stored blueprint was skipped. A silent cache miss, not a
+// failure. The read door strips unknown ENTRY members and NAMES them.
+describe('parseDataContractAtReadDoor — stored contracts survive a newer release (ggui#1115)', () => {
+  const base = {
+    actionSpec: { submit: { label: 'Submit' } },
+    propsSpec: { properties: { title: { schema: { type: 'string' } } } },
+    contextSpec: { cursor: { schema: { type: 'string' }, description: 'where the user is' } },
+  };
+
+  it('strips an unknown member on an action entry and names its path', () => {
+    const r = parseDataContractAtReadDoor({
+      ...base,
+      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual(['actionSpec.submit.oneShot']);
+    expect(r.contract.actionSpec?.['submit']).toEqual({ label: 'Submit' });
+  });
+
+  it('names every stripped path across the entry-bearing specs, not just the first', () => {
+    const r = parseDataContractAtReadDoor({
+      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+      propsSpec: { properties: { title: { schema: { type: 'string' }, sparkle: 1 } } },
+      contextSpec: { cursor: { schema: { type: 'string' }, futureThing: 'x' } },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect([...r.stripped].sort()).toEqual([
+      'actionSpec.submit.oneShot',
+      'contextSpec.cursor.futureThing',
+      'propsSpec.properties.title.sparkle',
+    ]);
+  });
+
+  it('reports NOTHING stripped for a contract this release fully names, and returns it unchanged', () => {
+    const r = parseDataContractAtReadDoor(base);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual([]);
+    expect(r.contract.actionSpec?.['submit']).toEqual({ label: 'Submit' });
+  });
+
+  it('still REFUSES what the write door refuses — a missing required field or a wrong type is not an unknown member', () => {
+    expect(parseDataContractAtReadDoor({ actionSpec: { submit: {} } }).ok).toBe(false);
+    expect(parseDataContractAtReadDoor({ actionSpec: { submit: { label: 42 } } }).ok).toBe(false);
+    expect(parseDataContractAtReadDoor('contract').ok).toBe(false);
+    expect(parseDataContractAtReadDoor(null).ok).toBe(false);
+  });
+
+  it('leaves a TOP-LEVEL unknown member alone — the outer object is passthrough by design, so it was never the hazard', () => {
+    const r = parseDataContractAtReadDoor({ ...base, futureSpec: { anything: true } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.stripped).toEqual([]);
   });
 });

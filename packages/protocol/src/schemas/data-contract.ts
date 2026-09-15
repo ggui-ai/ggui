@@ -756,6 +756,155 @@ export const DATA_CONTRACT_MINIMAL_EXAMPLE = {
   },
 } as const;
 
+/**
+ * The contract READ-door result (ggui#1115): the contract as this release
+ * can read it, plus the entry members it had to strip to get there.
+ */
+export type DataContractReadDoorResult =
+  | { readonly ok: true; readonly contract: DataContract; readonly stripped: readonly string[] }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+function isEntryObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Strip the keys of one ENTRY that this release does not name, recording the
+ * path of each. Returns the entry unchanged when there is nothing to strip,
+ * so an untouched contract keeps object identity where it can.
+ */
+function stripEntry(
+  entry: unknown,
+  known: ReadonlySet<string>,
+  path: string,
+  stripped: string[],
+): unknown {
+  if (!isEntryObject(entry)) return entry;
+  const extra = Object.keys(entry).filter((k) => !known.has(k));
+  if (extra.length === 0) return entry;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (known.has(k)) out[k] = v;
+    else stripped.push(`${path}.${k}`);
+  }
+  return out;
+}
+
+/** Strip every entry of a `Record<name, Entry>` map. */
+function stripEntryMap(
+  map: unknown,
+  known: ReadonlySet<string>,
+  path: string,
+  stripped: string[],
+): unknown {
+  if (!isEntryObject(map)) return map;
+  const out: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(map)) {
+    out[name] = stripEntry(entry, known, `${path}.${name}`, stripped);
+  }
+  return out;
+}
+
+/**
+ * Parse a STORED contract at a READ door (ggui#1115).
+ *
+ * `dataContractSchema`'s outer object is `.passthrough()`, so a whole new
+ * top-level spec was never the hazard — but its ENTRY schemas are
+ * `.strict()`, and contracts are STORED (blueprint rows, artifact
+ * manifests). So a release that adds a member to an action / prop / stream /
+ * context / tool ENTRY makes every older reader fail the parse, and a reader
+ * that turns a failed parse into "no candidate" drops the row from the match
+ * set: the generator runs again, a different card is produced, and nothing
+ * anywhere says a stored blueprint was skipped. A silent cache miss, not a
+ * failure — which is why this door exists and why it NAMES what it stripped.
+ *
+ * WRITE doors keep entry strictness and MUST: it is what catches a typo in a
+ * generated contract before it is stored, and relaxing it globally would
+ * trade a silent cache miss for silently stored garbage. The asymmetry is by
+ * DOOR, exactly as for `AppTheme` (`schemas/app-theme.ts`, VERSION-POLICY
+ * §3.6): this is the INTERPRET side, so it strips and reports; a read whose
+ * purpose is to REPRODUCE state (a writer's carry path) must not strip at
+ * all.
+ *
+ * Everything the write door refuses is still refused — a missing required
+ * field, a wrong type, a malformed spec. Only members this release does not
+ * NAME are stripped, never members it finds INVALID.
+ *
+ * NOT COVERED, deliberately and named rather than discovered: the gadget
+ * family under `clientCapabilities`. Its descriptors are validated per row
+ * with their own salvage posture (`strictGadgetDescriptorSchema`), evolve on
+ * their own surface, and folding them in here would put two different
+ * evolution stories behind one door.
+ */
+export function parseDataContractAtReadDoor(input: unknown): DataContractReadDoorResult {
+  const issuesOf = (error: z.ZodError): readonly string[] =>
+    error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+
+  if (!isEntryObject(input)) {
+    const direct = dataContractSchema.safeParse(input);
+    return direct.success
+      ? { ok: true, contract: direct.data, stripped: [] }
+      : { ok: false, issues: issuesOf(direct.error) };
+  }
+
+  const stripped: string[] = [];
+  const cleaned: Record<string, unknown> = { ...input };
+
+  const propsSpec = cleaned['propsSpec'];
+  if (isEntryObject(propsSpec)) {
+    cleaned['propsSpec'] = {
+      ...propsSpec,
+      properties: stripEntryMap(
+        propsSpec['properties'],
+        new Set(Object.keys(propEntrySchema.shape)),
+        'propsSpec.properties',
+        stripped,
+      ),
+    };
+  }
+
+  cleaned['actionSpec'] = stripEntryMap(
+    cleaned['actionSpec'],
+    new Set(Object.keys(actionEntrySchema.shape)),
+    'actionSpec',
+    stripped,
+  );
+  cleaned['streamSpec'] = stripEntryMap(
+    cleaned['streamSpec'],
+    new Set(Object.keys(streamChannelEntrySchema.shape)),
+    'streamSpec',
+    stripped,
+  );
+  cleaned['contextSpec'] = stripEntryMap(
+    cleaned['contextSpec'],
+    new Set(Object.keys(contextEntrySchema.shape)),
+    'contextSpec',
+    stripped,
+  );
+
+  const agentCapabilities = cleaned['agentCapabilities'];
+  if (isEntryObject(agentCapabilities)) {
+    cleaned['agentCapabilities'] = {
+      ...agentCapabilities,
+      tools: stripEntryMap(
+        agentCapabilities['tools'],
+        new Set(Object.keys(agentToolEntrySchema.shape)),
+        'agentCapabilities.tools',
+        stripped,
+      ),
+    };
+  }
+
+  for (const key of ['actionSpec', 'streamSpec', 'contextSpec'] as const) {
+    if (cleaned[key] === undefined) delete cleaned[key];
+  }
+
+  const parsed = dataContractSchema.safeParse(cleaned);
+  return parsed.success
+    ? { ok: true, contract: parsed.data, stripped }
+    : { ok: false, issues: issuesOf(parsed.error) };
+}
+
 export const dataContractSchema: z.ZodType<DataContract> = z
   .object({
     propsSpec: propsSpecSchema
