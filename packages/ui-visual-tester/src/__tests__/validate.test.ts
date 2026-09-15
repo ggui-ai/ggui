@@ -505,8 +505,8 @@ export default function Wizard() {
   return (
     <div>
       <p>Step 2 of 2</p>
-      <input aria-label="Team name" value={team} onChange={(e) => setTeam(e.target.value)} />
-      <button disabled={team.trim().length === 0} onClick={() => complete({ team })}>Complete Setup</button>
+      <input aria-label="Type CONFIRM to continue" value={team} onChange={(e) => setTeam(e.target.value)} />
+      <button disabled={team !== 'CONFIRM'} onClick={() => complete({ team })}>Complete Setup</button>
     </div>
   );
 }
@@ -520,7 +520,7 @@ export default function Wizard() {
 `;
 
 describe('#1040 — unreachable is named as not measured, with its reason; a real miss stays a miss', () => {
-  it('#1040 a Complete gated on a step-2 input the probe never primed reads action-unreachable (behind-navigation)', async () => {
+  it('#1040 a Complete gated on a step-2 value priming cannot satisfy reads action-unreachable (behind-navigation)', async () => {
     const code = await compile(WIZARD_GATED_STEP_SRC);
     const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1500, playwright });
     expect(result.ok).toBe(false);
@@ -574,5 +574,109 @@ describe('#996 — the control is found the way the harness finds it, not by the
     expect(result.ok).toBe(false);
     expect(result.failures[0]?.kind).toBe('action-no-effect');
     expect(result.failures[0]?.diagnostic).toContain('other actions dispatched: archive');
+  }, 60_000);
+});
+
+// #1040 (probe walk): the two shapes the 2026-09-15 public run could not measure, read from the
+// generated sources — a wizard whose Next is ONE persistent element (same DOM path on every step),
+// and a step gated on an input type the probe did not prime. Neither is a generator failure.
+const WIZARD_PERSISTENT_NEXT_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+const STEPS = ['Profile', 'Preferences', 'Review'];
+export default function Wizard() {
+  const complete = useAction('complete');
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
+  const canNext = step !== 0 || name.trim().length > 0;
+  return (
+    <div>
+      <p>Step {step + 1} of 3: {STEPS[step]}</p>
+      {step === 0 && <input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} />}
+      {step === 1 && <p>Theme: default</p>}
+      {step === 2 && <p>Review: {name}</p>}
+      <div>
+        <button disabled={step === 0} onClick={() => setStep(step - 1)}>Back</button>
+        {step < 2 ? (
+          <button disabled={!canNext} onClick={() => setStep(step + 1)}>Next</button>
+        ) : (
+          <button onClick={() => complete({ name })}>Complete Setup</button>
+        )}
+      </div>
+    </div>
+  );
+}
+`;
+
+const DATE_GATED_NEXT_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+export default function Survey() {
+  const submit = useAction('submit');
+  const [step, setStep] = useState(0);
+  const [date, setDate] = useState('');
+  if (step === 0) {
+    return (
+      <div>
+        <input aria-label="Preferred follow-up date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <button disabled={date.length === 0} onClick={() => setStep(1)}>Next</button>
+      </div>
+    );
+  }
+  return <div><p>Thanks — ready to send.</p><button onClick={() => submit({ date })}>Submit Survey</button></div>;
+}
+`;
+
+const SUBMIT_SURVEY_CONTRACT: DataContract = {
+  actionSpec: { submit: { label: 'Submit Survey', nextStep: 'survey_submit_response' } },
+  agentCapabilities: { tools: { survey_submit_response: { toolInfo: { inputSchema: { type: 'object' }, description: 'Record the survey' } } } },
+};
+
+// A control that REVEALS is not a wizard's Next: "Add item" appends a row whose checkbox is the
+// action's control. The probe must try what the click revealed before clicking the revealer again.
+const ADD_ITEM_REVEALS_ACTION_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+export default function Todo() {
+  const toggle = useAction('toggle');
+  const [items, setItems] = useState<string[]>([]);
+  return (
+    <div>
+      <button onClick={() => setItems([...items, 'Item ' + (items.length + 1)])}>Add item</button>
+      <ul>
+        {items.map((it) => (
+          <li key={it}><input type="checkbox" onChange={() => toggle({ item: it })} /> {it}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+`;
+
+const TODO_TOGGLE_CONTRACT: DataContract = {
+  actionSpec: { toggle: { label: 'Mark done', nextStep: 'todo_toggle' } },
+  agentCapabilities: { tools: { todo_toggle: { toolInfo: { inputSchema: { type: 'object' }, description: 'Toggle an item' } } } },
+};
+
+describe('#1040 — the probe walks a multi-step form the way a user does', () => {
+  it('#1040 a wizard whose Next is one persistent element is walked to its last step and Complete dispatches', async () => {
+    const code = await compile(WIZARD_PERSISTENT_NEXT_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: COMPLETE_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.failures[0]?.diagnostic ?? '').toBe('');
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#1040 a Next gated on a date input is primed like any other field, and Submit on the next step dispatches', async () => {
+    const code = await compile(DATE_GATED_NEXT_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SUBMIT_SURVEY_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.failures[0]?.diagnostic ?? '').toBe('');
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#1040 a revealer that is not a step (Add item) is not re-clicked before the control it revealed is tried', async () => {
+    const code = await compile(ADD_ITEM_REVEALS_ACTION_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: TODO_TOGGLE_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.failures[0]?.diagnostic ?? '').toBe('');
+    expect(result.ok).toBe(true);
   }, 60_000);
 });

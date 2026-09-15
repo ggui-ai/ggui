@@ -62,6 +62,19 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-16',
+    text:
+      'Contract-behaviour probe walks multi-step forms. The probe now primes date-typed inputs ' +
+      '(date, time, month, week, datetime-local) like text inputs, re-primes after a click reveals ' +
+      'or enables controls, and may click that control again once everything it revealed has been tried ' +
+      '(a wizard\'s Next; bounded to 8 re-clicks per control). Before this, a form whose Submit ' +
+      'or Complete rendered only on its last step read as "action-not-rendered" or ' +
+      '"action-no-effect" after the probe stopped at step one — the instrument\'s limit, published ' +
+      'as the model\'s failure. Rows the probe previously could not walk MAY now be measured; the ' +
+      'first run on the new image says which, in its own receipt. Scores, corpus and judge panel ' +
+      'unchanged; history is not rewritten.',
+  },
+  {
     date: '2026-09-14',
     text:
       'Reading change, announced (issue #1040): from the first run on a runner ' +

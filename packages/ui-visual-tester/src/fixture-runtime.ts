@@ -166,6 +166,12 @@ const CLICKABLE_SELECTOR =
 /** Per-control wait in the fallback pass — enough for a synchronous dispatch + a render. */
 const FALLBACK_CLICK_WAIT_MS = 600;
 /**
+ * #1040: how many times ONE control whose click revealed new controls (a wizard's Next, a tab) may be
+ * clicked again while the action's own control is still not visible. Bounds a walk through a
+ * multi-step form; a toggle that keeps revealing and hiding a panel cannot spin the probe.
+ */
+const MAX_NAVIGATOR_RECLICKS = 8;
+/**
  * ONE deadline covers both passes for an action: max(the caller's wait, this
  * floor). A few loosely-matching decoys can no longer run an action for
  * minutes; the floor keeps very short test waits from starving the fallback.
@@ -184,6 +190,11 @@ function norm(text: string): string {
  * DOM order. A generated component that wires `useAction('toggleItem')` to an
  * unnamed checkbox is found by pass 2 and judged by what its click dispatches.
  */
+/** The one disabled predicate: the collector's and the walk's reveal signal must not drift apart. */
+function isControlDisabled(el: HTMLElement): boolean {
+  return el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true';
+}
+
 function collectActionCandidates(
   root: HTMLElement,
   name: string,
@@ -200,7 +211,7 @@ function collectActionCandidates(
   const every = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
     (el): el is HTMLElement => el instanceof HTMLElement,
   );
-  const isDisabled = (el: HTMLElement): boolean => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true';
+  const isDisabled = isControlDisabled;
   const lcName = name.toLowerCase();
   const lcLabel = label.toLowerCase();
   const nameKey = norm(name);
@@ -241,7 +252,12 @@ function collectActionCandidates(
   return { named: [...byValue, ...byText], fallback: rest, disabled, namedDisabled, allClickables: every };
 }
 
-const TEXT_LIKE_INPUT_TYPES = new Set(['text', 'email', 'search', 'url', 'tel', 'number', 'password', '']);
+// #1040: date-like types too — a wizard's first step is routinely gated on one ("preferred follow-up
+// date"), and a Next that never enables hides every step behind it from the probe.
+const TEXT_LIKE_INPUT_TYPES = new Set([
+  'text', 'email', 'search', 'url', 'tel', 'number', 'password', '',
+  'date', 'time', 'month', 'week', 'datetime-local',
+]);
 
 function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
   const type = el instanceof HTMLInputElement ? el.type : 'textarea';
@@ -254,6 +270,16 @@ function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
       return 'https://example.com';
     case 'tel':
       return '5550100';
+    case 'date':
+      return '2026-01-15';
+    case 'time':
+      return '09:30';
+    case 'month':
+      return '2026-01';
+    case 'week':
+      return '2026-W03';
+    case 'datetime-local':
+      return '2026-01-15T09:30';
     default:
       return 'probe';
   }
@@ -289,7 +315,7 @@ function primeInputs(root: HTMLElement): number {
     if (el instanceof HTMLInputElement && !TEXT_LIKE_INPUT_TYPES.has(el.type)) continue;
     if (el.value.trim().length > 0) continue;
     setNativeValue(el, sampleValueFor(el));
-    primed += 1;
+    if (el.value.trim().length > 0) primed += 1;
   }
   for (const el of Array.from(root.querySelectorAll('select'))) {
     if (!(el instanceof HTMLSelectElement) || el.disabled) continue;
@@ -578,7 +604,8 @@ async function run(input: RunInput): Promise<RunOutcome> {
         status: 'action-not-rendered',
         diagnostic:
           `no clickable control in the rendered DOM for actionSpec.${input.actionName} (label "${entry.label}")` +
-          (first.disabled > 0 ? ` — ${first.disabled} control(s) rendered disabled, none naming the action` : ''),
+          (first.disabled > 0 ? ` — ${first.disabled} control(s) rendered disabled, none naming the action` : '') +
+          ` (primed ${primed} input(s))`,
       };
     }
     // One deadline for the whole action. Named controls get the caller's wait
@@ -614,25 +641,67 @@ async function run(input: RunInput): Promise<RunOutcome> {
     let namedDisabledSeen = first.namedDisabled;
     let navigated = false;
     let knownSignatures = new Set<string>(first.allClickables.map((el) => signatureOf(container, el)));
+    // #1040: the walk. A wizard's Next is ONE element at ONE DOM path on every step, so "tried once by
+    // path" stopped the probe at step 1 forever, and the terminal control never mounted. A control
+    // whose click revealed controls the probe had not seen is a NAVIGATOR: while the action's own
+    // control is not visible, the probe clicks it again (bounded) before exploring further — the way
+    // a user presses Next until the last step. Inputs a step reveals are primed like the first step's.
+    const navigators = new Map<string, number>();
+    let lastClickedSignature: string | undefined;
+    // The action's OWN control is keyed by path AND text: a wizard renders Complete at the path Next
+    // occupied on every earlier step, and "tried by path" would read it as the Next already clicked.
+    const namedKey = (el: HTMLElement): string => `${signatureOf(container, el)}|${(el.textContent ?? '').trim()}`;
+    const triedNamed = new Set<string>();
+    // A step is "revealed" when a control the probe had not seen appears OR a control it had only
+    // seen disabled becomes enabled (a wizard's Back on step 2, a Next a step's own field unlocked).
+    const stateOf = (el: HTMLElement): string => `${signatureOf(container, el)}|${isControlDisabled(el) ? 'off' : 'on'}`;
+    let knownStates = new Set<string>(first.allClickables.map(stateOf));
     for (;;) {
       if (remaining() === 0) {
         exhausted = true;
         break;
       }
-      const live = collectActionCandidates(container, input.actionName, entry.label);
-      namedDisabledSeen = Math.max(namedDisabledSeen, live.namedDisabled);
+      let live = collectActionCandidates(container, input.actionName, entry.label);
       // Disabled controls count: a step that reveals a disabled Complete IS navigation into the gate.
       const liveSignatures = live.allClickables.map((el) => signatureOf(container, el));
+      const liveStates = live.allClickables.map(stateOf);
+      // `navigated` (the reason on an unreachable exit) keeps its meaning: controls the probe had not
+      // seen appeared. `revealed` (the walk) is wider: that, or a control seen only disabled enabling.
       if (clicked > 0 && liveSignatures.some((sig) => !knownSignatures.has(sig))) navigated = true;
+      const revealed = clicked > 0 && liveStates.some((state) => !knownStates.has(state));
       knownSignatures = new Set<string>([...knownSignatures, ...liveSignatures]);
+      knownStates = new Set<string>([...knownStates, ...liveStates]);
+      if (revealed) {
+        if (lastClickedSignature !== undefined && !navigators.has(lastClickedSignature)) navigators.set(lastClickedSignature, 0);
+        // The revealed step may carry its own gate ("name", "date") — give it what the first step got.
+        if (primeInputs(container) > 0) {
+          await delay(150);
+          live = collectActionCandidates(container, input.actionName, entry.label);
+        }
+      }
+      namedDisabledSeen = Math.max(namedDisabledSeen, live.namedDisabled);
       const untried = (list: readonly HTMLElement[]): HTMLElement | undefined =>
         list.find((el) => el.isConnected && !tried.has(signatureOf(container, el)));
-      const nextNamed = untried(live.named);
-      const next = nextNamed ?? untried(live.fallback);
+      const nextNamed = live.named.find((el) => el.isConnected && !triedNamed.has(namedKey(el)));
+      const navigator =
+        nextNamed === undefined
+          ? live.fallback.find((el) => {
+              const sig = signatureOf(container, el);
+              return el.isConnected && (navigators.get(sig) ?? MAX_NAVIGATOR_RECLICKS) < MAX_NAVIGATOR_RECLICKS;
+            })
+          : undefined;
+      // Untried controls first — including the ones the last click revealed — and only when nothing
+      // untried remains, the navigator again: a wizard walks (one extra Back click); an "Add item"
+      // or a tab is not clicked eight more times before what it revealed gets its turn.
+      const next = nextNamed ?? untried(live.fallback) ?? navigator;
       if (next === undefined) break;
       const via: 'named' | 'fallback' = nextNamed !== undefined ? 'named' : 'fallback';
       if (via === 'named') namedAttempted = true;
-      tried.add(signatureOf(container, next));
+      const nextSignature = signatureOf(container, next);
+      if (navigator !== undefined && next === navigator) navigators.set(nextSignature, (navigators.get(nextSignature) ?? 0) + 1);
+      if (via === 'named') triedNamed.add(namedKey(next));
+      tried.add(nextSignature);
+      lastClickedSignature = nextSignature;
       const hit = await attempt(
         next,
         via === 'named' ? Math.min(input.waitMs, remaining()) : Math.min(FALLBACK_CLICK_WAIT_MS, remaining()),
@@ -644,6 +713,7 @@ async function run(input: RunInput): Promise<RunOutcome> {
     if (req.requireDispatch && !bestDispatch) missing.push('dispatch');
     if (req.requireDom && !bestDom) missing.push('DOM change');
     const others = otherActions.size > 0 ? `; other actions dispatched: ${[...otherActions].join(', ')}` : '';
+    const navigatorReclicks = [...navigators.values()].reduce((sum, n) => sum + n, 0);
     // #1040: the named control was seen only disabled and never clicked enabled — the probe could not
     // reach the action. Not measured, with the reason: a click made new controls appear (the gate sits
     // behind navigation the probe walked into but could not finish) or none did (the gate is input the
@@ -655,7 +725,7 @@ async function run(input: RunInput): Promise<RunOutcome> {
         reason,
         diagnostic:
           `actionSpec.${input.actionName} (label "${entry.label}") rendered disabled on every observation (${namedDisabledSeen} matching control(s)) and was never clicked enabled; ` +
-          `clicked ${clicked} other control(s) (${tried.size} distinct; primed ${primed} input(s)); new controls appeared after a click=${navigated}; DOM changed=${bestDom}` +
+          `clicked ${clicked} other control(s) (${tried.size} distinct; primed ${primed} input(s); navigator re-clicks=${navigatorReclicks}); new controls appeared after a click=${navigated}; DOM changed=${bestDom}` +
           `${exhausted ? '; budget exhausted' : ''}${others}`,
       };
     }
@@ -663,7 +733,7 @@ async function run(input: RunInput): Promise<RunOutcome> {
       status: 'action-no-effect',
       diagnostic:
         `${req.description}; clicked ${clicked} control(s) (${tried.size} distinct; first collection ${first.named.length} named, ${first.fallback.length} fallback, ${first.disabled} disabled; primed ${primed} input(s)` +
-        `${exhausted ? '; budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
+        `; navigator re-clicks=${navigatorReclicks}${exhausted ? '; budget exhausted' : ''}); best observed dispatch=${bestDispatch}, domChanged=${bestDom}; ` +
         `missing=${missing.join('+')}${others}`,
     };
   } finally {
