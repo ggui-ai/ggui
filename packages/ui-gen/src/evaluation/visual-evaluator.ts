@@ -18,6 +18,7 @@ import { fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'node:module';
 import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
@@ -274,9 +275,30 @@ export function resolveWirePackageDir(): string | null {
   return null;
 }
 
+/**
+ * The `@ggui-ai/design` package root — resolved by MODULE ID, never by counting
+ * directories (ggui#1110).
+ *
+ * The arithmetic this replaced (`…/'..','..','..','design'`) was correct only
+ * for the layout it was written against — `node_modules/@ggui-ai/ui-gen/dist/
+ * evaluation` → `node_modules/@ggui-ai/` + `design`. Under a deploy-flattened
+ * layout it landed one level too high, at `node_modules/design`, a path that is
+ * not the design package at all: the judge then walked a directory that does not
+ * exist, threw ENOENT inside every evaluation round on that deployment, and a
+ * bar refused cards no one could judge. `@ggui-ai/design` exports `./package.json`,
+ * so the module resolver answers correctly in every layout — scoped, flattened,
+ * hoisted — and the receipt keeps working inside the image.
+ */
 export function resolveDesignPackageDir(): string {
-  const selfDir = dirname(fileURLToPath(import.meta.url));
-  return resolve(selfDir, '..', '..', '..', 'design');
+  try {
+    return dirname(createRequire(import.meta.url).resolve('@ggui-ai/design/package.json'));
+  } catch {
+    // A runner whose module graph cannot see the package (a bundled judge, a
+    // test double). The layout guess is the last resort, and a wrong answer is
+    // now a NAMED absent receipt rather than a thrown round (`judgeDesignIdentity`).
+    const selfDir = dirname(fileURLToPath(import.meta.url));
+    return resolve(selfDir, '..', '..', '..', 'design');
+  }
 }
 
 async function bundleForRendering(
@@ -800,7 +822,11 @@ export async function runVisualEvaluationDetailed(
   // ggui#1042: the design tree is an input and a part of the judgement's identity.
   const designSrc = config.designSrcDir ?? resolve(resolveDesignPackageDir(), 'src');
   const design = judgeDesignIdentity(designSrc);
-  const stamp = <T extends VisualEvaluationResult>(r: T): T => ({ ...r, design, ...(config.themeMode !== undefined ? { themeMode: config.themeMode } : {}) });
+  const stamp = <T extends VisualEvaluationResult>(r: T): T => ({
+    ...r,
+    ...(design !== null ? { design } : {}),
+    ...(config.themeMode !== undefined ? { themeMode: config.themeMode } : {}),
+  });
 
   // Bundle component + design system into a single JS file
   let bundledCode: string;

@@ -57,14 +57,35 @@ export function designTreeSha256(root: string): string {
   return h.digest('hex');
 }
 
-const identityCache = new Map<string, JudgeDesignIdentity>();
+const identityCache = new Map<string, JudgeDesignIdentity | null>();
 
-/** The identity of the tree at `src`, computed once per process per path (a judge run paints hundreds of frames from one tree). */
-export function judgeDesignIdentity(src: string): JudgeDesignIdentity {
+/**
+ * The identity of the tree at `src`, computed once per process per path (a
+ * judge run paints hundreds of frames from one tree).
+ *
+ * `null` when the tree cannot be READ (ggui#1110): a deployed image ships the
+ * design package as built output with no `src/`, and an identity is a receipt
+ * about a judgement — never a precondition for making one. Before this,
+ * `scandir` threw ENOENT inside the evaluation round wherever the package ships
+ * built output only, the round returned no evaluation at all, and a bar refused
+ * a card that had cleared it. A row without the receipt says so; a round that cannot
+ * stamp one still runs.
+ */
+export function judgeDesignIdentity(src: string): JudgeDesignIdentity | null {
   const key = resolve(src);
   const cached = identityCache.get(key);
   if (cached !== undefined) return cached;
-  const identity: JudgeDesignIdentity = { src: key, srcSha256: designTreeSha256(key) };
+  let identity: JudgeDesignIdentity | null;
+  try {
+    identity = { src: key, srcSha256: designTreeSha256(key) };
+  } catch (e) {
+    // Unreadable tree: no source directory (a built package), no permission,
+    // a path that is not a directory. The reason is logged ONCE per path —
+    // the judgement proceeds unstamped rather than not at all.
+    const reason = e instanceof Error ? e.message : String(e);
+    console.warn(`[visual-eval] design tree unreadable at ${key} — the judgement carries no design identity (${reason})`);
+    identity = null;
+  }
   identityCache.set(key, identity);
   return identity;
 }

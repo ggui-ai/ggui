@@ -35,7 +35,7 @@
 import { getTheme, getDefaultThemeId } from '../themes/index';
 import { completeThemeVariables } from '../themes/derive-theme-variables';
 import type { FontFaceDeclaration, ThemeMode } from '../themes/types';
-import { fontFaceRules } from '../themes/font-faces';
+import { fontFaceRules, isRenderableFontFace } from '../themes/font-faces';
 
 /**
  * `@supports` query that gates the modern `color-mix()` tier of every
@@ -553,7 +553,12 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
   // `:root` chrome block when a theme arrives or changes after the shell was
   // served, and an evaluator's page, which until now painted a fallback family
   // and scored typography the visitor never saw. Absent ⇒ byte-identical.
-  const faces = opts.appTheme?.fonts;
+  //
+  // A face the grammar cannot render is SKIPPED here, never thrown over
+  // (ggui#1110): the write door refuses a malformed face, so one in a stored
+  // theme arrived through an older door — and it must cost that face alone,
+  // not the composition, and not the evaluation round doing the composing.
+  const faces = opts.appTheme?.fonts?.filter(isRenderableFontFace);
   if (faces !== undefined && faces.length > 0) css += fontFaceRules(faces);
   return css;
 }

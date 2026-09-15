@@ -32,6 +32,27 @@ function formatFor(src: string): string {
   }
 }
 
+/**
+ * Whether a declared face is renderable — the same grammar
+ * {@link assertFontFace} enforces, as a PREDICATE (ggui#1110).
+ *
+ * A DOOR refuses a malformed face; a COMPOSER must not throw over one. The
+ * composer paints whatever a stored theme happens to carry, and a theme that
+ * reached storage through an older door (or a door that did not exist yet)
+ * must cost at most that one face — never the whole composition, and never
+ * the round that was composing it.
+ */
+export function isRenderableFontFace(face: FontFaceDeclaration): boolean {
+  try {
+    assertFontFace(face);
+    return true;
+  } catch {
+    // The reason belongs to the door, which reports it; here the only
+    // decision is whether this face can be rendered.
+    return false;
+  }
+}
+
 /** Validate one declared face; the reason names the field a document door reports. */
 export function assertFontFace(face: FontFaceDeclaration): void {
   let url: URL;

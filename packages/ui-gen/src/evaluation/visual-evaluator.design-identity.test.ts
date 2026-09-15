@@ -3,11 +3,11 @@
 // on every judgement and on the PNG-free summary; `designSrcDir` names the
 // tree explicitly; `themeMode` is stamped when the caller composed the
 // tokens in a named mode (ggui#1076).
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { LaunchOptions } from 'puppeteer-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { designTreeSha256, isDesignRenderingInput, judgeDesignIdentity, resetJudgeDesignIdentityCache } from './design-identity.js';
 import {
   resolveDesignPackageDir,
@@ -79,8 +79,35 @@ describe('designTreeSha256', () => {
     resetJudgeDesignIdentityCache();
     const one = judgeDesignIdentity(DEFAULT_SRC);
     expect(judgeDesignIdentity(DEFAULT_SRC)).toBe(one);
-    expect(one.src).toBe(DEFAULT_SRC);
-    expect(one.srcSha256).toBe(designTreeSha256(DEFAULT_SRC));
+    expect(one).not.toBeNull();
+    expect(one!.src).toBe(DEFAULT_SRC);
+    expect(one!.srcSha256).toBe(designTreeSha256(DEFAULT_SRC));
+  });
+
+  it('resolveDesignPackageDir answers with the REAL @ggui-ai/design package, in whatever layout the runner has (ggui#1110)', () => {
+    const dir = resolveDesignPackageDir();
+    // The pin that would have caught the deployed failure: not "a path exists" but
+    // "the path IS the design package". The arithmetic resolver returned
+    // `node_modules/design` under a flattened layout — a directory that is not
+    // this package, and on some layouts not a directory at all.
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: string };
+    expect(pkg.name).toBe('@ggui-ai/design');
+    expect(existsSync(join(dir, 'src'))).toBe(true);
+    expect(designTreeSha256(join(dir, 'src'))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('an UNREADABLE tree is null, not a throw — a deployed image ships the design package without `src/` (ggui#1110)', () => {
+    resetJudgeDesignIdentityCache();
+    const missing = join(tmpdir(), `ggui-no-design-${Date.now()}`, 'src');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(judgeDesignIdentity(missing)).toBeNull();
+    // Cached as null: one warning per path, however many frames are painted.
+    expect(judgeDesignIdentity(missing)).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toMatch(/design tree unreadable/);
+    warn.mockRestore();
+    // …and the strict measurement still throws for a caller that wants it to.
+    expect(() => designTreeSha256(missing)).toThrow();
   });
 });
 

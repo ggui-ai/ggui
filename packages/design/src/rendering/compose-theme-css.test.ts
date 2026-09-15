@@ -86,6 +86,24 @@ describe('composeThemeCss — one composition, three callers', () => {
     expect(chrome.indexOf('@font-face')).toBeGreaterThan(chrome.indexOf('color-scheme:light'));
   });
 
+  it('a face the grammar cannot render costs that FACE, never the composition (ggui#1110 — the door refuses, the composer skips)', () => {
+    const themed = {
+      ...APP,
+      fonts: [
+        { family: 'Good Sans', src: 'https://fonts.example.com/good.woff2' },
+        { family: 'Insecure', src: 'http://fonts.example.com/bad.woff2' },
+        { family: 'No Host', src: 'https://localhost/bad.woff2' },
+      ],
+    };
+    const page = composeThemeCss({ layer: 'page', mode: 'light', appTheme: themed });
+    expect(page).toContain("font-family: 'Good Sans'");
+    expect(page).not.toContain('Insecure');
+    expect(page).not.toContain('No Host');
+    // Every face unrenderable ⇒ no @font-face block at all, and still no throw.
+    const allBad = composeThemeCss({ layer: 'page', mode: 'light', appTheme: { ...APP, fonts: [{ family: 'x', src: 'data:font/woff2;base64,AA' }] } });
+    expect(allBad).not.toContain('@font-face');
+  });
+
   it('no app theme ⇒ chrome is the ladder plus a bare color-scheme block', () => {
     expect(composeThemeCss({ layer: 'chrome', mode: 'light' })).toBe(`${getCssTokens('light')}:root{color-scheme:light;}`);
   });
