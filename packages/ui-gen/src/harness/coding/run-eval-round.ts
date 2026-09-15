@@ -128,6 +128,9 @@ const MAX_FEEDBACK_ISSUES = 3;
  * criterion is `not-applicable` (excluded from coverage denominators),
  * not `skipped` (which would count as silent absence).
  */
+/** Why an eval result carries no criteria: the round itself threw (ggui#1110). */
+const EVAL_ROUND_THREW_REASON = "eval round threw";
+
 const LOW_RISK_BYPASS_REASON =
   "same-image low-risk bypass: axis checks clean, tier-1/2 evaluation not invoked";
 
@@ -890,7 +893,23 @@ export async function runEvalRound(
       lastDiffFailed: false,
     };
   } catch (e) {
-    console.error("[simple] eval failed:", e instanceof Error ? e.message : e);
+    // The round threw. Until ggui#1110 this returned `evalResult` UNDEFINED and
+    // said so only in a console line: downstream the generation carried no
+    // evaluation at all, an offline mint exported no `eval.json`, and the bar
+    // read the missing file as "probe skipped" — a thrown evaluation and an
+    // evaluation that never ran became the same fact, with the reason lost.
+    // Now the failure IS the result: the round reports what threw, on the
+    // channel a judge reads, and can never be mistaken for a pass (`pass` is
+    // empty, the probe status is `infra-skipped`, and a bar that requires the
+    // probe still refuses — with a cause instead of a silence).
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[simple] eval failed:", message);
+    evalResult = evalResult ?? {
+      issues: [],
+      pass: [],
+      criteriaCoverage: notApplicableCoverage(`${EVAL_ROUND_THREW_REASON}: ${message}`),
+      runtimeProbe: { status: "infra-skipped", reason: `${EVAL_ROUND_THREW_REASON}: ${message}` },
+    };
     return {
       control: "break",
       evalDone: false,

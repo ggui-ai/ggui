@@ -198,6 +198,29 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
     expect(round.evalResult?.runtimeProbe).toBeDefined();
   });
 
+  it('a round that THROWS reports the failure AS the result — never an absent evaluation (ggui#1110)', async () => {
+    const { ctx, input } = await buildCtx('medium', null);
+    mockRunCheck.mockRejectedValueOnce(new Error('theme derivation exploded'));
+
+    const round = await runEvalRound(ctx, input);
+
+    // Before this pin the round returned `evalResult: undefined` and said why
+    // only on the console: a mint exported no `eval.json`, and a bar read the
+    // missing file as "the probe was skipped" — a thrown evaluation and an
+    // evaluation that never ran were the same fact, with the cause lost.
+    expect(round.evalResult).toBeDefined();
+    expect(round.evalResult?.runtimeProbe).toEqual({
+      status: 'infra-skipped',
+      reason: 'eval round threw: theme derivation exploded',
+    });
+    expect(round.evalResult?.criteriaCoverage?.every((c) => c.status === 'not-applicable')).toBe(true);
+    expect(round.evalResult?.criteriaCoverage?.[0]?.reason).toContain('theme derivation exploded');
+    // …and it can never be mistaken for a pass.
+    expect(round.evalResult?.pass).toEqual([]);
+    expect(round.evalDone).toBe(false);
+    expect(round.control).toBe('break');
+  });
+
   it('stamps every criterion not-applicable (with the bypass reason) on the same-image low-risk bypass exit', async () => {
     const { ctx, input } = await buildCtx('low', null);
 
