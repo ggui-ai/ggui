@@ -793,6 +793,14 @@ export interface RendererHandle {
    * `propsSpec` / `streamSpec`.
    */
   getCurrentGguiSession(): GguiSession | GguiSessionSeedInput | null;
+  /**
+   * Whether the mounted render PAINTS something (ggui#1103) — false while no
+   * render has mounted, and false for a mount holding no component (a payload
+   * with no code, or a module that threw). Read by the boot to decide whether
+   * the served shell's waiting indicator has become a lie; "a render was
+   * applied" is a different fact and was the one being used.
+   */
+  painted(): boolean;
   readonly validatorCtx: RendererValidatorContext;
   /**
    * Send surface for outbound frames. Wired by `setup()` to the WS
@@ -1186,6 +1194,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     mountedRender = target;
     if (renderer !== null) {
       await renderer.applyRender(target);
+      retireStandbyIfPainted();
       if (target.type !== 'mcpApps' && target.type !== 'system') {
         renderer.channelTransport.applyRender({
           sessionId: target.id,
@@ -1205,11 +1214,42 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const emitCodeReadyOnce = (): void => {
     if (codeReadyEmitted) return;
     codeReadyEmitted = true;
-    // First real paint — the served shell's working-state mark (#667)
-    // becomes a lie the moment content lands.
-    retireShellLoadingIndicator(doc);
+    // The served shell's working-state mark (#667) is retired by PAINT, not by
+    // this event (ggui#1103): `code-ready` fires after a render was APPLIED,
+    // and applying succeeds when the mount holds no component — so retiring
+    // here left a blank box with no indicator, indistinguishable from a card
+    // still negotiating. `code-ready` itself keeps firing exactly where it did:
+    // hosts pin selectors on it (E2E specs, accessibility scanners).
+    retireStandbyIfPainted();
     onLifecycle?.(makeLifecycleEvent('code-ready', { sessionId: meta.sessionId }));
   };
+
+  /**
+   * Retire the shell's standby ONLY when the mount paints something, and say
+   * so when a boot reaches its end painting nothing (ggui#1103). Three states
+   * that looked alike — negotiating, empty, painted — now read apart: the
+   * standby means "still coming", its absence with content means the card,
+   * its absence with a said status means "nothing to show".
+   */
+  let saidNothingToShow = false;
+  function retireStandbyIfPainted(): void {
+    if (renderer !== null && renderer.painted()) {
+      retireShellLoadingIndicator(doc);
+      // A frame that lands after we said there was nothing withdraws the
+      // sentence — the card is the answer now.
+      if (saidNothingToShow) {
+        saidNothingToShow = false;
+        setConnectedStatus(refs);
+      }
+      return;
+    }
+    if (!codeReadyEmitted) return; // still coming — the standby is honest
+    retireShellLoadingIndicator(doc);
+    if (!saidNothingToShow) {
+      saidNothingToShow = true;
+      setStatus(refs, 'Nothing to show for this card.', 'idle');
+    }
+  }
 
   // Mode discriminators. The mount surface is DECOUPLED from the live
   // channel: static content (codeUrl/codeB64/kind) paints immediately
@@ -1288,6 +1328,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     if (seed !== null) {
       await renderer.applyRender(seed);
       mountedRender = seed;
+      retireStandbyIfPainted();
       emitCodeReadyOnce();
     }
   }
@@ -5029,6 +5070,7 @@ async function bootProduction(opts: {
       );
 
       return {
+        painted: (): boolean => renderHandle?.painted === true,
         rootWireConfig: rootConfig,
         streamBus,
         applyRender,

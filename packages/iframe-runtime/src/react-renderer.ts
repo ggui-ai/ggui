@@ -396,6 +396,15 @@ export interface ReactRootMount {
   unmount(): void;
   /** Current component code (useful for tests + audit). */
   readonly currentCode: string | null;
+  /**
+   * Whether this mount HOLDS a component — i.e. whether the tree it renders
+   * is anything but its own stylesheet (ggui#1103). `applyRender` succeeding
+   * is not the same fact: a payload with no code, or a module that threw,
+   * leaves the scope element carrying only its `<style>`, and a caller that
+   * treats "a render was applied" as "something painted" retires the host's
+   * waiting indicator over a blank card.
+   */
+  readonly painted: boolean;
 }
 
 /**
@@ -679,6 +688,9 @@ export async function mountReactRoot(
   await initialEvaluate();
 
   return {
+    get painted(): boolean {
+      return currentComponent !== null;
+    },
     get currentCode() {
       return currentCode;
     },

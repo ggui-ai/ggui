@@ -163,6 +163,14 @@ export interface RenderItemHandle {
   unmount(): void;
   /** Current render kind. Test-only — not load-bearing. */
   readonly kind: MountedKind;
+  /**
+   * Whether the active mount PAINTS something (ggui#1103). A provisional,
+   * system or MCP-app mount always does; a React mount does only while it
+   * holds a component. The runtime reads this to decide whether the served
+   * shell's waiting indicator has become a lie — "a render was applied" is
+   * not that fact.
+   */
+  readonly painted: boolean;
 }
 
 // =============================================================================
@@ -359,6 +367,10 @@ export async function mountRender(
   return {
     get kind() {
       return currentKind;
+    },
+    get painted() {
+      if (currentKind === 'react') return reactMount?.painted === true;
+      return currentKind !== 'none';
     },
     async update(next) {
       const prevKind = currentKind;
