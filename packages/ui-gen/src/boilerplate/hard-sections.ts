@@ -225,14 +225,18 @@ Rules:
  */
 export const TERMINAL_ACTIONS = `## Actions the user means once
 
-Some actions are meant to happen ONCE — submitting a form, confirming a booking, approving a change, placing an order. A control that fires one MUST NOT stay armed after it fires, or the same request is one double-click away from happening twice.
+A second press is a mistake only when it would make a SECOND THING HAPPEN IN THE WORLD — a second booking, a second charge, a second order, a second application sent. If pressing again would only write the SAME STATE AGAIN — saving, updating, renaming, setting a preference, toggling — nothing is duplicated and the control stays armed.
 
+Guard a control only where you have evidence, not a feeling about the verb: the request itself names a one-time commitment — "submit the application", "place the order", "confirm the booking".
+
+**When in doubt, leave it armed.** A control the user cannot press a second time has lost them something that worked — save, edit, save again is ordinary. A control left armed is only what every interface does by default.
+
+When you do guard one:
 - Hold a small piece of state for it and set it in the handler: \`const [submitted, setSubmitted] = useState(false)\`.
 - \`disabled={submitted}\` on the control that fires it, and say so in the label or beside it ("Submitted", "Request sent") — a control that is disabled without explanation reads as broken.
-- Actions the user CAN mean repeatedly — sending a message, adding an item, toggling a row, refreshing — stay armed. Only the ones whose repetition would be a mistake are disabled.
 - A card re-rendered with new props starts fresh; the state above lives with the component, not with the request.
 
-YOU decide which actions are terminal, from the request and the contract's own words. Nothing in the wire tells you.`;
+Nothing in the wire DECLARES one-shot-ness yet, which is why the test is what a second press would DO — not how final the word sounds.`;
 
 /**
  * The frame owns the height — the component never sizes itself to the

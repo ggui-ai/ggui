@@ -202,6 +202,19 @@ export function buildContractsContext(
         if (entry.nextStep) {
           line += `\n    Next-step hint: agent intends to call \`${entry.nextStep}\``;
         }
+        // ggui#1108: `confirm` was the one declared action field the contract
+        // renderer dropped — every other author field (label, description,
+        // example, nextStep) reaches the model and this one did not. It is
+        // rendered as INFORMATION, not as a rule: the terminal-actions section
+        // deliberately does NOT cite it, because citing it measured ZERO —
+        // two wordings, n=4 each, `save` + `confirm: true` came back armed 0/4
+        // and 0/4. The field's own doc says "whether to show confirmation
+        // BEFORE triggering", which is gravity, not one-shot-ness, and the
+        // model reads it that way. Emitted only when true, so an absent flag
+        // leaves the prompt bytes identical to before this line existed.
+        if (entry.confirm === true) {
+          line += `\n    Author flag: \`confirm\` — the author marked this action grave enough to confirm before it fires, so a second press is a mistake.`;
+        }
         return line;
       })
       .join('\n');

@@ -143,8 +143,25 @@ function renderFreeBoilerplates(): string {
 // a centred 480 px column on the 768 px canvas and flush-left at 400 — one composition, two
 // pictures, chosen by a preset the model reached for with nothing telling it what the canvas was
 // for. INVARIANT 1 holds across the re-record.
+// Re-recorded 2026-09-15 for ggui#1108 (the NARROWING): `TERMINAL_ACTIONS` stops handing the model
+// the judgement and gives it a test — a second press is a mistake only when it would make a SECOND
+// THING HAPPEN IN THE WORLD; writing the same state again (save, update, rename, toggle) is
+// idempotent and stays armed — plus evidence (the request names a commitment, or the action's line
+// carries the author's `confirm` flag) and a default of ARM WHEN IN DOUBT. Both prompt digests move
+// together (constrained 5a9e5f57… → 199ccb14…, free 733b4916… → 2c70eb64…); the boilerplates are
+// untouched. Bought by a measured false positive: the canonical `save` contract came back guarded
+// 4/4 under the first wording against 0/4 before it (`a2b4575ca` vs `e952dc617`, n=4/arm, Fisher
+// one-sided p ≈ 0.014), and the guarded control — `{submitted ? 'Saved' : 'Save'}` — is what turned
+// three OSS wire-scenarios red. The error asymmetry is the reason for the new default: a terminal
+// action left armed is the behaviour we have always had; a repeatable control guarded TAKES AWAY
+// something that worked. The section does NOT cite the contract's `confirm` flag: citing it
+// MEASURED ZERO — two wordings, n=4 each, a `save` action carrying `confirm: true` came back armed
+// 0/4 and 0/4, because the field's own doc says "whether to show confirmation BEFORE triggering",
+// which is gravity and not one-shot-ness, and the model reads it that way. The flag is still
+// rendered into the contract context as INFORMATION (it was the one declared action field the
+// renderer dropped), never as a rule. INVARIANT 1 holds across the re-record.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '5a9e5f57c63c5cf5baa50d16207a2012c8cca1c85ae89285f9732db2ef6b5773';
+  '199ccb142d377dddc7b1514e0719bc64c87c4990810a7e25c52edcbe340264dc';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
 
@@ -174,8 +191,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // container, re-declared on every inverted / hero scope root as that surface's ink) — constrained unmoved.
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
+// Re-recorded 2026-09-15 for ggui#1108 (the NARROWING) — see the constrained note above; both arms share the section.
 export const FREE_PROMPT_SHA256 =
-  '733b49160ad30f403991062650ab646eb362af31db1efcca4b3e7d2a66cafc66';
+  '2c70eb64421a656449c3e9f18af991051410deb9e7916c7da0da4d71684242e4';
 export const FREE_BOILERPLATE_SHA256 =
   '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 
