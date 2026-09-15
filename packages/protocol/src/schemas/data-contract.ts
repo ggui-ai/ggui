@@ -177,6 +177,34 @@ export const actionEntrySchema = z
     schema: jsonSchemaSchema.optional(),
     example: jsonValueSchema.optional(),
     icon: z.string().optional(),
+    /**
+     * The author marks this action GRAVE (ggui#1112).
+     *
+     * ADVISORY, and honoured by exactly one party: `@ggui-ai/ui-gen`'s
+     * contract context renders it to the composing model as INFORMATION —
+     * *"the author marked this action grave enough to confirm before it
+     * fires"* — alongside `label`, `description`, `example` and `nextStep`.
+     * The model decides what to do with it. That is the same standing
+     * `nextStep` has: a declared field with a named consumer and no
+     * mechanical enforcer, which is legitimate as long as it says so.
+     *
+     * DO NOT promote it to a rule without re-measuring. Citing `confirm` in
+     * the generator's terminal-actions section MEASURED ZERO — two wordings,
+     * n = 4 each, a `save` action carrying `confirm: true` came back armed
+     * 0/4 and 0/4 (rnd, ggui#1108 narrowing). The finding that explains it:
+     * the field says GRAVITY, not at-most-once, and the model reads it that
+     * way. `confirm` asks BEFORE firing; {@link ActionEntry.oneShot} bounds
+     * HOW OFTEN it may fire. Siblings in intent, different questions, and an
+     * action may declare either, both or neither.
+     *
+     * Emitted today by the shipped system blueprints on destructive ops
+     * (`ggui_ops_revoke_connector_key`), so it is a live author signal and
+     * not a vestigial field.
+     *
+     * Observable violation: a contract declaring `confirm: true` whose
+     * rendered contract context omits the flag — pinned in ui-gen's
+     * `design-mode.pin.test.ts`.
+     */
     confirm: z.boolean().optional(),
     /**
      * This action may fire AT MOST ONCE per render (ggui#1108).

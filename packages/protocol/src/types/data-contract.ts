@@ -426,7 +426,13 @@ export interface ActionEntry {
   example?: JsonValue;
   /** Icon hint (emoji or icon name) */
   icon?: string;
-  /** Whether to show confirmation before triggering */
+  /**
+   * The author marks this action GRAVE (ggui#1112) — ADVISORY, not a rule.
+   * `@ggui-ai/ui-gen`'s contract context renders it to the composing model
+   * as information and the model decides; nothing enforces it mechanically,
+   * which is the same standing `nextStep` has. It asks BEFORE firing, where
+   * {@link ActionEntry.oneShot} bounds how OFTEN it may fire.
+   */
   confirm?: boolean;
   /**
    * OPTIONAL. Author-declared hint for the agent's next turn — the
