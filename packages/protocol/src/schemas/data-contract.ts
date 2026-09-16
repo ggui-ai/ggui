@@ -217,12 +217,21 @@ export const actionEntrySchema = z
      * the contract is where it is said.
      *
      * Obligations: the RUNTIME suppresses a second dispatch of a declared
-     * one-shot action for the render's lifetime; the RELAY never collapses
-     * distinct `actionId`s — two gestures are two facts and the relay stays
-     * honest about them; the AGENT treats `actionId` as an idempotency key
-     * for EVERY action, which buys at-most-once per DISPATCH (a replay, a
-     * re-delivered buffer) and explicitly NOT per intent, since a second
-     * gesture mints a new `actionId`.
+     * one-shot action for the render's lifetime — AND the suppression is
+     * NEVER SILENT: a suppressed dispatch leaves a named trace an operator
+     * can find (at minimum the runtime's diagnostic channel, carrying the
+     * `actionId` and `oneShot` as the reason), and it does NOT reach the
+     * agent as a dispatch. This is the rule `@ggui-ai/wire`'s dispatch
+     * dedup already holds for its own suppression, inherited here on
+     * purpose: a second gesture the runtime refuses to forward is an
+     * EVENT, not silence — otherwise a silent double-fire is replaced by a
+     * silent swallow, the same unobservable violation facing the other
+     * way. The RELAY never collapses distinct `actionId`s — two gestures
+     * are two facts and the relay stays honest about them; the AGENT
+     * treats `actionId` as an idempotency key for EVERY action, which buys
+     * at-most-once per DISPATCH (a replay, a re-delivered buffer) and
+     * explicitly NOT per intent, since a second gesture mints a new
+     * `actionId`.
      *
      * THE WINDOW, stated because "the render's lifetime" is ambiguous
      * otherwise: a fresh `ggui_render` RE-ARMS the action; a `ggui_update`
@@ -237,7 +246,9 @@ export const actionEntrySchema = z
      *
      * Failure mode: a duplicated side effect — a confirm card that writes
      * twice. Observable violation: two consume entries with distinct
-     * `actionId`s for the same declared one-shot action inside one render.
+     * `actionId`s for the same declared one-shot action inside one render;
+     * or a second gesture on such an action that produced neither a consume
+     * entry NOR a named suppression trace.
      */
     oneShot: z.boolean().optional(),
     nextStep: z.string().min(1).optional(),
