@@ -246,6 +246,8 @@ function buildHandler(opts: {
    * hands the hook on BOTH the cache-hit and cold-gen paths.
    */
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+  /** ggui#1131 (d) — the resolution observer, threaded onto the handler deps so tests can read how a render resolved. */
+  readonly onBlueprintResolution?: GguiRenderHandlerDeps['onBlueprintResolution'];
   /**
    * Optional render-row retention override. Threaded onto the handler
    * deps' `renderTtlMs` so tests can assert the committed row's
@@ -298,6 +300,7 @@ function buildHandler(opts: {
       ? { checkRenderContracts: opts.checkRenderContracts }
       : {}),
     ...(opts.postSuccessHook ? { postSuccessHook: opts.postSuccessHook } : {}),
+    ...(opts.onBlueprintResolution ? { onBlueprintResolution: opts.onBlueprintResolution } : {}),
     ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
     ...(opts.renderIdentityStore
       ? { renderIdentityStore: opts.renderIdentityStore }
@@ -2803,5 +2806,120 @@ describe('(i) override.contract RE-RESOLVES at (blueprintKey(override.contract),
     // then reports the OLD row's id — a false identity this test will
     // not bless by pinning it. `forceCreate`'s identity at an occupied
     // key is flagged on ggui#1131 as its own question.
+  });
+});
+
+// ggui#1131 (d) — the render NAMES how it resolved. Every lookup reaches the
+// index as the same read with no attribution, and a `forceCreate` render takes
+// no read at all — so a render that cold-gens past a bound card is invisible
+// anywhere but here. The observer mirrors `onBlueprintMatch`: non-blocking,
+// wrapped, never throws into the render. `identity` derives from the
+// registry's `deduped` flag, never inferred; three values, three facts.
+describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1131 (d))', () => {
+  type ResolutionEvent = Parameters<NonNullable<GguiRenderHandlerDeps['onBlueprintResolution']>>[0];
+
+  const registerAt = async (
+    stores: { vectorStore: InMemoryVectorStore; index: InMemoryBlueprintIndex },
+    contract: DataContract,
+    id: string,
+  ) =>
+    registerBlueprint(
+      { embedding: fakeEmbedding, vectorStore: stores.vectorStore, index: stores.index },
+      APP_ID,
+      {
+        kind: 'template',
+        contract,
+        intent: 'a test card',
+        componentCode: STORED_CODE,
+        source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
+      },
+      { mintId: () => id },
+    );
+
+  async function buildWithHook(hook: (e: ResolutionEvent) => void, opts: { forceCreate?: boolean } = {}) {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const storedUuid = 'bp_11111111-1111-4111-8111-111111111111';
+    await registerAt({ vectorStore, index }, CONTRACT, storedUuid);
+    const handshakeId = 'hs-resolution-1';
+    const base = buildRecord({
+      handshakeId,
+      origin: 'cache',
+      matchedBlueprint: { id: storedUuid, contractKey: blueprintKey(CONTRACT), variantKey: variantKey(undefined) },
+    });
+    await seedHandshake(
+      handshakeStore,
+      handshakeId,
+      opts.forceCreate ? { ...base, input: { ...base.input, forceCreate: true } } : base,
+    );
+    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE, onBlueprintResolution: hook });
+    return { handler, vectorStore, index, storedUuid, handshakeId };
+  }
+
+  it('(j) an accepted proposal: strategy proposed, indexRead hit, served stored, identity existing — the proposed id', async () => {
+    const events: ResolutionEvent[] = [];
+    const h = await buildWithHook((e) => events.push(e));
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      scope: 'render',
+      strategy: 'proposed',
+      contractKey: blueprintKey(CONTRACT),
+      variantKey: variantKey(undefined),
+      indexRead: 'hit',
+      served: 'stored',
+      blueprintId: h.storedUuid,
+      identity: 'existing',
+    });
+  });
+
+  it('(j) an override.contract with no row at the re-aimed key: override-reaim, indexRead miss, served fresh, identity minted', async () => {
+    const events: ResolutionEvent[] = [];
+    const h = await buildWithHook((e) => events.push(e));
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, override: { contract: OVERRIDE_CONTRACT }, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      scope: 'render',
+      strategy: 'override-reaim',
+      contractKey: blueprintKey(OVERRIDE_CONTRACT),
+      indexRead: 'miss',
+      served: 'fresh',
+      identity: 'minted',
+    });
+    expect(events[0]?.blueprintId).toBe(out.blueprintId);
+    expect(events[0]?.blueprintId).toMatch(/^bp_/);
+  });
+
+  it('(j) forceCreate with a row at the re-aimed key: force-create, indexRead SKIPPED, served fresh, identity EXISTING — the false identity, named', async () => {
+    const events: ResolutionEvent[] = [];
+    const h = await buildWithHook((e) => events.push(e), { forceCreate: true });
+    const reaimedUuid = 'bp_77777777-7777-4777-8777-777777777777';
+    await registerAt(h, OVERRIDE_CONTRACT, reaimedUuid);
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, override: { contract: OVERRIDE_CONTRACT }, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      strategy: 'force-create',
+      contractKey: blueprintKey(OVERRIDE_CONTRACT),
+      indexRead: 'skipped',
+      served: 'fresh',
+      identity: 'existing',
+      blueprintId: reaimedUuid,
+    });
+  });
+
+  it('(j) a throwing observer never breaks the render', async () => {
+    const h = await buildWithHook(() => {
+      throw new Error('observer exploded');
+    });
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(h.storedUuid);
   });
 });

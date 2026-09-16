@@ -458,6 +458,22 @@ export interface GguiSessionPostSuccessArgs {
  * with `ggui_update`, so the two emitting tools cannot drift on the
  * slice deps.
  */
+/** ggui#1131 (d) — how ONE render resolved its blueprint. See {@link GguiRenderHandlerDeps.onBlueprintResolution}. */
+export interface BlueprintResolutionEvent {
+  readonly scope: 'render';
+  /** `proposed` = the handshake's proposal accepted; `override-reaim` = contract and/or variance re-aimed (one index read); `force-create` = the agent opted out of reuse. */
+  readonly strategy: 'proposed' | 'override-reaim' | 'force-create';
+  readonly contractKey: string;
+  readonly variantKey: string;
+  /** `hit` / `miss` = the index was read at (contractKey, variantKey); `skipped` = no read was taken (force-create, or a proposal with nothing to point-read). */
+  readonly indexRead: 'hit' | 'miss' | 'skipped';
+  /** `stored` = a stored component served; `fresh` = this render generated the code it served. */
+  readonly served: 'stored' | 'fresh';
+  readonly blueprintId?: string;
+  /** `existing` = an already-bound row's id; `minted` = this render's registration created the row; `unregistered` = the best-effort registration failed and no id was minted. */
+  readonly identity: 'existing' | 'minted' | 'unregistered';
+}
+
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /**
    * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3):
@@ -836,6 +852,24 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
     rawInput: unknown,
   ) => Promise<PreGenerationRefusal | undefined> | PreGenerationRefusal | undefined;
 
+  /**
+   * ggui#1131 (d) — the render NAMES how it resolved its blueprint, once
+   * per render, the moment the resolution is final. Every lookup reaches
+   * the index as the same read with no attribution, and a `forceCreate`
+   * render takes no read at all, so a render that cold-gens past a bound
+   * card is invisible anywhere but here. Mirrors `onBlueprintMatch` on the
+   * handshake: an OBSERVER — absent ⇒ no-op, wrapped, a throwing observer
+   * is reported via `console.warn` and never breaks the render. This
+   * package ships no default; a host wires it to its own sink.
+   *
+   * `identity` derives from the registry's `deduped` flag — never inferred.
+   * `served: 'fresh'` with `identity: 'existing'` is the false-identity
+   * case (a forced regeneration at an occupied key: fresh code served, the
+   * old row's id reported) named as itself, never laundered as a reuse.
+   * Not emitted in placeholder mode (no blueprint resolution occurs) nor
+   * when generation fails (nothing was served).
+   */
+  readonly onBlueprintResolution?: (event: BlueprintResolutionEvent) => void;
   /**
    * Post-success hook. Fires AFTER the render commit for this call
    * and AFTER the response object is assembled, but BEFORE the handler
@@ -1947,6 +1981,14 @@ export function createGguiRenderHandler(
       // resolves to `null` → `blueprintHit` stays null → we fall
       // through to cold-gen. Never throws. `forceCreate` (agent opted
       // out after a declined handshake) skips reuse entirely.
+      // ggui#1131 (d) — what the resolution observer will be told, decided as the path runs.
+      let indexReadAttempted = false;
+      let registrationIdentity: BlueprintResolutionEvent['identity'] = 'unregistered';
+      const resolutionStrategy: BlueprintResolutionEvent['strategy'] = forceCreate
+        ? 'force-create'
+        : override !== undefined
+          ? 'override-reaim'
+          : 'proposed';
       let blueprintHit: {
         readonly id: string;
         readonly contractKey: string;
@@ -2059,6 +2101,7 @@ export function createGguiRenderHandler(
       ) {
         // ACCEPT — effective == proposed; point-read the stored row
         // (per-app first, then seed pools — see fan-out comment above).
+        indexReadAttempted = true;
         const bp = await readByIdAcrossPools(matched.id);
         if (bp) {
           blueprintHit = {
@@ -2093,6 +2136,7 @@ export function createGguiRenderHandler(
         // a stored component at that exact pair if one exists (per-app
         // first, then seed pools — see fan-out comment above). Both
         // overrides take this ONE read (ggui#1131).
+        indexReadAttempted = true;
         const bp = await findExactAcrossPools(
           effectiveContractKey,
           effectiveVariantKey,
@@ -2121,6 +2165,16 @@ export function createGguiRenderHandler(
         // at that commit already carries the id (no backfill needed
         // on this path).
         resolvedBlueprintId = blueprintHit.id;
+        emitBlueprintResolution(deps, {
+          scope: 'render',
+          strategy: resolutionStrategy,
+          contractKey: effectiveContractKey,
+          variantKey: effectiveVariantKey,
+          indexRead: 'hit',
+          served: 'stored',
+          blueprintId: blueprintHit.id,
+          identity: 'existing',
+        });
 
         // Authored source — resolve the body
         // from CodeStore by the row's stored hash, if any. Best-
@@ -2262,8 +2316,8 @@ export function createGguiRenderHandler(
                     readonly componentCode: string;
                     readonly source: LlmBlueprintSource;
                     readonly sourceCode?: string;
-                  }) =>
-                    safelyRegisterBlueprint(
+                  }) => {
+                    const reg = await safelyRegisterBlueprint(
                       {
                         embedding: generationCache.embedding,
                         vectorStore: generationCache.vectorStore,
@@ -2303,7 +2357,13 @@ export function createGguiRenderHandler(
                           ? { variance: effectiveVariance }
                           : {}),
                       },
-                    ),
+                    );
+                    // ggui#1131 (d) — the identity is what the registry SAID, never inferred:
+                    // a dedup hit means fresh code is about to be served under an id this
+                    // render did not mint, and the observer names that as itself.
+                    registrationIdentity = reg === undefined ? 'unregistered' : reg.deduped ? 'existing' : 'minted';
+                    return reg?.id;
+                  },
                 }
               : {}),
             ...(runtimeProps !== undefined
@@ -2349,6 +2409,16 @@ export function createGguiRenderHandler(
           // identity record was written with. No backfill exists.
           if (outcome.ok) {
             resolvedBlueprintId = outcome.blueprintId;
+            emitBlueprintResolution(deps, {
+              scope: 'render',
+              strategy: resolutionStrategy,
+              contractKey: effectiveContractKey,
+              variantKey: effectiveVariantKey,
+              indexRead: indexReadAttempted ? 'miss' : 'skipped',
+              served: 'fresh',
+              ...(outcome.blueprintId !== undefined ? { blueprintId: outcome.blueprintId } : {}),
+              identity: registrationIdentity,
+            });
           }
         }
       }
@@ -3895,6 +3965,17 @@ async function commitCachedGguiSession(
   return true;
 }
 
+/** ggui#1131 (d) — fire the resolution observer without letting it into the render. */
+function emitBlueprintResolution(deps: GguiRenderHandlerDeps, event: BlueprintResolutionEvent): void {
+  if (!deps.onBlueprintResolution) return;
+  try {
+    deps.onBlueprintResolution(event);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[ggui_render] onBlueprintResolution observer threw; ignoring: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /**
  * Wrap {@link registerBlueprint} so a write-side rejection (sqlite
  * disk-full, vector-dim mismatch on a misconfigured index, etc.)
@@ -3903,8 +3984,10 @@ async function commitCachedGguiSession(
  * committed; the registry write is a performance optimization, not a
  * correctness dependency.
  *
- * Returns the registered blueprint's opaque `bp_<uuid>` id so the
- * cold-gen path can surface it as the render's `blueprintId`. Returns
+ * Returns the registered blueprint's opaque `bp_<uuid>` id — and whether the
+ * registry DEDUPED (the row already existed; ggui#1131 (d)) — so the
+ * cold-gen path can surface the id as the render's `blueprintId` and name
+ * its identity honestly. Returns
  * `undefined` when the best-effort write threw (the render still
  * succeeds; only the future cache-hit optimization + the surfaced id
  * are lost — the wire then carries the empty-id default).
@@ -3915,10 +3998,10 @@ async function safelyRegisterBlueprint(
     : Parameters<typeof registerBlueprint>[0],
   scope: string,
   input: Parameters<typeof registerBlueprint>[2],
-): Promise<string | undefined> {
+): Promise<{ readonly id: string; readonly deduped: boolean } | undefined> {
   try {
     const registered = await registerBlueprint(deps, scope, input);
-    return registered.id;
+    return { id: registered.id, deduped: registered.deduped };
   } catch (err) {
     // Best-effort registration — the live render already produced
     // valid code + the row was committed; only the future cache-hit

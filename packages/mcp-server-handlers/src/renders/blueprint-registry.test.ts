@@ -128,6 +128,10 @@ describe('registerBlueprint', () => {
     });
     // Same UUID — the second registration is a dedup hit, not a new row.
     expect(b.id).toBe(a.id);
+    // ggui#1131 (d) — the registry SAYS whether it deduped; a caller that serves fresh code
+    // and receives the existing id must be able to name that identity rather than infer it.
+    expect(a.deduped).toBe(false);
+    expect(b.deduped).toBe(true);
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(1);
     // First write wins — no overwrite, no re-mint, no metadata churn.

@@ -570,6 +570,17 @@ export interface RegisterBlueprintOptions {
 }
 
 /**
+ * What {@link registerBlueprint} hands back: the row, plus whether this call
+ * MINTED it or found it already bound (ggui#1131 (d)). The registry is
+ * first-write-wins — a dedup hit returns the existing row verbatim — so a
+ * caller that generated fresh code and receives an id it did not mint is
+ * serving one thing and naming another. `deduped` is how it says so instead
+ * of inferring it: `false` = this call minted the row; `true` = the row
+ * already existed and nothing was written.
+ */
+export type RegisteredBlueprint = Blueprint & { readonly deduped: boolean };
+
+/**
  * Register a blueprint into the scope.
  *
  * Identity: a fresh `(contractKey, variantKey)` mints an opaque
@@ -603,7 +614,7 @@ export async function registerBlueprint(
   scope: string,
   input: RegisterBlueprintInput,
   options: RegisterBlueprintOptions = {},
-): Promise<Blueprint> {
+): Promise<RegisteredBlueprint> {
   if (input.intent.trim().length === 0) {
     throw new Error('registerBlueprint: intent cannot be empty');
   }
@@ -629,7 +640,7 @@ export async function registerBlueprint(
   const existingId = await deps.index.getId(scope, exactKey);
   if (existingId) {
     const existing = await findBlueprintByUuid(deps.vectorStore, scope, existingId);
-    if (existing) return existing;
+    if (existing) return { ...existing, deduped: true };
     // Dangling binding (id present, row gone) — self-heal: drop the stale
     // binding and fall through to mint a fresh row.
     await deps.index.deleteId(scope, exactKey);
@@ -696,7 +707,7 @@ export async function registerBlueprint(
     blueprint,
     input.createdBy ?? 'agent',
   );
-  return blueprint;
+  return { ...blueprint, deduped: false };
 }
 
 /**
