@@ -205,6 +205,13 @@ export interface DtcgTheme {
   /**
    * The scrim between the host page's ground and the card (ggui#1093 P1b,
    * ggui#1083). Absent ⇒ derived from the ground pair by the completion.
+   *
+   * Carried on the wire and validated at the document door. The CARD
+   * projection this package ships does not read it yet — inside the card
+   * the scrim stays the completion-derived one — while a host's own shell
+   * may already paint the member around the card from the same document.
+   * This sentence leaves with the card projection that reads it, in the
+   * same publication.
    */
   scrim?: {
     tone: 'light' | 'dark' | DtcgToken;
@@ -243,6 +250,12 @@ export interface DtcgTheme {
      * which no app redefines wholesale; these three bounded steps are the
      * override a card uses to sit inside someone else's site, exactly the
      * standing `palette` has. Absent ⇒ the shipped scale, unchanged.
+     *
+     * Carried on the wire and validated at the document door; no projection
+     * in this package reads `duration` or `easing` yet — a document may
+     * declare them today and the card keeps the shipped scale. This
+     * sentence leaves with the projection that reads them, in the same
+     * publication.
      */
     duration?: {
       fast?: DtcgToken;
