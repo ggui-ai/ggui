@@ -22,9 +22,10 @@
  * exact-key match returns `origin: 'cache'` + a stored
  * `matchedBlueprint`, and an ACCEPT render (override omitted)
  * point-reads that row by UUID and serves its componentCode verbatim.
- * `override.contract` is the STRICT fresh-contract path — it always
- * cold-gens by design ("a fresh contract; skip the point-read
- * entirely"). So:
+ * `override.contract` is the STRICT fresh-contract path — it resolves at
+ * the new contract's key and cold-gens only when nothing is stored there
+ * (ggui#1131: an override is a re-aim, not a request for new code). On a
+ * fresh key that IS a cold-gen, which is what the prime below relies on. So:
  *
  *   - COLD primes via `override.contract` — the LITERAL draft becomes
  *     `story.contract`, byte-identical and negotiator-independent, so
@@ -127,7 +128,8 @@ async function renderOnce(opts: {
   intent: string;
   /**
    * `'override'` — pin the LITERAL draft via `override.contract`
-   * (STRICT path; always cold-gens; deterministic `blueprintKey`).
+   * (STRICT path; deterministic `blueprintKey`; cold-gens when that key
+   * holds nothing, reuses when it does — ggui#1131).
    * `'accept'` — omit `override` so the render ACCEPTS the handshake's
    * proposal; with `origin: 'cache'` this is the §6 point-read reuse
    * path.

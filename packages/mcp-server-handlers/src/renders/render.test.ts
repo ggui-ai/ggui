@@ -19,11 +19,11 @@
  *   (f) `override.contract` is the AGENT SAFETY VALVE — even with a
  *       reusable cached blueprint present AND referenced by an
  *       `origin:'cache'` handshake, an `override` carrying a fresh
- *       SUPERSET contract cold-gens against the agent's draft and does
- *       NOT reuse the cached blueprint. This is the mechanism the whole
- *       "the cache PROPOSES, the agent DISPOSES" design rests on — the
- *       §6 point-read is gated on `override === undefined`, so an
- *       override structurally bypasses it.
+ *       SUPERSET contract does NOT serve the PROPOSED blueprint — "the
+ *       cache PROPOSES, the agent DISPOSES". With no row at the
+ *       re-aimed key it cold-gens against the agent's draft. (What
+ *       disposing does NOT mean, since ggui#1131: skipping the index —
+ *       see (i).)
  *
  * Plus the variance-aware reshape (Tasks 6+7):
  *   (g) the reshaped input schema accepts ACCEPT (`{handshakeId, props}`),
@@ -33,6 +33,12 @@
  *       `(contractKey, variantKey(newVariance))` — reuse if a row exists
  *       there, else cold-gen registered under the new variantKey, with
  *       `out.variantKey === variantKey(newVariance)`.
+ *   (i) `override.contract` RE-RESOLVES the same way (ggui#1131) — at
+ *       `(blueprintKey(override.contract), effectiveVariantKey)`: reuse
+ *       if a row exists there, else cold-gen registered under that key.
+ *       The two overrides are twins; an override is a RE-AIM, not a
+ *       request for a fresh generation. `forceCreate` (on the handshake
+ *       record) is the ONLY lever that forces one.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -56,6 +62,7 @@ import {
   isFailedRenderOutput,
   renderOutputSchema,
   type AppTheme,
+  type BlueprintVariance,
   type DataContract,
   type ComponentGguiSession,
 } from '@ggui-ai/protocol';
@@ -752,7 +759,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(render?.expiresAt).toBeGreaterThan(NOW + 89 * 24 * 60 * 60 * 1000);
   });
 
-  it('(f) override.contract is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
+  it('(f) override.contract with NO row at the re-aimed key cold-gens against the agents fresh draft — the PROPOSED blueprint is not served', async () => {
     // Reuse is RIGHT THERE: `buildAcceptCacheHarness` pre-seeds a stored
     // Blueprint (componentCode = STORED_CODE) at `storedUuid` AND an
     // `origin:'cache'` handshake record whose `matchedBlueprint`
@@ -2681,5 +2688,120 @@ describe('createGguiRenderHandler — admission-control key composition (#488)',
 
     expect(checkedKeys).toContain(`ggui_render:${APP_ID}:hash_xyz`);
     expect(checkedKeys.some((k) => k.includes('sub_abc123'))).toBe(false);
+  });
+});
+
+// ggui#1131 — `override.contract` re-aims; it does not bypass the index.
+// The row's own identity table: 17 sessions cold-genned at ONE contract
+// key after a card existed there — sixteen generations paid for a card
+// the index held. The wire contract said "cold-gens against it" and the
+// path skipped the point-read on PRESENCE; `override.variance` (h) has
+// always re-resolved. These pin the twin.
+describe('(i) override.contract RE-RESOLVES at (blueprintKey(override.contract), effectiveVariantKey) — ggui#1131', () => {
+  // (h)'s persona variance is scoped to its own block; the twin needs its own.
+  const REAIM_VARIANCE = { persona: 'x' } as const;
+  const registerAt = async (
+    harness: Harness,
+    contract: DataContract,
+    id: string,
+    variance?: BlueprintVariance,
+  ) =>
+    registerBlueprint(
+      { embedding: fakeEmbedding, vectorStore: harness.vectorStore, index: harness.index },
+      APP_ID,
+      {
+        kind: 'template',
+        contract,
+        intent: 'a test card',
+        componentCode: STORED_CODE,
+        source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' },
+        ...(variance !== undefined ? { variance } : {}),
+      },
+      { mintId: () => id },
+    );
+
+  it('(i) REUSES a blueprint registered at the re-aimed contract key — not the proposed one, not a fresh one', async () => {
+    const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
+    const reaimedUuid = 'bp_44444444-4444-4444-8444-444444444444';
+    await registerAt(harness, OVERRIDE_CONTRACT, reaimedUuid);
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { contract: OVERRIDE_CONTRACT }, props: {} },
+      CTX,
+    );
+
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(reaimedUuid);
+    expect(out.blueprintId).not.toBe(storedUuid);
+    expect(out.contractHash).toBe(blueprintKey(OVERRIDE_CONTRACT));
+  });
+
+  it('(i) a content-identical override resolves to the PROPOSED card — presence is not a cache bypass', async () => {
+    const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { contract: CONTRACT }, props: {} },
+      CTX,
+    );
+
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(storedUuid);
+  });
+
+  it('(i) override.contract + override.variance resolves at the PAIR', async () => {
+    const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
+    const pairUuid = 'bp_55555555-5555-4555-8555-555555555555';
+    await registerAt(harness, OVERRIDE_CONTRACT, pairUuid, REAIM_VARIANCE);
+    // A default-variant row at the SAME re-aimed contract must NOT be the one served.
+    await registerAt(harness, OVERRIDE_CONTRACT, 'bp_66666666-6666-4666-8666-666666666666');
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { contract: OVERRIDE_CONTRACT, variance: REAIM_VARIANCE }, props: {} },
+      CTX,
+    );
+
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(pairUuid);
+    expect(out.blueprintId).not.toBe(storedUuid);
+    expect(out.variantKey).toBe(variantKey(REAIM_VARIANCE));
+  });
+
+  it('(i) forceCreate is the ONLY force-fresh lever: with a row at the re-aimed key it still cold-gens', async () => {
+    // Green before the change and green after: this is the guard the
+    // re-resolve must keep, not a RED.
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE });
+    const harness: Harness = { handshakeStore, renderStore, vectorStore, index, handler };
+    const storedUuid = 'bp_11111111-1111-4111-8111-111111111111';
+    await registerAt(harness, CONTRACT, storedUuid);
+    const reaimedUuid = 'bp_77777777-7777-4777-8777-777777777777';
+    await registerAt(harness, OVERRIDE_CONTRACT, reaimedUuid);
+    const handshakeId = 'hs-force-1';
+    const base = buildRecord({
+      handshakeId,
+      origin: 'cache',
+      matchedBlueprint: { id: storedUuid, contractKey: blueprintKey(CONTRACT), variantKey: variantKey(undefined) },
+    });
+    await seedHandshake(handshakeStore, handshakeId, { ...base, input: { ...base.input, forceCreate: true } });
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { contract: OVERRIDE_CONTRACT }, props: {} },
+      CTX,
+    );
+
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(false);
+    expect(out.cache.reason).toContain('cold');
+    // NOT asserted: `out.blueprintId`. The registry is first-write-wins,
+    // so a forced regeneration at an occupied key serves fresh code and
+    // then reports the OLD row's id — a false identity this test will
+    // not bless by pinning it. `forceCreate`'s identity at an occupied
+    // key is flagged on ggui#1131 as its own question.
   });
 });

@@ -1307,7 +1307,12 @@ export function createGguiRenderHandler(
     //     variance verbatim. Reuses the proposed blueprint identity.
     //   - `override.contract` — re-draft the contract (STRICT —
     //     `validateContract` runs below as the commit gate; the server
-    //     does NOT repair it). Cold-gens against the new contract.
+    //     does NOT repair it). RE-RESOLVES at the effective
+    //     `(blueprintKey(newContract), variantKey)` exactly as a
+    //     variance override does — reuse if a row exists there, else
+    //     cold-gen registered under that key (ggui#1131). An override
+    //     is a RE-AIM, not a request for a fresh generation;
+    //     `forceCreate` is the only lever that forces one.
     //   - `override.variance` — re-aim the variant axis while keeping
     //     the agreed contract. Re-resolves the EFFECTIVE
     //     `(contractKey, variantKey)` — reuse if a blueprint exists
@@ -1920,9 +1925,18 @@ export function createGguiRenderHandler(
       //     `(blueprintKey(effectiveContract), effectiveVariantKey)`
       //     via the index — reuse if a row exists there, else cold-gen
       //     registered under the new variantKey.
-      //   - `override.contract` — a fresh contract; skip the
-      //     point-read entirely and cold-gen against it (the STRICT
-      //     `validateContract` commit gate already ran above).
+      //   - `override.contract` — the contract changed (the STRICT
+      //     `validateContract` commit gate already ran above). The
+      //     proposed `matchedBlueprint` names a card for the OLD
+      //     contract, so RE-RESOLVE at the effective
+      //     `(blueprintKey(effectiveContract), effectiveVariantKey)` —
+      //     the same index read as a variance override — reuse if a
+      //     row exists there, else cold-gen registered under that key.
+      //     ggui#1131: the row's identity table showed sixteen
+      //     generations paid at one key for a card the index held,
+      //     each serving unjudged code under the OLD row's id (the
+      //     registry is first-write-wins). Skipping the index here was
+      //     the mechanism.
       //
       // `blueprintId` equality across two renders therefore genuinely
       // means the same component was reused (no second, divergent
@@ -2066,16 +2080,19 @@ export function createGguiRenderHandler(
           };
         }
       } else if (
-        override?.variance !== undefined &&
-        override.contract === undefined &&
+        override !== undefined &&
         deps.generation.cache?.index &&
         !forceCreate
       ) {
-        // OVERRIDE.variance — the contract is unchanged but the variant
-        // axis moved. Re-resolve at the EFFECTIVE
-        // `(contractKey, effectiveVariantKey)` and reuse a stored
-        // component for that exact variant if one exists (per-app first,
-        // then seed pools — see fan-out comment above).
+        // OVERRIDE — the contract and/or the variant axis moved, so the
+        // proposed blueprint no longer names the right component.
+        // Re-resolve at the EFFECTIVE
+        // `(blueprintKey(effectiveContract), effectiveVariantKey)` —
+        // `effectiveContract` already folds in `override.contract` and
+        // `effectiveVariantKey` folds in `override.variance` — and reuse
+        // a stored component at that exact pair if one exists (per-app
+        // first, then seed pools — see fan-out comment above). Both
+        // overrides take this ONE read (ggui#1131).
         const bp = await findExactAcrossPools(
           effectiveContractKey,
           effectiveVariantKey,

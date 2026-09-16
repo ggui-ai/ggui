@@ -246,8 +246,9 @@ export const handshakeInputSchema = z.object({
  *   - `synth`  → render `{handshakeId, props}` (omit `override`) to gen against the amended contract.
  *
  * Any origin → render `{handshakeId, props, override: {contract?, variance?}}`
- * to re-aim the suggestion — `override.contract` gens against a fresh
- * contract; `override.variance` re-aims the variant axis.
+ * to re-aim the suggestion — `override.contract` re-aims to a fresh
+ * contract (resolved at its own key); `override.variance` re-aims the
+ * variant axis.
  *
  * Wire-output is intentionally lean. The handler carries `target`,
  * `alternatives`, `contractHash`, `serverCapabilities` on its internal
@@ -310,7 +311,12 @@ export const handshakeOutputSchema = z.object({
  *   - ACCEPT (omit `override`) reuses the agreed contract + the proposed
  *     variance, resolving the proposed `(contractKey, variantKey)`.
  *   - `override.contract` re-drafts the contract (STRICT — must already
- *     conform; the server does not repair it) and cold-gens against it.
+ *     conform; the server does not repair it) and re-resolves the
+ *     effective `(blueprintKey(newContract), variantKey)` — reuse if a
+ *     blueprint exists there, else cold-gen registered under that key.
+ *     An override is a RE-AIM, never a request for a fresh generation
+ *     (ggui#1131); `forceCreate` on the handshake is the only lever
+ *     that forces one.
  *   - `override.variance` re-aims the variant axis while keeping the
  *     agreed contract, re-resolving the effective
  *     `(contractKey, variantKey(newVariance))`.
@@ -881,7 +887,7 @@ export const renderOutputSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Opaque id of the materialised component for this render. On the handshake-decided reuse paths (accept a cache-origin proposal, or a variance re-aim that resolves to an existing variant) it is the stored id — equal ids across renders mean the same stored component. override.contract always generates cold and mints a fresh id, even for an identical contract.',
+      'Opaque id of the materialised component for this render. On every reuse path (accept a cache-origin proposal, or an override — contract and/or variance — that resolves to an existing blueprint at its key) it is the stored id; equal ids across renders mean the same stored component. A fresh id is minted only when nothing is stored at the resolved key, or when the handshake carried forceCreate.',
     ),
   variantKey: z
     .string()

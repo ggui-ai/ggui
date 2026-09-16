@@ -13,7 +13,8 @@
  *
  *   render({handshakeId, props, override: {contract: B}})
  *     -> render.ts reads override.contract (== literal B, ignoring the
- *        stored effectiveContract_A) and STRICT cold-gens against it
+ *        stored effectiveContract_A), resolves at B's key and cold-gens
+ *        against B when nothing is stored there (ggui#1131)
  *
  * The pass criterion: when A and B are DIFFERENT contract shapes,
  * accept's codeHash MUST NOT equal override's codeHash — they're
