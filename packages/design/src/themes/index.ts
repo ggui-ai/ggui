@@ -53,6 +53,7 @@ export { ThemeProvider, useTheme } from './ThemeProvider';
 
 // ggui#987 — the ONE producer, the write-door check, the face transport.
 export { completeThemeVariables, deriveThemeVariables, hexToOklch, oklchToHex, mixOklch, contrastRatio, ThemeDocumentInvalidError } from './derive-theme-variables';
+export type { ThemeDiagnostic, DeriveThemeOptions } from './derive-theme-variables';
 export type { ThemeVariableMap, Oklch } from './derive-theme-variables';
 export { validateOverlayCoverage, NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
 export type { OverlayCoverageReport } from './validate-overlay-coverage';

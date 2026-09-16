@@ -218,6 +218,52 @@ function tokenValue(t: DtcgToken<unknown> | undefined): string | undefined {
   return /^#[0-9a-fA-F]{3,6}$/.test(v) ? `#${parseHex(v).map((n) => n.toString(16).padStart(2, '0')).join('')}` : v;
 }
 
+/**
+ * A member the projector could not read (ggui#1158). Absent members are silence — the
+ * fallback is the design. PRESENT-but-unreadable members are not: a bare `"16px"` where a
+ * DTCG token is required produced exactly the output of an absent member, so a real host
+ * measured "nothing reaches the card" and could not tell why. The read door (ggui#1115)
+ * NAMES a member it cannot read instead of dropping the row; the projector names one
+ * instead of skipping it. Never a throw — a malformed theme must not take a card down.
+ */
+export interface ThemeDiagnostic {
+  readonly kind: 'member-unreadable';
+  /** Dotted path of the member, e.g. `typeScale.body.size`. */
+  readonly path: string;
+  /** What was found there, for the operator: `string "16px"`, `number 8`, `object without $value`. */
+  readonly found: string;
+}
+
+export interface DeriveThemeOptions {
+  /**
+   * Where a diagnostic goes. Default is LOUD — `console.warn` prefixed `[ggui-design]` — so
+   * a malformed member can never be silent; a host that routes diagnostics supplies its own.
+   */
+  readonly onDiagnostic?: (diagnostic: ThemeDiagnostic) => void;
+}
+
+function describeFound(t: unknown): string {
+  if (t === null) return 'null';
+  if (typeof t !== 'object') return `${typeof t} ${JSON.stringify(t)}`;
+  return '$value' in (t as object) ? 'object with a non-string, non-number $value' : 'object without $value';
+}
+
+const defaultDiagnostic = (d: ThemeDiagnostic): void => {
+  // eslint-disable-next-line no-console -- operator-visible failure signal; the whole point is that this is never silent
+  console.warn(`[ggui-design] theme member unreadable at ${d.path} — found ${d.found}; expected a DTCG token ({ $value }). The member was ignored and the fallback used.`);
+};
+
+/**
+ * `tokenValue` that distinguishes ABSENT (silence) from PRESENT-BUT-UNREADABLE (named).
+ * `path` is only for the diagnostic; the value contract is `tokenValue`'s.
+ */
+function readToken(t: unknown, path: string, report: (d: ThemeDiagnostic) => void): string | undefined {
+  if (t === undefined) return undefined;
+  const v = tokenValue(t as DtcgToken<unknown> | undefined);
+  if (v === undefined) report({ kind: 'member-unreadable', path, found: describeFound(t) });
+  return v;
+}
+
 function stated(group: Tokens, key: string): string | undefined {
   return tokenValue(group?.[key]);
 }
@@ -309,7 +355,16 @@ function parseSize(value: string): { n: number; unit: string } | undefined {
 /**
  * The one producer. See the module header for the rules.
  */
-export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVariableMap {
+export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: DeriveThemeOptions = {}): ThemeVariableMap {
+  // One member, one trace: `typeScale.body.size` is read twice (the ramp base, then the
+  // per-role stop), and an unreadable member must be named once, not per read site.
+  const reported = new Set<string>();
+  const sink = options.onDiagnostic ?? defaultDiagnostic;
+  const report = (d: ThemeDiagnostic): void => {
+    if (reported.has(d.path)) return;
+    reported.add(d.path);
+    sink(d);
+  };
   // The document's colour block, read by name: every key is a palette
   // (a record of stops) or a single role token — the union the entries
   // of `DtcgTheme['color']` already carry, so no widening is needed.
@@ -409,8 +464,8 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   V['--ggui-letter-spacing-heading'] = stated(spacingT, 'heading') ?? '-0.01em';
   for (const lh of Object.keys(lineHeight) as Array<keyof typeof lineHeight>) V[`--ggui-font-lineHeight-${lh}`] = String(lineHeight[lh]);
   const ramp = doc.font.ramp;
-  const base = ramp ? parseSize(tokenValue(ramp.base) ?? '') : undefined;
-  const ratio = ramp ? Number(tokenValue(ramp.ratio)) : NaN;
+  const base = ramp ? parseSize(readToken(ramp.base, 'font.ramp.base', report) ?? '') : undefined;
+  const ratio = ramp ? Number(readToken(ramp.ratio, 'font.ramp.ratio', report)) : NaN;
   for (const [stop, exp] of Object.entries(SIZE_EXP)) {
     V[`--ggui-font-size-${stop}`] =
       base && Number.isFinite(ratio) && ratio > 0
@@ -424,7 +479,7 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // and leading land on the tokens the primitives already read.
   const typeScale = doc.typeScale;
   if (typeScale !== undefined) {
-    const bodySize = parseSize(tokenValue(typeScale.body?.size) ?? '');
+    const bodySize = parseSize(readToken(typeScale.body?.size, 'typeScale.body.size', report) ?? '');
     if (bodySize !== undefined) {
       const r = Number.isFinite(ratio) && ratio > 0 ? ratio : 1.25;
       for (const [stop, exp] of Object.entries(SIZE_EXP)) {
@@ -432,20 +487,20 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
       }
     }
     for (const [role, stop] of Object.entries(ROLE_STOP)) {
-      const size = tokenValue(typeScale[role as keyof typeof typeScale]?.size);
+      const size = readToken(typeScale[role as keyof typeof typeScale]?.size, `typeScale.${role}.size`, report);
       if (size !== undefined) V[`--ggui-font-size-${stop}`] = size;
     }
-    const headingWeight = tokenValue(typeScale.h1?.weight);
+    const headingWeight = readToken(typeScale.h1?.weight, 'typeScale.h1.weight', report);
     if (headingWeight !== undefined) V['--ggui-font-weight-heading'] = headingWeight;
-    const bodyWeight = tokenValue(typeScale.body?.weight);
+    const bodyWeight = readToken(typeScale.body?.weight, 'typeScale.body.weight', report);
     if (bodyWeight !== undefined) V['--ggui-font-weight-normal'] = bodyWeight;
-    const headingTracking = tokenValue(typeScale.h1?.tracking);
+    const headingTracking = readToken(typeScale.h1?.tracking, 'typeScale.h1.tracking', report);
     if (headingTracking !== undefined) V['--ggui-letter-spacing-heading'] = headingTracking;
-    const bodyTracking = tokenValue(typeScale.body?.tracking);
+    const bodyTracking = readToken(typeScale.body?.tracking, 'typeScale.body.tracking', report);
     if (bodyTracking !== undefined) V['--ggui-letter-spacing-body'] = bodyTracking;
     // `leading` is a RATIO (protocol P1b, rnd's amendment): `line-height: <ratio>`
     // survives a size change, which a length does not.
-    const bodyLeading = tokenValue(typeScale.body?.leading);
+    const bodyLeading = readToken(typeScale.body?.leading, 'typeScale.body.leading', report);
     if (bodyLeading !== undefined) V['--ggui-font-lineHeight-normal'] = bodyLeading;
   }
 
@@ -464,7 +519,7 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode): ThemeVari
   // document that needs a bespoke step therefore does not declare `rhythm`.
   // Same shape as the type roles above, where a stated role outranks the ramp.
   const sp = doc.spacing as Tokens;
-  const rhythmBase = doc.rhythm ? parseSize(tokenValue(doc.rhythm.base) ?? '') : undefined;
+  const rhythmBase = doc.rhythm ? parseSize(readToken(doc.rhythm.base, 'rhythm.base', report) ?? '') : undefined;
   const onRhythm = (layer1: string): string | undefined => {
     if (rhythmBase === undefined) return undefined;
     const step = parseSize(layer1);
