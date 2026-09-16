@@ -280,6 +280,15 @@ export interface AxisCheckInput {
    * means `constrained`.
    */
   designMode?: DesignMode;
+  /**
+   * The rendering canvas the source is judged FOR (ggui#1117). A width cap on
+   * the outermost element is a defect on a fullscreen canvas and a no-op in a
+   * chat bubble, so a check that reads width must know the surface. Populated
+   * where the harness is built (`Harness.canvas`); ABSENT for callers with no
+   * rendering context — a check handles `undefined`, it never assumes a
+   * default (a silent `lg` would be the same guess with a nicer face).
+   */
+  canvas?: CanvasClass;
 }
 
 /**

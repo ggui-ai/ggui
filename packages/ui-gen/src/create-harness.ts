@@ -224,6 +224,7 @@ export function createHarness(input: CreateHarnessInput): Harness {
     name,
     classification,
     designMode,
+    ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
     ...(input.profile !== undefined ? { profile: input.profile } : {}),
     how,
     what,

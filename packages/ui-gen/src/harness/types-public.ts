@@ -303,6 +303,13 @@ export interface Harness {
    * into `free`.
    */
   readonly designMode: DesignMode;
+  /**
+   * The rendering canvas this harness was built for (ggui#1117) — threaded
+   * from `CreateHarnessInput.canvas` into the HOW leg (the `free` prompt
+   * states it) and, via `run-check.ts`, onto every axis check's input.
+   * ABSENT when the caller had no rendering context; never defaulted.
+   */
+  readonly canvas?: CanvasClass;
   /** The app's generation profile in force for this harness (#991), if any. */
   readonly profile?: GenerationProfileInput;
 

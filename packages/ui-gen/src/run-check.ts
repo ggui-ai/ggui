@@ -119,6 +119,8 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
     originalPrompt: prompt,
     classification: harness.classification,
     designMode: harness.designMode,
+    // ggui#1117: the canvas the harness was built for, when it has one — never a default.
+    ...(harness.canvas !== undefined ? { canvas: harness.canvas } : {}),
   };
   // The one runner `runAxisChecks` shares (ggui#1046 trace prints here, on the served path).
   const axisRun = runGatedAxisChecks(check.axisChecks, axisInput);

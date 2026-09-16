@@ -9,7 +9,7 @@ import { REGISTRY } from "./registry.js";
 import { matches, type AxisCheck, type AxisCheckInput } from "./types.js";
 import { axisCheckTraceEnabled } from "./helpers.js";
 import { createHash } from "node:crypto";
-import type { DesignMode } from "../../design-mode.js";
+import type { CanvasClass, DesignMode } from "../../design-mode.js";
 
 export interface RunAxisChecksInput {
   sourceCode: string;
@@ -18,6 +18,8 @@ export interface RunAxisChecksInput {
   originalPrompt: string;
   /** Which triad produced the source — see `AxisCheckInput.designMode`. */
   designMode?: DesignMode;
+  /** The canvas the source is judged for — see `AxisCheckInput.canvas` (ggui#1117); absent = no rendering context. */
+  canvas?: CanvasClass;
 }
 
 export function runAxisChecks(
@@ -30,6 +32,7 @@ export function runAxisChecks(
     originalPrompt: input.originalPrompt,
     classification,
     ...(input.designMode !== undefined ? { designMode: input.designMode } : {}),
+    ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
   };
   if (input.compiledCode === null) {
     traceAxisChecksSkipped(facts, "compiledCode null — no check ran");
@@ -93,6 +96,8 @@ export interface AxisCheckTrace {
   readonly classification: Classification["vector"];
   readonly propsSpecKeys: readonly string[];
   readonly propsSpecPropertyKeys: readonly string[];
+  /** The canvas the verdict was built for (ggui#1117) — present only when the input carried one. */
+  readonly canvas?: CanvasClass;
   readonly matched: readonly string[];
   readonly issues: ReadonlyArray<{ readonly id: string; readonly result: EvalIssue["result"] }>;
   readonly note?: string;
@@ -107,5 +112,7 @@ function traceFacts(input: AxisTraceFacts): Omit<AxisCheckTrace, "matched" | "is
     classification: input.classification.vector,
     propsSpecKeys: Object.keys(propsSpec ?? {}),
     propsSpecPropertyKeys: Object.keys(propsSpec?.properties ?? {}),
+    // No default here, unlike designMode: an absent canvas is a fact about the caller, not a guess to paper over.
+    ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
   };
 }
