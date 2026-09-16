@@ -213,7 +213,7 @@ export function buildContractsContext(
         // model reads it that way. Emitted only when true, so an absent flag
         // leaves the prompt bytes identical to before this line existed.
         if (entry.confirm === true) {
-          line += `\n    Author flag: \`confirm\` — the author marked this action grave enough to confirm before it fires, so a second press is a mistake.`;
+          line += `\n    Author flag: \`confirm\` — the author marked this action as one to confirm with the user before it fires.`;
         }
         return line;
       })
