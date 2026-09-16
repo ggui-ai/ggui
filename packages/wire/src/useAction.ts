@@ -60,6 +60,7 @@ export function useAction<T = unknown>(actionName: string): (data: T) => void {
           // subsequent dispatches.
           try {
             onDispatchSuppressed({
+              reason: 'duplicate-dispatch',
               actionName,
               payloadSignature: decision.signature,
               payload: data,

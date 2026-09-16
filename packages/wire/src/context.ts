@@ -122,18 +122,21 @@ export interface WireConfig<T extends DataContract = DataContract> {
     handler: (delivery: StreamDelivery<WireStreamPayload<T, N>>) => void,
   ) => () => void;
   /**
-   * Optional structured observability for `useAction`'s task-scoped
-   * duplicate-dispatch suppression. Fires alongside the always-on
-   * `console.warn` whenever the runtime coalesces a same-(name,
-   * payload) re-dispatch within one event-loop task — the nested-
-   * interactive double-fire backstop.
+   * Optional structured observability for the runtime's two dispatch-
+   * suppression invariants — the task-scoped duplicate backstop
+   * (`reason: 'duplicate-dispatch'`, fired by `useAction`) and the
+   * render-lifetime one-shot guard (`reason: 'one-shot-spent'`, fired by
+   * the config's own `dispatch` when a declared `oneShot` action is
+   * gestured a second time, ggui#1108). Both fire ALONGSIDE the always-on
+   * `console.warn`; neither reaches the agent.
    *
-   * Reachability constraint: the first-party renderers do NOT set
-   * this field — `buildRootWireConfig` (`@ggui-ai/iframe-runtime`)
-   * and `<GguiRender>`'s internal config both omit it. It fires only
-   * when a host hand-builds a complete `WireConfig` and mounts
-   * `GguiWireProvider` itself. On every first-party render path the
-   * `console.warn` is the sole suppression signal.
+   * Reachability constraint: the first-party renderers do NOT set this
+   * field — `buildRootWireConfig` (`@ggui-ai/iframe-runtime`) and
+   * `<GguiRender>`'s internal config both omit it. It fires only when a
+   * host hand-builds a complete `WireConfig` (or passes
+   * `onDispatchSuppressed` to `buildWireConfig`). On every first-party
+   * render path the `console.warn` is the sole suppression signal — which
+   * is what the `oneShot` contract requires as its minimum trace.
    */
   readonly onDispatchSuppressed?: (info: DispatchSuppressedInfo) => void;
 }
@@ -142,6 +145,18 @@ export interface WireConfig<T extends DataContract = DataContract> {
  * Payload for the {@link WireConfig.onDispatchSuppressed} callback.
  */
 export interface DispatchSuppressedInfo {
+  /**
+   * Why the dispatch was suppressed. Two distinct runtime invariants share
+   * one sink:
+   *   - `'duplicate-dispatch'` — the task-scoped backstop: a same-`(name,
+   *     payload)` re-dispatch within one event-loop task (the nested-
+   *     interactive double-fire). See `dispatch-dedup.ts`.
+   *   - `'one-shot-spent'` — a SECOND gesture on an action the contract
+   *     declared `oneShot` (ggui#1108): the action already fired for this
+   *     render's lifetime, so the repeat is not sent to the agent. Keyed on
+   *     the marker (the action's `oneShot` flag), never inferred from a name.
+   */
+  readonly reason: 'duplicate-dispatch' | 'one-shot-spent';
   /** The action name that was suppressed. */
   readonly actionName: string;
   /**

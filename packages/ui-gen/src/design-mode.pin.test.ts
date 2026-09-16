@@ -168,8 +168,15 @@ function renderFreeBoilerplates(): string {
 // from `design/src/primitives/types.ts` on every design build, so the four lines are the WHOLE prompt
 // delta (2530 lines → 2530, 4 changed); both prompt digests move together (constrained 199ccb14… →
 // 65e0ae7e…, free 2c70eb64… → e3a42df1…); the boilerplates are untouched. INVARIANT 1 holds across the re-record.
+// Re-recorded 2026-09-17 for ggui#1108 (the runtime one-shot half): the wire
+// docblock `WireConfig.onDispatchSuppressed` now documents BOTH suppression
+// invariants (task-scoped duplicate + render-lifetime one-shot). The wire
+// catalog `get-wire.ts` is generated from that JSDoc and rides the prompt as
+// `wireDoc` (harness/runtime.ts), a HARD section both arms carry — so BOTH
+// prompt digests move together (constrained 65e0ae7e… → 10000dbe…, free
+// e3a42df1… → 4480e86b…); the boilerplates are untouched. INVARIANT 1 holds.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '65e0ae7e94fa11c3a3c3d57dd76eb250222adcc612d3b93ab3d65ad245079fa9';
+  '10000dbe2ab23fc633d5f6d3419783ca4042911152b0df334dc274c67f37f561';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
 
@@ -201,8 +208,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 // Re-recorded 2026-09-15 for ggui#1108 (the NARROWING) — see the constrained note above; both arms share the section.
 // Re-recorded 2026-09-17 for ggui#1093 (radius by ROLE — the four control docblocks in the catalog, see the constrained note above); both arms carry the catalog.
+// Re-recorded 2026-09-17 for ggui#1108 (the wire catalog rides the prompt, see the constrained note above).
 export const FREE_PROMPT_SHA256 =
-  'e3a42df13ae238994deb1a9b91090d03d2251f31975af9580933324ea200926e';
+  '4480e86bb407d32c0ccc75a3310877d21e7d87fe003c5fb28009efee47af78e6';
 export const FREE_BOILERPLATE_SHA256 =
   '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 

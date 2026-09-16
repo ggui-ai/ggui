@@ -28,7 +28,8 @@ import {
   ClientContractViolationError,
   validateOutboundActionEnvelope,
 } from './contract';
-import type { WireConfig } from './context';
+import type { DispatchSuppressedInfo, WireConfig } from './context';
+import { payloadSignature } from './dispatch-dedup';
 
 /**
  * Per-channel ring cap for late-subscriber replay on reserved channels.
@@ -191,6 +192,16 @@ export interface BuildWireConfigOptions {
    * sequencing stays monotonic across emission sites.
    */
   readonly nextClientSeq?: () => number;
+  /**
+   * Optional structured sink for BOTH suppression invariants — the
+   * render-lifetime one-shot guard fired by this config's `dispatch`
+   * (`reason: 'one-shot-spent'`, ggui#1108) and, when set on the returned
+   * config, `useAction`'s task-scoped duplicate backstop
+   * (`reason: 'duplicate-dispatch'`). Omitted on the first-party render
+   * paths — there the always-on `console.warn` is the trace, which is the
+   * minimum the `oneShot` contract requires.
+   */
+  readonly onDispatchSuppressed?: (info: DispatchSuppressedInfo) => void;
 }
 
 /**
@@ -219,11 +230,49 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
     });
   const validateEnvelope = opts.validateEnvelope ?? validateOutboundActionEnvelope;
 
+  // ggui#1108 — the one-shot guard. This config is built ONCE per render
+  // (the iframe's boot; `props_update` reuses it, a new card is a new iframe
+  // and a new config), so a closure-local set of already-fired one-shot
+  // actions is exactly the RENDER's lifetime. `useAction`'s task-scoped
+  // dedup catches a double-fire from ONE gesture; this catches a SECOND
+  // gesture on an action the contract declared `oneShot` — the founder's
+  // "the submitted form still reads as a live request". The marker is the
+  // contract's flag, resolved through the same `getActiveActionSpec` thunk
+  // the validator uses; the guard NEVER infers one-shot from a name.
+  const spentOneShots = new Set<string>();
+
   return {
     app: opts.app,
     render: opts.render,
     auth: opts.auth,
+    ...(opts.onDispatchSuppressed !== undefined
+      ? { onDispatchSuppressed: opts.onDispatchSuppressed }
+      : {}),
     dispatch: (actionName, data) => {
+      const actionSpec = opts.getActiveActionSpec();
+      const isOneShot = actionSpec?.[actionName]?.oneShot === true;
+      if (isOneShot && spentOneShots.has(actionName)) {
+        // NEVER SILENT — the runtime's diagnostic channel (`console.warn`)
+        // carries the actionId and `oneShot` as the reason, and the dispatch
+        // does NOT reach the agent (no `emitEnvelope`). The structured sink
+        // fires alongside when a host provided one.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ggui] dispatch('${actionName}') suppressed: this action is declared ` +
+            `oneShot and already fired for this render. A second gesture is NOT ` +
+            `sent to the agent — the submitted control is spent for the render's ` +
+            `lifetime. If the action is meant to repeat, remove \`oneShot\` from ` +
+            `its contract entry.`,
+        );
+        opts.onDispatchSuppressed?.({
+          reason: 'one-shot-spent',
+          actionName,
+          payloadSignature: payloadSignature(actionName, data),
+          payload: data,
+          suppressedAt: Date.now(),
+        });
+        return;
+      }
       const envelope = buildActionEnvelope({
         sessionId: opts.render.sessionId,
         type: 'data:submit',
@@ -233,13 +282,18 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
         },
         clientSeq: nextClientSeq(),
       });
-      const result = validateEnvelope(opts.getActiveActionSpec(), envelope);
+      const result = validateEnvelope(actionSpec, envelope);
       if (!result.valid) {
+        // Not spent: a rejected envelope never reached the agent, so a
+        // corrected retry of a one-shot action must still be allowed to fire.
         opts.onViolation(
           new ClientContractViolationError('outbound-action', result.violations),
         );
         return;
       }
+      // Spend only on a committed fire — the marker records that the agent
+      // WILL receive this gesture, so the next one is the suppressible repeat.
+      if (isOneShot) spentOneShots.add(actionName);
       opts.emitEnvelope(envelope);
     },
     subscribe: (channelName, handler) => {
