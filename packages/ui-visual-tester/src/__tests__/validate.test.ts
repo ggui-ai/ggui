@@ -658,6 +658,30 @@ const TODO_TOGGLE_CONTRACT: DataContract = {
   agentCapabilities: { tools: { todo_toggle: { toolInfo: { inputSchema: { type: 'object' }, description: 'Toggle an item' } } } },
 };
 
+// #1040, from the 2026-09-16 public run: survey-form primed its date and STILL could not advance —
+// the form refuses a date in the past, and a constant sample date is a past date.
+const FUTURE_DATE_GATED_NEXT_SRC = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+export default function Survey() {
+  const submit = useAction('submit');
+  const [step, setStep] = useState(0);
+  const [date, setDate] = useState('');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const valid = date.length > 0 && new Date(date) >= today;
+  if (step === 0) {
+    return (
+      <div>
+        <input aria-label="Preferred follow-up date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        {date.length > 0 && !valid && <p>Date cannot be in the past</p>}
+        <button disabled={!valid} onClick={() => setStep(1)}>Next</button>
+      </div>
+    );
+  }
+  return <div><p>Thanks — ready to send.</p><button onClick={() => submit({ date })}>Submit Survey</button></div>;
+}
+`;
+
 describe('#1040 — the probe walks a multi-step form the way a user does', () => {
   it('#1040 a wizard whose Next is one persistent element is walked to its last step and Complete dispatches', async () => {
     const code = await compile(WIZARD_PERSISTENT_NEXT_SRC);
@@ -676,6 +700,13 @@ describe('#1040 — the probe walks a multi-step form the way a user does', () =
   it('#1040 a revealer that is not a step (Add item) is not re-clicked before the control it revealed is tried', async () => {
     const code = await compile(ADD_ITEM_REVEALS_ACTION_SRC);
     const result = await validateContractBehavior({ componentCode: code, contract: TODO_TOGGLE_CONTRACT, timeoutMs: 1500, playwright });
+    expect(result.failures[0]?.diagnostic ?? '').toBe('');
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
+  it('#1040 a Next gated on a date that must not be in the past is primed with a date that is not', async () => {
+    const code = await compile(FUTURE_DATE_GATED_NEXT_SRC);
+    const result = await validateContractBehavior({ componentCode: code, contract: SUBMIT_SURVEY_CONTRACT, timeoutMs: 1500, playwright });
     expect(result.failures[0]?.diagnostic ?? '').toBe('');
     expect(result.ok).toBe(true);
   }, 60_000);

@@ -259,9 +259,46 @@ const TEXT_LIKE_INPUT_TYPES = new Set([
   'date', 'time', 'month', 'week', 'datetime-local',
 ]);
 
+/**
+ * #1040: dates are primed RELATIVE TO NOW — a form routinely refuses a date in the past
+ * ("preferred follow-up date"), and a constant sample date is a past date. Thirty days out,
+ * clamped into the input's own [min, max] when those are set in the input's format (ISO
+ * strings compare lexically). Time-of-day values have no past to fall into.
+ */
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+type DateParts = { readonly y: number; readonly m: number; readonly d: number };
+const partsOf = (at: Date): DateParts => ({ y: at.getFullYear(), m: at.getMonth() + 1, d: at.getDate() });
+/** Today and thirty days out, as the parts a date-like value is built from. */
+function todayAndThirtyDaysOut(): { readonly today: DateParts; readonly later: DateParts } {
+  const now = new Date();
+  const at = new Date(now);
+  at.setDate(at.getDate() + 30);
+  return { today: partsOf(now), later: partsOf(at) };
+}
+/**
+ * Clamp a value into the input's [min, max] when each is set in the input's own format
+ * (ISO-shaped strings compare lexically). `min` later than the value wins; `max` earlier than
+ * the value wins only while it is not before `floor` (today in the same format) — a max in
+ * the past is a form that can never be satisfied, and the probe reports that as it is.
+ */
+function clampToRange(el: HTMLInputElement, value: string, floor: string, format: RegExp): string {
+  let out = value;
+  if (format.test(el.min) && el.min > out) out = el.min;
+  if (format.test(el.max) && el.max < out && el.max >= floor) out = el.max;
+  return out;
+}
+function isoWeekOf(y: number, m: number, d: number): string {
+  // ISO-8601 week: Thursday of the same week decides the year.
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const jan1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${pad2(week)}`;
+}
 function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
-  const type = el instanceof HTMLInputElement ? el.type : 'textarea';
-  switch (type) {
+  if (!(el instanceof HTMLInputElement)) return 'probe'; // a textarea has no type to switch on
+  switch (el.type) {
     case 'number':
       return '1';
     case 'email':
@@ -270,16 +307,27 @@ function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
       return 'https://example.com';
     case 'tel':
       return '5550100';
-    case 'date':
-      return '2026-01-15';
+    case 'date': {
+      const { today, later } = todayAndThirtyDaysOut();
+      const iso = (p: DateParts): string => `${p.y}-${pad2(p.m)}-${pad2(p.d)}`;
+      return clampToRange(el, iso(later), iso(today), /^\d{4}-\d{2}-\d{2}$/);
+    }
     case 'time':
       return '09:30';
-    case 'month':
-      return '2026-01';
-    case 'week':
-      return '2026-W03';
-    case 'datetime-local':
-      return '2026-01-15T09:30';
+    case 'month': {
+      const { today, later } = todayAndThirtyDaysOut();
+      const ym = (p: DateParts): string => `${p.y}-${pad2(p.m)}`;
+      return clampToRange(el, ym(later), ym(today), /^\d{4}-\d{2}$/);
+    }
+    case 'week': {
+      const { today, later } = todayAndThirtyDaysOut();
+      return clampToRange(el, isoWeekOf(later.y, later.m, later.d), isoWeekOf(today.y, today.m, today.d), /^\d{4}-W\d{2}$/);
+    }
+    case 'datetime-local': {
+      const { today, later } = todayAndThirtyDaysOut();
+      const at = (p: DateParts, hm: string): string => `${p.y}-${pad2(p.m)}-${pad2(p.d)}T${hm}`;
+      return clampToRange(el, at(later, '09:30'), at(today, '00:00'), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    }
     default:
       return 'probe';
   }
