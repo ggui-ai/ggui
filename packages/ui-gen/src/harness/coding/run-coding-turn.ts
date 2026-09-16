@@ -155,6 +155,13 @@ export interface CodingTurnContext {
   readonly systemPrompt: string;
   readonly harness: Harness;
   readonly contract: DataContract | undefined;
+  /**
+   * The ORIGINAL request (ggui#1122) — what the eval round has always judged
+   * against, now handed to auto-commit so the axis checks run on the serve
+   * path with the same input. Required: a caller that forgot it would silently
+   * run no axis checks on every served generation.
+   */
+  readonly originalPrompt: string;
   readonly commitMeta: Map<string, CommitMetadata>;
   readonly originalProps: string | undefined;
   readonly costTracker: CostTracker | null;
@@ -669,6 +676,13 @@ ${closingInstruction}`;
     // Which tier-0 legs fire — the design-vocabulary legs stand down in
     // `free` mode; every contract leg runs in both.
     harness.designMode,
+    // ggui#1122: the harness's pre-filtered axis checks run at auto-commit — the serve path.
+    {
+      checks: harness.check.axisChecks,
+      classification: harness.classification,
+      originalPrompt: ctx.originalPrompt,
+      ...(harness.canvas !== undefined ? { canvas: harness.canvas } : {}),
+    },
   );
   const toolMs = Date.now() - toolStart;
 

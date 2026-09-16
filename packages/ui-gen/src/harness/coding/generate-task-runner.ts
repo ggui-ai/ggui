@@ -178,6 +178,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
           systemPrompt: session.systemPrompt,
           harness: session.harness,
           contract: params.contract,
+          originalPrompt: params.userPrompt,
           commitMeta: session.commitMeta,
           originalProps: session.originalProps,
           costTracker: session.costTracker,

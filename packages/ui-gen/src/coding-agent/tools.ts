@@ -12,6 +12,10 @@ import * as esbuild from 'esbuild';
 import { AgentWorkspace } from './workspace';
 import { getSoftWarnings } from './self-check';
 import { runTier0Checks } from '../check/index.js';
+import { runGatedAxisChecks, traceAxisChecksSkipped } from '../evaluation/axis-checks/dispatch.js';
+import type { AxisCheck, AxisCheckInput } from '../evaluation/types-public.js';
+import type { Classification } from '../classifier/axes.js';
+import type { CanvasClass } from '../design-mode.js';
 import { PRIMITIVES_DOCUMENTATION } from '../validation/index.js';
 import type { DataContract } from '@ggui-ai/protocol';
 import type {
@@ -46,6 +50,22 @@ function getComponentDocumentation(name: string): string {
 // Auto-commit helper (shared by write and apply_changes)
 // =============================================================================
 
+/**
+ * The deterministic axis family at auto-commit (ggui#1122) — what a caller with a
+ * harness hands `executeTool` so the checks run on EVERY commit the coding agent
+ * makes, i.e. on the serve path, not only inside the eval round a serving deployment
+ * never enters. `checks` is the harness's pre-filtered list (`harness.check.axisChecks`)
+ * — the same list `run-check.ts` feeds the same pure runner. Absent: nothing runs.
+ */
+export interface AutoCommitAxisChecks {
+  readonly checks: readonly AxisCheck[];
+  readonly classification: Classification;
+  /** The ORIGINAL request — several checks read it (labels invented past the copy, terminal words). */
+  readonly originalPrompt: string;
+  /** The canvas the harness was built for (ggui#1117); absent = no rendering context, never a default. */
+  readonly canvas?: CanvasClass;
+}
+
 async function autoCommit(
   workspace: AgentWorkspace,
   commitMeta: Map<string, CommitMetadata>,
@@ -72,6 +92,8 @@ async function autoCommit(
   gadgetTypes?: Readonly<Record<string, string>>,
   /** Which tier-0 legs fire — see `runTier0Checks`'s `designMode`. */
   designMode: DesignMode = DEFAULT_DESIGN_MODE,
+  /** ggui#1122: run the harness's axis checks here too; absent, none run. */
+  axis?: AutoCommitAxisChecks,
 ): Promise<ToolResult> {
   const commitStart = Date.now();
   const raw = workspace.read();
@@ -123,17 +145,45 @@ async function autoCommit(
     gadgetTypes,
     designMode,
   );
-  const tier0Fails = tier0Issues.filter(i => i.result === 'fail');
+  // ggui#1122: the deterministic axis family runs HERE — on every commit the coding
+  // agent makes, which is the serve path — through the one pure runner `run-check.ts`
+  // feeds (the ggui#1046 trace line prints on both paths). Posture is the founder's:
+  // warn-as-warn, fail-as-fail. A WARN that started blocking a served generation
+  // because it moved surface would be a posture change, not a relocation, and comes
+  // to him as a named item. Only a source that BUILT is judged: on a build failure
+  // the checks are not asked (the same stand-down the gate+run wrapper makes) and
+  // the ggui#1046 trace says so — a skipped round never reads as a clean one.
+  const axisFacts = axis !== undefined
+    ? {
+        sourceCode: formatted,
+        ...(contract !== undefined ? { contract } : {}),
+        originalPrompt: axis.originalPrompt,
+        classification: axis.classification,
+        designMode,
+        ...(axis.canvas !== undefined ? { canvas: axis.canvas } : {}),
+      }
+    : undefined;
+  if (axisFacts !== undefined && !buildSuccess) traceAxisChecksSkipped(axisFacts, 'build failed — no check ran');
+  const axisRun = axis !== undefined && axisFacts !== undefined && buildSuccess
+    ? runGatedAxisChecks(axis.checks, { ...axisFacts, compiledCode } satisfies AxisCheckInput)
+    : undefined;
+  const axisIssues = axisRun?.issues ?? [];
+  const checkIssues = [...tier0Issues, ...axisIssues];
+  const tier0Fails = checkIssues.filter(i => i.result === 'fail');
   const selfCheckPassed = tier0Fails.length === 0;
   // When contextPolicy.labeledTier0 is set, prefix each violation with
   // its P0/P1/P2 priority so the LLM can rank against the prompt's
   // schema. The default (off) emits unlabeled feedback.
-  const violations = tier0Issues
+  const violations = checkIssues
     .filter(i => i.result === 'fail')
     .map(i => contextPolicy?.labeledTier0
       ? `[${i.priority ?? 'P0'}-${i.category}] ${i.description}\n  Fix: ${i.fix}`
       : `[${i.category}] ${i.description}\n  Fix: ${i.fix}`);
-  const softWarnings = getSoftWarnings(raw);
+  // Axis WARNs ride the existing non-blocking channel — feedback the model sees, never a block.
+  const axisWarnings = axisIssues
+    .filter(i => i.result === 'warn')
+    .map(i => `[${i.subcategory}] ${i.description} Fix: ${i.fix}`);
+  const softWarnings = [...getSoftWarnings(raw), ...axisWarnings];
   const selfCheckMs = Date.now() - selfCheckStart;
 
   // Always commit (preserves history)
@@ -144,7 +194,7 @@ async function autoCommit(
 
   const status = buildSuccess && selfCheckPassed ? 'PASS' : 'FAIL';
   console.log(
-    `[coding-agent] auto-commit: ${status} | build=${buildMs}ms self-check=${selfCheckMs}ms git=${gitMs}ms total=${Date.now() - commitStart}ms | violations=${violations.length}`,
+    `[coding-agent] auto-commit: ${status} | build=${buildMs}ms self-check=${selfCheckMs}ms git=${gitMs}ms total=${Date.now() - commitStart}ms | violations=${violations.length} | axis=${axisRun === undefined ? 'off' : `${axisIssues.length - axisWarnings.length}F/${axisWarnings.length}W`}`,
   );
   if (violations.length > 0) {
     for (const v of violations) {
@@ -202,6 +252,8 @@ export async function executeTool(
   gadgetTypes?: Readonly<Record<string, string>>,
   /** Which tier-0 legs fire on auto-commit — see `runTier0Checks`'s `designMode`. */
   designMode: DesignMode = DEFAULT_DESIGN_MODE,
+  /** ggui#1122: the harness's axis checks, run at every auto-commit — see `AutoCommitAxisChecks`. */
+  axis?: AutoCommitAxisChecks,
 ): Promise<ToolResult> {
   switch (tool) {
     case 'write':
@@ -222,7 +274,7 @@ export async function executeTool(
       const message = (input.commit_message as string) || `write ${lineCount} lines`;
 
       console.log(`[coding-agent] write: ${lineCount} lines → auto-commit`);
-      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode);
+      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode, axis);
     }
 
     case 'apply_changes': {
@@ -529,7 +581,7 @@ export async function executeTool(
       const message = (input.commit_message as string) || 'apply changes';
 
       console.log(`[coding-agent] apply_changes: ${changes.length} changes applied → auto-commit`);
-      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode);
+      return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes, designMode, axis);
     }
 
     case 'get_components_info': {
