@@ -68,6 +68,7 @@ import {
 import type { CoverageGap } from './blueprint-coverage.js';
 import { isFulfillable } from './blueprint-fulfillability.js';
 import type { BlueprintRegistryDeps } from './blueprint-registry.js';
+import { composeExactKey } from './blueprint-registry.js';
 import type {
   HandshakeNegotiator,
   HandshakeNegotiatorResult,
@@ -117,6 +118,13 @@ export interface BlueprintPool {
  * that differs between deployments lives behind this interface; the
  * decision spine in {@link decideHandshake} is deployment-agnostic.
  */
+/** The keys a find-similar probe reads the index at — see {@link HandshakeDecisionAdapter.onBlueprintMatch}. */
+export interface BlueprintLookupKeys {
+  readonly contractKey: string;
+  readonly variantKey: string;
+  readonly exactKey: string;
+}
+
 export interface HandshakeDecisionAdapter {
   /**
    * Resolve the LLM for this request — the find-similar judge AND the
@@ -185,6 +193,15 @@ export interface HandshakeDecisionAdapter {
     readonly pool: string;
     readonly scope: string;
     readonly result: BlueprintMatchResult;
+    /**
+     * WHAT the probe looked up, beside WHETHER it hit: the contract key,
+     * the variant key and the composed exact key the index was read at —
+     * the same three the matcher keys on (`blueprintKey(contract)`,
+     * `variantKey(variance)`, `<kind>:<contractKey>:<variantKey>`). Hashes,
+     * never content. Present on a miss as on a hit, so a contract miss and
+     * a variant miss stop reading alike to whoever consumes the outcome.
+     */
+    readonly lookup: BlueprintLookupKeys;
   }): void;
   /** Optional per-app tool-identity catalog (bare tool → canonical serverInfo).
    *  Present ⇒ run the canonicalization step before keying (Tier 1); absent ⇒
@@ -562,6 +579,17 @@ export async function decideHandshake(
     // satisfiable (see {@link isFulfillable}).
     const agentCaps = parsedDraft.data.agentCapabilities?.tools;
     const semanticHits: BlueprintMatchHit[] = [];
+    // The keys every pool probe below reads the index at — computed ONCE from the
+    // same arguments `matchBlueprint` receives (its `expectedKey` is this
+    // `blueprintKey(contract)`; it composes the exact key with the default kind),
+    // and handed to the observer so the outcome names its subject.
+    const lookupContractKey = blueprintKey(parsedDraft.data);
+    const lookupVariantKey = variantKey(variance);
+    const lookup: BlueprintLookupKeys = {
+      contractKey: lookupContractKey,
+      variantKey: lookupVariantKey,
+      exactKey: composeExactKey('template', lookupContractKey, lookupVariantKey),
+    };
     for (const pool of adapter.pools) {
       const scope = pool.scope ?? ctx.appId;
       try {
@@ -597,6 +625,7 @@ export async function decideHandshake(
             pool: pool.label ?? scope,
             scope,
             result: matchResult,
+            lookup,
           });
         } catch (err) {
           adapter.warn?.(

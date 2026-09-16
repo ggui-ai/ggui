@@ -21,10 +21,11 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import { variantKey } from '@ggui-ai/protocol/blueprint-key';
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { HandlerContext } from '../types.js';
 import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
+import { composeExactKey } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import type { BlueprintMatchHit, BlueprintMatchResult } from './blueprint-matcher.js';
 import { matchBlueprint } from './blueprint-matcher.js';
@@ -616,6 +617,47 @@ describe('decideHandshake — onBlueprintMatch observer (#490 Wave 1)', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({ pool: 'first', result: { strategy: 'no-match' } });
     expect(calls[1]).toMatchObject({ pool: 'second', result: { strategy: 'exact-key' } });
+  });
+
+  // ggui#1130 — the observer is told WHAT was looked up, not only whether it hit: the
+  // contract key, the variant key and the composed exact key the probe read the index
+  // at — the same three the matcher keys on (blueprintKey(contract), variantKey(variance),
+  // `template:<contractKey>:<variantKey>`). Hashes, never content. On a miss as on a hit,
+  // so "missed on the contract" and "missed on the variant" stop reading alike.
+  it('tells the observer the keys it looked up — contractKey, variantKey and the composed exactKey — on a miss and on a hit alike', async () => {
+    mockMatch
+      .mockResolvedValueOnce(miss)
+      .mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const calls: Array<{ pool: string; lookup: { contractKey: string; variantKey: string; exactKey: string } }> = [];
+    const onBlueprintMatch = vi.fn(
+      (input: { pool: string; lookup: { contractKey: string; variantKey: string; exactKey: string } }) => {
+        calls.push(input);
+      },
+    );
+    await decideHandshake(
+      adapter({ pools: [pool({ label: 'first' }), pool({ label: 'second' })], onBlueprintMatch }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    const contractKey = blueprintKey(DRAFT.contract);
+    const vk = variantKey(undefined);
+    const expected = { contractKey, variantKey: vk, exactKey: composeExactKey('template', contractKey, vk) };
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.lookup).toEqual(expected);
+    expect(calls[1]?.lookup).toEqual(expected);
+  });
+
+  it('the variant axis is in the lookup: a request variance changes variantKey and exactKey, never contractKey', async () => {
+    // a hit, so the decide resolves on the reuse path and no create-side mock is needed
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-v' }));
+    const calls: Array<{ lookup: { contractKey: string; variantKey: string; exactKey: string } }> = [];
+    await decideHandshake(
+      adapter({ pools: [pool({ label: 'only' })], onBlueprintMatch: (input) => { calls.push(input); } }),
+      { intent: 'i', blueprintDraft: { ...DRAFT, variance: { persona: 'terse' } }, ctx: CTX },
+    );
+    const contractKey = blueprintKey(DRAFT.contract);
+    const vk = variantKey({ persona: 'terse' });
+    expect(vk).not.toBe(variantKey(undefined));
+    expect(calls[0]?.lookup).toEqual({ contractKey, variantKey: vk, exactKey: composeExactKey('template', contractKey, vk) });
   });
 
   it('observes a no-match outcome with strategy "no-match" when no pool hits', async () => {
