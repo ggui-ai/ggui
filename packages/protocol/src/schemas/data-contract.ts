@@ -202,8 +202,11 @@ export const actionEntrySchema = z
      * not a vestigial field.
      *
      * Observable violation: a contract declaring `confirm: true` whose
-     * rendered contract context omits the flag — pinned in ui-gen's
-     * `design-mode.pin.test.ts`.
+     * rendered contract context omits the flag. (The pin for that belongs
+     * in `@ggui-ai/ui-gen` beside the renderer; this docblock names the
+     * criterion, not a test — a test name in a docblock is a claim about
+     * another package's tree, and this one once named a test that did
+     * not exist.)
      */
     confirm: z.boolean().optional(),
     /**
