@@ -160,8 +160,16 @@ function renderFreeBoilerplates(): string {
 // which is gravity and not one-shot-ness, and the model reads it that way. The flag is still
 // rendered into the contract context as INFORMATION (it was the one declared action field the
 // renderer dropped), never as a rule. INVARIANT 1 holds across the re-record.
+// Re-recorded 2026-09-17 for ggui#1093 (the harvest half — radius by ROLE): the primitive catalog's
+// four control docblocks (Button / Input / Select / TextArea) now name `--ggui-shape-radius-control`
+// — the host's button/field radius, falling to the `md` stop — instead of `--ggui-shape-radius-md`.
+// Bought by a measurement (guuey-team-landing, guuey#1320): on real host pages cards sit at 2–12px
+// while buttons are pills on two of eight, and one ladder cannot say that. The catalog is generated
+// from `design/src/primitives/types.ts` on every design build, so the four lines are the WHOLE prompt
+// delta (2530 lines → 2530, 4 changed); both prompt digests move together (constrained 199ccb14… →
+// 65e0ae7e…, free 2c70eb64… → e3a42df1…); the boilerplates are untouched. INVARIANT 1 holds across the re-record.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '199ccb142d377dddc7b1514e0719bc64c87c4990810a7e25c52edcbe340264dc';
+  '65e0ae7e94fa11c3a3c3d57dd76eb250222adcc612d3b93ab3d65ad245079fa9';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
 
@@ -192,8 +200,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-12 for ggui#1051: the manifest gains `inverseOutline` + `heroOutline` (the outline a scoped surface
 // draws on its own ground, derived to clear 3:1) — constrained unmoved.
 // Re-recorded 2026-09-15 for ggui#1108 (the NARROWING) — see the constrained note above; both arms share the section.
+// Re-recorded 2026-09-17 for ggui#1093 (radius by ROLE — the four control docblocks in the catalog, see the constrained note above); both arms carry the catalog.
 export const FREE_PROMPT_SHA256 =
-  '2c70eb64421a656449c3e9f18af991051410deb9e7916c7da0da4d71684242e4';
+  'e3a42df13ae238994deb1a9b91090d03d2251f31975af9580933324ea200926e';
 export const FREE_BOILERPLATE_SHA256 =
   '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 

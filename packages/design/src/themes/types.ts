@@ -222,6 +222,11 @@ export interface DtcgTheme {
   spacing: Record<string, DtcgToken>;
 
   shape: {
+    /**
+     * The radius ladder's stops (`sm` … `xl`) — and `control`, a ROLE rather than a stop: the
+     * radius the host's buttons and fields carry (ggui#1093 harvest half). Absent, the role is the
+     * `md` stop; the projector always emits `--ggui-shape-radius-control`.
+     */
     radius: Record<string, DtcgToken>;
     shadow: Record<string, DtcgToken>;
     border?: {

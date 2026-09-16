@@ -62,7 +62,7 @@ export function Select({
         style={{
           ...sizeStyles[size],
           width: '100%',
-          borderRadius: 'var(--ggui-shape-radius-md, 8px)',
+          borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
           border: `1px solid ${hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
           backgroundColor: disabled ? 'var(--ggui-color-sunken, #fafafa)' : 'var(--ggui-color-sunken, #ffffff)',
           color: value ? 'var(--ggui-color-onContainer, #18181b)' : 'var(--ggui-color-onSunken, #52525b)',

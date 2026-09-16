@@ -71,7 +71,7 @@ export function TextArea({
         style={{
           padding: '10px 12px',
           width: '100%',
-          borderRadius: 'var(--ggui-shape-radius-md, 8px)',
+          borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
           border: `1px solid ${
             hasError
               ? 'var(--ggui-color-error-500, #ef4444)'

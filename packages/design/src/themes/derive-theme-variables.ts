@@ -531,6 +531,13 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   for (const [key, value] of Object.entries(NAMED_SPACING)) V[`--ggui-spacing-${key}`] = onRhythm(value) ?? stated(sp, key) ?? value;
   const rad = doc.shape?.radius as Tokens;
   for (const [key, value] of Object.entries(radiusLadder)) V[`--ggui-shape-radius-${key}`] = stated(rad, key) ?? String(value);
+  // Radius by ROLE (ggui#1093, the harvest half): a host's cards and its controls do not share a
+  // radius — measured on real pages, cards sit at 2–12px while buttons are pills (9999px) on two of
+  // eight hosts. One ladder cannot say that, because Button / Input / Select / TextArea read the `md`
+  // stop that Card defaults to. `shape.radius.control` is the control role's own value; absent it,
+  // the role IS the `md` stop — so every document provides the variable (the consumed-token
+  // manifest's coverage rule) and a document that never heard of the role projects exactly as before.
+  V['--ggui-shape-radius-control'] = stated(rad, 'control') ?? V['--ggui-shape-radius-md']!;
   const sh = doc.shape?.shadow as Tokens;
   for (const [key, value] of Object.entries(shadowLadder)) V[`--ggui-shape-shadow-${key}`] = stated(sh, key) ?? String(value);
 

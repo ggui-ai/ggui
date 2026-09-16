@@ -97,7 +97,7 @@ export function Button({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 'var(--ggui-spacing-2, 8px)',
-        borderRadius: 'var(--ggui-shape-radius-md, 8px)',
+        borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
         fontWeight: 'var(--ggui-font-weight-medium, 500)',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         opacity: isDisabled ? 0.5 : 1,

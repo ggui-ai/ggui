@@ -722,7 +722,7 @@ export interface HeadingProps extends BaseProps {
  * `onPress` alias for `onClick`.
  *
  * Base styles applied to every variant:
- * - `border-radius: var(--ggui-shape-radius-md)`
+ * - `border-radius: var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - `font-weight: var(--ggui-font-weight-medium)`
  * - `box-shadow: var(--ggui-shape-shadow-sm)`
  * - `gap: var(--ggui-spacing-2)` between icon and text
@@ -796,7 +796,7 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
  * - Text: `var(--ggui-color-onContainer)`
- * - Border radius: `var(--ggui-shape-radius-md)`
+ * - Border radius: `var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - Label: `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`,
  *   `var(--ggui-color-onSunken)`
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
@@ -884,7 +884,7 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
  *   `var(--ggui-color-error-500)` (error)
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
- * - Border radius: `var(--ggui-shape-radius-md)`
+ * - Border radius: `var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - Resize: `vertical` by default, `none` when `autoResize` is true
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
  *
@@ -999,7 +999,7 @@ export interface SelectOption {
  *   `var(--ggui-color-container)` (disabled)
  * - Text: `var(--ggui-color-onContainer)` when a value is selected,
  *   `var(--ggui-color-onSunken)` when showing placeholder
- * - Border radius: `var(--ggui-shape-radius-md)`
+ * - Border radius: `var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - Cursor: `pointer` (normal), `not-allowed` (disabled)
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
  *

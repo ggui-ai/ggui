@@ -99,6 +99,7 @@
     "--ggui-font-weight-normal",
     "--ggui-font-weight-semibold",
     "--ggui-letter-spacing-heading",
+    "--ggui-shape-radius-control",
     "--ggui-shape-radius-full",
     "--ggui-shape-radius-lg",
     "--ggui-shape-radius-md",

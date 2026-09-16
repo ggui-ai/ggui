@@ -87,7 +87,7 @@ export function Input({
         style={{
           ...sizeStyles[size],
           width: '100%',
-          borderRadius: 'var(--ggui-shape-radius-md, 8px)',
+          borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
           border: `1px solid ${
             hasError
               ? 'var(--ggui-color-error-500, #ef4444)'
