@@ -1,0 +1,4 @@
+{
+  "prompt": "Greet the visitor and offer the three things this assistant can do",
+  "sampleProps": { "visitorName": "Gemma" }
+}

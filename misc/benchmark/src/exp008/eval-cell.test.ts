@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -86,6 +86,20 @@ describe('readCellInputs (cloud #975 export: compiled.js, source.tsx, contract.j
     expect(inputs.propsSource).toBe('cell');
     expect(inputs.commit.id).toBe('bootstrap');
     expect(inputs.variant.id).toBe('openai-frontier');
+  });
+
+  it("N−1 fixture (ggui#1152 ← #1014): Release 2's judge-input.json — { prompt, sampleProps } and nothing else, as 24aacf8e2 wrote it — reads unchanged through today's readJudgeInput", () => {
+    // The eval image is pinned independently of the mint image (backend.ts imageTag), so this reader meets
+    // cells from either side of a roll. Synthetic values, never a real cell. Retire with the release after next.
+    const dir = cellDir({ commit: null });
+    copyFileSync(join(__dirname, '__fixtures__', 'release-2-judge-input.json'), join(dir, JUDGE_INPUT_FILE));
+    const fixture = JSON.parse(readFileSync(join(dir, JUDGE_INPUT_FILE), 'utf8')) as { prompt: string; sampleProps: { visitorName: string } };
+    expect(Object.keys(fixture).sort()).toEqual(['prompt', 'sampleProps']);
+    expect(readJudgeInput(dir)).toEqual(fixture);
+    const inputs = readCellInputs(dir);
+    expect(inputs.bootstrap).toBe(true);
+    expect(inputs.prompt).toBe(fixture.prompt);
+    expect(inputs.sampleProps).toEqual(fixture.sampleProps);
   });
 
   it('a bootstrap cell on a model outside the matrix records the model verbatim on a synthetic bootstrap variant; no sample props = empty', () => {
