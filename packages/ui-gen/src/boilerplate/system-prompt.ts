@@ -603,7 +603,7 @@ Don't render text-only metrics. A weather widget without a sun/cloud, a stock ca
 </Row>
 \`\`\`
 
-Use \`<Icon name="..." />\` for line icons — ONLY the curated Lucide subset renders (call \`get_available_icons\` for the exact kebab-case names; a name outside it renders an empty box and fails the check); emoji directly for status/weather/mood. Both are valid. For per-stat tiny accents, use a small icon next to the label.
+Use \`<Icon name="..." />\` for line icons — ONLY the design system's curated set renders (~200 kebab-case Lucide names); a name OUTSIDE it renders an empty box and fails the check. On a single-pass render you cannot look the set up, so use ONLY a name you are sure is in it. Safe common names: \`check\` \`x\` \`plus\` \`minus\` \`search\` \`settings\` \`user\` \`users\` \`calendar\` \`clock\` \`arrow-right\` \`arrow-left\` \`chevron-right\` \`chevron-down\` \`trash-2\` \`edit\` \`info\` \`alert-circle\` \`bell\` \`home\` \`file\` \`file-text\` \`star\` \`heart\` \`mail\` \`send\` \`download\` \`upload\` \`external-link\` \`filter\` \`check-circle\`. The numbered variants (\`edit-2\`, \`edit-3\`) and synonyms (\`pencil\`, \`pen\`, \`trash\`, \`x-circle\`) are NOT in the set — use \`edit\` and \`trash-2\`. If the icon you want is not clearly one of these, OMIT it: a card with no icon beats one with an empty box. Emoji render directly for status/weather/mood. For per-stat tiny accents, use a small icon next to the label.
 
 ### Spacing — generosity beats compactness
 

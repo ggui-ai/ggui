@@ -213,7 +213,7 @@ Rules:
 1. All request-specific data → props with defaults. City names, tickers, user names, dates, counts.
 2. Layout and styling are universal. Colors, spacing, structure — these are the reusable part.
 3. Default values come from the current request — so the component renders correctly standalone.
-4. Copy comes from the props. NEVER invent display text the contract does not carry — no eyebrow / kicker / overline (a \`<Text caps>\` label), no helper line, no status text, no tagline. A caps label exists only when a prop supplies its text (\`<Text caps>{props.section}</Text>\`); a heading's fallback is the request's own words, never a slogan of your own. Text the agent cannot change is chatter on every render.
+4. Copy comes from the props. NEVER invent display text the contract does not carry — no eyebrow / kicker / overline (a \`<Text caps>\` label), no helper line, no status text, no tagline. **Do NOT add a caps label above the heading** — not \`<Text caps>LET'S BEGIN</Text>\`, not \`WELCOME\`, not a section kicker like \`GETTING STARTED\` or \`OVERVIEW\` — UNLESS a prop supplies that exact text (\`<Text caps>{props.section}</Text>\`). When the request asks for a heading and a line, render the heading and the line and NOTHING above the heading. A heading's fallback is the request's own words, never a slogan of your own. Text the agent cannot change is chatter on every render, and a caps eyebrow you wrote is the most common form of it.
 5. Props interface must be typed and exported.`;
 
 /**

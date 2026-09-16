@@ -175,8 +175,18 @@ function renderFreeBoilerplates(): string {
 // `wireDoc` (harness/runtime.ts), a HARD section both arms carry — so BOTH
 // prompt digests move together (constrained 65e0ae7e… → 10000dbe…, free
 // e3a42df1… → 4480e86b…); the boilerplates are untouched. INVARIANT 1 holds.
+// Re-recorded 2026-09-17 for ggui#1122 (C — the prompt-alignment half of the
+// axis-checks-at-auto-commit relocation): DATA_PARAMETERIZATION rule 4 names the
+// caps eyebrow concretely ("Do NOT add a caps label above the heading") and the
+// icon line carries an inline safe-list of curated-subset names + the traps
+// (`edit-2`/`pencil` are NOT in the set) so a single-pass serve needs no tool
+// call. Both are shared HARD sections, so BOTH prompt digests move together
+// (constrained 10000dbe… → 32544073…, free 4480e86b… → 7f0a6964…); the
+// boilerplates are untouched. INVARIANT 1 holds. Bought a measured drop: on the
+// same haiku serve profile, caps-label fails 10 → 2 and icon fails 3 → 0, mean
+// attempts 4.0 → 2.3, the two ≥6 runs gone.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '10000dbe2ab23fc633d5f6d3419783ca4042911152b0df334dc274c67f37f561';
+  '32544073a60f83bb0dea9b330f499a9945d222d9937a8ff19f8e22e60212fa2e';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
 
@@ -209,8 +219,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-15 for ggui#1108 (the NARROWING) — see the constrained note above; both arms share the section.
 // Re-recorded 2026-09-17 for ggui#1093 (radius by ROLE — the four control docblocks in the catalog, see the constrained note above); both arms carry the catalog.
 // Re-recorded 2026-09-17 for ggui#1108 (the wire catalog rides the prompt, see the constrained note above).
+// Re-recorded 2026-09-17 for ggui#1122 C (the caps + icon prompt rules are shared, see the constrained note above).
 export const FREE_PROMPT_SHA256 =
-  '4480e86bb407d32c0ccc75a3310877d21e7d87fe003c5fb28009efee47af78e6';
+  '7f0a69640e4d5667b6b56f1906f3a544b4ca1be355119ed1e50acac68afce63a';
 export const FREE_BOILERPLATE_SHA256 =
   '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
 
