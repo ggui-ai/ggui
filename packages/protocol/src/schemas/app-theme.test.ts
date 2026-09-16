@@ -323,22 +323,19 @@ describe('appThemeWouldDropRefusalText — the refusal is an instruction, not a 
     expect(text).toMatch(/carry/i);
   });
 
-  it('gives the clear-then-set path for a writer that DID mean to drop them, WITHOUT prescribing a mechanism that only one door has', () => {
-    // ggui#1124, cloud's per-door measurement: `theme: null` clears on exactly
-    // ONE of the four doors that write a theme. On the other three a writer
-    // following that instruction gets a SECOND refusal — the
-    // verdict-without-a-path this ruling exists to prevent, reintroduced by
-    // the text meant to prevent it. So the path is named as an OUTCOME
-    // (clear first, then write) with the concrete form marked door-dependent.
-    expect(text).toMatch(/clear/i);
+  it('gives the clear-then-set path for a writer that DID mean to drop them — `theme: null`, true on EVERY door (ggui#1145)', () => {
+    // ggui#1145 landed the uniform clear at the shared writer: `theme: null`
+    // clears on PUT, PATCH, the ops tool and the replace-mode push alike, so
+    // the refusal names the mechanism outright. The door-dependent hedge
+    // (ggui#1124's `cb87cf0bc`) was a workaround for the asymmetry, not a
+    // contract, and it leaves with the asymmetry.
+    expect(text).toContain('send `theme: null`');
     expect(text).toMatch(/then/i);
-    expect(text).toMatch(/depends on the door|door-dependent|differs by door/i);
-    expect(text).toContain('theme: null');
+    expect(text).toMatch(/NO theme between/);
   });
 
-  it('never states the clear MECHANISM as universal — it is true on one door of four', () => {
-    // The failure this pins: an instruction that is false on three doors.
-    expect(text).not.toMatch(/(?:always|on every door|on any door)[^.]*theme: null/i);
+  it('no longer hedges the mechanism by door — the hedge was a workaround and the asymmetry is gone', () => {
+    expect(text).not.toMatch(/depends on the door|door-dependent|differs by door|other doors differ/i);
   });
 
   it('says the app is themeless BETWEEN the two writes — nobody discovers that in production', () => {
