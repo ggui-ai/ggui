@@ -62,14 +62,9 @@ export async function runAdkLoop(
 ): Promise<AdapterResult> {
   const startTime = Date.now();
 
-  const { FunctionTool, LlmAgent, InMemoryRunner, isFinalResponse } = await import('@google/adk');
+  const { FunctionTool, Gemini, LlmAgent, InMemoryRunner, isFinalResponse } = await import('@google/adk');
 
   const capture = createCapture();
-
-  // Ensure ADK can find the API key
-  if (params.apiKey && !process.env.GOOGLE_GENAI_API_KEY) {
-    process.env.GOOGLE_GENAI_API_KEY = params.apiKey;
-  }
 
   // Build tools with capture wrappers
   const adkTools = params.tools.map((def) =>
@@ -88,9 +83,18 @@ export async function runAdkLoop(
     }),
   );
 
+  // The key the caller passed WINS, handed to the model directly (ggui#1132).
+  // The ADK resolves GOOGLE_GENAI_API_KEY || GOOGLE_API_KEY || GEMINI_API_KEY
+  // on its own when no key is given, so writing GOOGLE_GENAI_API_KEY here —
+  // a variable this adapter does not own — let a stale ambient value beat a
+  // fresh key, and no rotation could reach it. Precedence is fixed at the
+  // source: an explicit key never touches process.env; no key defers to the
+  // ADK's order untouched.
+  const model = params.apiKey ? new Gemini({ model: params.model, apiKey: params.apiKey }) : params.model;
+
   const agent = new LlmAgent({
     name: 'ui_generator',
-    model: params.model,
+    model,
     instruction: params.systemPrompt,
     tools: adkTools,
   });
