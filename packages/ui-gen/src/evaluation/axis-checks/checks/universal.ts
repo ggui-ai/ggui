@@ -4,7 +4,8 @@
 // component. Dispatched via a "universal" gate that matches every render
 // value.
 
-import { LUCIDE_ICON_NAMES } from "@ggui-ai/design";
+import { LUCIDE_ICON_NAMES, maxWidth as CONTAINER_MAX_WIDTH } from "@ggui-ai/design";
+import { CANVAS_VIEWPORTS, type CanvasClass } from "../../../design-mode.js";
 import type { EvalIssue } from "../../types-public.js";
 import type { AxisCheck, AxisCheckInput } from "../types.js";
 import {
@@ -391,6 +392,113 @@ function runTerminalActionUnguarded(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.root_width_cap (ggui#1117 — the eval leg ggui#1113 left out) ─
+// FRAME_SIZING's width half: the outermost element FILLS the frame; a width
+// cap belongs INSIDE it, on the column that holds text. A cap on the root is
+// the defect on a wide canvas (the card becomes a narrow strip with the
+// frame's ground on either side) and a no-op in a chat bubble (~400 px; a
+// 480 px cap never binds) — so the check reads `input.canvas`: it stands
+// down with no canvas (never a guess) and below `md`, and fires only for a
+// cap SMALLER than the canvas. A bare `<Container>` is a cap too — its
+// default preset is `lg`, 768 px — so it binds on `lg` / `xl` and not on
+// `md`. A cap the check cannot resolve to pixels (a `max-w-*` class, `rem`,
+// `%`) is reported because the prompt forbids it on the root. WARN, not
+// fail: the prompt names the one shape never to write; whether a centred
+// column was the right composition stays the model's call.
+export interface RootWidthCap {
+  /** The outermost element's tag name as written. */
+  readonly element: string;
+  /** The cap as written (`maxWidth="sm"`, `maxWidth: '480px'`, `max-w-md`, or `lg (Container default)`). */
+  readonly cap: string;
+  /** The cap in pixels when it resolves (a Container preset, an `Npx` value); `null` otherwise. */
+  readonly px: number | null;
+}
+
+/** The opening tag of the OUTERMOST element the default export returns, as written; `null` for none or a fragment. */
+function rootOpeningTag(sourceCode: string): { readonly name: string; readonly attrs: string } | null {
+  const start = sourceCode.indexOf("export default function");
+  const body = start >= 0 ? sourceCode.slice(start) : sourceCode;
+  const ret = /\breturn\s*\(?\s*</.exec(body);
+  if (ret === null) return null;
+  const at = ret.index + ret[0].length - 1;
+  const nameMatch = /^<([A-Za-z][\w.]*)/.exec(body.slice(at));
+  if (nameMatch === null) return null;
+  let j = at + nameMatch[0].length;
+  let depth = 0;
+  let quote: string | null = null;
+  for (; j < body.length; j++) {
+    const ch = body[j]!;
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (ch === ">" && depth === 0) break;
+  }
+  return { name: nameMatch[1]!, attrs: body.slice(at + nameMatch[0].length, j) };
+}
+
+const CONTAINER_PRESETS: Readonly<Record<string, string>> = CONTAINER_MAX_WIDTH;
+const NOT_A_CAP = new Set(["full", "none", "100%", "unset", "initial", "inherit"]);
+
+/** `sm` → 480; `480px` → 480; `100%` / `full` → not a cap (`undefined`); anything else → a cap of unknown size (`null`). */
+function capPx(value: string): number | null | undefined {
+  const v = value.trim();
+  if (NOT_A_CAP.has(v)) return undefined;
+  const resolved = CONTAINER_PRESETS[v] ?? v;
+  if (NOT_A_CAP.has(resolved)) return undefined;
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(resolved);
+  return px === null ? null : Number(px[1]);
+}
+
+/** The width cap the outermost returned element carries, or `null` when it fills the frame. */
+export function findRootWidthCap(sourceCode: string): RootWidthCap | null {
+  const root = rootOpeningTag(sourceCode);
+  if (root === null) return null;
+  const { name, attrs } = root;
+  const prop = /\bmaxWidth\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|(\d+(?:\.\d+)?))\s*\})/.exec(attrs);
+  if (prop !== null) {
+    const raw = prop[1] ?? prop[2] ?? prop[3] ?? prop[4] ?? `${prop[5]!}px`;
+    const px = capPx(raw);
+    return px === undefined ? null : { element: name, cap: `maxWidth="${raw}"`, px };
+  }
+  const style = /\bmaxWidth\s*:\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|(\d+(?:\.\d+)?))/.exec(attrs);
+  if (style !== null) {
+    const raw = style[1] ?? style[2] ?? style[3] ?? `${style[4]!}px`;
+    const px = capPx(raw);
+    return px === undefined ? null : { element: name, cap: `maxWidth: '${raw}'`, px };
+  }
+  const cls = /(?<![\w-])max-w-([\w[\]%.-]+)/.exec(attrs);
+  if (cls !== null) {
+    if (cls[1] === "full" || cls[1] === "none") return null;
+    return { element: name, cap: `max-w-${cls[1]!}`, px: null };
+  }
+  if (name === "Container") return { element: name, cap: "lg (Container default)", px: capPx("lg") ?? null };
+  return null;
+}
+
+const WIDE_CANVASES: ReadonlySet<CanvasClass> = new Set<CanvasClass>(["md", "lg", "xl"]);
+
+function runRootWidthCap(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  if (input.canvas === undefined || !WIDE_CANVASES.has(input.canvas)) return [];
+  const cap = findRootWidthCap(input.sourceCode);
+  if (cap === null) return [];
+  const width = CANVAS_VIEWPORTS[input.canvas].width;
+  if (cap.px !== null && cap.px >= width) return [];
+  const sized = cap.px !== null ? `${cap.px}px on a ${width}px canvas` : `on a ${width}px canvas`;
+  return [
+    mkIssue(
+      "universal.root_width_cap",
+      `The outermost element <${cap.element}> carries a width cap (${cap.cap}, ${sized}): on this canvas the card becomes a narrow strip with the frame's ground on either side. The frame owns the width; a cap belongs INSIDE the root, on the column that holds text.`,
+      'Let the root fill the frame — drop the cap on the element you return at the top (or `maxWidth="full"`) — and put the reading measure on an inner column: `<Box padding="lg"><Container maxWidth="sm">…</Container></Box>`.',
+      "warn",
+    ),
+  ];
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -409,6 +517,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runViewportSized,
+  },
+  {
+    id: "universal.root_width_cap",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runRootWidthCap,
   },
   {
     id: "universal.terminal_action_unguarded",
