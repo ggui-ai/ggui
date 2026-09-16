@@ -69,7 +69,10 @@ export function readPublicEnvFromGguiJson(gguiJson: unknown): Record<string, str
  * re-validates via `parseAnyLlmRoute` server-side; the CLI just forwards.
  *
  * Returns `{ model, keySource }` when `generation.model` is present.
- * Returns `undefined` when the generation block is absent or has no model.
+ * Returns `undefined` when the generation block is absent or has no model —
+ * the deploy then leaves the app's generation untouched (an explicit
+ * `generation: null` on the wire is the only clear; `ggui.json` has no null
+ * form for the block, so this reader never emits one).
  * Throws when the generation block is structurally invalid.
  */
 export function readGenerationFromGguiJson(
@@ -100,7 +103,9 @@ export function readGenerationFromGguiJson(
  * injection-safe {@link AppTheme} ready to PATCH to the cloud.
  *
  * Returns `undefined` when no `theme` field is declared (deploy leaves the
- * app's theme untouched).
+ * app's theme untouched — an explicit `theme: null` on the wire is the only
+ * clear, on every door; `ggui.json` has no null form for `theme`, so this
+ * reader never emits one).
  *
  * When a theme IS declared we parse the FULL manifest (via `parseGguiJson`)
  * — `loadTheme` requires the typed `GguiJsonV1` shape and resolves relative
