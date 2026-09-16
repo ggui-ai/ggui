@@ -1,0 +1,32 @@
+{
+  "name": "forward-app-theme-carry-unknown-member",
+  "description": "FORWARD tolerance on the theme CARRY read (ggui#1155, VERSION-POLICY §3.6): a theme GET response exactly as a LATER release's door returns it — the stored document VERBATIM, carrying a synthetic `futureMember` this release does not name, with `interpreted.stripped` naming it. Today's response schema must accept it with the member INTACT, and the names in `interpreted.stripped` must be exactly the members today's parser cannot name. A reader that strips here is the ggui#1124 defect at the door built to prevent it.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): the theme GET's response with a synthetic `futureMember`",
+    "sha": "synthetic"
+  },
+  "wire": "app-theme-carry",
+  "payload": {
+    "theme": {
+      "overlayHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "overlays": {
+        "light": {
+          "--ggui-color-primary-600": "#7c3aed"
+        },
+        "dark": {
+          "--ggui-color-primary-600": "#a78bfa"
+        }
+      },
+      "mode": "dark",
+      "name": "violet",
+      "futureMember": {
+        "any": "shape"
+      }
+    },
+    "interpreted": {
+      "stripped": ["futureMember"]
+    }
+  },
+  "expect": "accepted"
+}

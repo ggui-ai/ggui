@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Theme CARRY read (2026-09-17, additive, ggui#1155 — MINOR, same draft
+ * stamp): `appThemeCarrySchema` / `AppThemeCarry` and
+ * `appThemeGetResponseSchema` / `AppThemeGetResponse` — the REPRODUCE side
+ * of the two-read-paths rule. A theme GET returns the stored document
+ * VERBATIM (unknown members kept; a shape check over the named members,
+ * never a strip) or `null`, with an optional `interpreted.stripped`
+ * (`.min(1)`: present ⇔ at least one name) naming what an INTERPRET
+ * reader would drop. Exists so a writer's carry cannot be turned into the
+ * ggui#1124 defect by the reader it carries from. New exports only; no
+ * existing shape changes. Kit: wire `app-theme-carry`, forward case.
+ * --------------------------------------------------------------------
  * `ggui:dismiss` (2026-09-16, additive, ggui#1109 — MINOR, same draft
  * stamp): a user dismiss GESTURE forwarded from the card to its host as
  * an INTENT, on a new protocol-owned tag in the `ggui:` postMessage

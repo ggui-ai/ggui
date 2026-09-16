@@ -290,6 +290,63 @@ export function parseAppThemeAtReadDoor(input: unknown): AppThemeReadDoorResult 
  * discriminated union by key — exactly one of the four.
  */
 /**
+ * The CARRY read — the REPRODUCE side of the two-read-paths rule stated on
+ * {@link parseAppThemeAtReadDoor} (ggui#1155).
+ *
+ * A theme READ exists so that a writer can carry the stored document forward
+ * and write it back. That reader's job is fidelity: it MUST return the stored
+ * document VERBATIM — every top-level member, including members this release
+ * does not name, plus the stored attestation. Routing it through the
+ * INTERPRET door instead would strip exactly the members the writer is
+ * obliged to carry, and the very next write would be refused by the
+ * ggui#1124 guard as `wouldDrop` — the door built to protect those members
+ * catching the door that dropped them. That is the defect this schema
+ * exists to make impossible rather than merely noticed.
+ *
+ * So this is a SHAPE check, not a strip: the members this release names are
+ * validated exactly as the write door validates them (a bad token is still
+ * invalid, not carried), and everything else passes through untouched.
+ * Never `.strict()`, never the stripping read door.
+ */
+export const appThemeCarrySchema = z.object(appThemeSchema.shape).passthrough();
+
+/** The stored theme document as a carry read returns it — verbatim. */
+export type AppThemeCarry = z.infer<typeof appThemeCarrySchema>;
+
+/**
+ * What a theme GET promises (ggui#1155) — the DOOR's emit-side contract.
+ *
+ * `theme` is the stored document verbatim ({@link appThemeCarrySchema}) or
+ * `null` when the app has no theme. `interpreted.stripped`, when present,
+ * names the top-level members an INTERPRET reader on THIS release would have
+ * dropped — computed beside the document, never applied to it — so a carrier
+ * can see the gap without the document being altered.
+ *
+ * Presence ⇔ at least one name: `stripped` is `.min(1)`, so
+ * `{ interpreted: { stripped: [] } }` is INVALID rather than a second way to
+ * say "nothing was stripped". Two representations of nothing is exactly the
+ * ambiguity a reader keying on presence cannot be asked to resolve. The
+ * response is `.strict()` because this is what the DOOR emits — a reader on
+ * an older release parses it with its own tolerant read, per §3.6; this
+ * schema states the promise, not the reader's demand.
+ *
+ * Observable violation: a response whose `theme` carries fewer top-level
+ * members than the stored row holds; or `interpreted` present with nothing
+ * in it. The conformance kit's `app-theme-carry` forward case grades both.
+ */
+export const appThemeGetResponseSchema = z
+  .object({
+    theme: appThemeCarrySchema.nullable(),
+    interpreted: z
+      .object({ stripped: z.array(z.string().min(1)).min(1) })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export type AppThemeGetResponse = z.infer<typeof appThemeGetResponseSchema>;
+
+/**
  * The top-level members the STORED theme holds that an incoming write does
  * not carry — i.e. exactly what the write would destroy (ggui#1124).
  *

@@ -10,6 +10,8 @@ import {
   type AppTheme,
   appThemeDroppedMembers,
   appThemeWouldDropRefusalText,
+  appThemeCarrySchema,
+  appThemeGetResponseSchema,
 } from './app-theme.js';
 import { canonicalOverlayJson } from '../integrations/overlay-hash.js';
 
@@ -346,5 +348,67 @@ describe('appThemeWouldDropRefusalText — the refusal is an instruction, not a 
 
   it('refuses to render an empty list — a refusal that names nothing is not an instruction', () => {
     expect(() => appThemeWouldDropRefusalText([])).toThrow();
+  });
+});
+
+// ggui#1155 — the CARRY read (REPRODUCE side). A theme GET exists so a writer can
+// carry the stored document forward; it must return the document VERBATIM,
+// unknown members included, or the #1124 guard refuses the carry-write that
+// follows as `wouldDrop`. This is the door that must NOT strip.
+describe('appThemeCarrySchema — the REPRODUCE-side theme read (ggui#1155)', () => {
+  const stored = {
+    overlayHash: 'a'.repeat(64),
+    overlays: { light: { '--ggui-color-primary-600': '#7c3aed' }, dark: { '--ggui-color-primary-600': '#a78bfa' } },
+    mode: 'dark',
+    name: 'violet',
+    futureMember: { any: 'shape' },
+  };
+
+  it('returns the stored document VERBATIM — a member this release does not name is kept, not stripped', () => {
+    const r = appThemeCarrySchema.safeParse(stored);
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data).toEqual(stored);
+    expect(Object.keys(r.data).sort()).toEqual(Object.keys(stored).sort());
+  });
+
+  it('still refuses what the write door refuses — a bad token is invalid, not carried', () => {
+    const bad = { ...stored, overlays: { light: { 'not-a-ggui-var': '#000' }, dark: {} } };
+    expect(appThemeCarrySchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe('appThemeGetResponseSchema — what the theme GET promises (ggui#1155)', () => {
+  const theme = {
+    overlayHash: 'b'.repeat(64),
+    overlays: { light: {}, dark: {} },
+    mode: 'light',
+    futureMember: 1,
+  };
+
+  it('accepts `{ theme: null }` — an app with no theme', () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme: null }).success).toBe(true);
+  });
+
+  it('accepts a verbatim theme with `interpreted.stripped` naming what an INTERPRET reader would drop', () => {
+    const r = appThemeGetResponseSchema.safeParse({ theme, interpreted: { stripped: ['futureMember'] } });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.theme).toEqual(theme);
+    expect(r.data.interpreted).toEqual({ stripped: ['futureMember'] });
+  });
+
+  it('accepts a theme with NO `interpreted` — absence is the one way to say nothing was stripped', () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme }).success).toBe(true);
+  });
+
+  it('REFUSES `interpreted.stripped: []` — an empty list is not a second way to say absence', () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme, interpreted: { stripped: [] } }).success).toBe(false);
+    expect(appThemeGetResponseSchema.safeParse({ theme, interpreted: {} }).success).toBe(false);
+  });
+
+  it('REFUSES an undeclared top-level member on the response — the door promises exactly this shape', () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme, extra: true }).success).toBe(false);
+    expect(appThemeGetResponseSchema.safeParse({}).success).toBe(false);
   });
 });

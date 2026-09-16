@@ -14,7 +14,7 @@
  * Pure-function catalog: no transport, no adopter input — graded on every
  * `runConformance()` and by the kit's own unit lane.
  */
-import { appGenerationProfileSchema, appThemeSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
@@ -25,9 +25,10 @@ import release2RenderMeta from './cases/release-2-render-meta.json' with { type:
 import release2GenerationProfile from './cases/release-2-generation-profile.json' with { type: 'json' };
 import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-blueprint.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
+import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
 
 /** `backward`: the previous release's payload against today's parser. `forward`: a later release's payload against today's READ door. */
 export const N1_COMPAT_DIRECTIONS = ['backward', 'forward'] as const;
@@ -115,6 +116,7 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release2GenerationProfile,
   release2OpsGenerateBlueprint,
   forwardAppThemeUnknownMember,
+  forwardAppThemeCarryUnknownMember,
 ].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
@@ -133,6 +135,27 @@ function gradeAppThemeRead(payload: unknown): { pass: boolean; detail: string } 
   return { pass: true, detail: `parseAppThemeAtReadDoor: kept, stripped [${r.stripped.join(', ')}]` };
 }
 
+/** Key-order-insensitive JSON — a parser may emit named members first; VERBATIM is about content, not key order. */
+function canonicalJson(v: unknown): string {
+  const sortKeysDeep = (x: unknown): unknown =>
+    Array.isArray(x) ? x.map(sortKeysDeep) : isRecord(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sortKeysDeep(x[k])])) : x;
+  return JSON.stringify(sortKeysDeep(v));
+}
+function gradeAppThemeCarry(payload: unknown): { pass: boolean; detail: string } {
+  // ggui#1155 — the CARRY read must return the stored document VERBATIM and name,
+  // beside it, exactly the members an INTERPRET reader on this release would drop.
+  const r = appThemeGetResponseSchema.safeParse(payload);
+  if (!r.success) return { pass: false, detail: `appThemeGetResponseSchema refused a later release's carry response: ${r.error.issues.map((i) => i.message).join('; ')}` };
+  const sentTheme = isRecord(payload) ? payload['theme'] : undefined;
+  if (!isRecord(sentTheme)) return { pass: false, detail: 'the case must carry a non-null theme' };
+  if (canonicalJson(r.data.theme) !== canonicalJson(sentTheme)) return { pass: false, detail: 'the carry read did not return the stored document VERBATIM' };
+  const known = new Set(Object.keys(appThemeSchema.shape));
+  const unknown = Object.keys(sentTheme).filter((k) => !known.has(k)).sort();
+  const named = [...(r.data.interpreted?.stripped ?? [])].sort();
+  if (unknown.length === 0) return { pass: false, detail: 'the case must carry a member today does not name' };
+  if (JSON.stringify(named) !== JSON.stringify(unknown)) return { pass: false, detail: `interpreted.stripped [${named.join(', ')}] must name exactly the members today cannot name [${unknown.join(', ')}]` };
+  return { pass: true, detail: `appThemeGetResponseSchema: verbatim, named [${unknown.join(', ')}]` };
+}
 function gradeGenerationProfile(payload: unknown): { pass: boolean; detail: string } {
   const r = appGenerationProfileSchema.safeParse(payload);
   return r.success
@@ -168,6 +191,8 @@ export function runN1CompatConformance(): readonly N1CompatResult[] {
         ? gradeAppTheme(c.payload)
         : c.wire === 'app-theme-read'
           ? gradeAppThemeRead(c.payload)
+        : c.wire === 'app-theme-carry'
+          ? gradeAppThemeCarry(c.payload)
         : c.wire === 'render-meta'
           ? gradeRenderMeta(c.payload)
           : c.wire === 'generation-profile'
