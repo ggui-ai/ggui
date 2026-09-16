@@ -14,6 +14,8 @@ import {
   EXP008_CELL_REPORT_VERSION,
   MINT_RECEIPT_ABSENT_NOTE,
   readJudgeInput,
+  profileMembersStrippedNote,
+  themeMembersStrippedNote,
   JUDGE_INPUT_FILE,
   parseJudgeKEnv,
 } from './eval-cell';
@@ -442,6 +444,49 @@ describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejec
     const j = readJudgeInput(dir);
     expect(j.profile).toEqual(fixture.profile);
     expect(Object.keys(j.profile ?? {})).not.toContain('aMemberFromTheNextRelease');
+    // #1105: stripped AND NAMED — the row can say which member it did not score.
+    expect(j.profileStripped).toEqual(['aMemberFromTheNextRelease']);
+    expect(profileMembersStrippedNote(j.profileStripped ?? [])).toContain('aMemberFromTheNextRelease');
+  });
+  it('names nothing when the writer sent nothing this reader does not know', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify(fixture));
+    expect(readJudgeInput(dir).profileStripped).toBeUndefined();
+  });
+  it('reads the theme overlay through the same door and names its stripped members', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    writeFileSync(
+      join(dir, JUDGE_INPUT_FILE),
+      JSON.stringify({
+        ...fixture,
+        theme: {
+          mode: 'dark',
+          overlayHash: 'a'.repeat(64),
+          overlays: { light: { '--ggui-color-onContainer': '#f4f1ea' }, dark: { '--ggui-color-onContainer': '#1a1a1a' } },
+          aThemeMemberFromTheNextRelease: true,
+        },
+      }),
+    );
+    const j = readJudgeInput(dir);
+    expect(j.theme?.mode).toBe('dark');
+    expect(j.themeStripped).toEqual(['aThemeMemberFromTheNextRelease']);
+    expect(themeMembersStrippedNote(j.themeStripped ?? [])).toContain('aThemeMemberFromTheNextRelease');
+  });
+});
+
+describe('#1105 — the ROW names what the read door stripped (end to end, not only the reader)', () => {
+  it('a bootstrap cell whose profile carries a member this judge cannot know reports it in meta.notes by name', async () => {
+    const dir = cellDir({ commit: null });
+    writeFileSync(
+      join(dir, JUDGE_INPUT_FILE),
+      JSON.stringify({
+        prompt: 'Make me a hello card',
+        profile: { direction: 'Card ground = the page surface', aMemberFromTheNextRelease: 'scored by a newer judge, named by this one' },
+      }),
+    );
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel, visual: async () => null });
+    expect(report.meta.notes).toContain(profileMembersStrippedNote(['aMemberFromTheNextRelease']));
+    expect(report.meta.notes.join('\n')).not.toContain('theme members');
   });
 });
 

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DataContract, JsonObject, AppGenerationProfile, AppTheme } from '@ggui-ai/protocol';
-import { appGenerationProfileSchema, appThemeSchema } from '@ggui-ai/protocol';
+import { parseAppGenerationProfileAtReadDoor, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
@@ -100,7 +100,21 @@ export interface BootstrapJudgeInput {
   readonly profile?: AppGenerationProfile;
   /** The app's theme overlay, when the app carries one — the judge renders under it (the visitor's paint), not the design defaults. */
   readonly theme?: AppTheme;
+  /**
+   * Top-level profile members the read door stripped because this judge does not know them
+   * (a newer writer, N−1 #1014) — present only when non-empty. The row names them (#1105):
+   * a member the judge should have scored is dropped WITH its name, never silently.
+   */
+  readonly profileStripped?: readonly string[];
+  /** Same for the theme overlay. */
+  readonly themeStripped?: readonly string[];
 }
+/** The row's note when the read door thinned the profile — the names are the point (#1105). */
+export const profileMembersStrippedNote = (names: readonly string[]): string =>
+  `profile members unknown to this judge were stripped at the read door and not scored: ${names.join(', ')} (newer writer, N−1 #1014)`;
+/** Same for the theme overlay: stripped members were not rendered. */
+export const themeMembersStrippedNote = (names: readonly string[]): string =>
+  `theme members unknown to this judge were stripped at the read door and not rendered: ${names.join(', ')} (newer writer, N−1 #1014)`;
 export const JUDGE_INPUT_FILE = 'judge-input.json';
 export const BOOTSTRAP_NOTE =
   'bootstrap cell, no corpus — prompt and sample props read from judge-input.json; variant.id "bootstrap" is synthetic when the model is not a matrix arm';
@@ -122,6 +136,9 @@ export interface CellInputs {
   readonly profile?: AppGenerationProfile;
   /** The app's theme from judge-input.json — the judge renders under it; absent on corpus cells and on themeless apps. */
   readonly theme?: AppTheme;
+  /** Profile / theme members the read door stripped (a newer writer) — the row names them (#1105). */
+  readonly profileStripped?: readonly string[];
+  readonly themeStripped?: readonly string[];
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -167,36 +184,40 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
   if (raw.sampleProps !== undefined && !isJsonObject(raw.sampleProps)) {
     throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "sampleProps" must be a JSON object when present (in ${dir})`);
   }
+  // N−1 (#1014): this reader may be OLDER than the writer — a pinned eval image
+  // that predates a protocol addition must keep judging. Both reads go through
+  // protocol's READ doors (#1105): one door for the mint and the judge, so the
+  // two cannot disagree about what a stored profile says, and a member this
+  // judge cannot know is dropped WITH ITS NAME on the row, never silently.
+  // Limit (the door's): nested objects stay strict, so an additive member
+  // INSIDE one of them still refuses here.
   let profile: AppGenerationProfile | undefined;
+  let profileStripped: readonly string[] | undefined;
   if (raw.profile !== undefined) {
-    // N−1 (#1014): this reader may be OLDER than the writer — a pinned eval
-    // image that predates a protocol addition must keep judging. Strip mode
-    // drops top-level members it cannot know and validates the rest as before.
-    // Limit: nested objects in the schema stay strict, so an additive member
-    // INSIDE one of them still rejects here.
-    const parsed = appGenerationProfileSchema.strip().safeParse(raw.profile);
-    if (!parsed.success) {
-      throw new Error(
-        `eval-cell: ${JUDGE_INPUT_FILE} "profile" is not a generation profile — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
-      );
+    const door = parseAppGenerationProfileAtReadDoor(raw.profile);
+    if (!door.ok) {
+      throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "profile" is not a generation profile — ${door.issues.join('; ')} (in ${dir})`);
     }
-    profile = parsed.data;
+    profile = door.profile;
+    if (door.stripped.length > 0) profileStripped = door.stripped;
   }
   let theme: AppTheme | undefined;
+  let themeStripped: readonly string[] | undefined;
   if (raw.theme !== undefined) {
-    const parsed = appThemeSchema.strip().safeParse(raw.theme); // N−1 (#1014), same limit as profile above
-    if (!parsed.success) {
-      throw new Error(
-        `eval-cell: ${JUDGE_INPUT_FILE} "theme" is not an app theme — ${parsed.error.issues.map((i) => i.message).join('; ')} (in ${dir})`,
-      );
+    const door = parseAppThemeAtReadDoor(raw.theme);
+    if (!door.ok) {
+      throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "theme" is not an app theme — ${door.issues.join('; ')} (in ${dir})`);
     }
-    theme = parsed.data;
+    theme = door.theme;
+    if (door.stripped.length > 0) themeStripped = door.stripped;
   }
   return {
     prompt: raw.prompt,
     ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
     ...(profile !== undefined ? { profile } : {}),
     ...(theme !== undefined ? { theme } : {}),
+    ...(profileStripped !== undefined ? { profileStripped } : {}),
+    ...(themeStripped !== undefined ? { themeStripped } : {}),
   };
 }
 
@@ -258,11 +279,15 @@ export function readCellInputs(dir: string): CellInputs {
   let commit: BenchmarkCommit;
   let profile: AppGenerationProfile | undefined;
   let theme: AppTheme | undefined;
+  let profileStripped: readonly string[] | undefined;
+  let themeStripped: readonly string[] | undefined;
   if (ref === null) {
     const judge = readJudgeInput(dir);
     commit = bootstrapCommit(judge, contractJson.contract);
     profile = judge.profile;
     theme = judge.theme;
+    profileStripped = judge.profileStripped;
+    themeStripped = judge.themeStripped;
   } else {
     commit = commitForRef(ref);
     profile = undefined;
@@ -282,6 +307,8 @@ export function readCellInputs(dir: string): CellInputs {
     bootstrap,
     ...(profile !== undefined ? { profile } : {}),
     ...(theme !== undefined ? { theme } : {}),
+    ...(profileStripped !== undefined ? { profileStripped } : {}),
+    ...(themeStripped !== undefined ? { themeStripped } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -495,6 +522,8 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   const notes: string[] = [];
   if (deps.visual && deps.visualJudge && (deps.visualJudge.promptVersion === undefined || deps.visualJudge.promptDigest === undefined)) notes.push(VISUAL_PROMPT_UNSTAMPED_NOTE);
   if (inputs.bootstrap) notes.push(BOOTSTRAP_NOTE);
+  if (inputs.profileStripped !== undefined && inputs.profileStripped.length > 0) notes.push(profileMembersStrippedNote(inputs.profileStripped));
+  if (inputs.themeStripped !== undefined && inputs.themeStripped.length > 0) notes.push(themeMembersStrippedNote(inputs.themeStripped));
   if (inputs.propsSource === 'empty') notes.push(EMPTY_PROPS_NOTE);
   if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);
   const now = deps.now ?? (() => new Date());
