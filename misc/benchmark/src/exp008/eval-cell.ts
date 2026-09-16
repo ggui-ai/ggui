@@ -119,6 +119,35 @@ export const JUDGE_INPUT_FILE = 'judge-input.json';
 export const BOOTSTRAP_NOTE =
   'bootstrap cell, no corpus — prompt and sample props read from judge-input.json; variant.id "bootstrap" is synthetic when the model is not a matrix arm';
 export const EMPTY_PROPS_NOTE = 'no sample props — the judge and the behaviour check rendered the empty state';
+/** ggui#1156 part 1: the cell carried no sample props, so the judges rendered the contract author's OWN examples — named, never a synthesis. */
+export const exampleFieldsNote = (fields: readonly string[]): string =>
+  `judged on empty state + contract examples: ${fields.join(', ')} — the props' copy is the contract author's declared examples, not a sample the cell carried`;
+/** ggui#1156 part 2: nothing to render — no sample props on the cell, no examples on the contract, and the contract renders props. The score is a reading about the REQUEST, not the card. */
+export const NOT_JUDGEABLE_NOTE =
+  'not judgeable: no sampleProps on the item and no examples on the contract — the empty-state score is a reading about the request, not the card; the bar treats it as draft_invalid, never as judge_below_bar';
+
+/**
+ * The contract author's declared examples, as the props to render with (ggui#1156 part 1).
+ * An `example` is not a synthesis: it is what the author said the data looks like, on the
+ * wire, with provenance. `undefined` when no property carries one.
+ */
+export function examplesFrom(contract: DataContract): { readonly props: JsonObject; readonly fields: readonly string[] } | undefined {
+  const properties = contract.propsSpec?.properties ?? {};
+  const props: Record<string, JsonObject[string]> = {};
+  const fields: string[] = [];
+  for (const [name, entry] of Object.entries(properties)) {
+    if (entry.example !== undefined) {
+      props[name] = entry.example;
+      fields.push(name);
+    }
+  }
+  return fields.length > 0 ? { props, fields } : undefined;
+}
+
+/** Whether the contract declares any props at all — a props-less card judged empty is judged CORRECTLY and must never read as not-judgeable. */
+export function contractRendersProps(contract: DataContract): boolean {
+  return Object.keys(contract.propsSpec?.properties ?? {}).length > 0;
+}
 
 export interface CellInputs {
   readonly dir: string;
@@ -130,6 +159,10 @@ export interface CellInputs {
   /** The sample props the judges and the behaviour check render with (see `propsSource`). */
   readonly sampleProps?: JsonObject;
   readonly propsSource: PropsSource;
+  /** ggui#1156: present when `sampleProps` are the contract author's examples (`propsSource` stays 'empty'; the PRESENCE of this field is the fact). */
+  readonly exampleFields?: readonly string[];
+  /** ggui#1156: false ONLY when nothing could be rendered — `propsSource === 'empty'`, no examples, and the contract renders props. */
+  readonly judgeable: boolean;
   /** True when the cell has no corpus commit (contract.json.commitRef === null). */
   readonly bootstrap: boolean;
   /** The app's generation profile from judge-input.json — absent on corpus cells and on bootstrap cells whose app carries none. */
@@ -294,8 +327,14 @@ export function readCellInputs(dir: string): CellInputs {
     theme = undefined;
   }
   const variant = bootstrap ? bootstrapVariant(mint.model) : variantForModel(mint.model);
-  const sampleProps = commit.props;
-  const propsSource: PropsSource = sampleProps !== undefined ? (bootstrap ? 'cell' : 'commit') : 'empty';
+  // ggui#1156: the cell's own props win; absent them, the contract author's examples render
+  // (propsSource stays 'empty' — the presence of exampleFields is the fact); absent both, a
+  // contract that renders props is NOT JUDGEABLE and the bar must not score it against the floor.
+  const stated = commit.props;
+  const examples = stated === undefined ? examplesFrom(commit.contract) : undefined;
+  const sampleProps = stated ?? examples?.props;
+  const propsSource: PropsSource = stated !== undefined ? (bootstrap ? 'cell' : 'commit') : 'empty';
+  const judgeable = !(propsSource === 'empty' && examples === undefined && contractRendersProps(commit.contract));
   return {
     dir,
     mint,
@@ -304,6 +343,8 @@ export function readCellInputs(dir: string): CellInputs {
     prompt: commit.prompt,
     ...(sampleProps !== undefined ? { sampleProps } : {}),
     propsSource,
+    ...(examples !== undefined ? { exampleFields: examples.fields } : {}),
+    judgeable,
     bootstrap,
     ...(profile !== undefined ? { profile } : {}),
     ...(theme !== undefined ? { theme } : {}),
@@ -486,6 +527,10 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly codeHash?: string;
     /** Where the judges' sample props came from: the cell's judge-input.json, the corpus commit, or nothing (empty state). */
     readonly propsSource: PropsSource;
+    /** ggui#1156: emitted only when FALSE — nothing could be rendered; the bar's `draft_invalid` arm reads it before any score meets the floor. Absent ⇒ judged as before. */
+    readonly judgeable?: false;
+    /** ggui#1156: the props that came from the contract author's examples (`propsSource` stays 'empty'). Presence is the fact the bar derives `"empty+example"` from. */
+    readonly exampleFields?: readonly string[];
     /** The generation profile the visual judge was told to score against, verbatim — absent when the cell carried none. */
     readonly profile?: AppGenerationProfile;
     /** True when the judge rendered under the app's theme overlay (judge-input.json.theme) — absent when it rendered the design defaults. */
@@ -524,7 +569,8 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   if (inputs.bootstrap) notes.push(BOOTSTRAP_NOTE);
   if (inputs.profileStripped !== undefined && inputs.profileStripped.length > 0) notes.push(profileMembersStrippedNote(inputs.profileStripped));
   if (inputs.themeStripped !== undefined && inputs.themeStripped.length > 0) notes.push(themeMembersStrippedNote(inputs.themeStripped));
-  if (inputs.propsSource === 'empty') notes.push(EMPTY_PROPS_NOTE);
+  if (inputs.propsSource === 'empty') notes.push(inputs.exampleFields !== undefined ? exampleFieldsNote(inputs.exampleFields) : EMPTY_PROPS_NOTE);
+  if (!inputs.judgeable) notes.push(NOT_JUDGEABLE_NOTE);
   if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);
   const now = deps.now ?? (() => new Date());
 
@@ -642,6 +688,8 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       arm: mint.arm,
       ...(mint.codeHash !== undefined ? { codeHash: mint.codeHash } : {}),
       propsSource: inputs.propsSource,
+      ...(inputs.judgeable ? {} : { judgeable: false as const }),
+      ...(inputs.exampleFields !== undefined ? { exampleFields: inputs.exampleFields } : {}),
       ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
       ...(inputs.theme !== undefined ? { themeApplied: true as const } : {}),
       ...(visualUnavailable !== undefined
