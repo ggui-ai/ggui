@@ -280,6 +280,42 @@ describe('Cost Calculator', () => {
     expect(withCacheZero).toBeCloseTo(noCacheFields, 10);
   });
 
+  it('prices OpenAI cached input at the cache-read rate, not the input rate (#1186)', () => {
+    // Since #1186 the OpenAI adapters report `tokens.input` EXCLUDING the
+    // cached prefix and carry it as `cacheReadTokens`; the runner threads
+    // that into `cacheRead`, and the registry row's `cacheReadPer1M` prices
+    // it. Priced at the input rate instead, the cacheRead line below would
+    // be $0.020 and the total $0.028 — the pre-#1186 upper bound.
+    const cost = calculateCost('openai/gpt-5.6-luna', {
+      input: 10000,
+      output: 5000,
+      cacheRead: 100000,
+    });
+    // input: 10K × $0.20/1M      = $0.002
+    // output: 5K × $1.20/1M      = $0.006
+    // cacheRead: 100K × $0.02/1M = $0.002
+    expect(cost).toBeCloseTo(0.01, 6);
+  });
+
+  it('every OpenAI arm in the default lineup carries a cache-read rate (#1186)', () => {
+    // The page's methodology note says OpenAI cached input is priced at the
+    // provider's cache-read rate from the first run on an image carrying
+    // #1186. That copy is only true while every OpenAI arm's registry row
+    // has the rate — without it `calculateCost` falls back to the input
+    // rate and the column silently reverts to an upper bound. Assert the
+    // copy against the enforcement, per arm.
+    const lineupOpenAi = getDefaultVariants().flatMap((v) =>
+      v.sdkName === 'openai' && v.modelId !== undefined ? [v.modelId] : [],
+    );
+    expect(lineupOpenAi.length).toBeGreaterThan(0);
+    const rows = Object.values(MODEL_REGISTRY).filter((row) => lineupOpenAi.includes(row.id));
+    expect(rows.map((row) => row.id).sort()).toEqual([...lineupOpenAi].sort());
+    for (const row of rows) {
+      expect(row.costs.cacheReadPer1M, row.id).toBeDefined();
+      expect(row.costs.cacheReadPer1M, row.id).toBeLessThan(row.costs.inputPer1M);
+    }
+  });
+
   it('falls back to the input rate for a model with no cache rates', () => {
     // Gemini flash-lite has no cacheWritePer1M/cacheReadPer1M → cache
     // tokens price at the input rate ($0.25/1M).

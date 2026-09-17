@@ -62,6 +62,26 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-17',
+    text:
+      'OpenAI cost readings change meaning, announced (issue #1186): from the first run on a ' +
+      'runner image carrying commit b601ede80 (baked 2026-09-17), the OpenAI adapters report the ' +
+      'cached prompt prefix separately \u2014 OpenAI counts it inside input_tokens and names it in ' +
+      'input_tokens_details.cached_tokens \u2014 and the estimated cost prices it at the provider\'s ' +
+      'cache-read rate carried by the model registry, 10% of the input rate on all four OpenAI arms ' +
+      'at this line (luna $0.02, terra $0.20, sol $0.40, astra $1.00 per 1M tokens), instead of at ' +
+      'the full input rate. Rows before this line priced every OpenAI input token at the input ' +
+      'rate \u2014 an upper bound \u2014 so an OpenAI cost reading after this line is lower than the same ' +
+      'generation would have read before it, with no model change: the drop is the instrument, ' +
+      'not the model, and OpenAI cost readings across this line are not comparable. On the row, ' +
+      '"input tokens" for an OpenAI arm now excludes the cached prefix while "total tokens" still ' +
+      'includes it, so cached input = total \u2212 input \u2212 output. The Anthropic arms were already ' +
+      'priced this way and do not move; the Google arms are untouched by the commit. The cost ' +
+      'column is still generation plus the judge panel\'s own tokens. Scores, corpus and judge ' +
+      'panel unchanged; the first run on the new image says so in its own receipt; history is ' +
+      'not rewritten.',
+  },
+  {
     date: '2026-09-16',
     text:
       'Contract-behaviour probe walks multi-step forms. The probe now primes date-typed inputs ' +
