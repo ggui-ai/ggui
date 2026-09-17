@@ -4,6 +4,7 @@ import { completeThemeVariables, deriveThemeVariables } from './derive-theme-var
 import { darkTheme } from './defaults/dark';
 import { consumedTokenManifest } from './consumed-tokens';
 import { lightTheme } from './defaults/light';
+import previousReleaseManifest from './__fixtures__/consumed-tokens.manifest.release-5.json' with { type: 'json' };
 
 // ggui#987 §3.4 — the write-door check over a PROJECTION (an overlay), not a document.
 describe('validateOverlayCoverage', () => {
@@ -99,5 +100,36 @@ describe('validateOverlayCoverage — coverage is judged after completion (N−1
     expect(r.uncovered).toContain('--ggui-color-container');
     expect(r.uncovered).toContain('--ggui-color-heroGround');
     expect(r.unknown).toEqual([]);
+  });
+});
+
+// ggui#1184 — the consumed-token manifest is a WIRE between independently-rolled surfaces: a
+// client pinned to the previous release projects exactly that release's manifest, and this
+// release's door judges coverage against today's. Under the N−1 rule a receiver never requires a
+// token the previous release could not send — so the manifest may GROW only with a completion
+// rule in `completeThemeVariables` (the token fills from what a previous projection carries) or a
+// floor entry. Bought on prod: a control-radius role added in one release, without a completion
+// rule, refused every previous-release theme write as `uncovered`. The fixture is the PREVIOUS
+// release's manifest verbatim; it is re-pinned at each release cut.
+describe('N−1: the manifest grows only with a completion rule or a floor entry (ggui#1184, VERSION-POLICY §3.6)', () => {
+  const previous = new Set<string>(previousReleaseManifest.tokens);
+  const previousProjection = (): Record<string, string> =>
+    Object.fromEntries(Object.entries(deriveThemeVariables(lightTheme, 'light')).filter(([k]) => previous.has(k)));
+
+  it("an overlay covering exactly the PREVIOUS release's manifest is fully covered under today's door", () => {
+    const r = validateOverlayCoverage(previousProjection());
+    expect(r.uncovered).toEqual([]);
+    expect(r.unknown).toEqual([]);
+  });
+
+  it('every token added since the previous release completes from a previous-release projection, or is floored — named per token', () => {
+    const added = consumedTokenManifest.filter((t) => !previous.has(t)).sort();
+    // The growth this fixture knows about. A new token is a DECISION: add it here AND give it a
+    // completion rule (or a floor entry), or the next test names it as the N−1 break it is.
+    expect(added).toEqual(['--ggui-shape-radius-control']);
+    const completed = completeThemeVariables(previousProjection(), 'light');
+    const floor = new Set(NON_THEME_DEFINABLE_TOKENS);
+    const gaps = added.filter((t) => completed[t] === undefined && !floor.has(t));
+    expect(gaps).toEqual([]);
   });
 });

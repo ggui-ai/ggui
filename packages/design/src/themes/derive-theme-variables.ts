@@ -568,8 +568,25 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
  * stated (no surfaces, no family anchor) stays absent so the ladder beneath
  * still paints it. Pure — returns a new map.
  */
+/**
+ * Shape ROLES that complete from a base stop a previous-release projection already carries
+ * (ggui#1184). A role added to the manifest after a client pinned its release is a token that
+ * client could not send; under the N−1 rule the door may not require it, so the role fills here
+ * from the same rule `deriveThemeVariables` applies to a document — `control` from `md` — before
+ * coverage is judged. Every manifest growth adds a row here or a floor entry; the previous
+ * release's manifest is pinned as the fixture that catches the one that does neither.
+ */
+const SHAPE_ROLE_COMPLETIONS: ReadonlyArray<readonly [role: string, from: string]> = [
+  ['--ggui-shape-radius-control', '--ggui-shape-radius-md'],
+];
+
 export function completeThemeVariables(vars: Readonly<Record<string, string>>, mode: ThemeMode): Record<string, string> {
   const V: Record<string, string> = { ...vars };
+  // Shape roles first — they depend on no colour, so they complete even for a projection the
+  // colour rules below cannot read.
+  for (const [role, from] of SHAPE_ROLE_COMPLETIONS) {
+    if (V[role] === undefined && V[from] !== undefined) V[role] = V[from]!;
+  }
   const get = (k: string): string | undefined => V[`--ggui-color-${k}`];
   const put = (k: string, v: string): void => {
     if (V[`--ggui-color-${k}`] === undefined) V[`--ggui-color-${k}`] = v;
