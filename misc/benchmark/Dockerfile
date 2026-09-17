@@ -72,21 +72,53 @@ RUN find node_modules/.pnpm \
       -delete 2>/dev/null || true
 
 # ─── Runtime stage: clean alpine, COPY only the slim tree ─────────────
-# Debian, not alpine (ggui#973): the runner now carries a Chromium binary at
-# /usr/bin/chromium. TODAY only `validateContractBehavior` (playwright-core,
-# via bench.mjs's adapter) uses it; ui-gen's visual judge (puppeteer-core)
-# still launches @sparticuz/chromium's own glibc-built binary and ignores
-# PUPPETEER_EXECUTABLE_PATH until rnd's evaluator change lands — the env var
-# is exported now so that change needs no image rebuild. No package ever
-# downloads a browser at install or run time.
+# Debian, not alpine (ggui#973): the runner carries a Chromium binary at
+# /usr/bin/chromium, and BOTH browser users launch it: `validateContractBehavior`
+# (playwright-core, via bench.mjs's adapter) and ui-gen's visual judge
+# (puppeteer-core honours PUPPETEER_EXECUTABLE_PATH; pinned by
+# visual-evaluator.launch.test.ts — the @sparticuz/chromium fallback is taken
+# only when the env var is absent). No package ever downloads a browser at
+# install or run time.
+#
+# Fonts (ggui#1180): the judge renders the VISITOR's font stack
+# (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+# Arial, sans-serif`) on an image that ships only the Liberation faces. Left to
+# fontconfig's defaults, body and heading text came out in Liberation MONO on
+# every canvas — a face no visitor sees, scored as "technical rather than
+# welcoming" on every cell — while <button>'s UA font resolved to Sans. The
+# aliases below map each family of that stack and the generics to the
+# Liberation face a visitor's sans/serif/mono would be, and the build ASSERTS
+# the resolution: an image whose `sans-serif` is not Liberation Sans does not
+# build. The design token itself is never touched — it is the visitor's stack.
 FROM node:24-bookworm-slim
 
 WORKDIR /app
 ENV NODE_ENV=production
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends chromium fonts-liberation \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends chromium fonts-liberation fontconfig \
+  && rm -rf /var/lib/apt/lists/* \
+  && printf '%s\n' \
+       '<?xml version="1.0"?>' \
+       '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+       '<fontconfig>' \
+       '  <!-- ggui#1180: the visitor stack and the generics resolve to the Liberation faces. -->' \
+       '  <alias binding="same"><family>-apple-system</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias binding="same"><family>BlinkMacSystemFont</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias binding="same"><family>Segoe UI</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias binding="same"><family>Roboto</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias binding="same"><family>Helvetica Neue</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias binding="same"><family>system-ui</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+       '  <alias><family>serif</family><prefer><family>Liberation Serif</family></prefer></alias>' \
+       '  <alias><family>monospace</family><prefer><family>Liberation Mono</family></prefer></alias>' \
+       '</fontconfig>' \
+       > /etc/fonts/conf.d/60-ggui-judge-fonts.conf \
+  && fc-cache -f \
+  && fc-match sans-serif | grep -q 'Liberation Sans' \
+  && fc-match Roboto | grep -q 'Liberation Sans' \
+  && fc-match system-ui | grep -q 'Liberation Sans' \
+  && fc-match monospace | grep -q 'Liberation Mono'
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
     PUPPETEER_SKIP_DOWNLOAD=1 \
