@@ -6,6 +6,7 @@
 import { GeneratorAdapter, hasCredentials } from '../base';
 import type { AdapterConfig, GenerateParams } from '../base';
 import type { AdapterResult, ProviderName, AdapterMode } from '../types';
+import { splitOpenAiUsage } from './tokens';
 import {
   createCapture,
   captureSourceCode,
@@ -87,17 +88,19 @@ export class OpenAiSdkAdapter extends GeneratorAdapter {
     const usage = result.state.usage;
     const inputTokens = usage.inputTokens;
     const outputTokens = usage.outputTokens;
+    // OpenAI's input token count INCLUDES cached tokens; sum the cached
+    // subset across per-request details (ggui#1186).
+    const cachedInputTokens = (usage.inputTokensDetails ?? []).reduce(
+      (sum, details) => sum + (details.cached_tokens ?? 0),
+      0,
+    );
 
     return {
       compiledCode: capture.compiledCode,
       sourceCode: capture.sourceCode,
       stream: capture.stream,
       generatorMeta: capture.generatorMeta,
-      tokens: {
-        input: inputTokens,
-        output: outputTokens,
-        total: inputTokens + outputTokens,
-      },
+      ...splitOpenAiUsage(inputTokens, outputTokens, cachedInputTokens),
       generationTimeMs: Date.now() - startTime,
       turnsUsed: result.rawResponses?.length ?? 0,
     };

@@ -88,7 +88,7 @@ export interface AdapterResult {
   subagentsUsed?: string[];
   /** Tokens written to prompt cache (Claude-specific) */
   cacheCreationTokens?: number;
-  /** Tokens read from prompt cache (Claude-specific) */
+  /** Tokens read from prompt cache (Claude / OpenRouter / OpenAI). */
   cacheReadTokens?: number;
   /** SDK session ID for evaluation loop resume (Claude SDK-specific) */
   sdkSessionId?: string;

@@ -10,6 +10,7 @@ import { GeneratorAdapter, hasCredentials } from '../base';
 import type { AdapterConfig, GenerateParams } from '../base';
 import type { AdapterResult, ToolDefinition, ProviderName, AdapterMode } from '../types';
 import { zodToJsonSchema } from '../tool-bridge';
+import { splitOpenAiUsage } from './tokens';
 import {
   createCapture,
   captureSourceCode,
@@ -54,6 +55,9 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
     const capture = createCapture();
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    // OpenAI's input token count INCLUDES cached tokens; track the cached
+    // subset so tokens.input reports NON-cached input (ggui#1186).
+    let totalCachedInputTokens = 0;
     let turnsUsed = 0;
     let allTextOutput = '';
 
@@ -74,6 +78,8 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
       if (response.usage) {
         totalInputTokens += response.usage.input_tokens ?? 0;
         totalOutputTokens += response.usage.output_tokens ?? 0;
+        totalCachedInputTokens +=
+          response.usage.input_tokens_details?.cached_tokens ?? 0;
       }
 
       // Process output items
@@ -156,11 +162,11 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
       sourceCode: capture.sourceCode,
       stream: capture.stream,
       generatorMeta: capture.generatorMeta,
-      tokens: {
-        input: totalInputTokens,
-        output: totalOutputTokens,
-        total: totalInputTokens + totalOutputTokens,
-      },
+      ...splitOpenAiUsage(
+        totalInputTokens,
+        totalOutputTokens,
+        totalCachedInputTokens,
+      ),
       generationTimeMs: Date.now() - startTime,
       turnsUsed,
     };
