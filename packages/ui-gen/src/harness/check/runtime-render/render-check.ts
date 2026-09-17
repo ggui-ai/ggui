@@ -45,6 +45,7 @@ import {
   type ParentLink,
 } from "./host-boundary.js";
 import { hostGlobals, openRecord } from "../../../internal/open-record.js";
+import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
 
 /**
  * Module-namespace-shaped value injected into `loadComponent`'s
@@ -504,6 +505,20 @@ export async function runRenderCheckInProcess(
     let streamsChecked = 0;
 
     try {
+      // ggui#1187: prime form inputs before the action-wiring probe. A wired
+      // Send/Submit gated on a non-empty input (the chat-interface shape) is a
+      // no-op on empty, so an un-primed synthetic click never dispatches and
+      // the probe false-warns "did not dispatch it". Shared with the visual
+      // tester's primeInputs (#1021/#1040) so both prime identically. Priming
+      // sets input VALUES (not textContent) and fires input/change before the
+      // per-candidate fire-log window is opened, so it neither perturbs the
+      // prop-sensitivity text baseline nor false-positives the wiring probe.
+      // Best-effort: a priming failure must never abort the check.
+      try {
+        primeInputs(renderResult.container);
+      } catch {
+        // Un-primeable DOM falls back to the prior (un-primed) behavior.
+      }
       // ── Check 2: Action wiring (BLOCK / unverified-as-warn) ───────────
       if (input.contract?.actionSpec) {
         const actionSpec = input.contract.actionSpec;

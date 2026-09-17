@@ -35,6 +35,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./prime-inputs": {
+      "types": "./dist/prime-inputs.d.ts",
+      "import": "./dist/prime-inputs.js",
+      "default": "./dist/prime-inputs.js"
     }
   },
   "scripts": {
