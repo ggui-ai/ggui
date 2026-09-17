@@ -61,7 +61,7 @@
  * registrations; clients re-register transparently on next failure.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { isRecord } from '@ggui-ai/protocol';
 import type { AuthAdapter, PairingService } from '@ggui-ai/mcp-server-core';
@@ -377,8 +377,14 @@ function sha256Base64Url(input: string): string {
 }
 
 function verifyPkce(verifier: string, challenge: string): boolean {
-  const computed = sha256Base64Url(verifier);
-  return computed === challenge;
+  // Constant-time compare (ggui#1174). Both sides are base64url SHA-256
+  // digests when honest (43 chars); a length mismatch is refused before
+  // the compare because `timingSafeEqual` throws on unequal lengths, and
+  // the length of a digest is public anyway.
+  const computed = Buffer.from(sha256Base64Url(verifier));
+  const presented = Buffer.from(challenge);
+  if (computed.length !== presented.length) return false;
+  return timingSafeEqual(computed, presented);
 }
 
 // =============================================================================
@@ -439,11 +445,93 @@ export function handleAuthorizationServerMetadata(
 
 /**
  * `POST /oauth/register` — RFC 7591 Dynamic Client Registration. Issues
- * a random `client_id`. No `client_secret` (PKCE-only). Accepts arbitrary
- * `redirect_uris` from the client without validation against an allowlist
- * — the trade-off matches the MCP spec's pragmatism: any client willing
- * to do PKCE + paste-key gets registered.
+ * a random `client_id`. No `client_secret` (PKCE-only). Registration is
+ * OPEN — there is no allowlist of redirect URIs, because the MCP
+ * authorization spec (2025-06-18) expects any host to register itself
+ * before its user has ever seen this server. What keeps an open door
+ * from being an open redirect (ggui#1174) is not the door but the
+ * controls around it, each of them pinned in `oauth-dcr.test.ts`:
+ *
+ *   - `redirect_uris` are SHAPE-checked here ({@link validateRedirectUris}):
+ *     absolute; no fragment; `https`, or `http` on a loopback host
+ *     (RFC 8252 §7.3), or a private-use scheme (RFC 8252 §7.1 — the
+ *     shape desktop MCP hosts register) that a browser cannot execute;
+ *     no wildcard host; at most {@link MAX_REDIRECT_URIS}; one bad entry
+ *     refuses the whole registration (`invalid_redirect_uri`).
+ *   - `client_name` is bounded and printable (`invalid_client_metadata`)
+ *     because the consent page prints it.
+ *   - `/oauth/authorize` accepts only a redirect URI the client registered,
+ *     by exact string match, and only PKCE `S256`.
+ *   - `/oauth/token` binds the code to (client, redirect URI, challenge),
+ *     single-use, 5-minute TTL, constant-time verifier check.
+ *   - The consent page names the client and the redirect host BEFORE it
+ *     asks for a key, so the user is the last control and an informed one.
  */
+const MAX_REDIRECT_URIS = 10;
+const MAX_REDIRECT_URI_LENGTH = 2048;
+const MAX_CLIENT_NAME_LENGTH = 100;
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['127.0.0.1', '[::1]', 'localhost']);
+/** Schemes a browser will EXECUTE rather than navigate to — never a redirect target. */
+const EXECUTABLE_SCHEMES: ReadonlySet<string> = new Set([
+  'javascript:',
+  'data:',
+  'blob:',
+  'file:',
+  'about:',
+  'vbscript:',
+]);
+// eslint-disable-next-line no-control-regex -- the point is to find control characters
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+type RedirectUriVerdict =
+  | { readonly ok: readonly string[] }
+  | { readonly error: 'invalid_redirect_uri' | 'invalid_client_metadata'; readonly description: string };
+
+/** The one reason a URI is refused, or `undefined` when it is a redirect target. */
+function redirectUriProblem(uri: string): string | undefined {
+  if (uri.length > MAX_REDIRECT_URI_LENGTH) return 'longer than 2048 characters';
+  if (uri.includes('#')) return 'carries a fragment';
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return 'is not an absolute URL';
+  }
+  if (url.hostname.includes('*')) return 'names a wildcard host';
+  if (url.protocol === 'https:') return undefined;
+  if (url.protocol === 'http:') {
+    return LOOPBACK_HOSTS.has(url.hostname)
+      ? undefined
+      : 'uses `http` on a non-loopback host (only 127.0.0.1, [::1] and localhost may be plain http)';
+  }
+  if (EXECUTABLE_SCHEMES.has(url.protocol)) return `uses the \`${url.protocol}\` scheme`;
+  return undefined;
+}
+
+/** Every rule the door applies to `redirect_uris`; refuses the WHOLE list on the first bad entry. */
+export function validateRedirectUris(raw: unknown): RedirectUriVerdict {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { error: 'invalid_redirect_uri', description: '`redirect_uris` array is required' };
+  }
+  if (raw.length > MAX_REDIRECT_URIS) {
+    return {
+      error: 'invalid_client_metadata',
+      description: `\`redirect_uris\` carries ${raw.length} entries; at most ${MAX_REDIRECT_URIS} are accepted`,
+    };
+  }
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      return { error: 'invalid_redirect_uri', description: 'every `redirect_uris` entry must be a non-empty string' };
+    }
+    const problem = redirectUriProblem(entry);
+    if (problem !== undefined) {
+      return { error: 'invalid_redirect_uri', description: `redirect URI ${problem}: ${entry.slice(0, 200)}` };
+    }
+    out.push(entry);
+  }
+  return { ok: out };
+}
 export async function handleRegister(
   req: Request,
   res: Response,
@@ -451,28 +539,34 @@ export async function handleRegister(
   storage: OAuthStorage,
 ): Promise<void> {
   const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
-  const redirectUrisRaw = body['redirect_uris'];
-  if (!Array.isArray(redirectUrisRaw) || redirectUrisRaw.length === 0) {
+  const verdict = validateRedirectUris(body['redirect_uris']);
+  if ('error' in verdict) {
+    res.status(400).json({ error: verdict.error, error_description: verdict.description });
+    return;
+  }
+  const redirectUris = verdict.ok;
+
+  const clientNameRaw = body['client_name'];
+  if (clientNameRaw !== undefined && typeof clientNameRaw !== 'string') {
     res.status(400).json({
-      error: 'invalid_redirect_uri',
-      error_description: '`redirect_uris` array is required',
+      error: 'invalid_client_metadata',
+      error_description: '`client_name` must be a string when present',
     });
     return;
   }
-  const redirectUris = redirectUrisRaw.filter(
-    (u): u is string => typeof u === 'string' && u.length > 0,
-  );
-  if (redirectUris.length === 0) {
+  if (
+    typeof clientNameRaw === 'string' &&
+    (clientNameRaw.length > MAX_CLIENT_NAME_LENGTH || CONTROL_CHARS.test(clientNameRaw))
+  ) {
     res.status(400).json({
-      error: 'invalid_redirect_uri',
-      error_description: '`redirect_uris` must contain at least one non-empty string',
+      error: 'invalid_client_metadata',
+      error_description: `\`client_name\` must be at most ${MAX_CLIENT_NAME_LENGTH} printable characters`,
     });
     return;
   }
+  const clientName = clientNameRaw;
 
   const clientId = `mcp_client_${randomBytes(16).toString('base64url')}`;
-  const clientName =
-    typeof body['client_name'] === 'string' ? body['client_name'] : undefined;
 
   await storage.putClient({
     clientId,
@@ -531,13 +625,20 @@ export async function handleAuthorizeGet(
       if (typeof val === 'string') target.searchParams.set(k, val);
     }
     target.searchParams.set('mcp_origin', resolveIssuerUrl(req, config.issuerUrl));
+    // ggui#1174 — the hosted consent page names the client too. `client_name`
+    // is DISPLAY-ONLY and self-asserted at DCR (a stranger chose it); the
+    // honest signal on any consent page is `redirect_uri`, which the server
+    // binds by exact match to what that client registered.
+    if (v.client.clientName !== undefined) {
+      target.searchParams.set('client_name', v.client.clientName);
+    }
     res.redirect(302, target.toString());
     return;
   }
 
   // Forward all params back to the form so POST handler has them.
   // Includes `code_challenge`, `state`, etc.
-  res.type('html').send(renderAuthorizePage(params));
+  res.type('html').send(renderAuthorizePage(params, v.client));
 }
 
 /**
@@ -599,14 +700,14 @@ export async function handleAuthorizePost(
         .status(401)
         .type('html')
         .send(
-          renderAuthorizePage(params, 'Pair code expired or invalid — restart the server for a fresh code.'),
+          renderAuthorizePage(params, validation.client, 'Pair code expired or invalid — restart the server for a fresh code.'),
         );
       return;
     }
   } else if (pastedKey && pastedKey.length > 0) {
     apiKey = pastedKey;
   } else {
-    res.status(400).type('html').send(renderAuthorizePage(params, 'Pair code or API key required'));
+    res.status(400).type('html').send(renderAuthorizePage(params, validation.client, 'Pair code or API key required'));
     return;
   }
 
@@ -623,7 +724,7 @@ export async function handleAuthorizePost(
       res
         .status(401)
         .type('html')
-        .send(renderAuthorizePage(params, 'Invalid API key — try again.'));
+        .send(renderAuthorizePage(params, validation.client, 'Invalid API key — try again.'));
       return;
     }
     throw err;
@@ -797,7 +898,7 @@ async function validateAuthorizeParams(
   storage: OAuthStorage,
   config?: OAuthConfig,
   issuer?: string,
-): Promise<{ valid: true } | { error: string }> {
+): Promise<{ valid: true; client: ClientRecord } | { error: string }> {
   if (params['response_type'] !== 'code') {
     return { error: 'response_type must be `code`' };
   }
@@ -834,7 +935,7 @@ async function validateAuthorizeParams(
     }
   }
 
-  return { valid: true };
+  return { valid: true, client };
 }
 
 // =============================================================================
@@ -941,10 +1042,32 @@ ${bodyHtml}
 </html>`;
 }
 
+/** What the consent page prints as the redirect target: the host when the URI has one, else the scheme. */
+function describeRedirectTarget(uri: string | undefined): string {
+  if (!uri) return 'an unknown destination';
+  try {
+    const url = new URL(uri);
+    return url.host.length > 0 ? url.host : `a \`${url.protocol}\` app`;
+  } catch {
+    return 'an unknown destination';
+  }
+}
+
 function renderAuthorizePage(
   params: Record<string, string | undefined>,
+  client: ClientRecord,
   errorMessage?: string,
 ): string {
+  // ggui#1174 — the user is the last control on an OPEN registration
+  // door, so the page says WHO registered (the DCR client_name, which a
+  // stranger chose — escaped, never trusted) and WHERE the code will be
+  // sent, before it asks for a key.
+  const who = client.clientName
+    ? `<strong>${escapeHtml(client.clientName)}</strong> <span class="ggui-code">${escapeHtml(client.clientId)}</span>`
+    : `an unnamed client <span class="ggui-code">${escapeHtml(client.clientId)}</span>`;
+  const whereTo = escapeHtml(describeRedirectTarget(params['redirect_uri']));
+  const requester = `<p class="ggui-muted">${who} is asking to connect. If you authorize, a one-time code is sent to <strong>${whereTo}</strong>. If you do not recognise either, close this page.</p>`;
+
   // Forward every OAuth param as a hidden input so the POST handler
   // sees the same shape as /GET — no client-side state stash needed.
   const hiddenFields = (
@@ -972,6 +1095,7 @@ function renderAuthorizePage(
 
   const body = `<div class="ggui-card"><form method="POST" action="/oauth/authorize" class="ggui-stack">
 ${errorCallout}
+${requester}
 <label for="pair_code" class="ggui-label">Pair code</label>
 <div class="ggui-field"><input type="text" id="pair_code" name="pair_code" placeholder="000000" inputmode="numeric" autocomplete="off" autofocus pattern="[0-9]{6}" maxlength="6"></div>
 <p class="ggui-muted">The 6-digit code printed on your terminal when you ran <span class="ggui-code">ggui serve</span>. One-shot — restart the server for a fresh code.</p>
