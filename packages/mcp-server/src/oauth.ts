@@ -1042,12 +1042,19 @@ ${bodyHtml}
 </html>`;
 }
 
-/** What the consent page prints as the redirect target: the host when the URI has one, else the scheme. */
+/**
+ * What the consent page prints as the redirect target: `scheme://host` when
+ * the URI has a host (`https://client.example`, `claudedesktop://callback` —
+ * the same form the hosted consent page prints, so both doors show the same
+ * two facts identically), else the bare scheme. Never the path or query: the
+ * host is the signal the server binds by exact match; the rest is the
+ * client's own text.
+ */
 function describeRedirectTarget(uri: string | undefined): string {
   if (!uri) return 'an unknown destination';
   try {
     const url = new URL(uri);
-    return url.host.length > 0 ? url.host : `a \`${url.protocol}\` app`;
+    return url.host.length > 0 ? `${url.protocol}//${url.host}` : `a \`${url.protocol}\` app`;
   } catch {
     return 'an unknown destination';
   }

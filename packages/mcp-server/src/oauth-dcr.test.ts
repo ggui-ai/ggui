@@ -182,6 +182,17 @@ describe('ggui#1174 — the consent page names WHO is asking and WHERE the code 
     expect(target.searchParams.get('mcp_origin')).toBe('https://mcp.example.test');
   });
 
+  it('prints the redirect target as scheme://host — a custom-scheme client shows `claudedesktop://callback`, never the bare host `callback` (aligned with the hosted consent page, ggui#1202)', async () => {
+    fx = await boot();
+    const reg = await register(fx, { client_name: 'Desktop Host', redirect_uris: ['claudedesktop://callback', GOOD] });
+    const { challenge } = pkce();
+    for (const [uri, shown] of [['claudedesktop://callback', 'claudedesktop://callback'], [GOOD, 'https://client.example']] as const) {
+      const q = new URLSearchParams({ response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: uri, code_challenge: challenge, code_challenge_method: 'S256' });
+      const html = await (await fetch(`${fx.url}/oauth/authorize?${q.toString()}`)).text();
+      expect(html, uri).toContain(`<strong>${shown}</strong>`);
+    }
+  });
+
   it('a client_name is HTML-escaped on the page — the name a stranger registered cannot script the consent screen', async () => {
     fx = await boot();
     const reg = await register(fx, { client_name: '<img src=x onerror=alert(1)>', redirect_uris: [GOOD] });
