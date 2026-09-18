@@ -203,6 +203,15 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
   if (diag?.actionsFiredFromClicks?.length) {
     diagParts.push(`other actions fired from clicks: ${diag.actionsFiredFromClicks.join(", ")}`);
   }
+  if (diag?.inputPriming) {
+    // ggui#1187: an input-gated action that "did not dispatch" reads
+    // differently beside "primed 0" / a priming error than beside "primed 1".
+    diagParts.push(
+      "primed" in diag.inputPriming
+        ? `input priming: ${diag.inputPriming.primed} control(s) filled before the click`
+        : `input priming failed: ${diag.inputPriming.error}`,
+    );
+  }
   const diagSuffix = diagParts.length ? ` [observed: ${diagParts.join("; ")}]` : "";
 
   switch (issue.check) {

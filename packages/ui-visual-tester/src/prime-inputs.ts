@@ -7,6 +7,27 @@
 // SAME way — one typed-values table, no divergence. Pure DOM + Date only (no
 // Playwright), so it is safe to import into the lightweight happy-dom check
 // worker via the `@ggui-ai/ui-visual-tester/prime-inputs` subpath.
+//
+// Realm rule (ggui#1187 follow-up): every constructor this module needs —
+// `HTMLInputElement`, `HTMLTextAreaElement`, `HTMLSelectElement`, `Event` —
+// is read from the ROOT'S OWN window (`ownerDocument.defaultView`), never
+// from ambient globals. The check worker installs happy-dom's `window` and
+// `document` on `globalThis` without the element constructors, so an
+// `instanceof HTMLInputElement` there is a `ReferenceError`, not a `false`;
+// a browser page or vitest's happy-dom environment happens to have them.
+// One code path, every realm.
+
+/** The constructors of one DOM realm — the window the primed elements belong to. */
+type DomRealm = Pick<Window & typeof globalThis, 'HTMLInputElement' | 'HTMLTextAreaElement' | 'HTMLSelectElement' | 'Event'>;
+
+/** The realm an element lives in. A detached document has none — that is a caller error, reported as one. */
+function realmOf(el: Element): DomRealm {
+  const view = el.ownerDocument.defaultView;
+  if (view === null) {
+    throw new Error('primeInputs: the element is not attached to a window (ownerDocument.defaultView is null) — a detached document has no constructors to prime with');
+  }
+  return view;
+}
 
 // #1040: date-like types too — a wizard's first step is routinely gated on one ("preferred follow-up
 // date"), and a Next that never enables hides every step behind it from the probe.
@@ -53,7 +74,7 @@ function isoWeekOf(y: number, m: number, d: number): string {
   return `${date.getUTCFullYear()}-W${pad2(week)}`;
 }
 export function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): string {
-  if (!(el instanceof HTMLInputElement)) return 'probe'; // a textarea has no type to switch on
+  if (!(el instanceof realmOf(el).HTMLInputElement)) return 'probe'; // a textarea has no type to switch on
   switch (el.type) {
     case 'number':
       return '1';
@@ -91,16 +112,17 @@ export function sampleValueFor(el: HTMLInputElement | HTMLTextAreaElement): stri
 
 /** Set a value the way React notices it: through the prototype's native setter, then an input + change event. */
 export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string): void {
-  const proto = el instanceof HTMLTextAreaElement
-    ? HTMLTextAreaElement.prototype
-    : el instanceof HTMLSelectElement
-      ? HTMLSelectElement.prototype
-      : HTMLInputElement.prototype;
+  const view = realmOf(el);
+  const proto = el instanceof view.HTMLTextAreaElement
+    ? view.HTMLTextAreaElement.prototype
+    : el instanceof view.HTMLSelectElement
+      ? view.HTMLSelectElement.prototype
+      : view.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
   if (setter) setter.call(el, value);
   else el.value = value;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new view.Event('input', { bubbles: true }));
+  el.dispatchEvent(new view.Event('change', { bubbles: true }));
 }
 
 /**
@@ -111,18 +133,18 @@ export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement | HTML
  * Returns how many controls were primed.
  */
 export function primeInputs(root: HTMLElement): number {
+  const view = realmOf(root);
   let primed = 0;
-  const editable = (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): boolean =>
-    !el.disabled && !(el instanceof HTMLSelectElement) ? !(el as HTMLInputElement | HTMLTextAreaElement).readOnly : !el.disabled;
+  const editable = (el: HTMLInputElement | HTMLTextAreaElement): boolean => !el.disabled && !el.readOnly;
   for (const el of Array.from(root.querySelectorAll('input, textarea'))) {
-    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || !editable(el)) continue;
-    if (el instanceof HTMLInputElement && !TEXT_LIKE_INPUT_TYPES.has(el.type)) continue;
+    if (!(el instanceof view.HTMLInputElement || el instanceof view.HTMLTextAreaElement) || !editable(el)) continue;
+    if (el instanceof view.HTMLInputElement && !TEXT_LIKE_INPUT_TYPES.has(el.type)) continue;
     if (el.value.trim().length > 0) continue;
     setNativeValue(el, sampleValueFor(el));
     if (el.value.trim().length > 0) primed += 1;
   }
   for (const el of Array.from(root.querySelectorAll('select'))) {
-    if (!(el instanceof HTMLSelectElement) || el.disabled) continue;
+    if (!(el instanceof view.HTMLSelectElement) || el.disabled) continue;
     const current = el.options[el.selectedIndex];
     if (current !== undefined && current.value.trim().length > 0) continue;
     const first = Array.from(el.options).find((o) => o.value.trim().length > 0 && !o.disabled);
@@ -130,15 +152,21 @@ export function primeInputs(root: HTMLElement): number {
     setNativeValue(el, first.value);
     primed += 1;
   }
+  // Radios: one pick per named group; an unnamed radio is its own group.
+  // Grouping is done in JS (by `name` equality), not by re-querying with the
+  // name interpolated into a selector — no `CSS.escape`, no realm dependency.
+  const radios = Array.from(root.querySelectorAll('input[type="radio"]')).filter(
+    (m): m is HTMLInputElement => m instanceof view.HTMLInputElement,
+  );
   const seenGroups = new Set<string>();
-  for (const el of Array.from(root.querySelectorAll('input[type="radio"]'))) {
-    if (!(el instanceof HTMLInputElement) || el.disabled) continue;
-    const group = el.name || '';
-    if (seenGroups.has(group)) continue;
-    seenGroups.add(group);
-    const members = group
-      ? Array.from(root.querySelectorAll(`input[type="radio"][name="${CSS.escape(group)}"]`)).filter((m): m is HTMLInputElement => m instanceof HTMLInputElement)
-      : [el];
+  for (const el of radios) {
+    if (el.disabled) continue;
+    const group = el.name;
+    if (group !== '') {
+      if (seenGroups.has(group)) continue;
+      seenGroups.add(group);
+    }
+    const members = group !== '' ? radios.filter((m) => m.name === group) : [el];
     if (members.some((m) => m.checked)) continue;
     const first = members.find((m) => !m.disabled);
     if (first === undefined) continue;

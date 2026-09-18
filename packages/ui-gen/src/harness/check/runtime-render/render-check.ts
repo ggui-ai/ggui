@@ -99,8 +99,24 @@ export interface RenderCheckIssue {
     readonly actionsFiredFromClicks?: readonly string[];
     /** Surfaced to the agent: prop sourceTool hints from the contract (only if present). */
     readonly sourceToolHints?: Readonly<Record<string, string>>;
+    /**
+     * For action-wiring (ggui#1187): what input priming did before the
+     * synthetic dispatch — how many controls it filled, or why it could not
+     * run. A "did not dispatch it" on an input-gated action reads differently
+     * beside `{ primed: 0 }` or `{ error }` than beside `{ primed: 1 }`.
+     */
+    readonly inputPriming?: InputPrimingDiagnostic;
   };
 }
+
+/**
+ * Outcome of `primeInputs` before the action-wiring probe (ggui#1187). A
+ * priming failure never aborts the check — it is recorded here, on every
+ * action-wiring issue, so it is visible in the feedback instead of vanishing.
+ */
+export type InputPrimingDiagnostic =
+  | { readonly primed: number }
+  | { readonly error: string };
 
 export interface RenderCheckResult {
   readonly ok: boolean;
@@ -513,11 +529,16 @@ export async function runRenderCheckInProcess(
       // sets input VALUES (not textContent) and fires input/change before the
       // per-candidate fire-log window is opened, so it neither perturbs the
       // prop-sensitivity text baseline nor false-positives the wiring probe.
-      // Best-effort: a priming failure must never abort the check.
+      // A priming failure never aborts the check — it is RECORDED on every
+      // action-wiring issue as `diagnostics.inputPriming`. (The first cut
+      // swallowed it, and a `ReferenceError` in the check worker's realm —
+      // no `HTMLInputElement` on `globalThis` — hid behind that catch while
+      // every chat cell kept warning.)
+      let inputPriming: InputPrimingDiagnostic;
       try {
-        primeInputs(renderResult.container);
-      } catch {
-        // Un-primeable DOM falls back to the prior (un-primed) behavior.
+        inputPriming = { primed: primeInputs(renderResult.container) };
+      } catch (err) {
+        inputPriming = { error: err instanceof Error ? err.message : String(err) };
       }
       // ── Check 2: Action wiring (BLOCK / unverified-as-warn) ───────────
       if (input.contract?.actionSpec) {
@@ -537,7 +558,7 @@ export async function runRenderCheckInProcess(
             probe,
             user,
           });
-          if (issue) issues.push(issue);
+          if (issue) issues.push({ ...issue, diagnostics: { ...issue.diagnostics, inputPriming } });
         }
       }
 
