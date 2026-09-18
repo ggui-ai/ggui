@@ -64,6 +64,20 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-18',
     text:
+      'Instrument fix, announced (issue #1187): from the first run on a runner image carrying ' +
+      'commit 27e7e1bda, the runtime-render check fills a cell\'s inputs before it clicks a wired ' +
+      'action, the way a user types before pressing Send. Before this, a control that does ' +
+      'nothing on an empty form \u2014 the chat-interface shape \u2014 read "synthetic click did not ' +
+      'dispatch it" on every such cell: the instrument\'s limit, published as a finding against ' +
+      'the model. That line is no longer emitted for a control that dispatches once its inputs ' +
+      'are filled; a control that is genuinely unwired still reads as such. Rows carrying the ' +
+      'old line on 2026-09-18 passed with it, so scores and pass are not what this moves \u2014 the ' +
+      'per-cell issues list is; the first run on the new image says which rows in its own ' +
+      'receipt. Corpus, judge panel and every arm unchanged; history is not rewritten.',
+  },
+  {
+    date: '2026-09-18',
+    text:
       'Reading, not a change: the 2026-09-18 run \u2014 the first on a runner image carrying commit ' +
       'b601ede80 (source hash 7c86a28b6ab5) \u2014 read a cached prefix of zero on every OpenAI cell ' +
       '(40 of 40, 24 of them multi-turn), so its OpenAI cost readings are priced exactly as the ' +
