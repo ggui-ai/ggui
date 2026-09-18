@@ -227,6 +227,21 @@ export interface CanvasVisualSummary {
   fit?: 'fill';
 }
 
+/**
+ * ggui#1195 — the fit reading on the canvas whose policy FAILS an overflow
+ * (the inline chat card): the box it was judged at (`ceiling` — the order's
+ * declared viewport when one was carried, else the class box), whether that
+ * box was declared, and how many px of content sit below it (0 = fits).
+ * Present only when such a canvas was judged with a measurable height, so
+ * the bar and the ledger read one number for "does the hello fit".
+ */
+export interface VisualFitStamp {
+  readonly canvas: CanvasClass;
+  readonly ceiling: { readonly width: number; readonly height: number };
+  readonly declared: boolean;
+  readonly overflowPx: number;
+}
+
 /** The visual leg's per-canvas summary — see `EvalResult.visual`. */
 export interface VisualEvalSummary {
   /** Mean of the canvas scores (rounded). */
@@ -234,6 +249,8 @@ export interface VisualEvalSummary {
   /** Every canvas passed. */
   passed: boolean;
   canvases: CanvasVisualSummary[];
+  /** ggui#1195 — see {@link VisualFitStamp}; absent when no fail-policy canvas was judged. */
+  fit?: VisualFitStamp;
   /** The design tree the judge painted with (ggui#1042): `src` + `srcSha256` — `design@judge`. */
   design?: { readonly src: string; readonly srcSha256: string };
   /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */

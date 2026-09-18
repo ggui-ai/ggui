@@ -124,13 +124,19 @@ async function main() {
   // it (report.meta.visualUnavailableReason) — never a silent pass, never a
   // bare null when a reason exists.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme }) => {
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, canvasViewport }) => {
         const { runVisualEvaluationDetailed, CANVAS_CLASSES, cssTokensForAppTheme } = await import('@ggui-ai/ui-gen/evaluation');
         try {
           const d = await runVisualEvaluationDetailed(
             // theme → the ONE theme→CSS composer the iframe runtime uses; absent = the design defaults (no cssTokens key)
             { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(theme ? { cssTokens: cssTokensForAppTheme(theme) } : {}) },
-            { ...JUDGE_CONFIG, ...(sampleProps ? { sampleProps } : {}), canvases: CANVAS_CLASSES },
+            {
+              ...JUDGE_CONFIG,
+              ...(sampleProps ? { sampleProps } : {}),
+              canvases: CANVAS_CLASSES,
+              // ggui#1195 — the order's declared box for its canvas (from judge-input.json): the judge captures that canvas at it.
+              ...(canvasViewport ? { canvasViewports: { [canvasViewport.canvas]: { width: canvasViewport.width, height: canvasViewport.height } } } : {}),
+            },
           );
           if (d.result !== null) return toVisualOutcome(d.result);
           const unavailableReason = d.unavailableReason ?? 'visual judge returned no result and no reason';

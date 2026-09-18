@@ -123,6 +123,21 @@ export interface EvalRoundResult {
 const MAX_FEEDBACK_ISSUES = 3;
 
 /**
+ * ggui#1195 — the visual leg's deterministic fit verdict: the inline card's
+ * content is taller than the box it was judged at (`canvas-overflow`,
+ * critical ⇒ fail). Recognised by the marker the evaluator emits, never by
+ * the description's wording.
+ */
+function isFitFail(issue: EvalIssue): boolean {
+  return issue.result === "fail" && issue.category === "visual" && issue.subcategory === "canvas-overflow";
+}
+
+/** `[fit]`-tagged so the LLM can see the violation is the box, not the judge's taste. */
+function formatFitFeedback(issue: EvalIssue): string {
+  return `[fit] ${issue.category}/${issue.subcategory ?? ""}: ${issue.description}\n  Fix: ${issue.fix ?? ""}`;
+}
+
+/**
  * `criteriaCoverage` reason stamped on the same-image low-risk bypass
  * exits: tier-1/2 evaluation is never invoked there BY DESIGN, so every
  * criterion is `not-applicable` (excluded from coverage denominators),
@@ -503,6 +518,10 @@ export async function runEvalRound(
               ...(visualEvaluation?.canvases !== undefined
                 ? { canvases: visualEvaluation.canvases }
                 : {}),
+              // ggui#1195 — the declared box per canvas (same-target with the composer).
+              ...(visualEvaluation?.canvasViewports !== undefined
+                ? { canvasViewports: visualEvaluation.canvasViewports }
+                : {}),
               // #484/#489 — same threading as the LLM-eval leg above:
               // the visual eval's multimodal call runs inside the same
               // concurrent generation, so it needs the same routing
@@ -747,6 +766,11 @@ export async function runEvalRound(
     // stuck-loop detector won't fire (some fails change), but the cap
     // hits with the runtime fail unresolved.
     const RUNTIME_EXTENSION_BONUS = 2;
+    // ggui#1195 — a fit fail (the hello does not fit its declared first
+    // screen — the founder's ruling is FAIL, not warn) active at the cap is
+    // worth ONE more round: the fix is a composition change the LLM can make
+    // in a turn, and without the round the card ships cut off.
+    const FIT_EXTENSION_BONUS = 1;
     if (evalRoundsUsed >= maxEvalRounds) {
       // 2026-04-27 (in-loop probe trigger): probe is now off the per-turn
       // hot path; `blocking` from runCheck won't contain `runtime:*` fails
@@ -764,6 +788,36 @@ export async function runEvalRound(
       const allowRuntimeExtension =
         hasRuntimeFail &&
         evalRoundsUsed < maxEvalRounds + RUNTIME_EXTENSION_BONUS;
+      const fitFails = evalResult.issues.filter(isFitFail);
+      const allowFitExtension =
+        !allowRuntimeExtension &&
+        fitFails.length > 0 &&
+        evalRoundsUsed < maxEvalRounds + FIT_EXTENSION_BONUS;
+      if (allowFitExtension) {
+        const fitLines = fitFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatFitFeedback);
+        evalResult = {
+          ...evalResult,
+          issues: [...evalResult.issues, ...exitProbe.probeIssues],
+          runtimeProbe: exitProbe.meta,
+        };
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: fit fail active at cap — granting +1 retry (ggui#1195; ${fitFails.length} canvas-overflow)`,
+        );
+        return {
+          control: "feedback",
+          evalDone: false,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats: updatedPrevModeSubcats,
+          prevFailFingerprints: new Set([...currFailFingerprints, ...fitFails.map(fingerprintFail)]),
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: fitLines.join("\n\n"),
+          isEvalFeedback: true,
+          lastDiffFailed: false,
+        };
+      }
       if (!allowRuntimeExtension) {
         // Fold probe issues (if any) into evalResult for telemetry and
         // ALWAYS stamp the probe's execution meta, even though we're not

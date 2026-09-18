@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualEvalSummary } from './types-public.js';
+import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
@@ -55,6 +55,16 @@ export interface VisualEvalConfig {
    * single screenshot at `viewport`; no `canvases` field on the result.
    */
   canvases?: readonly CanvasClass[];
+  /**
+   * ggui#1195 — the box a canvas is COMPOSED for and CAPTURED at when the
+   * order declared one (the chat card at the visitor's real column, not the
+   * class's 400×640). Keyed by canvas; a canvas without an entry is judged
+   * at `CANVAS_VIEWPORTS[canvas]` as before. The composer's
+   * `rendering.viewport` and this entry are ONE value written once (the
+   * seam derives it), so the judge never scores a box the mint did not
+   * target. Only read in per-canvas mode.
+   */
+  canvasViewports?: Partial<Readonly<Record<CanvasClass, CanvasViewport>>>;
   /**
    * Optional provider-routing override — see
    * `AgentConfig.routeOverride`. Threaded onto the agent this
@@ -158,6 +168,12 @@ export function canvasFit(canvas: CanvasClass): 'fill' | undefined {
   return displayModeForCanvas(canvas) === 'fullscreen' ? 'fill' : undefined;
 }
 
+/** ggui#1195 — `true` when a canvas was judged at a box other than its class viewport (the order declared one). */
+export function isDeclaredViewport(canvas: CanvasClass, viewport: CanvasViewport): boolean {
+  const classBox = CANVAS_VIEWPORTS[canvas];
+  return viewport.width !== classBox.width || viewport.height !== classBox.height;
+}
+
 /** The deterministic fit issue — one per overflowing canvas, in the judge's issue shape so it rides the same channel. */
 export function canvasOverflowIssue(
   canvas: CanvasClass,
@@ -166,11 +182,18 @@ export function canvasOverflowIssue(
   verdict: 'fail' | 'warn',
 ): EvaluationIssue {
   const hidden = contentHeight - viewport.height;
+  // ggui#1195 — when the judge captured at a DECLARED box, the refusal names
+  // both boxes: the ceiling the content was measured against and the class
+  // box a reader would otherwise assume.
+  const classBox = CANVAS_VIEWPORTS[canvas];
+  const box = isDeclaredViewport(canvas, viewport)
+    ? `declared ${viewport.width}×${viewport.height}; class box ${classBox.width}×${classBox.height}`
+    : `${viewport.width}×${viewport.height}`;
   return {
     dimension: 'canvas-overflow',
     severity: verdict === 'fail' ? 'critical' : 'major',
     description:
-      `Rendered content is ${contentHeight}px tall on the ${canvas} canvas (${viewport.width}×${viewport.height}) — ` +
+      `Rendered content is ${contentHeight}px tall on the ${canvas} canvas (${box}) — ` +
       `${hidden}px ${verdict === 'fail' ? 'is cut off: the inline card does not scroll' : 'sits below the first screen'}.`,
     fix:
       'Fit the composition to the canvas: fewer and shorter sections, one compact row of chips, no hero taller than ' +
@@ -848,7 +871,8 @@ export async function runVisualEvaluationDetailed(
     const perCanvas: CanvasVisualResult[] = [];
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
-      const viewport = CANVAS_VIEWPORTS[canvas];
+      // ggui#1195 — the declared box when the order carried one, else the class box.
+      const viewport = config.canvasViewports?.[canvas] ?? CANVAS_VIEWPORTS[canvas];
       const policy = canvasFitPolicy(canvas);
       // ggui#1100: the page is composed per canvas with the runtime's fit — fullscreen canvases fill, the inline card does not.
       const fit = canvasFit(canvas);
@@ -1010,10 +1034,23 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     judge: c.judge,
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
   }));
+  // ggui#1195 — the fit stamp: the first canvas whose policy FAILS an
+  // overflow (the inline card), judged with a measurable height.
+  const fitCanvas = result.canvases.find((c) => canvasFitPolicy(c.canvas).overflow === 'fail' && c.contentHeight !== null);
+  const fit: VisualFitStamp | undefined =
+    fitCanvas !== undefined && fitCanvas.contentHeight !== null
+      ? {
+          canvas: fitCanvas.canvas,
+          ceiling: { width: fitCanvas.viewport.width, height: fitCanvas.viewport.height },
+          declared: isDeclaredViewport(fitCanvas.canvas, fitCanvas.viewport),
+          overflowPx: Math.max(0, fitCanvas.contentHeight - fitCanvas.viewport.height),
+        }
+      : undefined;
   return {
     score: result.finalScore,
     passed: result.passed,
     canvases,
+    ...(fit !== undefined ? { fit } : {}),
     ...(result.design !== undefined ? { design: result.design } : {}),
     ...(result.themeMode !== undefined ? { themeMode: result.themeMode } : {}),
   };

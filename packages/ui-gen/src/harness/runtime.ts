@@ -92,6 +92,12 @@ export interface SingleComponentParams {
      */
     canvases?: readonly CanvasClass[];
     /**
+     * ggui#1195 — per-canvas viewport override for the in-loop round: the
+     * box the composer targeted (`rendering.viewport`) so the round judges
+     * the same box. See `VisualEvalConfig.canvasViewports`.
+     */
+    canvasViewports?: Partial<Readonly<Record<CanvasClass, { width: number; height: number }>>>;
+    /**
      * The stylesheet the in-loop visual round renders under (a caller's
      * theme composed by `cssTokensForAppTheme`); absent = the design's
      * default tokens. Never part of the prompt or the identity.

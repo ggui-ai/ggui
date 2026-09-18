@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { DataContract, JsonObject, AppGenerationProfile, AppTheme } from '@ggui-ai/protocol';
 import { parseAppGenerationProfileAtReadDoor, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
+import { CANVAS_CLASSES } from '@ggui-ai/ui-gen/evaluation';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
@@ -108,6 +109,35 @@ export interface BootstrapJudgeInput {
   readonly profileStripped?: readonly string[];
   /** Same for the theme overlay. */
   readonly themeStripped?: readonly string[];
+  /** ggui#1195 — the box the mint composed the chat card at, when the order declared one; absent = the class box (an older mint wrote none). */
+  readonly canvasViewport?: DeclaredCanvasViewport;
+}
+
+/**
+ * ggui#1195 — a viewport in CSS px named with the canvas it applies to: the
+ * order's declared chat viewport, derived ONCE on the seam, composed at by
+ * the mint and captured at by the judge. Mirrors the mint's
+ * `BootstrapJudgeInput.canvasViewport` file-level contract.
+ */
+export interface DeclaredCanvasViewport {
+  readonly canvas: CanvasClass;
+  readonly width: number;
+  readonly height: number;
+}
+
+function isCanvasClass(v: unknown): v is CanvasClass {
+  return typeof v === 'string' && CANVAS_CLASSES.some((c) => c === v);
+}
+
+/** Loud on a box the judge cannot capture at — a wrong canvas name or a non-positive dimension is a writer bug, not a reading. */
+function readDeclaredCanvasViewport(raw: unknown, dir: string): DeclaredCanvasViewport {
+  const px = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  if (isJsonObject(raw) && isCanvasClass(raw.canvas) && px(raw.width) && px(raw.height)) {
+    return { canvas: raw.canvas, width: raw.width, height: raw.height };
+  }
+  throw new Error(
+    `eval-cell: ${JUDGE_INPUT_FILE} "canvasViewport" must be { canvas: one of ${CANVAS_CLASSES.join(' | ')}, width: px > 0, height: px > 0 } when present (in ${dir})`,
+  );
 }
 /** The row's note when the read door thinned the profile — the names are the point (#1105). */
 export const profileMembersStrippedNote = (names: readonly string[]): string =>
@@ -172,6 +202,8 @@ export interface CellInputs {
   /** Profile / theme members the read door stripped (a newer writer) — the row names them (#1105). */
   readonly profileStripped?: readonly string[];
   readonly themeStripped?: readonly string[];
+  /** ggui#1195 — the declared box from judge-input.json; the visual judge captures that canvas at it. Absent = class box. */
+  readonly canvasViewport?: DeclaredCanvasViewport;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -236,6 +268,8 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
   }
   let theme: AppTheme | undefined;
   let themeStripped: readonly string[] | undefined;
+  // ggui#1195 — the declared box, validated at the read door like profile and theme.
+  const canvasViewport = raw.canvasViewport !== undefined ? readDeclaredCanvasViewport(raw.canvasViewport, dir) : undefined;
   if (raw.theme !== undefined) {
     const door = parseAppThemeAtReadDoor(raw.theme);
     if (!door.ok) {
@@ -251,6 +285,7 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     ...(theme !== undefined ? { theme } : {}),
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
+    ...(canvasViewport !== undefined ? { canvasViewport } : {}),
   };
 }
 
@@ -314,6 +349,7 @@ export function readCellInputs(dir: string): CellInputs {
   let theme: AppTheme | undefined;
   let profileStripped: readonly string[] | undefined;
   let themeStripped: readonly string[] | undefined;
+  let canvasViewport: DeclaredCanvasViewport | undefined;
   if (ref === null) {
     const judge = readJudgeInput(dir);
     commit = bootstrapCommit(judge, contractJson.contract);
@@ -321,6 +357,7 @@ export function readCellInputs(dir: string): CellInputs {
     theme = judge.theme;
     profileStripped = judge.profileStripped;
     themeStripped = judge.themeStripped;
+    canvasViewport = judge.canvasViewport;
   } else {
     commit = commitForRef(ref);
     profile = undefined;
@@ -350,6 +387,7 @@ export function readCellInputs(dir: string): CellInputs {
     ...(theme !== undefined ? { theme } : {}),
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
+    ...(canvasViewport !== undefined ? { canvasViewport } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -417,6 +455,8 @@ export type VisualJudge = (ctx: {
   contract: DataContract;
   /** The commit's fixture props — what the harness passes the judge (`runner.ts:423`). */
   sampleProps?: JsonObject;
+  /** ggui#1195 — the declared box for one canvas; the judge captures that canvas at it (`VisualEvalConfig.canvasViewports`). */
+  canvasViewport?: DeclaredCanvasViewport;
 }) => Promise<VisualOutcome | VisualUnavailable | null>;
 
 /**
@@ -608,6 +648,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       ...(inputs.theme !== undefined ? { theme: inputs.theme } : {}),
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
+      ...(inputs.canvasViewport !== undefined ? { canvasViewport: inputs.canvasViewport } : {}),
     });
     if (isVisualUnavailable(outcome)) {
       visualUnavailable = outcome;

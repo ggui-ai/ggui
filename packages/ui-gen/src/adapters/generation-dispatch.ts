@@ -102,6 +102,12 @@ export interface GenerationDispatchParams {
      * today's single screenshot at `viewport`.
      */
     canvases?: readonly CanvasClass[];
+    /**
+     * ggui#1195 — per-canvas viewport override for the in-loop round: the
+     * box the composer targeted (`rendering.viewport`) so the round judges
+     * the same box. See `VisualEvalConfig.canvasViewports`.
+     */
+    canvasViewports?: Partial<Readonly<Record<CanvasClass, { width: number; height: number }>>>;
   };
   /** Quality config controlling eval tiers and improvement behavior */
   qualityConfig?: QualityConfig;
