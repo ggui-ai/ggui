@@ -131,6 +131,8 @@ const MAX_FEEDBACK_ISSUES = 3;
 function isFitFail(issue: EvalIssue): boolean {
   return issue.result === "fail" && issue.category === "visual" && issue.subcategory === "canvas-overflow";
 }
+/** The same marker as {@link isFitFail}, on the fingerprint `fingerprintFail` builds (`category|subcategory|…`). */
+const FIT_FINGERPRINT_PREFIX = "visual|canvas-overflow|";
 
 /** `[fit]`-tagged so the LLM can see the violation is the box, not the judge's taste. */
 function formatFitFeedback(issue: EvalIssue): string {
@@ -702,13 +704,19 @@ export async function runEvalRound(
     // to localize them; the +2 max-rounds extension is the right escape
     // hatch, not stuck-loop exit. Keep stuck-loop active for non-runtime
     // fail-sets (the original tier-1 nitpick case it was built for).
-    const onlyRuntimeFails =
+    // ggui#1195 follow-up: a FIT fail (`visual|canvas-overflow|…`) is exempt
+    // the same way — its escape hatch is the one `[fit]` round at the cap, and
+    // a card whose measured height did not move between rounds would otherwise
+    // exit here as "stuck" before that round is ever reached (the adversarial
+    // review ran the commit's own test and found round 2's break WAS the stuck
+    // exit). Bounded: the cap block grants the fit round exactly once.
+    const onlyExtensionExemptFails =
       currFailFingerprints.size > 0 &&
-      [...currFailFingerprints].every((fp) => fp.includes("|runtime:"));
+      [...currFailFingerprints].every((fp) => fp.includes("|runtime:") || fp.startsWith(FIT_FINGERPRINT_PREFIX));
     if (
       evalRoundsUsed > 1 &&
       currFailFingerprints.size > 0 &&
-      !onlyRuntimeFails &&
+      !onlyExtensionExemptFails &&
       [...currFailFingerprints].every((fp) => prevFailFingerprints.has(fp))
     ) {
       console.log(

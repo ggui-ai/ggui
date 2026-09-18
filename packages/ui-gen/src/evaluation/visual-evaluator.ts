@@ -120,6 +120,8 @@ export interface CanvasVisualResult {
   judge: CanvasJudgeRecord;
   /** How the judge composed the mount (ggui#1100): `'fill'` on every fullscreen canvas, absent on the inline card. */
   fit?: 'fill';
+  /** ggui#1195 — `true` when the order DECLARED this canvas's box (`config.canvasViewports` carried an entry), whatever its value. */
+  declared?: true;
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
@@ -872,7 +874,8 @@ export async function runVisualEvaluationDetailed(
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
       // ggui#1195 — the declared box when the order carried one, else the class box.
-      const viewport = config.canvasViewports?.[canvas] ?? CANVAS_VIEWPORTS[canvas];
+      const declaredBox = config.canvasViewports?.[canvas];
+      const viewport = declaredBox ?? CANVAS_VIEWPORTS[canvas];
       const policy = canvasFitPolicy(canvas);
       // ggui#1100: the page is composed per canvas with the runtime's fit — fullscreen canvases fill, the inline card does not.
       const fit = canvasFit(canvas);
@@ -929,6 +932,7 @@ export async function runVisualEvaluationDetailed(
         overflow,
         judge: judgeRecord,
         ...(fit !== undefined ? { fit } : {}),
+        ...(declaredBox !== undefined ? { declared: true as const } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
@@ -1042,7 +1046,8 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
       ? {
           canvas: fitCanvas.canvas,
           ceiling: { width: fitCanvas.viewport.width, height: fitCanvas.viewport.height },
-          declared: isDeclaredViewport(fitCanvas.canvas, fitCanvas.viewport),
+          // Declared = the order carried a box, even one equal to the class box (the review's point).
+          declared: fitCanvas.declared === true,
           overflowPx: Math.max(0, fitCanvas.contentHeight - fitCanvas.viewport.height),
         }
       : undefined;

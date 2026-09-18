@@ -126,4 +126,44 @@ describe('ggui#1195 — declared-viewport threading + the [fit] extension at the
     expect(r2.control, 'the fit extension is ONE round').toBe('break');
     expect(r2.evalDone).toBe(false);
   });
+
+  it('a fit fail whose measured height did NOT move between rounds still reaches the cap and gets its [fit] round — never the stuck exit (the review’s finding)', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { logs.push(args.map(String).join(' ')); });
+    try {
+      const fakeVisualMod: typeof realVisualEvaluator = {
+        ...realVisualEvaluator,
+        runVisualEval: () => Promise.resolve({ issues: [FIT_FAIL], summary: FAILED_SUMMARY }),
+      };
+      const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod, 2);
+      const r1 = await runEvalRound(ctx, input);
+      expect(r1.control).toBe('feedback');
+      const r2 = await runEvalRound(ctx, { ...input, evalRoundsUsed: r1.evalRoundsUsed, prevModeSubcats: r1.prevModeSubcats, prevFailFingerprints: r1.prevFailFingerprints });
+      expect(logs.some((l) => l.includes('stuck —')), 'the identical fit fail must not read as stuck').toBe(false);
+      expect(r2.control, 'round 2 = the cap: the [fit] round').toBe('feedback');
+      expect(r2.lastResultText).toContain('[fit]');
+      const r3 = await runEvalRound(ctx, { ...input, evalRoundsUsed: r2.evalRoundsUsed, prevModeSubcats: r2.prevModeSubcats, prevFailFingerprints: r2.prevFailFingerprints });
+      expect(r3.control, 'after the one fit round: stop').toBe('break');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the ONE-round bound holds on its own — a fit fail whose height changes every round cannot ride the stuck exit, so only the bound can stop it', async () => {
+    let call = 0;
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: () => {
+        call += 1;
+        const px = 600 - call * 10;
+        return Promise.resolve({ issues: [{ ...FIT_FAIL, description: `Rendered content is ${px}px tall on the xs-chat-card canvas (declared 384×516) — ${px - 516}px is cut off.` }], summary: FAILED_SUMMARY });
+      },
+    };
+    const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod, 1);
+    const r1 = await runEvalRound(ctx, input);
+    expect(r1.control).toBe('feedback');
+    expect(r1.lastResultText).toContain('[fit]');
+    const r2 = await runEvalRound(ctx, { ...input, evalRoundsUsed: r1.evalRoundsUsed, prevModeSubcats: r1.prevModeSubcats, prevFailFingerprints: r1.prevFailFingerprints });
+    expect(r2.control, 'FIT_EXTENSION_BONUS is 1: the second cap decision breaks').toBe('break');
+  });
 });

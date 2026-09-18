@@ -102,6 +102,13 @@ describe('ggui#1195 — the inline card is captured and judged at the DECLARED v
     expect(summarizeVisualResult(classBox.result!)?.fit).toEqual({ canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: false, overflowPx: 0 });
     const pageOnly = await runVisualEvaluationDetailed(CONTEXT, { provider: 'claude', passThreshold: 70, canvases: ['lg'] }, fitDeps(600));
     expect(summarizeVisualResult(pageOnly.result!)?.fit, 'no fail-policy canvas judged ⇒ no stamp').toBeUndefined();
+    // Declared means CARRIED — an order that declares exactly the class box is still a declaration.
+    const declaredClassBox = await runVisualEvaluationDetailed(
+      CONTEXT,
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': { width: 400, height: 640 } } },
+      fitDeps(600),
+    );
+    expect(summarizeVisualResult(declaredClassBox.result!)?.fit).toEqual({ canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: true, overflowPx: 0 });
   });
 
   it('canvasOverflowIssue names the declared box beside the class box only when they differ', () => {
