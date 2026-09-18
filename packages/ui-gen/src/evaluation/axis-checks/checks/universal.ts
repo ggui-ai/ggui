@@ -8,6 +8,7 @@ import { LUCIDE_ICON_NAMES, maxWidth as CONTAINER_MAX_WIDTH } from "@ggui-ai/des
 import { CANVAS_VIEWPORTS, type CanvasClass } from "../../../design-mode.js";
 import type { EvalIssue } from "../../types-public.js";
 import type { AxisCheck, AxisCheckInput } from "../types.js";
+import type { DataContract } from "@ggui-ai/protocol";
 import {
   getRequiredPropNames,
   mkIssue,
@@ -499,6 +500,91 @@ function runRootWidthCap(input: AxisCheckInput): EvalIssue[] {
   ];
 }
 
+// ── universal.action_label_dropped (ggui#1190 — the transcription-drop guard) ─
+// The GUARD half of #1190: the model transcribes an actionSpec label onto a
+// control but DROPS a special character ("Confirm & Schedule" → "Confirm
+// Schedule"), because the verbatim label is not at the write-site. This check
+// NAMES that class on the bench and guards regression; the fix (carry the
+// verbatim label / render it from data) lands separately, so #1190 stays open.
+// WARN-class, deterministic, and tuned to flag ONLY the high-confidence drop.
+
+const LABEL_SPECIAL_CHAR = /[^a-z0-9\s]/i;
+const normText = (s: string): string => s.toLowerCase().replace(/\s+/g, " ").trim();
+const alnumText = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Extract the VISIBLE rendered text of a component — JSX text nodes (with `{…}`
+ * expression containers stripped, nesting-aware) plus visible string
+ * attributes (aria-label / placeholder / title / alt). Deliberately excludes
+ * identifiers and call args: `useAction('confirmSchedule')` and the `const
+ * confirmSchedule` binding must NOT count as the label "Confirm & Schedule"
+ * appearing, or every action would false-match its own camelCase name.
+ */
+function visibleText(sourceCode: string): string {
+  // JSX text nodes: `>text<`. Excluding `>` from the run (`[^<>]`) skips the
+  // `=>` arrow-body conflation — an arrow's `>` is followed by code then a
+  // `>`, never text then a `<`, so only true tag-close→text→tag runs match,
+  // and identifiers (`const confirmSchedule`, `useAction('confirmSchedule')`)
+  // are never between `>` and `<`. `{…}` expression children are stripped so an
+  // expression's identifiers don't count as visible text.
+  const jsx = (sourceCode.match(/>([^<>]*)</g) ?? [])
+    .map((m) => m.slice(1, -1).replace(/\{[^}]*\}/g, " "))
+    .join(" ");
+  let attrs = "";
+  const attrRx = /\b(?:aria-label|placeholder|title|alt)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let m: RegExpExecArray | null;
+  while ((m = attrRx.exec(sourceCode)) !== null) attrs += " " + (m[1] ?? m[2] ?? "");
+  return jsx + " " + attrs;
+}
+
+/**
+ * Find actionSpec labels whose special-character content was dropped from the
+ * generated source. FALSE-POSITIVE-SAFE by construction — flags ONLY when the
+ * label's alphanumeric words appear CONTIGUOUSLY in the source but the full
+ * label (with its "&", "/", "+" …) does not, i.e. a clean transcription drop.
+ * Every ambiguous shape is exempt: labels rendered from data (`.label`
+ * anywhere), labels with no special char (nothing to drop), labels present
+ * verbatim, entity-encoded `&` (`&amp;` — the words stop being contiguous, so
+ * no flag), and very short labels. Presence-ANYWHERE, not wiring-scoped, on
+ * purpose: if the label's text appears anywhere we never flag.
+ */
+export function findDroppedActionLabels(
+  sourceCode: string,
+  contract: DataContract | undefined,
+): Array<{ readonly name: string; readonly label: string }> {
+  const actionSpec = contract?.actionSpec;
+  if (actionSpec === undefined) return [];
+  // Component renders any label from data → it does not transcribe → exempt all.
+  if (/\.label\b/.test(sourceCode)) return [];
+  const vis = visibleText(sourceCode);
+  const normVis = normText(vis);
+  const alnumVis = alnumText(vis);
+  const out: Array<{ name: string; label: string }> = [];
+  for (const [name, entry] of Object.entries(actionSpec)) {
+    const label = entry.label;
+    if (typeof label !== "string" || label.length === 0 || label === name) continue;
+    if (!LABEL_SPECIAL_CHAR.test(label)) continue; // no special char → nothing to drop
+    if (alnumText(label).length < 3) continue; // too short to match confidently
+    if (normVis.includes(normText(label))) continue; // present verbatim in visible text → correct
+    // The label's words appear contiguously in the VISIBLE text but the full
+    // label (with its punctuation) does not → a character was dropped.
+    if (alnumVis.includes(alnumText(label))) out.push({ name, label });
+  }
+  return out;
+}
+
+function runActionLabelDropped(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  return findDroppedActionLabels(input.sourceCode, input.contract).map(({ name, label }) =>
+    mkIssue(
+      "universal.action_label_dropped",
+      `The action "${name}" declares label "${label}", but the rendered control appears to drop its "${label.replace(/[a-z0-9\s]/gi, "").trim()}": the label's words are in the generated source, the full label is not — a transcription drop (ggui#1190).`,
+      `Render the label EXACTLY as the contract states it — button text should be the verbatim \`actionSpec.${name}.label\`, or render it from data (\`{x.label}\`), never a re-typed copy that drops "&", "/", "+", etc.`,
+      "warn",
+    ),
+  );
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -523,6 +609,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runRootWidthCap,
+  },
+  {
+    id: "universal.action_label_dropped",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runActionLabelDropped,
   },
   {
     id: "universal.terminal_action_unguarded",
