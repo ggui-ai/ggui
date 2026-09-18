@@ -15,6 +15,13 @@ export interface AdapterConfig {
   /** Use Bedrock instead of direct API (Claude only) */
   useBedrock?: boolean;
   /**
+   * ggui#1185 — run on the machine's own Claude Code login instead of a key.
+   * Claude SDK adapter only. The adapter strips every provider key from the
+   * spawned env and pins the run tool-less, config-less and non-bare (see
+   * `claude/claude-code-login.ts`). Opt-in; absent ⇒ key-based auth.
+   */
+  claudeCodeLogin?: boolean;
+  /**
    * Thinking level for models with extended thinking (Gemini 3.x Flash
    * via the Interactions API). Mirrors the API's `thinking_level` enum —
    * `'minimal'` is the floor (the API has NO true off), then `'low'` /
@@ -129,5 +136,6 @@ export function hasCredentials(
 ): boolean {
   if (config.apiKey) return true;
   if (config.useBedrock) return true;
+  if (config.claudeCodeLogin) return true;
   return envVarNames.some((name) => !!process.env[name]);
 }

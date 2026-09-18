@@ -388,3 +388,34 @@ describe('resolveRoute — sibling-clear matrix', () => {
     },
   );
 });
+
+// ggui#1185 — the Claude Code login path. A sentinel credential on an anthropic
+// route means "no key: the spawned Claude Code binary authenticates with the
+// machine's own login". The decision must clear every provider key from the
+// subprocess env (a stale key would win over the login) and name the auth mode
+// so the adapter can pin the SDK options that keep the run tool-less and
+// non-bare. Any other provider with the sentinel is a misconfiguration.
+import { CLAUDE_CODE_LOGIN_CREDENTIAL } from './claude/claude-code-login';
+describe('resolveRoute — claude-code-login sentinel (ggui#1185)', () => {
+  it('anthropic + sentinel → auth named, every provider key cleared, model kept', () => {
+    const d = resolveRoute({
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+      apiKey: CLAUDE_CODE_LOGIN_CREDENTIAL,
+      env: { ANTHROPIC_API_KEY: 'sk-ant-stale', CLAUDE_API_KEY: 'stale', ANTHROPIC_AUTH_TOKEN: 'stale', OPENAI_API_KEY: 'sk-other' },
+    });
+    expect(d.auth).toBe('claude-code-login');
+    expect(d.model).toBe('claude-haiku-4-5-20251001');
+    for (const k of ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY']) {
+      expect(k in d.env && d.env[k] === undefined, `${k} must be cleared (present as undefined)`).toBe(true);
+    }
+  });
+  it('a real key on an anthropic route does not name the login auth', () => {
+    const d = resolveRoute({ route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }, apiKey: 'sk-ant-real', env: {} });
+    expect(d.auth).toBeUndefined();
+    expect(d.env.ANTHROPIC_API_KEY).toBe('sk-ant-real');
+  });
+  it('the sentinel on a non-anthropic route is refused by name', () => {
+    expect(() => resolveRoute({ route: { provider: 'openai', model: 'gpt-5.6-luna' }, apiKey: CLAUDE_CODE_LOGIN_CREDENTIAL, env: {} }))
+      .toThrow(/claude-code-login/);
+  });
+});

@@ -12,6 +12,7 @@
 // legacy) still needs the wire-canonical anthropic id → cross-region
 // profile id upcast.
 
+import { CLAUDE_CODE_LOGIN_CREDENTIAL, PROVIDER_KEY_ENV_NAMES } from './claude/claude-code-login';
 import type { LlmRoute } from '@ggui-ai/protocol';
 
 /**
@@ -58,6 +59,13 @@ export function getBedrockModelId(model: string): string {
 }
 
 export interface RoutingDecision {
+  /**
+   * Named only for the Claude Code login path (ggui#1185): the caller passed
+   * {@link CLAUDE_CODE_LOGIN_CREDENTIAL} as the key, every provider key is
+   * cleared from the env below, and the adapter pins the SDK options that keep
+   * the run tool-less, config-less and non-bare. Absent ⇒ key-based auth.
+   */
+  readonly auth?: 'claude-code-login';
   /**
    * Upstream model id the dispatch adapter will pass to the provider
    * SDK. For most routes this is `route.model` verbatim — the typed
@@ -143,6 +151,13 @@ function clearSiblings(
  */
 export function resolveRoute(input: RoutingInput): RoutingDecision {
   const { route, apiKey, env } = input;
+  if (apiKey === CLAUDE_CODE_LOGIN_CREDENTIAL && route.provider !== 'anthropic') {
+    throw new Error(
+      `${route.provider}:${route.model} cannot use the claude-code-login credential — ` +
+        `the machine's Claude Code login authenticates the Claude Code binary only; ` +
+        `pick an anthropic route or supply a ${route.provider} API key.`,
+    );
+  }
 
   switch (route.provider) {
     case 'openai': {
@@ -215,6 +230,19 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
     }
 
     case 'anthropic': {
+      if (apiKey === CLAUDE_CODE_LOGIN_CREDENTIAL) {
+        // ggui#1185: no key reaches the spawned binary — it authenticates with
+        // the machine's own Claude Code login. Every provider key AND every
+        // sibling is cleared, because the binary prefers an env key over its
+        // login and a stale one would silently take the run off this path.
+        const cleared: Record<string, undefined> = {};
+        for (const k of PROVIDER_KEY_ENV_NAMES) cleared[k] = undefined;
+        return {
+          model: route.model,
+          env: { ...cleared, ...clearSiblings(new Set()) },
+          auth: 'claude-code-login',
+        };
+      }
       if (apiKey) {
         return {
           model: route.model,

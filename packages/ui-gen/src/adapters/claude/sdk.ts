@@ -13,6 +13,7 @@ import type { ClaudeSdkConfig, GenerateParams } from '../base';
 import type { AdapterResult, ProviderName, AdapterMode } from '../types';
 import { createArtifacts, processMessage } from './message-parser';
 import { createToolMcpServer } from './tool-bridge';
+import { claudeCodeLoginQueryOptions, stripProviderKeyEnv } from './claude-code-login';
 
 export class ClaudeSdkAdapter extends GeneratorAdapter {
   readonly provider: ProviderName = 'claude';
@@ -40,7 +41,11 @@ export class ClaudeSdkAdapter extends GeneratorAdapter {
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
     // Build environment from config or process.env
-    const env = buildEnv(cfg.env);
+    // ggui#1185 — on the login path no provider key may reach the binary:
+    // it prefers an env key over its login, so a stale one would take the
+    // run off this path without a word.
+    const login = cfg.claudeCodeLogin === true;
+    const env = login ? stripProviderKeyEnv(buildEnv(cfg.env)) : buildEnv(cfg.env);
 
     const artifacts = createArtifacts();
     const onProgress = cfg.onProgress;
@@ -72,6 +77,8 @@ export class ClaudeSdkAdapter extends GeneratorAdapter {
         allowDangerouslySkipPermissions: true,
         ...(cfg.cliPath && { pathToClaudeCodeExecutable: cfg.cliPath }),
         ...(cfg.stderr && { stderr: cfg.stderr }),
+        // ggui#1185 — tool-less, config-less, non-bare; the model is pinned above.
+        ...(login ? claudeCodeLoginQueryOptions() : {}),
       },
     })) {
       processMessage(
