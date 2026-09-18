@@ -1,7 +1,7 @@
 import { useState, useId } from 'react';
 import type { CSSProperties } from 'react';
 import type { AccordionProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const chevron = (expanded: boolean) => (
   <svg
@@ -11,7 +11,7 @@ const chevron = (expanded: boolean) => (
     fill="currentColor"
     aria-hidden="true"
     style={{
-      transition: `transform ${duration.normal} ${easing.easeInOut}`,
+      transition: `transform ${motionVar.duration.base} ${motionVar.easing.standard}`,
       transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
       flexShrink: 0,
     }}
@@ -121,7 +121,7 @@ export function Accordion({
                   fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
                   color: 'var(--ggui-color-onContainer, #18181b)',
                   textAlign: 'left',
-                  transition: `background-color ${duration.fast} ${easing.easeInOut}`,
+                  transition: `background-color ${motionVar.duration.fast} ${motionVar.easing.standard}`,
                 }}
               >
                 <span>{item.title}</span>

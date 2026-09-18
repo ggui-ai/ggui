@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import type { CSSProperties } from 'react';
 import type { SelectProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const sizeStyles: Record<string, CSSProperties> = {
   sm: { padding: '6px 10px', fontSize: 'var(--ggui-font-size-sm, 14px)' },
@@ -73,7 +73,7 @@ export function Select({
           backgroundPosition: 'right 12px center',
           paddingRight: '36px',
           boxSizing: 'border-box',
-          transition: `border-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}`,
+          transition: `border-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}`,
         }}
         {...rest}
       >

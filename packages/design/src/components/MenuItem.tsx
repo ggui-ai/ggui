@@ -1,6 +1,7 @@
 import type { MenuItemProps } from './types';
 import { radius } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * MenuItem - A clickable item for menus and lists
@@ -41,7 +42,7 @@ export function MenuItem({
         fontWeight: active ? fontWeight.medium : fontWeight.normal,
         textAlign: 'left',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'background-color 0.15s',
+        transition: `background-color ${motionVar.duration.fast} ${motionVar.easing.standard}`,
         ...style,
       }}
       onMouseEnter={(e) => {

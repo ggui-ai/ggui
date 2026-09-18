@@ -29,11 +29,14 @@ describe('generateCssVariables', () => {
     expect(css).toContain('--ggui-spacing-md:');
   });
 
-  it('does NOT emit unconsumed groups — accessibility, zIndex and the motion ladders are layer-1 or code constants, never projected', () => {
+  it('does NOT emit unconsumed groups — accessibility, zIndex and the composed motion ladders are layer-1 or code constants, never projected; the motion TEMPO is (ggui#1106)', () => {
     const css = generateCssVariables(lightTheme, 'light');
     expect(css).not.toContain('--ggui-accessibility-');
     expect(css).not.toContain('--ggui-zIndex-');
-    expect(css).not.toContain('--ggui-motion-duration-');
+    expect(css).not.toContain('--ggui-motion-transition-');
+    expect(css).not.toContain('--ggui-motion-keyframes-');
+    expect(css).toContain('--ggui-motion-duration-base: 200ms;');
+    expect(css).toContain('--ggui-motion-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);');
   });
 
   it('wraps output in :root selector, sorted by name', () => {

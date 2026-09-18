@@ -212,6 +212,7 @@ export const TOKENS_EXPORTS = [
   'duration',
   'easing',
   'transition',
+  'motionVar',
   'keyframes',
   'thinkingAnimation',
   'thinkingKeyframes',

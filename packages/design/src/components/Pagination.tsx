@@ -2,6 +2,7 @@ import type { PaginationProps } from './types';
 import { Button } from '../primitives/Button';
 import { Icon } from '../primitives/Icon';
 import { fontSize, fontWeight } from '../tokens/typography';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * Pagination - Page navigation controls
@@ -84,7 +85,7 @@ export function Pagination({
         fontWeight: active ? fontWeight.medium : fontWeight.normal,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        transition: 'all 0.15s',
+        transition: `all ${motionVar.duration.fast} ${motionVar.easing.standard}`,
       }}
     >
       {page}

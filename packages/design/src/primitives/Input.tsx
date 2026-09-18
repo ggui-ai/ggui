@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import type { CSSProperties } from 'react';
 import type { InputProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const sizeStyles: Record<string, CSSProperties> = {
   sm: {
@@ -97,7 +97,7 @@ export function Input({
             ? 'var(--ggui-color-sunken, #fafafa)'
             : 'var(--ggui-color-sunken, #ffffff)',
           color: 'var(--ggui-color-onContainer, #18181b)',
-          transition: `border-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}`,
+          transition: `border-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}`,
           boxSizing: 'border-box',
         }}
         {...rest}

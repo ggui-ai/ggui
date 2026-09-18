@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateOverlayCoverage, NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
+import { validateOverlayCoverage, NON_THEME_DEFINABLE_TOKENS, LADDER_COVERED_TOKENS } from './validate-overlay-coverage';
 import { completeThemeVariables, deriveThemeVariables } from './derive-theme-variables';
 import { darkTheme } from './defaults/dark';
 import { consumedTokenManifest } from './consumed-tokens';
@@ -21,8 +21,8 @@ describe('validateOverlayCoverage', () => {
   });
 
   it('unknown = keys(overlay) − manifest − floor — a projected name nothing reads is named (the dead-key class)', () => {
-    const overlay = { ...deriveThemeVariables(lightTheme, 'light'), '--ggui-color-surface': '#fff', '--ggui-motion-duration-fast': '100ms' };
-    expect(validateOverlayCoverage(overlay).unknown).toEqual(['--ggui-color-surface', '--ggui-motion-duration-fast']);
+    const overlay = { ...deriveThemeVariables(lightTheme, 'light'), '--ggui-color-surface': '#fff', '--ggui-motion-duration-glacial': '100ms' };
+    expect(validateOverlayCoverage(overlay).unknown).toEqual(['--ggui-color-surface', '--ggui-motion-duration-glacial']);
   });
 
   it('the floor is neither required nor unknown', () => {
@@ -126,10 +126,29 @@ describe('N−1: the manifest grows only with a completion rule or a floor entry
     const added = consumedTokenManifest.filter((t) => !previous.has(t)).sort();
     // The growth this fixture knows about. A new token is a DECISION: add it here AND give it a
     // completion rule (or a floor entry), or the next test names it as the N−1 break it is.
-    expect(added).toEqual(['--ggui-shape-radius-control']);
+    expect(added).toEqual([
+      '--ggui-motion-duration-base',
+      '--ggui-motion-duration-fast',
+      '--ggui-motion-duration-slow',
+      '--ggui-motion-easing-emphasized',
+      '--ggui-motion-easing-exit',
+      '--ggui-motion-easing-standard',
+      '--ggui-shape-radius-control',
+    ]);
     const completed = completeThemeVariables(previousProjection(), 'light');
     const floor = new Set(NON_THEME_DEFINABLE_TOKENS);
-    const gaps = added.filter((t) => completed[t] === undefined && !floor.has(t));
+    // ggui#1106 — the third mechanism: a name the :root ladder always declares, which an overlay
+    // may omit (the card keeps the shipped tempo) and a document may still state.
+    const ladderCovered = new Set(LADDER_COVERED_TOKENS);
+    const gaps = added.filter((t) => completed[t] === undefined && !floor.has(t) && !ladderCovered.has(t));
     expect(gaps).toEqual([]);
+  });
+
+  it('ladder-covered names: omitted ⇒ never uncovered; stated ⇒ never unknown (ggui#1106)', () => {
+    const omitted = validateOverlayCoverage(previousProjection());
+    expect(omitted.uncovered.filter((t) => t.startsWith('--ggui-motion-'))).toEqual([]);
+    const stated = validateOverlayCoverage({ ...previousProjection(), '--ggui-motion-duration-base': '160ms' });
+    expect(stated.unknown).toEqual([]);
+    expect(stated.uncovered).toEqual([]);
   });
 });

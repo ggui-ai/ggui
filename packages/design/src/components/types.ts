@@ -161,7 +161,7 @@ export interface FormFieldProps extends BaseProps {
  *
  * Composes: none -- renders a native `<button>` element.
  *
- * Built-in transition: `background-color 0.15s` on hover.
+ * Built-in transition: `background-color` over `var(--ggui-motion-duration-fast)` / `var(--ggui-motion-easing-standard)` on hover (ggui#1106).
  *
  * Color logic:
  * - **Normal**: text `colors.gray[700]`, hover bg `colors.gray[100]`
@@ -527,7 +527,7 @@ export interface BreadcrumbProps extends BaseProps {
  * Composes: `Button` (ghost variant for prev/next/first/last arrows),
  * `Icon` (`chevron-left`, `chevron-right`).
  *
- * Built-in transition: `all 0.15s` on page number buttons.
+ * Built-in transition: `all` over `var(--ggui-motion-duration-fast)` / `var(--ggui-motion-easing-standard)` on page number buttons (ggui#1106).
  *
  * Page windowing: when `totalPages > maxVisible`, the component shows the
  * first page, last page, a window of pages around `currentPage`, and

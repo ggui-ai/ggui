@@ -5,6 +5,7 @@ import { Row } from '../primitives/Row';
 import { Text } from '../primitives/Text';
 import { Icon } from '../primitives/Icon';
 import { Divider } from '../primitives/Divider';
+import { motionVar } from '../tokens/transitions';
 
 type StepState = 'completed' | 'current' | 'upcoming';
 
@@ -49,7 +50,7 @@ function Marker({ index, state }: { index: number; state: StepState }): ReactNod
         justifyContent: 'center',
         flexShrink: 0,
         boxSizing: 'border-box',
-        transition: 'background-color 0.2s, border-color 0.2s, color 0.2s',
+        transition: `background-color ${motionVar.duration.base} ${motionVar.easing.standard}, border-color ${motionVar.duration.base} ${motionVar.easing.standard}, color ${motionVar.duration.base} ${motionVar.easing.standard}`,
         ...markerStyles[state],
       }}
     >

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { TableProps, SortDirection } from './types';
+import { motionVar } from '../tokens/transitions';
 
 const sortIndicator = (active: boolean, direction: SortDirection) => (
   <span
@@ -143,7 +144,7 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
                     : striped && rowIndex % 2 === 1
                       ? 'var(--ggui-color-sunken, #fafafa)'
                       : 'transparent',
-                transition: 'background-color 0.15s ease',
+                transition: `background-color ${motionVar.duration.fast} ${motionVar.easing.standard}`,
               }}
             >
               {columns.map((col) => (

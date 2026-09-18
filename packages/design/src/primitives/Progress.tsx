@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { ProgressProps } from './types';
+import { motionVar } from '../tokens/transitions';
 
 const variantColors: Record<string, string> = {
   default: 'var(--ggui-color-primary-600, #0284c7)',
@@ -66,7 +67,7 @@ export function Progress({
             height: '100%',
             borderRadius: height / 2,
             backgroundColor: barColor,
-            transition: indeterminate ? 'none' : 'width 0.3s ease',
+            transition: indeterminate ? 'none' : `width ${motionVar.duration.slow} ${motionVar.easing.standard}`,
             ...(indeterminate
               ? {
                   width: '30%',

@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { CSSProperties } from 'react';
 import type { RadioGroupProps } from './types';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * RadioGroup - A group of radio button options
@@ -103,7 +104,7 @@ export function RadioGroup({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.2s',
+                    transition: `all ${motionVar.duration.base} ${motionVar.easing.standard}`,
                   }}
                 >
                   {isSelected && (

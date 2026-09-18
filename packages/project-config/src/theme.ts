@@ -271,14 +271,14 @@ const TypeScaleRole = z.strictObject({
  * member changes a pixel. A member may be contracted before its consumer
  * exists; a VARIABLE may not enter the consumed-token manifest before its
  * consumer exists (a name nothing reads is coverage debt, not a feature).
- * Today that makes three of these members STATED, STORED and NOT YET
+ * Today that makes two of these members STATED, STORED and NOT YET
  * VISIBLE: the role-named type families and `scrim` arrive with their
- * consumers (ggui#1075 Track C (b), ggui#1083), and `motion` with
- * **ggui#1106** — the card's motion is build-time constants in the
- * primitives, so no `--ggui-motion-*` variable exists to project onto yet
- * (the manifest carries 122 tokens and none of them is motion). A writer
- * may declare all of them now, which is the point of contracting first;
- * nobody should read the contract as shipping the behaviour.
+ * consumers (ggui#1075 Track C (b), ggui#1083). `motion.duration` /
+ * `motion.easing` DO reach the card since **ggui#1106** (the primitives
+ * read `--ggui-motion-*` variables the projection emits); `motion.reduce`
+ * is still carried without a composer that reads it. A writer may declare
+ * all of them now, which is the point of contracting first; nobody should
+ * read the contract as shipping a behaviour this list says is not consumed.
  */
 
 /** The five type roles; `display` is the poster-scale role a host page leads with. */
@@ -543,6 +543,13 @@ function stringToken<T>(token: { $type: string; $value: T; $description?: string
   return { $type: token.$type, $value: value, ...(token.$description !== undefined ? { $description: token.$description } : {}) };
 }
 
+/** The stated steps of an optional-keyed token group, each carried as a string token; unstated keys stay absent (ggui#1106). */
+function mapStatedTokens(group: Readonly<Record<string, { $type: string; $value: string; $description?: string } | undefined>>): Record<string, DtcgToken> {
+  return Object.fromEntries(
+    Object.entries(group).flatMap(([k, t]) => (t === undefined ? [] : [[k, stringToken(t, t.$value)] as const])),
+  );
+}
+
 function mapRecord<In, Out>(record: Readonly<Record<string, In>>, f: (value: In) => Out): Record<string, Out> {
   return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, f(v)]));
 }
@@ -607,6 +614,10 @@ export function normalizeThemeDocument(doc: ThemeDocument): DtcgTheme {
               ),
             ),
             keyframes: doc.motion.keyframes ?? lightTheme.motion.keyframes,
+            // ggui#1106 — the tempo override reaches the projection: each stated step verbatim.
+            ...(doc.motion.duration !== undefined ? { duration: mapStatedTokens(doc.motion.duration) } : {}),
+            ...(doc.motion.easing !== undefined ? { easing: mapStatedTokens(doc.motion.easing) } : {}),
+            ...(doc.motion.reduce !== undefined ? { reduce: doc.motion.reduce } : {}),
           },
     accessibility: {
       focusRing: accessibility?.focusRing ?? lightTheme.accessibility.focusRing,

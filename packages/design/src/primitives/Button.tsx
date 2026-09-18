@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { ButtonProps } from './types';
 import { Spinner } from './Spinner';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const sizeStyles: Record<string, CSSProperties> = {
   xs: {
@@ -102,7 +102,7 @@ export function Button({
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         opacity: isDisabled ? 0.5 : 1,
         width: fullWidth ? '100%' : undefined,
-        transition: `background-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}, opacity ${duration.normal} ${easing.easeInOut}`,
+        transition: `background-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}, opacity ${motionVar.duration.base} ${motionVar.easing.standard}`,
         boxShadow: 'var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))',
         ...style,
       }}

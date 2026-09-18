@@ -1,5 +1,6 @@
 import type { LinkProps } from './types';
 import { resolveToneCss } from './color-slots';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * Link - An anchor element with consistent styling
@@ -39,7 +40,7 @@ export function Link({
         color: linkColor,
         textDecoration: underlineStyle,
         cursor: 'pointer',
-        transition: 'color 0.2s',
+        transition: `color ${motionVar.duration.base} ${motionVar.easing.standard}`,
         ...style,
       }}
       onMouseEnter={(e) => {

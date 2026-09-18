@@ -1,7 +1,7 @@
 import { useState, useId, useRef, useCallback } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import type { TabsProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const sizeStyles: Record<string, CSSProperties> = {
   sm: {
@@ -88,7 +88,7 @@ export function Tabs({
       fontWeight: isActive
         ? ('var(--ggui-font-weight-semibold, 600)' as CSSProperties['fontWeight'])
         : ('var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight']),
-      transition: `color ${duration.normal} ${easing.easeInOut}, background-color ${duration.normal} ${easing.easeInOut}, border-color ${duration.normal} ${easing.easeInOut}`,
+      transition: `color ${motionVar.duration.base} ${motionVar.easing.standard}, background-color ${motionVar.duration.base} ${motionVar.easing.standard}, border-color ${motionVar.duration.base} ${motionVar.easing.standard}`,
       whiteSpace: 'nowrap',
       flex: fullWidth ? 1 : undefined,
       justifyContent: fullWidth ? 'center' : undefined,

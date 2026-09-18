@@ -31,6 +31,10 @@
  *     family's 100 / 900 stops (light) or 800 / 100 (dark).
  *   - flat `error` = `error-500`; `link` = the stated link, else
  *     `primary-600` — stated wins, an alias is never appended over it.
+ *   - motion (ggui#1106): `--ggui-motion-duration-{fast,base,slow}` and
+ *     `--ggui-motion-easing-{standard,emphasized,exit}` are the stated
+ *     `motion.duration` / `motion.easing` steps, else the layer-1 scale in
+ *     `../tokens/transitions` — the tempo every primitive's `transition` reads.
  *   - font sizes come from `font.ramp { base, ratio }` by the exponent
  *     table (xs −2 … 4xl +5), else the layer-1 ladder; weights, line
  *     heights, letter-spacing defaults, shadows, radii and spacing fall
@@ -49,6 +53,7 @@ import { consumedTokenManifest } from './consumed-tokens';
 import { NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
 import { fontFamily, fontSize, fontWeight, lineHeight } from '../tokens/typography';
 import { spacing as spacingLadder, radius as radiusLadder, shadow as shadowLadder } from '../tokens/spacing';
+import { duration, easing } from '../tokens/transitions.js';
 
 /** The projected variable set: `--ggui-*` name → CSS value. */
 export type ThemeVariableMap = Readonly<Record<string, string>>;
@@ -540,6 +545,20 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   V['--ggui-shape-radius-control'] = stated(rad, 'control') ?? V['--ggui-shape-radius-md']!;
   const sh = doc.shape?.shadow as Tokens;
   for (const [key, value] of Object.entries(shadowLadder)) V[`--ggui-shape-shadow-${key}`] = stated(sh, key) ?? String(value);
+
+  // ggui#1106 — motion through variables: the layer-1 scale (`tokens/transitions`)
+  // by default, a stated `motion.duration` / `motion.easing` step VERBATIM (the
+  // document door validated it). Roles: standard = the system's ease-in-out;
+  // emphasized = the decelerating arrival (`easeOut`); exit = the accelerating
+  // departure (`easeIn`). Every primitive's `transition` reads these six names.
+  const md = doc.motion?.duration as Tokens;
+  const me = doc.motion?.easing as Tokens;
+  V['--ggui-motion-duration-fast'] = stated(md, 'fast') ?? duration.fast;
+  V['--ggui-motion-duration-base'] = stated(md, 'base') ?? duration.normal;
+  V['--ggui-motion-duration-slow'] = stated(md, 'slow') ?? duration.slow;
+  V['--ggui-motion-easing-standard'] = stated(me, 'standard') ?? easing.easeInOut;
+  V['--ggui-motion-easing-emphasized'] = stated(me, 'emphasized') ?? easing.easeOut;
+  V['--ggui-motion-easing-exit'] = stated(me, 'exit') ?? easing.easeIn;
 
   if (missing.length > 0) throw new ThemeDocumentInvalidError(missing);
 

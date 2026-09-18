@@ -256,11 +256,10 @@ export interface DtcgTheme {
      * override a card uses to sit inside someone else's site, exactly the
      * standing `palette` has. Absent ⇒ the shipped scale, unchanged.
      *
-     * Carried on the wire and validated at the document door; no projection
-     * in this package reads `duration` or `easing` yet — a document may
-     * declare them today and the card keeps the shipped scale. This
-     * sentence leaves with the projection that reads them, in the same
-     * publication.
+     * Projected by `deriveThemeVariables` onto `--ggui-motion-duration-*` /
+     * `--ggui-motion-easing-*` (ggui#1106), which every primitive's
+     * `transition` reads — a stated step reaches the card verbatim; an
+     * unstated one keeps the shipped scale.
      */
     duration?: {
       fast?: DtcgToken;
@@ -285,10 +284,11 @@ export interface DtcgTheme {
      * absent — and the COMPOSER's default is `respect`, emitting the
      * reduced-motion rule unless a document explicitly says `ignore`.
      *
-     * CONTRACTED, NOT YET CONSUMED (ggui#1106): the primitives express
-     * motion as build-time constants, so no `--ggui-motion-*` variable
-     * exists to project onto and a stated tempo changes nothing visible
-     * until that row lands. Declaring it today is correct and stored.
+     * CONTRACTED, NOT YET CONSUMED: the tempo and easings above ARE consumed
+     * (ggui#1106), but no composer in this package emits a document-driven
+     * reduced-motion rule yet — `reduce` is carried and stored, and the
+     * shipped `reducedMotionCSS` applies regardless of it. Declaring it today
+     * is correct; nobody should read it as shipping the behaviour.
      */
     reduce?: 'respect' | 'ignore';
   };

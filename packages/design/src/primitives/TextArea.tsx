@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import type { TextAreaProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * TextArea - A multiline text input primitive
@@ -83,7 +83,7 @@ export function TextArea({
           color: 'var(--ggui-color-onContainer, #18181b)',
           fontSize: 'var(--ggui-font-size-sm, 14px)',
           fontFamily: 'inherit',
-          transition: `border-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}`,
+          transition: `border-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}`,
           boxSizing: 'border-box',
           resize: autoResize ? 'none' : 'vertical',
         }}

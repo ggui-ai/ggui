@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ToggleProps } from './types';
-import { duration, easing } from '../tokens/transitions';
+import { motionVar } from '../tokens/transitions';
 
 const sizeConfig = {
   sm: { width: 36, height: 20, knob: 16 },
@@ -60,7 +60,7 @@ export function Toggle({
           borderRadius: '9999px',
           backgroundColor: checked ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)',
           position: 'relative',
-          transition: `background-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}`,
+          transition: `background-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}`,
           flexShrink: 0,
           outline: 'none',
           boxShadow: focused
@@ -77,7 +77,7 @@ export function Toggle({
             position: 'absolute',
             top: (config.height - config.knob) / 2,
             left: checked ? config.width - config.knob - (config.height - config.knob) / 2 : (config.height - config.knob) / 2,
-            transition: `left ${duration.normal} ${easing.easeInOut}`,
+            transition: `left ${motionVar.duration.base} ${motionVar.easing.standard}`,
             boxShadow: 'var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))',
           }}
         />

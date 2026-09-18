@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { CheckboxProps } from './types';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * Checkbox - A checkbox input primitive
@@ -65,7 +66,7 @@ export function Checkbox({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'all 0.2s',
+            transition: `all ${motionVar.duration.base} ${motionVar.easing.standard}`,
           }}
         >
           {(checked || indeterminate) && (

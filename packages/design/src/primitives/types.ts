@@ -2227,13 +2227,13 @@ export interface AccordionItem {
  * and uncontrolled (internal state) modes.
  *
  * Chevron animation: the trailing chevron icon rotates from 0deg (collapsed) to
- * 180deg (expanded) with `transition: transform 200ms ease-in-out`.
+ * 180deg (expanded) with `transition: transform var(--ggui-motion-duration-base) var(--ggui-motion-easing-standard)` (ggui#1106).
  *
  * Header button: full-width flex layout (`justify-content: space-between`),
  * `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`,
  * `var(--ggui-color-onContainer)`.
  * Header padding: `var(--ggui-spacing-2) var(--ggui-spacing-4)`.
- * Background transition: `background-color 100ms ease-in-out`.
+ * Background transition: `background-color var(--ggui-motion-duration-fast) var(--ggui-motion-easing-standard)`.
  *
  * **IMPORTANT:** `onChange` receives the full array of currently expanded keys,
  * NOT a single key or a React event. In single mode (`multiple: false`), this

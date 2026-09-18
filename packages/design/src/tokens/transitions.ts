@@ -23,17 +23,44 @@ export const easing = {
   spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
 } as const;
 
-/** Transition presets combining duration + easing */
+/**
+ * ggui#1106 — the tempo a card READS. Six CSS variables the theme layer always
+ * emits (`deriveThemeVariables`): the layer-1 scale above by default, a host's
+ * stated `motion.duration` / `motion.easing` when the document carries one.
+ * Every `transition` a primitive declares is composed from THESE, never from the
+ * constants, so a host's tempo reaches the card. Keyframe animations (spinners,
+ * pulses, shimmers) are not on the tempo scale and keep the constants.
+ * Literal names on purpose: the consumed-token manifest is derived by scanning
+ * source for `var(--ggui-…`.
+ */
+export const motionVar = {
+  duration: {
+    fast: 'var(--ggui-motion-duration-fast)',
+    base: 'var(--ggui-motion-duration-base)',
+    slow: 'var(--ggui-motion-duration-slow)',
+  },
+  easing: {
+    /** The system's ease-in-out — the default for colour, border and size changes. */
+    standard: 'var(--ggui-motion-easing-standard)',
+    /** The decelerating arrival — transforms and entrances. */
+    emphasized: 'var(--ggui-motion-easing-emphasized)',
+    /** The accelerating departure. */
+    exit: 'var(--ggui-motion-easing-exit)',
+  },
+} as const;
+
+/** Transition presets combining duration + easing — composed from the tempo VARIABLES (ggui#1106). */
 export const transition = {
   none: 'none',
-  fast: `${duration.fast} ${easing.easeInOut}`,
-  normal: `${duration.normal} ${easing.easeInOut}`,
-  slow: `${duration.slow} ${easing.easeInOut}`,
-  colors: `color ${duration.normal} ${easing.easeInOut}, background-color ${duration.normal} ${easing.easeInOut}, border-color ${duration.normal} ${easing.easeInOut}`,
-  opacity: `opacity ${duration.normal} ${easing.easeInOut}`,
-  transform: `transform ${duration.normal} ${easing.easeOut}`,
+  fast: `${motionVar.duration.fast} ${motionVar.easing.standard}`,
+  normal: `${motionVar.duration.base} ${motionVar.easing.standard}`,
+  slow: `${motionVar.duration.slow} ${motionVar.easing.standard}`,
+  colors: `color ${motionVar.duration.base} ${motionVar.easing.standard}, background-color ${motionVar.duration.base} ${motionVar.easing.standard}, border-color ${motionVar.duration.base} ${motionVar.easing.standard}`,
+  opacity: `opacity ${motionVar.duration.base} ${motionVar.easing.standard}`,
+  transform: `transform ${motionVar.duration.base} ${motionVar.easing.emphasized}`,
 } as const;
 
 export type Duration = typeof duration;
 export type Easing = typeof easing;
 export type Transition = typeof transition;
+export type MotionVar = typeof motionVar;

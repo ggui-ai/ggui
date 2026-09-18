@@ -38,6 +38,24 @@ export const NON_THEME_DEFINABLE_TOKENS: readonly string[] = [
   '--ggui-flash-color',
 ];
 
+/**
+ * ggui#1106 — manifest names the :root LADDER always declares (every
+ * `deriveThemeVariables` projection of a layer-1 document emits them), that a
+ * document MAY state, and that an overlay may OMIT: the card then animates at
+ * the shipped tempo, exactly as under a release that had no motion names
+ * (N−1, ggui#1184). Not the floor — a stated one is consumed, never
+ * `unknown` — and not a completion: an overlay never restates the ladder
+ * (`completeThemeVariables` fills only what the overlay itself implies).
+ */
+export const LADDER_COVERED_TOKENS: readonly string[] = [
+  '--ggui-motion-duration-fast',
+  '--ggui-motion-duration-base',
+  '--ggui-motion-duration-slow',
+  '--ggui-motion-easing-standard',
+  '--ggui-motion-easing-emphasized',
+  '--ggui-motion-easing-exit',
+];
+
 export interface OverlayCoverageReport {
   readonly uncovered: readonly string[];
   readonly unknown: readonly string[];
@@ -90,7 +108,8 @@ export function validateOverlayCoverage(
   // answers the question of names. `unknown` stays a judgement on the
   // RAW keys — a projected name nothing reads is still the projector's bug.
   const covered = new Set(Object.keys(completeThemeVariables(overlay, 'light')));
-  const uncovered = [...manifest].filter((t) => !covered.has(t)).sort();
+  const ladderCovered = new Set(LADDER_COVERED_TOKENS);
+  const uncovered = [...manifest].filter((t) => !covered.has(t) && !ladderCovered.has(t)).sort();
   const unknown = [...keys].filter((k) => !manifest.has(k) && !floor.has(k)).sort();
   return { uncovered, unknown, warnings: rampWarnings(overlay) };
 }

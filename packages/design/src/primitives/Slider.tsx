@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { CSSProperties } from 'react';
 import type { SliderProps } from './types';
+import { motionVar } from '../tokens/transitions';
 
 /**
  * Slider - A range input primitive
@@ -73,7 +74,7 @@ export function Slider({
             height: '6px',
             borderRadius: '3px',
             backgroundColor: disabled ? 'var(--ggui-color-outline, #d4d4d8)' : 'var(--ggui-color-primary-600, #0284c7)',
-            transition: 'width 0.1s',
+            transition: `width ${motionVar.duration.fast} ${motionVar.easing.standard}`,
           }}
         />
         {/* Native input for accessibility */}
@@ -112,7 +113,7 @@ export function Slider({
             backgroundColor: '#ffffff',
             border: `2px solid ${disabled ? 'var(--ggui-color-outline, #d4d4d8)' : 'var(--ggui-color-primary-600, #0284c7)'}`,
             boxShadow: 'var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))',
-            transition: 'left 0.1s',
+            transition: `left ${motionVar.duration.fast} ${motionVar.easing.standard}`,
             pointerEvents: 'none',
           }}
         />
