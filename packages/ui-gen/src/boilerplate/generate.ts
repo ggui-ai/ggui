@@ -259,7 +259,14 @@ export function generateBoilerplate(
     // roughly nothing (Exp 002b: adoption 1/36), which is why it is the
     // smallest of the three legs and never the one relied on.
     const onceHint = " — if this is meant ONCE, disable its control after it fires";
-    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
+    // ggui#1190: the control's copy is the contract's label, VERBATIM — shown at the
+    // exact site for EVERY action (it used to appear only beside a `nextStep`
+    // hint), because the model given `"Confirm & Schedule"` in the contract block
+    // wrote `'Confirm Schedule'`. The rule lives in DATA_PARAMETERIZATION rule 4;
+    // this is its site reminder, and the axis check `universal.action_label_dropped`
+    // names the drop when both are ignored.
+    const copyHint = ` — control copy: "${label}" VERBATIM`;
+    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${copyHint}${onceHint}`);
     actionReturnFields.push(key);
   }
 
