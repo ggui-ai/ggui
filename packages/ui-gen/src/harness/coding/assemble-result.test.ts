@@ -129,6 +129,36 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     expect(result.cacheCreationTokens).toBe(200);
   });
 
+  // ggui#1186 — `tokens.total` is the FULL processed footprint (the adapters'
+  // convention: non-cached input + cache creation + cache reads + output), so a
+  // row's cached count is recoverable as `total − input − output` even when the
+  // cache fields themselves are not published. Before this pin the harness path
+  // published `input + output`, which priced the cached prefix but hid it.
+  it("tokens.total is the full footprint: input + cacheCreation + cacheRead + output", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.totalIn = 122;
+    telemetry.totalOut = 609;
+    telemetry.cacheReadTokens = 36_501;
+    telemetry.cacheCreationTokens = 200;
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+    expect(result.tokens).toEqual({ input: 122, output: 609, total: 122 + 200 + 36_501 + 609 });
+    expect(result.tokens.total - result.tokens.input - result.tokens.output).toBe(36_701);
+  });
+
+  it("tokens.total is input + output when no cache counter was reported", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.totalIn = 1_000;
+    telemetry.totalOut = 50;
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+    expect(result.tokens).toEqual({ input: 1_000, output: 50, total: 1_050 });
+  });
+
   it("forwards evalResult.criteriaCoverage to the assembled result untouched (bench reporter reads it per run)", async () => {
     const session = fakeSession();
     const telemetry = createTelemetry();

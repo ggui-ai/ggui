@@ -98,7 +98,16 @@ export async function assembleGenerationResult(
     tokens: {
       input: telemetry.totalIn,
       output: telemetry.totalOut,
-      total: telemetry.totalIn + telemetry.totalOut,
+      // ggui#1186: the FULL processed footprint — the adapters' convention
+      // (non-cached input + cache creation + cache reads + output) — so a
+      // row's cached count is `total − input − output` even where the cache
+      // fields are not published. `input + output` alone priced the cached
+      // prefix and hid it (a 36k-token luna turn published as 1.6k).
+      total:
+        telemetry.totalIn +
+        (telemetry.cacheCreationTokens ?? 0) +
+        (telemetry.cacheReadTokens ?? 0) +
+        telemetry.totalOut,
     },
     // Prompt-cache counters are provider-specific — pass through truthfully.
     // Absent on the telemetry (provider didn't report) stays absent here,
