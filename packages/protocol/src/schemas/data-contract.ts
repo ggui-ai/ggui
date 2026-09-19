@@ -223,8 +223,9 @@ export const actionEntrySchema = z
      * one-shot action for the render's lifetime — AND the suppression is
      * NEVER SILENT: a suppressed dispatch leaves a named trace an operator
      * can find (at minimum the runtime's diagnostic channel, carrying the
-     * `actionId` and `oneShot` as the reason), and it does NOT reach the
-     * agent as a dispatch. This is the rule `@ggui-ai/wire`'s dispatch
+     * action's NAME and `oneShot` as the reason — a suppressed dispatch
+     * mints no `actionId`, so the trace names the action, never an id),
+     * and it does NOT reach the agent as a dispatch. This is the rule `@ggui-ai/wire`'s dispatch
      * dedup already holds for its own suppression, inherited here on
      * purpose: a second gesture the runtime refuses to forward is an
      * EVENT, not silence — otherwise a silent double-fire is replaced by a

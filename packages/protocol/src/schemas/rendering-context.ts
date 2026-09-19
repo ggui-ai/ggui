@@ -39,7 +39,13 @@ export const renderingContextSchema = z
     device: z.enum(RENDERING_DEVICES),
     /** Shell type — the container the component renders in. */
     shell: z.enum(RENDERING_SHELLS),
-    /** Viewport dimensions in CSS pixels (optional). */
+    /**
+     * The mount's geometry as the SENDER declares it, in CSS pixels
+     * (optional). What a receiving lane makes of it is that lane's policy,
+     * named on its receipt — whether `height` is a fixed box or a ceiling
+     * the lane judges overflow against (ggui#1195: the chat card grows to
+     * content under the column's ceiling) is never a second wire word.
+     */
     viewport: renderingViewportSchema.optional(),
   })
   .strict();
