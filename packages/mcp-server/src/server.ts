@@ -4919,6 +4919,27 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   };
   const oauthStorage: OAuthStorage = oauthConfig.storage ?? new InMemoryOAuthStorage();
   if (oauthEnabled) {
+    // ggui#1193 — per-IP limit on DCR (10 registrations / 10 min). The door is
+    // OPEN by design (#1174's ruling: MCP hosts register themselves), and an
+    // open door with no limiter is an unbounded anonymous write into this
+    // replica's memory. Same middleware as `/pair`, its own quota; mounted
+    // BEFORE the route so `next()` reaches the handler only when allowed. A
+    // denial names itself on both surfaces: 429 + `Retry-After` + `rate_limited`
+    // to the caller, `rate_limit_hit { quotaKey: 'oauth-register' }` to the operator.
+    const registerRateLimiter = new FixedWindowRateLimiter({
+      store: new InMemoryQuotaStore(),
+      limit: 10,
+      windowMs: 10 * 60 * 1000,
+    });
+    app.use(
+      "/oauth/register",
+      createPairLoginRateLimitMiddleware({
+        limiter: registerRateLimiter,
+        logger: logger.child({ middleware: "rate-limit", route: "oauth-register" }),
+        quotaKey: "oauth-register",
+        ...(opts.trustProxy !== undefined ? { trustProxy: opts.trustProxy } : {}),
+      })
+    );
     // Discovery + auth + token endpoints — see `./oauth-as-routes.ts`.
     // `getPairingService` late-binds: the pairing service is
     // constructed below this mount, and the consent-submit handler

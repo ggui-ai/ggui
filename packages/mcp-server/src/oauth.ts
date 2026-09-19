@@ -466,6 +466,9 @@ export function handleAuthorizationServerMetadata(
  *     single-use, 5-minute TTL, constant-time verifier check.
  *   - The consent page names the client and the redirect host BEFORE it
  *     asks for a key, so the user is the last control and an informed one.
+ *   - The mount carries a per-IP limit (10 registrations / 10 min, ggui#1193;
+ *     `server.ts`, the `/pair` middleware with its own quota), pinned in
+ *     `oauth-register-rate-limit.test.ts` — an open door is bounded, not shut.
  */
 const MAX_REDIRECT_URIS = 10;
 const MAX_REDIRECT_URI_LENGTH = 2048;
