@@ -64,6 +64,23 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-19',
     text:
+      'Token counts completed, announced (issue #1186): from the first run on a runner image ' +
+      'carrying commit 0bf89728c, a cell\'s "total tokens" is the provider\'s full footprint \u2014 ' +
+      'non-cached input, cache reads, cache creations and output \u2014 on every arm. Before it, the ' +
+      'runner\'s path left cache reads and creations out of the total: an OpenAI cell on the ' +
+      '2026-09-19 run read a total in the hundreds where the provider processed tens of ' +
+      'thousands, and Anthropic cells had left out their cache reads and creations all along. ' +
+      'Costs do not move \u2014 pricing already used those counters \u2014 so what changes is the token ' +
+      'stats, not the cost column: OpenAI totals return to the provider\'s footprint (about ' +
+      '37,000 on a warm first turn of this corpus) and Anthropic totals grow by their cache reads ' +
+      'and creations. From that run, on every arm, cached tokens (reads plus creations) equal ' +
+      'total \u2212 input \u2212 output, and that is the receipt; the first run on the new image names ' +
+      'itself in its own receipt. Scores, corpus and judge panel unchanged; history is not ' +
+      'rewritten.',
+  },
+  {
+    date: '2026-09-19',
+    text:
       'Cause read, and the first run that moved (issue #1186): the runner\'s coding loop takes its ' +
       'token counts from a path the 2026-09-17 change did not reach, which is why the 2026-09-18 ' +
       'run read a cached prefix of zero on every OpenAI cell. Commit 19863264d routes that path ' +
