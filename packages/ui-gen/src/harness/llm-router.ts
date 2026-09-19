@@ -30,6 +30,7 @@ import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
 import { getBedrockModelId } from '../adapters/provider-router.js';
 import { toolArgsToJsonObject } from '../adapters/tool-bridge.js';
+import { splitOpenAiUsage } from '../adapters/openai/tokens.js';
 import {
   emitLlmTraceEvent,
   newLlmTraceId,
@@ -180,6 +181,8 @@ export interface LLMWithToolsResponse {
   inputTokens: number;
   outputTokens: number;
   turnsUsed: number;
+  /** Prompt-cache reads summed over the loop's turns, when the provider reports them (absent = unreported, never zero). */
+  cacheReadTokens?: number;
 }
 
 export interface LLMToolCall {
@@ -1131,10 +1134,19 @@ export class OpenAIAgent extends LLMAgent {
       }
     }
 
+    // ggui#1186 (second site): `input_tokens` INCLUDES the cached prefix on the
+    // Responses API — report the NON-cached input like every other provider.
+    // The text response carries no cache field, so the cached count is
+    // dropped here rather than double-counted.
+    const textUsage = splitOpenAiUsage(
+      response.usage?.input_tokens ?? 0,
+      response.usage?.output_tokens ?? 0,
+      response.usage?.input_tokens_details?.cached_tokens ?? 0,
+    );
     return {
       text,
-      inputTokens: response.usage?.input_tokens ?? 0,
-      outputTokens: response.usage?.output_tokens ?? 0,
+      inputTokens: textUsage.tokens.input,
+      outputTokens: textUsage.tokens.output,
       sampling: { temperature: temperature ?? 'provider-default' },
     };
   }
@@ -1196,14 +1208,26 @@ export class OpenAIAgent extends LLMAgent {
       (o): o is ResponseFunctionToolCall => o.type === 'function_call',
     );
 
+    // ggui#1186 (second site): the harness coding loop reads THIS per-turn
+    // usage (`run-coding-turn` → `generate-task-runner` telemetry), not the
+    // adapters' results — so the split lives here too: `inputTokens` is the
+    // NON-cached input and `cacheReadTokens` the cached subset, reported (0
+    // when the breakdown says none), so a generation's metadata — and whatever
+    // prices or aggregates it downstream — sees OpenAI cache reads at all.
+    const toolsUsage = splitOpenAiUsage(
+      response.usage?.input_tokens ?? 0,
+      response.usage?.output_tokens ?? 0,
+      response.usage?.input_tokens_details?.cached_tokens ?? 0,
+    );
     return {
       toolCalls: functionCalls.map((fc) => ({
         id: fc.call_id,
         name: fc.name,
         input: JSON.parse(fc.arguments ?? '{}') as JsonObject,
       })),
-      inputTokens: response.usage?.input_tokens ?? 0,
-      outputTokens: response.usage?.output_tokens ?? 0,
+      inputTokens: toolsUsage.tokens.input,
+      outputTokens: toolsUsage.tokens.output,
+      cacheReadTokens: toolsUsage.cacheReadTokens,
     };
   }
 
@@ -1242,6 +1266,7 @@ export class OpenAIAgent extends LLMAgent {
     ];
     let totalIn = 0;
     let totalOut = 0;
+    let totalCacheRead = 0;
     let allText = '';
 
     for (let turn = 0; turn < maxTurns; turn++) {
@@ -1253,8 +1278,15 @@ export class OpenAIAgent extends LLMAgent {
           tools: openaiTools,
         }),
       );
-      totalIn += response.usage?.input_tokens ?? 0;
-      totalOut += response.usage?.output_tokens ?? 0;
+      // ggui#1186 (second site): non-cached input + cached subset, per turn.
+      const turnUsage = splitOpenAiUsage(
+        response.usage?.input_tokens ?? 0,
+        response.usage?.output_tokens ?? 0,
+        response.usage?.input_tokens_details?.cached_tokens ?? 0,
+      );
+      totalIn += turnUsage.tokens.input;
+      totalOut += turnUsage.tokens.output;
+      totalCacheRead += turnUsage.cacheReadTokens;
 
       const functionCalls = response.output.filter(
         (o): o is ResponseFunctionToolCall => o.type === 'function_call',
@@ -1291,6 +1323,7 @@ export class OpenAIAgent extends LLMAgent {
       text: allText,
       inputTokens: totalIn,
       outputTokens: totalOut,
+      cacheReadTokens: totalCacheRead,
       turnsUsed: input.length,
     };
   }
