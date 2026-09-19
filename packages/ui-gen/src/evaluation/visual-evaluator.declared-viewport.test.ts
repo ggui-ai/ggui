@@ -111,6 +111,20 @@ describe('ggui#1195 — the inline card is captured and judged at the DECLARED v
     expect(summarizeVisualResult(declaredClassBox.result!)?.fit).toEqual({ canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: true, overflowPx: 0 });
   });
 
+  it('a FRACTIONAL declared box is captured, measured and reported at whole px — CDP takes int32 (measured: 383.5 is refused)', async () => {
+    const deps = fitDeps(600);
+    const { result } = await runVisualEvaluationDetailed(
+      CONTEXT,
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': { width: 383.5, height: 515.5 } } },
+      deps,
+    );
+    expect(deps.captures).toEqual([{ width: 384, height: 516, fullPage: false }]);
+    const card = result!.canvases![0]!;
+    expect(card.viewport).toEqual({ width: 384, height: 516 });
+    expect(card.overflow).toBe(true);
+    expect(summarizeVisualResult(result!)?.fit).toEqual({ canvas: 'xs-chat-card', ceiling: { width: 384, height: 516 }, declared: true, overflowPx: 84 });
+  });
+
   it('canvasOverflowIssue names the declared box beside the class box only when they differ', () => {
     const declared = canvasOverflowIssue('xs-chat-card', DECLARED, 600, 'fail');
     expect(declared.description).toContain('declared 384×516');

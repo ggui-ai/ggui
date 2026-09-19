@@ -62,7 +62,11 @@ export interface VisualEvalConfig {
    * at `CANVAS_VIEWPORTS[canvas]` as before. The composer's
    * `rendering.viewport` and this entry are ONE value written once (the
    * seam derives it), so the judge never scores a box the mint did not
-   * target. Only read in per-canvas mode.
+   * target. Only read in per-canvas mode. Captured at WHOLE CSS px: the
+   * browser's device-metrics override takes integers (measured — a 383.5 px
+   * width is refused by CDP), so a fractional declared box is rounded once
+   * where it enters and the capture, the ceiling and the reported
+   * `viewport` all carry that same integer box.
    */
   canvasViewports?: Partial<Readonly<Record<CanvasClass, CanvasViewport>>>;
   /**
@@ -168,6 +172,17 @@ export const JUDGE_SCOPE_CLASS = 'ggui-judge-scope';
  */
 export function canvasFit(canvas: CanvasClass): 'fill' | undefined {
   return displayModeForCanvas(canvas) === 'fullscreen' ? 'fill' : undefined;
+}
+
+/**
+ * The box a browser can be asked for: whole CSS px. CDP's
+ * `Emulation.setDeviceMetricsOverride` deserialises width/height as int32 and
+ * refuses a fraction (measured on Chrome: `383.5` → "int32 value expected"),
+ * while a host measuring its chat column with `getBoundingClientRect()` may
+ * legitimately declare one. Rounded once, at the judge's boundary.
+ */
+export function integerBox(viewport: { width: number; height: number }): { width: number; height: number } {
+  return { width: Math.round(viewport.width), height: Math.round(viewport.height) };
 }
 
 /** ggui#1195 — `true` when a canvas was judged at a box other than its class viewport (the order declared one). */
@@ -548,18 +563,20 @@ export async function resolveLaunchOptions(
 ): Promise<LaunchOptions> {
   const env = deps.env ?? process.env;
   const override = env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  // Whole px at the one place `defaultViewport` is built — the single-shot path takes the caller's box verbatim.
+  const defaultViewport = integerBox(viewport);
   if (override) {
     return {
       executablePath: override,
       args: [...EXECUTABLE_PATH_LAUNCH_ARGS],
-      defaultViewport: viewport,
+      defaultViewport,
       headless: true,
     };
   }
   const chromium = await (deps.loadChromium ?? loadSparticuzChromium)();
   return {
     args: chromium.args,
-    defaultViewport: viewport,
+    defaultViewport,
     executablePath: await chromium.executablePath(),
     headless: true,
   };
@@ -875,7 +892,7 @@ export async function runVisualEvaluationDetailed(
     for (const canvas of config.canvases) {
       // ggui#1195 — the declared box when the order carried one, else the class box.
       const declaredBox = config.canvasViewports?.[canvas];
-      const viewport = declaredBox ?? CANVAS_VIEWPORTS[canvas];
+      const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
       const policy = canvasFitPolicy(canvas);
       // ggui#1100: the page is composed per canvas with the runtime's fit — fullscreen canvases fill, the inline card does not.
       const fit = canvasFit(canvas);
