@@ -62,6 +62,25 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-19',
+    text:
+      'Cause read, and the first run that moved (issue #1186): the runner\'s coding loop takes its ' +
+      'token counts from a path the 2026-09-17 change did not reach, which is why the 2026-09-18 ' +
+      'run read a cached prefix of zero on every OpenAI cell. Commit 19863264d routes that path ' +
+      'through the same split, and the 2026-09-19 run is the first on a runner image carrying it: ' +
+      'the OpenAI arms\' cost per generation read 42 to 67 percent lower than the day before with ' +
+      'no model change \u2014 the cached prefix priced at the provider\'s cache-read rate instead of the ' +
+      'input rate \u2014 so OpenAI cost readings from runs before 2026-09-19 are upper bounds and are ' +
+      'not comparable across it. On the row, an OpenAI arm\'s "input tokens" and "total tokens" ' +
+      'now count only the non-cached prompt tokens and the output; the cached prefix is priced in ' +
+      'the cost but not shown, so those counts understate what the provider processed by the size ' +
+      'of the cached prefix (about 36,000 tokens on a first turn of this corpus) until the row ' +
+      'carries the cached count. The judge panel\'s OpenAI judge likewise reports only its ' +
+      'non-cached input, so the panel\'s share of the cost column (about a cent a cell) omits its ' +
+      'cached prefix. Anthropic and Google arms\' pricing is untouched; scores, corpus and judge ' +
+      'panel unchanged; history is not rewritten.',
+  },
+  {
     date: '2026-09-18',
     text:
       'Instrument fix, announced (issue #1187): from the first run on a runner image carrying ' +
@@ -101,9 +120,8 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'rate \u2014 an upper bound. Where the provider reports a cached prefix, a reading after this ' +
       'line is lower than the same generation would have read before it, with no model change ' +
       '\u2014 the drop is the instrument, not the model \u2014 and OpenAI cost readings across this line ' +
-      'are not comparable; where it reports none, nothing moves. The row itself says which: for an ' +
-      'OpenAI arm, "input tokens" now excludes the cached prefix while "total tokens" still ' +
-      'includes it, so cached input = total \u2212 input \u2212 output. The Anthropic arms were already ' +
+      'are not comparable; where it reports none, nothing moves. For an OpenAI arm, "input ' +
+      'tokens" now excludes the cached prefix. The Anthropic arms were already ' +
       'priced this way and do not move; the Google arms are untouched by the commit. The cost ' +
       'column is still generation plus the judge panel\'s own tokens. Scores, corpus and judge ' +
       'panel unchanged; each run\'s receipt names the cached count it read; history is not ' +
