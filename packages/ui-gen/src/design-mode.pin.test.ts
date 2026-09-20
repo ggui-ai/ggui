@@ -185,10 +185,27 @@ function renderFreeBoilerplates(): string {
 // boilerplates are untouched. INVARIANT 1 holds. Bought a measured drop: on the
 // same haiku serve profile, caps-label fails 10 → 2 and icon fails 3 → 0, mean
 // attempts 4.0 → 2.3, the two ≥6 runs gone.
+// Re-recorded 2026-09-20 for ggui#1190 + ggui#1106 — two landings that shipped without this
+// file being run, re-recorded together. ggui#1190 (an action's control copy is the contract's
+// `label` VERBATIM): DATA_PARAMETERIZATION rule 4 gains the sentence — every character,
+// including `&`, `/`, `–` and quotes; never paraphrased, shortened or re-cased — a shared HARD
+// section, so BOTH prompt digests move together; and the action-hook scaffold's inline comment
+// now carries `control copy: "<label>" VERBATIM` at the hook site for every action, so BOTH
+// BOILERPLATE digests move too (fixture A's `toggleTodo` line is the whole boilerplate delta;
+// fixture B declares no action). ggui#1106 (motion through variables): the primitive catalog,
+// generated from `design/src/primitives/types.ts`, now states four transitions as
+// `var(--ggui-motion-duration-*)` / `var(--ggui-motion-easing-*)` instead of literal ms and
+// easing names (a chevron rotation, a ground transition, two hover transitions); both arms
+// carry the catalog, so both prompt digests move for it as well. Constrained prompt
+// 32544073… → 040bd0a3…, free prompt 7f0a6964… → 71ef8019…; constrained boilerplate
+// cea6b88d… → 8f1dfd89…, free boilerplate 4e3cb232… → b9b86589…. INVARIANT 1 holds across
+// the re-record: the shared hunks are byte-identical in both arms' dumps (eight prompt hunks,
+// one boilerplate hunk, the same text in each); the free arm ALSO moves by the consumed-token
+// manifest — see the free note.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '32544073a60f83bb0dea9b330f499a9945d222d9937a8ff19f8e22e60212fa2e';
+  '040bd0a3c00768e73df375b706e9b436537bf5efacbcd7b4f1ef5fd8b1a6a4ca';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  'cea6b88db0a4491816d21c9fc51718555bd6627c55fde5aac68116fd52e0e6b6';
+  '8f1dfd899bbc6f626c03ab1cb55817a2fe486e0509151fcd64942066d0269026';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
@@ -220,10 +237,18 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-17 for ggui#1093 (radius by ROLE — the four control docblocks in the catalog, see the constrained note above); both arms carry the catalog.
 // Re-recorded 2026-09-17 for ggui#1108 (the wire catalog rides the prompt, see the constrained note above).
 // Re-recorded 2026-09-17 for ggui#1122 C (the caps + icon prompt rules are shared, see the constrained note above).
+// Re-recorded 2026-09-20 for ggui#1190 + ggui#1106 (the shared text — see the constrained note
+// above). The free arm moves by ONE thing more: it renders the consumed-token manifest, which
+// ggui#1106 grew by the six `--ggui-motion-{duration-fast,duration-base,duration-slow,
+// easing-standard,easing-emphasized,easing-exit}` entries (123 → 129); the constrained arm does
+// not render the manifest. Receipt: with `ui-gen/src` + `design/src` swapped back to the previous
+// re-record (4edc964a9) against the current design build, the other three digests returned to
+// their constants and this one alone did not (3ac8c035…) — the manifest is read from the built
+// package, and that residue is the manifest.
 export const FREE_PROMPT_SHA256 =
-  '7f0a69640e4d5667b6b56f1906f3a544b4ca1be355119ed1e50acac68afce63a';
+  '71ef801947b5a46ef166e3bda0da97855a57ac0996940f7a9b7c7f77385644f9';
 export const FREE_BOILERPLATE_SHA256 =
-  '4e3cb2321931c95336be251623906ef866aa1a0a83bee6a0c2b3ada756210ef7';
+  'b9b865898c8308f5145d01e92e43d0bbd6b40c828c71be6a2430e0b8526f15a4';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [

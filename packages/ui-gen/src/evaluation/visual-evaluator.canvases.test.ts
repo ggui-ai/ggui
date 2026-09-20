@@ -102,6 +102,9 @@ describe('runVisualEvaluation — per-canvas mode', () => {
       passed: true,
       // ggui#1042: the summary names the design tree the judge painted with.
       design: { src: expect.stringMatching(/design\/src$/), srcSha256: expect.stringMatching(/^[0-9a-f]{64}$/) },
+      // ggui#1195: the fit stamp — the inline card's box (the first canvas whose policy FAILS an
+      // overflow, judged with a measurable height); judged at the class viewport here, so `declared: false`.
+      fit: { canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: false, overflowPx: 0 },
       canvases: [
         { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
         // ggui#1100: a fullscreen canvas is composed with the runtime's fit and says so; the inline card carries no `fit`.
