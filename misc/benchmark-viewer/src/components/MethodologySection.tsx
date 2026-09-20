@@ -62,6 +62,20 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-20',
+    text:
+      'Google cache accounting, announced (issue #1186): from the first run on a runner image ' +
+      'carrying commit a1278994d, a Google arm\'s "input tokens" excludes the cached part of the ' +
+      'prompt \u2014 which Gemini reports and the runner had been counting as ordinary input \u2014 and ' +
+      'the row\'s cached count (total \u2212 input \u2212 output) is real for those arms. google-fast and ' +
+      'google-balanced re-price that part at their registry cache-read rates (0.03 and 0.075 per ' +
+      '1M tokens, a tenth of their input rates), so their cost readings move down from that run ' +
+      'and are not comparable across it; google-premium carries no cache-read rate in the ' +
+      'registry, so its cost stays what it was \u2014 an upper bound \u2014 while its token stats move; a ' +
+      'sourced rate for that row is the registry owner\'s to cite. Anthropic and OpenAI arms ' +
+      'unchanged; scores, corpus and judge panel unchanged; history is not rewritten.',
+  },
+  {
     date: '2026-09-19',
     text:
       'Token counts completed, announced (issue #1186): from the first run on a runner image ' +
