@@ -75,7 +75,9 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
       });
     });
     const { scopeClass, css } = scopedStyleOf(container);
-    expect(css).toContain(`.${scopeClass}{--ggui-color-ground: #0a0a0f;--ggui-color-primary-600: #eeeeee;}`);
+    // ggui#1083: the composer completes the overlay before painting — a ground it carries completes the
+    // scrim's tint beside it (the ground a ggui-owned page sits the card on); the layer order is unchanged.
+    expect(css).toContain(`.${scopeClass}{--ggui-color-ground: #0a0a0f;--ggui-color-primary-600: #eeeeee;--ggui-scrim-tint: #0a0a0f;}`);
     expect(css).not.toContain('#fefefe');
     expect(rootCss()).toContain('color-scheme:dark;');
     expect(rootCss()).toContain('--ggui-color-ground: #0a0a0f;');
