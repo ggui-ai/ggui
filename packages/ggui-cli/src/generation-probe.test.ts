@@ -449,3 +449,32 @@ describe('locked constants', () => {
     expect(PROVIDER_PROBE_ORDER[0]).toBe('anthropic');
   });
 });
+
+// ggui#1132 (second site) — the serve banner names a shadowed alias whose value
+// differs, so the operator sees the silent-winner case at boot instead of at
+// the first 401. Names only, never values.
+describe('describeGenerationBinding — alias conflict (ggui#1132)', () => {
+  it('appends the winner and the shadowed alias when the boot resolution carries one', async () => {
+    const resolver: ByokResolver = {
+      async resolve(provider) {
+        if (provider !== 'google') return null;
+        return { key: 'k-secret-value', source: 'env', provider: 'google', envName: 'GOOGLE_API_KEY', shadowedEnvNames: ['GEMINI_API_KEY'] };
+      },
+    };
+    const binding = await probeGenerationBinding({ resolver, blueprints: emptyBlueprints, providerOrder: ['google'] });
+    const line = describeGenerationBinding(binding);
+    expect(line).toContain('GOOGLE_API_KEY won');
+    expect(line).toContain('GEMINI_API_KEY');
+    expect(line, 'the key value never reaches the banner').not.toContain('k-secret-value');
+  });
+  it('says nothing extra when there is no conflict', async () => {
+    const resolver: ByokResolver = {
+      async resolve(provider) {
+        if (provider !== 'google') return null;
+        return { key: 'gem', source: 'env', provider: 'google', envName: 'GEMINI_API_KEY' };
+      },
+    };
+    const binding = await probeGenerationBinding({ resolver, blueprints: emptyBlueprints, providerOrder: ['google'] });
+    expect(describeGenerationBinding(binding)).not.toContain('won');
+  });
+});

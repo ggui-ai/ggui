@@ -95,6 +95,14 @@ export interface ByokKeyResolution {
    * that's what fired, instead of a generic "google env".
    */
   readonly envName?: string;
+  /**
+   * ggui#1132 — env names in this provider's alias list that were ALSO set,
+   * to a DIFFERENT value, and lost to `envName` under the locked precedence.
+   * Names only, never values. A stale key in a shadowed alias is exactly
+   * the silent failure this exists to make loud: a rotated `GEMINI_API_KEY`
+   * that a stale `GOOGLE_API_KEY` beats. Absent ⇒ no conflict.
+   */
+  readonly shadowedEnvNames?: readonly string[];
 }
 
 export interface ByokResolverOptions {
@@ -203,11 +211,19 @@ export function createByokResolver(
         for (const name of envNames) {
           const value = env[name];
           if (value !== undefined && value.length > 0) {
+            // ggui#1132: name every OTHER alias that is set to a different
+            // value — it lost silently under the locked precedence.
+            const shadowed = envNames.filter((other) => {
+              if (other === name) return false;
+              const v = env[other];
+              return v !== undefined && v.length > 0 && v !== value;
+            });
             return {
               key: value,
               source: 'env',
               provider,
               envName: name,
+              ...(shadowed.length > 0 ? { shadowedEnvNames: shadowed } : {}),
             };
           }
         }

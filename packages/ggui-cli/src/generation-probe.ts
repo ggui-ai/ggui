@@ -211,6 +211,8 @@ export interface GenerationBinding {
   readonly keySource?: ByokKeyResolution['source'];
   /** Env-var name that produced the boot-scan hit, when applicable. */
   readonly keyEnvName?: string;
+  /** ggui#1132 — aliases set to a different value that lost to `keyEnvName`; names only. */
+  readonly keyShadowedEnvNames?: readonly string[];
 }
 
 /**
@@ -305,6 +307,9 @@ export async function probeGenerationBinding(
         ...(bootHit.envName !== undefined
           ? { keyEnvName: bootHit.envName }
           : {}),
+        ...(bootHit.shadowedEnvNames !== undefined
+          ? { keyShadowedEnvNames: bootHit.shadowedEnvNames }
+          : {}),
       }
     : {
         generation,
@@ -340,5 +345,9 @@ export function describeGenerationBinding(
         ? `env: ${binding.keyEnvName}`
         : 'env'
       : 'credentials-file';
-  return `generation: ${binding.provider} / ${binding.model} (${src})`;
+  const conflict =
+    binding.keyShadowedEnvNames !== undefined && binding.keyEnvName !== undefined
+      ? ` — ${binding.keyEnvName} won; ${binding.keyShadowedEnvNames.join(', ')} also set and differs (rotate both or unset one, ggui#1132)`
+      : '';
+  return `generation: ${binding.provider} / ${binding.model} (${src})${conflict}`;
 }

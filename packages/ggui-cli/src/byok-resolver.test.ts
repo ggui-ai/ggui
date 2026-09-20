@@ -319,3 +319,27 @@ describe('createByokResolver — credentials-file mode + writeability', () => {
     }
   });
 });
+
+// ggui#1132 (second site) — the hazard was never which alias wins; it was that a
+// stale value in the OTHER alias wins silently. The precedence stays locked
+// (GOOGLE first — Google's own SDKs prefer it, and mcp-server mirrors it); the
+// resolution NAMES a shadowed alias whose value differs, so the banner and
+// `ggui provider-key set` can say so. Names only, never values.
+describe('google alias conflict is named, not silent (ggui#1132)', () => {
+  it('both set and DIFFERENT → GOOGLE wins and GEMINI is named as shadowed', async () => {
+    const resolver = createByokResolver({ env: { GOOGLE_API_KEY: 'goog', GEMINI_API_KEY: 'gem' }, fileStore: null });
+    const r = await resolver.resolve('google');
+    expect(r).toMatchObject({ key: 'goog', envName: 'GOOGLE_API_KEY', shadowedEnvNames: ['GEMINI_API_KEY'] });
+    expect(JSON.stringify(r)).not.toContain('gem');
+  });
+  it('both set and EQUAL → no conflict to name', async () => {
+    const resolver = createByokResolver({ env: { GOOGLE_API_KEY: 'same', GEMINI_API_KEY: 'same' }, fileStore: null });
+    expect((await resolver.resolve('google'))?.shadowedEnvNames).toBeUndefined();
+  });
+  it('only one alias set → no conflict to name', async () => {
+    const resolver = createByokResolver({ env: { GEMINI_API_KEY: 'gem' }, fileStore: null });
+    const r = await resolver.resolve('google');
+    expect(r).toMatchObject({ key: 'gem', envName: 'GEMINI_API_KEY' });
+    expect(r?.shadowedEnvNames).toBeUndefined();
+  });
+});

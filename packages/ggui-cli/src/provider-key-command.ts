@@ -125,7 +125,13 @@ export function envVarForProvider(provider: ByokProvider): string {
  *
  * - `anthropic`   → `ANTHROPIC_API_KEY`
  * - `openai`      → `OPENAI_API_KEY`
- * - `google`      → `GOOGLE_API_KEY` (primary), then `GEMINI_API_KEY` (fallback)
+ * - `google`      → `GOOGLE_API_KEY` (primary), then `GEMINI_API_KEY` (fallback).
+ *                   The precedence is locked (Google's own SDKs prefer
+ *                   `GOOGLE_API_KEY` when both are set, and the hosted key
+ *                   routes mirror this order). When both are set to DIFFERENT
+ *                   values the loser is named — see {@link describeAliasConflict}
+ *                   — because a stale key in the shadowed alias is the failure
+ *                   that otherwise happens silently (ggui#1132).
  * - `openrouter`  → `OPENROUTER_API_KEY`
  *
  * Order matches `byok-resolver.ts` so that the key the cloud receives is
@@ -149,6 +155,26 @@ export function readKeyFromEnv(
   return undefined;
 }
 
+/**
+ * ggui#1132 — one line naming an alias conflict, or `undefined` when there is
+ * none. Only `google` has aliases. Names only, never values: the line is
+ * printed to stderr by `ggui provider-key set` and by the `ggui serve` banner.
+ */
+export function describeAliasConflict(
+  provider: ByokProvider,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string | undefined {
+  if (provider !== 'google') return undefined;
+  const [primary, fallback] = ['GOOGLE_API_KEY', 'GEMINI_API_KEY'] as const;
+  const a = env[primary];
+  const b = env[fallback];
+  if (!a || !b || a === b) return undefined;
+  return (
+    `${primary} won; ${fallback} is also set and differs — ` +
+    `a stale key in the shadowed alias wins silently, so rotate both or unset one (ggui#1132).`
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Command runner
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +196,7 @@ Subcommands:
           ANTHROPIC_API_KEY  (anthropic)
           OPENAI_API_KEY     (openai)
           GOOGLE_API_KEY     (google, primary); GEMINI_API_KEY (fallback)
+                             — if both are set and differ, the shadowed one is named
           OPENROUTER_API_KEY (openrouter)
 
 Options:
@@ -242,6 +269,8 @@ export async function runProviderKeyCommand(
 
   // ── Read key from env ────────────────────────────────────────────────────
   const key = readKeyFromEnv(provider);
+  const conflict = describeAliasConflict(provider);
+  if (conflict !== undefined) process.stderr.write(`ggui provider-key set: ${conflict}\n`);
   if (!key) {
     const primaryVar = envVarForProvider(provider);
     const hint =

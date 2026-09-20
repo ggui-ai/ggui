@@ -276,3 +276,21 @@ describe('runProviderKeyCommand', () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 });
+
+// ggui#1132 (second site) — the push to the cloud must say when a shadowed alias
+// differs, in the same words the serve banner uses. Names only, never values.
+import { describeAliasConflict } from './provider-key-command';
+describe('describeAliasConflict (ggui#1132)', () => {
+  it('names the winner and the shadowed alias when both are set and differ', () => {
+    const line = describeAliasConflict('google', { GOOGLE_API_KEY: 'goog', GEMINI_API_KEY: 'gem' });
+    expect(line).toContain('GOOGLE_API_KEY');
+    expect(line).toContain('GEMINI_API_KEY');
+    expect(line).not.toContain('goog');
+    expect(line).not.toContain('gem');
+  });
+  it('is silent when the aliases agree, when one is absent, and for single-var providers', () => {
+    expect(describeAliasConflict('google', { GOOGLE_API_KEY: 'same', GEMINI_API_KEY: 'same' })).toBeUndefined();
+    expect(describeAliasConflict('google', { GEMINI_API_KEY: 'gem' })).toBeUndefined();
+    expect(describeAliasConflict('anthropic', { ANTHROPIC_API_KEY: 'a', GEMINI_API_KEY: 'x' })).toBeUndefined();
+  });
+});
