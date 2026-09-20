@@ -245,8 +245,14 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // re-record (4edc964a9) against the current design build, the other three digests returned to
 // their constants and this one alone did not (3ac8c035…) — the manifest is read from the built
 // package, and that residue is the manifest.
+// Re-recorded 2026-09-20 for ggui#1083 (cut 1 — the scrim reaches the card's own pages): the
+// consumed-token manifest gains `--ggui-scrim-tint` + `--ggui-scrim-opacity` (129 → 131), which the
+// free prompt renders; constrained does not render the manifest, and no HARD section, catalog or
+// scaffold moved, so the other three digests are byte-stable. Free prompt 71ef8019… → 5f8196ac…
+// (read against a REBUILT design dist — the pin reads the manifest from the built package, so a
+// stale dist reports no move where CI's fresh build does).
 export const FREE_PROMPT_SHA256 =
-  '71ef801947b5a46ef166e3bda0da97855a57ac0996940f7a9b7c7f77385644f9';
+  '5f8196acd8223abd3004e6a010a0da3e8e62d88fafb75bf3d5f6e44138db8429';
 export const FREE_BOILERPLATE_SHA256 =
   'b9b865898c8308f5145d01e92e43d0bbd6b40c828c71be6a2430e0b8526f15a4';
 

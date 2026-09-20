@@ -271,9 +271,12 @@ const TypeScaleRole = z.strictObject({
  * member changes a pixel. A member may be contracted before its consumer
  * exists; a VARIABLE may not enter the consumed-token manifest before its
  * consumer exists (a name nothing reads is coverage debt, not a feature).
- * Today that makes two of these members STATED, STORED and NOT YET
- * VISIBLE: the role-named type families and `scrim` arrive with their
- * consumers (ggui#1075 Track C (b), ggui#1083). `motion.duration` /
+ * Today that makes ONE of these members STATED, STORED and NOT YET
+ * VISIBLE: the role-named type families arrive with their consumer
+ * (ggui#1075 Track C (b)). `scrim` reaches the card's own pages since
+ * **ggui#1083** (`--ggui-scrim-tint` / `--ggui-scrim-opacity` — the ground
+ * the visual judge's shell sits the card on; `blur` stays the embedding
+ * shell's knob, carried and stored, never projected). `motion.duration` /
  * `motion.easing` DO reach the card since **ggui#1106** (the primitives
  * read `--ggui-motion-*` variables the projection emits); `motion.reduce`
  * is still carried without a composer that reads it. A writer may declare

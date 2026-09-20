@@ -35,6 +35,11 @@
  *     `--ggui-motion-easing-{standard,emphasized,exit}` are the stated
  *     `motion.duration` / `motion.easing` steps, else the layer-1 scale in
  *     `../tokens/transitions` — the tempo every primitive's `transition` reads.
+ *   - scrim (ggui#1083): `--ggui-scrim-tint` / `--ggui-scrim-opacity` are the
+ *     stated `scrim.tone` (`light` / `dark` → `#ffffff` / `#000000`, a colour
+ *     token verbatim) and `scrim.opacity`, else the mode's ground at 0.45 — the
+ *     ground a ggui-owned page sits the card on; `scrim.blur` is the embedding
+ *     shell's knob and is never projected.
  *   - font sizes come from `font.ramp { base, ratio }` by the exponent
  *     table (xs −2 … 4xl +5), else the layer-1 ladder; weights, line
  *     heights, letter-spacing defaults, shadows, radii and spacing fall
@@ -212,6 +217,8 @@ const SIZE_EXP: Readonly<Record<string, number>> = { xs: -2, sm: -1, base: 0, lg
 const ROLE_STOP: Readonly<Record<string, string>> = { display: '4xl', h1: '3xl', h2: '2xl', body: 'base', label: 'xs' };
 /** Layer-1's spacing unit — the step `rhythm.base` replaces (ggui#1093 R1). */
 const LAYER1_SPACING_UNIT_PX = 4;
+/** The scrim's opacity when the document states none — the embedding shell's own default (ggui#1083). */
+const SCRIM_DEFAULT_OPACITY = '0.45';
 
 type Tokens = Readonly<Record<string, DtcgToken<unknown> | undefined>> | undefined;
 
@@ -271,6 +278,18 @@ function readToken(t: unknown, path: string, report: (d: ThemeDiagnostic) => voi
 
 function stated(group: Tokens, key: string): string | undefined {
   return tokenValue(group?.[key]);
+}
+
+/**
+ * The scrim's tint from a stated `scrim.tone` (ggui#1083): the words map as the
+ * embedding shell maps them (`light` → `#ffffff`, `dark` → `#000000`), a colour
+ * token passes through `tokenValue`; `undefined` when nothing is stated.
+ */
+function scrimTint(tone: NonNullable<DtcgTheme['scrim']>['tone'] | undefined): string | undefined {
+  if (tone === undefined) return undefined;
+  if (tone === 'light') return '#ffffff';
+  if (tone === 'dark') return '#000000';
+  return tokenValue(tone);
 }
 
 /** Synthesise a family's ten stops from its `500` anchor (stated stops win). */
@@ -560,6 +579,15 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   V['--ggui-motion-easing-emphasized'] = stated(me, 'emphasized') ?? easing.easeOut;
   V['--ggui-motion-easing-exit'] = stated(me, 'exit') ?? easing.easeIn;
 
+  // ggui#1083 — the scrim between the host page's ground and the card: a stated
+  // `scrim.tone` at a stated `scrim.opacity`, else the mode's ground at 0.45 — the
+  // embedding shell's own defaults, so the judge's page and the widget sit the card
+  // on one scrim. `scrim.blur` is NOT projected: it needs a host page behind it,
+  // which only the embedding shell has; a name nothing in the card reads is a dead
+  // key the write door refuses.
+  V['--ggui-scrim-tint'] = scrimTint(doc.scrim?.tone) ?? V['--ggui-color-ground']!;
+  V['--ggui-scrim-opacity'] = tokenValue(doc.scrim?.opacity) ?? SCRIM_DEFAULT_OPACITY;
+
   if (missing.length > 0) throw new ThemeDocumentInvalidError(missing);
 
   // Project onto the manifest — exactly, minus the floor.
@@ -614,6 +642,12 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
   const onGround = get('onGround');
   const container = get('container');
   const onContainer = get('onContainer');
+  // ggui#1083 — the scrim's tint completes from the ground the overlay itself carries
+  // (N−1: an overlay from a composer that predates the name is never refused for it);
+  // its opacity is a constant the :root ladder always declares, so it is ladder-covered
+  // (`LADDER_COVERED_TOKENS`), never completed — an overlay without surfaces stays the
+  // ladder's.
+  if (V['--ggui-scrim-tint'] === undefined && ground !== undefined) V['--ggui-scrim-tint'] = ground;
   if (ground === undefined || onGround === undefined || container === undefined || onContainer === undefined) return V;
   put('elevated', mode === 'light' ? container : mixOklch(container, onContainer, 0.08));
   put('onElevated', onContainer);

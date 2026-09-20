@@ -206,12 +206,14 @@ export interface DtcgTheme {
    * The scrim between the host page's ground and the card (ggui#1093 P1b,
    * ggui#1083). Absent ⇒ derived from the ground pair by the completion.
    *
-   * Carried on the wire and validated at the document door. The CARD
-   * projection this package ships does not read it yet — inside the card
-   * the scrim stays the completion-derived one — while a host's own shell
-   * may already paint the member around the card from the same document.
-   * This sentence leaves with the card projection that reads it, in the
-   * same publication.
+   * Carried on the wire and validated at the document door. Projected by
+   * `deriveThemeVariables` onto `--ggui-scrim-tint` / `--ggui-scrim-opacity`
+   * (ggui#1083): `tone` as `#ffffff` / `#000000` for the words or the stated
+   * colour, `opacity` verbatim, else the mode's ground at 0.45 — the ground a
+   * ggui-owned page (the visual judge's shell) sits the card on, the same
+   * scrim an embedding shell paints around the card from this member. `blur`
+   * is the shell's knob alone — it needs a host page behind it — and is
+   * carried and stored, never projected into the card.
    */
   scrim?: {
     tone: 'light' | 'dark' | DtcgToken;

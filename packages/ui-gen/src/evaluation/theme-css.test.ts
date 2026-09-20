@@ -19,7 +19,9 @@ describe('cssTokensForAppTheme — the judge paints the app\'s tokens', () => {
   it("a theme whose ink role equals its ground reaches the shell's CSS (the case a default-token judge could not see)", () => {
     const css = cssTokensForAppTheme(THEME);
     expect(css.startsWith(getCssTokens('light'))).toBe(true);
-    expect(css).toContain(':root{color-scheme:light;--ggui-color-onContainer: #ffffff;--ggui-color-ground: #ffffff;--ggui-shape-radius-md: 6px;}');
+    // ggui#1083: the composer completes the overlay before painting — a ground it carries
+    // completes the scrim's tint (the ground the judge's page sits the card on).
+    expect(css).toContain(':root{color-scheme:light;--ggui-color-onContainer: #ffffff;--ggui-color-ground: #ffffff;--ggui-scrim-tint: #ffffff;--ggui-shape-radius-md: 6px;}');
   });
   it("the theme's own mode wins over the caller's", () => {
     const dark = cssTokensForAppTheme(DARK, 'light');

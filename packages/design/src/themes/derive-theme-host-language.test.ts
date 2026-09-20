@@ -91,7 +91,7 @@ describe('the host design language reaches the card (ggui#1093 R1)', () => {
     expect(v['--ggui-font-size-xs']).toMatch(/^[0-9.]+px$/);
   });
 
-  it('the scrim and the role-named families are NOT emitted yet (their consumers do not exist)', () => {
+  it('the scrim reaches the card (ggui#1083: tint + opacity, never blur); the role-named families are NOT emitted yet (their consumer does not exist)', () => {
     const v = deriveThemeVariables(
       withMembers({
         scrim: { tone: 'dark', opacity: ratio(0.7), blur: px('16px') },
@@ -99,7 +99,9 @@ describe('the host design language reaches the card (ggui#1093 R1)', () => {
       }),
       'light',
     );
-    expect(Object.keys(v).some((k) => k.startsWith('--ggui-scrim-'))).toBe(false);
+    expect(v['--ggui-scrim-tint']).toBe('#000000');
+    expect(v['--ggui-scrim-opacity']).toBe('0.7');
+    expect(Object.keys(v).filter((k) => k.startsWith('--ggui-scrim-')).sort()).toEqual(['--ggui-scrim-opacity', '--ggui-scrim-tint']);
     expect(v['--ggui-font-size-h1']).toBeUndefined();
     // …and stating them never breaks the derivation.
     expect(v['--ggui-font-size-3xl']).toBe('40px');

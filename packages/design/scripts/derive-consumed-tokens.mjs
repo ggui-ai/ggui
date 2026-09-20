@@ -88,7 +88,8 @@ const SHELL_NAMESPACE_RE = /^--ggui-shell-/;
  * never by a theme, so never a consumed token.
  */
 // `motion` joined with ggui#1106: `--ggui-motion-duration-*` / `--ggui-motion-easing-*` are the tempo a document may state.
-const THEME_FAMILIES = new Set(['color', 'font', 'letter', 'shape', 'spacing', 'flash', 'motion']);
+// `scrim` joined with ggui#1083: `--ggui-scrim-tint` / `--ggui-scrim-opacity` are the scrim a ggui-owned page sits the card on.
+const THEME_FAMILIES = new Set(['color', 'font', 'letter', 'shape', 'spacing', 'flash', 'motion', 'scrim']);
 function isThemeFamily(name) {
   const family = name.split('-')[3];
   return family !== undefined && THEME_FAMILIES.has(family);

@@ -133,6 +133,10 @@ describe('N−1: the manifest grows only with a completion rule or a floor entry
       '--ggui-motion-easing-emphasized',
       '--ggui-motion-easing-exit',
       '--ggui-motion-easing-standard',
+      // ggui#1083 — the scrim pair: `tint` completes from the overlay's own ground, `opacity`
+      // is ladder-covered (a constant every projection declares).
+      '--ggui-scrim-opacity',
+      '--ggui-scrim-tint',
       '--ggui-shape-radius-control',
     ]);
     const completed = completeThemeVariables(previousProjection(), 'light');

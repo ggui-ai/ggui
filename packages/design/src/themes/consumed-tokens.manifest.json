@@ -105,6 +105,8 @@
     "--ggui-motion-easing-emphasized",
     "--ggui-motion-easing-exit",
     "--ggui-motion-easing-standard",
+    "--ggui-scrim-opacity",
+    "--ggui-scrim-tint",
     "--ggui-shape-radius-control",
     "--ggui-shape-radius-full",
     "--ggui-shape-radius-lg",

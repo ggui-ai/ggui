@@ -467,7 +467,10 @@ function buildRenderHTML(
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);
-      background: var(--ggui-color-neutral-50, #ffffff);
+      /* ggui#1083 — the host stand-in (neutral-50) under the theme's scrim (its tint at
+         its opacity): the ground a frosted host puts under the card, so the judge scores
+         the card where the visitor sees it. */
+      background: color-mix(in oklch, var(--ggui-scrim-tint, var(--ggui-color-ground, #ffffff)) calc(var(--ggui-scrim-opacity, 0.45) * 100%), var(--ggui-color-neutral-50, #ffffff));
       color: var(--ggui-color-neutral-900, #111827);
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }

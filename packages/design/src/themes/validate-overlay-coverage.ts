@@ -54,6 +54,10 @@ export const LADDER_COVERED_TOKENS: readonly string[] = [
   '--ggui-motion-easing-standard',
   '--ggui-motion-easing-emphasized',
   '--ggui-motion-easing-exit',
+  // ggui#1083 — the scrim's opacity: a constant (0.45) every projection declares, that a
+  // document MAY state, and that an overlay may omit; its tint is NOT here — it completes
+  // from the overlay's own ground (`completeThemeVariables`).
+  '--ggui-scrim-opacity',
 ];
 
 export interface OverlayCoverageReport {
