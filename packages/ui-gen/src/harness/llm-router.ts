@@ -30,7 +30,7 @@ import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
 import { getBedrockModelId } from '../adapters/provider-router.js';
 import { toolArgsToJsonObject } from '../adapters/tool-bridge.js';
-import { splitOpenAiUsage } from '../adapters/openai/tokens.js';
+import { splitCacheInclusiveUsage, splitOpenAiUsage } from '../adapters/openai/tokens.js';
 import {
   emitLlmTraceEvent,
   newLlmTraceId,
@@ -1372,6 +1372,19 @@ function toUserInputStep(text: string): Interactions.UserInputStep {
   return { type: 'user_input', content: [{ type: 'text', text }] };
 }
 
+/**
+ * ggui#1186 (third site) — an Interactions `usage` split into the shared
+ * convention: `total_input_tokens` includes the cached part of the prompt
+ * (`total_cached_tokens`, per the SDK's own words), so the non-cached prompt
+ * is the input and the cached subset is reported separately.
+ */
+function googleInteractionUsage(
+  usage: { total_input_tokens?: number; total_output_tokens?: number; total_cached_tokens?: number } | undefined,
+): { inputTokens: number; outputTokens: number; cacheReadTokens: number } {
+  const split = splitCacheInclusiveUsage(usage?.total_input_tokens ?? 0, usage?.total_output_tokens ?? 0, usage?.total_cached_tokens ?? 0);
+  return { inputTokens: split.tokens.input, outputTokens: split.tokens.output, cacheReadTokens: split.cacheReadTokens };
+}
+
 export class GoogleAgent extends LLMAgent {
   readonly provider = 'google' as const;
 
@@ -1425,8 +1438,9 @@ export class GoogleAgent extends LLMAgent {
 
     return {
       text: interactionText(interaction),
-      inputTokens: interaction.usage?.total_input_tokens ?? 0,
-      outputTokens: interaction.usage?.total_output_tokens ?? 0,
+      // ggui#1186 (third site): `total_input_tokens` INCLUDES the cached part of the prompt — report the non-cached input.
+      inputTokens: googleInteractionUsage(interaction.usage).inputTokens,
+      outputTokens: googleInteractionUsage(interaction.usage).outputTokens,
       sampling: { temperature: temperature ?? 'provider-default' },
     };
   }
@@ -1468,7 +1482,8 @@ export class GoogleAgent extends LLMAgent {
       const usage = response.usageMetadata;
       const result: LLMResponse = {
         text,
-        inputTokens: usage?.promptTokenCount ?? 0,
+        // ggui#1186 (third site): `promptTokenCount` includes `cachedContentTokenCount` — report the non-cached input.
+        inputTokens: splitCacheInclusiveUsage(usage?.promptTokenCount ?? 0, usage?.candidatesTokenCount ?? 0, usage?.cachedContentTokenCount ?? 0).tokens.input,
         outputTokens: usage?.candidatesTokenCount ?? 0,
       };
 
@@ -1658,8 +1673,8 @@ export class GoogleAgent extends LLMAgent {
 
     return {
       toolCalls,
-      inputTokens: interaction.usage?.total_input_tokens ?? 0,
-      outputTokens: interaction.usage?.total_output_tokens ?? 0,
+      // ggui#1186 (third site): the coding loop reads this per-turn usage — the non-cached prompt as input, the cached subset reported.
+      ...googleInteractionUsage(interaction.usage),
     };
   }
 
@@ -1697,6 +1712,7 @@ export class GoogleAgent extends LLMAgent {
 
     let totalIn = 0;
     let totalOut = 0;
+    let totalCacheRead = 0;
     let allText = '';
     let turnsUsed = 0;
 
@@ -1714,8 +1730,11 @@ export class GoogleAgent extends LLMAgent {
       turnsUsed = turn + 1;
 
       if (interaction.usage) {
-        totalIn += interaction.usage.total_input_tokens ?? 0;
-        totalOut += interaction.usage.total_output_tokens ?? 0;
+        // ggui#1186 (third site): non-cached input + cached subset, per turn.
+        const turnUsage = googleInteractionUsage(interaction.usage);
+        totalIn += turnUsage.inputTokens;
+        totalOut += turnUsage.outputTokens;
+        totalCacheRead += turnUsage.cacheReadTokens;
       }
 
       // Collect text
@@ -1763,6 +1782,7 @@ export class GoogleAgent extends LLMAgent {
       text: allText,
       inputTokens: totalIn,
       outputTokens: totalOut,
+      cacheReadTokens: totalCacheRead,
       turnsUsed,
     };
   }

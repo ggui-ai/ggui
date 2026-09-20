@@ -32,6 +32,24 @@ export function splitOpenAiUsage(
   outputTokens: number,
   cachedTokens: number,
 ): { tokens: AdapterResult['tokens']; cacheReadTokens: number } {
+  return splitCacheInclusiveUsage(inputTokensInclCached, outputTokens, cachedTokens);
+}
+
+/**
+ * The provider-neutral form of the split above (ggui#1186, third site): any
+ * provider whose reported input token count INCLUDES the cached part of the
+ * prompt — OpenAI's `input_tokens` + `input_tokens_details.cached_tokens`,
+ * Gemini's `total_input_tokens` + `total_cached_tokens` and
+ * `promptTokenCount` + `cachedContentTokenCount` ("the cached part of the
+ * prompt", per the SDK) — is split the same way into the non-cached input and
+ * the cached subset, so `input` is never double-counted and `total` stays the
+ * full footprint.
+ */
+export function splitCacheInclusiveUsage(
+  inputTokensInclCached: number,
+  outputTokens: number,
+  cachedTokens: number,
+): { tokens: AdapterResult['tokens']; cacheReadTokens: number } {
   // Never let a malformed usage report drive input negative.
   const cacheRead = Math.min(
     Math.max(cachedTokens, 0),
