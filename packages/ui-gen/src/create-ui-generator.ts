@@ -298,16 +298,25 @@ export function createUiGenerator(
       // structurally into the dispatch call instead. `route.env`
       // already carries exactly the key(s) that would have gone into
       // `process.env`, so no extra resolution work is needed here.
-      const routeOverride = disableEnvMutation
-        ? {
-            apiKey:
-              route.env['ANTHROPIC_API_KEY'] ??
-              route.env['OPENAI_API_KEY'] ??
-              route.env['GEMINI_API_KEY'] ??
-              route.env['OPENROUTER_API_KEY'],
-            useBedrock: route.env['CLAUDE_CODE_USE_BEDROCK'] === '1',
-          }
-        : undefined;
+      //
+      // ggui#1185 — the login path has NO key to write anywhere: the
+      // route decision `auth: 'claude-code-login'` is carried as
+      // `routeOverride.claudeCodeLogin` in BOTH env modes, because the
+      // flag is the only way the decision reaches `createAgent` /
+      // `createVisionAgent` (which select the login client on it).
+      const routeOverride =
+        route.auth === 'claude-code-login'
+          ? { claudeCodeLogin: true }
+          : disableEnvMutation
+            ? {
+                apiKey:
+                  route.env['ANTHROPIC_API_KEY'] ??
+                  route.env['OPENAI_API_KEY'] ??
+                  route.env['GEMINI_API_KEY'] ??
+                  route.env['OPENROUTER_API_KEY'],
+                useBedrock: route.env['CLAUDE_CODE_USE_BEDROCK'] === '1',
+              }
+            : undefined;
 
       try {
         const tools = createGeneratorTools({
