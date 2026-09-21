@@ -32,7 +32,13 @@
 import type { LLMToolDef } from '../llm.js';
 
 /** Provider tag that produced the call. Mirrors {@link AgentConfig.provider}. */
-export type LlmTraceProvider = 'anthropic' | 'openai' | 'google' | 'openrouter';
+/**
+ * `claude-code-login` is the Anthropic model reached through the machine's
+ * own Claude Code login (ggui#1185) rather than a key — a trace reader can
+ * tell the two apart, which the routing vocabulary (`provider: 'anthropic'`)
+ * deliberately does not.
+ */
+export type LlmTraceProvider = 'anthropic' | 'claude-code-login' | 'openai' | 'google' | 'openrouter';
 
 /** Which `LLMAgent` method initiated the call. */
 export type LlmTraceKind =

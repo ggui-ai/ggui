@@ -36,6 +36,15 @@ import {
   newLlmTraceId,
   summarizeTools,
 } from './llm-trace-sink.js';
+import {
+  buildLoginQueryOptions,
+  collectLoginTurn,
+  createDenyingIntercept,
+  createLoginToolServer,
+  imageUserMessage,
+  type InterceptedToolCall,
+  type LoginSdk,
+} from './claude-code-login-query.js';
 
 // `LLMToolDef` lives in `@ggui-ai/ui-gen/llm`. This file re-exports it
 // so `../harness/llm-router.js` importers (evaluator.ts,
@@ -77,6 +86,16 @@ export interface AgentConfig {
     readonly apiKey?: string;
     /** Anthropic-only: force the Bedrock-IAM client instead of the direct API client. */
     readonly useBedrock?: boolean;
+    /**
+     * Anthropic-only (ggui#1185): run on the machine's own Claude Code
+     * LOGIN instead of a key — the route decision `auth: 'claude-code-login'`
+     * lands here, and `createAgent` / `createVisionAgent` select
+     * `ClaudeCodeLoginAgent` (one `query()` per call) instead of the raw
+     * API client. Every agent the harness builds — coding, evaluation,
+     * visual judge — takes the same decision. Off unless set; a real key
+     * never coexists with it (the router refuses a non-anthropic route).
+     */
+    readonly claudeCodeLogin?: boolean;
   };
   /**
    * Observer invoked once per retried attempt when `apiCall()` (#489)
@@ -1093,6 +1112,258 @@ export class AnthropicAgent extends LLMAgent {
 // OpenAIAgent
 // =============================================================================
 
+/**
+ * ggui#1185 (B) — the Anthropic model reached through the machine's own
+ * Claude Code LOGIN, for the one path that has no key: every router call
+ * is ONE Agent SDK `query()` (`maxTurns: 1`), the binary PROPOSES tool
+ * calls and ggui's harness executes them — the same one-shot contract as
+ * `AnthropicAgent.callTools`, so everything above the router (the coding
+ * loop, `apply_changes`, the axis checks, the evaluation legs) is
+ * untouched. Selected only when the route decision carries
+ * `routeOverride.claudeCodeLogin`; never by default.
+ *
+ * What it refuses, as behaviour (the carve-out): it writes no key
+ * anywhere (the env the binary inherits is stripped of every provider key
+ * name and `system:init.apiKeySource` must read `"none"` or the run stops
+ * before its first turn); it never runs `--bare`, never loads `~/.claude`,
+ * and never allow-lists a tool (an allow-listed MCP tool executes without
+ * asking). The pure pieces — options, the JSON-Schema→Zod tool bridge, the
+ * stream reader and its error classes — live in
+ * `./claude-code-login-query.ts`; the measurements behind each are cited
+ * there. Rate limits are the plan's: a 429 the binary relays rides the
+ * same `apiCall()` retry seam as the raw client.
+ *
+ * Honest asymmetries, reported rather than hidden: the SDK has no
+ * `tool_choice`, so `appliedToolChoice` is always `'auto'`; the binary
+ * emitted a thinking block despite `thinkingConfig: { type: 'disabled' }`
+ * in the probe (Exp 009 reports thinking tokens as their own column);
+ * `warmCache` is a no-op (a warm-up turn would spend the plan for
+ * nothing); `callWithTools` (an in-client agentic loop) is not offered —
+ * the harness runs the loop.
+ */
+export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
+  readonly provider = 'anthropic' as const;
+
+  protected resolveModel(model: string): string {
+    return model.startsWith('anthropic/') ? model.slice('anthropic/'.length) : model;
+  }
+
+  protected async createClient(): Promise<LoginSdk> {
+    const { query, tool, createSdkMcpServer } = await import('@anthropic-ai/claude-agent-sdk');
+    return { query, tool, createSdkMcpServer };
+  }
+
+  async callText(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    _maxTokens?: number,
+    _temperature?: number,
+  ): Promise<LLMResponse> {
+    const sdk = await this.getClient<LoginSdk>();
+    const traceId = newLlmTraceId();
+    const startedAt = Date.now();
+    const resolvedModel = this.resolveModel(model);
+    try {
+      const turn = await this.apiCall(() =>
+        collectLoginTurn(
+          sdk.query({
+            prompt: userPrompt,
+            options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
+          }),
+          { intercepted: [], log: console.log, warn: console.warn },
+        ),
+      );
+      const usage = turn.result.usage;
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callText',
+        systemPrompt,
+        userPrompt,
+        result: {
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          cacheCreated: usage.cache_creation_input_tokens,
+          cacheRead: usage.cache_read_input_tokens,
+          text: turn.text,
+        },
+      });
+      return { text: turn.text, inputTokens: usage.input_tokens, outputTokens: usage.output_tokens };
+    } catch (e) {
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callText',
+        systemPrompt,
+        userPrompt,
+        error: { message: e instanceof Error ? e.message : String(e) },
+      });
+      throw e;
+    }
+  }
+
+  async callVision(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    image: VisionImageInput,
+    _maxTokens?: number,
+  ): Promise<LLMResponse> {
+    const sdk = await this.getClient<LoginSdk>();
+    const traceId = newLlmTraceId();
+    const startedAt = Date.now();
+    const resolvedModel = this.resolveModel(model);
+    try {
+      const turn = await this.apiCall(() =>
+        collectLoginTurn(
+          sdk.query({
+            prompt: imageUserMessage(userPrompt, image),
+            options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
+          }),
+          { intercepted: [], log: console.log, warn: console.warn },
+        ),
+      );
+      const usage = turn.result.usage;
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callVision',
+        systemPrompt,
+        userPrompt,
+        result: { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, text: turn.text },
+      });
+      return { text: turn.text, inputTokens: usage.input_tokens, outputTokens: usage.output_tokens };
+    } catch (e) {
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callVision',
+        systemPrompt,
+        userPrompt,
+        error: { message: e instanceof Error ? e.message : String(e) },
+      });
+      throw e;
+    }
+  }
+
+  async callTools(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    tools: LLMToolDef[],
+    toolChoice: 'required' | 'auto' = 'required',
+    _scopedTools?: LLMToolDef[],
+  ): Promise<LLMToolCallResponse> {
+    const sdk = await this.getClient<LoginSdk>();
+    const traceId = newLlmTraceId();
+    const startedAt = Date.now();
+    const resolvedModel = this.resolveModel(model);
+    if (toolChoice === 'required') {
+      console.warn(
+        `[claude-code-login] callTools: the Agent SDK has no tool_choice surface; caller's 'required' is reported as 'auto'`,
+      );
+    }
+    try {
+      const turn = await this.apiCall(() => {
+        // Fresh per attempt: the SDK connects the server instance per query().
+        const intercepted: InterceptedToolCall[] = [];
+        const server = createLoginToolServer(sdk, tools);
+        return collectLoginTurn(
+          sdk.query({
+            prompt: userPrompt,
+            options: buildLoginQueryOptions({
+              model: resolvedModel,
+              systemPrompt,
+              tools: { server, canUseTool: createDenyingIntercept(intercepted) },
+            }),
+          }),
+          { intercepted, log: console.log, warn: console.warn },
+        );
+      });
+      const usage = turn.result.usage;
+      const cacheCreated = usage.cache_creation_input_tokens;
+      const cacheRead = usage.cache_read_input_tokens;
+      if (cacheCreated || cacheRead) {
+        console.log(
+          `[claude-code-login] callTools cache: created=${cacheCreated} read=${cacheRead} input=${usage.input_tokens} output=${usage.output_tokens}`,
+        );
+      }
+      const toolCalls: LLMToolCall[] = turn.toolCalls.map((c) => ({ id: c.id, name: c.name, input: c.input }));
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callTools',
+        systemPrompt,
+        userPrompt,
+        tools: summarizeTools(tools),
+        result: {
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          cacheCreated,
+          cacheRead,
+          toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })),
+        },
+      });
+      return {
+        toolCalls,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+        cacheReadTokens: cacheRead,
+        cacheCreationTokens: cacheCreated,
+        appliedToolChoice: 'auto',
+      };
+    } catch (e) {
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'claude-code-login',
+        model: resolvedModel,
+        kind: 'callTools',
+        systemPrompt,
+        userPrompt,
+        tools: summarizeTools(tools),
+        error: { message: e instanceof Error ? e.message : String(e) },
+      });
+      throw e;
+    }
+  }
+
+  async callWithTools(): Promise<LLMWithToolsResponse> {
+    throw new Error(
+      "claude-code-login: callWithTools (an in-client agentic loop) is not part of the login client — ggui's harness runs the loop through callTools",
+    );
+  }
+}
+
 export class OpenAIAgent extends LLMAgent {
   readonly provider = 'openai' as const;
 
@@ -2015,6 +2286,14 @@ export function createAgent(providerOrConfig: AgentConfig['provider'] | AgentCon
   const routeOverride =
     typeof providerOrConfig === 'string' ? undefined : providerOrConfig.routeOverride;
   const onRetry = typeof providerOrConfig === 'string' ? undefined : providerOrConfig.onRetry;
+  if (routeOverride?.claudeCodeLogin === true) {
+    if (provider !== 'anthropic') {
+      throw new Error(
+        `${provider}: the claude-code-login credential authenticates the Claude Code binary only — pick an anthropic route or supply a ${provider} API key`,
+      );
+    }
+    return new ClaudeCodeLoginAgent(routeOverride, onRetry);
+  }
   switch (provider) {
     case 'anthropic':
       return new AnthropicAgent(routeOverride, onRetry);
@@ -2041,6 +2320,14 @@ export type VisionProvider = 'anthropic' | 'google';
 export function createVisionAgent(
   config: AgentConfig & { provider: VisionProvider },
 ): LLMAgent & VisionAgent {
+  if (config.routeOverride?.claudeCodeLogin === true) {
+    if (config.provider !== 'anthropic') {
+      throw new Error(
+        `${config.provider}: the claude-code-login credential authenticates the Claude Code binary only — pick an anthropic route or supply a ${config.provider} API key`,
+      );
+    }
+    return new ClaudeCodeLoginAgent(config.routeOverride, config.onRetry);
+  }
   switch (config.provider) {
     case 'anthropic':
       return new AnthropicAgent(config.routeOverride, config.onRetry);
