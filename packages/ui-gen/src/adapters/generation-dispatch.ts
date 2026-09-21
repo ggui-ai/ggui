@@ -185,7 +185,12 @@ export interface GenerationDispatchParams {
    * means `constrained` (byte-identical to the pre-`designMode` path).
    */
   designMode?: DesignMode;
-  /** Rendering canvas class for the `free` prompt — see `CreateHarnessInput.canvas`. */
+  /**
+   * Rendering canvas class — see `CreateHarnessInput.canvas`. Absent, the
+   * harness derives it from `shellType` × `screen` (ggui#1117), so the axis
+   * checks always judge for the canvas the generation renders on; the
+   * `free` prompt renders it, the constrained prompt ignores it.
+   */
   canvas?: CanvasClass;
   /** The app's generation profile (#991). */
   profile?: GenerationProfileInput;
@@ -302,7 +307,13 @@ export async function dispatchGeneration(
       : {}),
     // Design mode + canvas — the harness carries them to every leg.
     ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),
-    ...(params.canvas !== undefined ? { canvas: params.canvas } : {}),
+    // ggui#1117 — the canvas is ALWAYS carried: a stated one, else the class
+    // shell × screen renders on. The axis checks judge for it
+    // (`universal.root_width_cap` stands down without one — which is what every
+    // served generation got, since the serving runtime states no canvas); the
+    // constrained prompt ignores it (INVARIANT 1, `design-mode.pin.test.ts`),
+    // so the prompt digests do not move; the free prompt renders it as before.
+    canvas: params.canvas ?? canvasForRendering(params.shellType, params.screen),
     ...(params.profile !== undefined ? { profile: params.profile } : {}),
     // Policy is pre-resolved at the dispatch boundary so `createHarness`
     // stays free of experiment plumbing. `resolveHarnessPolicy` applies
