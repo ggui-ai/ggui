@@ -424,10 +424,12 @@ const GENERATION_ERROR = { code: 'PRODUCTION_FAILED' as const, message: 'provide
 describe('ggui_render — postFailureHook (#804): every failure after the gate passed', () => {
   it('fires on the returned outcome:failed envelope with the session and the generation error', async () => {
     const postFailureHook = vi.fn();
+    const postSuccessHook = vi.fn();
     const h = buildFailureHarness({
       gate: async () => undefined,
       generator: async () => ({ ok: false, error: GENERATION_ERROR }),
       postFailureHook,
+      postSuccessHook,
     });
     const handshakeId = 'hs-fail-envelope-1';
     await seedAgentHandshake(h.handshakeStore, handshakeId);
@@ -443,8 +445,14 @@ describe('ggui_render — postFailureHook (#804): every failure after the gate p
     expect(args.error).toEqual(GENERATION_ERROR);
     // Unchanged contract: the success hook observes EVERY settled render, a
     // failed envelope included (codeReady:false) — the failure hook is the
-    // addition, not a replacement.
+    // addition, not a replacement. Since ggui#1227 the bundle SAYS which arm
+    // fired: a metering consumer cannot tell a failed render from a
+    // legitimate codeReady:false one by the other fields (both carry
+    // generation:null and blueprintId:'').
     expect(h.postSuccessHook).toHaveBeenCalledTimes(1);
+    const settled: GguiSessionPostSuccessArgs = postSuccessHook.mock.calls[0]?.[0];
+    expect(settled.outcome).toBe('failed');
+    expect(settled.codeReady).toBe(false);
   });
 
   it('fires on a failure the handler THROWS after the gate passed (no session minted yet)', async () => {

@@ -75,7 +75,11 @@ import * as matcherModule from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
 import { CODE_DELIVERY_EVENTS } from './code-delivery-events.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
-import { createGguiRenderHandler, type GguiRenderHandlerDeps } from './render.js';
+import {
+  createGguiRenderHandler,
+  type GguiRenderHandlerDeps,
+  type GguiSessionPostSuccessArgs,
+} from './render.js';
 import type { BlueprintPool } from './decide-handshake.js';
 import {
   isHandlerFailure,
@@ -854,6 +858,18 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(seen.at(-1)).toBeNull();
   });
 
+  it('passes outcome to postSuccessHook — "rendered" on cold gen AND on blueprint reuse (ggui#1227)', async () => {
+    const seen: Array<GguiSessionPostSuccessArgs['outcome']> = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
+      seen.push(a.outcome);
+    };
+    const cold = await buildColdGenHarness({ postSuccessHook });
+    await cold.harness.handler.handler({ handshakeId: cold.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toBe('rendered');
+    const cache = await buildAcceptCacheHarness({ postSuccessHook });
+    await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toBe('rendered');
+  });
   it('threads the matcher cosine onto the committed cacheHit.similarity — and falls back to 1 only for skew-era records (#564)', async () => {
     // Record persisted WITH the matcher cosine (post-#564 pod).
     const withCosine = await buildAcceptCacheHarnessFor(CONTRACT, {

@@ -418,6 +418,19 @@ export interface GguiSessionPostSuccessArgs {
    */
   readonly action: Required<GguiRenderOutput>['action'];
   /** Whether the render committed real componentCode. */
+  /**
+   * Which arm of the render settled this bundle — the same word the wire
+   * envelope carries (ggui#1227). `'rendered'` is the success assembly:
+   * an interface was produced or reused (`codeReady` may still be false
+   * for a placeholder, a probe, or a cache hit whose commit was
+   * rejected). `'failed'` is the generation-failure arm: no interface
+   * was produced, the envelope went out `outcome:'failed'`, and the hook
+   * still fires so downstream side-effects observe EVERY settled render.
+   * Metering MUST read this, not `codeReady`/`generation`: both arms can
+   * carry `generation:null` and `blueprintId:''`, so no other field tells
+   * a failed render from a legitimate `codeReady:false` one.
+   */
+  readonly outcome: 'rendered' | 'failed';
   readonly codeReady: boolean;
   /**
    * True when this render reused an existing blueprint (no LLM call);
@@ -2639,6 +2652,7 @@ export function createGguiRenderHandler(
           contractHash: effectiveContractKey,
           intent: story.intent,
           action,
+          outcome: 'failed',
           codeReady: false,
           cacheHit: false,
           generation: null,
@@ -2750,6 +2764,7 @@ export function createGguiRenderHandler(
         contractHash: effectiveContractKey,
         intent: story.intent,
         action,
+        outcome: 'rendered',
         codeReady: generatedCodeReady,
         // Always defined + accurate: `result.cache` is assigned from
         // `cacheMarker ?? { hit: false, … }`, set on BOTH the
