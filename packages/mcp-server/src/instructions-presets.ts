@@ -47,7 +47,7 @@
  * underlying tools/call envelopes flow.
  */
 const ACTION_ROUTING_PARAGRAPH =
-  "Action routing: every actionSpec entry is a GESTURE — a discrete event the agent reacts to on its next turn. When the user interacts, the iframe relays the action through `ggui_runtime_submit_action` to the server, which appends the event onto a per-render pipe. Your `ggui_consume` long-poll unblocks mid-turn with the event payload plus a uiContext snapshot of every declared contextSpec slot. There is no synchronous server-side tool-fire — `actions drive turns` is a structural invariant (docs/principles/actions-vs-context.md): an action always waits for the agent. Cross-MCP `nextStep` hints work the same way: the agent reads the event's `actionData.nextStep`, decides whether to honor it, and calls the named tool on the next turn (the tool MAY live on a different MCP server — declare it in `agentCapabilities.tools` so the cross-ref invariant passes).";
+  "Action routing: every actionSpec entry is a GESTURE — a discrete event the agent reacts to on its next turn. When the user interacts, the iframe relays the action through `ggui_runtime_submit_action` to the server, which appends the event onto a per-render pipe. Your `ggui_consume` long-poll unblocks mid-turn with the event payload plus a uiContext snapshot of every declared contextSpec slot. There is no synchronous server-side tool-fire — `actions drive turns` is a structural invariant (https://docs.ggui.ai/concepts/sessions-and-the-event-model/): an action always waits for the agent. Cross-MCP `nextStep` hints work the same way: the agent reads the event's `actionData.nextStep`, decides whether to honor it, and calls the named tool on the next turn (the tool MAY live on a different MCP server — declare it in `agentCapabilities.tools` so the cross-ref invariant passes).";
 
 /**
  * Worked invocation example. Layered atop the `aggressive` content by
@@ -77,7 +77,7 @@ const DEFAULT_PRESET_BODY = [
     '',
     '  • streamSpec   — agent → client (live updates). Live outbound channels for streaming data to the UI mid-render — chat tokens, progress events, log lines, time-series data. Each entry has a `schema` for the frame shape; you push frames via ggui_emit. e.g. a chat surface has `assistantMessage` on streamSpec for token-by-token output.',
     '',
-    'PLACEMENT RULE for actionSpec vs contextSpec: "does this thing need the agent\'s next-turn reasoning?" Yes → actionSpec. No → contextSpec. There is no third category (full rule: docs/principles/actions-vs-context.md).',
+    'PLACEMENT RULE for actionSpec vs contextSpec: "does this thing need the agent\'s next-turn reasoning?" Yes → actionSpec. No → contextSpec. There is no third category (full rule: https://docs.ggui.ai/concepts/sessions-and-the-event-model/).',
     '',
     '═══ LIFECYCLE ═══',
     '',

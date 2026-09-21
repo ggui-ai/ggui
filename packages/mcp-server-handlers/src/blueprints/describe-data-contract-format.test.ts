@@ -57,3 +57,13 @@ describe('ggui_protocol_describe_data_contract_format — teaching matches the g
     expect(doc).toContain('`_ggui:` prefix');
   });
 });
+
+// ggui#1149 — this text is served to agents via
+// `ggui_protocol_describe_data_contract_format`; a `docs/…` path is a dead
+// link outside the monorepo.
+describe('describe_data_contract_format cites no monorepo-only docs/ path (ggui#1149)', () => {
+  it('the served description carries no docs/ repo path', async () => {
+    const text = JSON.stringify(await createDescribeDataContractFormatHandler().handler({}, { appId: 'a', requestId: 'r' }));
+    expect(text).not.toMatch(/\bdocs\/(principles|development|plans|protocol)\//);
+  });
+});

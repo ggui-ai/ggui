@@ -68,9 +68,10 @@ interface DataContract {
 \`intent\` is NOT a contract field — the outer pipeline owns it
 (top-level \`intent\` on the flat \`ggui_handshake\` input). The
 four-spec surface — propsSpec / actionSpec / contextSpec / streamSpec
-— describes the wire exhaustively. See
-\`docs/principles/actions-vs-context.md\` for the placement rule on
-the two inbound specs.
+— describes the wire exhaustively. The
+placement rule for the two inbound specs — does this thing need the
+agent's next-turn reasoning? Yes → actionSpec, no → contextSpec, no third
+category — is stated at https://docs.ggui.ai/concepts/sessions-and-the-event-model/ .
 
 ## PropsSpec
 

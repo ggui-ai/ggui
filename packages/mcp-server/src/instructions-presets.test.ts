@@ -173,3 +173,15 @@ describe('the presets say what ggui_get_session returns — never "the session" 
     }
   });
 });
+
+// ggui#1149 — the instructions preset ships on the wire to every host. A
+// `docs/…` path is a monorepo-only location: on the public mirror and for
+// every self-hoster it is a dead link. The rule the preset cites is stated
+// inline; the citation must point at a public home or at nothing.
+describe('instructions presets cite no monorepo-only docs/ path (ggui#1149)', () => {
+  it('no preset body carries a docs/ repo path', () => {
+    for (const [name, body] of Object.entries(MCP_INSTRUCTIONS_PRESETS)) {
+      expect(body, `preset ${name}`).not.toMatch(/\bdocs\/(principles|development|plans|protocol)\//);
+    }
+  });
+});
