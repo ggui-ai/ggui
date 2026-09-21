@@ -13,6 +13,13 @@
  *   - Per-IP source: `X-Forwarded-For` (first non-empty hop) when
  *     `trustProxy=true`, else `req.socket.remoteAddress`. Falls back to
  *     `'unknown'` and treats every unidentified peer as a single bucket.
+ *     THE OPERATOR'S OBLIGATION behind `trustProxy=true`: the proxy in
+ *     front MUST OVERWRITE `X-Forwarded-For` from the connection it
+ *     accepted (ingress-nginx: `use-forwarded-headers: "false"`), never
+ *     append to a header the client sent — with an appending proxy the
+ *     first hop is whatever the caller wrote, so the caller picks its own
+ *     bucket per request and the limit binds only the honest. A limiter
+ *     whose key the limited party controls is not a limiter (ggui#1193).
  *   - On denial: 429 + `Retry-After` (seconds, ceiling) + JSON
  *     `{error: {code: 'rate_limited', message, retryAfter}}`.
  *   - On limiter throw: log + `next()` (fail-open). A limiter outage MUST
@@ -28,7 +35,11 @@ export interface PairLoginRateLimitOptions {
   readonly logger: Logger;
   /** Tag prefix on the bucket key. */
   readonly quotaKey: string;
-  /** When true, prefer the first `X-Forwarded-For` hop. Default false. */
+  /**
+   * When true, prefer the first `X-Forwarded-For` hop. Default false. Set
+   * it ONLY behind a proxy that overwrites the header (see the module
+   * docblock): behind one that appends, the bucket key is caller-chosen.
+   */
   readonly trustProxy?: boolean;
 }
 
