@@ -25,6 +25,7 @@
 import type { Express } from "express";
 import { existsSync } from "node:fs";
 import type { Logger } from "./logger.js";
+import { createPublicReadPreflight } from "./browser-cors.js";
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -62,8 +63,15 @@ export function mountRuntimeBundleRoute(opts: MountOptions): void {
   // Content-hashed long-cache route (#472) — registered ahead of the
   // plain path so the two never shadow each other regardless of how a
   // custom `runtimePath` glob might overlap.
+  // ggui#1231 — the bundle is a public `*` read; its PREFLIGHT must say
+  // so too, or a sandboxed (`null`-origin) frame that preflights the
+  // fetch fails while the plain GET works. Registered for every mount
+  // path, the 503 "not built" branch included.
+  const preflight = createPublicReadPreflight();
+  app.options(runtimePath, preflight);
   if (opts.hashed !== undefined) {
     const { path: hashedPath, source } = opts.hashed;
+    app.options(hashedPath, preflight);
     app.get(hashedPath, (_req, res) => {
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
       // Immutable: the path names these exact bytes (see MountOptions

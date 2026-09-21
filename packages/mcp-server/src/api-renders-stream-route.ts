@@ -51,6 +51,7 @@ import type { Express, Response } from "express";
 import type { GguiSessionChannelServer } from "./ggui-session-channel.js";
 import type { SubscriberSink } from "./ggui-session-channel/internal-types.js";
 import type { Logger } from "./logger.js";
+import { createPublicReadPreflight } from "./browser-cors.js";
 
 /**
  * Heartbeat cadence (25s). Under ALB's 60s idle default with 2x+
@@ -144,6 +145,8 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
   const { app, renderStore, secret, channelProvider, logger } = opts;
   const heartbeatMs = opts.heartbeatMs ?? SSE_HEARTBEAT_MS;
 
+  // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  app.options("/api/sessions/:sessionId/stream", createPublicReadPreflight());
   app.get("/api/sessions/:sessionId/stream", async (req, res) => {
     // ── Phase 1: plain-HTTP gates, BEFORE any event-stream byte ──
     // (EventSource fails permanently on non-200 — the demotion signal.)

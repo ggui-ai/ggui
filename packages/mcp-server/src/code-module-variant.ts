@@ -47,6 +47,7 @@ import {
 } from "@ggui-ai/design/rendering";
 import { hoistImports } from "@ggui-ai/design/module-loader";
 import type { Logger } from "./logger.js";
+import { createPublicReadPreflight } from "./browser-cors.js";
 
 /**
  * Mint the `codeModuleUrl` for one render's component code, or decline.
@@ -165,6 +166,8 @@ export function mountShimRoutes(opts: {
   readonly shims: ReadonlyMap<string, Buffer>;
 }): void {
   const { app, urlPrefix, runtimeHash, shims } = opts;
+  // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  app.options(`${urlPrefix}/:rt/:file`, createPublicReadPreflight());
   app.get(`${urlPrefix}/:rt/:file`, (req: Request, res: Response) => {
     // Same CORS rationale as the runtime bundle: module fetches from a
     // sandboxed `srcdoc` iframe (`null` origin) always run CORS mode.
@@ -247,6 +250,8 @@ export function mountCodeModuleVariantRoute(opts: {
   readonly logger: Logger;
 }): void {
   const { app, codeStore, variant, logger } = opts;
+  // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  app.options(CODE_MODULE_VARIANT_ROUTE, createPublicReadPreflight());
   app.get(CODE_MODULE_VARIANT_ROUTE, async (req: Request, res: Response) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     // RegExp routes surface capture groups as positional params.

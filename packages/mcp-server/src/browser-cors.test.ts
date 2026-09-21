@@ -9,7 +9,11 @@ import { describe, expect, it, vi } from "vitest";
 import express from "express";
 import { request as httpRequest } from "node:http";
 import { buildOriginHostPolicy } from "./origin-validation.js";
-import { createBrowserCorsMiddleware } from "./browser-cors.js";
+import {
+  createBrowserCorsMiddleware,
+  createPreflightFallback,
+  createPublicReadPreflight,
+} from "./browser-cors.js";
 
 // Loopback round-trip suite: every request in this file spins a
 // throwaway `app.listen(0)` and awaits one localhost round-trip with no
@@ -28,12 +32,22 @@ function buildApp(): express.Express {
   app.post("/mcp", (_req, res) => {
     res.status(200).json({ ok: true });
   });
+  // ggui#1231 — a public `*` read route owns its own preflight, the
+  // way the runtime-bundle / code / session-read routes do in server.ts.
+  app.options("/asset.js", createPublicReadPreflight());
+  app.get("/asset.js", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.status(200).type("application/javascript").send("export {}");
+  });
+  // Mounted last, as server.ts does: a preflight nobody owns is a bare 204.
+  app.use(createPreflightFallback());
   return app;
 }
 
 async function call(
   method: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  path = "/mcp"
 ): Promise<{ status: number; headers: Record<string, string | string[] | undefined> }> {
   const app = buildApp();
   const server = app.listen(0);
@@ -43,7 +57,7 @@ async function call(
   try {
     return await new Promise((resolve, reject) => {
       const req = httpRequest(
-        { host: "127.0.0.1", port: addr.port, method, path: "/mcp", headers },
+        { host: "127.0.0.1", port: addr.port, method, path, headers },
         (res) => {
           res.resume();
           res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
@@ -94,11 +108,12 @@ describe("preflight", () => {
     expect(headers["access-control-allow-credentials"]).toBeUndefined();
   });
 
-  it("omits CORS headers for an unlisted origin", async () => {
-    const { headers } = await call("OPTIONS", {
+  it("omits CORS headers for an unlisted origin — a bare 204 from the fallback", async () => {
+    const { status, headers } = await call("OPTIONS", {
       Origin: "https://evil.com",
       "Access-Control-Request-Method": "POST",
     });
+    expect(status).toBe(204);
     expect(headers["access-control-allow-origin"]).toBeUndefined();
   });
 });
@@ -118,6 +133,72 @@ describe("actual requests", () => {
   it("leaves origin-less requests untouched", async () => {
     const { status, headers } = await call("POST", {});
     expect(status).toBe(200);
+    expect(headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});
+
+describe("ggui#1231 — public * read routes own their preflight", () => {
+  const PREFLIGHT_HEADERS = {
+    "Access-Control-Request-Method": "GET",
+    "Access-Control-Request-Headers": "x-request-id",
+  };
+
+  it("answers a null-origin preflight (sandboxed srcdoc frame) with *", async () => {
+    const { status, headers } = await call(
+      "OPTIONS",
+      { Origin: "null", ...PREFLIGHT_HEADERS },
+      "/asset.js"
+    );
+    expect(status).toBe(204);
+    expect(headers["access-control-allow-origin"]).toBe("*");
+    expect(headerString(headers["access-control-allow-methods"])).toContain("get");
+    expect(headerString(headers["access-control-allow-methods"])).toContain("head");
+    expect(headerString(headers["access-control-allow-headers"])).toContain("x-request-id");
+    expect(headers["access-control-allow-credentials"]).toBeUndefined();
+  });
+
+  it("answers an unlisted-origin preflight with * — the route is public by design", async () => {
+    const { status, headers } = await call(
+      "OPTIONS",
+      { Origin: "https://evil.example", ...PREFLIGHT_HEADERS },
+      "/asset.js"
+    );
+    expect(status).toBe(204);
+    expect(headers["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("falls back to the default allow-headers when the preflight names none", async () => {
+    const { headers } = await call(
+      "OPTIONS",
+      { Origin: "null", "Access-Control-Request-Method": "GET" },
+      "/asset.js"
+    );
+    expect(headerString(headers["access-control-allow-headers"])).toContain("content-type");
+  });
+
+  it("leaves an allowed origin's preflight to the allowlist layer (specific origin, not *)", async () => {
+    const { status, headers } = await call(
+      "OPTIONS",
+      { Origin: "https://app.guuey.com", ...PREFLIGHT_HEADERS },
+      "/asset.js"
+    );
+    expect(status).toBe(204);
+    expect(headers["access-control-allow-origin"]).toBe("https://app.guuey.com");
+  });
+
+  it("a preflight on a path nobody owns is a bare 204 (fallback), never *", async () => {
+    const { status, headers } = await call(
+      "OPTIONS",
+      { Origin: "null", ...PREFLIGHT_HEADERS },
+      "/nowhere"
+    );
+    expect(status).toBe(204);
+    expect(headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("an origin-less OPTIONS (non-browser client) still ends as a 204", async () => {
+    const { status, headers } = await call("OPTIONS", {}, "/mcp");
+    expect(status).toBe(204);
     expect(headers["access-control-allow-origin"]).toBeUndefined();
   });
 });

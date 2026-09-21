@@ -59,6 +59,7 @@ import {
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import type { Express } from "express";
 import type { Logger } from "./logger.js";
+import { createPublicReadPreflight } from "./browser-cors.js";
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -134,6 +135,8 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
   // host is the last resort for local/tunnel deployments.
   const staticBase = codeBaseUrl ?? publicBaseUrl;
 
+  // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  app.options("/api/sessions/:sessionId/state", createPublicReadPreflight());
   app.get("/api/sessions/:sessionId/state", async (req, res) => {
     // CORS on EVERY response, gates included: cross-origin frames can
     // only read a status when the response carries ACAO. Without it a
@@ -363,6 +366,8 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     });
   });
 
+  // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  app.options("/api/sessions/:sessionId/events", createPublicReadPreflight());
   app.get("/api/sessions/:sessionId/events", async (req, res) => {
     // CORS pre-gates — same contract as /state: the 410/401 verdicts
     // are part of the polling rung's protocol and must be readable

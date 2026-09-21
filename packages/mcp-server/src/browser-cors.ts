@@ -9,11 +9,23 @@
  * where the browser itself holds the Streamable HTTP connection: guuey's
  * browser host layer, local dev SPAs, Electron renderers.
  *
- * POSTURE: an origin ALLOWLIST, never `*`. The three existing `*` routes
- * (runtime-bundle, code, api-renders) are credential-free or token-gated
- * public reads; `/mcp` is different — `cookieAuthMiddleware` promotes the
- * session cookie to a Bearer on it, so it belongs to the cookie-authed
- * class. `Access-Control-Allow-Credentials` is NEVER set.
+ * POSTURE: an origin ALLOWLIST, never `*`, for everything THIS layer
+ * answers. The public `*` read routes (runtime bundle + shims, code and
+ * contract modules, the session read endpoints) are credential-free or
+ * token-in-URL public reads that stamp `*` on their own responses — and
+ * since ggui#1231 they also OWN their preflight, via
+ * `createPublicReadPreflight()`. The reason is structural: a sandboxed
+ * `srcdoc` frame's origin is the literal `null`, a value no allowlist
+ * can name, and a preflight this layer ended with a bare 204 made every
+ * request the browser chose to preflight fail as an opaque CORS error
+ * while the plain GET kept working. So an OPTIONS from an origin this
+ * layer does not allow is PASSED THROUGH, not ended — a route-level
+ * `app.options(path, createPublicReadPreflight())` gets its turn, and
+ * `createPreflightFallback()`, mounted last, closes what nobody owns
+ * with the bare 204. `/mcp` is different — `cookieAuthMiddleware`
+ * promotes the session cookie to a Bearer on it, so it belongs to the
+ * cookie-authed class and never owns a `*` preflight.
+ * `Access-Control-Allow-Credentials` is NEVER set, by either handler.
  *
  * LAYER RELATIONSHIP: origin-validation runs first and decides WHETHER a
  * request executes at all (the spec-mandated 403); this layer decides HOW
@@ -59,12 +71,9 @@ export function createBrowserCorsMiddleware(opts: {
   return (req, res, next) => {
     const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
 
-    // No Origin — a non-browser client. Nothing to negotiate.
+    // No Origin — a non-browser client. Nothing to negotiate; an OPTIONS
+    // falls through to a route-owned preflight or the fallback's 204.
     if (origin === undefined || origin.length === 0) {
-      if (req.method === "OPTIONS") {
-        res.status(204).end();
-        return;
-      }
       next();
       return;
     }
@@ -92,13 +101,74 @@ export function createBrowserCorsMiddleware(opts: {
           typeof requested === "string" && requested.length > 0 ? requested : DEFAULT_ALLOW_HEADERS
         );
         res.setHeader("Access-Control-Max-Age", MAX_AGE_SECONDS);
+        res.status(204).end();
+        return;
       }
-      // A disallowed preflight gets a bare 204 with no CORS headers —
-      // the browser fails the request, which is the intended outcome.
-      res.status(204).end();
+      // A preflight from an origin this layer does not allow is NOT ended
+      // here (ggui#1231): the public `*` read routes own theirs — see
+      // `createPublicReadPreflight()` — and `createPreflightFallback()`
+      // answers everything nobody owns with a bare 204 and no CORS
+      // header, so the browser fails the request, the intended outcome.
+      next();
       return;
     }
 
+    next();
+  };
+}
+
+/** Methods a public read route serves; nothing side-effectful. */
+const PUBLIC_READ_ALLOW_METHODS = "GET, HEAD, OPTIONS";
+
+/**
+ * Fallback allow-headers for a public read preflight that names none.
+ * These routes take no `Authorization`: their gate, where they have one,
+ * is a token in the URL, which the preflight never carries.
+ */
+const PUBLIC_READ_DEFAULT_ALLOW_HEADERS = "Accept, Content-Type, Range";
+
+/**
+ * The preflight answer of a public `*` read route (ggui#1231). Register
+ * it as `app.options(<the same path>, createPublicReadPreflight())`
+ * beside the route's `app.get`, so the preflight says exactly what the
+ * GET already says: any origin — including the `null` of a sandboxed
+ * `srcdoc` frame, which no allowlist can name — may read it. Reflects
+ * the requested headers so a host-injected extra needs no code change
+ * here. Never sets `Access-Control-Allow-Credentials`.
+ *
+ * An origin the allowlist DOES name never reaches this handler: the
+ * allowlist layer answers its preflight first, with the specific origin.
+ */
+export function createPublicReadPreflight(): RequestHandler {
+  return (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", PUBLIC_READ_ALLOW_METHODS);
+    const requested = req.headers["access-control-request-headers"];
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      typeof requested === "string" && requested.length > 0
+        ? requested
+        : PUBLIC_READ_DEFAULT_ALLOW_HEADERS
+    );
+    res.setHeader("Access-Control-Max-Age", MAX_AGE_SECONDS);
+    res.status(204).end();
+  };
+}
+
+/**
+ * The terminal answer for a preflight nobody owns: a bare 204 with no
+ * CORS header, so the browser fails the request. Mount it LAST — after
+ * every route — because `createBrowserCorsMiddleware` passes an
+ * unlisted-origin (or origin-less) OPTIONS through precisely so a
+ * route-level preflight can answer before this does. Non-OPTIONS
+ * requests are untouched.
+ */
+export function createPreflightFallback(): RequestHandler {
+  return (req, res, next) => {
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
     next();
   };
 }

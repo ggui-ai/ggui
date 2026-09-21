@@ -276,7 +276,7 @@ import { resolveMcpInstructions, type McpInstructionsValue } from "./instruction
 import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
 import { buildControlService, CONTROL_PATH } from "./control-service.js";
-import { createBrowserCorsMiddleware } from "./browser-cors.js";
+import { createBrowserCorsMiddleware, createPreflightFallback } from "./browser-cors.js";
 import {
   buildOriginHostPolicy,
   createOriginHostValidationMiddleware,
@@ -6176,6 +6176,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       }
       return result.theme;
     })();
+
+  // ggui#1231 — the LAST handler: a preflight no route owns ends here as a
+  // bare 204 with no CORS header. `createBrowserCorsMiddleware` passes an
+  // unlisted-origin OPTIONS through so the public `*` read routes' own
+  // `app.options(...)` (runtime bundle + shims, code/contract modules,
+  // session reads) can answer first; everything else falls to this.
+  app.use(createPreflightFallback());
 
   let httpServer: NodeHttpServer | null = null;
 

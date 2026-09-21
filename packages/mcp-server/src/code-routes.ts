@@ -36,6 +36,7 @@ import {
   mountCodeModuleVariantRoute,
   type CodeModuleVariantOptions,
 } from "./code-module-variant.js";
+import { createPublicReadPreflight } from "./browser-cors.js";
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -70,6 +71,8 @@ export function mountCodeRoutes(opts: MountOptions): void {
     });
   }
   const mountContentAddressableRoute = (mountPath: string, label: "code" | "contract"): void => {
+    // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+    app.options(mountPath, createPublicReadPreflight());
     app.get(mountPath, async (req: Request, res: Response) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       const hash = req.params["hash"];
