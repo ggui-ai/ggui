@@ -4,27 +4,39 @@
  *
  * One function — `matchBlueprint(deps, scope, query)` — that selects
  * a lookup strategy by request shape and returns a structured decision
- * the caller can branch on. Two strategies, mutually exclusive per
- * call — fuzzy matching across non-equal canonical contracts is
- * structurally unsafe, so the matcher never cascades between them:
+ * the caller can branch on. Two strategies, tried IN ORDER within one
+ * call (the body below is the source of truth; this header describes
+ * it, ggui#1229):
  *
  *   - **`exact-key` strategy** — agent supplied a contract.
  *     Canonical-key equality lookup against the registry. Free,
- *     deterministic, <1ms. Hit ⇒ `match-exact`. Miss ⇒ `no-match`
- *     (cold gen against the agent's authored contract).
- *   - **`semantic` strategy** — agent omitted a contract.
- *     RAG (top-K cosine) + LLM rerank judge. Hit ⇒ `match-semantic`.
- *     Miss buckets distinguish cosine-gate skip, no-LLM-wired skip,
- *     judge declined, low-confidence, defense. ~$0.001 + ~1.5s when
- *     LLM is wired.
+ *     deterministic, <1ms. Hit ⇒ `match-exact`, returned at once.
+ *     Miss ⇒ FALL THROUGH to the semantic strategy — unless
+ *     `options.disableSemantic` (the exact-only reuse policy,
+ *     ggui#607), in which case the miss is reported as `no-match`
+ *     without spending retrieval or the judge.
+ *   - **`semantic` strategy** — agent omitted a contract, or the
+ *     exact key missed. RAG (top-K cosine) + LLM rerank judge. Hit ⇒
+ *     `match-semantic`. Miss buckets distinguish cosine-gate skip,
+ *     no-LLM-wired skip, judge declined, low-confidence, defense.
+ *     ~$0.001 + ~1.5s when LLM is wired.
+ *
+ * A semantic hit for a contract-bearing request is served PROACTIVELY,
+ * kept safe by two properties (stated again at the branch): reuse is
+ * ATOMIC (the cached blueprint's own contract + code, never the
+ * request's contract under cached code), and coverage is INFORMATIONAL
+ * (`coverageGap` rides every semantic hit; the decision layer surfaces
+ * it as `COVERAGE_GAP` warn findings and the agent may override — the
+ * cache proposes, the agent disposes).
  *
  * Caller treats `match-*` as reuse and `no-match*` as cold gen; the
  * produced blueprint is registered into the scope post-gen.
  *
- * The matcher is the single source of truth for the decision; both
- * `ggui_handshake` and `ggui_render` route through it. Without
- * unification the two surfaces would drift, leaving "did this hit
- * via handshake or render?" as a debug pain point.
+ * The matcher is the single source of truth for the decision. Its
+ * callers today: `decide-handshake` (the `ggui_handshake` path), the
+ * cache-reuse probe and the match-precision probe. `ggui_render` does
+ * NOT call it (§6): render resolves the blueprint by the identity the
+ * handshake already decided.
  *
  * No I/O concerns leak to the caller — `BlueprintRegistryDeps`
  * captures the embedder + vector store, and an optional `LLMCaller`

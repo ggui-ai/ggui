@@ -19,6 +19,12 @@
  * candidate list, the ladder takes over and a deterministic answer
  * still flows out. Layered, never replaced.
  *
+ * Status (ggui#1229): exported and tested, with NO in-tree caller — a
+ * ready seam for a variant selector / rerank stage, not a live path.
+ * Kept as published API rather than deleted so the next selector slice
+ * (or a self-hoster) wires it without a new contract; its tests are the
+ * contract until then.
+ *
  * Pre-filter strategy: always keep candidates with `isOperatorDefault
  * === true`, then top up the shortlist by `validatorScore desc` until
  * the limit is reached. Operator pins always survive the cut so the

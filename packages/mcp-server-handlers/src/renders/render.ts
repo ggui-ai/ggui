@@ -273,25 +273,25 @@ export interface GenerationDeps {
   readonly seedPools?: readonly BlueprintPool[];
 
   /**
-   * Per-call LLM resolver for Tier 2 rerank in the blueprint matcher.
-   * When wired alongside `cache`, render routes through
-   * `matchBlueprint` and uses the registry-based three-tier flow:
-   * Tier 1 contract-key exact, Tier 2 RAG + LLM rerank, Tier 3 cold
-   * gen + register. When absent, the matcher skips Tier 2 and falls
-   * through to cold gen on cache miss — same registry storage, no
-   * judge step.
+   * NOT READ by the render handler (ggui#1229). Since §6 the render
+   * flow does not run the blueprint matcher — it resolves the blueprint
+   * by the identity the handshake decided — so passing an LLM resolver
+   * here has no effect. The matcher's judge is wired through the
+   * handshake negotiator's own deps (`createLlmBackedHandshakeNegotiator`
+   * in `@ggui-ai/mcp-server`). The key stays on this published type
+   * because removing it is a breaking change for a self-hoster that
+   * passes it; it leaves at the next major.
    */
   readonly resolveLlmCaller?: (
     ctx: HandlerContext,
   ) => LLMCaller | null | Promise<LLMCaller | null>;
 
   /**
-   * Optional marketplace-install bridge. When wired
-   * alongside `cache`, the render handler threads it into
-   * `matchBlueprint` deps so installed blueprints lazily compile
-   * + populate the same vector store. The bridge is idempotent per
-   * scope; the first matchBlueprint call pays the compile, every
-   * subsequent call hits the cache directly.
+   * Optional marketplace-install bridge — NOT READ by the render
+   * handler (ggui#1229): the matcher that consumes it runs in the
+   * handshake path, whose deps (`decide-handshake`, the handshake
+   * negotiator) carry it. Passing it here has no effect; the key stays
+   * on this published type until the next major, as above.
    *
    * Constructed by the CLI / embedder via
    * `createInstalledBlueprintsProvider(...)` — `mcp-server-handlers`
