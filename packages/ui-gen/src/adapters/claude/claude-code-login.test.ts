@@ -26,6 +26,6 @@ describe('claude-code-login (ggui#1185)', () => {
     expect(env.ANTHROPIC_API_KEY, 'input not mutated').toBe('a');
   });
   it('pins tool-less, config-less, non-bare', () => {
-    expect(claudeCodeLoginQueryOptions()).toEqual({ tools: [], settingSources: [], extraArgs: { 'no-bare': null } });
+    expect(claudeCodeLoginQueryOptions()).toEqual({ tools: [], settingSources: [], });
   });
 });

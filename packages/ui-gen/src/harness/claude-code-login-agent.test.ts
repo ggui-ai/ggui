@@ -376,7 +376,8 @@ describe("callTools — one query() carrying the carve-out", () => {
     expect(options.thinking).toEqual({ type: "disabled" });
     expect(options.tools).toEqual([]);
     expect(options.settingSources).toEqual([]);
-    expect(options.extraArgs).toEqual({ "no-bare": null });
+    // `--no-bare` is deliberately NOT passed: the SDK's bundled binary rejects it (measured).
+    expect(options.extraArgs).toBeUndefined();
   });
 
   it("strips every provider key name from the spawned env and keeps the rest", async () => {

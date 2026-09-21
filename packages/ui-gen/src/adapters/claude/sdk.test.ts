@@ -27,7 +27,7 @@ const PARAMS = { userPrompt: 'u', systemPrompt: 's', model: 'claude-haiku-4-5-20
 describe('ClaudeSdkAdapter — claude-code-login path (ggui#1185)', () => {
   afterEach(() => { seen.options.length = 0; });
 
-  it('strips every provider key from the spawned env, pins tools/settings/non-bare, keeps the model', async () => {
+  it('strips every provider key from the spawned env, pins tools/settings (no --no-bare: the bundled binary rejects it), keeps the model', async () => {
     const adapter = new ClaudeSdkAdapter({
       claudeCodeLogin: true,
       env: { ANTHROPIC_API_KEY: 'sk-ant-stale', CLAUDE_API_KEY: 'stale', ANTHROPIC_AUTH_TOKEN: 'stale', ANTHROPIC_BASE_URL: 'http://localhost:4000', PATH: '/usr/bin' },
@@ -40,7 +40,8 @@ describe('ClaudeSdkAdapter — claude-code-login path (ggui#1185)', () => {
     expect(env.PATH).toBe('/usr/bin');
     expect(o.tools).toEqual([]);
     expect(o.settingSources).toEqual([]);
-    expect(o.extraArgs).toEqual({ 'no-bare': null });
+    // `--no-bare` is NOT passed: the SDK's bundled binary (2.1.229) rejects it (measured 2026-09-21).
+    expect(o.extraArgs).toBeUndefined();
     expect(o.model).toBe('claude-haiku-4-5-20251001');
   });
 

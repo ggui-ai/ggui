@@ -14,10 +14,11 @@
  *      `ANTHROPIC_API_KEY` would silently take the run off the login path.
  *   3. {@link claudeCodeLoginQueryOptions} — the SDK options that keep the
  *      run bounded: no built-in tool (`tools: []`), no `~/.claude` settings,
- *      hooks or MCP servers leaking in (`settingSources: []`), and the
- *      non-bare path pinned (`--no-bare`): `--bare` skips keychain reads —
- *      the login — and is slated to become the `-p` default upstream, so an
- *      unpinned run would one day stop using the login without a word.
+ *      hooks or MCP servers leaking in (`settingSources: []`). Not
+ *      `--bare`, either: on the SDK's bundled binary `-p` reads the login
+ *      store as it always has, so no flag is needed — and the flag it
+ *      would be (`--no-bare`) is one that binary rejects; see the note on
+ *      the function below.
  *
  * Opt-in, off by default; the default stays a provider key. The copy that
  * names what this does lives with the CLI flag that enables it.
@@ -55,9 +56,18 @@ export function stripProviderKeyEnv(
  * The SDK `query()` options a login-path run is pinned to — typed as the
  * SDK's own `Options` members, so a change in the SDK's shape is a compile
  * error here and never a silently ignored key.
+  *
+ * NOT pinned: `--no-bare`. The SDK spawns its BUNDLED binary (2.1.229 for
+ * SDK 0.3.229), which has no bare mode and rejects the flag outright
+ * (`error: unknown option '--no-bare'`, measured 2026-09-21 on the first
+ * live turn of the login client); the machine's own `claude` (2.1.274)
+ * accepts it, which is where the earlier probe measured it. On the
+ * bundled binary `-p` reads the login store as it always has. If a later
+ * SDK bundles a binary where bare becomes the `-p` default, the flag
+ * comes back here — with the SDK version bump, measured again.
  */
-export type ClaudeCodeLoginQueryOptions = Required<Pick<Options, 'tools' | 'settingSources' | 'extraArgs'>>;
+export type ClaudeCodeLoginQueryOptions = Required<Pick<Options, 'tools' | 'settingSources'>>;
 
 export function claudeCodeLoginQueryOptions(): ClaudeCodeLoginQueryOptions {
-  return { tools: [], settingSources: [], extraArgs: { 'no-bare': null } };
+  return { tools: [], settingSources: [] };
 }
