@@ -94,7 +94,7 @@ describe('ggui#1195 — declared-viewport threading + the [fit] extension at the
       ...realVisualEvaluator,
       runVisualEval: (_context, config) => {
         captured.push(config);
-        return Promise.resolve({ issues: [], summary: { score: 84, passed: true, canvases: [] } });
+        return Promise.resolve({ issues: [], summary: { score: 84, passed: true, canvases: [] }, coverage: { status: 'ran' } });
       },
     };
     const a = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod);
@@ -108,7 +108,7 @@ describe('ggui#1195 — declared-viewport threading + the [fit] extension at the
   it('a canvas-overflow FAIL active at the cap grants ONE extra round with [fit]-tagged feedback; the round after that stops', async () => {
     const fakeVisualMod: typeof realVisualEvaluator = {
       ...realVisualEvaluator,
-      runVisualEval: () => Promise.resolve({ issues: [FIT_FAIL], summary: FAILED_SUMMARY }),
+      runVisualEval: () => Promise.resolve({ issues: [FIT_FAIL], summary: FAILED_SUMMARY, coverage: { status: 'ran' } }),
     };
     const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod, 1);
     const r1 = await runEvalRound(ctx, input);
@@ -133,7 +133,7 @@ describe('ggui#1195 — declared-viewport threading + the [fit] extension at the
     try {
       const fakeVisualMod: typeof realVisualEvaluator = {
         ...realVisualEvaluator,
-        runVisualEval: () => Promise.resolve({ issues: [FIT_FAIL], summary: FAILED_SUMMARY }),
+        runVisualEval: () => Promise.resolve({ issues: [FIT_FAIL], summary: FAILED_SUMMARY, coverage: { status: 'ran' } }),
       };
       const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod, 2);
       const r1 = await runEvalRound(ctx, input);
@@ -156,7 +156,7 @@ describe('ggui#1195 — declared-viewport threading + the [fit] extension at the
       runVisualEval: () => {
         call += 1;
         const px = 600 - call * 10;
-        return Promise.resolve({ issues: [{ ...FIT_FAIL, description: `Rendered content is ${px}px tall on the xs-chat-card canvas (declared 384×516) — ${px - 516}px is cut off.` }], summary: FAILED_SUMMARY });
+        return Promise.resolve({ issues: [{ ...FIT_FAIL, description: `Rendered content is ${px}px tall on the xs-chat-card canvas (declared 384×516) — ${px - 516}px is cut off.` }], summary: FAILED_SUMMARY, coverage: { status: 'ran' } });
       },
     };
     const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, fakeVisualMod, 1);

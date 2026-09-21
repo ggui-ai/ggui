@@ -22,7 +22,7 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary } from "../../evaluation/types-public.js";
+import type { EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
@@ -540,6 +540,12 @@ export async function runEvalRound(
     llmResult = llm;
     visualIssues = visual?.issues ?? null;
     const visualSummary: VisualEvalSummary | undefined = visual?.summary;
+    // ggui#1221 — the judge leg's coverage is ALWAYS stamped: ran / skipped (with the
+    // reason) / not-applicable when no visual leg was configured for this round.
+    const visualCoverage: VisualCoverage = visual?.coverage ?? { status: 'not-applicable', reason: 'visual leg not configured' };
+    if (visualCoverage.status === 'skipped') {
+      console.log(`[eval] visual-judge: SKIPPED (${visualCoverage.reason ?? 'no reason recorded'})`);
+    }
 
     // Track costs from LLM eval calls
     if (llmResult) {
@@ -570,6 +576,7 @@ export async function runEvalRound(
       // requested and the leg ran; every later re-stamp spreads this
       // base so it survives to the assembled result.
       ...(visualSummary !== undefined ? { visual: visualSummary } : {}),
+      visualCoverage,
     };
 
     // ── Log merged results, with mode-check subcategory breakdown ──

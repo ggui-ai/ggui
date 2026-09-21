@@ -142,8 +142,9 @@ describe('runVisualEvaluation — per-canvas mode', () => {
 });
 
 describe('runVisualEval — the harness outcome', () => {
-  it('no browser → { issues: [] } with no summary key (the pre-canvas shape)', async () => {
+  it('no browser → { issues: [] } with no summary key, and the leg says it was SKIPPED with the reason (ggui#1221)', async () => {
     // The default launcher (puppeteer-core) with a bogus binary fails to launch → null → empty outcome.
+    // ggui#1221: the absence used to be silent — `{ issues: [] }` reads exactly like a clean run.
     const saved = process.env.PUPPETEER_EXECUTABLE_PATH;
     process.env.PUPPETEER_EXECUTABLE_PATH = '/definitely/not/a/browser';
     try {
@@ -151,10 +152,25 @@ describe('runVisualEval — the harness outcome', () => {
         { compiledCode: COMPONENT, originalPrompt: 'a card' },
         { provider: 'claude', passThreshold: 70, canvases: ['md'] },
       );
-      expect(outcome).toEqual({ issues: [] });
+      expect(outcome.issues).toEqual([]);
+      expect('summary' in outcome).toBe(false);
+      expect(outcome.coverage.status).toBe('skipped');
+      expect(typeof outcome.coverage.reason).toBe('string');
+      expect(outcome.coverage.reason!.length).toBeGreaterThan(0);
     } finally {
       if (saved === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH;
       else process.env.PUPPETEER_EXECUTABLE_PATH = saved;
     }
+  });
+
+  it('a judged run says the leg RAN, beside the summary (ggui#1221)', async () => {
+    const deps = recordingDeps([80, 90]);
+    const outcome = await runVisualEval(
+      { compiledCode: COMPONENT, originalPrompt: 'a card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card', 'xl'] },
+      deps,
+    );
+    expect(outcome.coverage).toEqual({ status: 'ran' });
+    expect(outcome.summary?.score).toBe(85);
   });
 });

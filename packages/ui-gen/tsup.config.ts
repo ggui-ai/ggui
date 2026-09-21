@@ -131,5 +131,11 @@ export default defineConfig({
     '@google/adk',
     '@openai/agents',
     'puppeteer-core',
+    // ggui#1221 — the bundled-chromium fallback of the visual evaluator. A
+    // devDependency tsup could not see, so it inlined the tree (tar-fs →
+    // bare-fs → bare-stream → streamx → events-universal) and the ESM
+    // `__require("events")` stub threw in every ESM consumer that reached
+    // the fallback. External, and an optional peer like puppeteer-core.
+    '@sparticuz/chromium',
   ],
 });

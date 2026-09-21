@@ -27,10 +27,10 @@ import { CostTracker } from '../../evaluation/cost-tracker.js';
 import { classifyAxes } from '../../classifier/classifier.js';
 import { createHarness } from '../../create-harness.js';
 import * as realLlmEvaluator from '../../evaluation/llm-evaluator.js';
+import * as realVisualEvaluator from '../../evaluation/visual-evaluator.js';
 import type { LLMEvalConfig, LLMEvalContext, PreWarmedEvalContext } from '../../evaluation/llm-evaluator.js';
 import { LLM_EVAL_STATIC_CRITERIA } from '../../evaluation/types-public.js';
 import type { CriterionCoverage } from '../../evaluation/types-public.js';
-import * as realVisualEvaluator from '../../evaluation/visual-evaluator.js';
 import type { VisualEvalConfig } from '../../evaluation/visual-evaluator.js';
 import type { VisualEvalSummary } from '../../evaluation/types-public.js';
 import type { AgentSpec } from '../runtime.js';
@@ -138,7 +138,7 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
     mockRunCheck.mockResolvedValue({ issues: [] });
   });
 
-  async function buildCtx(riskTier: 'low' | 'medium', llmEvalMod: typeof realLlmEvaluator | null) {
+  async function buildCtx(riskTier: 'low' | 'medium', llmEvalMod: typeof realLlmEvaluator | null, visualMod: typeof realVisualEvaluator | null = null) {
     const classification = {
       ...classifyAxes({ contract: {}, prompt: 'test prompt' }),
       riskTier,
@@ -164,7 +164,7 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
       maxEvalRounds: 3,
       costTracker: new CostTracker(null),
       llmEvalMod,
-      visualMod: null,
+      visualMod,
       preWarmPromise: undefined,
     };
     const input: EvalRoundInput = {
@@ -176,6 +176,31 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
     };
     return { ctx, input };
   }
+
+  it('stamps visualCoverage not-applicable when the round has no visual leg (ggui#1221)', async () => {
+    const fakeLlmEvalMod: typeof realLlmEvaluator = {
+      ...realLlmEvaluator,
+      runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], criteriaCoverage: [], inputTokens: 0, outputTokens: 0 }),
+    };
+    const { ctx, input } = await buildCtx('medium', fakeLlmEvalMod);
+    const round = await runEvalRound(ctx, input);
+    expect(round.evalResult?.visualCoverage).toEqual({ status: 'not-applicable', reason: 'visual leg not configured' });
+  });
+
+  it("carries the judge leg's SKIPPED coverage with its reason onto the round's evalResult (ggui#1221)", async () => {
+    const fakeLlmEvalMod: typeof realLlmEvaluator = {
+      ...realLlmEvaluator,
+      runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], criteriaCoverage: [], inputTokens: 0, outputTokens: 0 }),
+    };
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: () => Promise.resolve({ issues: [], coverage: { status: 'skipped', reason: 'no chromium' } }),
+    };
+    const { ctx, input } = await buildCtx('medium', fakeLlmEvalMod, fakeVisualMod);
+    const round = await runEvalRound(ctx, input);
+    expect(round.evalResult?.visualCoverage).toEqual({ status: 'skipped', reason: 'no chromium' });
+    expect(round.evalResult?.visual).toBeUndefined();
+  });
 
   it("carries runLLMEvaluation's criteriaCoverage onto the round's evalResult (fails if any exit literal drops it)", async () => {
     const stamped: CriterionCoverage[] = LLM_EVAL_STATIC_CRITERIA.map(({ criterion, tier }, i) =>
@@ -303,7 +328,7 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
       ...realVisualEvaluator,
       runVisualEval: (_context, config) => {
         captured.push(config);
-        return Promise.resolve({ issues: [], summary });
+        return Promise.resolve({ issues: [], summary, coverage: { status: 'ran' } });
       },
     };
     const a = await buildCtx({ enabled: true }, fakeVisualMod);
@@ -322,7 +347,7 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
       ...realVisualEvaluator,
       runVisualEval: (context, _config) => {
         captured.push(context);
-        return Promise.resolve({ issues: [], summary });
+        return Promise.resolve({ issues: [], summary, coverage: { status: 'ran' } });
       },
     };
     const themed = await buildCtx({ enabled: true, cssTokens: ':root{--ggui-color-onContainer:#fff}' }, fakeVisualMod);
@@ -347,7 +372,7 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
       ...realVisualEvaluator,
       runVisualEval: (_context, config) => {
         captured.push(config);
-        return Promise.resolve({ issues: [], summary });
+        return Promise.resolve({ issues: [], summary, coverage: { status: 'ran' } });
       },
     };
     const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card', 'xl'] }, fakeVisualMod);
@@ -363,7 +388,7 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
   it('without canvases the visual leg returns no summary and evalResult carries no `visual` key', async () => {
     const fakeVisualMod: typeof realVisualEvaluator = {
       ...realVisualEvaluator,
-      runVisualEval: () => Promise.resolve({ issues: [] }),
+      runVisualEval: () => Promise.resolve({ issues: [], coverage: { status: 'skipped', reason: 'no browser (test stub)' } }),
     };
     const { ctx, input } = await buildCtx({ enabled: true }, fakeVisualMod);
 

@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualEvalSummary, VisualFitStamp } from './types-public.js';
+import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
@@ -1210,6 +1210,12 @@ export interface VisualEvalOutcome {
    * the single-shot path (byte-identical to the pre-canvas result).
    */
   summary?: VisualEvalSummary;
+  /**
+   * ggui#1221 — whether the judge leg ran or was skipped (with the reason
+   * `runVisualEvaluationDetailed` names). Always present: the absence of a
+   * summary used to be indistinguishable from a clean single-shot run.
+   */
+  coverage: VisualCoverage;
 }
 
 /**
@@ -1219,9 +1225,16 @@ export interface VisualEvalOutcome {
 export async function runVisualEval(
   context: VisualEvalContext,
   config: VisualEvalConfig,
+  deps: VisualEvalDeps = {},
 ): Promise<VisualEvalOutcome> {
-  const result = await runVisualEvaluation(context, config);
-  if (!result) return { issues: [] }; // puppeteer not available
+  const detailed = await runVisualEvaluationDetailed(context, config, deps);
+  const result = detailed.result;
+  if (!result) {
+    // ggui#1221 — no browser / launch failure / unbundlable / unparsable judge:
+    // the leg is SKIPPED, and says so on the outcome instead of leaving `{ issues: [] }`.
+    const reason = detailed.unavailableReason ?? 'no browser available';
+    return { issues: [], coverage: { status: 'skipped', reason } };
+  }
 
   const issues: EvalIssue[] = (result.issues || []).map(issue => ({
     tier: 2 as const,
@@ -1233,5 +1246,6 @@ export async function runVisualEval(
     fix: issue.fix || '',
   }));
   const summary = summarizeVisualResult(result);
-  return summary === undefined ? { issues } : { issues, summary };
+  const coverage: VisualCoverage = { status: 'ran' };
+  return summary === undefined ? { issues, coverage } : { issues, summary, coverage };
 }

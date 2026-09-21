@@ -124,6 +124,24 @@ export interface CriterionCoverage {
 }
 
 /**
+ * Coverage of the screenshot JUDGE leg for one eval round (ggui#1221) — a
+ * different surface from the `visual` CRITERION in `criteriaCoverage` (the
+ * LLM evaluator's read of the source). `ran` = a frame was captured and
+ * judged; `skipped` = the leg was configured but produced no verdict
+ * (no browser, a launch or in-page failure, an unbundlable component, an
+ * unparsable judge answer) with `reason` naming why; `not-applicable` =
+ * the round had no visual leg configured. Before this row a skipped leg
+ * left NO trace on the result — `{ issues: [] }` read exactly like a
+ * clean run, and every bootstrap mint on a browserless runtime "passed"
+ * its visual round that way.
+ */
+export interface VisualCoverage {
+  readonly status: CriterionRunStatus;
+  /** Populated for `skipped` / `not-applicable` — why no verdict. */
+  readonly reason?: string;
+}
+
+/**
  * The static criteria `runLLMEvaluation` runs, in stamp order — the
  * ONE list both the evaluator's coverage stamp and the harness's
  * bypass stamp derive from, so the two can never disagree on the set.
@@ -185,6 +203,13 @@ export interface EvalResult {
    * never here — this object is serialized into reports.
    */
   visual?: VisualEvalSummary;
+  /**
+   * Whether the screenshot judge leg ran, was skipped (with the reason) or
+   * was not configured — ALWAYS stamped by the harness's eval round
+   * (ggui#1221), so a consumer can tell a clean visual run from a leg
+   * that silently could not run. See {@link VisualCoverage}.
+   */
+  visualCoverage?: VisualCoverage;
 }
 
 /** One canvas's visual verdict, PNG-free — see `EvalResult.visual`. */
