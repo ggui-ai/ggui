@@ -5,7 +5,7 @@
 // tokens in a named mode (ggui#1076).
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import type { LaunchOptions } from 'puppeteer-core';
 import { describe, expect, it, vi } from 'vitest';
 import { designTreeSha256, isDesignRenderingInput, judgeDesignIdentity, resetJudgeDesignIdentityCache } from './design-identity.js';
@@ -55,6 +55,16 @@ describe('designTreeSha256', () => {
     expect(designTreeSha256(a)).toBe(first);
     writeFileSync(join(a, 'primitives', 'Card.tsx'), 'export const Card = 2;');
     expect(designTreeSha256(a)).not.toBe(first);
+  });
+  it('is a function of the TREE, not of the spelling of its root: a trailing separator or a `..` segment in `root` hashes the same as the resolved path (2026-09-21 — the relative key was sliced by the unresolved root\'s length)', () => {
+    const a = mkdtempSync(join(tmpdir(), 'ggui-design-spelling-'));
+    mkdirSync(join(a, 'primitives'));
+    writeFileSync(join(a, 'primitives', 'Card.tsx'), 'export const Card = 1;');
+    writeFileSync(join(a, 'index.ts'), 'export * from "./primitives/Card";');
+    const resolved = designTreeSha256(resolve(a));
+    expect(designTreeSha256(a + sep)).toBe(resolved);
+    expect(designTreeSha256(join(a, '..', basename(a)))).toBe(resolved);
+    expect(designTreeSha256(join(a, 'primitives', '..'))).toBe(resolved);
   });
   it('hashes rendering inputs only: tests, stories and docs neither move nor make the identity (ggui#1042 — a built image ships without them)', () => {
     const a = mkdtempSync(join(tmpdir(), 'ggui-design-inputs-'));

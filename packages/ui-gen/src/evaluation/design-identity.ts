@@ -14,7 +14,7 @@
 // that carries the same rendering inputs.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 export interface JudgeDesignIdentity {
   /** Absolute path of the design `src` tree the judge bundled against. */
@@ -37,20 +37,31 @@ export function isDesignRenderingInput(relativePath: string): boolean {
   return true;
 }
 
-/** sha256 over every rendering input under `root` (sorted relative path + contents) — the identity of a design tree as it paints. */
+/**
+ * sha256 over every rendering input under `root` (sorted relative path +
+ * contents) — the identity of a design tree as it paints.
+ *
+ * A function of the TREE, not of the spelling of `root`: the relative keys
+ * are taken against the RESOLVED root, so `…/design/src`, `…/design/src/` and
+ * `…/ui-gen/../design/src` hash the same bytes. Before this the key was
+ * sliced by the unresolved root's length while each entry had already been
+ * resolved, so an un-normalised root produced a different hash for the same
+ * tree — a phantom design skew for any caller composing the path.
+ */
 export function designTreeSha256(root: string): string {
+  const base = resolve(root);
   const files: string[] = [];
   const walk = (dir: string): void => {
     for (const name of readdirSync(dir).sort()) {
       const full = resolve(dir, name);
       if (statSync(full).isDirectory()) walk(full);
-      else if (isDesignRenderingInput(full.slice(root.length + 1))) files.push(full);
+      else if (isDesignRenderingInput(relative(base, full))) files.push(full);
     }
   };
-  walk(root);
+  walk(base);
   const h = createHash('sha256');
   for (const f of files) {
-    h.update(f.slice(root.length + 1) + '\n');
+    h.update(relative(base, f) + '\n');
     h.update(readFileSync(f));
     h.update('\n');
   }
