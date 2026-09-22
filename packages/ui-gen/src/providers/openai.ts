@@ -137,19 +137,25 @@ export function createOpenAiAdapter(
  *
  * Token-cap parameter selection:
  *
- *   - `gpt-5*`, `o1*`, `o3*`, `o4*` (reasoning + new-API models) →
- *     `max_completion_tokens`. The legacy `max_tokens` field returns
- *     400 `unsupported_parameter` on these models per the OpenAI 2024-09
- *     deprecation: "Unsupported parameter: 'max_tokens' is not supported
- *     with this model. Use 'max_completion_tokens' instead."
- *   - Everything else (`gpt-4*`, `gpt-3.5*`, etc.) → `max_tokens` for
- *     backwards-compat with the chat-completions field that's been
- *     stable since 2023.
+ *   - OpenAI, `gpt-N*` with N ≥ 5 (gpt-5, gpt-6, …) and `o1*`, `o3*`,
+ *     `o4*` (reasoning + new-API models) → `max_completion_tokens`. The
+ *     legacy `max_tokens` field returns 400 `unsupported_parameter` on
+ *     these models per the OpenAI 2024-09 deprecation: "Unsupported
+ *     parameter: 'max_tokens' is not supported with this model. Use
+ *     'max_completion_tokens' instead."
+ *   - OpenAI, everything else (`gpt-4*`, `gpt-3.5*`, etc.) →
+ *     `max_tokens` for backwards-compat with the chat-completions field
+ *     that's been stable since 2023.
+ *   - OpenRouter, every model → `max_tokens`. The rule above is
+ *     OpenAI's, not the gateway's: OpenRouter's catalog lists only
+ *     `max_tokens` for `openai/gpt-6-luna` and `openai/gpt-6-sol`, and
+ *     accepts it for every other slug. Keyed on the provider, so no
+ *     model id — slugged or bare — can switch an OpenRouter body.
  *
- * Heuristic chosen over a hard model-list because new gpt-5.x variants
- * ship continuously; the prefix is the contract OpenAI exposes. Same
- * heuristic applies to OpenRouter which wires to backing models — when
- * a caller picks `gpt-5.6-luna` through OpenRouter the same rule fires.
+ * A generation-number rule rather than a hard model list, because new
+ * variants ship continuously and the generation is the contract OpenAI
+ * exposes (ggui#1255: the `gpt-5` prefix alone sent every gpt-6 id,
+ * the live `gpt-6-astra` included, down the legacy field).
  */
 export function buildOpenAiBody(request: ProviderRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
@@ -160,21 +166,27 @@ export function buildOpenAiBody(request: ProviderRequest): Record<string, unknow
     ],
   };
   if (request.maxTokens !== undefined) {
-    body[selectMaxTokensField(request.route.model)] = request.maxTokens;
+    const field =
+      request.route.provider === 'openrouter'
+        ? 'max_tokens'
+        : selectMaxTokensField(request.route.model);
+    body[field] = request.maxTokens;
   }
   return body;
 }
 
 /**
- * Pick which token-cap field name to send. Bare-string match on the
- * leading model identifier — no SDK lookup, no async; runs once per
- * request body build.
+ * Pick which token-cap field name an OpenAI request sends, from a BARE
+ * OpenAI model id (`gpt-6-luna`, not `openai/gpt-6-luna` — an
+ * `<author>/` slug is a gateway id and is deliberately not stripped).
+ * The gpt generation is read as a number, so `gpt-50` is not `gpt-5`.
+ * No SDK lookup, no async; runs once per request body build.
  */
 export function selectMaxTokensField(model: string): 'max_tokens' | 'max_completion_tokens' {
   const m = model.toLowerCase();
-  if (m.startsWith('gpt-5') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
-    return 'max_completion_tokens';
-  }
+  const generation = /^gpt-(\d+)/.exec(m);
+  if (generation !== null && Number(generation[1]) >= 5) return 'max_completion_tokens';
+  if (m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return 'max_completion_tokens';
   return 'max_tokens';
 }
 

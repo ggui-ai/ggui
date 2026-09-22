@@ -283,6 +283,23 @@ describe('selectMaxTokensField', () => {
     expect(selectMaxTokensField('GPT-5.4-mini')).toBe('max_completion_tokens');
     expect(selectMaxTokensField('O1-preview')).toBe('max_completion_tokens');
   });
+
+  // ggui#1255 (S4) — the gpt-6 generation is a reasoning family like
+  // gpt-5; before this the `gpt-5` prefix was the whole rule, so every
+  // gpt-6 id (the live `gpt-6-astra` mint default included) fell through
+  // to the legacy field.
+  it('picks max_completion_tokens for the gpt-6 generation (and any later gpt-N)', () => {
+    expect(selectMaxTokensField('gpt-6-luna')).toBe('max_completion_tokens');
+    expect(selectMaxTokensField('gpt-6-sol')).toBe('max_completion_tokens');
+    expect(selectMaxTokensField('gpt-6-astra')).toBe('max_completion_tokens');
+    expect(selectMaxTokensField('gpt-7')).toBe('max_completion_tokens');
+    // The generation number is read, not string-prefixed: gpt-50 is not "gpt-5".
+    expect(selectMaxTokensField('gpt-4.1')).toBe('max_tokens');
+  });
+
+  it('reads a bare OpenAI id only — an `<author>/` slug is not stripped', () => {
+    expect(selectMaxTokensField('openai/gpt-6-luna')).toBe('max_tokens');
+  });
 });
 
 describe('OpenAiAdapter — contract', () => {
@@ -350,6 +367,29 @@ describe('OpenAiAdapter — happy path', () => {
     const messages = body['messages'] as Array<{ role: string; content: string }>;
     expect(messages[0]?.role).toBe('system');
     expect(messages[1]?.role).toBe('user');
+  });
+
+  it('sends max_completion_tokens for the live gpt-6-astra route (ggui#1255)', async () => {
+    let capturedInit: RequestInit | undefined;
+    const adapter = createOpenAiAdapter({
+      fetch: fakeFetch({
+        status: 200,
+        body: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] },
+        spy: (_u, init) => {
+          capturedInit = init;
+        },
+      }),
+    });
+    await adapter.complete({
+      apiKey: 'sk-test',
+      route: { provider: 'openai', model: 'gpt-6-astra' },
+      systemPrompt: 's',
+      userPrompt: 'u',
+      maxTokens: 64,
+    });
+    const body = JSON.parse(capturedInit?.body as string) as Record<string, unknown>;
+    expect(body['max_completion_tokens']).toBe(64);
+    expect(body).not.toHaveProperty('max_tokens');
   });
 
   it('maps content_filter → content-filter', async () => {
@@ -445,6 +485,37 @@ describe('OpenRouterAdapter — happy path', () => {
     expect(headers?.['HTTP-Referer']).toBe('https://example.test');
     expect(headers?.['X-Title']).toBe('test-app');
   });
+
+  // ggui#1255 (S4) — OpenRouter's catalog lists ONLY `max_tokens` for
+  // openai/gpt-6-luna and openai/gpt-6-sol, and the paged status route
+  // `openrouter openai/gpt-5.6-luna` runs on `max_tokens` today. The
+  // OpenAI field rule must never reach an OpenRouter body — keyed on the
+  // PROVIDER, so not even a bare OpenAI-shaped id can switch it.
+  it.each(['openai/gpt-5.6-luna', 'openai/gpt-6-luna', 'openai/gpt-6-sol', 'gpt-6-luna'])(
+    'sends max_tokens (never max_completion_tokens) for %s',
+    async (model) => {
+      let capturedInit: RequestInit | undefined;
+      const adapter = createOpenRouterAdapter({
+        fetch: fakeFetch({
+          status: 200,
+          body: { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] },
+          spy: (_u, init) => {
+            capturedInit = init;
+          },
+        }),
+      });
+      await adapter.complete({
+        apiKey: 'or-key',
+        route: { provider: 'openrouter', model },
+        systemPrompt: 's',
+        userPrompt: 'u',
+        maxTokens: 64,
+      });
+      const body = JSON.parse(capturedInit?.body as string) as Record<string, unknown>;
+      expect(body['max_tokens']).toBe(64);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
 });
 
 // ─── Google adapter ──────────────────────────────────────────
