@@ -84,6 +84,8 @@ interface JudgeReturn {
 
 function stubLlm(
   ret: JudgeReturn | (() => JudgeReturn) | (() => Promise<JudgeReturn>),
+  /** ggui#1275 — observe the judge's user message (the candidates it was offered). */
+  onUser?: (user: string) => void,
 ): LLMCaller {
   return {
     async call() {
@@ -91,9 +93,10 @@ function stubLlm(
     },
     async callStructured<T>(
       _system: string,
-      _user: string,
+      user: string,
       _tool: ToolSchema,
     ): Promise<T> {
+      onUser?.(user);
       const value = typeof ret === 'function' ? await ret() : ret;
       return value as unknown as T;
     },
@@ -1094,5 +1097,85 @@ describe('decideHandshake — A4 deterministic propose path (real matcher, stub 
     expect(gapFindings[0]?.severity).toBe('warn');
     expect(gapFindings[0]?.path).toBe('propsSpec.properties.humidity');
     expect(gapFindings[0]?.message).toMatch(/humidity/);
+  });
+});
+
+// ── ggui#1275 — the cosine floor applies to EVERY candidate the judge sees ──
+//
+// The gate used to test top-1 only, then hand ALL top-K to the judge, which
+// could pick any of them: observed on dev, a reuse at cosine 0.19 under the
+// 0.2 floor because top-1 was 0.27. The floor's own rationale ("below this
+// the candidates are clearly unrelated") is per candidate. An embedder with
+// chosen geometry makes the cosines exact: the query sits at [1,0,0].
+
+const ALPHA_COSINE = 0.27;
+const BRAVO_COSINE = 0.19;
+
+class GeometryEmbeddingProvider {
+  readonly id = 'geometry-1275';
+  readonly dimensions = 3;
+  async embed(text: string): Promise<number[]> {
+    if (text.includes('ALPHA-INTENT')) return [ALPHA_COSINE, Math.sqrt(1 - ALPHA_COSINE ** 2), 0];
+    if (text.includes('BRAVO-INTENT')) return [BRAVO_COSINE, 0, Math.sqrt(1 - BRAVO_COSINE ** 2)];
+    return [1, 0, 0];
+  }
+}
+
+async function twoCandidateRegistry() {
+  const registry = {
+    embedding: new GeometryEmbeddingProvider(),
+    vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
+  };
+  const alpha = await registerBlueprint(registry, SCOPE, {
+    kind: 'template',
+    contract: NOTEPAD_CONTRACT,
+    intent: 'ALPHA-INTENT notepad',
+    componentCode: 'a',
+    source: { kind: 'user' },
+  });
+  const bravo = await registerBlueprint(registry, SCOPE, {
+    kind: 'template',
+    contract: TODO_CONTRACT_CACHED,
+    intent: 'BRAVO-INTENT todo list',
+    componentCode: 'b',
+    source: { kind: 'user' },
+  });
+  return { registry, alpha, bravo };
+}
+
+describe('matchBlueprint — the cosine floor is per candidate (ggui#1275)', () => {
+  it('a candidate below the floor is never offered to the judge, even when top-1 clears it', async () => {
+    const { registry, alpha, bravo } = await twoCandidateRegistry();
+    const offered: string[] = [];
+    // The judge would pick the sub-floor candidate if it were offered.
+    const llm = stubLlm({ matchId: bravo.id, confidence: 0.9, reason: 'picked the 0.19 one' }, (u) => offered.push(u));
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' }, { minCosineForRerank: 0.2 });
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toContain(alpha.id);
+    expect(offered[0]).not.toContain(bravo.id);
+    // The sub-floor candidate cannot become a reuse.
+    expect(result.strategy).not.toBe('semantic');
+  });
+
+  it('a candidate at or above the floor still reaches the judge and can be reused', async () => {
+    const { registry, alpha } = await twoCandidateRegistry();
+    const result = await matchBlueprint(
+      { registry, llm: stubLlm({ matchId: alpha.id, confidence: 0.9, reason: 'close enough' }) },
+      SCOPE,
+      { intent: 'a query intent' },
+      { minCosineForRerank: 0.2 },
+    );
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') expect(result.cosine).toBeCloseTo(ALPHA_COSINE, 5);
+  });
+
+  it('with the floor below both, both are offered — nothing else about the judge changes', async () => {
+    const { registry, alpha, bravo } = await twoCandidateRegistry();
+    const offered: string[] = [];
+    const llm = stubLlm({ matchId: null, confidence: 0, reason: 'none' }, (u) => offered.push(u));
+    await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' }, { minCosineForRerank: 0.1 });
+    expect(offered[0]).toContain(alpha.id);
+    expect(offered[0]).toContain(bravo.id);
   });
 });

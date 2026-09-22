@@ -161,9 +161,15 @@ export interface MatchBlueprintOptions {
   readonly kind?: BlueprintKind;
   /** RAG top-K. Default 20 — balance between recall and prompt cost. */
   readonly topK?: number;
-  /** Minimum cosine on top-1 to even invoke the LLM judge. Default 0.2 — */
-  /** below this the candidates are clearly unrelated; rerank cost is wasted. */
-  /** (Loosened for Path-A; see the DEFAULT_MIN_COSINE note.) */
+  /**
+   * Minimum cosine a candidate needs to reach the LLM judge. Default 0.2 —
+   * below this a candidate is clearly unrelated. Applied PER CANDIDATE
+   * (ggui#1275): a candidate under the floor is never offered to the judge,
+   * so it can never become a reuse; when even top-1 is under it, the judge
+   * is skipped entirely and the rerank cost is saved. (Loosened for Path-A;
+   * see the DEFAULT_MIN_COSINE note. The VALUE is rnd's to tune; the
+   * per-candidate semantics are this matcher's.)
+   */
   readonly minCosineForRerank?: number;
   /** LLM judge confidence threshold for treating a semantic-strategy decision as a hit. */
   /** Default 0.5 — loosened for Path-A; see the DEFAULT_JUDGE_THRESHOLD note. */
@@ -442,6 +448,17 @@ export async function matchBlueprint(
     return { strategy: 'no-match', reason, candidates };
   }
 
+  // ggui#1275 — the floor is per candidate. Top-1 clearing it used to hand
+  // ALL top-K to the judge, which could pick any of them (observed: a reuse
+  // at cosine 0.19 under the 0.2 floor because top-1 was 0.27). Only
+  // candidates at or above the floor are eligible; top-1 is among them, so
+  // the list is never empty here. The trace still carries the full top-K.
+  const eligible = candidates.filter((c) => c.cosine >= minCosine);
+  const floorNote =
+    eligible.length < candidates.length
+      ? ` (${eligible.length} of ${candidates.length} candidates at or above minCosine=${minCosine})`
+      : '';
+
   // Run the LLM rerank judge.
   const decision = await rerankCandidates(
     { llm: deps.llm },
@@ -449,7 +466,7 @@ export async function matchBlueprint(
       intent: trimmedIntent,
       contractSummary: summarizeContract(query.contract),
     },
-    candidates.map((c) => ({
+    eligible.map((c) => ({
       id: c.blueprint.id,
       cachedIntent: c.blueprint.intent,
       cachedContractSummary: summarizeContract(c.blueprint.contract),
@@ -464,7 +481,7 @@ export async function matchBlueprint(
         : 'no-match-low-confidence: the closest saved interface is not a confident match — a new one will be generated';
     const traceReason =
       decision.matchId === null
-        ? `no-match: judge declined all ${candidates.length} candidates (confidence=${decision.confidence.toFixed(2)})`
+        ? `no-match: judge declined all ${eligible.length} candidates (confidence=${decision.confidence.toFixed(2)})${floorNote}`
         : `no-match-low-confidence: judge picked ${decision.matchId} but confidence=${decision.confidence.toFixed(2)} < threshold=${judgeThreshold}`;
     emit({
       decision:
@@ -483,7 +500,7 @@ export async function matchBlueprint(
     };
   }
 
-  const matched = candidates.find((c) => c.blueprint.id === decision.matchId);
+  const matched = eligible.find((c) => c.blueprint.id === decision.matchId);
   if (!matched) {
     // Defensive — rerankCandidates already guards against unknown ids
     // by collapsing to null, but a future change could re-introduce
