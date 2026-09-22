@@ -41,7 +41,8 @@ import {
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createLocalEmbeddingProvider } from '@ggui-ai/embedding-local';
-import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
+import type { LLMCaller } from '@ggui-ai/negotiator';
+import { anthropicProbeJudge } from '../probe-anthropic-judge.js';
 import { matchBlueprint } from '../blueprint-matcher.js';
 import {
   findBlueprintsByEmbedding,
@@ -70,49 +71,6 @@ function resolveKey(): string {
   const k = parsed.apps?.global?.anthropic;
   if (!k) throw new Error(`no anthropic key (env or ${p})`);
   return k;
-}
-
-function anthropicJudge(apiKey: string): LLMCaller {
-  return {
-    async call(): Promise<string> {
-      throw new Error('text mode unused');
-    },
-    async callStructured<T>(
-      system: string,
-      user: string,
-      tool: ToolSchema,
-    ): Promise<T> {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5',
-          max_tokens: 512,
-          system,
-          messages: [{ role: 'user', content: user }],
-          tools: [
-            {
-              name: tool.name,
-              description: tool.description,
-              input_schema: tool.input_schema,
-            },
-          ],
-          tool_choice: { type: 'tool', name: tool.name },
-        }),
-      });
-      const json = (await res.json()) as {
-        content?: { type: string; input?: unknown }[];
-        error?: { message?: string };
-      };
-      if (!res.ok) throw new Error(`anthropic: ${json.error?.message}`);
-      const block = json.content?.find((b) => b.type === 'tool_use');
-      return block?.input as T;
-    },
-  };
 }
 
 // --- result shapes ---------------------------------------------------------
@@ -291,7 +249,7 @@ async function resolveEmbedding(): Promise<BlueprintRegistryDeps['embedding']> {
 }
 
 async function main(): Promise<void> {
-  const llm = anthropicJudge(resolveKey());
+  const llm = anthropicProbeJudge(resolveKey());
   const embedding = await resolveEmbedding();
   process.stdout.write(`embedding provider: ${embedding.id}\n`);
   mkdirSync(OUT_DIR, { recursive: true });

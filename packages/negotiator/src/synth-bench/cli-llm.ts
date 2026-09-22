@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve as pathResolve } from 'node:path';
 import type { LLMCaller, ToolSchema } from '../llm-caller.js';
+import { anthropicRejectsForcedToolChoice } from '@ggui-ai/protocol';
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
@@ -75,6 +76,19 @@ export function getTokenUsage(): {
   return { input: totalInputTokens, output: totalOutputTokens };
 }
 
+/**
+ * Thinking budget added to the caller's answer budget for a model that
+ * refuses a forced tool (ggui#1264). Same value and reason as the
+ * negotiator's production caller in `@ggui-ai/mcp-server`; the three
+ * copies are consolidated under ggui#1271.
+ */
+const ALWAYS_THINKING_HEADROOM_TOKENS = 16_000;
+
+/**
+ * The dev caller the synth benches and the rerank probe CLI share
+ * (Haiku-pinned by default; every CLI takes `--model`). Text mode is not
+ * exercised — every consumer uses `callStructured`.
+ */
 export function buildAnthropicLlmCaller(
   apiKey: string,
   model: string,
@@ -82,7 +96,7 @@ export function buildAnthropicLlmCaller(
   return {
     async call(): Promise<string> {
       throw new Error(
-        'synth-bench: text-mode not exercised — synth uses callStructured',
+        'negotiator dev caller: text-mode not exercised — use callStructured',
       );
     },
     async callStructured<T>(
@@ -92,13 +106,25 @@ export function buildAnthropicLlmCaller(
       maxTokens?: number,
     ): Promise<T> {
       // `temperature` deprecated on Haiku 4.5+ — Anthropic rejects with
-      // HTTP 400. `tool_choice: { type: 'tool', name }` below already
-      // binds output to the input_schema; residual stochasticity stays
-      // bounded via canonical-key normalization downstream.
+      // HTTP 400. Residual stochasticity stays bounded via canonical-key
+      // normalization downstream.
+      //
+      // ggui#1264 — a forced `tool_choice` only where the model accepts
+      // one. The always-thinking models (`@ggui-ai/protocol`
+      // `anthropicRejectsForcedToolChoice`) 400 on it, so they get
+      // `auto` + at most one call + the tool named in the system prompt,
+      // and thinking headroom on top of the answer budget (their thinking
+      // counts against `max_tokens` and comes first).
+      const refusesForcedTool = anthropicRejectsForcedToolChoice(model);
+      const answerBudget = maxTokens ?? 1024;
       const body = {
         model,
-        max_tokens: maxTokens ?? 1024,
-        system: systemPrompt,
+        max_tokens: refusesForcedTool
+          ? answerBudget + ALWAYS_THINKING_HEADROOM_TOKENS
+          : answerBudget,
+        system: refusesForcedTool
+          ? `${systemPrompt}\n\nAnswer by calling the \`${tool.name}\` tool exactly once. Do not answer in text.`
+          : systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
         tools: [
           {
@@ -107,7 +133,9 @@ export function buildAnthropicLlmCaller(
             input_schema: tool.input_schema,
           },
         ],
-        tool_choice: { type: 'tool', name: tool.name },
+        tool_choice: refusesForcedTool
+          ? { type: 'auto', disable_parallel_tool_use: true }
+          : { type: 'tool', name: tool.name },
       };
       const res = await fetch(ANTHROPIC_API, {
         method: 'POST',
