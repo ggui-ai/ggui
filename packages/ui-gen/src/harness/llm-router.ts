@@ -1143,7 +1143,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
             prompt: userPrompt,
             options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
           }),
-          { intercepted: [], log: console.log, warn: console.warn },
+          { intercepted: [], kind: "callText", log: console.log, warn: console.warn },
         ),
       );
       const usage = turn.result.usage;
@@ -1203,7 +1203,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
             prompt: imageUserMessage(userPrompt, image),
             options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
           }),
-          { intercepted: [], log: console.log, warn: console.warn },
+          { intercepted: [], kind: "callVision", log: console.log, warn: console.warn },
         ),
       );
       const usage = turn.result.usage;
@@ -1270,7 +1270,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
               tools: { server, canUseTool: createDenyingIntercept(intercepted) },
             }),
           }),
-          { intercepted, log: console.log, warn: console.warn },
+          { intercepted, kind: "callTools", log: console.log, warn: console.warn },
         );
       });
       const usage = turn.result.usage;

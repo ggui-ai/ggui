@@ -386,6 +386,8 @@ export interface CollectedLoginTurn {
 }
 
 export interface CollectLoginTurnOptions {
+  /** Which router call this turn serves — named on the per-call usage line. */
+  readonly kind: "callText" | "callTools" | "callVision";
   /** What the intercept saw, to cross-check against the stream's blocks. */
   readonly intercepted: readonly InterceptedToolCall[];
   readonly log: (line: string) => void;
@@ -420,6 +422,7 @@ export async function collectLoginTurn(
   let init: MeasuredInitMessage | undefined;
   const toolCalls: LoginToolCall[] = [];
   let text = "";
+  let thinkingBlocks = 0;
   let result: SDKResultMessage | undefined;
   try {
     for await (const msg of stream) {
@@ -442,6 +445,8 @@ export async function collectLoginTurn(
             });
           } else if (block.type === "text") {
             text += block.text;
+          } else if (block.type === "thinking" || block.type === "redacted_thinking") {
+            thinkingBlocks += 1;
           }
         }
       } else if (msg.type === "result") {
@@ -457,6 +462,21 @@ export async function collectLoginTurn(
   if (result === undefined) {
     throw new Error("claude-code-login: query() ended without a result message");
   }
+
+  // ggui#1273 — ONE usage line per call, on every ending (a failed call
+  // spent tokens too). Exp 009 needs output netted of thinking, and the
+  // text written OUTSIDE the tool call separates the two candidate causes
+  // of the login arm's longer output: unrequested thinking vs a preamble
+  // under `tool_choice: auto`. `output_tokens_details` is typed non-null
+  // by the SDK but can be absent on the wire; absent reads as 0.
+  const usage = result.usage;
+  const thinkingTokens = usage.output_tokens_details?.thinking_tokens ?? 0;
+  opts.log(
+    `[claude-code-login] usage kind=${opts.kind} input=${usage.input_tokens} output=${usage.output_tokens} ` +
+      `cacheRead=${usage.cache_read_input_tokens} cacheCreated=${usage.cache_creation_input_tokens} ` +
+      `thinking=${thinkingTokens} thinkingBlocks=${thinkingBlocks} textChars=${text.length} ` +
+      `toolCalls=${toolCalls.length} stop=${result.stop_reason ?? "none"}`
+  );
 
   const streamSaw = describeCalls(toolCalls);
   const interceptSaw = describeCalls(opts.intercepted);

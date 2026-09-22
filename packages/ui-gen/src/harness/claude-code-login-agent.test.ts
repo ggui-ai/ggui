@@ -602,3 +602,96 @@ describe("callText / callVision", () => {
     );
   });
 });
+
+// ── ggui#1273 — the per-call usage line Exp 009 needs to net thinking out ──
+
+describe("per-call usage line (ggui#1273)", () => {
+  const usageLines = (): string[] => logs.filter((l) => l.includes("[claude-code-login] usage "));
+
+  it("callTools logs ONE usage line with input/output/cache/thinking/text, thinking read from result.usage", async () => {
+    queue({
+      messages: [
+        init("none"),
+        assistant([
+          thinking(""),
+          text("I will update line 1 now."),
+          toolUse("mcp__ggui__apply_changes", INPUT),
+        ]),
+        maxTurns(
+          resultUsage({ input: 125, output: 40, cacheRead: 100, cacheCreated: 5, thinking: 61 })
+        ),
+      ],
+      throwAfter: new Error("Claude Code returned an error result: Reached max turns (1)"),
+    });
+    await loginAgent().callTools(MODEL, "s", "u", [APPLY], "required");
+    expect(usageLines()).toHaveLength(1);
+    const line = usageLines()[0] ?? "";
+    for (const part of [
+      "kind=callTools",
+      "input=125",
+      "output=40",
+      "cacheRead=100",
+      "cacheCreated=5",
+      "thinking=61",
+      "thinkingBlocks=1",
+      "textChars=25",
+      "toolCalls=1",
+      "stop=tool_use",
+    ]) {
+      expect(line).toContain(part);
+    }
+  });
+
+  it("thinking=0 and textChars=0 on a clean tool-only turn", async () => {
+    queue(happyPath);
+    await loginAgent().callTools(MODEL, "s", "u", [APPLY], "required");
+    const line = usageLines()[0] ?? "";
+    expect(line).toContain("thinking=0");
+    expect(line).toContain("textChars=0");
+    expect(line).toContain("thinkingBlocks=0");
+  });
+
+  it("is logged on an error ending too — the failed call spent tokens as well", async () => {
+    queue({
+      messages: [
+        init("none"),
+        executionError(resultUsage({ input: 9, output: 2, thinking: 7 }), ["boom"]),
+      ],
+      throwAfter: new Error("Claude Code returned an error result: boom"),
+    });
+    await expect(loginAgent().callTools(MODEL, "s", "u", [APPLY], "required")).rejects.toThrow(
+      /boom/
+    );
+    expect(usageLines()).toHaveLength(1);
+    expect(usageLines()[0]).toContain("thinking=7");
+  });
+
+  it("callText and callVision log it too, each naming its kind", async () => {
+    queue(
+      {
+        messages: [
+          init("none"),
+          assistant([text("hi")], "end_turn"),
+          success(resultUsage({ input: 3, output: 1 }), "hi"),
+        ],
+      },
+      {
+        messages: [
+          init("none"),
+          assistant([text("Orange")], "end_turn"),
+          success(resultUsage({ input: 164, output: 78 }), "Orange"),
+        ],
+      }
+    );
+    await loginAgent().callText(MODEL, "s", "u");
+    await loginAgent().callVision(MODEL, "s", "u", {
+      mediaType: "image/png",
+      base64: "iVBORw0KGgo=",
+    });
+    const lines = usageLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("kind=callText");
+    expect(lines[1]).toContain("kind=callVision");
+    expect(lines[1]).toContain("input=164");
+  });
+});
