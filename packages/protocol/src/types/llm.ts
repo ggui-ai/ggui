@@ -165,6 +165,31 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
+  // ggui#1252 (2026-09-23) — strings quoted from platform.claude.com, fetched
+  // 2026-09-23: pricing "Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok |
+  // $0.20 / MTok | $20 / MTok"; model-deprecations "claude-opus-5-5 | Active |
+  // N/A | Not sooner than September 22, 2027". 1M context. Not in the lineup
+  // (founder ruling 2026-09-23: support ships, no default and no lineup move).
+  "anthropic/claude-opus-5-5": {
+    id: "anthropic/claude-opus-5-5",
+    provider: "anthropic",
+    displayName: "Claude Opus 5.5",
+    tier: "premium",
+    state: "active",
+    lineup: false,
+    retireNotBefore: "2027-09-22",
+    costs: {
+      inputPer1M: 4.0,
+      outputPer1M: 20.0,
+      // 5-minute cache write (1.25×); the 1h write ($8) is not modeled.
+      cacheWritePer1M: 5.0,
+      // NOT the usual 0.1× — pricing footnote 2: "Cache hits and refreshes
+      // on Claude Opus 5.5 are priced at 0.05x the base input price." $0.20.
+      cacheReadPer1M: 0.2,
+    },
+    maxTokens: 1000000,
+    supportsTools: true,
+  },
   "anthropic/claude-opus-5": {
     id: "anthropic/claude-opus-5",
     provider: "anthropic",
@@ -392,6 +417,45 @@ const MODEL_ROWS = defineModelRegistry({
       cacheReadPer1M: 1.0,
     },
     maxTokens: 922000,
+    supportsTools: true,
+  },
+  // ggui#1252 (2026-09-23) — quoted from developers.openai.com/api/docs/models
+  // (gpt-6-sol, gpt-6-luna), fetched 2026-09-23: "1,050,000 context window"
+  // (`maxTokens` is the context window, as on every row — #977's semantics;
+  // the page's "Maximum input tokens: 922,000" is a different number), prices
+  // per 1M as the rows below, no dated snapshot, no retirement date published
+  // → `retireNotBefore` unset. Not in the lineup (founder ruling 2026-09-23).
+  // Sol's tier: see ggui#1252 (founder's call, package D2b).
+  "openai/gpt-6-sol": {
+    id: "openai/gpt-6-sol",
+    provider: "openai",
+    displayName: "GPT-6 Sol",
+    tier: "balanced",
+    state: "active",
+    lineup: false,
+    costs: {
+      inputPer1M: 2.0,
+      outputPer1M: 10.0,
+      cacheWritePer1M: 2.5,
+      cacheReadPer1M: 0.2,
+    },
+    maxTokens: 1050000,
+    supportsTools: true,
+  },
+  "openai/gpt-6-luna": {
+    id: "openai/gpt-6-luna",
+    provider: "openai",
+    displayName: "GPT-6 Luna",
+    tier: "fast",
+    state: "active",
+    lineup: false,
+    costs: {
+      inputPer1M: 0.1,
+      outputPer1M: 0.5,
+      cacheWritePer1M: 0.125,
+      cacheReadPer1M: 0.01,
+    },
+    maxTokens: 1050000,
     supportsTools: true,
   },
   "openai/gpt-5.6-sol": {

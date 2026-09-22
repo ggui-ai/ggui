@@ -63,6 +63,7 @@ export const MODELS = {
     // Mythos-class Fable 5; 2026-09: Fable 5.1) and the 4.6–4.8 generation carry undated
     // wire IDs; Haiku 4.5 still uses the dated form.
     'claude-fable-5-1', // 2026-09 (ggui#706); dateless like the rest of the 5 family
+    'claude-opus-5-5', // 2026-09-22 (ggui#1252); dateless — platform.claude.com model-deprecations: Active, retire ≥ 2027-09-22
     'claude-fable-5',
     'claude-opus-5',
     'claude-sonnet-5',
@@ -81,6 +82,12 @@ export const MODELS = {
     // `gpt-5.6` alias routes to Sol on OpenAI's side. No dated
     // siblings registered at adoption time.
     'gpt-6-astra', // ggui#977 (2026-09-09): listed by `GET /v1/models/gpt-6-astra` → 200
+    // GPT-6 Sol + Luna (2026-09-22, ggui#1252): undated aliases, no dated
+    // snapshot published ("Snapshot: gpt-6-sol" / "gpt-6-luna" on each model
+    // page). Chat Completions tool calling requires `reasoning_effort: none`
+    // on both (the model pages) — the adapter's concern, not the allowlist's.
+    'gpt-6-sol',
+    'gpt-6-luna',
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -128,8 +135,12 @@ export const MODELS = {
     //     before locking expanded coverage.
     //   - Region-less `anthropic.*` IDs — served ONLY by the
     //     Messages-API Bedrock endpoint (`AnthropicBedrockMantle`).
-    //     The Claude 5 family and Opus 4.8 exist ONLY in this family
-    //     (per the Anthropic models doc). Requires the AWS account to
+    //     At the 2026-08-13 probe the Claude 5 family and Opus 4.8
+    //     existed ONLY in this family (per the Anthropic models doc).
+    //     Not a rule for later releases: AWS's Opus 5.5 card lists
+    //     region-prefixed profiles too (`us.` / `eu.` / `global.` …).
+    //     Bedrock Opus 5.5 is NOT registered here (ggui#1251: model
+    //     access not open, no vendored LiteLLM Bedrock price row). Requires the AWS account to
     //     have enabled Claude in Amazon Bedrock; otherwise every id
     //     403s "not available for this account".
 
@@ -204,7 +215,6 @@ export const MODELS = {
     'deepseek/deepseek-r1-0528',
     'qwen/qwen3.7-max',
     'qwen/qwen3-coder',
-    'mistralai/mistral-large-2512',
     'openai/gpt-oss-120b',
   ],
 } as const;

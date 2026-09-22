@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Model registry: `anthropic/claude-opus-5-5`, `openai/gpt-6-sol`,
+ * `openai/gpt-6-luna` (2026-09-23, additive, ggui#1252 — MINOR, same draft
+ * stamp; the protocol half of the new-models support batch ggui#1251, WITH
+ * cloud's LiteLLM re-vendor). Three `ModelId` rows + `MODELS.anthropic` /
+ * `MODELS.openai` entries; all `active`, none in the lineup, no default
+ * moves. Opus 5.5 4 / 20 / 5 / 0.2 (0.05× cache read), `maxTokens`
+ * 1000000, `retireNotBefore` 2027-09-22; Sol 2 / 10 / 2.5 / 0.2 and Luna
+ * 0.1 / 0.5 / 0.125 / 0.01, `maxTokens` 1050000 (the context window), no
+ * retirement floor published. Every field quoted from the vendor page on
+ * the issue. `mistralai/mistral-large-2512` leaves `MODELS.openrouter`
+ * (retired upstream: LiteLLM dropped it, OpenRouter no longer lists it);
+ * the route stays accepted by shape like any uncurated slug. Bedrock Opus
+ * 5.5 is not registered (held). No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Theme CARRY read (2026-09-17, additive, ggui#1155 — MINOR, same draft
  * stamp): `appThemeCarrySchema` / `AppThemeCarry` and
  * `appThemeGetResponseSchema` / `AppThemeGetResponse` — the REPRODUCE side
