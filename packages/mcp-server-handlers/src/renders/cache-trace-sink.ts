@@ -366,6 +366,14 @@ function envStdoutSink(): CacheTraceSink {
   return envStdoutSinkSingleton;
 }
 
+let envScoresSinkSingleton: CacheTraceSink | null = null;
+function envScoresSink(): CacheTraceSink {
+  if (!envScoresSinkSingleton) {
+    envScoresSinkSingleton = createScoresJsonCacheTraceSink();
+  }
+  return envScoresSinkSingleton;
+}
+
 export function emitCacheTraceEvent(event: CacheTraceEvent): void {
   // Env-gated stdout JSON diagnostic (`GGUI_CACHE_TRACE=logger`) — like
   // the stderr gate below, it lives INSIDE this function rather than
@@ -374,9 +382,17 @@ export function emitCacheTraceEvent(event: CacheTraceEvent): void {
   // sink proved fragile across module-instance boundaries in exactly
   // the way the registry docstring above warns (2026-08-21: an armed
   // deployment produced zero lines); the in-module gate cannot miss.
-  if (process.env['GGUI_CACHE_TRACE'] === 'logger') {
+  const traceMode = process.env['GGUI_CACHE_TRACE'];
+  if (traceMode === 'logger') {
     try {
       envStdoutSink().emit(event);
+    } catch {
+      // Diagnostic must never break generation.
+    }
+  } else if (traceMode === 'scores') {
+    // ggui#1275 — the prod-safe projection: decisions, keys and scores, no text.
+    try {
+      envScoresSink().emit(event);
     } catch {
       // Diagnostic must never break generation.
     }
@@ -453,6 +469,116 @@ export function createStdoutJsonCacheTraceSink(): CacheTraceSink {
         if (event.winningBlueprintId !== undefined) {
           record['matchedBlueprintId'] = event.winningBlueprintId;
         }
+        process.stdout.write(`${JSON.stringify(record)}\n`);
+      } catch {
+        // A diagnostic sink must never break generation — swallow.
+      }
+    },
+  };
+}
+
+/**
+ * Version stamp on every scores-JSON trace line. Bump it on ANY change to
+ * the emitted shape, as for {@link CACHE_TRACE_STDOUT_SCHEMA_VERSION}.
+ */
+export const CACHE_TRACE_SCORES_SCHEMA_VERSION = 1;
+
+/**
+ * One scores-JSON trace line. An ALLOW-list: every field is an id, an
+ * enum, a number or a flag — none carries text a user or a model wrote.
+ */
+interface CacheTraceScoresRecord {
+  readonly level: 'info';
+  readonly time: string;
+  readonly msg: 'cache_trace_scores';
+  readonly traceSchemaVersion: number;
+  readonly id: string;
+  readonly durationMs: number;
+  readonly appId: string;
+  readonly decision: CacheTraceDecision;
+  readonly strategy?: CacheTraceStrategy;
+  readonly threshold: number;
+  readonly expectedKey: string;
+  readonly judgeConfidence?: number;
+  readonly matchedBlueprintId?: string;
+  readonly candidateCount: number;
+  readonly topCosine?: number;
+  /** The cosine of the candidate the judge chose — the reuse's actual similarity. */
+  readonly chosenCosine?: number;
+  /** Top five `{key, score}` — never `cachedIntent`. */
+  readonly candidatesJson: string;
+  readonly cosineNoveltyDistance?: number;
+  readonly agentClassification?: 'confirm' | 'override';
+  readonly synthFired?: boolean;
+  readonly synthSuccess?: boolean;
+  readonly synthLatencyMs?: number;
+  readonly outputContractKey?: string;
+}
+
+/**
+ * A sink that writes each {@link CacheTraceEvent} as ONE newline-delimited
+ * JSON record to stdout carrying the matcher's DECISIONS AND SCORES ONLY
+ * (ggui#1275), so a deployment can measure its reuse distribution — top
+ * and chosen cosine, judge confidence, the decision class — where the
+ * verbose `logger` projection cannot run because it carries text. Enable
+ * with `GGUI_CACHE_TRACE=scores`.
+ *
+ * It is an ALLOW-list ({@link CacheTraceScoresRecord}): it never writes
+ * `intent`, a candidate's `cachedIntent`, `judgeReason` (the judge
+ * paraphrases the intent), the free-text `reason`, validator hints or the
+ * synthesizer's reason. A field added to {@link CacheTraceEvent} later
+ * reaches this line only by being added here, deliberately.
+ *
+ * Sync + non-throwing per the {@link CacheTraceSink} contract.
+ */
+export function createScoresJsonCacheTraceSink(): CacheTraceSink {
+  return {
+    emit(event: CacheTraceEvent): void {
+      try {
+        const top = event.candidates[0];
+        const chosen =
+          event.winningBlueprintId !== undefined
+            ? event.candidates.find((c) => c.key === event.winningBlueprintId)
+            : undefined;
+        const record: CacheTraceScoresRecord = {
+          level: 'info',
+          time: new Date(event.at).toISOString(),
+          msg: 'cache_trace_scores',
+          traceSchemaVersion: CACHE_TRACE_SCORES_SCHEMA_VERSION,
+          id: event.id,
+          durationMs: event.durationMs,
+          appId: event.scope,
+          decision: event.decision,
+          ...(event.strategy !== undefined ? { strategy: event.strategy } : {}),
+          threshold: event.threshold,
+          expectedKey: event.expectedKey,
+          ...(event.judgeConfidence !== undefined ? { judgeConfidence: event.judgeConfidence } : {}),
+          ...(event.winningBlueprintId !== undefined ? { matchedBlueprintId: event.winningBlueprintId } : {}),
+          candidateCount: event.candidates.length,
+          ...(top !== undefined ? { topCosine: top.score } : {}),
+          ...(chosen !== undefined ? { chosenCosine: chosen.score } : {}),
+          candidatesJson: JSON.stringify(
+            event.candidates
+              .slice(0, CACHE_TRACE_STDOUT_CANDIDATES_CAP)
+              .map((c) => ({ key: c.key, score: c.score })),
+          ),
+          ...(event.cosineNoveltyDistance !== undefined
+            ? { cosineNoveltyDistance: event.cosineNoveltyDistance }
+            : {}),
+          ...(event.agentClassification !== undefined
+            ? { agentClassification: event.agentClassification }
+            : {}),
+          ...(event.synth !== undefined
+            ? {
+                synthFired: event.synth.fired,
+                synthSuccess: event.synth.success,
+                synthLatencyMs: event.synth.latencyMs,
+                ...(event.synth.outputContractKey !== undefined
+                  ? { outputContractKey: event.synth.outputContractKey }
+                  : {}),
+              }
+            : {}),
+        };
         process.stdout.write(`${JSON.stringify(record)}\n`);
       } catch {
         // A diagnostic sink must never break generation — swallow.

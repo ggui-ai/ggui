@@ -3,6 +3,8 @@ import {
   createStderrCacheTraceSink,
   createStdoutJsonCacheTraceSink,
   emitCacheTraceEvent,
+  createScoresJsonCacheTraceSink,
+  CACHE_TRACE_SCORES_SCHEMA_VERSION,
   setCacheTraceSink,
   newCacheTraceId,
   type CacheTraceEvent,
@@ -247,5 +249,137 @@ describe('emitCacheTraceEvent env-gated stdout JSON diagnostic (GGUI_CACHE_TRACE
     process.env['GGUI_CACHE_TRACE'] = 'off';
     emitCacheTraceEvent(makeEvent());
     expect(writes.filter((w) => w.includes('"cache_trace"'))).toHaveLength(0);
+  });
+});
+
+// ── ggui#1275 — a trace mode prod can run: scores, keys and decisions, NO text ──
+
+const SCORES_KEYS = [
+  'level',
+  'time',
+  'msg',
+  'traceSchemaVersion',
+  'id',
+  'durationMs',
+  'appId',
+  'decision',
+  'strategy',
+  'threshold',
+  'expectedKey',
+  'judgeConfidence',
+  'matchedBlueprintId',
+  'candidateCount',
+  'topCosine',
+  'chosenCosine',
+  'candidatesJson',
+  'cosineNoveltyDistance',
+  'agentClassification',
+  'synthFired',
+  'synthSuccess',
+  'synthLatencyMs',
+  'outputContractKey',
+].sort();
+
+function textRichEvent(): CacheTraceEvent {
+  return makeEvent({
+    intent: 'SECRET-INTENT user wrote this',
+    decision: 'match-semantic',
+    strategy: 'semantic',
+    expectedKey: 'k-expected',
+    threshold: 0.5,
+    reason: 'SECRET-REASON match-semantic: judge matched bp-2',
+    judgeConfidence: 0.8,
+    judgeReason: 'SECRET-JUDGE the user wants a weather card',
+    candidates: [
+      { key: 'bp-1', score: 0.41, cachedIntent: 'SECRET-CACHED one' },
+      { key: 'bp-2', score: 0.33, cachedIntent: 'SECRET-CACHED two' },
+    ],
+    winningBlueprintId: 'bp-2',
+    cosineNoveltyDistance: 0.59,
+    validatorFindings: [{ kind: 'k', severity: 'warn', hint: 'SECRET-HINT' }],
+    synth: { fired: true, success: false, latencyMs: 12, reason: 'SECRET-SYNTH', outputContractKey: 'k-out' },
+    agentClassification: 'confirm',
+  });
+}
+
+function captureStdout(): string[] {
+  const lines: string[] = [];
+  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    lines.push(String(chunk));
+    return true;
+  });
+  return lines;
+}
+
+describe('createScoresJsonCacheTraceSink (ggui#1275)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('never writes intent, cached intent, judge reason, reason, validator hints or synth reason', () => {
+    const lines = captureStdout();
+    createScoresJsonCacheTraceSink().emit(textRichEvent());
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).not.toContain('SECRET');
+  });
+
+  it('carries decisions, keys and scores only — top and CHOSEN cosine, judge confidence, the capped key/score list', () => {
+    const lines = captureStdout();
+    createScoresJsonCacheTraceSink().emit(textRichEvent());
+    const rec = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>;
+    expect(rec['msg']).toBe('cache_trace_scores');
+    expect(rec['traceSchemaVersion']).toBe(CACHE_TRACE_SCORES_SCHEMA_VERSION);
+    expect(rec['decision']).toBe('match-semantic');
+    expect(rec['appId']).toBe('app-1');
+    expect(rec['topCosine']).toBe(0.41);
+    expect(rec['chosenCosine']).toBe(0.33);
+    expect(rec['judgeConfidence']).toBe(0.8);
+    expect(rec['matchedBlueprintId']).toBe('bp-2');
+    expect(rec['candidateCount']).toBe(2);
+    expect(JSON.parse(String(rec['candidatesJson']))).toEqual([
+      { key: 'bp-1', score: 0.41 },
+      { key: 'bp-2', score: 0.33 },
+    ]);
+    expect(rec['synthFired']).toBe(true);
+    expect(rec['outputContractKey']).toBe('k-out');
+  });
+
+  it('is an ALLOW-list: the line carries exactly the named keys, so a field added to the event later cannot leak by default', () => {
+    const lines = captureStdout();
+    createScoresJsonCacheTraceSink().emit(textRichEvent());
+    const rec = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>;
+    expect(Object.keys(rec).sort()).toEqual(SCORES_KEYS);
+  });
+
+  it('never throws, even when stdout write explodes', () => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => {
+      throw new Error('EPIPE');
+    });
+    expect(() => createScoresJsonCacheTraceSink().emit(textRichEvent())).not.toThrow();
+  });
+});
+
+describe('emitCacheTraceEvent — GGUI_CACHE_TRACE=scores (ggui#1275)', () => {
+  afterEach(() => {
+    delete process.env['GGUI_CACHE_TRACE'];
+    vi.restoreAllMocks();
+  });
+
+  it('self-emits the scores line, and only that line, with NO registered sink', () => {
+    process.env['GGUI_CACHE_TRACE'] = 'scores';
+    const lines = captureStdout();
+    emitCacheTraceEvent(textRichEvent());
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('"msg":"cache_trace_scores"');
+    expect(lines[0]).not.toContain('SECRET');
+  });
+
+  it('GGUI_CACHE_TRACE=logger is unchanged: the verbose line, not the scores line', () => {
+    process.env['GGUI_CACHE_TRACE'] = 'logger';
+    const lines = captureStdout();
+    emitCacheTraceEvent(textRichEvent());
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('"msg":"cache_trace"');
+    expect(lines[0]).not.toContain('cache_trace_scores');
   });
 });
