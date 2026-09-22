@@ -329,11 +329,23 @@ export function isValidOpenrouterModel(s: string): boolean {
 }
 
 /**
+ * The Bedrock cross-region inference-profile prefixes — the `<region>.`
+ * a profile id carries before its vendor (`us.anthropic.claude-…`). ONE
+ * list (ggui#1254): {@link isValidBedrockModel}'s shape doc and the
+ * Anthropic id normalizer (`anthropic-model-rules.ts`) both read it, where
+ * the docblock said `us`/`eu`/`apac`/`global`, the normalizer matched any
+ * two letters and so missed `apac.`/`global.`, and AWS's Opus 5.5 model
+ * card also publishes `au.` and `jp.`. A new AWS profile prefix is added
+ * here and every reader follows.
+ */
+export const BEDROCK_INFERENCE_REGION_PREFIXES = ["us", "eu", "au", "jp", "apac", "global"] as const;
+
+/**
  * Validate a Bedrock model string by shape. AWS accepts THREE forms:
  *
  *   - Cross-region inference profile ids — `<region>.<inner>` where
- *     region is `us`/`eu`/`apac`/`global` and inner contains `.`,
- *     `-`, `:`, alphanumerics (e.g.
+ *     region is one of {@link BEDROCK_INFERENCE_REGION_PREFIXES} and inner
+ *     contains `.`, `-`, `:`, alphanumerics (e.g.
  *     `'us.anthropic.claude-haiku-4-5-20251001-v1:0'`).
  *   - Bedrock foundation model ids — bare `<vendor>.<model>` form
  *     (e.g. `'anthropic.claude-sonnet-4-6'`).

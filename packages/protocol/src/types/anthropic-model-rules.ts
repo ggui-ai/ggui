@@ -35,15 +35,28 @@
  * never a different one.
  */
 
+import { BEDROCK_INFERENCE_REGION_PREFIXES } from "./llm-route.js";
+
+/** `<region>.anthropic.` for every Bedrock profile prefix — built from the ONE list in `llm-route.ts`. */
+const BEDROCK_PROFILE_PREFIX = new RegExp(
+  `^(?:(?:${BEDROCK_INFERENCE_REGION_PREFIXES.join("|")})\\.)?anthropic\\.`
+);
+
 /**
  * Strip every routing spelling down to the bare Claude API id so the
  * family predicates below see one form: `anthropic/claude-x`,
- * `anthropic.claude-x`, `us.anthropic.claude-x[-vN:M]` and the bare
- * `claude-x` all normalize to `claude-x…`. ARNs are left as-is (they
- * name a profile, not a family) and match no predicate.
+ * `anthropic.claude-x`, `<profile>.anthropic.claude-x[-vN:M]` for every
+ * Bedrock cross-region profile in `BEDROCK_INFERENCE_REGION_PREFIXES`
+ * (ggui#1254 — the old two-letter match let `global.` and `apac.` through,
+ * so a `global.anthropic.claude-opus-5-5` route sent a forced tool choice
+ * and kept its sampling params), a `bedrock/` prefix, and the bare
+ * `claude-x` all normalize to `claude-x…`. OpenRouter's dotted versions
+ * (`anthropic/claude-opus-5.5`) keep their dot; the predicates accept
+ * both. ARNs are left as-is (they name a profile, not a family) and match
+ * no predicate.
  */
 export function normalizeAnthropicModelId(model: string): string {
-  return model.replace(/^anthropic\//, "").replace(/^(?:[a-z]{2}\.)?anthropic\./, "");
+  return model.replace(/^bedrock\//, "").replace(/^anthropic\//, "").replace(BEDROCK_PROFILE_PREFIX, "");
 }
 
 /**
@@ -60,8 +73,14 @@ export function anthropicRejectsSamplingParams(model: string): boolean {
 
 /**
  * Models that reject a FORCED tool choice (`tool_choice: any` / a named
- * tool) with HTTP 400: Claude Fable 5.1 (ggui#706). `auto` is accepted.
+ * tool) with HTTP 400: Claude Fable 5.1 (ggui#706), Claude Mythos 5.1,
+ * Claude Opus 5.5 (ggui#1254) and Claude Mythos Preview — the set the API
+ * reference names ("reject forced tool use"). Fable 5, Mythos 5 and Opus 5
+ * still accept it. `auto` is accepted by all. The version separator is `-`
+ * in API and Bedrock ids and `.` in OpenRouter's (`claude-opus-5.5`).
  */
 export function anthropicRejectsForcedToolChoice(model: string): boolean {
-  return /^claude-fable-5-1(?:-|$)/.test(normalizeAnthropicModelId(model));
+  return /^claude-(?:fable-5[-.]1|mythos-5[-.]1|opus-5[-.]5|mythos-preview)(?:-|$)/.test(
+    normalizeAnthropicModelId(model)
+  );
 }

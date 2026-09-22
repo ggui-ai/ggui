@@ -12,6 +12,7 @@ import {
   anthropicRejectsSamplingParams,
   normalizeAnthropicModelId,
 } from "../anthropic-model-rules.js";
+import { BEDROCK_INFERENCE_REGION_PREFIXES } from "../llm-route.js";
 
 describe("normalizeAnthropicModelId", () => {
   it("reduces every routing spelling to the bare API id", () => {
@@ -73,5 +74,77 @@ describe("anthropicRejectsForcedToolChoice — Fable 5.1 only", () => {
     for (const id of ["claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]) {
       expect(anthropicRejectsForcedToolChoice(id)).toBe(false);
     }
+  });
+});
+
+// ─── ggui#1254 — Opus 5.5, Mythos, every Bedrock profile, OpenRouter's dotted ids ───
+
+describe("BEDROCK_INFERENCE_REGION_PREFIXES — the one region list (ggui#1254)", () => {
+  it("is exactly the six AWS cross-region profile prefixes", () => {
+    expect([...BEDROCK_INFERENCE_REGION_PREFIXES]).toEqual(["us", "eu", "au", "jp", "apac", "global"]);
+  });
+});
+
+describe("normalizeAnthropicModelId — every region profile and the bedrock/ form (ggui#1254)", () => {
+  it("strips every prefix in the list, and a bedrock/ prefix", () => {
+    for (const region of BEDROCK_INFERENCE_REGION_PREFIXES) {
+      expect(normalizeAnthropicModelId(`${region}.anthropic.claude-opus-5-5`)).toBe("claude-opus-5-5");
+    }
+    expect(normalizeAnthropicModelId("bedrock/global.anthropic.claude-opus-5-5")).toBe("claude-opus-5-5");
+    expect(normalizeAnthropicModelId("bedrock/anthropic.claude-fable-5-1")).toBe("claude-fable-5-1");
+    expect(normalizeAnthropicModelId("apac.anthropic.claude-fable-5-1")).toBe("claude-fable-5-1");
+  });
+
+  it("does not strip a prefix that is not an AWS profile", () => {
+    expect(normalizeAnthropicModelId("xx.anthropic.claude-opus-5-5")).toBe("xx.anthropic.claude-opus-5-5");
+  });
+});
+
+describe("anthropicRejectsForcedToolChoice — Fable 5.1, Mythos 5.1, Opus 5.5, Mythos Preview (ggui#1254)", () => {
+  it("flags Opus 5.5 in every spelling — bare, anthropic/, anthropic., us., global., apac., bedrock/", () => {
+    for (const id of [
+      "claude-opus-5-5",
+      "anthropic/claude-opus-5-5",
+      "anthropic.claude-opus-5-5",
+      "us.anthropic.claude-opus-5-5",
+      "global.anthropic.claude-opus-5-5",
+      "apac.anthropic.claude-opus-5-5",
+      "bedrock/global.anthropic.claude-opus-5-5",
+    ]) {
+      expect(anthropicRejectsForcedToolChoice(id), id).toBe(true);
+    }
+  });
+
+  it("flags Claude Mythos 5.1 and Mythos Preview, the rest of the forced-tool set in the API reference", () => {
+    expect(anthropicRejectsForcedToolChoice("claude-mythos-5-1")).toBe(true);
+    expect(anthropicRejectsForcedToolChoice("global.anthropic.claude-mythos-5-1")).toBe(true);
+    expect(anthropicRejectsForcedToolChoice("claude-mythos-preview")).toBe(true);
+  });
+
+  it("flags OpenRouter's dotted spellings of both families", () => {
+    expect(anthropicRejectsForcedToolChoice("anthropic/claude-opus-5.5")).toBe(true);
+    expect(anthropicRejectsForcedToolChoice("anthropic/claude-fable-5.1")).toBe(true);
+    expect(anthropicRejectsForcedToolChoice("global.anthropic.claude-fable-5-1")).toBe(true);
+  });
+
+  it("does not flag Opus 5, Fable 5, Mythos 5, a longer version number, or a non-Anthropic id", () => {
+    for (const id of [
+      "claude-opus-5",
+      "claude-opus-5-50",
+      "anthropic/claude-opus-5",
+      "claude-mythos-5",
+      "claude-fable-5",
+      "openai/gpt-6-sol",
+      "gpt-6-luna",
+    ]) {
+      expect(anthropicRejectsForcedToolChoice(id), id).toBe(false);
+    }
+  });
+});
+
+describe("anthropicRejectsSamplingParams — Opus 5.5 pinned explicitly (ggui#1254)", () => {
+  it("flags claude-opus-5-5 in its API and Bedrock spellings", () => {
+    expect(anthropicRejectsSamplingParams("claude-opus-5-5")).toBe(true);
+    expect(anthropicRejectsSamplingParams("global.anthropic.claude-opus-5-5")).toBe(true);
   });
 });

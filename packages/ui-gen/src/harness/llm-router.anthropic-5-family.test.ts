@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   AnthropicAgent,
+  OpenRouterAgent,
   resolveAnthropicSampling,
 } from './llm-router.js';
 
@@ -133,6 +134,62 @@ describe('AnthropicAgent.callText — sampling guard', () => {
   });
 });
 
+interface FakeOpenRouterArgs {
+  model: string;
+  tool_choice: 'required' | 'auto';
+}
+
+/** An OpenRouterAgent whose client is a fake `chatCompletion` recorder. */
+class FakeOpenRouterAgent extends OpenRouterAgent {
+  readonly chatCompletion = vi.fn().mockImplementation((args: FakeOpenRouterArgs) =>
+    Promise.resolve({
+      choices: [
+        {
+          message:
+            args.tool_choice === 'required'
+              ? { content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'evaluate_x', arguments: '{}' } }] }
+              : { content: 'no tool call under auto', tool_calls: undefined },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }),
+  );
+
+  protected override async createClient(): Promise<{ chatCompletion: FakeOpenRouterAgent['chatCompletion'] }> {
+    return { chatCompletion: this.chatCompletion };
+  }
+}
+
+describe('OpenRouterAgent.callTools — the same forced tool_choice guard (ggui#1254)', () => {
+  const tool = { name: 'evaluate_x', description: 'x', parameters: { type: 'object' } };
+
+  it("downgrades 'required' to auto for anthropic/claude-opus-5.5 and discloses appliedToolChoice", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const agent = new FakeOpenRouterAgent();
+
+    const res = await agent.callTools('openrouter/anthropic/claude-opus-5.5', 'sys', 'user', [tool], 'required');
+
+    expect(agent.chatCompletion.mock.calls[0]?.[0]?.tool_choice).toBe('auto');
+    expect(res.appliedToolChoice).toBe('auto');
+    expect(res.toolCalls).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("keeps 'required' for a model that accepts it", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const agent = new FakeOpenRouterAgent();
+
+    const res = await agent.callTools('anthropic/claude-haiku-4.5', 'sys', 'user', [tool], 'required');
+
+    expect(agent.chatCompletion.mock.calls[0]?.[0]?.tool_choice).toBe('required');
+    expect(res.appliedToolChoice).toBe('required');
+    expect(res.toolCalls).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
 describe('AnthropicAgent.callTools — forced tool_choice guard', () => {
   const tool = { name: 'evaluate_x', description: 'x', parameters: { type: 'object' } };
 
@@ -148,6 +205,17 @@ describe('AnthropicAgent.callTools — forced tool_choice guard', () => {
     // outcome the evaluator's criteriaCoverage records as `skipped`.
     expect(res.toolCalls).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("downgrades 'required' to auto on Opus 5.5 too (ggui#1254)", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const agent = new FakeClientAgent();
+
+    const res = await agent.callTools('claude-opus-5-5', 'sys', 'user', [tool], 'required');
+
+    expect(agent.stream.mock.calls[0]?.[0]?.tool_choice).toEqual({ type: 'auto' });
+    expect(res.appliedToolChoice).toBe('auto');
     warn.mockRestore();
   });
 

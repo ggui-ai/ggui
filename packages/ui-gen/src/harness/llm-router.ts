@@ -222,9 +222,10 @@ export interface LLMToolCallResponse {
   outputTokens: number;
   /**
    * The tool-choice mode the provider ACTUALLY received. Callers ask
-   * for `'required'` (Anthropic `tool_choice: any`); Claude Fable 5.1
-   * rejects forced tool choice with HTTP 400, so the Anthropic adapter
-   * downgrades to `'auto'` for that family and reports it here. A
+   * for `'required'` (Anthropic `tool_choice: any`); Claude Fable 5.1 and
+   * Opus 5.5 reject forced tool choice with HTTP 400, so the Anthropic
+   * and OpenRouter adapters downgrade to `'auto'` for those families and
+   * report it here. A
    * downgraded call may legitimately return zero tool calls — the
    * evaluator's `criteriaCoverage` records that as `skipped`, never as
    * a pass. Absent = predates the field (treat as unknown).
@@ -863,10 +864,10 @@ export class AnthropicAgent extends LLMAgent {
       // want the final-message shape downstream, so use the stream
       // helper's `finalMessage()` which folds the events back to the
       // same `Message` Type the non-streaming path returned.
-      // Fable 5.1 rejects a forced tool choice (400); downgrade to
-      // `auto` for that family and disclose it on the response so a
-      // resulting zero-tool-call reply is never mistaken for a verdict
-      // (ggui#710 / #706).
+      // Fable 5.1 and Opus 5.5 reject a forced tool choice (400);
+      // downgrade to `auto` for those families and disclose it on the
+      // response so a resulting zero-tool-call reply is never mistaken
+      // for a verdict (ggui#710 / #706 / #1254).
       const appliedToolChoice: 'required' | 'auto' =
         toolChoice === 'required' && anthropicRejectsForcedToolChoice(resolvedModel)
           ? 'auto'
@@ -2117,12 +2118,25 @@ export class OpenRouterAgent extends LLMAgent {
     }
     this.sessionMessages.push({ role: 'user', content: userPrompt });
 
+    // ggui#1254 — OpenRouter forwards the tool choice to the upstream, so an
+    // Anthropic family that refuses a forced tool choice (Fable 5.1, Opus 5.5;
+    // OpenRouter spells them `anthropic/claude-opus-5.5`) 400s here exactly as
+    // it does direct. Same guard, same disclosure as the Anthropic adapter.
+    const requested = toolChoice ?? 'auto';
+    const appliedToolChoice: 'required' | 'auto' =
+      requested === 'required' && anthropicRejectsForcedToolChoice(resolved) ? 'auto' : requested;
+    if (appliedToolChoice !== requested) {
+      console.warn(
+        `[openrouter] callTools: ${resolved} rejects forced tool_choice (HTTP 400); caller's 'required' downgraded to 'auto'`,
+      );
+    }
+
     const response = await this.apiCall(() =>
       client.chatCompletion({
         model: resolved,
         messages: this.sessionMessages,
         tools: orTools,
-        tool_choice: toolChoice ?? 'auto',
+        tool_choice: appliedToolChoice,
       }),
     );
 
@@ -2146,6 +2160,7 @@ export class OpenRouterAgent extends LLMAgent {
       toolCalls,
       inputTokens: response.usage.prompt_tokens,
       outputTokens: response.usage.completion_tokens,
+      appliedToolChoice,
     };
   }
 
