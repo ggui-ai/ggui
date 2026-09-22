@@ -24,11 +24,12 @@ import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
 import type { EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
-import { mapProviderForEvaluator } from "../enforced-coding.js";
+import { mapProviderForEvaluator, visionJudgeProvider } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
 import { isRecoverableRenderCrash } from "../check/runtime-render/index.js";
 import type { Harness } from "../types-public.js";
 import type { AgentSpec, SingleComponentParams } from "../runtime.js";
+import type { VisualEvalOutcome } from "../../evaluation/visual-evaluator.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -147,6 +148,37 @@ function formatFitFeedback(issue: EvalIssue): string {
  */
 /** Why an eval result carries no criteria: the round itself threw (ggui#1110). */
 const EVAL_ROUND_THREW_REASON = "eval round threw";
+
+/**
+ * The in-loop visual leg, made total (ggui#1248). The judge runs on a VISION
+ * provider: the agent's provider narrowed by `visionJudgeProvider`, never
+ * asserted into the vision union — a lane whose generation provider has no
+ * vision path (OpenAI, OpenRouter) gets a leg recorded as SKIPPED with the
+ * reason, and the judge is not called. And whatever the leg does, it resolves:
+ * a rejection becomes the same skipped coverage with the error, so the round
+ * never takes its thrown path on account of the visual leg and the runtime
+ * probe still runs — a bar that requires the probe decides on the probe, not
+ * on a judge that could not be reached.
+ */
+function runVisualLeg(
+  visualEvalAgent: AgentSpec,
+  run: (provider: "claude" | "google") => Promise<VisualEvalOutcome>,
+): Promise<VisualEvalOutcome> {
+  const provider = visionJudgeProvider(visualEvalAgent.provider);
+  if (provider === undefined) {
+    return Promise.resolve({
+      issues: [],
+      coverage: {
+        status: "skipped",
+        reason: `no vision judge for provider '${visualEvalAgent.provider}' (model ${visualEvalAgent.model}) — the in-loop visual judge runs on a vision provider (anthropic, google)`,
+      },
+    });
+  }
+  return run(provider).catch((e: unknown): VisualEvalOutcome => ({
+    issues: [],
+    coverage: { status: "skipped", reason: `visual leg failed: ${e instanceof Error ? e.message : String(e)}` },
+  }));
+}
 
 const LOW_RISK_BYPASS_REASON =
   "same-image low-risk bypass: axis checks clean, tier-1/2 evaluation not invoked";
@@ -500,7 +532,7 @@ export async function runEvalRound(
           )
         : null,
       visualMod
-        ? visualMod.runVisualEval(
+        ? runVisualLeg(visualEvalAgent, (provider) => visualMod.runVisualEval(
             {
               compiledCode,
               originalPrompt: userPrompt,
@@ -509,7 +541,7 @@ export async function runEvalRound(
               ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
             },
             {
-              provider: mapProviderForEvaluator(visualEvalAgent.provider) as "claude" | "google",
+              provider,
               model: visualEvalAgent.model,
               passThreshold: visualThreshold,
               // The in-loop visual round renders the same sample the runtime probe
@@ -533,7 +565,7 @@ export async function runEvalRound(
               routeOverride: visualEvalAgent.routeOverride,
               onRetry: visualEvalAgent.onRetry,
             },
-          )
+          ))
         : null,
     ]);
     evalLlmMs = Date.now() - evalLlmStart;

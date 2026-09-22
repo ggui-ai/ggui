@@ -2046,6 +2046,13 @@ export function createVisionAgent(
       return new AnthropicAgent(config.routeOverride, config.onRetry);
     case 'google':
       return new GoogleAgent(config.routeOverride, config.onRetry);
+    default: {
+      // ggui#1248 — refused by NAME, never answered with `undefined`: a caller that
+      // asserted its way past the type got back an agent it could not call, and the
+      // throw surfaced three frames later as "reading 'callVision'".
+      const unreachable: never = config.provider;
+      throw new Error(`createVisionAgent: provider '${String(unreachable)}' has no vision path (anthropic, google)`);
+    }
   }
 }
 

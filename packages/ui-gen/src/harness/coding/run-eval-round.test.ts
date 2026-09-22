@@ -385,6 +385,41 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
     expect(round.evalResult?.visual).toEqual(summary);
   });
 
+  // ggui#1248 — the in-loop visual judge runs on a VISION provider, never on the generation's by
+  // inheritance, and whatever the judge leg does the round survives it (the runtime probe must run).
+  it("an OpenAI lane's visual leg is SKIPPED with the reason: the judge is never called, and the round does not take the thrown path (ggui#1248)", async () => {
+    let judged = 0;
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: () => {
+        judged += 1;
+        return Promise.resolve({ issues: [], coverage: { status: 'ran' } });
+      },
+    };
+    const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'] }, fakeVisualMod);
+
+    const round = await runEvalRound({ ...ctx, visualEvalAgent: { provider: 'openai', model: 'gpt-6-astra' } }, input);
+
+    expect(judged).toBe(0);
+    expect(round.evalResult?.visualCoverage?.status).toBe('skipped');
+    expect(round.evalResult?.visualCoverage?.reason).toContain("'openai'");
+    expect(round.evalResult?.runtimeProbe?.reason ?? '').not.toContain('eval round threw');
+  });
+
+  it('a visual leg that THROWS is recorded as skipped with the error and never throws the round (ggui#1248)', async () => {
+    const fakeVisualMod: typeof realVisualEvaluator = {
+      ...realVisualEvaluator,
+      runVisualEval: () => Promise.reject(new Error('vision call exploded')),
+    };
+    const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'] }, fakeVisualMod);
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult?.visualCoverage?.status).toBe('skipped');
+    expect(round.evalResult?.visualCoverage?.reason).toContain('vision call exploded');
+    expect(round.evalResult?.runtimeProbe?.reason ?? '').not.toContain('eval round threw');
+  });
+
   it('without canvases the visual leg returns no summary and evalResult carries no `visual` key', async () => {
     const fakeVisualMod: typeof realVisualEvaluator = {
       ...realVisualEvaluator,
