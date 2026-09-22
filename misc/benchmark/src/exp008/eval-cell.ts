@@ -537,10 +537,30 @@ export interface MintReceipt {
   readonly promptDigests: { readonly constrained: string; readonly free: string };
 }
 
+/**
+ * ggui#1249 — the image the cell was JUDGED on, from the eval task's own
+ * environment: the runner image bakes `GIT_SHA` and `BENCH_SOURCE_HASH` as ENV.
+ * Stamped into `report.meta.evalImage` so a take-check reads the cell's own
+ * receipt instead of reconstructing the identity from the task definition.
+ */
+export interface EvalImage {
+  readonly gitSha: string;
+  readonly benchSourceHash: string;
+}
+
+/** Both values present and non-empty → the identity; anything else → undefined (a local run carries none, and nothing is guessed). */
+export function readEvalImageEnv(env: { readonly GIT_SHA?: string; readonly BENCH_SOURCE_HASH?: string }): EvalImage | undefined {
+  const gitSha = env.GIT_SHA?.trim();
+  const benchSourceHash = env.BENCH_SOURCE_HASH?.trim();
+  return gitSha && benchSourceHash ? { gitSha, benchSourceHash } : undefined;
+}
+
 export interface EvalCellDeps {
   readonly dir: string;
   /** Absent = the eval task ran without the MINT_* receipt env (recorded in `notes`). */
   readonly mintReceipt?: MintReceipt;
+  /** Absent = the task ran without the image env (a local run) — the row then carries no `evalImage`. */
+  readonly evalImage?: EvalImage;
   readonly playwright?: PlaywrightModule;
   /** Default: the arm-neutral aesthetic panel (#973 §5b). */
   readonly panel?: PanelJudge;
@@ -584,6 +604,8 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly mintSourceSha?: string;
     /** Prompt digests (constrained / free) pinned at `mintSourceSha` — checked against the experiment's pins by the verdict. */
     readonly promptDigests?: { readonly constrained: string; readonly free: string };
+    /** ggui#1249: the image the cell was judged on (the eval task's `GIT_SHA` / `BENCH_SOURCE_HASH` env) — absent on a run without them. */
+    readonly evalImage?: EvalImage;
     /** Visual score summary of the cell (the per-canvas mean when canvases ran). */
     readonly visual?: { readonly score: number; readonly passed: boolean };
     readonly visualJudge?: VisualJudgeIdentity;
@@ -749,6 +771,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
             promptDigests: deps.mintReceipt.promptDigests,
           }
         : {}),
+      ...(deps.evalImage !== undefined ? { evalImage: deps.evalImage } : {}),
       ...(visual !== undefined ? { visual } : {}),
       ...(deps.visual && deps.visualJudge
         ? {

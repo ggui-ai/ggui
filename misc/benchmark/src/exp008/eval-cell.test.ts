@@ -18,6 +18,7 @@ import {
   themeMembersStrippedNote,
   JUDGE_INPUT_FILE,
   parseJudgeKEnv,
+  readEvalImageEnv,
 } from './eval-cell';
 import type { VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
 import { calculateCost, resolveJudgeCostModelId, resolveCostModelId } from '../multi-sdk/runner.js';
@@ -273,6 +274,33 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
     expect(report.meta.notes).toContain('visual judge returned null');
     expect(report.meta.visualJudge).toBeUndefined();
     expect(report.meta.panelPromptVersion).toBe('aesthetic-eval.v3-panel-arm-neutral');
+  });
+});
+
+describe('eval image on the row (ggui#1249)', () => {
+  it('reads GIT_SHA + BENCH_SOURCE_HASH from the env — only when both are present and non-empty', () => {
+    expect(readEvalImageEnv({ GIT_SHA: 'aaef864', BENCH_SOURCE_HASH: '8cd8021fa4b4' })).toEqual({ gitSha: 'aaef864', benchSourceHash: '8cd8021fa4b4' });
+    expect(readEvalImageEnv({ GIT_SHA: 'aaef864' })).toBeUndefined();
+    expect(readEvalImageEnv({ BENCH_SOURCE_HASH: '8cd8021fa4b4' })).toBeUndefined();
+    expect(readEvalImageEnv({ GIT_SHA: ' ', BENCH_SOURCE_HASH: '' })).toBeUndefined();
+    expect(readEvalImageEnv({})).toBeUndefined();
+  });
+
+  it('stamps the image the cell was judged on into report.meta.evalImage and the written report.json', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel,
+      evalImage: { gitSha: 'aaef864', benchSourceHash: '8cd8021fa4b4' },
+    });
+    expect(report.meta.evalImage).toEqual({ gitSha: 'aaef864', benchSourceHash: '8cd8021fa4b4' });
+    const written = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as { meta: { evalImage?: { gitSha: string } } };
+    expect(written.meta.evalImage?.gitSha).toBe('aaef864');
+  });
+
+  it('without the env the row carries no evalImage key — nothing invented', async () => {
+    const dir = cellDir();
+    const report = await evaluateCell(readCellInputs(dir), { dir, playwright: neverLaunch, panel });
+    expect('evalImage' in report.meta).toBe(false);
   });
 });
 

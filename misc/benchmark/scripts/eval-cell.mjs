@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { loadPlaywright } from './lib/load-playwright.mjs';
-import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome } from '../src/exp008/eval-cell.ts';
+import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome, readEvalImageEnv } from '../src/exp008/eval-cell.ts';
 
 function getArg(names, fallback) {
   const i = process.argv.findIndex((a) => names.includes(a));
@@ -160,8 +160,11 @@ async function main() {
         promptDigests: { constrained: process.env.MINT_PROMPT_DIGEST_CONSTRAINED, free: process.env.MINT_PROMPT_DIGEST_FREE },
       }
     : undefined;
+  // ggui#1249: the image this eval task runs on, from its own env — absent on a local run.
+  const evalImage = readEvalImageEnv(process.env);
   const report = await evaluateCell(inputs, {
     ...(mintReceipt ? { mintReceipt } : {}),
+    ...(evalImage ? { evalImage } : {}),
     dir,
     ...(playwright ? { playwright } : {}),
     ...(visual ? { visual, visualJudge: VISUAL_JUDGE } : {}),
