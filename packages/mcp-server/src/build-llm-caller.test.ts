@@ -225,7 +225,13 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
         description: '',
         input_schema: { type: 'object' },
       }),
-    ).rejects.toThrow(/anthropic tool-use HTTP 429.*rate limited/);
+    ).rejects.toMatchObject({
+      // ggui#1255 — a NAMED failure: the kind + status, and the provider's
+      // own text still rides in the message.
+      kind: 'http',
+      status: 429,
+      message: expect.stringMatching(/\[http\]: HTTP 429.*rate limited/),
+    });
   });
 
   it('throws when the response carries no matching tool_use block', async () => {
@@ -248,6 +254,10 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
         description: '',
         input_schema: { type: 'object' },
       }),
-    ).rejects.toThrow(/missing tool_use block.*submit_decision/);
+    ).rejects.toMatchObject({
+      // ggui#1255 — named: the turn ended without the tool call.
+      kind: 'no_tool_call',
+      message: expect.stringMatching(/\[no_tool_call\].*submit_decision/),
+    });
   });
 });

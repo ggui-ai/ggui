@@ -57,7 +57,7 @@ import {
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { LLMCaller } from "@ggui-ai/negotiator";
 import type { Blueprint } from "@ggui-ai/protocol";
-import { isRecord } from "@ggui-ai/protocol";
+import { anthropicRejectsForcedToolChoice, isRecord } from "@ggui-ai/protocol";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
 
 /**
@@ -68,7 +68,9 @@ import { selectAdapter } from "@ggui-ai/ui-gen/providers";
  *
  * `callStructured` is wired for Anthropic only. Anthropic's
  * `/v1/messages` natively supports forced tool use via `tools[] +
- * tool_choice: {type:'tool', name}`, so we hit the API directly here
+ * tool_choice: {type:'tool', name}` — on the models that accept it; the
+ * always-thinking models refuse a forced tool (see
+ * `anthropicCallStructured`) — so we hit the API directly here
  * instead of expanding the `ProviderAdapter` interface for one
  * provider. Other providers (OpenAI, Google, OpenRouter, Bedrock)
  * omit `callStructured`; consumers detect absence and fall back to
@@ -135,10 +137,76 @@ export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKey
   return caller;
 }
 
-/** Anthropic-direct tool-use call. Forces a single tool invocation
- *  and returns the tool's `input` JSON. Throws on non-2xx, network
- *  errors, or response-shape failures so the caller (rerank judge,
- *  synthesizer) can collapse to its null-decision fallback. */
+/**
+ * Thinking budget added to the caller's ANSWER budget when the model
+ * refuses a forced tool. Those are the always-thinking models: their
+ * thinking counts against `max_tokens` and comes before the tool call,
+ * so a caller's small answer budget (the rerank judge asks for 512)
+ * would be spent before the `tool_use` block exists. `max_tokens` is a
+ * ceiling, not spend.
+ */
+export const ALWAYS_THINKING_HEADROOM_TOKENS = 16_000;
+
+/** How a structured call ended without the tool input it asked for. */
+export type AnthropicStructuredCallFailureKind =
+  /** The budget ran out (`stop_reason: max_tokens`) before the tool call. */
+  | "max_tokens"
+  /** The model finished without calling the tool (possible under `auto`). */
+  | "no_tool_call"
+  /** The model declined (`stop_reason: refusal`). */
+  | "refusal"
+  /** The API answered non-2xx. */
+  | "http"
+  /** The body was not a Messages response. */
+  | "malformed";
+
+/**
+ * A structured call that returned no tool input, NAMED by why. The kind
+ * is in the message too (`[max_tokens]` …), so a consumer that only
+ * surfaces the message — the rerank judge's `reason` — still reports
+ * which failure it was instead of an anonymous null decision.
+ */
+export class AnthropicStructuredCallError extends Error {
+  readonly kind: AnthropicStructuredCallFailureKind;
+  readonly status: number | undefined;
+  readonly stopReason: string | undefined;
+  constructor(
+    kind: AnthropicStructuredCallFailureKind,
+    detail: string,
+    extra: { readonly status?: number; readonly stopReason?: string } = {}
+  ) {
+    super(`anthropic structured call [${kind}]: ${detail}`);
+    this.name = "AnthropicStructuredCallError";
+    this.kind = kind;
+    this.status = extra.status;
+    this.stopReason = extra.stopReason;
+  }
+}
+
+/**
+ * Anthropic-direct tool-use call; returns the tool's `input` JSON.
+ *
+ * Two request shapes, chosen by the shared model-rule predicate
+ * (`anthropicRejectsForcedToolChoice`, the same list the harness router
+ * reads — one list, so a model the API starts refusing is added once):
+ *
+ *   - Models that accept a forced tool: `tool_choice: {type: 'tool'}`
+ *     and the caller's `max_tokens`, as before.
+ *   - Models that refuse it (the always-thinking family): a forced tool
+ *     is an HTTP 400 on every call, so they get `tool_choice: auto` with
+ *     at most one call, an instruction naming the tool appended to the
+ *     system prompt, and `ALWAYS_THINKING_HEADROOM_TOKENS` added to the
+ *     caller's budget. `strict: true` is deliberately NOT sent: the two
+ *     consumers' schemas carry keywords strict tool use rejects (the
+ *     rerank judge's `minimum`/`maximum`, the synthesizer's map-shaped
+ *     `additionalProperties`), so it would trade one 400 for another;
+ *     both consumers already validate the input they get back.
+ *
+ * Every way the turn ends without the tool input throws an
+ * `AnthropicStructuredCallError` whose kind says which — the caller
+ * (rerank judge, synthesizer) collapses it to its null-decision
+ * fallback, and the kind rides along in the reason.
+ */
 async function anthropicCallStructured(args: {
   apiKey: string;
   model: string;
@@ -151,20 +219,21 @@ async function anthropicCallStructured(args: {
   };
   maxTokens?: number;
 }): Promise<unknown> {
+  const answerBudget = args.maxTokens ?? 1024;
+  const refusesForcedTool = anthropicRejectsForcedToolChoice(args.model);
   const body = {
     model: args.model,
-    max_tokens: args.maxTokens ?? 1024,
+    max_tokens: refusesForcedTool ? answerBudget + ALWAYS_THINKING_HEADROOM_TOKENS : answerBudget,
     // `temperature` was pinned to 0 for deterministic structured
     // output, but Anthropic deprecated the parameter on newer
     // tool-use models (Haiku 4.5+ rejects it with HTTP 400). Dropped.
-    // `tool_choice: { type: 'tool', name }` below already binds the
-    // output shape to the declared input_schema — the model can't
-    // emit a free-form text response when forced-tool is set.
     // Residual stochasticity is in field VALUES (e.g. action names);
     // both consumers (synthesizer + rerank judge) MUST tolerate
     // paraphrase via canonical-key normalisation rather than relying
     // on temperature=0.
-    system: args.systemPrompt,
+    system: refusesForcedTool
+      ? `${args.systemPrompt}\n\nAnswer by calling the \`${args.tool.name}\` tool exactly once. Do not answer in text.`
+      : args.systemPrompt,
     messages: [{ role: "user", content: args.userMessage }],
     tools: [
       {
@@ -173,10 +242,12 @@ async function anthropicCallStructured(args: {
         input_schema: args.tool.input_schema,
       },
     ],
-    // Forced tool use — model MUST emit exactly this tool. Without
-    // this the model can drift to a text reply and synth/rerank
-    // both lose their structured guarantee.
-    tool_choice: { type: "tool", name: args.tool.name },
+    // Forced tool use where the model allows it — the model MUST emit
+    // exactly this tool. Where it doesn't, `auto` + one call + the
+    // instruction above, and a missing call is a named failure below.
+    tool_choice: refusesForcedTool
+      ? { type: "auto", disable_parallel_tool_use: true }
+      : { type: "tool", name: args.tool.name },
   };
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -189,25 +260,35 @@ async function anthropicCallStructured(args: {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`anthropic tool-use HTTP ${response.status}: ${text.slice(0, 500)}`);
+    throw new AnthropicStructuredCallError("http", `HTTP ${response.status}: ${text.slice(0, 500)}`, {
+      status: response.status,
+    });
   }
-  const json = (await response.json()) as {
-    content?: Array<{
-      type?: string;
-      name?: string;
-      input?: unknown;
-    }>;
-  };
-  // Find the tool_use block. With `tool_choice: {type:'tool'}` the
-  // model is forced to emit exactly one; defensively scan in case the
-  // shape ever shifts.
-  const toolUse = json.content?.find(
-    (block) => block.type === "tool_use" && block.name === args.tool.name
+  const json: unknown = await response.json();
+  if (!isRecord(json) || !Array.isArray(json["content"])) {
+    throw new AnthropicStructuredCallError("malformed", "response body is not a Messages response");
+  }
+  const stopReason = typeof json["stop_reason"] === "string" ? json["stop_reason"] : undefined;
+  const toolUse = json["content"].find(
+    (block): block is Record<string, unknown> =>
+      isRecord(block) && block["type"] === "tool_use" && block["name"] === args.tool.name
   );
-  if (!toolUse || toolUse.input === undefined) {
-    throw new Error(`anthropic tool-use response missing tool_use block for "${args.tool.name}"`);
+  if (toolUse !== undefined && toolUse["input"] !== undefined) return toolUse["input"];
+  if (stopReason === "max_tokens") {
+    throw new AnthropicStructuredCallError(
+      "max_tokens",
+      `stop_reason=max_tokens before the "${args.tool.name}" tool_use block (max_tokens=${body.max_tokens})`,
+      { stopReason }
+    );
   }
-  return toolUse.input;
+  if (stopReason === "refusal") {
+    throw new AnthropicStructuredCallError("refusal", `the model declined (stop_reason=refusal)`, { stopReason });
+  }
+  throw new AnthropicStructuredCallError(
+    "no_tool_call",
+    `the turn ended (stop_reason=${stopReason ?? "absent"}) without a "${args.tool.name}" tool_use block`,
+    stopReason !== undefined ? { stopReason } : {}
+  );
 }
 
 /**

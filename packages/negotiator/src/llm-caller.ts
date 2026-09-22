@@ -25,11 +25,15 @@
  *   the caller didn't request them — the text path is used as a
  *   regex-JSON fallback.
  * - `callStructured?<T>(...)` is OPTIONAL. When present, it MUST
- *   force tool use against the supplied `ToolSchema` and return the
- *   tool input, parsed as `T`. Implementations that don't support
- *   forced structured output simply omit this method; consumers
- *   fall back to `call` + regex JSON extraction. Absence is not an
- *   error.
+ *   return the input of the supplied `ToolSchema`'s tool, parsed as
+ *   `T`, or THROW — never return anything else. It forces the tool
+ *   where the model allows that; a model that refuses a forced tool
+ *   (the always-thinking family) is asked for it without forcing, so
+ *   the call can end with no tool input, and that ending is a throw.
+ *   Consumers validate what they get back either way. Implementations
+ *   that can't produce tool input at all simply omit this method;
+ *   consumers fall back to `call` + regex JSON extraction. Absence is
+ *   not an error.
  * - `ToolSchema.input_schema` follows the OpenAI tool-use JSON
  *   Schema convention. Implementations that use a different
  *   tool-use protocol (e.g., Anthropic's variant) MUST translate at
@@ -56,9 +60,11 @@ export interface LLMCaller {
   ): Promise<string>;
 
   /**
-   * Call with forced tool use for guaranteed structured JSON output.
-   * Implementations that can't force tool use should omit this
-   * method — consumers detect absence and fall back to regex JSON
+   * Call for the supplied tool's input as structured JSON — forced
+   * where the model allows it, requested otherwise; throws when the
+   * turn ends without it (see the normative semantics above).
+   * Implementations that can't produce tool input at all should omit
+   * this method — consumers detect absence and fall back to regex JSON
    * extraction on the text path.
    */
   callStructured?<T>(
