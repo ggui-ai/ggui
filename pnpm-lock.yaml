@@ -56,6 +56,7 @@ overrides:
   protobufjs@<7.6.5: ^7.6.5
   '@opentelemetry/core@<2.8.0': ^2.8.0
   adm-zip@<0.6.1: ^0.6.1
+  devalue@5: ^5.9.2
   immutable@<3.8.3: ^3.8.3
   '@guuey/mcp-apps-host': 0.18.2
   '@a2a-js/sdk': 0.3.14
@@ -11940,7 +11941,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       mariadb: 3.5.4
     transitivePeerDependencies:
       - better-sqlite3
@@ -11993,7 +11994,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       pg: 8.19.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
