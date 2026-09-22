@@ -246,8 +246,20 @@ export function generateBoilerplate(
     }
 
     const toolNote = tool ? ` (label "${label}", nextStep hint → ${tool})` : "";
+    // ggui#1190: the control's copy is the contract's label, VERBATIM — stated for
+    // EVERY action (it used to appear only beside a `nextStep` hint), because the
+    // model given `"Confirm & Schedule"` in the contract block wrote
+    // `'Confirm Schedule'`. The rule lives in DATA_PARAMETERIZATION rule 4; this is
+    // its reminder beside the action, and the axis check
+    // `universal.action_label_dropped` names the drop when both are ignored.
+    // ggui#1244: it rides the payload type's doc comment, NOT the hook line. Placed
+    // on the hook line directly before the once-hint below, the two read as the
+    // control's spec and gemini-3.5-flash-lite guarded the repeatable Save 8/8;
+    // here, with the hook line back to its earlier bytes, 5/24 — within noise of
+    // the rate before either hint moved (1/8) — while one-time commitments stayed
+    // guarded 40/40 across three providers and every label stayed verbatim (Exp 009).
     actionTypeAliases.push(
-      `/** Action payload: ${desc || label}${toolNote} */\ntype ${typeName} = ${tsType};`
+      `/** Action payload: ${desc || label}${toolNote} — control copy: "${label}" VERBATIM */\ntype ${typeName} = ${tsType};`
     );
     // Inline signature tells the LLM exactly how to call this action
     const callSig = tsType === "void" ? "() => void — fire and forget" : `(data: ${tsType}) => void`;
@@ -255,18 +267,14 @@ export function generateBoilerplate(
     // ggui#1108 (mitigation): the reminder sits at the EXACT site the model
     // writes the handler. It is a hint, not the rule — the rule is the prompt's
     // `TERMINAL_ACTIONS` section, because only the request and the contract say
-    // which actions are meant once. A site comment alone moves generation by
-    // roughly nothing (Exp 002b: adoption 1/36), which is why it is the
-    // smallest of the three legs and never the one relied on.
+    // which actions are meant once. It is NOT inert, whatever Exp 002b measured
+    // for a different site comment (adoption 1/36): Exp 009 (ggui#1244) removed
+    // it and one-time scheduling went armed on all three providers (guarded 9/12
+    // against 24/24), and a second hint placed beside it turned it into an
+    // instruction for every action. So it stays, ALONE on the hook line — what
+    // sits next to it is part of what it says.
     const onceHint = " — if this is meant ONCE, disable its control after it fires";
-    // ggui#1190: the control's copy is the contract's label, VERBATIM — shown at the
-    // exact site for EVERY action (it used to appear only beside a `nextStep`
-    // hint), because the model given `"Confirm & Schedule"` in the contract block
-    // wrote `'Confirm Schedule'`. The rule lives in DATA_PARAMETERIZATION rule 4;
-    // this is its site reminder, and the axis check `universal.action_label_dropped`
-    // names the drop when both are ignored.
-    const copyHint = ` — control copy: "${label}" VERBATIM`;
-    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${copyHint}${onceHint}`);
+    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
     actionReturnFields.push(key);
   }
 

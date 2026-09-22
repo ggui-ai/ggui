@@ -202,10 +202,20 @@ function renderFreeBoilerplates(): string {
 // the re-record: the shared hunks are byte-identical in both arms' dumps (eight prompt hunks,
 // one boilerplate hunk, the same text in each); the free arm ALSO moves by the consumed-token
 // manifest — see the free note.
+// Re-recorded 2026-09-23 for ggui#1244 — BOTH BOILERPLATE digests, nothing else: ggui#1190's copy
+// reminder (`— control copy: "<label>" VERBATIM`) moves OFF the action hook line and onto the action's
+// payload-type doc comment, so the hook line is byte-identical to its pre-#1190 form again (fixture A's
+// `toggleTodo` pair of lines is the whole delta, the same two lines in each arm). Bought by a measured
+// false positive: beside ggui#1108's once-hint on the hook line, gemini-3.5-flash-lite guarded the wire
+// scenarios' repeatable Save 8/8 (the nightly OSS E2E matrix red four nights); split, 5/24 — within noise
+// of the rate before either hint moved (1/8) — with one-time commitments still guarded 40/40 across three
+// providers and every label verbatim. Removing the once-hint instead cost the true positive (9/12), so it stays.
+// Constrained boilerplate 8f1dfd89… → d030418c…, free boilerplate b9b86589… → a33e33a7…; both prompt
+// digests are byte-stable. INVARIANT 1 holds: the two arms' boilerplate hunks are byte-identical.
 export const CONSTRAINED_PROMPT_SHA256 =
   '040bd0a3c00768e73df375b706e9b436537bf5efacbcd7b4f1ef5fd8b1a6a4ca';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  '8f1dfd899bbc6f626c03ab1cb55817a2fe486e0509151fcd64942066d0269026';
+  'd030418ca64aef40a12db280c0078bb730769a1909a86f1fcdf0d38d1c64532a';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
@@ -253,8 +263,10 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // stale dist reports no move where CI's fresh build does).
 export const FREE_PROMPT_SHA256 =
   '5f8196acd8223abd3004e6a010a0da3e8e62d88fafb75bf3d5f6e44138db8429';
+// Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
+// doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
-  'b9b865898c8308f5145d01e92e43d0bbd6b40c828c71be6a2430e0b8526f15a4';
+  'a33e33a71580fd493e12e1e3c87b4af943a588e2800eb2da8f7049af6fca61cb';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [
