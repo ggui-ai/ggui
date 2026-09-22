@@ -188,7 +188,7 @@ overrides:
   # unchanged in 0.6.0. Caret keeps future 0.7.x out — a bare floor
   # would drag consumers across the next breaking line, which is
   # exactly the breakage this file exists to avoid.
-  "adm-zip@<0.6.0": ^0.6.0
+  "adm-zip@<0.6.1": ^0.6.1
   "immutable@<3.8.3": ^3.8.3
   # Exact-pinned SAME as root (ggui#430) — force ONE dispatcher copy per
   # tree, and the same one in both trees. Moved 0.3.1 → 0.4.0 with the
@@ -441,6 +441,7 @@ overrides:
   "@ungap/structured-clone": 1.3.3
   "@vitejs/plugin-react": 6.1.0
   acorn: 8.18.0
+  adm-zip: 0.6.1
   b4a: 1.8.1
   bare-events: 2.9.1
   bare-fs: 4.8.0
