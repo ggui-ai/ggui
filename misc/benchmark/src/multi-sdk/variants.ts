@@ -272,6 +272,9 @@ export function getGeneratorVariants(): BenchmarkVariant[] {
  * - `claude-fast-login` (Exp 009, ggui#1185): `claude-fast`'s exact model on
  *   the machine's Claude Code login instead of a key — the arms differ in the
  *   client only.
+ * - `gpt-6-luna`, `gpt-6-sol`, `claude-opus-5-5` (Exp 010, ggui#1260): the
+ *   candidate models, each on its registry id and registry tier; the control
+ *   is the default `openai-fast` (`gpt-5.6-luna`).
  */
 export function getCandidateVariants(): BenchmarkVariant[] {
   return [
@@ -281,6 +284,24 @@ export function getCandidateVariants(): BenchmarkVariant[] {
       tier: 'fast',
       modelId: 'anthropic/claude-haiku-4-5',
       claudeCodeLogin: true,
+    },
+    {
+      id: 'gpt-6-luna',
+      sdkName: 'openai',
+      tier: 'fast',
+      modelId: 'openai/gpt-6-luna',
+    },
+    {
+      id: 'gpt-6-sol',
+      sdkName: 'openai',
+      tier: 'balanced',
+      modelId: 'openai/gpt-6-sol',
+    },
+    {
+      id: 'claude-opus-5-5',
+      sdkName: 'claude',
+      tier: 'premium',
+      modelId: 'anthropic/claude-opus-5-5',
     },
   ];
 }
