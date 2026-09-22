@@ -446,9 +446,14 @@ export function handleAuthorizationServerMetadata(
 /**
  * `POST /oauth/register` — RFC 7591 Dynamic Client Registration. Issues
  * a random `client_id`. No `client_secret` (PKCE-only). Registration is
- * OPEN — there is no allowlist of redirect URIs, because the MCP
- * authorization spec (2025-06-18) expects any host to register itself
- * before its user has ever seen this server. What keeps an open door
+ * OPEN — there is no allowlist of redirect URIs. The MCP authorization
+ * spec's current revision (2026-07-28) permits DCR as a deprecated
+ * fallback ("MAY … retained for backwards compatibility") and recommends
+ * Client ID Metadata Documents (SHOULD), which this server does not
+ * support yet (ggui#1269); a client falls back to DCR when the metadata
+ * advertises no `client_id_metadata_document_supported`, so today every
+ * host registers here, before its user has ever seen this server. What
+ * keeps an open door
  * from being an open redirect (ggui#1174) is not the door but the
  * controls around it, each of them pinned in `oauth-dcr.test.ts`:
  *
