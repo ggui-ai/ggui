@@ -408,7 +408,7 @@ overrides:
   "@rollup/rollup-win32-ia32-msvc": 4.62.4
   "@rollup/rollup-win32-x64-gnu": 4.62.4
   "@rollup/rollup-win32-x64-msvc": 4.62.4
-  "@silverprotocol/core": 0.6.2
+  "@silverprotocol/core": 0.6.3
   "@sinclair/typebox": 0.27.12
   "@smithy/core": 3.32.0
   "@smithy/credential-provider-imds": 4.4.16
