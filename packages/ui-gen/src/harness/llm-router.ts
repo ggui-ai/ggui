@@ -24,7 +24,12 @@ import type {
   GoogleGenAI,
   Interactions,
 } from '@google/genai';
-import type { JsonObject } from '@ggui-ai/protocol';
+import {
+  anthropicRejectsForcedToolChoice,
+  anthropicRejectsSamplingParams,
+  normalizeAnthropicModelId,
+  type JsonObject,
+} from '@ggui-ai/protocol';
 import type { LLMToolDef } from '../llm.js';
 import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
@@ -567,39 +572,6 @@ export abstract class LLMAgent {
 // =============================================================================
 // AnthropicAgent
 // =============================================================================
-
-/**
- * Strip every routing spelling down to the bare Claude API id so the
- * family predicates below see one form: `anthropic/claude-x`,
- * `anthropic.claude-x`, `us.anthropic.claude-x[-vN:M]` and the bare
- * `claude-x` all normalize to `claude-x…`. ARNs are left as-is (they
- * name a profile, not a family) and match no predicate.
- */
-export function normalizeAnthropicModelId(model: string): string {
-  return model
-    .replace(/^anthropic\//, '')
-    .replace(/^(?:[a-z]{2}\.)?anthropic\./, '');
-}
-
-/**
- * Models that reject non-default sampling parameters with HTTP 400:
- * Opus 4.7 and everything after it (Fable 5, Fable 5.1, Opus 5,
- * Sonnet 5). Haiku 4.5 (`claude-haiku-4-5*`) still accepts them.
- * Strings per ggui#706 (platform.claude.com, verified 2026-09-02).
- */
-export function anthropicRejectsSamplingParams(model: string): boolean {
-  return /^claude-(?:opus-4-7|opus-5|sonnet-5|fable-5)(?:-|$)/.test(
-    normalizeAnthropicModelId(model),
-  );
-}
-
-/**
- * Models that reject a FORCED tool choice (`tool_choice: any` / a named
- * tool) with HTTP 400: Claude Fable 5.1 (ggui#706). `auto` is accepted.
- */
-export function anthropicRejectsForcedToolChoice(model: string): boolean {
-  return /^claude-fable-5-1(?:-|$)/.test(normalizeAnthropicModelId(model));
-}
 
 /**
  * Decide what sampling reaches Anthropic for `model` given the caller's

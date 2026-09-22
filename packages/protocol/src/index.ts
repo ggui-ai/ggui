@@ -82,6 +82,7 @@ export * from "./types/llm";
 export * from "./types/refusal-codes";
 export * from "./types/domain-error-codes";
 export * from "./types/llm-route";
+export * from "./types/anthropic-model-rules";
 export * from "./types/interface-context";
 export * from "./types/host-context";
 export * from "./types/lifecycle";
