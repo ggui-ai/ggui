@@ -440,6 +440,13 @@ export function handleAuthorizationServerMetadata(
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'], // PKCE-only, no client_secret
     scopes_supported: ['mcp'],
+    // RFC 9207 / ggui#1270: every authorization response this AS sends
+    // carries `iss`. Advertising it obliges EVERY path that redirects to a
+    // client's redirect_uri — including an operator's `consentUrl` page on
+    // its own error redirect — to carry `iss` too (the 302 hands that page
+    // the value as `mcp_origin`); a conforming client rejects a response
+    // without it once this is true.
+    authorization_response_iss_parameter_supported: true,
   });
 }
 
@@ -663,7 +670,8 @@ export async function handleAuthorizeGet(
  *      `lookupUser` binding.
  *   3. On success: write {code, accessToken=key, codeChallenge,
  *      redirectUri, clientId} to storage. 5-minute TTL.
- *   4. Redirect to `redirect_uri?code=<code>&state=<state>`.
+ *   4. Redirect to `redirect_uri?code=<code>&state=<state>&iss=<issuer>`
+ *      (RFC 9207; `issuer` byte-identical to the metadata's, ggui#1270).
  *   5. On bad key: re-render the page with an error message (preserves
  *      OAuth params).
  */
@@ -783,12 +791,17 @@ export async function handleAuthorizePost(
     // only thing that lags.
   }
 
-  // Build redirect URL — preserve the client's `state`.
+  // Build redirect URL — preserve the client's `state`, and name the
+  // issuer (RFC 9207, ggui#1270): the SAME `resolveIssuerUrl` value the
+  // metadata publishes as `issuer`, because a client compares the two
+  // by simple string comparison with no normalization. The mix-up
+  // defence: a code only goes to the token endpoint of the AS whose
+  // metadata the client recorded.
   const redirectUrl = new URL(params['redirect_uri']!);
   redirectUrl.searchParams.set('code', code);
   if (params['state']) redirectUrl.searchParams.set('state', params['state']);
+  redirectUrl.searchParams.set('iss', resolveIssuerUrl(req, config.issuerUrl));
   res.redirect(302, redirectUrl.toString());
-  void config; // Reserved for future per-issuer overrides.
 }
 
 /**

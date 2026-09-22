@@ -203,3 +203,63 @@ describe('ggui#1174 — the consent page names WHO is asking and WHERE the code 
     expect(html).toContain('&lt;img');
   });
 });
+
+// ggui#1270 — RFC 9207 `iss` on the authorization response (MCP authorization 2026-07-28,
+// "Authorization Response Validation": an AS SHOULD include `iss`, and one that does MUST advertise
+// `authorization_response_iss_parameter_supported: true`; clients compare it to the issuer they
+// recorded from the metadata with SIMPLE string comparison — no normalization). So the value must be
+// byte-identical to the metadata's `issuer`, which both sides take from one function.
+describe('ggui#1270 — the authorization response names its issuer (RFC 9207)', () => {
+  let fx: Fx;
+  afterEach(async () => { await fx.server.close(); });
+
+  async function metadataIssuer(f: Fx): Promise<{ issuer: string; flag: unknown }> {
+    const md = (await (await fetch(`${f.url}/.well-known/oauth-authorization-server`)).json()) as Record<string, unknown>;
+    return { issuer: String(md['issuer']), flag: md['authorization_response_iss_parameter_supported'] };
+  }
+
+  it('the metadata advertises authorization_response_iss_parameter_supported: true', async () => {
+    fx = await boot();
+    expect((await metadataIssuer(fx)).flag).toBe(true);
+  });
+
+  it('the success redirect carries iss byte-identical to the metadata issuer, beside code and state', async () => {
+    fx = await boot();
+    const { issuer } = await metadataIssuer(fx);
+    const reg = await register(fx, { redirect_uris: [GOOD] });
+    const { challenge } = pkce();
+    const authz = await authorize(fx, { response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: GOOD, code_challenge: challenge, code_challenge_method: 'S256', state: 's9', api_key: 'devAllowAllKey' });
+    const loc = new URL(authz.headers.get('location')!);
+    expect(loc.searchParams.get('code')).toBeTruthy();
+    expect(loc.searchParams.get('state')).toBe('s9');
+    expect(loc.searchParams.get('iss')).toBe(issuer);
+    expect(issuer).toBe('https://mcp.example.test');
+  });
+
+  it('with no configured issuerUrl (derived from the request), iss still equals what the metadata says for the same host', async () => {
+    fx = await bootUnconfiguredIssuer();
+    const { issuer } = await metadataIssuer(fx);
+    const reg = await register(fx, { redirect_uris: [GOOD] });
+    const { challenge } = pkce();
+    const authz = await authorize(fx, { response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: GOOD, code_challenge: challenge, code_challenge_method: 'S256', api_key: 'devAllowAllKey' });
+    expect(new URL(authz.headers.get('location')!).searchParams.get('iss')).toBe(issuer);
+  });
+
+  it('the hosted consent 302 hands the page mcp_origin = the metadata issuer — the value its own error redirect (Cancel → access_denied) must echo as iss', async () => {
+    fx = await boot('https://consent.example/oauth/consent');
+    const { issuer } = await metadataIssuer(fx);
+    const reg = await register(fx, { redirect_uris: [GOOD] });
+    const { challenge } = pkce();
+    const q = new URLSearchParams({ response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: GOOD, code_challenge: challenge, code_challenge_method: 'S256' });
+    const res = await fetch(`${fx.url}/oauth/authorize?${q.toString()}`, { redirect: 'manual' });
+    expect(new URL(res.headers.get('location')!).searchParams.get('mcp_origin')).toBe(issuer);
+  });
+});
+
+async function bootUnconfiguredIssuer(): Promise<Fx> {
+  const server = createGguiServer({ logger: silentLogger, oauth: {} });
+  const httpServer = await server.listen(0, '127.0.0.1');
+  const addr = httpServer.address();
+  if (!addr || typeof addr === 'string') throw new Error('no address');
+  return { server, url: `http://127.0.0.1:${addr.port}` };
+}
