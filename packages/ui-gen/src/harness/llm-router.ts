@@ -47,6 +47,7 @@ import {
   createDenyingIntercept,
   createLoginToolServer,
   imageUserMessage,
+  LOGIN_REQUIRED_TOOL_INSTRUCTION,
   type InterceptedToolCall,
   type LoginSdk,
 } from './claude-code-login-query.js';
@@ -1144,7 +1145,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
             prompt: userPrompt,
             options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
           }),
-          { intercepted: [], kind: "callText", log: console.log, warn: console.warn },
+          { intercepted: [], kind: "callText", choice: "none", log: console.log, warn: console.warn },
         ),
       );
       const usage = turn.result.usage;
@@ -1204,7 +1205,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
             prompt: imageUserMessage(userPrompt, image),
             options: buildLoginQueryOptions({ model: resolvedModel, systemPrompt }),
           }),
-          { intercepted: [], kind: "callVision", log: console.log, warn: console.warn },
+          { intercepted: [], kind: "callVision", choice: "none", log: console.log, warn: console.warn },
         ),
       );
       const usage = turn.result.usage;
@@ -1252,11 +1253,11 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
     const traceId = newLlmTraceId();
     const startedAt = Date.now();
     const resolvedModel = this.resolveModel(model);
-    if (toolChoice === 'required') {
-      console.warn(
-        `[claude-code-login] callTools: the Agent SDK has no tool_choice surface; caller's 'required' is reported as 'auto'`,
-      );
-    }
+    // ggui#1273 — the Agent SDK has no tool_choice; 'required' is implemented
+    // as rnd's instruction on the USER prompt (never the system prompt) and
+    // disclosed as instructed-not-enforced: appliedToolChoice stays 'auto'.
+    const sentUserPrompt =
+      toolChoice === 'required' ? `${userPrompt}\n\n${LOGIN_REQUIRED_TOOL_INSTRUCTION}` : userPrompt;
     try {
       const turn = await this.apiCall(() => {
         // Fresh per attempt: the SDK connects the server instance per query().
@@ -1264,14 +1265,14 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
         const server = createLoginToolServer(sdk, tools);
         return collectLoginTurn(
           sdk.query({
-            prompt: userPrompt,
+            prompt: sentUserPrompt,
             options: buildLoginQueryOptions({
               model: resolvedModel,
               systemPrompt,
               tools: { server, canUseTool: createDenyingIntercept(intercepted) },
             }),
           }),
-          { intercepted, kind: "callTools", log: console.log, warn: console.warn },
+          { intercepted, kind: "callTools", choice: toolChoice === 'required' ? "required:instructed" : "auto", log: console.log, warn: console.warn },
         );
       });
       const usage = turn.result.usage;
@@ -1293,7 +1294,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
         model: resolvedModel,
         kind: 'callTools',
         systemPrompt,
-        userPrompt,
+        userPrompt: sentUserPrompt,
         tools: summarizeTools(tools),
         result: {
           inputTokens: usage.input_tokens,
@@ -1322,7 +1323,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
         model: resolvedModel,
         kind: 'callTools',
         systemPrompt,
-        userPrompt,
+        userPrompt: sentUserPrompt,
         tools: summarizeTools(tools),
         error: { message: e instanceof Error ? e.message : String(e) },
       });

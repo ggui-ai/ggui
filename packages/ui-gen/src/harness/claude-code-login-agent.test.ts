@@ -30,6 +30,8 @@ import type {
   BetaUsage,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { isRecord, type JsonObject } from "@ggui-ai/protocol";
+import { createHash } from "node:crypto";
+import { LOGIN_REQUIRED_TOOL_INSTRUCTION } from "./claude-code-login-query.js";
 import type { LLMToolDef } from "../llm.js";
 
 /**
@@ -369,7 +371,8 @@ describe("callTools — one query() carrying the carve-out", () => {
       "required"
     );
     const { prompt, options } = fake.calls[0]!;
-    expect(prompt).toBe("user prompt");
+    // ggui#1273 (rnd's ruling): under 'required' the client appends its instruction to the USER prompt.
+    expect(prompt).toBe(`user prompt\n\n${LOGIN_REQUIRED_TOOL_INSTRUCTION}`);
     expect(options.systemPrompt).toBe("SYSTEM ZEBRA-7");
     expect(options.model).toBe(MODEL);
     expect(options.maxTurns).toBe(1);
@@ -693,5 +696,62 @@ describe("per-call usage line (ggui#1273)", () => {
     expect(lines[0]).toContain("kind=callText");
     expect(lines[1]).toContain("kind=callVision");
     expect(lines[1]).toContain("input=164");
+  });
+});
+
+// ── ggui#1273 — the login client IMPLEMENTS the router's `'required'` contract
+//    (rnd's ruling: not a triad change). The raw arm's `tool_choice: any` is
+//    in-context forcing; the SDK has no such parameter, so the client appends
+//    rnd's fixed instruction to the call's USER prompt, only under 'required'.
+
+describe("toolChoice 'required' → the client's instruction (ggui#1273, rnd's ruling)", () => {
+  it("the instruction is rnd's wording, byte for byte — one shot, a new wording is a new pre-registration", () => {
+    expect(Buffer.byteLength(LOGIN_REQUIRED_TOOL_INSTRUCTION, "utf8")).toBe(120);
+    expect(createHash("sha256").update(LOGIN_REQUIRED_TOOL_INSTRUCTION, "utf8").digest("hex")).toBe(
+      "dceccb2ff9dc87a0c3cb0f34b0b1253ce5417e81408b79c0f8a6882981fd6e3e"
+    );
+  });
+
+  it("'required' appends it to the USER prompt, verbatim, after the caller's prompt", async () => {
+    queue(happyPath);
+    await loginAgent().callTools(MODEL, "sys", "the user prompt", [APPLY], "required");
+    expect(fake.calls[0]?.prompt).toBe(`the user prompt\n\n${LOGIN_REQUIRED_TOOL_INSTRUCTION}`);
+  });
+
+  it("'auto' sends the caller's user prompt unchanged — no instruction", async () => {
+    queue(happyPath);
+    await loginAgent().callTools(MODEL, "sys", "the user prompt", [APPLY], "auto");
+    expect(fake.calls[0]?.prompt).toBe("the user prompt");
+  });
+
+  it("the systemPrompt is byte-identical under 'required' and 'auto' — the triad is untouched", async () => {
+    queue(happyPath, happyPath);
+    await loginAgent().callTools(MODEL, "SYSTEM TEXT", "u", [APPLY], "required");
+    await loginAgent().callTools(MODEL, "SYSTEM TEXT", "u", [APPLY], "auto");
+    expect(fake.calls[0]?.options.systemPrompt).toBe("SYSTEM TEXT");
+    expect(fake.calls[1]?.options.systemPrompt).toBe("SYSTEM TEXT");
+  });
+
+  it("disclosure: appliedToolChoice stays 'auto' (instructed, not enforced) and the usage line says which", async () => {
+    queue(happyPath, happyPath);
+    const required = await loginAgent().callTools(MODEL, "s", "u", [APPLY], "required");
+    await loginAgent().callTools(MODEL, "s", "u", [APPLY], "auto");
+    expect(required.appliedToolChoice).toBe("auto");
+    const lines = logs.filter((l) => l.includes("[claude-code-login] usage "));
+    expect(lines[0]).toContain("choice=required:instructed");
+    expect(lines[1]).toContain("choice=auto");
+  });
+
+  it("callText has no tool choice: its usage line says choice=none and its prompt is unchanged", async () => {
+    queue({
+      messages: [
+        init("none"),
+        assistant([text("hi")], "end_turn"),
+        success(resultUsage({ input: 3, output: 1 }), "hi"),
+      ],
+    });
+    await loginAgent().callText(MODEL, "s", "the text prompt");
+    expect(fake.calls[0]?.prompt).toBe("the text prompt");
+    expect(logs.find((l) => l.includes("[claude-code-login] usage "))).toContain("choice=none");
   });
 });

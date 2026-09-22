@@ -385,7 +385,33 @@ export interface CollectedLoginTurn {
   readonly result: SDKResultMessage;
 }
 
+/**
+ * The login client's implementation of the router's `toolChoice:
+ * 'required'` (ggui#1273). The raw client sends `tool_choice: any`, which
+ * the API enforces in context (the model cannot emit text before the
+ * call); the Agent SDK has no such parameter, and without it the model
+ * wrote a preamble before the tool call on the login arm (Exp 009b:
+ * ~76% of the arm's excess output). So under `'required'` — and ONLY
+ * then — the client appends this to the call's USER prompt; the system
+ * prompt, the generation triad's text, is never touched. It is an
+ * instruction, not enforcement: `appliedToolChoice` stays `'auto'` and the
+ * usage line reads `choice=required:instructed`.
+ *
+ * Wording ruled by ggui-team-rnd, verbatim (120 bytes, sha256
+ * dceccb2ff9dc87a0c3cb0f34b0b1253ce5417e81408b79c0f8a6882981fd6e3e, pinned
+ * in the test). It is measured ONCE under Exp 009's bars: a different
+ * wording is a new pre-registered experiment, never a re-run.
+ */
+export const LOGIN_REQUIRED_TOOL_INSTRUCTION =
+  "Respond only with tool calls: do not write any text before, between or after them. Text outside a tool call is not read.";
+
 export interface CollectLoginTurnOptions {
+  /**
+   * How the caller's tool choice reached the model, named on the usage
+   * line: `required:instructed` (the instruction above was appended),
+   * `auto`, or `none` for calls that offer no tools.
+   */
+  readonly choice: "required:instructed" | "auto" | "none";
   /** Which router call this turn serves — named on the per-call usage line. */
   readonly kind: "callText" | "callTools" | "callVision";
   /** What the intercept saw, to cross-check against the stream's blocks. */
@@ -475,7 +501,7 @@ export async function collectLoginTurn(
     `[claude-code-login] usage kind=${opts.kind} input=${usage.input_tokens} output=${usage.output_tokens} ` +
       `cacheRead=${usage.cache_read_input_tokens} cacheCreated=${usage.cache_creation_input_tokens} ` +
       `thinking=${thinkingTokens} thinkingBlocks=${thinkingBlocks} textChars=${text.length} ` +
-      `toolCalls=${toolCalls.length} stop=${result.stop_reason ?? "none"}`
+      `toolCalls=${toolCalls.length} stop=${result.stop_reason ?? "none"} choice=${opts.choice}`
   );
 
   const streamSaw = describeCalls(toolCalls);
