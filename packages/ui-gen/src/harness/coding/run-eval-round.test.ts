@@ -387,13 +387,18 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
 
   // ggui#1248 — the in-loop visual judge runs on a VISION provider, never on the generation's by
   // inheritance, and whatever the judge leg does the round survives it (the runtime probe must run).
-  it("an OpenAI lane's visual leg is SKIPPED with the reason: the judge is never called, and the round does not take the thrown path (ggui#1248)", async () => {
+  it("an OpenAI lane's visual JUDGE is SKIPPED with the reason: the judge is never called (its fit half runs alone), and the round does not take the thrown path (ggui#1248)", async () => {
     let judged = 0;
+    let fitMeasured = 0;
     const fakeVisualMod: typeof realVisualEvaluator = {
       ...realVisualEvaluator,
       runVisualEval: () => {
         judged += 1;
         return Promise.resolve({ issues: [], coverage: { status: 'ran' } });
+      },
+      runVisualFit: () => {
+        fitMeasured += 1;
+        return Promise.resolve({ status: 'measured', issues: [], readings: [] });
       },
     };
     const { ctx, input } = await buildCtx({ enabled: true, canvases: ['xs-chat-card'] }, fakeVisualMod);
@@ -401,6 +406,7 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
     const round = await runEvalRound({ ...ctx, visualEvalAgent: { provider: 'openai', model: 'gpt-6-astra' } }, input);
 
     expect(judged).toBe(0);
+    expect(fitMeasured).toBe(1);
     expect(round.evalResult?.visualCoverage?.status).toBe('skipped');
     expect(round.evalResult?.visualCoverage?.reason).toContain("'openai'");
     expect(round.evalResult?.runtimeProbe?.reason ?? '').not.toContain('eval round threw');

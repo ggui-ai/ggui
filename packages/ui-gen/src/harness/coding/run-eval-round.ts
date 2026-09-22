@@ -29,7 +29,13 @@ import { runCheck } from "../index.js";
 import { isRecoverableRenderCrash } from "../check/runtime-render/index.js";
 import type { Harness } from "../types-public.js";
 import type { AgentSpec, SingleComponentParams } from "../runtime.js";
-import type { VisualEvalOutcome } from "../../evaluation/visual-evaluator.js";
+import type {
+  CanvasFitReading,
+  VisualEvalContext,
+  VisualEvalOutcome,
+  VisualFitConfig,
+  VisualFitOutcome,
+} from "../../evaluation/visual-evaluator.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -159,25 +165,53 @@ const EVAL_ROUND_THREW_REASON = "eval round threw";
  * never takes its thrown path on account of the visual leg and the runtime
  * probe still runs — a bar that requires the probe decides on the probe, not
  * on a judge that could not be reached.
+ *
+ * The leg's FIT half does not need the judge (ggui#1195): the fit verdict is a
+ * frame at the declared box and a scroll height, so a no-vision lane with
+ * canvases runs `measureFit` alone. Its canvas-overflow fail rides the round's
+ * issues like the judge path's would — so the `[fit]` round the cap grants
+ * can fire on that lane — and the coverage still reads `skipped` for the judge,
+ * with what the fit half measured (or why it could not) appended. Without
+ * that half, a card taller than its declared chat box on such a lane was
+ * never told so in the loop, so the composition fix was never asked for.
  */
 function runVisualLeg(
   visualEvalAgent: AgentSpec,
   run: (provider: "claude" | "google") => Promise<VisualEvalOutcome>,
+  measureFit: (() => Promise<VisualFitOutcome>) | undefined,
 ): Promise<VisualEvalOutcome> {
   const provider = visionJudgeProvider(visualEvalAgent.provider);
   if (provider === undefined) {
-    return Promise.resolve({
+    const noJudge = `no vision judge for provider '${visualEvalAgent.provider}' (model ${visualEvalAgent.model}) — the in-loop visual judge runs on a vision provider (anthropic, google)`;
+    if (measureFit === undefined) {
+      return Promise.resolve({ issues: [], coverage: { status: "skipped", reason: noJudge } });
+    }
+    const notMeasured = (why: string): VisualEvalOutcome => ({
       issues: [],
-      coverage: {
-        status: "skipped",
-        reason: `no vision judge for provider '${visualEvalAgent.provider}' (model ${visualEvalAgent.model}) — the in-loop visual judge runs on a vision provider (anthropic, google)`,
-      },
+      coverage: { status: "skipped", reason: `${noJudge}; fit not measured: ${why}` },
     });
+    return measureFit().then(
+      (fit): VisualEvalOutcome =>
+        fit.status === "measured"
+          ? {
+              issues: fit.issues,
+              coverage: { status: "skipped", reason: `${noJudge}; fit measured without the judge: ${describeFitReadings(fit.readings)}` },
+            }
+          : notMeasured(fit.reason),
+      (e: unknown): VisualEvalOutcome => notMeasured(e instanceof Error ? e.message : String(e)),
+    );
   }
   return run(provider).catch((e: unknown): VisualEvalOutcome => ({
     issues: [],
     coverage: { status: "skipped", reason: `visual leg failed: ${e instanceof Error ? e.message : String(e)}` },
   }));
+}
+
+/** The fit half's receipt on the coverage: `xs-chat-card 384×516 content 535px (overflow)`, one per canvas. */
+function describeFitReadings(readings: readonly CanvasFitReading[]): string {
+  return readings
+    .map((r) => `${r.canvas} ${r.viewport.width}×${r.viewport.height} content ${r.contentHeight ?? "?"}px${r.overflow ? " (overflow)" : ""}`)
+    .join(", ");
 }
 
 const LOW_RISK_BYPASS_REASON =
@@ -497,6 +531,30 @@ export async function runEvalRound(
     let llmResult: (EvalResult & { inputTokens: number; outputTokens: number }) | null = null;
     let visualIssues: EvalIssue[] | null = null;
 
+    // The visual leg's page and frame — ONE value each, read by the judge and
+    // by its fit half alike, so both frame the same component the same way.
+    const visualContext: VisualEvalContext = {
+      compiledCode,
+      originalPrompt: userPrompt,
+      profile: harness.profile,
+      // The caller's theme, when named — the round paints what the app paints.
+      ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
+    };
+    const visualFrame: VisualFitConfig = {
+      // The in-loop visual round renders the same sample the runtime probe
+      // does (the caller's fixture) unless the config names its own.
+      sampleProps: visualEvaluation?.sampleProps ?? fixtureProps,
+      // Per-canvas judging (arm-neutral) — absent = single shot.
+      ...(visualEvaluation?.canvases !== undefined ? { canvases: visualEvaluation.canvases } : {}),
+      // ggui#1195 — the declared box per canvas (same-target with the composer).
+      ...(visualEvaluation?.canvasViewports !== undefined ? { canvasViewports: visualEvaluation.canvasViewports } : {}),
+    };
+    // The fit verdict is per canvas: a single-shot leg has no box to hold content against.
+    const measureFit =
+      visualMod && visualFrame.canvases !== undefined && visualFrame.canvases.length > 0
+        ? () => visualMod.runVisualFit(visualContext, visualFrame)
+        : undefined;
+
     const evalLlmStart = Date.now();
     const [llm, visual] = await Promise.all([
       llmEvalMod
@@ -532,40 +590,26 @@ export async function runEvalRound(
           )
         : null,
       visualMod
-        ? runVisualLeg(visualEvalAgent, (provider) => visualMod.runVisualEval(
-            {
-              compiledCode,
-              originalPrompt: userPrompt,
-              profile: harness.profile,
-              // The caller's theme, when named — the round paints what the app paints.
-              ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
-            },
-            {
-              provider,
-              model: visualEvalAgent.model,
-              passThreshold: visualThreshold,
-              // The in-loop visual round renders the same sample the runtime probe
-              // does (the caller's fixture) unless the config names its own.
-              sampleProps: visualEvaluation?.sampleProps ?? fixtureProps,
-              viewport: visualEvaluation?.viewport,
-              // Per-canvas judging (arm-neutral) — absent = single shot.
-              ...(visualEvaluation?.canvases !== undefined
-                ? { canvases: visualEvaluation.canvases }
-                : {}),
-              // ggui#1195 — the declared box per canvas (same-target with the composer).
-              ...(visualEvaluation?.canvasViewports !== undefined
-                ? { canvasViewports: visualEvaluation.canvasViewports }
-                : {}),
-              // #484/#489 — same threading as the LLM-eval leg above:
-              // the visual eval's multimodal call runs inside the same
-              // concurrent generation, so it needs the same routing
-              // override (never fall back to `process.env`) and the
-              // same provider-429-retry observer (retries reach the
-              // host application's structured log).
-              routeOverride: visualEvalAgent.routeOverride,
-              onRetry: visualEvalAgent.onRetry,
-            },
-          ))
+        ? runVisualLeg(
+            visualEvalAgent,
+            (provider) =>
+              visualMod.runVisualEval(visualContext, {
+                provider,
+                model: visualEvalAgent.model,
+                passThreshold: visualThreshold,
+                viewport: visualEvaluation?.viewport,
+                ...visualFrame,
+                // #484/#489 — same threading as the LLM-eval leg above:
+                // the visual eval's multimodal call runs inside the same
+                // concurrent generation, so it needs the same routing
+                // override (never fall back to `process.env`) and the
+                // same provider-429-retry observer (retries reach the
+                // host application's structured log).
+                routeOverride: visualEvalAgent.routeOverride,
+                onRetry: visualEvalAgent.onRetry,
+              }),
+            measureFit,
+          )
         : null,
     ]);
     evalLlmMs = Date.now() - evalLlmStart;

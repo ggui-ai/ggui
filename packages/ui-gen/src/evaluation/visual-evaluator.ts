@@ -787,6 +787,51 @@ export interface VisualEvalDetailed {
 }
 
 
+/**
+ * One canvas, framed: the box it is captured at (ggui#1195 — the DECLARED box
+ * when the order carried one, else the class box), the canvas's fit policy,
+ * the runtime's fit for the mount (ggui#1100 — fullscreen canvases fill, the
+ * inline card does not) and the capture. The judge path and the fit-only path
+ * ({@link runVisualFit}) frame through this ONE function, so a fit verdict
+ * reached without the judge is taken on the frame the judge would have seen.
+ */
+interface CanvasFrame {
+  readonly viewport: CanvasViewport;
+  readonly policy: CanvasFitPolicy;
+  readonly fit: 'fill' | undefined;
+  /** `true` when `canvasViewports` carried an entry for this canvas, whatever its value. */
+  readonly declared: boolean;
+  readonly attempt: ScreenshotAttempt;
+}
+
+async function frameCanvas(
+  bundledCode: string,
+  context: VisualEvalContext,
+  html: string,
+  canvas: CanvasClass,
+  canvasViewports: VisualEvalConfig['canvasViewports'],
+  deps: ScreenshotDeps,
+): Promise<CanvasFrame> {
+  const declaredBox = canvasViewports?.[canvas];
+  const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
+  const policy = canvasFitPolicy(canvas);
+  const fit = canvasFit(canvas);
+  const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit) : html;
+  const attempt = await captureScreenshotDetailed(canvasHtml, viewport, deps, policy.capture);
+  return { viewport, policy, fit, declared: declaredBox !== undefined, attempt };
+}
+
+/**
+ * The deterministic fit verdict on one frame (ggui#1027): the issue the
+ * canvas's policy gives an overflow, or `null` when the content fits, could
+ * not be measured, or the canvas scrolls by design.
+ */
+function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+  const contentHeight = frame.attempt.contentHeight;
+  if (contentHeight === null || contentHeight <= frame.viewport.height || frame.policy.overflow === 'none') return null;
+  return canvasOverflowIssue(canvas, frame.viewport, contentHeight, frame.policy.overflow);
+}
+
 /** One judge call parsed, retried ONCE on a malformed answer (#1017); the FIRST reason is kept verbatim. */
 type JudgedAnswer =
   | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
@@ -893,14 +938,8 @@ export async function runVisualEvaluationDetailed(
     const perCanvas: CanvasVisualResult[] = [];
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
-      // ggui#1195 — the declared box when the order carried one, else the class box.
-      const declaredBox = config.canvasViewports?.[canvas];
-      const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
-      const policy = canvasFitPolicy(canvas);
-      // ggui#1100: the page is composed per canvas with the runtime's fit — fullscreen canvases fill, the inline card does not.
-      const fit = canvasFit(canvas);
-      const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit) : html;
-      const attempt = await captureScreenshotDetailed(canvasHtml, viewport, deps, policy.capture);
+      const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps);
+      const { viewport, policy, fit, attempt } = frame;
       const screenshot = attempt.png;
       if (!screenshot) {
         const unavailableReason = attempt.reason ?? 'no browser available';
@@ -937,8 +976,9 @@ export async function runVisualEvaluationDetailed(
       // The fit verdict (ggui#1027): deterministic, in the judge's issue channel.
       const contentHeight = attempt.contentHeight;
       const overflow = contentHeight !== null && contentHeight > viewport.height;
-      if (contentHeight !== null && contentHeight > viewport.height && policy.overflow !== 'none') {
-        result.issues.push(canvasOverflowIssue(canvas, viewport, contentHeight, policy.overflow));
+      const fitIssue = fitVerdict(canvas, frame);
+      if (fitIssue !== null) {
+        result.issues.push(fitIssue);
         if (policy.overflow === 'fail') result.passed = false;
       }
       perCanvasResults.push(result);
@@ -952,7 +992,7 @@ export async function runVisualEvaluationDetailed(
         overflow,
         judge: judgeRecord,
         ...(fit !== undefined ? { fit } : {}),
-        ...(declaredBox !== undefined ? { declared: true as const } : {}),
+        ...(frame.declared ? { declared: true as const } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
@@ -1008,6 +1048,11 @@ export async function runVisualEvaluationDetailed(
  * per-dimension means, `issues` = union (description prefixed with the
  * canvas), `critique` = one line per canvas, tokens summed.
  */
+/** A canvas's issue as the aggregate carries it: the description prefixed `[<canvas>]`. */
+function canvasScopedIssue(canvas: CanvasClass, issue: EvaluationIssue): EvaluationIssue {
+  return { ...issue, description: `[${canvas}] ${issue.description}` };
+}
+
 function aggregateCanvasResults(
   perCanvas: readonly CanvasVisualResult[],
   results: readonly EvaluationResult[],
@@ -1028,7 +1073,7 @@ function aggregateCanvasResults(
   let outputTokens = 0;
   results.forEach((r, i) => {
     const canvas = perCanvas[i]!.canvas;
-    for (const issue of r.issues) issues.push({ ...issue, description: `[${canvas}] ${issue.description}` });
+    for (const issue of r.issues) issues.push(canvasScopedIssue(canvas, issue));
     if (r.critique) critiques.push(`${canvas}: ${r.critique}`);
     inputTokens += r.inputTokens ?? 0;
     outputTokens += r.outputTokens ?? 0;
@@ -1236,16 +1281,102 @@ export async function runVisualEval(
     return { issues: [], coverage: { status: 'skipped', reason } };
   }
 
-  const issues: EvalIssue[] = (result.issues || []).map(issue => ({
-    tier: 2 as const,
-    result: (issue.severity === 'critical' ? 'fail' : 'warn') as 'fail' | 'warn',
-    category: 'visual' as const,
-    subcategory: issue.dimension,
-    severity: (issue.severity === 'critical' ? 'critical' : 'major') as 'critical' | 'major',
-    description: issue.description,
-    fix: issue.fix || '',
-  }));
+  const issues: EvalIssue[] = (result.issues || []).map(toEvalIssue);
   const summary = summarizeVisualResult(result);
   const coverage: VisualCoverage = { status: 'ran' };
   return summary === undefined ? { issues, coverage } : { issues, summary, coverage };
+}
+
+/** A judge-shaped issue as the harness's tier-2 issue: critical ⇒ a blocking fail, anything else ⇒ a warn. */
+function toEvalIssue(issue: EvaluationIssue): EvalIssue {
+  return {
+    tier: 2,
+    result: issue.severity === 'critical' ? 'fail' : 'warn',
+    category: 'visual',
+    subcategory: issue.dimension,
+    severity: issue.severity === 'critical' ? 'critical' : 'major',
+    description: issue.description,
+    fix: issue.fix || '',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The fit half without the judge
+// ---------------------------------------------------------------------------
+
+/** What the fit half reads — the frame's inputs; nothing about a judge. */
+export type VisualFitConfig = Pick<VisualEvalConfig, 'sampleProps' | 'canvases' | 'canvasViewports' | 'designSrcDir'>;
+
+/** One canvas's fit reading: the box, the measure, whether it overflowed — no score. */
+export interface CanvasFitReading {
+  readonly canvas: CanvasClass;
+  readonly viewport: CanvasViewport;
+  readonly contentHeight: number | null;
+  readonly overflow: boolean;
+  /** `true` when the order declared this canvas's box. */
+  readonly declared?: true;
+}
+
+/** `measured` = every canvas was framed (its fit issues, possibly none); `unavailable` = no verdict, with why. */
+export type VisualFitOutcome =
+  | { readonly status: 'measured'; readonly issues: EvalIssue[]; readonly readings: CanvasFitReading[] }
+  | { readonly status: 'unavailable'; readonly reason: string };
+
+/**
+ * The visual leg's deterministic half, taken WITHOUT the vision judge.
+ *
+ * The fit verdict needs a browser and nothing else: each canvas is framed at
+ * its box (the declared one when the order carried it), its scroll height is
+ * measured against the box's height, and the canvas's fit policy decides what
+ * an overflow earns — the same frame ({@link frameCanvas}), the same measure
+ * and the same issue ({@link fitVerdict}, canvas-scoped) as the judge path, so
+ * the two reach one verdict. What is absent is the score. A caller whose
+ * generation provider has no vision judge takes this half alone, so a chat
+ * card cut off at its declared box is still reported in the loop, where the
+ * round can buy the composition fix.
+ *
+ * Per-canvas only: without `canvases` there is no box to hold the content
+ * against, and the outcome is `unavailable`. A frame that cannot be taken is
+ * `unavailable` with the capture's reason — never a pass.
+ */
+export async function runVisualFit(
+  context: VisualEvalContext,
+  config: VisualFitConfig,
+  deps: ScreenshotDeps = {},
+): Promise<VisualFitOutcome> {
+  if (config.canvases === undefined || config.canvases.length === 0) {
+    return { status: 'unavailable', reason: 'no canvases — the fit verdict is taken per canvas' };
+  }
+  const designSrc = config.designSrcDir ?? resolve(resolveDesignPackageDir(), 'src');
+  let bundledCode: string;
+  try {
+    bundledCode = await bundleForRendering(context.compiledCode, config.sampleProps ?? {}, designSrc);
+  } catch (e) {
+    return { status: 'unavailable', reason: `bundle failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const html = buildRenderHTML(bundledCode, context.cssTokens);
+  const issues: EvalIssue[] = [];
+  const readings: CanvasFitReading[] = [];
+  for (const canvas of config.canvases) {
+    const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps);
+    if (!frame.attempt.png) {
+      return { status: 'unavailable', reason: `${frame.attempt.reason ?? 'no browser available'} at canvas ${canvas}` };
+    }
+    const contentHeight = frame.attempt.contentHeight;
+    const overflow = contentHeight !== null && contentHeight > frame.viewport.height;
+    const verdict = fitVerdict(canvas, frame);
+    if (verdict !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, verdict)));
+    readings.push({
+      canvas,
+      viewport: frame.viewport,
+      contentHeight,
+      overflow,
+      ...(frame.declared ? { declared: true as const } : {}),
+    });
+    console.log(
+      `[visual-fit] canvas=${canvas} ${frame.viewport.width}×${frame.viewport.height} ` +
+        `content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${frame.policy.overflow})` : ''} | no judge`,
+    );
+  }
+  return { status: 'measured', issues, readings };
 }
