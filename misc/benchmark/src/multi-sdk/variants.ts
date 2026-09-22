@@ -262,3 +262,40 @@ export function getGeneratorVariants(): BenchmarkVariant[] {
     },
   ];
 }
+
+/**
+ * Named arms that are NOT in the public matrix: they run only when a
+ * `--variant` names them, and never change the 11-arm default count the page
+ * publishes. Each is a registered experiment's arm, kept here so an experiment
+ * re-runs by id rather than by an ad-hoc flag.
+ *
+ * - `claude-fast-login` (Exp 009, ggui#1185): `claude-fast`'s exact model on
+ *   the machine's Claude Code login instead of a key — the arms differ in the
+ *   client only.
+ */
+export function getCandidateVariants(): BenchmarkVariant[] {
+  return [
+    {
+      id: 'claude-fast-login',
+      sdkName: 'claude',
+      tier: 'fast',
+      modelId: 'anthropic/claude-haiku-4-5',
+      claudeCodeLogin: true,
+    },
+  ];
+}
+
+/**
+ * The variants a run executes: no ids → the default matrix exactly; ids → the
+ * named arms, looked up across the default matrix AND the candidates, in the
+ * order given. An unknown id throws — a typo never silently shrinks a run.
+ */
+export function resolveRunVariants(ids: readonly string[]): BenchmarkVariant[] {
+  if (ids.length === 0) return getDefaultVariants();
+  const pool = new Map([...getDefaultVariants(), ...getCandidateVariants()].map((v) => [v.id, v] as const));
+  return ids.map((id) => {
+    const v = pool.get(id);
+    if (v === undefined) throw new Error(`unknown variant id '${id}' (known: ${[...pool.keys()].join(', ')})`);
+    return v;
+  });
+}

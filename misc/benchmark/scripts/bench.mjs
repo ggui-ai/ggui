@@ -346,7 +346,7 @@ const run = async () => {
   const { LocalStorage } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
   const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
-  const { getDefaultVariants } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
+  const { resolveRunVariants } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
   const {
     ClaudeRawAdapter,
     OpenAiRawAdapter,
@@ -372,9 +372,10 @@ const run = async () => {
   // Apply --think / --eval role overrides (NOT --model: the per-tier SKU on
   // each variant IS the coding model; overriding it would flatten the grid).
   const hasSharedRoles = Object.keys(sharedModelRoles).length > 0;
-  const variants = getDefaultVariants()
+  // No --variant = the default matrix; --variant may also name a candidate arm
+  // (variants.ts#getCandidateVariants — outside the public matrix). Unknown ids throw.
+  const variants = resolveRunVariants(variantIds)
     .filter((v) => providers.includes(v.sdkName) && tiers.includes(v.tier))
-    .filter((v) => variantIds.length === 0 || variantIds.includes(v.id))
     .map((v) => (hasSharedRoles ? { ...v, modelRoles: { ...v.modelRoles, ...sharedModelRoles } } : v));
 
   if (variants.length === 0) {

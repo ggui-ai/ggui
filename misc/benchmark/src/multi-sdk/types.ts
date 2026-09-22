@@ -39,6 +39,15 @@ export interface BenchmarkVariant {
   rendering?: RenderingContext;
   /** Planning mode: 'stuffed' (default) or 'agentic' (tool-calling loop) */
   planningMode?: 'stuffed' | 'agentic';
+  /**
+   * Claude only (ggui#1185 / Exp 009): run this arm on the machine's own
+   * Claude Code LOGIN instead of a key — the runner passes
+   * `routeOverride: { claudeCodeLogin: true }` to `dispatchGeneration`, and
+   * the harness builds its login client for the coding agent, the evaluator
+   * and the in-loop visual judge alike. Absent = the key path. Refused on any
+   * other provider.
+   */
+  claudeCodeLogin?: true;
 
   /**
    * UI generator slug. Identifies which registered `UiGenerator`

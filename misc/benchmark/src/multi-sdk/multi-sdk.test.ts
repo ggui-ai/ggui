@@ -20,7 +20,7 @@ import {
 import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost, resolveCostModelId } from './runner';
-import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants } from './variants';
+import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants, getCandidateVariants, resolveRunVariants } from './variants';
 import type { BenchmarkRunResult, PanelEvalResult, AestheticScores } from './types';
 import { AESTHETIC_PROMPT_VERSION_PANEL } from './post-eval';
 
@@ -434,6 +434,35 @@ describe('MODEL_REGISTRY', () => {
 // =============================================================================
 // Variants
 // =============================================================================
+
+describe('Candidate variants — named arms outside the public matrix (Exp 009 / #1185)', () => {
+  it('no candidate id collides with a default id, and none joins the 11-arm default matrix', () => {
+    const defaults = new Set(getDefaultVariants().map((v) => v.id));
+    const candidates = getCandidateVariants();
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const c of candidates) expect(defaults.has(c.id), c.id).toBe(false);
+    expect(getDefaultVariants()).toHaveLength(11);
+  });
+
+  it('the Exp 009 login arm is the raw arm\'s exact model on the claude adapter, differing only by claudeCodeLogin', () => {
+    const raw = getDefaultVariants().find((v) => v.id === 'claude-fast');
+    const login = getCandidateVariants().find((v) => v.id === 'claude-fast-login');
+    expect(raw).toBeDefined();
+    expect(login).toMatchObject({ sdkName: 'claude', tier: raw?.tier, modelId: raw?.modelId, claudeCodeLogin: true });
+  });
+
+  it('only claude candidates may carry claudeCodeLogin (the router refuses the login credential on any other provider)', () => {
+    for (const v of [...getDefaultVariants(), ...getCandidateVariants()]) {
+      if (v.claudeCodeLogin) expect(v.sdkName, v.id).toBe('claude');
+    }
+  });
+
+  it('resolveRunVariants: no --variant = the default matrix exactly; --variant may name default AND candidate ids; unknown ids are loud', () => {
+    expect(resolveRunVariants([]).map((v) => v.id)).toEqual(getDefaultVariants().map((v) => v.id));
+    expect(resolveRunVariants(['claude-fast', 'claude-fast-login']).map((v) => v.id)).toEqual(['claude-fast', 'claude-fast-login']);
+    expect(() => resolveRunVariants(['no-such-arm'])).toThrow(/no-such-arm/);
+  });
+});
 
 describe('Benchmark Variants', () => {
   it('default variants cover all 9 SDK × tier combos plus the two frontier arms — claude-frontier and openai-frontier (11)', () => {

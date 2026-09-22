@@ -251,6 +251,19 @@ export class BenchmarkRunner {
     // explicit error result below.
     const generatorSlug = resolveGeneratorSlug(variant);
 
+    if (variant.claudeCodeLogin === true && variant.sdkName !== "claude") {
+      return {
+        variant,
+        commit,
+        generation: null,
+        evaluation: null,
+        estimatedCostUsd: 0,
+        error: `variant ${variant.id}: claudeCodeLogin is Claude-only (sdkName ${variant.sdkName})`,
+        timestamp: new Date().toISOString(),
+        generator: resolveGeneratorSlug(variant),
+      };
+    }
+
     const adapter = this.resolveAdapter(variant);
     if (!adapter) {
       return {
@@ -402,6 +415,9 @@ export class BenchmarkRunner {
         await withTimeout(
           dispatchGeneration({
             provider: variant.sdkName,
+            // ggui#1185 / Exp 009: the login arm — the harness builds its
+            // Claude Code login client for every agent in the loop.
+            ...(variant.claudeCodeLogin === true ? { routeOverride: { claudeCodeLogin: true } } : {}),
             userPrompt: harnessUserPrompt,
             model: nativeModelId,
             tools,
