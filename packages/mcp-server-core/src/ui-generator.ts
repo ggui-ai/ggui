@@ -226,9 +226,6 @@ export interface UiGenerateInput {
 }
 
 /**
- * Metadata emitted alongside every result (success or failure) for telemetry.
- */
-/**
  * The engine's BUILD identity: values that change when the engine's code or
  * templates change and never with the request. Carried on
  * {@link GenerationMetadata.build}; absent when the engine does not report one.
@@ -246,6 +243,9 @@ export interface GeneratorBuild {
   readonly digests: Readonly<Record<string, string>>;
 }
 
+/**
+ * Metadata emitted alongside every result (success or failure) for telemetry.
+ */
 export interface GenerationMetadata {
   provider: LlmProvider;
   /**
