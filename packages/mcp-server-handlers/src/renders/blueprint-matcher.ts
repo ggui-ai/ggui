@@ -71,7 +71,6 @@ import {
 } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import { coverageGap, type CoverageGap } from './blueprint-coverage.js';
-import { MIN_SIMILARITY_SCORE } from '../blueprints/search-blueprints.js';
 
 /** An all-empty coverage gap — used for exact-key hits (canonical-key
  *  equality already implies full coverage) and for contract-less requests
@@ -163,13 +162,12 @@ export interface MatchBlueprintOptions {
   /** RAG top-K. Default 20 — balance between recall and prompt cost. */
   readonly topK?: number;
   /**
-   * Minimum cosine a candidate needs to reach the LLM judge. Default
-   * {@link MIN_SIMILARITY_SCORE} (0.3) — the same floor
-   * `ggui_search_blueprints` applies, so the path that serves a reuse is
-   * never looser than the path that only lists candidates. Applied PER
-   * CANDIDATE (ggui#1275): a candidate under the floor is never offered to
-   * the judge, so it can never become a reuse; when even top-1 is under
-   * it, the judge is skipped entirely and the rerank cost is saved.
+   * Minimum cosine a candidate needs to reach the LLM judge. Default 0.2
+   * (see the DEFAULT_MIN_COSINE note for why it is not
+   * `ggui_search_blueprints`' 0.3). Applied PER CANDIDATE (ggui#1275): a
+   * candidate under the floor is never offered to the judge, so it can
+   * never become a reuse; when even top-1 is under it, the judge is skipped
+   * entirely and the rerank cost is saved.
    */
   readonly minCosineForRerank?: number;
   /** LLM judge confidence threshold for treating a semantic-strategy decision as a hit. */
@@ -188,16 +186,24 @@ export interface MatchBlueprintOptions {
 }
 
 const DEFAULT_TOP_K = 20;
-// The cosine floor is the shared similarity floor, not a matcher-local
-// number (ggui#1275). It was loosened to 0.2 for Path-A on the argument
-// that over-proposal is safe because the agent disposes of every proposal.
-// Measured on a development deployment, the valve is weak — calling agents
-// confirmed 84 % of semantic proposals, and 2 of the 8 reuses between 0.2
-// and 0.3 were wrong — so the floor went back to the one number both paths
-// share.
-// Cost, stated rather than hidden: a short intent that is the same task in
-// fewer words can embed under 0.3 and now cold-generates.
-const DEFAULT_MIN_COSINE = MIN_SIMILARITY_SCORE;
+// The cosine gate before the judge. It is 0.2 and deliberately NOT
+// `ggui_search_blueprints`' 0.3, because the two numbers are not on one
+// scale: the retrieval query below embeds the request's intent ALONE
+// (`ragArg = { intent }`), while every stored vector embeds its contract
+// summary AND its intent (`composeEmbeddingInput(contract, intent)`). That
+// asymmetry (ggui#606) depresses every cosine this matcher sees. Measured
+// on a development deployment with the production embedder (ggui#1275): a
+// request with the same contract and a near-identical intent scored 0.29
+// here and 0.87 when the query carries the contract too. So a 0.3 gate on
+// this scale turns true matches away before the judge sees them.
+// 0.2 is the gate ggui#606's ranking probe ran under, with the judge
+// picking correctly; what the 0.2–0.3 band admits past the judge was
+// sampled once on dev and not calibrated: 8 reuses, 6 right (short
+// intents at 0.27–0.30) and 2 wrong, both on a blueprint with no cached
+// intent, which ggui#1275 (3) now keeps out of the judge entirely. The
+// gate is recalibrated when the query is composed like the stored side
+// (ggui#606, rnd's design and gate).
+const DEFAULT_MIN_COSINE = 0.2;
 // Loosened for Path-A: accept a semantic judge's pick more readily, so a
 // paraphrased / similar contract is reused instead of cold-generating.
 // Over-proposal is bounded by the agent decision step plus the COVERAGE_GAP

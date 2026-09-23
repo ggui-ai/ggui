@@ -253,7 +253,7 @@ describe('matchBlueprint — disableSemantic (per-app exact-only reuse, ggui#607
 
 describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
   // The mock embedder produces sine/cosine basis vectors that often
-  // land below 0.3 cosine across distinct text — fine for production
+  // land below the default gate across distinct text — fine for production
   // (real bge-small embeds differently) but not for these unit tests
   // where we want to exercise the LLM-rerank path. Drop the gate to
   // -1 so candidates always reach the judge; the gate behaviour
@@ -391,8 +391,8 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       },
       SCOPE,
       { intent: 'totally unrelated topic chunk' },
-      // Default minCosineForRerank=0.3 — mock embedder will produce
-      // a low cosine on disparate texts and the gate fires.
+      // An explicit near-1 gate — the mock embedder produces a low
+      // cosine on disparate texts, so the gate fires.
       { minCosineForRerank: 0.99 },
     );
     expect(judgeCalled).toBe(false);
@@ -1181,13 +1181,19 @@ describe('matchBlueprint — the cosine floor is per candidate (ggui#1275)', () 
   });
 });
 
-// ── ggui#1275 follow-up (2) — ONE similarity floor, 0.3, on both paths ──
+// ── ggui#1275 follow-up (2), revised — the handshake gate is 0.2, not the search tool's 0.3 ──
 //
-// rnd's verdict (c.5786466220): of the 8 dev semantic reuses under 0.3, 2
-// were wrong, and agents confirmed 84 % of semantic proposals — so the
-// proposal is usually served and the floor is the gate that matters. The
-// handshake matcher's default floor and `ggui_search_blueprints`' floor are
-// one constant, so the path that auto-serves is never the looser one.
+// The matcher's retrieval query embeds the request's intent ALONE, while
+// stored vectors embed contract summary + intent (ggui#606), so its cosines
+// sit on a depressed scale. Reproduced on a dev deployment with the
+// production embedder: the pair behind ggui#1275 (same contract, near-
+// identical intent) scored 0.29 on this scale and 0.87 with the contract in
+// the query. A 0.3 gate here turned that true match away before the judge
+// saw it, so the gate is back to 0.2 until the query is composed like the
+// stored side (ggui#606). rnd's earlier dev sample (c.5786466220: 8 reuses
+// between 0.2 and 0.3, 2 of them wrong) was taken on the same scale; both
+// wrong reuses were on a blueprint with no cached intent, which ggui#1275 (3)
+// now keeps out of the judge (the suite below).
 
 class MarkerEmbeddingProvider {
   readonly id = 'marker-1275-floor';
@@ -1226,13 +1232,26 @@ async function floorRegistry(cosines: ReadonlyMap<string, number>) {
   return { registry, ids };
 }
 
-describe('matchBlueprint — one similarity floor on both paths (ggui#1275)', () => {
-  it('the floor is 0.3, and it is the search tool’s own constant', () => {
+describe('matchBlueprint — the handshake gate is 0.2, not the search tool’s 0.3 (ggui#1275, ggui#606)', () => {
+  it('the search tool keeps its own 0.3 floor', () => {
     expect(MIN_SIMILARITY_SCORE).toBe(0.3);
   });
 
-  it('by default, a 0.29 candidate never reaches the judge and never becomes a reuse', async () => {
+  it('by default, a 0.29 candidate reaches the judge and can be reused (the ggui#1275 pair)', async () => {
     const { registry, ids } = await floorRegistry(new Map([['CHARLIE-INTENT', 0.29]]));
+    let judgeCalled = false;
+    const llm = stubLlm(() => {
+      judgeCalled = true;
+      return { matchId: ids.get('CHARLIE-INTENT') ?? null, confidence: 0.92, reason: 'same task, fewer words' };
+    });
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' });
+    expect(judgeCalled).toBe(true);
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') expect(result.cosine).toBeCloseTo(0.29, 5);
+  });
+
+  it('by default, a 0.19 candidate never reaches the judge and never becomes a reuse', async () => {
+    const { registry, ids } = await floorRegistry(new Map([['CHARLIE-INTENT', 0.19]]));
     let judgeCalled = false;
     const llm = stubLlm(() => {
       judgeCalled = true;
@@ -1244,16 +1263,16 @@ describe('matchBlueprint — one similarity floor on both paths (ggui#1275)', ()
     expect(result.reason).toMatch(/match-skip-low-cosine/);
   });
 
-  it('by default, a judge-preferred 0.29 candidate under a top-1 of 0.35 is not offered', async () => {
+  it('by default, a judge-preferred 0.19 candidate under a top-1 of 0.25 is not offered', async () => {
     const { registry, ids } = await floorRegistry(
       new Map([
-        ['DELTA-INTENT', 0.35],
-        ['CHARLIE-INTENT', 0.29],
+        ['DELTA-INTENT', 0.25],
+        ['CHARLIE-INTENT', 0.19],
       ]),
     );
     const offered: string[] = [];
     const llm = stubLlm(
-      { matchId: ids.get('CHARLIE-INTENT') ?? null, confidence: 0.92, reason: 'picked the 0.29 one' },
+      { matchId: ids.get('CHARLIE-INTENT') ?? null, confidence: 0.92, reason: 'picked the 0.19 one' },
       (u) => offered.push(u),
     );
     const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' });
@@ -1261,18 +1280,6 @@ describe('matchBlueprint — one similarity floor on both paths (ggui#1275)', ()
     expect(offered[0]).toContain(ids.get('DELTA-INTENT'));
     expect(offered[0]).not.toContain(ids.get('CHARLIE-INTENT'));
     expect(result.strategy).not.toBe('semantic');
-  });
-
-  it('by default, a candidate just above the shared floor still reaches the judge and can be reused', async () => {
-    const cosine = MIN_SIMILARITY_SCORE + 0.005;
-    const { registry, ids } = await floorRegistry(new Map([['ECHO-INTENT', cosine]]));
-    const result = await matchBlueprint(
-      { registry, llm: stubLlm({ matchId: ids.get('ECHO-INTENT') ?? null, confidence: 0.9, reason: 'close enough' }) },
-      SCOPE,
-      { intent: 'a query intent' },
-    );
-    expect(result.strategy).toBe('semantic');
-    if (result.strategy === 'semantic') expect(result.cosine).toBeCloseTo(cosine, 5);
   });
 });
 
@@ -1335,7 +1342,7 @@ describe('matchBlueprint — a stand-in intent never reaches the judge (ggui#127
     const { registry } = await fallbackRegistry(
       new Map([
         ['FOXTROT-INTENT', 0.6],
-        ['HOTEL-INTENT', 0.2],
+        ['HOTEL-INTENT', 0.15], // under the handshake's 0.2 gate
       ]),
       new Set(['FOXTROT-INTENT']),
     );

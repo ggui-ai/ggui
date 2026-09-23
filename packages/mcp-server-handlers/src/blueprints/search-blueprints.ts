@@ -67,12 +67,16 @@ import {
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 
 /**
- * The similarity floor for blueprint reuse, on both paths: this tool
- * drops a hit under it, and the handshake matcher (`matchBlueprint`)
- * never offers its judge a candidate under it (ggui#1275) — one number,
- * so the path that serves a reuse is never looser than the path that
- * only lists candidates. Below this is noise; callers that want stricter
- * matching post-filter by `score`.
+ * The similarity floor for this tool: a hit under it is dropped. Below
+ * this is noise; callers that want stricter matching post-filter by
+ * `score`.
+ *
+ * The handshake matcher (`matchBlueprint`) gates its judge with its own
+ * number (0.2), not this one, because the two are not on one scale: the
+ * matcher's retrieval query embeds a request's intent without its
+ * contract while stored vectors embed both, which depresses its cosines
+ * (ggui#606, ggui#1275). One shared number returns when the matcher's
+ * query is composed like the stored side.
  */
 export const MIN_SIMILARITY_SCORE = 0.3;
 
