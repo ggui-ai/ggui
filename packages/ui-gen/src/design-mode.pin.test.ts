@@ -24,7 +24,6 @@
  * The pitfalls block is env-gated (`GGUI_PITFALLS`); the digests assume
  * both env vars are unset, which the `beforeAll` enforces.
  */
-import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -32,54 +31,20 @@ import { PIN_FIXTURES } from './pin-fixtures.js';
 import { buildSystemPrompt as buildProductionPrompt } from './harness/runtime.js';
 import { generateBoilerplate } from './boilerplate/generate.js';
 import { buildSystemPrompt as buildSkeletonPrompt } from './boilerplate/system-prompt.js';
+import {
+  generatorBuild,
+  renderBoilerplateTemplates,
+  renderPromptTemplates,
+  templateSha256 as sha256,
+} from './generator-build.js';
 
-const JOIN = '\n<<<pin-fixture-boundary>>>\n';
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-/** Render the production prompt stack for every fixture (positional wrapper — the pre-`designMode` signature). */
-function renderConstrainedPrompts(): string {
-  return PIN_FIXTURES.map((f) =>
-    buildProductionPrompt(f.userRequest, f.shellType, f.screen),
-  ).join(JOIN);
-}
-
-function renderConstrainedBoilerplates(): string {
-  return PIN_FIXTURES.map((f) =>
-    generateBoilerplate(f.userRequest, f.contract, f.shellType, f.screen),
-  ).join(JOIN);
-}
-
-/** Free-mode prompt for every fixture — designMode threaded positionally; canvas derived from shell × screen. */
-function renderFreePrompts(): string {
-  return PIN_FIXTURES.map((f) =>
-    buildProductionPrompt(
-      f.userRequest,
-      f.shellType,
-      f.screen,
-      undefined,
-      undefined,
-      undefined,
-      'free',
-    ),
-  ).join(JOIN);
-}
-
-function renderFreeBoilerplates(): string {
-  return PIN_FIXTURES.map((f) =>
-    generateBoilerplate(
-      f.userRequest,
-      f.contract,
-      f.shellType,
-      f.screen,
-      undefined,
-      undefined,
-      'free',
-    ),
-  ).join(JOIN);
-}
+// The canonical renders (and the hash) live with the runtime build identity
+// (`generator-build.ts`, ggui#1280) — the pin hashes the SAME functions the
+// generator stamps, so the recorded constants and the runtime key cannot drift.
+const renderConstrainedPrompts = (): string => renderPromptTemplates('constrained');
+const renderConstrainedBoilerplates = (): string => renderBoilerplateTemplates('constrained');
+const renderFreePrompts = (): string => renderPromptTemplates('free');
+const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 
 // ── Recorded from the UNMODIFIED code (see header) ──────────────────────
 // Re-recorded 2026-09-10 for ggui#989: the prompts' colour vocabulary
@@ -423,5 +388,16 @@ describe('INVARIANT 1 — constrained triad is byte-identical to the pre-designM
       console.log(`CONSTRAINED_BOILERPLATE_SHA256=${digest}`);
     }
     expect(digest).toBe(CONSTRAINED_BOILERPLATE_SHA256);
+  });
+});
+
+describe('the runtime build identity IS the pinned digest (ggui#1280)', () => {
+  it('under the default env, generatorBuild() stamps exactly the four recorded constants', () => {
+    const constrained = generatorBuild('constrained');
+    const free = generatorBuild('free');
+    expect(constrained.digests.promptTemplateSha256).toBe(CONSTRAINED_PROMPT_SHA256);
+    expect(constrained.digests.boilerplateTemplateSha256).toBe(CONSTRAINED_BOILERPLATE_SHA256);
+    expect(free.digests.promptTemplateSha256).toBe(FREE_PROMPT_SHA256);
+    expect(free.digests.boilerplateTemplateSha256).toBe(FREE_BOILERPLATE_SHA256);
   });
 });

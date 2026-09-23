@@ -56,6 +56,7 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import { createGeneratorTools } from './adapters/index.js';
 import { dispatchGeneration } from './adapters/generation-dispatch.js';
+import { generatorBuild } from './generator-build.js';
 import { hasProfile } from './boilerplate/styling-profile.js';
 import { effortDials } from './effort.js';
 import type { ProviderName } from './adapters/types.js';
@@ -68,6 +69,7 @@ import {
 } from './contract-context.js';
 import type { RenderingContext } from './contract-context.js';
 import type { DesignMode } from './design-mode.js';
+import { DEFAULT_DESIGN_MODE } from './design-mode.js';
 import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
 import type { QualityConfig } from './evaluation/types-public.js';
 import type { EvaluationConfig } from './evaluation/types.js';
@@ -421,6 +423,8 @@ export function createUiGenerator(
           latencyMs: Date.now() - startedAt,
           cacheHit: false,
           attempts: result.turnsUsed,
+          // ggui#1280 — the build that made this generation (template keys, never per-request).
+          build: generatorBuild(designMode ?? DEFAULT_DESIGN_MODE),
           // Prompt-cache counters are provider-specific (Claude reports
           // them; others omit). Pass through truthfully — absent on the
           // adapter result stays absent here, never defaulted to 0.
@@ -461,6 +465,8 @@ export function createUiGenerator(
             outputTokens: 0,
             latencyMs: Date.now() - startedAt,
             cacheHit: false,
+            // ggui#1280 — a failed generation still names the build that failed.
+            build: generatorBuild(designMode ?? DEFAULT_DESIGN_MODE),
           },
         };
       } finally {

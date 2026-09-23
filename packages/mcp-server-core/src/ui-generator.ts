@@ -228,6 +228,24 @@ export interface UiGenerateInput {
 /**
  * Metadata emitted alongside every result (success or failure) for telemetry.
  */
+/**
+ * The engine's BUILD identity: values that change when the engine's code or
+ * templates change and never with the request. Carried on
+ * {@link GenerationMetadata.build}; absent when the engine does not report one.
+ */
+export interface GeneratorBuild {
+  /** The engine package's version when readable at runtime; absent, never guessed, when not. */
+  readonly version?: string;
+  /** Engine-defined label for the configuration the digests were computed under. Opaque to consumers, like `routeKind`. */
+  readonly mode?: string;
+  /**
+   * Content digests (lowercase hex sha256) that identify the build. Keys are
+   * the engine's own, scoped by `generator`; consumers compare and group by
+   * value, and only a consumer that knows the engine reads a key.
+   */
+  readonly digests: Readonly<Record<string, string>>;
+}
+
 export interface GenerationMetadata {
   provider: LlmProvider;
   /**
@@ -266,6 +284,12 @@ export interface GenerationMetadata {
    * Generators that route through a single path may omit the field.
    */
   routeKind?: string;
+  /**
+   * The engine's BUILD identity: values that change when the engine's code
+   * or templates change and never with the request. Absent when the engine
+   * does not report one.
+   */
+  readonly build?: GeneratorBuild;
 }
 
 /**

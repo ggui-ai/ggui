@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { UiGenerateInput } from '@ggui-ai/mcp-server-core';
 import type { GenerationResult } from './harness/result-types.js';
+import { generatorBuild } from './generator-build.js';
 
 // Mock the dispatch seam. The factory imports `dispatchGeneration`
 // from this module path; the mock returns a controllable result so we
@@ -106,5 +107,35 @@ describe('createUiGenerator — cache-token metadata passthrough', () => {
     // on the metadata, never defaulted to 0.
     expect(out.metadata.cacheReadTokens).toBeUndefined();
     expect(out.metadata.cacheCreationTokens).toBeUndefined();
+  });
+});
+
+// ggui#1280 — every generation names the BUILD that made it (the digests are
+// template keys, never per-request), so a reused render can be told apart from
+// a fresh one by the triad build that minted it.
+describe('createUiGenerator — the build identity rides the metadata (ggui#1280)', () => {
+  beforeEach(() => {
+    dispatchMock.mockReset();
+  });
+
+  it('a default generation stamps the constrained build', async () => {
+    dispatchMock.mockResolvedValue(fakeResult());
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    expect(out.metadata?.build).toEqual(generatorBuild('constrained'));
+    expect(out.metadata?.build?.mode).toBe('constrained');
+  });
+
+  it('a free-design generation stamps the free build', async () => {
+    dispatchMock.mockResolvedValue(fakeResult());
+    const out = await createUiGenerator({ designMode: 'free' }).generate(fakeInput());
+    expect(out.metadata?.build).toEqual(generatorBuild('free'));
+  });
+
+  it('a harness failure still names the build that failed', async () => {
+    dispatchMock.mockRejectedValue(new Error('harness exploded'));
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(false);
+    expect(out.metadata?.build).toEqual(generatorBuild('constrained'));
   });
 });
