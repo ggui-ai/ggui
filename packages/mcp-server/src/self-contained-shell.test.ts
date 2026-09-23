@@ -256,6 +256,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 describe('buildSelfContainedShell — every view field the shared spread emits reaches the inline slice', () => {
   const VIEW_SPREAD: Required<ReturnType<typeof spreadRenderMetaViewOntoSlice>> = {
     actionSpec: { submit: { label: 'Submit', oneShot: true } },
+    spentOneShots: ['submit'],
     epoch: 3,
     propsJson: '{"count":3}',
     contextSlots: [

@@ -1157,6 +1157,13 @@ export interface SelfContainedShellInputs {
    */
   readonly actionSpec?: McpAppAiGguiRenderMeta["actionSpec"];
   /**
+   * The card's spent `oneShot` action names, mirrored from
+   * {@link McpAppAiGguiRenderMeta.spentOneShots} (ggui#1223). Symmetric
+   * forward so a card re-served through `/r/<shortCode>` or `resources/read`
+   * renders spent exactly as the tool-result slice's does.
+   */
+  readonly spentOneShots?: McpAppAiGguiRenderMeta["spentOneShots"];
+  /**
    * Permissions-Policy directive list derived from the active render's
    * `clientCapabilities.gadgets[*].permission`.
    * When present (non-empty), inlined onto the bootstrap as
@@ -1389,6 +1396,9 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
       ? { contextSlots: opts.contextSlots }
       : {}),
     ...(opts.actionSpec !== undefined ? { actionSpec: opts.actionSpec } : {}),
+    ...(opts.spentOneShots !== undefined && opts.spentOneShots.length > 0
+      ? { spentOneShots: opts.spentOneShots }
+      : {}),
     // Content-addressable contract-validator bundle. Iframe-runtime
     // fetches `validatorsUrl` + dynamic-imports to resolve
     // validators. Omitted when the contract declares no

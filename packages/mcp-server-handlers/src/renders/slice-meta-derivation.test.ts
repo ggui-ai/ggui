@@ -187,6 +187,38 @@ describe('deriveRenderMeta', () => {
     expect('actionSpec' in spreadRenderMetaViewOntoSlice(deriveRenderMeta(componentItem()))).toBe(false);
   });
 
+  // ggui#1223 — the card's spent oneShot names ride the slice, gated on the card: a record written
+  // on epoch N projects only onto the card whose epoch is N, so a card minted by `ggui_update`
+  // starts fresh — the lifetime the runtime's in-memory guard already has.
+  it("ggui#1223: projects the record's spent names when its epoch is the projected card's", () => {
+    const actionSpec: ActionSpec = { save: { label: 'Save', oneShot: true } };
+    expect(deriveRenderMeta(componentItem({ epoch: 2, actionSpec, spentOneShots: { epoch: 2, actions: ['save'] } })).spentOneShots).toEqual(['save']);
+    // no epoch on the row reads as 0 — the same default the slice's `epoch` projects
+    expect(deriveRenderMeta(componentItem({ actionSpec, spentOneShots: { epoch: 0, actions: ['save'] } })).spentOneShots).toEqual(['save']);
+  });
+
+  it('ggui#1223: a record from an earlier card is NOT projected — a card minted by ggui_update starts fresh', () => {
+    const actionSpec: ActionSpec = { save: { label: 'Save', oneShot: true } };
+    const view = deriveRenderMeta(componentItem({ epoch: 3, actionSpec, spentOneShots: { epoch: 2, actions: ['save'] } }));
+    expect('spentOneShots' in view).toBe(false);
+  });
+
+  it("ggui#1223: projects only names the CARD declares oneShot — a stray or non-oneShot name never reaches the slice", () => {
+    const actionSpec: ActionSpec = { save: { label: 'Save', oneShot: true }, undo: { label: 'Undo' } };
+    const view = deriveRenderMeta(componentItem({ actionSpec, spentOneShots: { epoch: 0, actions: ['save', 'undo', 'gone'] } }));
+    expect(view.spentOneShots).toEqual(['save']);
+    // nothing left after the filter ⇒ the field is absent, not []
+    expect('spentOneShots' in deriveRenderMeta(componentItem({ actionSpec, spentOneShots: { epoch: 0, actions: ['undo'] } }))).toBe(false);
+  });
+
+  it('ggui#1223: no record, or a record with no actions, projects nothing; the spread carries it when present', () => {
+    expect('spentOneShots' in deriveRenderMeta(componentItem())).toBe(false);
+    expect('spentOneShots' in deriveRenderMeta(componentItem({ spentOneShots: { epoch: 0, actions: [] } }))).toBe(false);
+    const view = deriveRenderMeta(componentItem({ actionSpec: { go: { label: 'Go', oneShot: true } }, spentOneShots: { epoch: 0, actions: ['go'] } }));
+    expect(spreadRenderMetaViewOntoSlice(view).spentOneShots).toEqual(['go']);
+    expect('spentOneShots' in spreadRenderMetaViewOntoSlice(deriveRenderMeta(componentItem()))).toBe(false);
+  });
+
   it('component variant: includes contextSlots when contextSpec is declared', () => {
     const contextSpec: ContextSpec = {
       count: { schema: { type: 'number' }, default: 0 },
@@ -242,8 +274,9 @@ describe('deriveRenderMeta', () => {
     const view = deriveRenderMeta(
       componentItem({
         props: { city: 'Seoul' },
-        actionSpec: { save: { label: 'Save', nextStep: 'save_note' } },
+        actionSpec: { save: { label: 'Save', nextStep: 'save_note', oneShot: true } },
         contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
+        spentOneShots: { epoch: 0, actions: ['save'] },
       }),
     );
     expect(view).toEqual({
@@ -269,7 +302,9 @@ describe('deriveRenderMeta', () => {
       // content-addressable store. The view carries no VALIDATOR bytes;
       // the action contract's DATA rides whole (ggui#1178) — the same
       // shape the WS session carries, `nextStep` included.
-      actionSpec: { save: { label: 'Save', nextStep: 'save_note' } },
+      actionSpec: { save: { label: 'Save', nextStep: 'save_note', oneShot: true } },
+      // ggui#1223 — the card's spent oneShot names (record epoch = the card's).
+      spentOneShots: ['save'],
     });
   });
 

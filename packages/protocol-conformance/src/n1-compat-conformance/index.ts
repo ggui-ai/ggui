@@ -175,9 +175,11 @@ function gradeOpsGenerateBlueprint(payload: unknown): { pass: boolean; detail: s
 function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
   const themeIssues: string[] = [];
   const actionIssues: string[] = [];
+  const spentIssues: string[] = [];
   const r = parseMcpAppAiGguiRenderMeta(payload, {
     onInvalidTheme: (issues) => themeIssues.push(...issues),
     onInvalidActionSpec: (issues) => actionIssues.push(...issues),
+    onInvalidSpentOneShots: (issues) => spentIssues.push(...issues),
   });
   if (!r.ok) return { pass: false, detail: `parseMcpAppAiGguiRenderMeta refused the previous release's slice: ${r.reason}` };
   if (r.meta === undefined) return { pass: false, detail: 'parseMcpAppAiGguiRenderMeta found no `ai.ggui/render` slice in the payload' };
@@ -192,9 +194,19 @@ function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
   if (sentActionSpec && (actionIssues.length > 0 || r.meta.actionSpec === undefined)) {
     return { pass: false, detail: `the slice's action contract was dropped at the read door: ${actionIssues.join('; ') || 'actionSpec absent on the parsed meta'}` };
   }
+  // ggui#1223 — the card's spent oneShot names must survive the read door: dropping them makes a
+  // consumed action read as live again after a reload.
+  const sentSpent = isRecord(sent) && sent['spentOneShots'] !== undefined;
+  if (sentSpent && (spentIssues.length > 0 || r.meta.spentOneShots === undefined)) {
+    return { pass: false, detail: `the card's spent oneShot set was dropped at the read door: ${spentIssues.join('; ') || 'spentOneShots absent on the parsed meta'}` };
+  }
   return {
     pass: true,
-    detail: 'parseMcpAppAiGguiRenderMeta: accepted' + (sentTheme ? ', theme preserved' : '') + (sentActionSpec ? ', actionSpec preserved' : ''),
+    detail:
+      'parseMcpAppAiGguiRenderMeta: accepted' +
+      (sentTheme ? ', theme preserved' : '') +
+      (sentActionSpec ? ', actionSpec preserved' : '') +
+      (sentSpent ? ', spentOneShots preserved' : ''),
   };
 }
 

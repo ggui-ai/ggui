@@ -75,6 +75,12 @@ export interface ExtractMcpAppAiGguiMetaOptions {
    * `console.warn`.
    */
   readonly onStrippedActionSpecMembers?: ((keys: readonly string[]) => void) | undefined;
+  /**
+   * The read door refused the slice's `spentOneShots` (ggui#1223): the slice
+   * is kept, the spent set dropped, so a consumed action would look live
+   * again. Unset ⇒ one `console.warn` naming the issues (never silence).
+   */
+  readonly onInvalidSpentOneShots?: ((issues: readonly string[]) => void) | undefined;
 }
 
 export function extractMcpAppAiGguiMeta(
@@ -103,6 +109,11 @@ export function extractMcpAppAiGguiMeta(
       options.onStrippedActionSpecMembers ??
       ((keys): void => {
         console.warn('[ggui] tool_result actionSpec carried entry members this release does not name — stripped', keys);
+      }),
+    onInvalidSpentOneShots:
+      options.onInvalidSpentOneShots ??
+      ((issues): void => {
+        console.warn('[ggui] tool_result spentOneShots refused by the read door — rendering without it', issues);
       }),
   });
   if (!parsed.ok) return null;

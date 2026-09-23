@@ -42,6 +42,7 @@ export type ObservabilityEvent =
   | ActionSpecInvalidEvent
   | ActionSpecMemberStrippedEvent
   | OneShotUnenforceableEvent
+  | SpentOneShotsInvalidEvent
   | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
@@ -441,6 +442,19 @@ export interface OneShotUnenforceableEvent {
   readonly kind: 'one-shot-unenforceable';
   readonly renderId: string;
   readonly actionName: string;
+}
+
+/**
+ * The render slice carried a `spentOneShots` the wire schema refused
+ * (ggui#1223): the parser dropped it, and the card mounted with only its
+ * in-memory one-shot guard — a consumed action reads as live again after a
+ * reload. `issues` are the schema's own messages.
+ *
+ * @public
+ */
+export interface SpentOneShotsInvalidEvent {
+  readonly kind: 'spent-one-shots-invalid';
+  readonly issues: readonly string[];
 }
 
 /**

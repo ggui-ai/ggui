@@ -310,6 +310,14 @@ export function parseActionSpecAtReadDoor(input: unknown): ActionSpecReadDoorRes
   return { ok: true, actionSpec: r.data, stripped: stripped.sort() };
 }
 
+/**
+ * The spent-`oneShot` names on the render slice (ggui#1223): the `actionSpec`
+ * names declared `oneShot` that already had a COMMITTED dispatch on the card
+ * the slice mounts. Names only — non-empty strings; the `oneShot` flag itself
+ * is read from the card's `actionSpec`, never inferred from a listed name.
+ */
+export const spentOneShotsSchema = z.array(z.string().min(1));
+
 /** {@link StreamChannelEntry} — per-channel metadata in a {@link StreamSpec}. */
 export const streamChannelEntrySchema = z
   .object({

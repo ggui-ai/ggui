@@ -243,3 +243,37 @@ describe('extractMcpAppAiGguiMeta — the read door reports a dropped or strippe
     warn.mockRestore();
   });
 });
+
+// ggui#1223 — the card's spent oneShot names: a malformed value is dropped and reported,
+// and warns when the caller wires no callback.
+describe('extractMcpAppAiGguiMeta — a malformed spentOneShots is reported, not swallowed', () => {
+  const withSpent = (spentOneShots: unknown) => ({
+    _meta: {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        spentOneShots,
+      },
+    },
+  });
+
+  it('carries a valid list and calls nothing; drops a malformed one through onInvalidSpentOneShots', () => {
+    const issues: string[][] = [];
+    expect(extractMcpAppAiGguiMeta(withSpent(['submit']), { onInvalidSpentOneShots: (i) => issues.push([...i]) })?.spentOneShots).toEqual(['submit']);
+    expect(issues).toEqual([]);
+    const meta = extractMcpAppAiGguiMeta(withSpent('submit'), { onInvalidSpentOneShots: (i) => issues.push([...i]) });
+    expect(meta?.sessionId).toBe('sess-1');
+    expect(meta?.spentOneShots).toBeUndefined();
+    expect(issues).toHaveLength(1);
+  });
+
+  it('with no callback wired it WARNS rather than dropping in silence', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    extractMcpAppAiGguiMeta(withSpent([1]));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('spentOneShots');
+    warn.mockRestore();
+  });
+});

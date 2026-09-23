@@ -277,6 +277,9 @@ function projectMeta(
     // Already validated at the wire parser's tolerant read door, so no
     // re-validation here.
     ...(meta.actionSpec !== undefined ? { actionSpec: meta.actionSpec } : {}),
+    // The card's spent oneShot names (ggui#1223), carried through whole —
+    // validated at the wire parser's tolerant read door.
+    ...(meta.spentOneShots !== undefined ? { spentOneShots: meta.spentOneShots } : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(streamWebSocketLocalTools !== undefined
@@ -403,6 +406,16 @@ export function reportStrippedActionSpecMembers(keys: readonly string[]): void {
 }
 
 /**
+ * The wire parser refused the slice's `spentOneShots` (ggui#1223): report it
+ * to the embedding host as `spent-one-shots-invalid` and mount without it.
+ * The runtime keeps its in-memory guard alone, so a consumed action would
+ * look live again after a reload — never silently.
+ */
+export function reportInvalidSpentOneShots(issues: readonly string[]): void {
+  postObservabilityToParent({ kind: 'spent-one-shots-invalid', issues: [...issues] });
+}
+
+/**
  * Every degradation the wire parser's read door can report, bound to its
  * observability event — the ONE options object every
  * `parseMcpAppAiGguiRenderMeta` call in this package passes, so a door
@@ -414,6 +427,7 @@ export const READ_DOOR_REPORTERS: ParseMcpAppAiGguiRenderMetaOptions = {
   onStrippedThemeMembers: reportStrippedThemeMembers,
   onInvalidActionSpec: reportInvalidActionSpec,
   onStrippedActionSpecMembers: reportStrippedActionSpecMembers,
+  onInvalidSpentOneShots: reportInvalidSpentOneShots,
 };
 
 /**

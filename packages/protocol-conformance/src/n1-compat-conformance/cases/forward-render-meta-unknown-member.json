@@ -1,6 +1,6 @@
 {
   "name": "forward-render-meta-unknown-member",
-  "description": "FORWARD tolerance (ggui#1178, VERSION-POLICY §3.6): the `_meta[\"ai.ggui/render\"]` slice a LATER release may write — a top-level member this release does not name (`futureMember`), and an `actionSpec` whose entry carries a member this release does not name (`futureEntryMember`). Both are synthetic by construction: the payload is the NEXT release's, so it carries no landed sha. The read door MUST accept the slice and KEEP the action contract (stripping the unknown entry member and naming it). Dropping the whole `actionSpec` is the violation: a runtime left with no contract has no one-shot guard and validates gestures permissively, which is the fail-open ggui#1178 closes.",
+  "description": "FORWARD tolerance (ggui#1178, VERSION-POLICY §3.6): the `_meta[\"ai.ggui/render\"]` slice a LATER release may write — a top-level member this release does not name (`futureMember`), and an `actionSpec` whose entry carries a member this release does not name (`futureEntryMember`). Both are synthetic by construction: the payload is the NEXT release's, so it carries no landed sha. The read door MUST accept the slice and KEEP the action contract (stripping the unknown entry member and naming it). Dropping the whole `actionSpec` is the violation: a runtime left with no contract has no one-shot guard and validates gestures permissively, which is the fail-open ggui#1178 closes. The slice also carries `spentOneShots` (ggui#1223): the card's spent `oneShot` names MUST survive the read door too — dropping them makes a consumed action read as live again after a reload.",
   "direction": "forward",
   "release": {
     "label": "a later ggui release (synthetic): a render slice plus a synthetic top-level member and a synthetic action-entry member",
@@ -26,7 +26,8 @@
       },
       "futureMember": {
         "any": "value"
-      }
+      },
+      "spentOneShots": ["submit"]
     }
   },
   "expect": "accepted"

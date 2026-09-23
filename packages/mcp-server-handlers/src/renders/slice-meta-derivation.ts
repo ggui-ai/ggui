@@ -682,6 +682,13 @@ export interface RenderMetaView {
    * none.
    */
   readonly actionSpec?: ActionSpec;
+  /**
+   * The card's spent `oneShot` action names (ggui#1223): the stored record's
+   * `actions`, projected ONLY when the record's `epoch` is the projected
+   * card's. Component variant only; absent when nothing was spent on this
+   * card.
+   */
+  readonly spentOneShots?: readonly string[];
   /** History head epoch (#483) — the mount's own epoch for the freeze latch. */
   readonly epoch?: number;
   readonly propsJson?: string;
@@ -1006,11 +1013,12 @@ export function spreadRenderMetaViewOntoSlice(
   view: RenderMetaView | undefined,
 ): Pick<
   McpAppAiGguiRenderMeta,
-  'epoch' | 'propsJson' | 'contextSlots' | 'permissionsPolicy' | 'theme' | 'gadgets' | 'actionSpec'
+  'epoch' | 'propsJson' | 'contextSlots' | 'permissionsPolicy' | 'theme' | 'gadgets' | 'actionSpec' | 'spentOneShots'
 > {
   if (view === undefined) return {};
   return {
     ...(view.actionSpec !== undefined ? { actionSpec: view.actionSpec } : {}),
+    ...(view.spentOneShots !== undefined ? { spentOneShots: [...view.spentOneShots] } : {}),
     ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
     ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
     ...(view.contextSlots !== undefined && view.contextSlots.length > 0
@@ -1068,6 +1076,16 @@ export function deriveRenderMeta(
   );
   const gadgets = deriveGadgetRegistrations(item);
   const codeB64 = deriveCodeB64(item);
+  // ggui#1223 — the card's spent oneShot names. Gated on the CARD: a record
+  // written on an earlier card (before a `ggui_update`) is not this card's.
+  // Filtered to the names THIS card's actionSpec declares `oneShot`, so a
+  // stray or non-oneShot name never reaches the slice (the runtime guard
+  // reads the flag from the contract too — this keeps the slice honest).
+  const spentRecord = item.spentOneShots;
+  const spentOneShots =
+    spentRecord !== undefined && spentRecord.epoch === (item.epoch ?? 0)
+      ? spentRecord.actions.filter((name) => item.actionSpec?.[name]?.oneShot === true)
+      : [];
   return {
     // History head epoch (#483) — the mount reads this as its OWN
     // epoch for the freeze latch. Always projected (0 default) so a
@@ -1087,6 +1105,7 @@ export function deriveRenderMeta(
     // ggui#1178 — the action contract, whole, for a runtime painting without
     // a live WS session frame (the only other carrier).
     ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
+    ...(spentOneShots.length > 0 ? { spentOneShots } : {}),
   };
 }
 

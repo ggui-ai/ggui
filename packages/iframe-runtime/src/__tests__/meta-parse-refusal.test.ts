@@ -162,3 +162,41 @@ describe('parseMetaFromGlobal — the slice\'s action contract is never dropped 
     expect(posted).toEqual([]);
   });
 });
+
+// ggui#1223 — the card's spent oneShot names ride the slice; a malformed value mounts WITHOUT it
+// (the runtime keeps its in-memory guard alone) and says so.
+describe('parseMetaFromGlobal — the spent oneShot set is never dropped silently', () => {
+  beforeEach(() => {
+    posted.length = 0;
+  });
+  const slice = (spentOneShots: unknown) => ({
+    'ai.ggui/render': {
+      sessionId: 'sess-1',
+      appId: 'app-1',
+      runtimeUrl: 'https://runtime.example/bundle.js',
+      codeUrl: 'https://code.example/component.js',
+      spentOneShots,
+    },
+  });
+
+  it('carries a valid spentOneShots through validateMeta and posts nothing', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = slice(['submit']);
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.spentOneShots).toEqual(['submit']);
+    expect(posted).toEqual([]);
+  });
+
+  it('drops a malformed spentOneShots, keeps the slice, posts spent-one-shots-invalid with the issues', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = slice([7]);
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.spentOneShots).toBeUndefined();
+    expect(posted).toHaveLength(1);
+    const event = posted[0] as { kind: string; issues: string[] };
+    expect(event.kind).toBe('spent-one-shots-invalid');
+    expect(event.issues.length).toBeGreaterThan(0);
+  });
+});

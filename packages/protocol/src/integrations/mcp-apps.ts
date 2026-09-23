@@ -34,7 +34,7 @@ import type {
   JsonValue,
 } from '../types/data-contract.js';
 import { parseAppThemeAtReadDoor, type AppTheme } from '../schemas/app-theme.js';
-import { parseActionSpecAtReadDoor } from '../schemas/data-contract.js';
+import { parseActionSpecAtReadDoor, spentOneShotsSchema } from '../schemas/data-contract.js';
 import type { ActionSpec } from '../types/data-contract.js';
 import { isRecord } from '../validation/is-record.js';
 import type { z } from 'zod';
@@ -404,6 +404,19 @@ export interface McpAppAiGguiRenderMeta {
    * (SPEC). Read through `parseActionSpecAtReadDoor`, which is tolerant.
    */
   readonly actionSpec?: ActionSpec;
+  /**
+   * The `actionSpec` names declared `oneShot` that already had a COMMITTED
+   * dispatch on THIS card (the slice's `epoch`) — ggui#1223. The runtime
+   * seeds its one-shot guard from it on mount, so a consumed action renders
+   * spent after a reload exactly as it did before one. Scope is one card: an
+   * amend or `props_update` keeps it; a card minted by `ggui_update` starts
+   * fresh. Projected only by `deriveRenderMeta`. Absent ⇒ the runtime's
+   * in-memory guard alone (nothing spent, or an older server). A listed name
+   * counts only when the card's `actionSpec` entry is `oneShot` — the flag is
+   * read from the contract, never from a name. Read tolerantly: a malformed
+   * value is dropped and named (`onInvalidSpentOneShots`), never fatal.
+   */
+  readonly spentOneShots?: readonly string[];
   readonly contractHash?: string;
   readonly validatorsUrl?: string;
 
@@ -496,6 +509,13 @@ export interface ParseMcpAppAiGguiRenderMetaOptions {
    * caller logs the keys.
    */
   readonly onStrippedActionSpecMembers?: ((keys: readonly string[]) => void) | undefined;
+  /**
+   * Called when `spentOneShots` is present but is not an array of non-empty
+   * strings (ggui#1223). The slice drops it and the runtime keeps its
+   * in-memory guard alone — a consumed action would look live again after a
+   * reload, so this MUST NOT be silent. The paint still succeeds.
+   */
+  readonly onInvalidSpentOneShots?: ((issues: readonly string[]) => void) | undefined;
 }
 
 export function parseMcpAppAiGguiRenderMeta(
@@ -630,6 +650,13 @@ export function parseMcpAppAiGguiRenderMeta(
   if (actionRead?.ok === true && actionRead.stripped.length > 0) {
     options.onStrippedActionSpecMembers?.(actionRead.stripped);
   }
+  // ggui#1223 — the card's spent oneShot names, read tolerantly.
+  const spentRead = s.spentOneShots !== undefined ? spentOneShotsSchema.safeParse(s.spentOneShots) : undefined;
+  if (spentRead !== undefined && !spentRead.success) {
+    options.onInvalidSpentOneShots?.(
+      spentRead.error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`),
+    );
+  }
 
   const slice: McpAppAiGguiRenderMeta = {
     sessionId: s.sessionId,
@@ -655,6 +682,7 @@ export function parseMcpAppAiGguiRenderMeta(
     // slice, matching the tolerant posture of the other optional fields.
     ...(parsedTheme !== undefined ? { theme: parsedTheme } : {}),
     ...(actionRead?.ok === true ? { actionSpec: actionRead.actionSpec } : {}),
+    ...(spentRead?.success === true ? { spentOneShots: spentRead.data } : {}),
     ...(s.gadgets !== undefined
       ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
       : {}),
@@ -1023,6 +1051,7 @@ export interface McpAppsGguiSession {
   readonly actionSpec?: never;
   readonly contextSpec?: never;
   readonly clientCapabilities?: never;
+  readonly spentOneShots?: never;
 }
 
 /**

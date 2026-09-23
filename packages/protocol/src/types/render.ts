@@ -359,6 +359,28 @@ export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBa
    * from the runtime.
    */
   readonly contextSnapshot?: JsonObject;
+  /**
+   * The card's spent `oneShot` actions (ggui#1223): the `actionSpec` names
+   * declared `oneShot` that had a COMMITTED dispatch (past contract
+   * validation — a rejected envelope never spends) on the card whose history
+   * epoch is `epoch`. Written by the session writer at the dispatch;
+   * `deriveRenderMeta` projects `actions` as the slice's `spentOneShots`
+   * ONLY when `epoch` equals the card it projects, so a card minted by
+   * `ggui_update` starts fresh — the lifetime the runtime's in-memory guard
+   * already has. Absent ⇒ nothing recorded (nothing spent, or an older
+   * writer).
+   */
+  readonly spentOneShots?: SpentOneShotsRecord;
+}
+
+/**
+ * The per-card record behind `ComponentGguiSession.spentOneShots`
+ * (ggui#1223): which card (`epoch`, the history epoch of the card the
+ * dispatches happened on) and which `oneShot` action names it spent.
+ */
+export interface SpentOneShotsRecord {
+  readonly epoch: number;
+  readonly actions: readonly string[];
 }
 
 /**

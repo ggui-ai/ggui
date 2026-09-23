@@ -990,3 +990,35 @@ describe('parseMcpAppAiGguiRenderMeta — actionSpec on the slice (ggui#1178)', 
     expect(called).toBe(false);
   });
 });
+
+describe('parseMcpAppAiGguiRenderMeta — spentOneShots on the slice (ggui#1223)', () => {
+  const base = { sessionId: 'r-1', appId: 'app-1', runtimeUrl: '/_ggui/iframe-runtime.js' };
+
+  it('carries the spent oneShot names through (the committed dispatches on THIS card)', () => {
+    const r = parseMcpAppAiGguiRenderMeta({ 'ai.ggui/render': { ...base, spentOneShots: ['submit', 'approve'] } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.meta?.spentOneShots).toEqual(['submit', 'approve']);
+  });
+
+  it('drops a malformed spentOneShots with a NAMED callback — the paint still succeeds', () => {
+    const issues: string[] = [];
+    for (const bad of ['submit', [1, 2], ['submit', ''], { submit: true }]) {
+      issues.length = 0;
+      const r = parseMcpAppAiGguiRenderMeta(
+        { 'ai.ggui/render': { ...base, spentOneShots: bad } },
+        { onInvalidSpentOneShots: (i) => issues.push(...i) },
+      );
+      expect(r.ok, JSON.stringify(bad)).toBe(true);
+      if (r.ok) expect(r.meta?.spentOneShots, JSON.stringify(bad)).toBeUndefined();
+      expect(issues.length, JSON.stringify(bad)).toBeGreaterThan(0);
+    }
+  });
+
+  it('absent stays absent (an older server, N−1) — no callback fires, the runtime keeps its in-memory guard', () => {
+    let called = false;
+    const r = parseMcpAppAiGguiRenderMeta({ 'ai.ggui/render': base }, { onInvalidSpentOneShots: () => { called = true; } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.meta?.spentOneShots).toBeUndefined();
+    expect(called).toBe(false);
+  });
+});

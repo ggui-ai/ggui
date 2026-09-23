@@ -69,6 +69,7 @@ export type {
   AppThemeMemberStrippedEvent,
   ActionSpecInvalidEvent,
   ActionSpecMemberStrippedEvent,
+  SpentOneShotsInvalidEvent,
   ThemeReinjectFailedEvent,
   SubscribeFailedEvent,
   ChannelTransportPickedEvent,

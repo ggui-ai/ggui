@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The card's spent `oneShot` names on the render slice (2026-09-23,
+ * additive, ggui#1223: MINOR, same draft stamp).
+ * `McpAppAiGguiRenderMeta.spentOneShots?: readonly string[]`, projected only
+ * by `deriveRenderMeta` from the stored `ComponentGguiSession.spentOneShots`
+ * record (`SpentOneShotsRecord` = `{ epoch, actions }`) — only when the
+ * record's epoch is the projected card's, filtered to the names that card
+ * declares `oneShot`. A consumed action re-served after a reload rendered
+ * live again; the runtime now seeds its guard from the slice. New exports:
+ * `spentOneShotsSchema`, `SpentOneShotsRecord`; the parser options gain
+ * `onInvalidSpentOneShots` (a malformed value is dropped and named, never
+ * fatal). Kit: the `render-meta` forward case carries the member. The store
+ * write (ggui#1305) and the runtime seed land separately. No
+ * `PROTOCOL_VERSION` move. *
+ * --------------------------------------------------------------------
  * `actionSpec` on the static render slice (2026-09-23, additive, ggui#1178:
  * MINOR, same draft stamp). `McpAppAiGguiRenderMeta.actionSpec?: ActionSpec`,
  * projected only by `deriveRenderMeta` (component renders) and WHOLE, the

@@ -45,6 +45,8 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   ],
   // The action contract rides the slice whole (ggui#1178).
   actionSpec: { submit: { label: 'Submit', oneShot: true } },
+  // The card's spent oneShot names (ggui#1223).
+  spentOneShots: ['submit'],
   contractHash: 'sha256:abc',
   validatorsUrl: 'https://example.test/validators/sha256:abc.js',
   codeUrl: 'https://example.test/code/sha256:def.js',
