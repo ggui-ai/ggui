@@ -5,9 +5,12 @@
  * negotiator's structured call (`@ggui-ai/mcp-server`), and the
  * negotiator/probe tooling. One module instead of a copy per caller:
  * a model the API starts refusing a parameter for is added here once.
- * The families are regexes today — themselves a second list of models
- * beside the registry — and ggui#1268 moves the forced-tool fact onto
- * the registry rows.
+ * The families are regexes — a second list of models beside the
+ * registry. The forced-tool one stays a regex and is PINNED instead
+ * (ggui#1268): a table written from the vendor's pages classifies every
+ * Anthropic id the allowlists in `llm-route.ts` can route, and the
+ * predicate must agree with it in both directions — so a routable id
+ * added without a vendor-quoted row, or a disagreement, fails CI.
  *
  * Lives in protocol beside `llm-route.ts` because model facts live
  * here: the registry rows (`llm.ts`), the allowlists and the
@@ -73,11 +76,14 @@ export function anthropicRejectsSamplingParams(model: string): boolean {
 
 /**
  * Models that reject a FORCED tool choice (`tool_choice: any` / a named
- * tool) with HTTP 400: Claude Fable 5.1 (ggui#706), Claude Mythos 5.1,
- * Claude Opus 5.5 (ggui#1254) and Claude Mythos Preview — the set the API
- * reference names ("reject forced tool use"). Fable 5, Mythos 5 and Opus 5
- * still accept it. `auto` is accepted by all. The version separator is `-`
- * in API and Bedrock ids and `.` in OpenRouter's (`claude-opus-5.5`).
+ * tool) with HTTP 400. The API reference names Claude Opus 5.5, Claude
+ * Fable 5.1 and Claude Mythos 5.1 ("Forced tool use not supported",
+ * platform.claude.com/docs/en/api/errors, read 2026-09-23). Claude Mythos
+ * Preview is matched too although that page does not name it: a wrong
+ * `true` is the safe direction (above), and no allowlist carries it, so it
+ * sits outside the ggui#1268 pin. Fable 5, Mythos 5 and Opus 5 still
+ * accept it. `auto` is accepted by all. The version separator is `-` in API
+ * and Bedrock ids and `.` in OpenRouter's (`claude-opus-5.5`).
  */
 export function anthropicRejectsForcedToolChoice(model: string): boolean {
   return /^claude-(?:fable-5[-.]1|mythos-5[-.]1|opus-5[-.]5|mythos-preview)(?:-|$)/.test(
