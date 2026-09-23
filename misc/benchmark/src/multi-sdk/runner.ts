@@ -15,6 +15,7 @@ import {
 import type { AnyAdapterConfig } from "@ggui-ai/ui-gen/adapters/base";
 import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters";
 import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
+import { runWithVariantTag } from "./variant-log-tag.js";
 import type { AdapterResult } from "@ggui-ai/ui-gen/adapters/types";
 import type { ModelRoles } from "@ggui-ai/ui-gen/harness/result-types";
 import { DEFAULT_QUALITY_CONFIG } from "@ggui-ai/ui-gen/evaluation";
@@ -181,7 +182,8 @@ export class BenchmarkRunner {
     const total = runnableTasks.length;
     const results = await runWithConcurrency(
       runnableTasks.map((task) => async () => {
-        const result = await this.runSingle(task.variant, task.commit);
+        // ggui#1282: every console line this cell writes carries its variant's tag.
+        const result = await runWithVariantTag(task.variant.id, () => this.runSingle(task.variant, task.commit));
         completedCount++;
         this.config.onProgress?.({ completed: completedCount, total });
         return result;

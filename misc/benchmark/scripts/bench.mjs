@@ -325,6 +325,9 @@ for (const root of ENV_ROOTS) {
 const run = async () => {
   // Dynamic imports of TypeScript modules (via tsx loader)
   const { BenchmarkRunner } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/runner.ts'));
+  // ggui#1282: tag each variant's console lines (paired cells run concurrently in one process).
+  const { installVariantConsoleTag } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variant-log-tag.ts'));
+  installVariantConsoleTag();
   const { LocalStorage, savedComponentsFromResults } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
   const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
