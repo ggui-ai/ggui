@@ -536,6 +536,10 @@ describe('createOAuthProvidersStore — corrupt file handling', () => {
       }),
       { mode: 0o644 },
     );
+    // `writeFile`'s `mode` is a request filtered through the process umask
+    // (under `077` it lands as 0600, which is strict). A test asserting on a
+    // file mode sets the mode; it does not request it (#1297).
+    await fs.chmod(h.filePath, 0o644);
     const list = await h.store.list();
     expect(list.length).toBe(1);
     const laxLog = h.logger.captured.find(
