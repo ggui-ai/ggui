@@ -157,6 +157,17 @@ export interface BuildWireConfigOptions {
    */
   readonly getActiveActionSpec: () => ActionSpec | undefined;
   /**
+   * The `oneShot` action names this card already spent BEFORE this config
+   * existed (ggui#1223): the card's persisted record, as the host holds it.
+   * A card re-served after a reload is a new config whose in-memory spent set
+   * starts empty; without this, a consumed action would fire again. Read on
+   * every dispatch, like {@link getActiveActionSpec}, so a record that arrives
+   * after boot still counts. A listed name is spent only when the active spec
+   * declares it `oneShot` — the flag comes from the contract, never from a
+   * name. Absent, or `undefined`, ⇒ the in-memory guard alone.
+   */
+  readonly getSpentOneShots?: () => readonly string[] | undefined;
+  /**
    * Validate the built envelope before emission. Defaults to wire's
    * own {@link validateOutboundActionEnvelope}. The iframe runtime
    * injects its precompiled-validator variant so the dispatch never
@@ -249,7 +260,10 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
   // gesture on an action the contract declared `oneShot` — the founder's
   // "the submitted form still reads as a live request". The marker is the
   // contract's flag, resolved through the same `getActiveActionSpec` thunk
-  // the validator uses; the guard NEVER infers one-shot from a name.
+  // the validator uses; the guard NEVER infers one-shot from a name. What the
+  // card spent before this config existed (a reload re-serves the card in a
+  // new iframe) arrives through `getSpentOneShots` (ggui#1223) and counts the
+  // same as this set.
   const spentOneShots = new Set<string>();
 
   return {
@@ -263,7 +277,9 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
       const actionSpec = opts.getActiveActionSpec();
       if (actionSpec === undefined) opts.onActionSpecAbsent?.(actionName);
       const isOneShot = actionSpec?.[actionName]?.oneShot === true;
-      if (isOneShot && spentOneShots.has(actionName)) {
+      const spent =
+        spentOneShots.has(actionName) || opts.getSpentOneShots?.()?.includes(actionName) === true;
+      if (isOneShot && spent) {
         // NEVER SILENT — the runtime's diagnostic channel (`console.warn`)
         // carries the actionId and `oneShot` as the reason, and the dispatch
         // does NOT reach the agent (no `emitEnvelope`). The structured sink

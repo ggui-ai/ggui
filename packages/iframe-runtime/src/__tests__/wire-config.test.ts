@@ -367,3 +367,52 @@ describe('buildRootWireConfig — one-shot-unenforceable (ggui#1178)', () => {
     expect(unenforceableEvents()).toEqual([]);
   });
 });
+
+// ggui#1223 — a card re-served after a reload boots a new iframe, so the wire
+// guard's in-memory spent set starts empty. The render's persisted record
+// (`spentOneShots: { epoch, actions }`) is what says which `oneShot` actions
+// this card already spent. It counts only for the card it was written on: a
+// record whose epoch is not the render's own belongs to an earlier card (a
+// `ggui_update` mints a fresh one), the same gate `deriveRenderMeta` applies.
+describe('buildRootWireConfig — the card’s persisted spent oneShots (ggui#1223)', () => {
+  const SPEC: ActionSpec = { submit: { label: 'Submit', oneShot: true } };
+  function dispatchOnce(render: GguiSession): WebSocketMessage[] {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { send, messages } = makeFakeManager();
+    const cfg = buildRootWireConfig({
+      sessionId: render.id,
+      appId: 'app_x',
+      getCurrentGguiSession: () => render,
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+    cfg.dispatch('submit', {});
+    return messages;
+  }
+
+  it('a record on the render’s own epoch spends the action: the FIRST gesture after reload is stopped', () => {
+    const render = makeRender('r_spent', {
+      actionSpec: SPEC,
+      epoch: 2,
+      spentOneShots: { epoch: 2, actions: ['submit'] },
+    });
+    expect(dispatchOnce(render)).toHaveLength(0);
+  });
+
+  it('a record from an EARLIER card (epoch ≠ the render’s) does not count: the fresh card fires', () => {
+    const render = makeRender('r_fresh', {
+      actionSpec: SPEC,
+      epoch: 3,
+      spentOneShots: { epoch: 2, actions: ['submit'] },
+    });
+    expect(dispatchOnce(render)).toHaveLength(1);
+  });
+
+  it('an absent epoch reads as 0, as everywhere else', () => {
+    const render = makeRender('r_zero', {
+      actionSpec: SPEC,
+      spentOneShots: { epoch: 0, actions: ['submit'] },
+    });
+    expect(dispatchOnce(render)).toHaveLength(0);
+  });
+});

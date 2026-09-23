@@ -206,3 +206,61 @@ describe('a dispatch that resolves no action spec (ggui#1178)', () => {
     expect(absent).toEqual([]);
   });
 });
+
+// ggui#1223 — a card re-served after a reload is a NEW config (a new iframe),
+// so the closure-local spent set starts empty and a consumed `oneShot` action
+// painted live. The card's persisted spent names reach the config through
+// `getSpentOneShots`, read on every dispatch like `getActiveActionSpec`, so the
+// guard stops the FIRST gesture on an action this card already spent. The flag
+// is still the contract's: a listed name that is not declared `oneShot` fires.
+describe('one-shot guard — the card’s persisted spent names (ggui#1223)', () => {
+  function persisted(spent: readonly string[] | undefined) {
+    const emitted: JsonValue[] = [];
+    const suppressed: DispatchSuppressedInfo[] = [];
+    const config = buildWireConfig({
+      app: { appId: 'a', appName: 'a' },
+      render: { sessionId: 's1', isConnected: true },
+      auth: { isAuthenticated: false },
+      getActiveActionSpec: () => ONE_SHOT_SPEC,
+      getSpentOneShots: () => spent,
+      validateEnvelope: () => ({ valid: true, violations: [] }),
+      onViolation: () => {
+        throw new Error('unexpected violation');
+      },
+      emitEnvelope: (env) => emitted.push(env.payload ?? null),
+      streamBus: new StreamBus(),
+      onDispatchSuppressed: (info) => suppressed.push(info),
+    });
+    return { config, emitted, suppressed };
+  }
+
+  it('a oneShot action the card already spent is stopped on the FIRST gesture, and traced', () => {
+    const { config, emitted, suppressed } = persisted(['submit']);
+    config.dispatch('submit', { ok: true });
+    expect(emitted).toEqual([]);
+    expect(suppressed).toMatchObject([{ reason: 'one-shot-spent', actionName: 'submit' }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a listed name the contract does NOT declare oneShot still fires — the flag is read from the contract, never a name', () => {
+    const { config, emitted, suppressed } = persisted(['log']);
+    config.dispatch('log', { n: 1 });
+    config.dispatch('log', { n: 2 });
+    expect(emitted).toHaveLength(2);
+    expect(suppressed).toEqual([]);
+  });
+
+  it('an unspent oneShot action fires once, then the in-memory guard spends it as before', () => {
+    const { config, emitted, suppressed } = persisted(['other']);
+    config.dispatch('submit', {});
+    config.dispatch('submit', {});
+    expect(emitted).toHaveLength(1);
+    expect(suppressed.map((s) => s.reason)).toEqual(['one-shot-spent']);
+  });
+
+  it('no persisted names (an older server, or nothing spent) leaves the guard exactly as it was', () => {
+    const { config, emitted } = persisted(undefined);
+    config.dispatch('submit', {});
+    expect(emitted).toHaveLength(1);
+  });
+});

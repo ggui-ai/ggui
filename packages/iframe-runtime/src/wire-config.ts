@@ -216,6 +216,20 @@ export function buildRootWireConfig(
         : undefined;
     },
     onActionSpecAbsent: nameUnenforceableOnce,
+    // ggui#1223 — the card's persisted spent `oneShot` names. A re-served card
+    // boots a new iframe, so the guard's in-memory set starts empty; the
+    // render's record says what this card already spent. It counts only when
+    // written on THIS card (its epoch is the render's own; absent ⇒ 0), the
+    // same gate `deriveRenderMeta` applies, since a `ggui_update` mints a fresh
+    // card whose record would otherwise carry over.
+    getSpentOneShots: () => {
+      const currentRender = opts.getCurrentGguiSession();
+      if (currentRender === null || currentRender.type === 'mcpApps' || currentRender.type === 'system') {
+        return undefined;
+      }
+      const record = currentRender.spentOneShots;
+      return record !== undefined && record.epoch === (currentRender.epoch ?? 0) ? record.actions : undefined;
+    },
     // The iframe's precompiled-validator variant — the dispatch never
     // trips the iframe's no-`unsafe-eval` CSP.
     validateEnvelope: validateOutboundActionEnvelope,

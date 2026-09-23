@@ -1772,12 +1772,24 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
  * (ggui#1178): a mount with no live session frame paints from this seed, and
  * the one-shot guard reads the current render's spec, so a seed without it
  * could not enforce `oneShot`. A system seed never carries one.
+ *
+ * It also carries the card's `epoch` and, when the slice lists them, the
+ * `oneShot` names this card already spent, as the render's record
+ * `{ epoch, actions }` (ggui#1223). `deriveRenderMeta` projected those names
+ * for this card only, so the record's epoch is the card's own and the guard
+ * stops the first gesture on a spent action after a reload.
  */
 export async function buildGguiSessionSeedInput(
   meta: McpAppAiGguiRenderMeta,
 ): Promise<GguiSessionSeedInput | null> {
   const props = parseSeedProps(meta.propsJson);
-  const actionSpec = meta.actionSpec !== undefined ? { actionSpec: meta.actionSpec } : {};
+  const componentFields = {
+    ...(meta.actionSpec !== undefined ? { actionSpec: meta.actionSpec } : {}),
+    ...(typeof meta.epoch === 'number' ? { epoch: meta.epoch } : {}),
+    ...(meta.spentOneShots !== undefined
+      ? { spentOneShots: { epoch: meta.epoch ?? 0, actions: meta.spentOneShots } }
+      : {}),
+  };
 
   // System-card mode — `kind` keyed against the built-in registry.
   if (meta.kind !== undefined) {
@@ -1797,7 +1809,7 @@ export async function buildGguiSessionSeedInput(
       appId: meta.appId,
       componentCode: decodeCodeB64(meta.codeB64),
       ...(props !== undefined ? { props } : {}),
-      ...actionSpec,
+      ...componentFields,
     };
   }
 
@@ -1815,7 +1827,7 @@ export async function buildGguiSessionSeedInput(
     appId: meta.appId,
     componentCode,
     ...(props !== undefined ? { props } : {}),
-    ...actionSpec,
+    ...componentFields,
   };
 }
 

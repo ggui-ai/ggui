@@ -250,6 +250,66 @@ describe('buildGguiSessionSeedInput — the slice’s actionSpec (ggui#1178)', (
   });
 });
 
+// ggui#1223 — the slice carries the card's `epoch` and the `oneShot` names this
+// card already spent (projected by `deriveRenderMeta` for this card only). A
+// component seed carries them as the render's record, `{ epoch, actions }`, so
+// the wire guard can stop the first gesture on a spent action after a reload.
+describe('buildGguiSessionSeedInput — the slice’s spent oneShots (ggui#1223)', () => {
+  const SPEC: ActionSpec = { submit: { label: 'Submit', oneShot: true } };
+  const B64 = Buffer.from('export default function C(){return null}', 'utf8').toString('base64');
+
+  it('a component seed carries the card’s epoch and its spent names as the record', async () => {
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: B64,
+      actionSpec: SPEC,
+      epoch: 2,
+      spentOneShots: ['submit'],
+    });
+    if (seed === null || seed.type === 'system') throw new Error('expected a component seed');
+    expect(seed.epoch).toBe(2);
+    expect(seed.spentOneShots).toEqual({ epoch: 2, actions: ['submit'] });
+  });
+
+  it('an absent slice epoch is 0 on the record, matching the absent render epoch', async () => {
+    const seed = await buildGguiSessionSeedInput({ ...BASE, codeB64: B64, spentOneShots: ['submit'] });
+    if (seed === null || seed.type === 'system') throw new Error('expected a component seed');
+    expect(seed.spentOneShots).toEqual({ epoch: 0, actions: ['submit'] });
+    expect('epoch' in seed).toBe(false);
+  });
+
+  it('a slice with no spent names leaves the record absent; a system seed never has one', async () => {
+    const component = await buildGguiSessionSeedInput({ ...BASE, codeB64: B64 });
+    expect(component !== null && 'spentOneShots' in component).toBe(false);
+    const system = await buildGguiSessionSeedInput({ ...BASE, kind: 'no-credentials', spentOneShots: ['submit'] });
+    expect(system !== null && 'spentOneShots' in system).toBe(false);
+  });
+
+  it('mounted as the current render after a reload, the seed stops the FIRST gesture on a spent oneShot', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: B64,
+      actionSpec: SPEC,
+      epoch: 1,
+      spentOneShots: ['submit'],
+    });
+    const sent: WebSocketMessage[] = [];
+    const cfg = buildRootWireConfig({
+      sessionId: BASE.sessionId,
+      appId: BASE.appId,
+      getCurrentGguiSession: () => seed,
+      manager: { send: (msg: WebSocketMessage) => sent.push(msg) },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('submit', {});
+
+    expect(sent, 'the consumed action does not reach the agent again').toEqual([]);
+    warn.mockRestore();
+  });
+});
+
 describe('readPendingToolResults — buffered-tool-result supersede order', () => {
   const toolResult = (propsJson: string) => ({
     content: [],

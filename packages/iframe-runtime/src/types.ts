@@ -50,7 +50,9 @@ type GguiSessionLedgerFields =
  * (`propsSpec` / `streamSpec` / `actionSpec`), so the channel handlers that
  * read those after the `type !== 'mcpApps' && type !== 'system'` narrowing
  * stay type-clean. On a seed, `propsSpec` and `streamSpec` are `undefined`;
- * `actionSpec` is the slice's own when the slice carried one (ggui#1178).
+ * `actionSpec` is the slice's own when the slice carried one (ggui#1178), and
+ * so are `epoch` and the spent-`oneShot` record built from the slice's
+ * `spentOneShots` (ggui#1223).
  */
 export type GguiSessionSeedInput =
   | Omit<ComponentGguiSession, GguiSessionLedgerFields>
