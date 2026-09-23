@@ -325,7 +325,7 @@ for (const root of ENV_ROOTS) {
 const run = async () => {
   // Dynamic imports of TypeScript modules (via tsx loader)
   const { BenchmarkRunner } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/runner.ts'));
-  const { LocalStorage } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
+  const { LocalStorage, savedComponentsFromResults } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
   const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
   const { resolveRunVariants } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
@@ -458,19 +458,9 @@ const run = async () => {
   // SHA (Dockerfile sets ENV GIT_SHA); 'local' only for uncontainerized runs.
   const displayReport = toDisplayReport(report, reportId, process.env.GIT_SHA || 'local');
 
-  // Extract compiled components from results
-  const compiledComponents = new Map();
-  for (const result of report.results) {
-    if (result.generation?.compiledCode) {
-      compiledComponents.set(
-        `${result.variant.id}-${result.commit.id}`,
-        {
-          source: result.generation.sourceCode || '',
-          compiled: result.generation.compiledCode,
-        }
-      );
-    }
-  }
+  // Every cell that produced a bundle; a cell whose contract-feedback round
+  // fired also carries the source before it (saved beside the component).
+  const compiledComponents = savedComponentsFromResults(report.results);
 
   await storage.saveReport({ reportId, report: displayReport, compiledComponents });
 

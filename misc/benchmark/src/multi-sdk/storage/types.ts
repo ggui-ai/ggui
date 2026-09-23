@@ -1,4 +1,18 @@
 import type { BenchmarkReportDisplay } from '@ggui-ai/shared';
+import type { ContractFeedbackRecord } from '@ggui-ai/ui-gen/evaluation';
+
+/**
+ * One cell's saved component: the final source and bundle, plus — only on
+ * cells where the harness's contract-feedback round fired — the record of
+ * that round (`sourceBefore` = the component as it stood when the model was
+ * told; `source` above is the after). Saved beside the component so a
+ * before/after read of the round needs nothing but the cell's directory.
+ */
+export interface SavedComponent {
+  readonly source: string;
+  readonly compiled: string;
+  readonly contractFeedback?: ContractFeedbackRecord;
+}
 
 /**
  * Storage interface for benchmark reports.
@@ -18,7 +32,7 @@ export interface BenchmarkStorage {
   saveReport(params: {
     reportId: string;
     report: BenchmarkReportDisplay;
-    compiledComponents: Map<string, { source: string; compiled: string }>;
+    compiledComponents: ReadonlyMap<string, SavedComponent>;
   }): Promise<void>;
 
   /** Update report status (e.g., running → completed or failed) */
