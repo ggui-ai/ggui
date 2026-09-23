@@ -43,7 +43,7 @@ import { z } from "zod";
 import type { LLMToolDef } from "../llm.js";
 import {
   claudeCodeLoginQueryOptions,
-  stripProviderKeyEnv,
+  loginChildEnv,
 } from "../adapters/claude/claude-code-login.js";
 import { MCP_SERVER_NAME } from "../adapters/claude/tool-bridge.js";
 import { toolArgsToJsonObject } from "../adapters/tool-bridge.js";
@@ -186,8 +186,9 @@ export async function* imageUserMessage(
  * SDK's typed `thinking` option (the probe spelled it `thinkingConfig`,
  * untyped, and saw a thinking block anyway — whether the typed spelling
  * is honoured is Exp 009's to measure; it reports thinking tokens as
- * their own column either way); every provider key name is stripped from the
- * env the binary inherits; Layer 1's pins keep it tool-less (the CLI's
+ * their own column either way); the binary inherits an allowlisted env
+ * (`loginChildEnv`: no provider key, nothing else the parent merely holds,
+ * ggui#1278); Layer 1's pins keep it tool-less (the CLI's
  * own tools), config-less (`~/.claude` never loads) and non-bare (the
  * login store IS read). Tools, when offered, come as ggui's in-process
  * MCP server with NO allow-list and the denying intercept.
@@ -206,7 +207,7 @@ export function buildLoginQueryOptions(params: {
     systemPrompt: params.systemPrompt,
     maxTurns: 1,
     thinking: { type: "disabled" },
-    env: stripProviderKeyEnv(params.env ?? process.env),
+    env: loginChildEnv(params.env ?? process.env),
     ...claudeCodeLoginQueryOptions(),
     ...(params.tools !== undefined
       ? {

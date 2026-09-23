@@ -9,9 +9,12 @@
  *   1. {@link CLAUDE_CODE_LOGIN_CREDENTIAL} — the sentinel a `ProviderKeyRef`
  *      carries in place of a key, the same shape `bedrock-iam` already uses
  *      for "authenticate with ambient credentials, not a key I hold".
- *   2. {@link stripProviderKeyEnv} — no provider key may reach the spawned
- *      process: the binary prefers an env key over its login, so a stale
- *      `ANTHROPIC_API_KEY` would silently take the run off the login path.
+ *   2. {@link loginChildEnv} — the spawned process sees an ALLOWLIST of the
+ *      parent's env, never the parent's env minus a few names: no provider
+ *      key (the binary prefers an env key over its login, so a stale
+ *      `ANTHROPIC_API_KEY` would silently take the run off the login path),
+ *      no other secret the parent merely holds, and no switch that would
+ *      change what the binary does (ggui#1278).
  *   3. {@link claudeCodeLoginQueryOptions} — the SDK options that keep the
  *      run bounded: no built-in tool (`tools: []`), no `~/.claude` settings,
  *      hooks or MCP servers leaking in (`settingSources: []`). Not
@@ -40,14 +43,66 @@ export const PROVIDER_KEY_ENV_NAMES = [
   "ANTHROPIC_BASE_URL",
 ] as const;
 
-/** A copy of `env` without any provider key or endpoint override. */
-export function stripProviderKeyEnv(
+/**
+ * The only env names the login child inherits (ggui#1278), plus every
+ * `LC_*` locale name. The spawned binary sees a property of this code, not
+ * whatever the parent happened to load: a parent that sourced a whole
+ * `.env` holds every provider's key, and a denylist would pass all of them
+ * on, together with switches such as `CLAUDE_CODE_USE_BEDROCK` that would
+ * silently re-route the run.
+ *
+ * - Process basics: `PATH` (the binary runs helpers, e.g. the macOS
+ *   keychain tool), `HOME`/`USER`/`LOGNAME` (where and whose the login
+ *   store is), `SHELL`, temp dirs, `TERM`, `TZ`, locale.
+ * - Where the login lives: `CLAUDE_CONFIG_DIR`, the XDG base dirs.
+ * - `CLAUDE_CODE_OAUTH_TOKEN`: the login ITSELF when a headless host
+ *   supplies it by env (`claude setup-token`). It is the one credential
+ *   this path may use; every provider key stays out
+ *   ({@link PROVIDER_KEY_ENV_NAMES} is never on this list).
+ * - Network reach: proxy variables in both spellings, and the extra-CA
+ *   and certificate paths a corporate network needs.
+ */
+export const LOGIN_CHILD_ENV_NAMES = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "TERM",
+  "TZ",
+  "LANG",
+  "CLAUDE_CONFIG_DIR",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_STATE_HOME",
+  "XDG_RUNTIME_DIR",
+  "HTTPS_PROXY",
+  "https_proxy",
+  "HTTP_PROXY",
+  "http_proxy",
+  "NO_PROXY",
+  "no_proxy",
+  "ALL_PROXY",
+  "all_proxy",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+] as const;
+
+const LOGIN_CHILD_ENV: ReadonlySet<string> = new Set(LOGIN_CHILD_ENV_NAMES);
+
+/** The env the login child is spawned with: the allowlisted names present in `env`, nothing else. */
+export function loginChildEnv(
   env: Readonly<Record<string, string | undefined>>
 ): Record<string, string> {
   const out: Record<string, string> = {};
-  const drop: ReadonlySet<string> = new Set(PROVIDER_KEY_ENV_NAMES);
   for (const [k, v] of Object.entries(env)) {
-    if (v !== undefined && !drop.has(k)) out[k] = v;
+    if (v !== undefined && (LOGIN_CHILD_ENV.has(k) || k.startsWith("LC_"))) out[k] = v;
   }
   return out;
 }

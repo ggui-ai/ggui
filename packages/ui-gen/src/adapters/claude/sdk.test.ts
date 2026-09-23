@@ -52,6 +52,10 @@ describe("ClaudeSdkAdapter — claude-code-login path (ggui#1185)", () => {
         ANTHROPIC_AUTH_TOKEN: "stale",
         ANTHROPIC_BASE_URL: "http://localhost:4000",
         PATH: "/usr/bin",
+        // ggui#1278 — the rest of a loaded `.env`, and a switch that would re-route the binary.
+        OPENAI_API_KEY: "sk-openai",
+        GITHUB_TOKEN: "ghp",
+        CLAUDE_CODE_USE_BEDROCK: "1",
       },
     });
     await adapter.generate(PARAMS).catch(() => undefined);
@@ -64,6 +68,9 @@ describe("ClaudeSdkAdapter — claude-code-login path (ggui#1185)", () => {
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_BASE_URL",
     ])
+      expect(k in env, `${k} must not reach the binary`).toBe(false);
+    // ggui#1278 — an allowlist, not a denylist: nothing else the parent held gets through.
+    for (const k of ["OPENAI_API_KEY", "GITHUB_TOKEN", "CLAUDE_CODE_USE_BEDROCK"])
       expect(k in env, `${k} must not reach the binary`).toBe(false);
     expect(env.PATH).toBe("/usr/bin");
     expect(o.tools).toEqual([]);

@@ -320,7 +320,9 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test-must-not-reach-the-binary");
   vi.stubEnv("CLAUDE_API_KEY", "alias-must-not-reach-the-binary");
-  vi.stubEnv("GGUI_UNRELATED", "kept");
+  vi.stubEnv("GGUI_UNRELATED", "must-not-reach-the-binary");
+  vi.stubEnv("OPENAI_API_KEY", "sk-openai-must-not-reach-the-binary");
+  vi.stubEnv("CLAUDE_CODE_USE_BEDROCK", "1");
 });
 
 afterEach(() => {
@@ -383,7 +385,7 @@ describe("callTools — one query() carrying the carve-out", () => {
     expect(options.extraArgs).toBeUndefined();
   });
 
-  it("strips every provider key name from the spawned env and keeps the rest", async () => {
+  it("hands the spawned binary an allowlisted env: no provider key, and nothing else the parent merely holds (ggui#1278)", async () => {
     queue(happyPath);
     await loginAgent().callTools(MODEL, "s", "u", [APPLY], "required");
     const env = fake.calls[0]!.options.env;
@@ -392,7 +394,11 @@ describe("callTools — one query() carrying the carve-out", () => {
     expect(env).not.toHaveProperty("CLAUDE_API_KEY");
     expect(env).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(env).not.toHaveProperty("ANTHROPIC_BASE_URL");
-    expect(env?.["GGUI_UNRELATED"]).toBe("kept");
+    expect(env).not.toHaveProperty("GGUI_UNRELATED");
+    expect(env).not.toHaveProperty("OPENAI_API_KEY");
+    expect(env).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    // Control: what the binary needs still arrives from the real parent env.
+    expect(env?.["PATH"]).toBe(process.env["PATH"]);
   });
 
   it("bridges the tools as an in-process MCP server named ggui and allow-lists NONE of them", async () => {
