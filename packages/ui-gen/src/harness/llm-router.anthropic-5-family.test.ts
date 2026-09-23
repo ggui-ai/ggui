@@ -173,6 +173,11 @@ describe('OpenRouterAgent.callTools — the same forced tool_choice guard (ggui#
     expect(res.appliedToolChoice).toBe('auto');
     expect(res.toolCalls).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+    // The downgrade happens BEFORE sending, so the line must not read as a 400
+    // that occurred (it would send a reader looking for an error that never was).
+    const line = String(warn.mock.calls[0]?.[0]);
+    expect(line).toContain('before sending');
+    expect(line).not.toContain('(HTTP 400)');
     warn.mockRestore();
   });
 
@@ -205,6 +210,11 @@ describe('AnthropicAgent.callTools — forced tool_choice guard', () => {
     // outcome the evaluator's criteriaCoverage records as `skipped`.
     expect(res.toolCalls).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+    // The downgrade happens BEFORE sending, so the line must not read as a 400
+    // that occurred (it would send a reader looking for an error that never was).
+    const line = String(warn.mock.calls[0]?.[0]);
+    expect(line).toContain('before sending');
+    expect(line).not.toContain('(HTTP 400)');
     warn.mockRestore();
   });
 

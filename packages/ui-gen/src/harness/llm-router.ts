@@ -875,8 +875,8 @@ export class AnthropicAgent extends LLMAgent {
           : toolChoice;
       if (appliedToolChoice !== toolChoice) {
         console.warn(
-          `[anthropic] callTools: ${normalizeAnthropicModelId(resolvedModel)} rejects forced tool_choice (HTTP 400); ` +
-            `caller's 'required' downgraded to 'auto'`,
+          `[anthropic] callTools: ${normalizeAnthropicModelId(resolvedModel)} would reject a forced tool_choice (the API answers 400); ` +
+            `caller's 'required' downgraded to 'auto' before sending`,
         );
       }
       const response = await this.apiCall(() =>
@@ -2128,7 +2128,7 @@ export class OpenRouterAgent extends LLMAgent {
       requested === 'required' && anthropicRejectsForcedToolChoice(resolved) ? 'auto' : requested;
     if (appliedToolChoice !== requested) {
       console.warn(
-        `[openrouter] callTools: ${resolved} rejects forced tool_choice (HTTP 400); caller's 'required' downgraded to 'auto'`,
+        `[openrouter] callTools: ${resolved} would reject a forced tool_choice (the API answers 400); caller's 'required' downgraded to 'auto' before sending`,
       );
     }
 
