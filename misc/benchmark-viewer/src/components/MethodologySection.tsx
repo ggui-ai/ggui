@@ -64,6 +64,21 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-23',
     text:
+      'Instrument change, announced (issue #1299): from the first run on a runner image carrying ' +
+      'commit cc1480e35, a runtime-render probe that runs out of its wall-clock bound is recorded ' +
+      'as timed out — with its elapsed time and the host\'s load — instead of as a component ' +
+      'crash. Before it, a probe that simply ran out of time on a busy machine published in the ' +
+      'cell\'s runtime-probe verdict as a crash the model caused; from that run such a cell\'s ' +
+      'verdict reads "probe did not run (timed-out: \u2026)", neither a pass nor a failure, and a ' +
+      'component that genuinely throws still reads as a crash. The generation loop changes with ' +
+      'it: a timeout is no longer handed to the model as a crash to fix, so on a heavily loaded ' +
+      'run a cell can spend fewer turns and less time than it would have. The per-cell probe ' +
+      'verdicts move; the score and pass columns do not read the probe. Corpus, judge panel and ' +
+      'every arm unchanged; history is not rewritten.',
+  },
+  {
+    date: '2026-09-23',
+    text:
       'Report field added, not a method change (issue #404): from the first run on a runner image ' +
       'carrying commit 3cccad688, a cell\'s generation record in the published report carries ' +
       'sameExchangeBreak — the tool the model kept repeating and how many times — when the ' +
