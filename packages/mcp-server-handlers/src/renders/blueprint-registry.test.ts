@@ -1526,3 +1526,52 @@ describe('registerBlueprint — eviction count-gate (ggui#540)', () => {
     expect(list).toHaveBeenCalled();
   });
 });
+
+// ── ggui#1275 (3) — a row says when its intent is a stand-in ─────────────
+//
+// A writer with no statement of the UI's task still has to store an intent
+// (registration refuses an empty one), so it stores a stand-in — a
+// placeholder, an id, a title, a persona. The row carries `intentSource:
+// 'fallback'` for those; an authored intent writes no mark at all, so a row
+// written today is byte-identical to one written before the field existed,
+// and a reader from before the field ignores a key it never reads.
+describe('registerBlueprint — intentSource (ggui#1275)', () => {
+  it('a stand-in intent is marked fallback, and the mark survives a read back', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'operator-registered blueprint (bp_x)',
+      intentSource: 'fallback',
+      componentCode: 'export default () => null;',
+      source: { kind: 'user' },
+    });
+    expect(bp.intentSource).toBe('fallback');
+    const row = await deps.vectorStore.getByKey(SCOPE, bp.id);
+    expect(row?.metadata['intentSource']).toBe('fallback');
+    const read = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(read?.intentSource).toBe('fallback');
+    const listed = await listBlueprints(deps, SCOPE);
+    expect(listed.find((b) => b.id === bp.id)?.intentSource).toBe('fallback');
+  });
+
+  it('an authored intent writes no mark — absent reads as authored', async () => {
+    const deps = makeDeps();
+    for (const intentSource of [undefined, 'authored'] as const) {
+      const contract: DataContract = intentSource === undefined ? NOTEPAD_CONTRACT : FEEDBACK_CONTRACT;
+      const bp = await registerBlueprint(deps, SCOPE, {
+        kind: 'template',
+        contract,
+        intent: 'Build a notepad',
+        ...(intentSource !== undefined ? { intentSource } : {}),
+        componentCode: 'export default () => null;',
+        source: { kind: 'user' },
+      });
+      expect(bp.intentSource).toBeUndefined();
+      const row = await deps.vectorStore.getByKey(SCOPE, bp.id);
+      expect(row?.metadata).not.toHaveProperty('intentSource');
+      const read = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(contract));
+      expect(read?.intentSource).toBeUndefined();
+    }
+  });
+});

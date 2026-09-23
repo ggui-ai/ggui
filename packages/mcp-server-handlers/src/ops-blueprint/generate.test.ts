@@ -19,7 +19,7 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import { findBlueprintExact } from '../renders/blueprint-registry.js';
+import { findBlueprintExact, listBlueprints } from '../renders/blueprint-registry.js';
 import type { TelemetryEvent } from "@ggui-ai/mcp-server-core";
 import { describe, expect, it, vi } from "vitest";
 import { GadgetNotRegisteredError } from "../renders/assert-gadgets.js";
@@ -693,5 +693,26 @@ describe("createGguiOpsGenerateBlueprintHandler — the generation prompt (#1046
     const placeholder = events.filter((e) => e.name === "blueprint.generate_prompt_placeholder");
     expect(placeholder).toHaveLength(1);
     expect(placeholder[0]?.attributes).toMatchObject({ appId: "app-1", requestId: "req-1", reason: "no-intent-no-seedPrompt" });
+  });
+});
+
+// ggui#1275 — an explicit intent or a seed prompt is the UI's task
+// (authored); a persona alone is a stand-in (fallback).
+describe("ggui_ops_generate_blueprint — the cache mirror's intentSource (ggui#1275)", () => {
+  it.each([
+    [{ intent: "a weekly spend summary" }, undefined],
+    [{ seedPrompt: "make it red" }, undefined],
+    [{ persona: "data-dense" }, "fallback"],
+  ] as const)("%j mirrors intentSource %s", async (hints, expected) => {
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const handler = createGguiOpsGenerateBlueprintHandler({ ...defaultDeps(), cacheRegistry });
+    await handler.handler({ contract: emptyContract(), ...hints }, makeCtx("app-1"));
+    const rows = await listBlueprints(cacheRegistry, "app-1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.intentSource).toBe(expected);
   });
 });

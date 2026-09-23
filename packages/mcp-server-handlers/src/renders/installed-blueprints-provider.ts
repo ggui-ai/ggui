@@ -132,11 +132,17 @@ export interface InstalledBlueprintEntry {
    */
   readonly contract: InstallToCacheInput['contract'];
   /**
-   * Intent prose for RAG embedding. Caller derives from the manifest
-   * (typically `description ?? name`). Used by Tier-2 semantic
-   * matching; Tier-1 exact-key matching ignores it.
+   * Intent prose for RAG embedding. Used by Tier-2 semantic matching;
+   * Tier-1 exact-key matching ignores it. Derive it together with
+   * {@link intentSource} via `installedBlueprintIntent(manifest, id)`.
    */
   readonly intent: string;
+  /**
+   * Where {@link intent} came from — `'fallback'` for a title or an id,
+   * which the matcher's semantic judge never sees (ggui#1275). Default
+   * `'authored'`.
+   */
+  readonly intentSource?: InstallToCacheInput['intentSource'];
 }
 
 /**
@@ -377,6 +383,7 @@ export function createInstalledBlueprintsProvider(
           contract: entry.contract,
           componentCode: compileResult.code,
           intent: entry.intent,
+          ...(entry.intentSource !== undefined ? { intentSource: entry.intentSource } : {}),
         });
         let bucket = registeredBindings.get(scope);
         if (!bucket) {

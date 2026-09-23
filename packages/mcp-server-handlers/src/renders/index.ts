@@ -266,6 +266,7 @@ export {
   type BlueprintRegistryDeps,
   type ContractValidator,
   type RegisterBlueprintInput,
+  type BlueprintIntentSource,
   type RegisterBlueprintOptions,
 } from "./blueprint-registry.js";
 export {
@@ -291,7 +292,11 @@ export {
   type HandshakeDecideInput,
   type HandshakeDecisionAdapter,
 } from "./decide-handshake.js";
-export { installToCache, type InstallToCacheInput } from "./install-to-cache.js";
+export {
+  installToCache,
+  installedBlueprintIntent,
+  type InstallToCacheInput,
+} from "./install-to-cache.js";
 export {
   createInstalledBlueprintsProvider,
   type CreateInstalledBlueprintsProviderOptions,

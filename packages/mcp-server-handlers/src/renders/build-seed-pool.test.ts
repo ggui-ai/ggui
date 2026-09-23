@@ -205,4 +205,21 @@ describe('buildSeedPool', () => {
     );
     expect(hit).not.toBeNull();
   });
+
+  // ggui#1275 — a seed prompt is a statement of the UI's task; a persona or
+  // the pool's default label is a stand-in.
+  it.each([
+    [{ seedPrompt: 'a checkout summary card' }, undefined],
+    [{ persona: 'data-dense' }, 'fallback'],
+    [{}, 'fallback'],
+  ] as const)('variance %j registers intentSource %s', async (variance, expected) => {
+    const bp = toPortableBlueprint({ contract, componentCode: 'export default () => null;', variance, source: LLM_SOURCE });
+    const pool = await buildSeedPool({ label: 'intent-source', loadAll: async () => [bp] }, { scope: 'shared' });
+    const hit = await findBlueprintExact(
+      { vectorStore: pool.registry.vectorStore, index: pool.registry.index },
+      'shared', 'template', blueprintKey(contract), variantKey(variance),
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.intentSource).toBe(expected);
+  });
 });

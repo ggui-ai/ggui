@@ -113,6 +113,15 @@ export interface Blueprint {
   readonly contract: DataContract;
   /** Original intent prose that produced the blueprint. Diagnostic + RAG. */
   readonly intent: string;
+  /**
+   * `'fallback'` when {@link intent} is a stand-in — a placeholder, an
+   * id, a title or a persona, written because the writer had no
+   * statement of the UI's task. Absent means authored. The semantic
+   * judge never sees a fallback row (it would compare contract summaries
+   * and guess); exact-key reuse still reaches it. See
+   * {@link BlueprintIntentSource}.
+   */
+  readonly intentSource?: 'fallback';
   /** Generated component source. Empty string when generation hasn't happened yet. */
   readonly componentCode: string;
   /**
@@ -232,11 +241,37 @@ export interface BlueprintRegistryDeps {
   readonly durability?: BlueprintDurabilityDeps;
 }
 
+/**
+ * Where a registry row's intent came from (ggui#1275).
+ *
+ * - `'authored'` — a statement of the UI's TASK: a render request's
+ *   intent, a generation `seedPrompt`, a manifest's `intent` or
+ *   `description`.
+ * - `'fallback'` — a stand-in, stored because registration refuses an
+ *   empty intent: an operator placeholder, a bare id, a manifest `name`
+ *   (a title names a thing; it does not describe a task), or a `persona`
+ *   (it describes the agent, not the UI).
+ *
+ * Semantic reuse is intent similarity, so a fallback row never reaches
+ * the matcher's judge; it stays reachable by exact key. Only
+ * `'fallback'` is stored (`intentSource` in row metadata); an authored
+ * row writes nothing, so it is byte-identical to a row written before
+ * the field existed, and absence reads as authored.
+ */
+export type BlueprintIntentSource = 'authored' | 'fallback';
+
 /** Input for {@link registerBlueprint}. */
 export interface RegisterBlueprintInput {
   readonly kind: BlueprintKind;
   readonly contract: DataContract;
   readonly intent: string;
+  /**
+   * Where {@link intent} came from. Default `'authored'`. A writer that
+   * substitutes a stand-in because it has no statement of the UI's task
+   * MUST pass `'fallback'` — see {@link BlueprintIntentSource} for which
+   * sources are which.
+   */
+  readonly intentSource?: BlueprintIntentSource;
   readonly componentCode: string;
   /**
    * Authored (pre-compile) source body, when the generator distinguishes
@@ -343,6 +378,7 @@ const METADATA_KEYS = {
   lastHitAt: 'lastHitAt',
   installed: 'installed',
   sourceCodeHash: 'sourceCodeHash',
+  intentSource: 'intentSource',
 } as const;
 
 function blueprintToMetadata(
@@ -361,6 +397,9 @@ function blueprintToMetadata(
     // Flat-provenance scalars — key names owned by the protocol codec.
     ...blueprintSourceToFlat(bp.source),
     ...(bp.installed === true ? { [METADATA_KEYS.installed]: true } : {}),
+    ...(bp.intentSource === 'fallback'
+      ? { [METADATA_KEYS.intentSource]: 'fallback' }
+      : {}),
     ...(bp.lastHitAt !== undefined
       ? { [METADATA_KEYS.lastHitAt]: bp.lastHitAt }
       : {}),
@@ -477,6 +516,7 @@ function rowToBlueprint(
   const hitCount = readScalarNumber(metadata[METADATA_KEYS.hitCount]) ?? 0;
   const lastHitAt = readScalarString(metadata[METADATA_KEYS.lastHitAt]);
   const installed = metadata[METADATA_KEYS.installed] === true;
+  const intentIsFallback = metadata[METADATA_KEYS.intentSource] === 'fallback';
   const variance = readVariance(metadata[METADATA_KEYS.variance]);
   // `variantKey` is identity-bearing — `blueprintToMetadata` always
   // writes it, so a blueprint-shaped row without one is a legacy row
@@ -505,6 +545,7 @@ function rowToBlueprint(
     hitCount,
     source,
     ...(installed ? { installed: true } : {}),
+    ...(intentIsFallback ? { intentSource: 'fallback' } : {}),
     ...(lastHitAt !== undefined ? { lastHitAt } : {}),
     ...(sourceCodeHash !== undefined ? { sourceCodeHash } : {}),
   };
@@ -675,6 +716,7 @@ export async function registerBlueprint(
     hitCount: 0,
     source: input.source,
     ...(input.installed === true ? { installed: true } : {}),
+    ...(input.intentSource === 'fallback' ? { intentSource: 'fallback' } : {}),
     ...(warnFindings.length > 0
       ? { validationWarnings: warnFindings }
       : {}),

@@ -472,6 +472,13 @@ export function createGguiOpsGenerateBlueprintHandler(
             kind: "template",
             contract,
             intent: intentForCache,
+            // ggui#1275 — an explicit intent or a seed prompt states the
+            // UI's task; a persona or the placeholder is a stand-in the
+            // matcher's judge never sees.
+            intentSource:
+              parsed.intent !== undefined || parsed.seedPrompt !== undefined
+                ? "authored"
+                : "fallback",
             componentCode,
             // The cache row MUST carry the same variance as the MVB
             // row: `registerBlueprint` keys the exact-lookup on

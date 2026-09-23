@@ -275,6 +275,10 @@ export function createGguiOpsRegisterBlueprintHandler(
             kind: "template",
             contract,
             intent: intentForCache,
+            // ggui#1275 — only a seed prompt states the UI's task. A
+            // persona describes the agent and the placeholder describes
+            // nothing: both are stand-ins the matcher's judge never sees.
+            intentSource: parsed.seedPrompt !== undefined ? "authored" : "fallback",
             componentCode,
             // Same user-arm provenance as the MVB row above — one
             // handler call, one provenance claim across both stores.

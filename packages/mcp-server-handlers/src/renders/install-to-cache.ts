@@ -51,6 +51,7 @@
 import {
   registerBlueprint,
   type Blueprint,
+  type BlueprintIntentSource,
   type BlueprintRegistryDeps,
   type RegisterBlueprintOptions,
 } from './blueprint-registry.js';
@@ -93,6 +94,39 @@ export interface InstallToCacheInput {
    * `summarizeContract(contract)`.
    */
   readonly intent: string;
+  /**
+   * Where {@link intent} came from. Default `'authored'`. Derive both
+   * fields with {@link installedBlueprintIntent} so every install bridge
+   * reads a manifest the same way (ggui#1275).
+   */
+  readonly intentSource?: BlueprintIntentSource;
+}
+
+/**
+ * The intent an installed blueprint registers under, derived from its
+ * manifest, and whether that intent is authored (ggui#1275).
+ *
+ * A manifest's `intent` or `description` states the UI's task —
+ * authored. Its `name` is a title ("Weather Card") and `id` is an id:
+ * either is a stand-in (`'fallback'`), which the matcher's semantic judge
+ * never sees, while exact-key reuse still reaches the row. Blank fields
+ * are skipped, so a whitespace-only description falls through to the
+ * next source instead of registering an empty intent.
+ */
+export function installedBlueprintIntent(
+  manifest: {
+    readonly intent?: string;
+    readonly description?: string;
+    readonly name?: string;
+  },
+  id: string,
+): { readonly intent: string; readonly intentSource: BlueprintIntentSource } {
+  for (const stated of [manifest.intent, manifest.description]) {
+    const trimmed = stated?.trim();
+    if (trimmed) return { intent: trimmed, intentSource: 'authored' };
+  }
+  const name = manifest.name?.trim();
+  return { intent: name ? name : id, intentSource: 'fallback' };
 }
 
 /**
@@ -142,6 +176,7 @@ export async function installToCache(
       kind: 'template',
       contract: input.contract,
       intent: input.intent,
+      ...(input.intentSource !== undefined ? { intentSource: input.intentSource } : {}),
       componentCode: input.componentCode,
       source: { kind: 'user' },
       installed: true,

@@ -8,7 +8,7 @@ import type { DataContract } from "@ggui-ai/protocol";
 import { blueprintKey, variantKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { findBlueprintExact } from "../renders/blueprint-registry.js";
+import { findBlueprintExact, listBlueprints } from "../renders/blueprint-registry.js";
 import type { HandlerContext } from "../types.js";
 import { createGguiOpsRegisterBlueprintHandler } from "./register.js";
 
@@ -347,5 +347,34 @@ describe("createGguiOpsRegisterBlueprintHandler — appId input + authorizer", (
         makeCtx("app-1")
       )
     ).rejects.toThrow(/not curatable/);
+  });
+});
+
+// ggui#1275 — the cache mirror says when its intent is a stand-in. A seed
+// prompt describes the UI (authored); a persona describes the agent, and the
+// placeholder describes nothing (fallback — never offered to the judge).
+describe("ggui_ops_register_blueprint — the cache mirror's intentSource (ggui#1275)", () => {
+  it.each([
+    [{ seedPrompt: "a small register-test card" }, undefined],
+    [{ persona: "data-dense" }, "fallback"],
+    [{}, "fallback"],
+  ] as const)("%j mirrors intentSource %s", async (hints, expected) => {
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const blueprintStore = new InMemoryBlueprintStore();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      putCode: (codeHash, body) => {
+        blueprintStore.putCode(codeHash, body);
+      },
+      cacheRegistry,
+    });
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, ...hints }, makeCtx("app-1"));
+    const rows = await listBlueprints(cacheRegistry, "app-1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.intentSource).toBe(expected);
   });
 });

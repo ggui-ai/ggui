@@ -9,7 +9,7 @@ import type {
   VectorSearchResult,
 } from '@ggui-ai/mcp-server-core';
 import { fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
-import { registerBlueprint } from './blueprint-registry.js';
+import { registerBlueprint, type BlueprintIntentSource } from './blueprint-registry.js';
 import { gateImportedBlueprint, type ImportGateCtx } from './import-gate.js';
 import type { BlueprintPool } from './decide-handshake.js';
 import type { SeedPoolSource } from './seed-pool-source.js';
@@ -114,14 +114,8 @@ export async function buildSeedPool(
       {
         kind: 'template',
         contract: record.contract,
-        // Coalesce on the first NON-EMPTY hint — `??` is nullish-only, so an
-        // empty `seedPrompt`/`persona` would yield an empty intent and trip
-        // registerBlueprint's "intent cannot be empty" guard, aborting the
-        // whole build on one bad record.
-        intent:
-          [record.variance.seedPrompt, record.variance.persona]
-            .map((s) => s?.trim())
-            .find((s): s is string => Boolean(s)) ?? 'shared blueprint',
+        // intent + intentSource — see seedPoolIntent below.
+        ...seedPoolIntent(record.variance),
         componentCode: record.componentCode,
         // Provenance travels WITH the artifact (PortableBlueprint v2
         // requires it) — an llm-minted record stays llm-sourced in
@@ -139,4 +133,23 @@ export async function buildSeedPool(
     scope,
     label: source.label,
   };
+}
+
+/**
+ * The intent a seed-pool record registers under, and where it came from
+ * (ggui#1275). Coalesces on the first NON-EMPTY hint — `??` is
+ * nullish-only, so an empty `seedPrompt`/`persona` would yield an empty
+ * intent and trip registerBlueprint's "intent cannot be empty" guard,
+ * aborting the whole build on one bad record. Only a seed prompt states
+ * the UI's task; a persona (it describes the agent) or the pool's default
+ * label is a stand-in, which the matcher's judge never sees.
+ */
+function seedPoolIntent(variance: {
+  readonly seedPrompt?: string;
+  readonly persona?: string;
+}): { readonly intent: string; readonly intentSource: BlueprintIntentSource } {
+  const seedPrompt = variance.seedPrompt?.trim();
+  if (seedPrompt) return { intent: seedPrompt, intentSource: 'authored' };
+  const persona = variance.persona?.trim();
+  return { intent: persona ? persona : 'shared blueprint', intentSource: 'fallback' };
 }

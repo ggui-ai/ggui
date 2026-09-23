@@ -457,16 +457,37 @@ export async function matchBlueprint(
     return { strategy: 'no-match', reason, candidates };
   }
 
-  // ggui#1275 — the floor is per candidate. Top-1 clearing it used to hand
-  // ALL top-K to the judge, which could pick any of them (observed: a reuse
-  // at cosine 0.19 under the then-0.2 floor because top-1 was 0.27). Only
-  // candidates at or above the floor are eligible; top-1 is among them, so
-  // the list is never empty here. The trace still carries the full top-K.
-  const eligible = candidates.filter((c) => c.cosine >= minCosine);
+  // ggui#1275 — who the judge may see. (1) The floor is per candidate: top-1
+  // clearing it used to hand ALL top-K to the judge, which could pick any of
+  // them (observed: a reuse at cosine 0.19 under the then-0.2 floor because
+  // top-1 was 0.27). (2) A row whose intent is a stand-in
+  // (`intentSource: 'fallback'` — a placeholder, an id, a title, a persona)
+  // is never offered: semantic reuse is intent similarity, and with no
+  // intent the judge compares contract summaries and guesses (observed: both
+  // wrong reuses of the 2026-09 read picked one placeholder-intent row).
+  // Such a row stays reachable by exact key above. The trace still carries
+  // the full top-K.
+  const aboveFloor = candidates.filter((c) => c.cosine >= minCosine);
+  const eligible = aboveFloor.filter((c) => c.blueprint.intentSource !== 'fallback');
   const floorNote =
     eligible.length < candidates.length
-      ? ` (${eligible.length} of ${candidates.length} candidates at or above minCosine=${minCosine})`
+      ? ` (${eligible.length} of ${candidates.length} candidates at or above minCosine=${minCosine} with an authored intent)`
       : '';
+
+  if (eligible.length === 0) {
+    // Top-1 cleared the floor, but every candidate that did carries a
+    // stand-in intent — nothing the judge could honestly compare.
+    const reason =
+      'no-match: no saved interface close enough has a stated intent — a new one will be generated';
+    const traceReason = `no-match: ${aboveFloor.length} candidates at or above minCosine=${minCosine}, none with an authored intent; judge skipped`;
+    emit({
+      decision: 'no-match',
+      strategy: 'semantic',
+      reason: traceReason,
+      candidates,
+    });
+    return { strategy: 'no-match', reason, candidates };
+  }
 
   // Run the LLM rerank judge.
   const decision = await rerankCandidates(

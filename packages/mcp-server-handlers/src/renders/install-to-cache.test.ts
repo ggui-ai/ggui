@@ -20,7 +20,7 @@ import {
   findBlueprintExact,
   listBlueprints,
 } from './blueprint-registry.js';
-import { installToCache } from './install-to-cache.js';
+import { installToCache, installedBlueprintIntent } from './install-to-cache.js';
 
 const SCOPE = 'app-install';
 
@@ -134,5 +134,35 @@ describe('installToCache', () => {
     expect(byKind.get('user')?.componentCode).toBe('installed-code');
     expect(byKind.get('user')?.installed).toBe(true);
     expect(byKind.get('llm')?.componentCode).toBe('synth-code');
+  });
+});
+
+// ggui#1275 — which manifest field an installed blueprint's intent came from.
+// A manifest's `intent` or `description` states the UI's task (authored); its
+// `name` is a title and an id is an id (fallback). One helper, so the install
+// bridges cannot drift apart on it.
+describe('installedBlueprintIntent (ggui#1275)', () => {
+  it.each([
+    [{ intent: 'pick a delivery slot', description: 'slot picker', name: 'Slots' }, 'pick a delivery slot', 'authored'],
+    [{ description: 'a counter with plus and minus', name: 'Counter' }, 'a counter with plus and minus', 'authored'],
+    [{ description: '   ', name: 'Counter' }, 'Counter', 'fallback'],
+    [{ name: 'Counter' }, 'Counter', 'fallback'],
+    [{}, 'vendor:counter:1.0.0', 'fallback'],
+  ] as const)('%j → %s (%s)', (manifest, intent, intentSource) => {
+    expect(installedBlueprintIntent(manifest, 'vendor:counter:1.0.0')).toEqual({ intent, intentSource });
+  });
+
+  it('a name-only install registers as fallback and stays exact-key reusable', async () => {
+    const deps = makeDeps();
+    const derived = installedBlueprintIntent({ name: 'Counter' }, 'vendor:counter:1.0.0');
+    const bp = await installToCache(deps, SCOPE, {
+      contract: COUNTER_CONTRACT,
+      componentCode: 'export default () => null;',
+      ...derived,
+    });
+    expect(bp.intentSource).toBe('fallback');
+    const hit = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(COUNTER_CONTRACT));
+    expect(hit?.id).toBe(bp.id);
+    expect(hit?.intentSource).toBe('fallback');
   });
 });

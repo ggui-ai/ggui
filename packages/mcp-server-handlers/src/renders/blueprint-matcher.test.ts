@@ -1275,3 +1275,91 @@ describe('matchBlueprint — one similarity floor on both paths (ggui#1275)', ()
     if (result.strategy === 'semantic') expect(result.cosine).toBeCloseTo(cosine, 5);
   });
 });
+
+// ── ggui#1275 (3) — no semantic reuse for a candidate without an authored intent ──
+//
+// rnd's verdict (c.5786466220): both wrong reuses below 0.3 picked ONE
+// operator-registered blueprint whose intent was a placeholder, so the judge
+// compared contract summaries and guessed. Semantic reuse means intent
+// similarity; a row whose intent is a stand-in (`intentSource: 'fallback'`)
+// never reaches the judge. It stays reachable by exact key.
+
+async function fallbackRegistry(cosines: ReadonlyMap<string, number>, fallback: ReadonlySet<string>) {
+  const registry = {
+    embedding: new MarkerEmbeddingProvider(cosines),
+    vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
+  };
+  const ids = new Map<string, string>();
+  const contracts = new Map<string, DataContract>();
+  for (const marker of cosines.keys()) {
+    const contract: DataContract = {
+      contextSpec: { [marker.toLowerCase().replace(/-/g, '_')]: { schema: { type: 'string' }, default: '' } },
+    };
+    const bp = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract,
+      intent: fallback.has(marker) ? `operator-registered blueprint (${marker})` : `${marker} notepad`,
+      ...(fallback.has(marker) ? { intentSource: 'fallback' as const } : {}),
+      componentCode: marker,
+      source: { kind: 'user' },
+    });
+    ids.set(marker, bp.id);
+    contracts.set(marker, contract);
+  }
+  return { registry, ids, contracts };
+}
+
+describe('matchBlueprint — a stand-in intent never reaches the judge (ggui#1275)', () => {
+  it('a fallback-intent candidate the judge would pick is not offered, and is not reused', async () => {
+    const { registry, ids } = await fallbackRegistry(
+      new Map([
+        ['FOXTROT-INTENT', 0.6],
+        ['GOLF-INTENT', 0.4],
+      ]),
+      new Set(['FOXTROT-INTENT']),
+    );
+    const offered: string[] = [];
+    const llm = stubLlm(
+      { matchId: ids.get('FOXTROT-INTENT') ?? null, confidence: 0.65, reason: 'the contract looks similar' },
+      (u) => offered.push(u),
+    );
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a walkthrough of a CLI login' });
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toContain(ids.get('GOLF-INTENT'));
+    expect(offered[0]).not.toContain(ids.get('FOXTROT-INTENT'));
+    expect(result.strategy).not.toBe('semantic');
+  });
+
+  it('when every candidate above the floor is a fallback, the judge is not called', async () => {
+    const { registry } = await fallbackRegistry(
+      new Map([
+        ['FOXTROT-INTENT', 0.6],
+        ['HOTEL-INTENT', 0.2],
+      ]),
+      new Set(['FOXTROT-INTENT']),
+    );
+    let judgeCalled = false;
+    const llm = stubLlm(() => {
+      judgeCalled = true;
+      return { matchId: null, confidence: 0, reason: '' };
+    });
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a walkthrough of a CLI login' });
+    expect(judgeCalled).toBe(false);
+    expect(result.strategy).toBe('no-match');
+  });
+
+  it('an exact-key hit on the same fallback blueprint still reuses it', async () => {
+    const { registry, ids, contracts } = await fallbackRegistry(
+      new Map([['FOXTROT-INTENT', 0.6]]),
+      new Set(['FOXTROT-INTENT']),
+    );
+    const result = await matchBlueprint(
+      { registry, llm: stubLlm({ matchId: null, confidence: 0, reason: 'unused' }) },
+      SCOPE,
+      { intent: 'anything at all', contract: contracts.get('FOXTROT-INTENT') },
+    );
+    expect(result.strategy).toBe('exact-key');
+    if (result.strategy === 'exact-key') expect(result.blueprint.id).toBe(ids.get('FOXTROT-INTENT'));
+  });
+});

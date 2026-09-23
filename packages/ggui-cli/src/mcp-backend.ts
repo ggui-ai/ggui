@@ -70,6 +70,7 @@ import { PlaintextFileProviderKeyStore } from "@ggui-ai/mcp-server-core/plaintex
 import {
   createInstalledBlueprintsProvider,
   createStderrCacheTraceSink,
+  installedBlueprintIntent,
   setCacheTraceSink,
   type BlueprintPool,
   type CreateInstalledBlueprintsProviderOptions,
@@ -738,13 +739,14 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       installedBlueprints: () =>
         entries.flatMap((entry) => {
           if (entry.manifest.contract === undefined) return [];
-          const intent = entry.manifest.description ?? entry.manifest.name ?? entry.id;
+          // A description states the UI's task; a name or the id is a
+          // stand-in the matcher's judge never sees (ggui#1275).
           return [
             {
               id: entry.id,
               manifestPath: entry.manifestPath,
               contract: entry.manifest.contract,
-              intent,
+              ...installedBlueprintIntent(entry.manifest, entry.id),
             },
           ];
         }),
