@@ -202,6 +202,17 @@ export interface BuildWireConfigOptions {
    * minimum the `oneShot` contract requires.
    */
   readonly onDispatchSuppressed?: (info: DispatchSuppressedInfo) => void;
+  /**
+   * Called on a dispatch that resolved NO action spec
+   * (`getActiveActionSpec()` returned `undefined`), with the action's name
+   * (ggui#1178). Without a spec the one-shot guard cannot know whether the
+   * action is `oneShot`, so it cannot enforce one; the dispatch still
+   * proceeds, as a spec-less dispatch always has. Wire reports every such
+   * dispatch; whether the render SHOULD have carried a spec, and how to name
+   * it, is the host's knowledge — the iframe runtime posts the
+   * `one-shot-unenforceable` observability event once per component render.
+   */
+  readonly onActionSpecAbsent?: (actionName: string) => void;
 }
 
 /**
@@ -250,6 +261,7 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
       : {}),
     dispatch: (actionName, data) => {
       const actionSpec = opts.getActiveActionSpec();
+      if (actionSpec === undefined) opts.onActionSpecAbsent?.(actionName);
       const isOneShot = actionSpec?.[actionName]?.oneShot === true;
       if (isOneShot && spentOneShots.has(actionName)) {
         // NEVER SILENT — the runtime's diagnostic channel (`console.warn`)

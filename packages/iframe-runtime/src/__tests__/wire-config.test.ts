@@ -29,13 +29,20 @@
  * ADAPTER: CSP-precompiled validation, violation dual-emission, and
  * the tools/call-vs-WS transport seam.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const posted = vi.hoisted((): unknown[] => []);
+vi.mock('../observability.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../observability.js')>()),
+  postObservabilityToParent: (event: unknown) => posted.push(event),
+}));
 import type {
   ActionEnvelope,
   ActionSpec,
   ComponentGguiSession,
   GguiSession,
 } from '@ggui-ai/protocol';
+import type { GguiSessionSeedInput } from '../types.js';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import {
@@ -265,5 +272,98 @@ describe('buildRootWireConfig — subscribe via StreamBus', () => {
       mode: 'replace',
       complete: true,
     });
+  });
+});
+
+// ggui#1178 — a card can paint and take gestures with NO action spec (a mount
+// past the WS token's TTL, a host with no live channel, or an older server that
+// never put the spec on the render slice). The one-shot guard then cannot know
+// an action is `oneShot`, so it fails open. The runtime's obligation: name that
+// once per COMPONENT render as the posted `one-shot-unenforceable` observability
+// event, and let the dispatch proceed. System and mcpApps renders carry no spec
+// by design and stay quiet.
+describe('buildRootWireConfig — one-shot-unenforceable (ggui#1178)', () => {
+  beforeEach(() => {
+    posted.length = 0;
+  });
+  function unenforceableEvents(): unknown[] {
+    return posted.filter(
+      (e) => typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'one-shot-unenforceable',
+    );
+  }
+
+  it('a component render with no actionSpec posts one-shot-unenforceable ONCE, and every dispatch proceeds', () => {
+    const { send, messages } = makeFakeManager();
+    const render = makeRender('render_nospec');
+    const cfg = buildRootWireConfig({
+      sessionId: 'render_nospec',
+      appId: 'app_x',
+      getCurrentGguiSession: () => render,
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('submit', { ok: true });
+    cfg.dispatch('submit', { ok: true });
+
+    expect(messages).toHaveLength(2);
+    expect(unenforceableEvents()).toEqual([
+      { kind: 'one-shot-unenforceable', renderId: 'render_nospec', actionName: 'submit' },
+    ]);
+  });
+
+  it('a new render is named again, once', () => {
+    const { send } = makeFakeManager();
+    let render = makeRender('render_a');
+    const cfg = buildRootWireConfig({
+      sessionId: 'render_a',
+      appId: 'app_x',
+      getCurrentGguiSession: () => render,
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('submit', {});
+    render = makeRender('render_b');
+    cfg.dispatch('submit', {});
+    cfg.dispatch('submit', {});
+
+    expect(unenforceableEvents()).toEqual([
+      { kind: 'one-shot-unenforceable', renderId: 'render_a', actionName: 'submit' },
+      { kind: 'one-shot-unenforceable', renderId: 'render_b', actionName: 'submit' },
+    ]);
+  });
+
+  it('a component render WITH an actionSpec never names it', () => {
+    const { send } = makeFakeManager();
+    const render = makeRender('render_spec', { actionSpec: { submit: { label: 'Submit' } } });
+    const cfg = buildRootWireConfig({
+      sessionId: 'render_spec',
+      appId: 'app_x',
+      getCurrentGguiSession: () => render,
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('submit', {});
+
+    expect(unenforceableEvents()).toEqual([]);
+  });
+
+  it('a system render (no spec by design) never names it', () => {
+    const { send, messages } = makeFakeManager();
+    const system: GguiSessionSeedInput = { id: 'sys_1', appId: 'app_x', type: 'system', kind: 'mcp-apps-probe' };
+    const cfg = buildRootWireConfig({
+      sessionId: 'sys_1',
+      appId: 'app_x',
+      getCurrentGguiSession: () => system,
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('probe', {});
+
+    expect(messages).toHaveLength(1);
+    expect(unenforceableEvents()).toEqual([]);
   });
 });

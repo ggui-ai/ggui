@@ -41,6 +41,7 @@ export type ObservabilityEvent =
   | AppThemeMemberStrippedEvent
   | ActionSpecInvalidEvent
   | ActionSpecMemberStrippedEvent
+  | OneShotUnenforceableEvent
   | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
@@ -425,6 +426,21 @@ export interface ActionSpecInvalidEvent {
 export interface ActionSpecMemberStrippedEvent {
   readonly kind: 'action-spec-member-stripped';
   readonly keys: readonly string[];
+}
+
+/**
+ * A component render dispatched with no action contract on either carrier
+ * (ggui#1178, SPEC §5.5.1): the one-shot guard cannot know whether the
+ * action is `oneShot`, so the dispatch proceeds unguarded. Posted once per
+ * render, on its first such dispatch. `actionName` is the action that
+ * dispatched, never its payload.
+ *
+ * @public
+ */
+export interface OneShotUnenforceableEvent {
+  readonly kind: 'one-shot-unenforceable';
+  readonly renderId: string;
+  readonly actionName: string;
 }
 
 /**

@@ -157,3 +157,52 @@ describe('one-shot guard (ggui#1108)', () => {
     expect(suppressed).toHaveLength(0);
   });
 });
+
+// ggui#1178 — a dispatch that resolved NO action spec cannot tell whether the
+// action is `oneShot`, so the guard above cannot enforce one. The dispatch still
+// proceeds (a missing spec is permissive, as it always was); wire reports each
+// such dispatch through `onActionSpecAbsent` so the HOST can name the
+// unenforceable state — whether a render should have carried a spec is the
+// host's knowledge, not wire's.
+describe('a dispatch that resolves no action spec (ggui#1178)', () => {
+  function specless(onActionSpecAbsent?: (actionName: string) => void) {
+    const emitted: JsonValue[] = [];
+    const opts: BuildWireConfigOptions = {
+      app: { appId: 'a', appName: 'a' },
+      render: { sessionId: 's1', isConnected: true },
+      auth: { isAuthenticated: false },
+      getActiveActionSpec: () => undefined,
+      validateEnvelope: () => ({ valid: true, violations: [] }),
+      onViolation: () => {
+        throw new Error('unexpected violation');
+      },
+      emitEnvelope: (env) => {
+        emitted.push(env.payload ?? null);
+      },
+      streamBus: new StreamBus(),
+      ...(onActionSpecAbsent !== undefined ? { onActionSpecAbsent } : {}),
+    };
+    return { config: buildWireConfig(opts), emitted };
+  }
+
+  it('reports every spec-less dispatch to onActionSpecAbsent with the action name, and every one still proceeds', () => {
+    const absent: string[] = [];
+    const { config, emitted } = specless((name) => absent.push(name));
+    config.dispatch('submit', { ok: true });
+    config.dispatch('submit', { ok: true });
+    expect(emitted).toEqual([
+      { action: 'submit', data: { ok: true } },
+      { action: 'submit', data: { ok: true } },
+    ]);
+    expect(absent).toEqual(['submit', 'submit']);
+  });
+
+  it('a dispatch that resolved a spec never calls onActionSpecAbsent', () => {
+    const absent: string[] = [];
+    const { config } = harness();
+    const withHook = buildWireConfig({ ...harness().opts, onActionSpecAbsent: (name) => absent.push(name) });
+    config.dispatch('log', {});
+    withHook.dispatch('log', {});
+    expect(absent).toEqual([]);
+  });
+});

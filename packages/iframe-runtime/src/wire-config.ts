@@ -47,6 +47,7 @@ import {
   fromClientContractViolation,
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
+import { postObservabilityToParent } from './observability.js';
 
 // `StreamBus` (and its bounded reserved-channel replay ring) lives in
 // `@ggui-ai/wire` (one implementation for every first-party renderer).
@@ -175,6 +176,26 @@ export function buildRootWireConfig(
     emitProtocolError(fromClientContractViolation(err));
   }
 
+  // ggui#1178 — a card paints and takes gestures even when no action spec
+  // reached it (a mount past the WS token's TTL, a host with no live channel,
+  // an older server that never put the spec on the render slice). The one-shot
+  // guard then cannot know an action is `oneShot` and fails open. The runtime's
+  // obligation is to NAME that, never silently: once per component render, as
+  // the `one-shot-unenforceable` observability event posted to the embedding
+  // host (the channel every other degradation in this runtime uses), and the
+  // dispatch proceeds. It is named on the first spec-less DISPATCH, not at
+  // paint: an absent spec also means "this card declares no actions", so a
+  // paint-time name would fire on every display-only card. System and mcpApps
+  // renders carry no spec by design and are never named.
+  let namedUnenforceableFor: string | null = null;
+  const nameUnenforceableOnce = (actionName: string): void => {
+    const currentRender = opts.getCurrentGguiSession();
+    if (currentRender === null || currentRender.type === 'mcpApps' || currentRender.type === 'system') return;
+    if (namedUnenforceableFor === currentRender.id) return;
+    namedUnenforceableFor = currentRender.id;
+    postObservabilityToParent({ kind: 'one-shot-unenforceable', renderId: currentRender.id, actionName });
+  };
+
   return buildWireConfig({
     app: { appId: opts.appId, appName: opts.appId },
     // `isConnected` here is the static config field; `useRender()`
@@ -194,6 +215,7 @@ export function buildRootWireConfig(
         ? currentRender.actionSpec
         : undefined;
     },
+    onActionSpecAbsent: nameUnenforceableOnce,
     // The iframe's precompiled-validator variant — the dispatch never
     // trips the iframe's no-`unsafe-eval` CSP.
     validateEnvelope: validateOutboundActionEnvelope,
