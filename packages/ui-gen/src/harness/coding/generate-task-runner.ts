@@ -22,6 +22,7 @@ import {
   type A1Phase,
 } from "./run-coding-turn.js";
 import { runEvalRound } from "./run-eval-round.js";
+import type { TokenUsage } from "./run-eval-round.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -64,10 +65,11 @@ export interface GenerateTelemetry {
   /** Total output tokens billed across coding + eval. */
   totalOut: number;
   /**
-   * Prompt-cache tokens accumulated across coding turns, when the
-   * provider reports them. Optional: stays `undefined` for providers
-   * that don't expose cache accounting (never defaulted to 0 here, so
-   * the boundary can distinguish "no cache reads" from "unreported").
+   * Prompt-cache tokens accumulated across coding turns AND eval rounds
+   * (ggui#1281), when the provider reports them. Optional: stays
+   * `undefined` for providers that don't expose cache accounting (never
+   * defaulted to 0 here, so the boundary can distinguish "no cache reads"
+   * from "unreported").
    */
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
@@ -125,6 +127,24 @@ export function createTelemetry(): GenerateTelemetry {
     codingStartedAtMs: 0,
     codingMs: 0,
   };
+}
+
+/**
+ * Fold one call's (or one eval round's) tokens into the run's totals — the ONE
+ * rule for coding turns and eval rounds alike (ggui#1281: the eval path used to
+ * add input/output only, so `tokens.total` dropped every eval call's cached
+ * prefix). A cache counter is seeded on its first report and stays `undefined`
+ * while nothing has reported one: unreported, never zero.
+ */
+export function absorbTokens(telemetry: GenerateTelemetry, usage: TokenUsage): void {
+  telemetry.totalIn += usage.input;
+  telemetry.totalOut += usage.output;
+  if (usage.cacheRead !== undefined) {
+    telemetry.cacheReadTokens = (telemetry.cacheReadTokens ?? 0) + usage.cacheRead;
+  }
+  if (usage.cacheCreation !== undefined) {
+    telemetry.cacheCreationTokens = (telemetry.cacheCreationTokens ?? 0) + usage.cacheCreation;
+  }
 }
 
 export interface CreateGenerateRunnerInput {
@@ -210,19 +230,12 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         },
       );
 
-      telemetry.totalIn += turn.tokens.input;
-      telemetry.totalOut += turn.tokens.output;
-      // Accumulate prompt-cache counters only when the provider reported
-      // them this turn. Seeding from `undefined` on first report keeps the
-      // "unreported" providers' totals absent rather than 0.
-      if (turn.cacheReadTokens !== undefined) {
-        telemetry.cacheReadTokens =
-          (telemetry.cacheReadTokens ?? 0) + turn.cacheReadTokens;
-      }
-      if (turn.cacheCreationTokens !== undefined) {
-        telemetry.cacheCreationTokens =
-          (telemetry.cacheCreationTokens ?? 0) + turn.cacheCreationTokens;
-      }
+      absorbTokens(telemetry, {
+        input: turn.tokens.input,
+        output: turn.tokens.output,
+        ...(turn.cacheReadTokens !== undefined ? { cacheRead: turn.cacheReadTokens } : {}),
+        ...(turn.cacheCreationTokens !== undefined ? { cacheCreation: turn.cacheCreationTokens } : {}),
+      });
       telemetry.cumulativeLlmMs += turn.llmMs;
       telemetry.cumulativeToolMs += turn.toolMs;
       iconNamesCache = turn.iconNamesCache;
@@ -343,8 +356,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         if (round.evalResult) telemetry.evalResult = round.evalResult;
         if (round.contractFeedback) telemetry.contractFeedback = round.contractFeedback;
         evalDone = round.evalDone;
-        telemetry.totalIn += round.evalTokens.input;
-        telemetry.totalOut += round.evalTokens.output;
+        absorbTokens(telemetry, round.evalTokens);
 
         if (round.control === "break") break;
         // round.control === "feedback" — set next coding turn input.

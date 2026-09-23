@@ -25,7 +25,7 @@ import type {
 } from './types-public.js';
 import { LLM_EVAL_STATIC_CRITERIA } from './types-public.js';
 import { createAgent } from '../harness/llm-router';
-import type { AgentConfig, LLMToolDef, LLMAgent } from '../harness/llm-router';
+import type { AgentConfig, LLMToolDef, LLMAgent, LLMToolCallResponse } from '../harness/llm-router';
 import type { JsonObject } from '@ggui-ai/protocol';
 import { getCriterionById } from './types-public.js';
 import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
@@ -596,8 +596,34 @@ interface CriterionResult {
   coverage: CriterionRunStatus;
   /** Populated for `skipped` — why the criterion produced no verdict. */
   skipReason?: string;
-  tokens: { in: number; out: number };
+  /** This call's token accounting. The cache counts are present only when the
+   *  provider reported them — absent means unreported, never zero (ggui#1281). */
+  tokens: { in: number; out: number; cacheRead?: number; cacheCreation?: number };
   durationMs: number;
+}
+
+/** A call's token accounting, carrying the prompt-cache counts only when the
+ *  provider reported them (the router's rule: absent is "unreported"). */
+function callTokens(response: LLMToolCallResponse): CriterionResult['tokens'] {
+  return {
+    in: response.inputTokens,
+    out: response.outputTokens,
+    ...(response.cacheReadTokens !== undefined ? { cacheRead: response.cacheReadTokens } : {}),
+    ...(response.cacheCreationTokens !== undefined ? { cacheCreation: response.cacheCreationTokens } : {}),
+  };
+}
+
+/**
+ * The evaluation's summed token accounting. `inputTokens` is the NON-cached
+ * input (the router's convention); the cache counts are the sums of what the
+ * calls reported, and stay absent when no call reported one — so a caller can
+ * tell "no cache reads" from "the provider does not say" (ggui#1281).
+ */
+export interface LLMEvalTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 /**
@@ -642,7 +668,7 @@ async function evalCriterion(
         pass: true,
         coverage: 'skipped',
         skipReason: 'no tool call returned',
-        tokens: { in: response.inputTokens, out: response.outputTokens },
+        tokens: callTokens(response),
         durationMs,
       };
     }
@@ -700,7 +726,7 @@ async function evalCriterion(
       issues,
       pass,
       coverage: 'ran',
-      tokens: { in: response.inputTokens, out: response.outputTokens },
+      tokens: callTokens(response),
       durationMs,
     };
   } catch (e) {
@@ -833,7 +859,7 @@ export async function runLLMEvaluation(
   context: LLMEvalContext,
   config: LLMEvalConfig,
   preWarmedContext?: PreWarmedEvalContext | null,
-): Promise<EvalResult & { inputTokens: number; outputTokens: number }> {
+): Promise<EvalResult & LLMEvalTokenUsage> {
   const providerName = config.provider;
   const model = config.model || getDefaultEvalModel(providerName);
   const routerProvider =
@@ -887,7 +913,10 @@ export async function runLLMEvaluation(
   const passCategories: string[] = [];
   let totalIn = 0;
   let totalOut = 0;
-  let cachedTokensEstimate = 0;
+  // Measured, not estimated: summed from what the calls reported; absent
+  // while no call has reported one (ggui#1281).
+  let cacheRead: number | undefined;
+  let cacheCreation: number | undefined;
 
   for (const r of results) {
     allIssues.push(...r.issues);
@@ -896,12 +925,8 @@ export async function runLLMEvaluation(
     }
     totalIn += r.tokens.in;
     totalOut += r.tokens.out;
-  }
-
-  // Estimate cached tokens (mother prompt sent N times, cached N-1 times)
-  const firstResult = results[0];
-  if (firstResult && firstResult.tokens.in > 0) {
-    cachedTokensEstimate = firstResult.tokens.in * (totalCriteriaCount - 1);
+    if (r.tokens.cacheRead !== undefined) cacheRead = (cacheRead ?? 0) + r.tokens.cacheRead;
+    if (r.tokens.cacheCreation !== undefined) cacheCreation = (cacheCreation ?? 0) + r.tokens.cacheCreation;
   }
 
   const wallMs = Date.now() - evalStart;
@@ -928,7 +953,7 @@ export async function runLLMEvaluation(
   }
   console.log(
     `[eval] total: ${(wallMs / 1000).toFixed(1)}s wall (${totalCriteriaCount} parallel) | ` +
-    `in=${totalIn} out=${totalOut} cached~=${cachedTokensEstimate} | ` +
+    `in=${totalIn} out=${totalOut} cacheRead=${cacheRead ?? 'unreported'} cacheWrite=${cacheCreation ?? 'unreported'} | ` +
     `issues=${allIssues.length} pass=${passCategories.length}` +
     (skippedCount > 0 ? ` skipped=${skippedCount}` : ''),
   );
@@ -939,5 +964,7 @@ export async function runLLMEvaluation(
     criteriaCoverage,
     inputTokens: totalIn,
     outputTokens: totalOut,
+    ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
+    ...(cacheCreation !== undefined ? { cacheCreationTokens: cacheCreation } : {}),
   };
 }

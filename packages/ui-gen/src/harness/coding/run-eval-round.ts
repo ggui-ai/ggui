@@ -40,6 +40,7 @@ import type {
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
 type LlmEvalMod = typeof import("../../evaluation/llm-evaluator.js");
+type LLMEvalTokenUsage = import("../../evaluation/llm-evaluator.js").LLMEvalTokenUsage;
 type VisualEvalMod = typeof import("../../evaluation/visual-evaluator.js");
 
 /**
@@ -100,6 +101,20 @@ export interface EvalRoundInput {
  */
 export type EvalRoundControl = "break" | "feedback";
 
+/**
+ * One call's (or one round's) token accounting. `input` is the NON-cached
+ * input; the cache counts are present only when the provider reported them —
+ * absent means unreported, never zero. The runner folds every coding turn and
+ * every eval round through the same rule (`absorbTokens`), so the published
+ * `tokens.total` holds one convention across both (ggui#1281, #1186).
+ */
+export interface TokenUsage {
+  readonly input: number;
+  readonly output: number;
+  readonly cacheRead?: number;
+  readonly cacheCreation?: number;
+}
+
 export interface EvalRoundResult {
   readonly control: EvalRoundControl;
   /** True only on the low-risk bypass + clean-pass paths. */
@@ -115,7 +130,7 @@ export interface EvalRoundResult {
   readonly prevFailFingerprints: Set<string>;
   readonly preWarmedContext: PreWarmedEvalContext | null | undefined;
   /** Tokens added during this round — caller adds to its own totals. */
-  readonly evalTokens: { input: number; output: number };
+  readonly evalTokens: TokenUsage;
   /** Wall-clock of the parallel LLM + visual eval block (zero on the
    *  low-risk bypass path, which exits before `Promise.all`). Caller
    *  accumulates into its `cumulativeEvalLlmMs`. */
@@ -447,7 +462,7 @@ export async function runEvalRound(
   const currentSource = workspace.read() ?? "";
 
   let evalResult: EvalResult | undefined;
-  let evalTokens = { input: 0, output: 0 };
+  let evalTokens: TokenUsage = { input: 0, output: 0 };
   let evalLlmMs = 0;
 
   try {
@@ -571,7 +586,7 @@ export async function runEvalRound(
     }
 
     // ── Tier 1+2: LLM evaluation + Visual eval in parallel ──
-    let llmResult: (EvalResult & { inputTokens: number; outputTokens: number }) | null = null;
+    let llmResult: (EvalResult & LLMEvalTokenUsage) | null = null;
     let visualIssues: EvalIssue[] | null = null;
 
     // The visual leg's page and frame — ONE value each, read by the judge and
@@ -672,6 +687,8 @@ export async function runEvalRound(
       evalTokens = {
         input: llmResult.inputTokens,
         output: llmResult.outputTokens,
+        ...(llmResult.cacheReadTokens !== undefined ? { cacheRead: llmResult.cacheReadTokens } : {}),
+        ...(llmResult.cacheCreationTokens !== undefined ? { cacheCreation: llmResult.cacheCreationTokens } : {}),
       };
     }
 

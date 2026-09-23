@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { assembleGenerationResult } from "./assemble-result";
-import { createTelemetry } from "./generate-task-runner";
+import { absorbTokens, createTelemetry } from "./generate-task-runner";
 import type { CodingSession } from "./init-session";
 
 function fakeSession(overrides: Partial<CodingSession> = {}): CodingSession {
@@ -146,6 +146,26 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     const result = await assembleGenerationResult({ session, telemetry, source: "" });
     expect(result.tokens).toEqual({ input: 122, output: 609, total: 122 + 200 + 36_501 + 609 });
     expect(result.tokens.total - result.tokens.input - result.tokens.output).toBe(36_701);
+  });
+
+  // ggui#1281 — the eval round's cache reads/writes reach the same totals as the
+  // coding turns': before the fix the eval path added input/output only, so a
+  // generation's published total dropped every eval call's cached prefix.
+  it("a coding turn plus an eval round: tokens.total is the full footprint of BOTH (ggui#1281)", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    absorbTokens(telemetry, { input: 122, output: 609, cacheRead: 36_501, cacheCreation: 200 }); // coding turn
+    absorbTokens(telemetry, { input: 21, output: 350, cacheRead: 84_000, cacheCreation: 2_800 }); // eval round
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+    expect(result.tokens).toEqual({
+      input: 122 + 21,
+      output: 609 + 350,
+      total: 122 + 21 + (200 + 2_800) + (36_501 + 84_000) + 609 + 350,
+    });
+    expect(result.cacheReadTokens).toBe(36_501 + 84_000);
+    expect(result.cacheCreationTokens).toBe(200 + 2_800);
   });
 
   it("tokens.total is input + output when no cache counter was reported", async () => {

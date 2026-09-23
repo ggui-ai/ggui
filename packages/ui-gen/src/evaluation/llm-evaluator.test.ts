@@ -387,6 +387,57 @@ export default function MyComponent({ title }: Props) {
     mockCreateAgent.mockClear();
   });
 
+  // ggui#1281 — the eval calls' prompt-cache accounting reaches the result (it used to stop at in/out,
+  // and the summary line printed an ESTIMATE). Absent on every call ⇒ absent on the result: unreported,
+  // never zero — the same rule the router's result type states.
+  it('sums the calls\u2019 measured cache reads and writes onto the result (ggui#1281)', async () => {
+    mockCallTools.mockResolvedValue({
+      toolCalls: [{ name: 'evaluate_criterion', input: { pass: true } }],
+      inputTokens: 3,
+      outputTokens: 50,
+      cacheReadTokens: 12_000,
+      cacheCreationTokens: 400,
+    });
+
+    const result = await runLLMEvaluation(context, config, NO_DYNAMIC);
+
+    expect(result.inputTokens).toBe(7 * 3);
+    expect(result.outputTokens).toBe(7 * 50);
+    expect(result.cacheReadTokens).toBe(7 * 12_000);
+    expect(result.cacheCreationTokens).toBe(7 * 400);
+  });
+
+  it('a provider that reports no cache leaves both fields absent, never zero (ggui#1281)', async () => {
+    mockCallTools.mockResolvedValue({
+      toolCalls: [{ name: 'evaluate_criterion', input: { pass: true } }],
+      inputTokens: 500,
+      outputTokens: 50,
+    });
+
+    const result = await runLLMEvaluation(context, config, NO_DYNAMIC);
+
+    expect('cacheReadTokens' in result).toBe(false);
+    expect('cacheCreationTokens' in result).toBe(false);
+  });
+
+  it('when only some calls report cache, the total is the sum of what was reported (ggui#1281)', async () => {
+    let n = 0;
+    mockCallTools.mockImplementation(() => {
+      n += 1;
+      return Promise.resolve({
+        toolCalls: [{ name: 'evaluate_criterion', input: { pass: true } }],
+        inputTokens: 10,
+        outputTokens: 5,
+        ...(n % 2 === 1 ? { cacheReadTokens: 1_000 } : {}),
+      });
+    });
+
+    const result = await runLLMEvaluation(context, config, NO_DYNAMIC);
+
+    expect(result.cacheReadTokens).toBe(4 * 1_000); // calls 1, 3, 5, 7 of 7
+    expect('cacheCreationTokens' in result).toBe(false);
+  });
+
   it('makes 7 parallel calls when pre-warmed with no dynamic criteria', async () => {
     // Mock all 7 calls to return pass
     mockCallTools.mockResolvedValue({
