@@ -62,6 +62,19 @@ export interface ExtractMcpAppAiGguiMetaOptions {
    * member names, never their content. Unset ⇒ one `console.warn`.
    */
   readonly onStrippedThemeMembers?: ((keys: readonly string[]) => void) | undefined;
+  /**
+   * The read door refused the slice's `actionSpec` (ggui#1178): the slice
+   * is kept, the action contract dropped. Unset ⇒ one `console.warn`
+   * naming the issues (never silence).
+   */
+  readonly onInvalidActionSpec?: ((issues: readonly string[]) => void) | undefined;
+  /**
+   * The read door KEPT the `actionSpec` and stripped entry members this
+   * release does not name (ggui#1178, VERSION-POLICY §3.6) — the
+   * `<action>.<member>` paths, never their content. Unset ⇒ one
+   * `console.warn`.
+   */
+  readonly onStrippedActionSpecMembers?: ((keys: readonly string[]) => void) | undefined;
 }
 
 export function extractMcpAppAiGguiMeta(
@@ -80,6 +93,16 @@ export function extractMcpAppAiGguiMeta(
       options.onStrippedThemeMembers ??
       ((keys): void => {
         console.warn('[ggui] tool_result theme carried members this release does not name — stripped', keys);
+      }),
+    onInvalidActionSpec:
+      options.onInvalidActionSpec ??
+      ((issues): void => {
+        console.warn('[ggui] tool_result actionSpec refused by the read door — rendering without it', issues);
+      }),
+    onStrippedActionSpecMembers:
+      options.onStrippedActionSpecMembers ??
+      ((keys): void => {
+        console.warn('[ggui] tool_result actionSpec carried entry members this release does not name — stripped', keys);
       }),
   });
   if (!parsed.ok) return null;

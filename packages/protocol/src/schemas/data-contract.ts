@@ -58,6 +58,7 @@ import { KNOWN_PERMISSION_NAMES } from '../validation/hygiene-rules';
 import { STDLIB_GADGETS_PACKAGE } from '../gadgets/stdlib-gadgets';
 import { COMPONENT_NAME_RE, HOOK_NAME_RE } from './gadget-name-grammar';
 import type {
+  ActionSpec,
   DataContract,
   JsonValue,
   JsonSchema,
@@ -261,6 +262,53 @@ export const actionEntrySchema = z
 
 /** {@link ActionSpec} — flat `Record<name, ActionEntry>`. */
 export const actionSpecSchema = z.record(z.string(), actionEntrySchema);
+
+/**
+ * READ-door variant of {@link actionSpecSchema} (ggui#1178). An entry member
+ * this release does not name is STRIPPED, not refused; every other member is
+ * validated exactly as the write door validates it. This is the INTERPRET
+ * side of the two-read-paths rule (see `parseAppThemeAtReadDoor`).
+ *
+ * Why it exists: a runtime reads `actionSpec` off the static render slice
+ * (`_meta["ai.ggui/render"].actionSpec`) that a possibly NEWER server wrote.
+ * `actionEntrySchema` is `.strict()`, so a strict read would drop the whole
+ * spec the day a newer release adds an entry member. The runtime would fall
+ * back to `{}`: no one-shot guard and permissive gesture validation, which is
+ * the fail-open ggui#1178 closes. Contract AUTHORING (every write door)
+ * stays on the strict {@link actionSpecSchema}.
+ */
+export const actionSpecReadSchema = z.record(z.string(), z.object(actionEntrySchema.shape));
+
+export type ActionSpecReadDoorResult =
+  | { readonly ok: true; readonly actionSpec: ActionSpec; readonly stripped: readonly string[] }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+/**
+ * Parse an `actionSpec` at a READ door: `ok` with the spec and the entry
+ * members that were stripped (`<action>.<member>`, sorted, `[]` when none),
+ * or the issues in `path: message` form when the spec is refused for a reason
+ * the write door would also refuse (not a record, an entry without `label`, a
+ * member of the wrong type). The caller NAMES both outcomes: a stripped
+ * member and a dropped spec are degradations, and a degradation is never
+ * silent.
+ */
+export function parseActionSpecAtReadDoor(input: unknown): ActionSpecReadDoorResult {
+  const r = actionSpecReadSchema.safeParse(input);
+  if (!r.success) {
+    return { ok: false, issues: r.error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`) };
+  }
+  const known = new Set(Object.keys(actionEntrySchema.shape));
+  const stripped: string[] = [];
+  if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
+    for (const [name, entry] of Object.entries(input)) {
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+      for (const member of Object.keys(entry)) {
+        if (!known.has(member)) stripped.push(`${name}.${member}`);
+      }
+    }
+  }
+  return { ok: true, actionSpec: r.data, stripped: stripped.sort() };
+}
 
 /** {@link StreamChannelEntry} — per-channel metadata in a {@link StreamSpec}. */
 export const streamChannelEntrySchema = z

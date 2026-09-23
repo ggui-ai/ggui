@@ -40,6 +40,7 @@ import {
   computeContractBundle,
   deriveContextDefault,
   DEFAULT_BUNDLE_HOST,
+  type ActionSpec,
   type AppTheme,
   type GadgetDescriptor,
   type JsonSchema,
@@ -674,6 +675,13 @@ export function derivePropsJson(item: GguiSession): string | undefined {
  */
 export interface RenderMetaView {
   readonly kind?: string;
+  /**
+   * The render's action contract, WHOLE: the same shape the live WS session
+   * carries (ggui#1178). It reaches a runtime that paints without a live
+   * session frame. Component variant only; absent when the contract declares
+   * none.
+   */
+  readonly actionSpec?: ActionSpec;
   /** History head epoch (#483) — the mount's own epoch for the freeze latch. */
   readonly epoch?: number;
   readonly propsJson?: string;
@@ -998,10 +1006,11 @@ export function spreadRenderMetaViewOntoSlice(
   view: RenderMetaView | undefined,
 ): Pick<
   McpAppAiGguiRenderMeta,
-  'epoch' | 'propsJson' | 'contextSlots' | 'permissionsPolicy' | 'theme' | 'gadgets'
+  'epoch' | 'propsJson' | 'contextSlots' | 'permissionsPolicy' | 'theme' | 'gadgets' | 'actionSpec'
 > {
   if (view === undefined) return {};
   return {
+    ...(view.actionSpec !== undefined ? { actionSpec: view.actionSpec } : {}),
     ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
     ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
     ...(view.contextSlots !== undefined && view.contextSlots.length > 0
@@ -1075,6 +1084,9 @@ export function deriveRenderMeta(
       : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(theme !== undefined ? { theme } : {}),
+    // ggui#1178 — the action contract, whole, for a runtime painting without
+    // a live WS session frame (the only other carrier).
+    ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
   };
 }
 

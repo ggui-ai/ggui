@@ -24,6 +24,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildSelfContainedShell } from './mcp-apps-outbound.js';
+import { spreadRenderMetaViewOntoSlice } from '@ggui-ai/mcp-server-handlers/renders';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -240,4 +241,44 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   // host presents the iframe. `_meta.ui.displayMode` (spec-native MCP-Apps
   // SEP-1865) is the only per-render hint and is stamped from
   // `App.defaultDisplayMode` by the render handler's `resultMeta`, not by this builder.
+});
+
+/**
+ * The resource-served shell (`/r/<shortCode>`, `ui://ggui/render/…`) takes
+ * the view's fields through ONE shared spread, but `buildSelfContainedShell`
+ * forwards a hand-listed set — and a spread member the input type does not
+ * name is not excess-checked, so a new view field compiles and vanishes on
+ * this path while the tool-result slice carries it (ggui#1178: `actionSpec`
+ * did exactly that). The fixture is typed `Required<…>` over the spread's
+ * return, so a new key breaks this build until the fixture gains it — then
+ * the round-trip fails until the shell forwards it.
+ */
+describe('buildSelfContainedShell — every view field the shared spread emits reaches the inline slice', () => {
+  const VIEW_SPREAD: Required<ReturnType<typeof spreadRenderMetaViewOntoSlice>> = {
+    actionSpec: { submit: { label: 'Submit', oneShot: true } },
+    epoch: 3,
+    propsJson: '{"count":3}',
+    contextSlots: [
+      { name: 'draftText', contextName: 'DraftTextContext', schema: { type: 'string' }, default: '' },
+    ],
+    permissionsPolicy: ['geolocation=(self)'],
+    theme: { overlayHash: 'ab'.repeat(32), overlays: { light: {}, dark: {} } },
+    gadgets: [{ package: '@acme/map', bundleUrl: 'https://cdn.test/map.js' }],
+  };
+
+  it('forwards each spread key verbatim', () => {
+    const html = buildSelfContainedShell({
+      sessionId: 'sess_001',
+      appId: 'app_001',
+      runtimeUrl: SAMPLE_RUNTIME_URL,
+      codeUrl: SAMPLE_CODE_URL,
+      codeHash: SAMPLE_CODE_HASH,
+      ...VIEW_SPREAD,
+    });
+    const slice = extractInlineRenderSlice(html) ?? {};
+    const carried = Object.fromEntries(
+      Object.keys(VIEW_SPREAD).map((k) => [k, slice[k]]),
+    );
+    expect(carried).toEqual(VIEW_SPREAD);
+  });
 });

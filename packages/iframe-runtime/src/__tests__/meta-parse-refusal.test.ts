@@ -96,3 +96,69 @@ describe('parseMetaFromGlobal — a stripped theme member is reported, not swall
     expect(posted).toEqual([]);
   });
 });
+
+// ggui#1178 — the action contract rides the slice through the same kind of
+// tolerant read door as the theme: a malformed `actionSpec` mounts WITHOUT
+// it and says so; an entry member this release does not name is stripped
+// and named; neither degradation is silent.
+describe('parseMetaFromGlobal — the slice\'s action contract is never dropped silently', () => {
+  beforeEach(() => {
+    posted.length = 0;
+  });
+
+  it('drops a malformed actionSpec, keeps the slice, posts action-spec-invalid with the schema issues', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        actionSpec: { submit: { label: 42 } },
+      },
+    };
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.actionSpec).toBeUndefined();
+    expect(posted).toHaveLength(1);
+    const event = posted[0] as { kind: string; issues: string[] };
+    expect(event.kind).toBe('action-spec-invalid');
+    expect(event.issues.some((i) => i.startsWith('submit.label'))).toBe(true);
+  });
+
+  it('keeps the actionSpec, drops an unknown entry member, posts action-spec-member-stripped with its path', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        actionSpec: { submit: { label: 'Submit', oneShot: true, futureEntryMember: 1 } },
+      },
+    };
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.actionSpec).toEqual({ submit: { label: 'Submit', oneShot: true } });
+    expect(posted).toEqual([
+      { kind: 'action-spec-member-stripped', keys: ['submit.futureEntryMember'] },
+    ]);
+  });
+
+  it('an actionSpec this release names entirely rides the slice and posts nothing', () => {
+    (globalThis as { __GGUI_META__?: unknown }).__GGUI_META__ = {
+      'ai.ggui/render': {
+        sessionId: 'sess-1',
+        appId: 'app-1',
+        runtimeUrl: 'https://runtime.example/bundle.js',
+        codeUrl: 'https://code.example/component.js',
+        actionSpec: { submit: { label: 'Submit', oneShot: true } },
+      },
+    };
+    const result = parseMetaFromGlobal();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.meta.actionSpec).toEqual({ submit: { label: 'Submit', oneShot: true } });
+    expect(posted).toEqual([]);
+  });
+});

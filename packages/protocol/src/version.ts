@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `actionSpec` on the static render slice (2026-09-23, additive, ggui#1178:
+ * MINOR, same draft stamp). `McpAppAiGguiRenderMeta.actionSpec?: ActionSpec`,
+ * projected only by `deriveRenderMeta` (component renders) and WHOLE, the
+ * same value the live WS session carries. A runtime painting without a live
+ * session frame (past the wsToken TTL, the pre-WS window, no live trio) held
+ * `{}` and failed open: no `oneShot` guard, permissive validation. New
+ * exports: `actionSpecReadSchema`, `parseActionSpecAtReadDoor`, and
+ * `ActionSpecReadDoorResult`, the tolerant READ door that strips and names
+ * unknown entry members (`actionEntrySchema` is `.strict()`, so a strict read
+ * would drop the whole spec on a newer server's member). The parser options
+ * gain `onInvalidActionSpec` and `onStrippedActionSpecMembers`. Kit: wire
+ * `render-meta`, forward case. The runtime half (seed + the
+ * `one-shot-unenforceable` trace) is rnd's, landing AFTER this. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Model registry: `anthropic/claude-opus-5-5`, `openai/gpt-6-sol`,
  * `openai/gpt-6-luna` (2026-09-23, additive, ggui#1252 — MINOR, same draft
  * stamp; the protocol half of the new-models support batch ggui#1251, WITH

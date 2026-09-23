@@ -39,6 +39,8 @@ export type ObservabilityEvent =
   | FontFaceBlockedEvent
   | AppThemeInvalidEvent
   | AppThemeMemberStrippedEvent
+  | ActionSpecInvalidEvent
+  | ActionSpecMemberStrippedEvent
   | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
   | ChannelTransportPickedEvent
@@ -396,6 +398,32 @@ export interface AppThemeInvalidEvent {
  */
 export interface AppThemeMemberStrippedEvent {
   readonly kind: 'app-theme-member-stripped';
+  readonly keys: readonly string[];
+}
+
+/**
+ * The render slice carried an `actionSpec` the wire schema refused
+ * (ggui#1178): the parser dropped it and the card mounted without the
+ * action contract. `issues` are the schema's own messages — the
+ * operator's pointer to the writer that projected a malformed contract.
+ *
+ * @public
+ */
+export interface ActionSpecInvalidEvent {
+  readonly kind: 'action-spec-invalid';
+  readonly issues: readonly string[];
+}
+
+/**
+ * The render slice's `actionSpec` carried entry members THIS release does
+ * not name (ggui#1178, VERSION-POLICY §3.6): the read door kept every
+ * action and stripped those members, and the card says which. `keys` are
+ * `<action>.<member>` paths only, never their content.
+ *
+ * @public
+ */
+export interface ActionSpecMemberStrippedEvent {
+  readonly kind: 'action-spec-member-stripped';
   readonly keys: readonly string[];
 }
 

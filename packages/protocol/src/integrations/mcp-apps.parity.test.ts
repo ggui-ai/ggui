@@ -38,6 +38,8 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
     overlays: { light: { '--ggui-color-primary-600': '#7c3aed' }, dark: { '--ggui-color-primary-600': '#a78bfa' } },
   },
   gadgets: [{ package: '@acme/map', bundleUrl: 'https://cdn.test/map.js' }],
+  // ggui#1178 — the action contract on the static slice (round-trips whole).
+  actionSpec: { submit: { label: 'Submit', oneShot: true } },
   // Keyed per PUBLIC_ENV_APP_KEY_RE so the same fixture round-trips
   // the iframe-runtime's stricter projection (its parity twin).
   publicEnv: { GGUI_PUBLIC_APP_MAP_STYLE: 'basic' },

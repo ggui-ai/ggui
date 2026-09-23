@@ -192,3 +192,54 @@ describe('extractMcpAppAiGguiMeta — the read door reports what it dropped', ()
     warn.mockRestore();
   });
 });
+
+// ggui#1178 — the action contract rides the slice through the same tolerant
+// read door: a malformed `actionSpec` and entry members this release does not
+// name reach the caller's observability, and warn when the caller wires none.
+describe('extractMcpAppAiGguiMeta — the read door reports a dropped or stripped action contract', () => {
+  const base = {
+    sessionId: 'sess-1',
+    appId: 'app-1',
+    runtimeUrl: 'https://runtime.example/bundle.js',
+    codeUrl: 'https://code.example/component.js',
+  };
+  const withActionSpec = (actionSpec: unknown) => ({
+    _meta: { 'ai.ggui/render': { ...base, actionSpec } },
+  });
+
+  it('calls onInvalidActionSpec with the issues and mounts without the actionSpec', () => {
+    const issues: string[][] = [];
+    const meta = extractMcpAppAiGguiMeta(withActionSpec({ submit: { label: 42 } }), {
+      onInvalidActionSpec: (i) => issues.push([...i]),
+    });
+    expect(meta?.sessionId).toBe('sess-1');
+    expect(meta?.actionSpec).toBeUndefined();
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.some((i) => i.startsWith('submit.label'))).toBe(true);
+  });
+
+  it('calls onStrippedActionSpecMembers with the <action>.<member> paths and keeps the actionSpec', () => {
+    const keys: string[][] = [];
+    const meta = extractMcpAppAiGguiMeta(
+      withActionSpec({ submit: { label: 'Submit', futureEntryMember: 1 } }),
+      { onStrippedActionSpecMembers: (k) => keys.push([...k]) },
+    );
+    expect(meta?.actionSpec).toEqual({ submit: { label: 'Submit' } });
+    expect(keys).toEqual([['submit.futureEntryMember']]);
+  });
+
+  it('with no callbacks wired it WARNS rather than dropping in silence', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    extractMcpAppAiGguiMeta(withActionSpec({ submit: { label: 42 } }));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('actionSpec');
+    warn.mockClear();
+    extractMcpAppAiGguiMeta(withActionSpec({ submit: { label: 'Submit', futureEntryMember: 1 } }));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('actionSpec');
+    warn.mockClear();
+    extractMcpAppAiGguiMeta(withActionSpec({ submit: { label: 'Submit' } }));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

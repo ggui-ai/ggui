@@ -56,7 +56,10 @@ import type {
   McpAppContextSlot,
   McpAppGadgetRef,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  parseMcpAppAiGguiRenderMeta,
+  type ParseMcpAppAiGguiRenderMetaOptions,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiMetaParseResult } from './types.js';
 import { postObservabilityToParent } from './observability.js';
 
@@ -270,6 +273,10 @@ function projectMeta(
     // Per-app theme overlay carried through verbatim. Already validated
     // via `appThemeSchema` by the wire parser, so no re-validation here.
     ...(meta.theme !== undefined ? { theme: meta.theme } : {}),
+    // The slice's action contract (ggui#1178), carried through whole.
+    // Already validated at the wire parser's tolerant read door, so no
+    // re-validation here.
+    ...(meta.actionSpec !== undefined ? { actionSpec: meta.actionSpec } : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(streamWebSocketLocalTools !== undefined
@@ -375,6 +382,41 @@ export function reportStrippedThemeMembers(keys: readonly string[]): void {
 }
 
 /**
+ * The wire parser refused the slice's `actionSpec` (ggui#1178): report it
+ * to the embedding host as `action-spec-invalid` and mount without the
+ * action contract. Passed as `onInvalidActionSpec` on every
+ * `parseMcpAppAiGguiRenderMeta` call in this package.
+ */
+export function reportInvalidActionSpec(issues: readonly string[]): void {
+  postObservabilityToParent({ kind: 'action-spec-invalid', issues: [...issues] });
+}
+
+/**
+ * The read door KEPT the slice's `actionSpec` but stripped entry members
+ * this release does not name (ggui#1178, VERSION-POLICY §3.6): report the
+ * `<action>.<member>` paths so a newer writer's member is visible, not
+ * swallowed. Passed as `onStrippedActionSpecMembers` on every
+ * `parseMcpAppAiGguiRenderMeta` call in this package.
+ */
+export function reportStrippedActionSpecMembers(keys: readonly string[]): void {
+  postObservabilityToParent({ kind: 'action-spec-member-stripped', keys: [...keys] });
+}
+
+/**
+ * Every degradation the wire parser's read door can report, bound to its
+ * observability event — the ONE options object every
+ * `parseMcpAppAiGguiRenderMeta` call in this package passes, so a door
+ * that learns a new report is wired everywhere at once rather than at
+ * whichever call site someone remembered.
+ */
+export const READ_DOOR_REPORTERS: ParseMcpAppAiGguiRenderMetaOptions = {
+  onInvalidTheme: reportInvalidAppTheme,
+  onStrippedThemeMembers: reportStrippedThemeMembers,
+  onInvalidActionSpec: reportInvalidActionSpec,
+  onStrippedActionSpecMembers: reportStrippedActionSpecMembers,
+};
+
+/**
  * Parse the render slice from `globalThis.__GGUI_META__` — the
  * synchronous self-contained shell delivery channel.
  *
@@ -396,10 +438,7 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
   if (!isPlainObject(raw)) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiRenderMeta(raw, {
-    onInvalidTheme: reportInvalidAppTheme,
-    onStrippedThemeMembers: reportStrippedThemeMembers,
-  });
+  const parsed = parseMcpAppAiGguiRenderMeta(raw, READ_DOOR_REPORTERS);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
@@ -455,10 +494,7 @@ export function parseMetaFromToolResult(
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   const meta: Record<string, unknown> = topMeta;
-  const parsed = parseMcpAppAiGguiRenderMeta(meta, {
-    onInvalidTheme: reportInvalidAppTheme,
-    onStrippedThemeMembers: reportStrippedThemeMembers,
-  });
+  const parsed = parseMcpAppAiGguiRenderMeta(meta, READ_DOOR_REPORTERS);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }

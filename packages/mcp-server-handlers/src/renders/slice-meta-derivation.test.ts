@@ -20,6 +20,7 @@ import {
   derivePropsJson,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  spreadRenderMetaViewOntoSlice,
   deriveTheme,
   resolveSliceTheme,
   wsOriginToHttpOrigin,
@@ -166,14 +167,24 @@ describe('deriveRenderMeta', () => {
     expect(view.propsJson).toBe('{"city":"Seoul"}');
   });
 
-  it('component variant: actionSpec does not leak into the View (nextStep hints derive server-side at consume-event build time)', () => {
+  // ggui#1178 supersedes the 2026-06-10 pin (ae5af1bde) that kept actionSpec OFF the view: its premise
+  // was "no client consumer" (the tool hint moved server-side). The one-shot guard and gesture
+  // validation ARE client consumers, and a runtime painting without a live WS frame had `{}`.
+  it('component variant: projects actionSpec WHOLE onto the View — the same shape the WS session carries (ggui#1178)', () => {
     const actionSpec: ActionSpec = {
-      save: { label: 'Save', nextStep: 'save_note' },
+      save: { label: 'Save', nextStep: 'save_note', oneShot: true },
       undo: { label: 'Undo' },
     };
     const view = deriveRenderMeta(componentItem({ actionSpec }));
-    expect('actionSpec' in view).toBe(false);
+    expect(view.actionSpec).toEqual(actionSpec);
     expect('actionNextSteps' in view).toBe(false);
+  });
+
+  it('ggui#1178: the slice spread carries actionSpec; a component without one and a system card carry none', () => {
+    const actionSpec: ActionSpec = { go: { label: 'Go', oneShot: true } };
+    expect(spreadRenderMetaViewOntoSlice(deriveRenderMeta(componentItem({ actionSpec }))).actionSpec).toEqual(actionSpec);
+    expect('actionSpec' in deriveRenderMeta(componentItem())).toBe(false);
+    expect('actionSpec' in spreadRenderMetaViewOntoSlice(deriveRenderMeta(componentItem()))).toBe(false);
   });
 
   it('component variant: includes contextSlots when contextSpec is declared', () => {
@@ -255,7 +266,10 @@ describe('deriveRenderMeta', () => {
       ],
       // Validators are no longer projected onto the view — render.ts
       // calls deriveContractBundle directly + writes to the
-      // content-addressable store. The view carries no contract bytes.
+      // content-addressable store. The view carries no VALIDATOR bytes;
+      // the action contract's DATA rides whole (ggui#1178) — the same
+      // shape the WS session carries, `nextStep` included.
+      actionSpec: { save: { label: 'Save', nextStep: 'save_note' } },
     });
   });
 

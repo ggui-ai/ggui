@@ -26,6 +26,7 @@ import release2GenerationProfile from './cases/release-2-generation-profile.json
 import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-blueprint.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
+import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
 export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
@@ -117,6 +118,7 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release2OpsGenerateBlueprint,
   forwardAppThemeUnknownMember,
   forwardAppThemeCarryUnknownMember,
+  forwardRenderMetaUnknownMember,
 ].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
@@ -172,7 +174,11 @@ function gradeOpsGenerateBlueprint(payload: unknown): { pass: boolean; detail: s
 
 function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
   const themeIssues: string[] = [];
-  const r = parseMcpAppAiGguiRenderMeta(payload, { onInvalidTheme: (issues) => themeIssues.push(...issues) });
+  const actionIssues: string[] = [];
+  const r = parseMcpAppAiGguiRenderMeta(payload, {
+    onInvalidTheme: (issues) => themeIssues.push(...issues),
+    onInvalidActionSpec: (issues) => actionIssues.push(...issues),
+  });
   if (!r.ok) return { pass: false, detail: `parseMcpAppAiGguiRenderMeta refused the previous release's slice: ${r.reason}` };
   if (r.meta === undefined) return { pass: false, detail: 'parseMcpAppAiGguiRenderMeta found no `ai.ggui/render` slice in the payload' };
   const sent = isRecord(payload) ? payload[MCP_APP_AI_GGUI_RENDER_META_KEY] : undefined;
@@ -180,7 +186,16 @@ function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
   if (sentTheme && (themeIssues.length > 0 || r.meta.theme === undefined)) {
     return { pass: false, detail: `the previous release's theme was dropped at the read door: ${themeIssues.join('; ') || 'theme absent on the parsed meta'}` };
   }
-  return { pass: true, detail: 'parseMcpAppAiGguiRenderMeta: accepted' + (sentTheme ? ', theme preserved' : '') };
+  // ggui#1178 — an action contract the slice carried must survive the read door (unknown entry
+  // members stripped, never the whole spec dropped).
+  const sentActionSpec = isRecord(sent) && sent['actionSpec'] !== undefined;
+  if (sentActionSpec && (actionIssues.length > 0 || r.meta.actionSpec === undefined)) {
+    return { pass: false, detail: `the slice's action contract was dropped at the read door: ${actionIssues.join('; ') || 'actionSpec absent on the parsed meta'}` };
+  }
+  return {
+    pass: true,
+    detail: 'parseMcpAppAiGguiRenderMeta: accepted' + (sentTheme ? ', theme preserved' : '') + (sentActionSpec ? ', actionSpec preserved' : ''),
+  };
 }
 
 /** Grade every N−1 case against the protocol as shipped. */

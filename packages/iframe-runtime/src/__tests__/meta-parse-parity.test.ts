@@ -43,6 +43,8 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
       default: '',
     },
   ],
+  // The action contract rides the slice whole (ggui#1178).
+  actionSpec: { submit: { label: 'Submit', oneShot: true } },
   contractHash: 'sha256:abc',
   validatorsUrl: 'https://example.test/validators/sha256:abc.js',
   codeUrl: 'https://example.test/code/sha256:def.js',

@@ -935,3 +935,58 @@ describe('ggui:dismiss — the host-bound dismiss intent (ggui#1109)', () => {
     expect(isMcpAppDismissMessage({ type: 'ggui:lifecycle', event: { state: 'mounting' } })).toBe(false);
   });
 });
+
+// ggui#1178 — `actionSpec` rides the static `ai.ggui/render` slice, so a runtime that paints WITHOUT a
+// live WS session frame (a mount past the wsToken TTL, the pre-WS window, a mount with no live trio)
+// still holds the contract its one-shot guard and gesture validation read. The read door is TOLERANT:
+// `actionEntrySchema` is `.strict()`, and a strict read would drop the whole spec the day a newer
+// server adds an entry member — re-opening exactly the fail-open this closes (N−1, new → old).
+describe('parseMcpAppAiGguiRenderMeta — actionSpec on the slice (ggui#1178)', () => {
+  const base = { sessionId: 'r-1', appId: 'app-1', runtimeUrl: '/_ggui/iframe-runtime.js' };
+  const spec = {
+    submit: { label: 'Submit', oneShot: true, confirm: true, nextStep: 'record_answer' },
+    cancel: { label: 'Cancel' },
+  };
+
+  it('carries a valid actionSpec through, whole (the same shape the WS session carries)', () => {
+    const r = parseMcpAppAiGguiRenderMeta({ 'ai.ggui/render': { ...base, actionSpec: spec } });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.meta?.actionSpec).toEqual(spec);
+  });
+
+  it('strips an entry member this release does not know, keeps the rest, and NAMES it (N−1, new → old)', () => {
+    const stripped: string[] = [];
+    const r = parseMcpAppAiGguiRenderMeta(
+      { 'ai.ggui/render': { ...base, actionSpec: { ...spec, submit: { ...spec.submit, futureEntryMember: 1 } } } },
+      { onStrippedActionSpecMembers: (keys) => stripped.push(...keys) },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.meta?.actionSpec).toEqual(spec);
+    expect(stripped).toEqual(['submit.futureEntryMember']);
+  });
+
+  it('drops a malformed actionSpec with a NAMED callback — the paint still succeeds (never MALFORMED_RENDER for this member)', () => {
+    const issues: string[] = [];
+    for (const bad of [{ submit: { oneShot: true } }, 'not-an-object', { submit: { label: 7 } }]) {
+      issues.length = 0;
+      const r = parseMcpAppAiGguiRenderMeta(
+        { 'ai.ggui/render': { ...base, actionSpec: bad } },
+        { onInvalidActionSpec: (i) => issues.push(...i) },
+      );
+      expect(r.ok, JSON.stringify(bad)).toBe(true);
+      if (r.ok) expect(r.meta?.actionSpec, JSON.stringify(bad)).toBeUndefined();
+      expect(issues.length, JSON.stringify(bad)).toBeGreaterThan(0);
+    }
+  });
+
+  it('absent stays absent (an older server) — no callback fires', () => {
+    let called = false;
+    const r = parseMcpAppAiGguiRenderMeta(
+      { 'ai.ggui/render': base },
+      { onInvalidActionSpec: () => { called = true; }, onStrippedActionSpecMembers: () => { called = true; } },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.meta?.actionSpec).toBeUndefined();
+    expect(called).toBe(false);
+  });
+});

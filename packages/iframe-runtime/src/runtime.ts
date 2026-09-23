@@ -57,8 +57,7 @@ import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
   validateMeta,
-  reportInvalidAppTheme,
-  reportStrippedThemeMembers,
+  READ_DOOR_REPORTERS,
 } from './meta-parse.js';
 import type {
   McpAppAiGguiMetaParseFailureReason,
@@ -2009,10 +2008,7 @@ export async function resolveMetaViaReadDoor(
   if (text === undefined) return null;
   const envelope = readGguiShellEnvelope(text);
   if (envelope === undefined) return null;
-  const parsed = parseMcpAppAiGguiRenderMeta(envelope, {
-    onInvalidTheme: reportInvalidAppTheme,
-    onStrippedThemeMembers: reportStrippedThemeMembers,
-  });
+  const parsed = parseMcpAppAiGguiRenderMeta(envelope, READ_DOOR_REPORTERS);
   if (!parsed.ok || parsed.meta === undefined) return null;
   const validated = validateMeta(parsed.meta);
   return validated.ok ? validated.meta : null;

@@ -67,6 +67,8 @@ export type {
   FontFaceBlockedEvent,
   AppThemeInvalidEvent,
   AppThemeMemberStrippedEvent,
+  ActionSpecInvalidEvent,
+  ActionSpecMemberStrippedEvent,
   ThemeReinjectFailedEvent,
   SubscribeFailedEvent,
   ChannelTransportPickedEvent,

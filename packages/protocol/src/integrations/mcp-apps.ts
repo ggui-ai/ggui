@@ -34,6 +34,8 @@ import type {
   JsonValue,
 } from '../types/data-contract.js';
 import { parseAppThemeAtReadDoor, type AppTheme } from '../schemas/app-theme.js';
+import { parseActionSpecAtReadDoor } from '../schemas/data-contract.js';
+import type { ActionSpec } from '../types/data-contract.js';
 import { isRecord } from '../validation/is-record.js';
 import type { z } from 'zod';
 import type { gguiSessionSummaryWireSchema } from '../schemas/mcp';
@@ -390,6 +392,18 @@ export interface McpAppAiGguiRenderMeta {
   // fetches the validators bundle from `validatorsUrl`; same contract
   // on repeat activations ⇒ browser HTTP cache hit (no round-trip).
   // Both fields paired — hash without URL has nowhere to fetch from.
+  /**
+   * The render's action contract, WHOLE: the same `ActionSpec` the live WS
+   * session carries (ggui#1178). It rides the static slice so a runtime that
+   * paints WITHOUT a live session frame still holds the contract its one-shot
+   * guard and gesture validation read. Those cases are: a mount past the
+   * wsToken TTL (which never self-recovers), the pre-WS paint window, and a
+   * mount with no live trio. Projected only by `deriveRenderMeta`. Absent on
+   * a render with no `actionSpec` and on a slice from an older server. A
+   * runtime holding NO spec cannot enforce `oneShot` and MUST name that state
+   * (SPEC). Read through `parseActionSpecAtReadDoor`, which is tolerant.
+   */
+  readonly actionSpec?: ActionSpec;
   readonly contractHash?: string;
   readonly validatorsUrl?: string;
 
@@ -469,6 +483,19 @@ export interface ParseMcpAppAiGguiRenderMetaOptions {
    * the stripped one; nothing else changes.
    */
   readonly onStrippedThemeMembers?: ((keys: readonly string[]) => void) | undefined;
+  /**
+   * Called when an `actionSpec` is present but the read door refuses it
+   * (ggui#1178). The slice drops it, leaving the runtime without a contract
+   * (no one-shot guard, permissive validation). That MUST NOT be silent: the
+   * caller logs or emits its observability event. The paint still succeeds.
+   */
+  readonly onInvalidActionSpec?: ((issues: readonly string[]) => void) | undefined;
+  /**
+   * Called when the read door KEPT the `actionSpec` but stripped entry members
+   * this release does not name (`<action>.<member>`, N−1 new → old). The
+   * caller logs the keys.
+   */
+  readonly onStrippedActionSpecMembers?: ((keys: readonly string[]) => void) | undefined;
 }
 
 export function parseMcpAppAiGguiRenderMeta(
@@ -595,6 +622,14 @@ export function parseMcpAppAiGguiRenderMeta(
   if (themeRead?.ok === true && themeRead.stripped.length > 0) {
     options.onStrippedThemeMembers?.(themeRead.stripped);
   }
+  // ggui#1178 — the action contract on the static slice, read tolerantly.
+  const actionRead = s.actionSpec !== undefined ? parseActionSpecAtReadDoor(s.actionSpec) : undefined;
+  if (actionRead !== undefined && !actionRead.ok) {
+    options.onInvalidActionSpec?.(actionRead.issues);
+  }
+  if (actionRead?.ok === true && actionRead.stripped.length > 0) {
+    options.onStrippedActionSpecMembers?.(actionRead.stripped);
+  }
 
   const slice: McpAppAiGguiRenderMeta = {
     sessionId: s.sessionId,
@@ -619,6 +654,7 @@ export function parseMcpAppAiGguiRenderMeta(
     // overlay degrades to "no overlay" rather than failing the whole
     // slice, matching the tolerant posture of the other optional fields.
     ...(parsedTheme !== undefined ? { theme: parsedTheme } : {}),
+    ...(actionRead?.ok === true ? { actionSpec: actionRead.actionSpec } : {}),
     ...(s.gadgets !== undefined
       ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
       : {}),

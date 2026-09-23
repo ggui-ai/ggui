@@ -1114,6 +1114,14 @@ export interface SelfContainedShellInputs {
    */
   readonly contextSlots?: McpAppAiGguiRenderMeta["contextSlots"];
   /**
+   * The active render's action contract, mirrored from
+   * {@link McpAppAiGguiRenderMeta.actionSpec} (ggui#1178). Symmetric
+   * forward so `/r/<shortCode>` and `resources/read` iframes see the same
+   * contract the tool-result slice carries. Absent ⇒ no action contract
+   * on the slice.
+   */
+  readonly actionSpec?: McpAppAiGguiRenderMeta["actionSpec"];
+  /**
    * Permissions-Policy directive list derived from the active render's
    * `clientCapabilities.gadgets[*].permission`.
    * When present (non-empty), inlined onto the bootstrap as
@@ -1345,6 +1353,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
       ? { contextSlots: opts.contextSlots }
       : {}),
+    ...(opts.actionSpec !== undefined ? { actionSpec: opts.actionSpec } : {}),
     // Content-addressable contract-validator bundle. Iframe-runtime
     // fetches `validatorsUrl` + dynamic-imports to resolve
     // validators. Omitted when the contract declares no
