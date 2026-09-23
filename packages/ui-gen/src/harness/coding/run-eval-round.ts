@@ -22,7 +22,7 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
+import type { ContractFeedbackRecord, EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator, visionJudgeProvider } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
@@ -124,6 +124,13 @@ export interface EvalRoundResult {
   readonly lastResultText: string;
   readonly isEvalFeedback: boolean;
   readonly lastDiffFailed: boolean;
+  /**
+   * ggui#1261 — set ONLY on the round that granted a contract-feedback round:
+   * what bought it and the source it was fed back on. The caller keeps it past
+   * this round (the next round rebuilds `evalResult`) and stamps it on the
+   * result the generation ends with.
+   */
+  readonly contractFeedback?: ContractFeedbackRecord;
 }
 
 /** Cap feedback to N issues per eval-fix turn so the LLM stays surgical. */
@@ -366,6 +373,42 @@ function formatRuntimeProbeFeedback(issue: EvalIssue): string {
     `[runtime] ${issue.category}${subcat}: ${issue.description}\n` +
     `  Fix: ${issue.fix ?? ""}`
   );
+}
+
+/**
+ * Exit-probe checks whose FAIL buys ONE feedback round although it is not a
+ * crash: a contract defect the probe diagnoses deterministically, with a fix
+ * text the model can act on in a turn. Without the round the loop recorded the
+ * finding and shipped it — its own evaluator named the defect and the model
+ * never heard. Named, and grown only with evidence: `prop-sensitivity` (a
+ * declared prop ignored, a literal baked in its place — "You" for
+ * `currentUser`) is the class measured failing across models (ggui#1261).
+ */
+const FEEDBACK_PROBE_CHECKS: readonly string[] = ["prop-sensitivity"];
+
+/** Rounds past the cap the contract-feedback round may use: one, as the fit round (ggui#1195). */
+const CONTRACT_FEEDBACK_BONUS = 1;
+
+/** `runtime:<check>` or `runtime:<check>:<subject>` for a named feedback check, FAIL only. */
+function isFeedbackProbeFail(issue: EvalIssue): boolean {
+  const sub = issue.subcategory;
+  if (issue.result !== "fail" || typeof sub !== "string") return false;
+  return FEEDBACK_PROBE_CHECKS.some((check) => sub === `runtime:${check}` || sub.startsWith(`runtime:${check}:`));
+}
+
+/**
+ * The exit probe's feedback-worthy FAILs this generation has not been told
+ * about yet. A finding whose fingerprint already rode a feedback round and
+ * recurred is left out — one attempt per finding, then it ships as recorded.
+ */
+/** The round's record: the findings that bought it, and the source they were found on. */
+function contractFeedbackRecord(fails: readonly EvalIssue[], sourceBefore: string): ContractFeedbackRecord {
+  return { firedOn: fails.flatMap((i) => (i.subcategory !== undefined ? [i.subcategory] : [])), sourceBefore };
+}
+
+function contractFeedbackFails(exitProbe: ProbeAtExitResult, alreadyFedBack: ReadonlySet<string>): EvalIssue[] {
+  if (!exitProbe.fired) return [];
+  return exitProbe.probeIssues.filter((i) => isFeedbackProbeFail(i) && !alreadyFedBack.has(fingerprintFail(i)));
 }
 
 /**
@@ -748,6 +791,40 @@ export async function runEvalRound(
           lastDiffFailed: false,
         };
       }
+      // ggui#1261 — a contract defect the probe diagnosed (a named check,
+      // FAIL) that this generation has not been told about: ONE feedback
+      // round with the probe's own diagnosis and fix. The next round re-runs
+      // the probe at its exit, so the result this generation ends with
+      // carries the post-fix stamp, never this one.
+      const contractFails = contractFeedbackFails(exitProbe, prevFailFingerprints);
+      if (contractFails.length > 0 && evalRoundsUsed < maxEvalRounds + CONTRACT_FEEDBACK_BONUS) {
+        const lines = contractFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
+        evalResult = {
+          ...evalResult,
+          issues: [...allIssues, ...exitProbe.probeIssues],
+          pass: allPass,
+          runtimeProbe: exitProbe.meta,
+        };
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: tier-1/2 clean BUT contract probe fail — granting +1 turn ` +
+            `(ggui#1261; ${contractFails.map((i) => i.subcategory).join(", ")})`,
+        );
+        return {
+          control: "feedback",
+          evalDone: false,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats: updatedPrevModeSubcats,
+          prevFailFingerprints: new Set([...currFailFingerprints, ...contractFails.map(fingerprintFail)]),
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: lines.join("\n\n"),
+          isEvalFeedback: true,
+          lastDiffFailed: false,
+          contractFeedback: contractFeedbackRecord(contractFails, currentSource),
+        };
+      }
       // Probe didn't trip a recoverable fail — fold its issues (if any)
       // into the merged result and ALWAYS stamp its execution meta, so a
       // did-not-run probe is visible downstream even on this clean exit.
@@ -907,6 +984,36 @@ export async function runEvalRound(
           lastResultText: fitLines.join("\n\n"),
           isEvalFeedback: true,
           lastDiffFailed: false,
+        };
+      }
+      // ggui#1261 — a named contract FAIL from the exit probe active at the
+      // cap: the same one round as at the clean exit, bounded at the cap + 1.
+      const capContractFails = allowRuntimeExtension ? [] : contractFeedbackFails(exitProbe, prevFailFingerprints);
+      if (capContractFails.length > 0 && evalRoundsUsed < maxEvalRounds + CONTRACT_FEEDBACK_BONUS) {
+        const contractLines = capContractFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
+        evalResult = {
+          ...evalResult,
+          issues: [...evalResult.issues, ...exitProbe.probeIssues],
+          runtimeProbe: exitProbe.meta,
+        };
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: contract probe fail active at cap — granting +1 retry ` +
+            `(ggui#1261; ${capContractFails.map((i) => i.subcategory).join(", ")})`,
+        );
+        return {
+          control: "feedback",
+          evalDone: false,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats: updatedPrevModeSubcats,
+          prevFailFingerprints: new Set([...currFailFingerprints, ...capContractFails.map(fingerprintFail)]),
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: contractLines.join("\n\n"),
+          isEvalFeedback: true,
+          lastDiffFailed: false,
+          contractFeedback: contractFeedbackRecord(capContractFails, currentSource),
         };
       }
       if (!allowRuntimeExtension) {

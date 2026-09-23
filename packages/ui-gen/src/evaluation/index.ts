@@ -22,6 +22,7 @@ export type {
   EvalOutcome,
   EvalCategory,
   EvalResult,
+  ContractFeedbackRecord,
   VisualEvalSummary,
   CanvasJudgeRecord,
   CanvasVisualSummary,

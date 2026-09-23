@@ -12,7 +12,7 @@
 
 import type { Classification } from "../../classifier/index.js";
 import type { JsonValue } from "@ggui-ai/protocol";
-import type { EvalResult } from "../../evaluation/types-public.js";
+import type { ContractFeedbackRecord, EvalResult } from "../../evaluation/types-public.js";
 import type { Harness, Task, TaskContext } from "../types-public.js";
 import type { SingleComponentParams } from "../runtime.js";
 import type { TaskRunner } from "../index.js";
@@ -73,6 +73,12 @@ export interface GenerateTelemetry {
   cacheCreationTokens?: number;
   /** Latest evalResult — undefined when eval was disabled or never ran. */
   evalResult: EvalResult | undefined;
+  /**
+   * ggui#1261 — the contract-feedback round, once one fired: kept across the
+   * rounds after it (each rebuilds `evalResult`) so the assembled result can
+   * carry the round's before beside the source the generation ends with.
+   */
+  contractFeedback: ContractFeedbackRecord | undefined;
   /** Latest compiled code — empty string until the first self-check pass. */
   compiledCode: string;
   /**
@@ -111,6 +117,7 @@ export function createTelemetry(): GenerateTelemetry {
     totalIn: 0,
     totalOut: 0,
     evalResult: undefined,
+    contractFeedback: undefined,
     compiledCode: "",
     pairedSource: "",
     selfCheckPassed: false,
@@ -334,6 +341,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         prevFailFingerprints = round.prevFailFingerprints;
         preWarmedContext = round.preWarmedContext;
         if (round.evalResult) telemetry.evalResult = round.evalResult;
+        if (round.contractFeedback) telemetry.contractFeedback = round.contractFeedback;
         evalDone = round.evalDone;
         telemetry.totalIn += round.evalTokens.input;
         telemetry.totalOut += round.evalTokens.output;

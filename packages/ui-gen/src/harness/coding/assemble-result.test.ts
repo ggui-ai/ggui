@@ -179,6 +179,37 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     expect(result.evalResult?.criteriaCoverage).toEqual(telemetry.evalResult.criteriaCoverage);
   });
 
+  it("stamps the contract-feedback round's record on the result the generation ends with, beside that result's own (post-round) probe verdict (ggui#1261)", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran" } };
+    telemetry.contractFeedback = {
+      firedOn: ["runtime:prop-sensitivity:currentUser"],
+      sourceBefore: "export default function Chat() { return <p>You</p>; }",
+    };
+
+    const result = await assembleGenerationResult({ session, telemetry, source: "export default function Chat(props) { return <p>{props.currentUser}</p>; }" });
+
+    expect(result.evalResult?.contractFeedback).toEqual(telemetry.contractFeedback);
+    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran" });
+    expect(result.evalResult?.issues).toEqual([]);
+  });
+
+  it("carries no contract-feedback key when no such round fired (truthful absence)", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran" } };
+
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+
+    expect(result.evalResult).toBeDefined();
+    expect("contractFeedback" in result.evalResult!).toBe(false);
+  });
+
   it("leaves cache-token fields undefined when telemetry omits them (truthful absence)", async () => {
     const session = fakeSession();
     const telemetry = createTelemetry();

@@ -122,7 +122,12 @@ export async function assembleGenerationResult(
     generationTimeMs: totalMs,
     turnsUsed: telemetry.turnsUsed,
     passesUsed: 1,
-    evalResult: telemetry.evalResult,
+    // ggui#1261 — the contract-feedback round's record rides the result the
+    // generation ends with (whose probe stamp is the post-round verdict).
+    evalResult:
+      telemetry.evalResult !== undefined && telemetry.contractFeedback !== undefined
+        ? { ...telemetry.evalResult, contractFeedback: telemetry.contractFeedback }
+        : telemetry.evalResult,
     needsBackgroundImprovement,
     selfCheckPassed: telemetry.selfCheckPassed,
     timing,

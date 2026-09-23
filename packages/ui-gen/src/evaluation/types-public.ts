@@ -175,6 +175,14 @@ export function notApplicableCoverage(reason: string): CriterionCoverage[] {
   }));
 }
 
+/** One contract-feedback round (ggui#1261): what bought it, and the source it was fed back on. */
+export interface ContractFeedbackRecord {
+  /** The exit-probe issue subcategories that bought the round, e.g. `runtime:prop-sensitivity:currentUser`. */
+  readonly firedOn: readonly string[];
+  /** The component source as it stood when the model was told — the round's BEFORE. */
+  readonly sourceBefore: string;
+}
+
 export interface EvalResult {
   issues: EvalIssue[];
   pass: string[];
@@ -194,6 +202,14 @@ export interface EvalResult {
    * probe runner; absent on eval paths that never invoke the probe.
    */
   runtimeProbe?: RuntimeProbeMeta;
+  /**
+   * The contract-feedback round, when one fired this generation (ggui#1261):
+   * which exit-probe findings bought it and the source as it stood when the
+   * model was told. `runtimeProbe` and the `runtime:*` issues on this result
+   * are the probe's verdict AFTER that round; `sourceBefore` beside the final
+   * source is the round's before/after. Absent when no such round fired.
+   */
+  contractFeedback?: ContractFeedbackRecord;
   /**
    * Per-canvas visual verdicts. Stamped by the harness ONLY when the
    * visual leg ran with `visualEvaluation.canvases` set (arm-neutral —
