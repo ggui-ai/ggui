@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A member-level clear on a theme write (2026-09-23, additive, ggui#1308:
+ * MINOR, same draft stamp). New exports: `APP_THEME_CLEARABLE_MEMBERS`
+ * (`mode`, `name`, `frameless`, `fonts`, `imagery` — the optional members
+ * outside the attestation), `AppThemeClearableMember`,
+ * `appThemeWriteSchema` / `AppThemeWrite` (the write form, where those
+ * members also accept `null`), and `splitAppThemeWrite`. `appThemeSchema`
+ * and `AppTheme` are unchanged and null-free. The #1124 refusal text names
+ * the member-level clear for each clearable dropped member. The shared
+ * writer's half (storing the split document, naming the cleared members)
+ * lands WITH this (cloud). No `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * The card's spent `oneShot` names on the render slice (2026-09-23,
  * additive, ggui#1223: MINOR, same draft stamp).
  * `McpAppAiGguiRenderMeta.spentOneShots?: readonly string[]`, projected only
@@ -18,7 +30,8 @@
  * `onInvalidSpentOneShots` (a malformed value is dropped and named, never
  * fatal). Kit: the `render-meta` forward case carries the member. The store
  * write (ggui#1305) and the runtime seed land separately. No
- * `PROTOCOL_VERSION` move. *
+ * `PROTOCOL_VERSION` move.
+ *
  * --------------------------------------------------------------------
  * `actionSpec` on the static render slice (2026-09-23, additive, ggui#1178:
  * MINOR, same draft stamp). `McpAppAiGguiRenderMeta.actionSpec?: ActionSpec`,

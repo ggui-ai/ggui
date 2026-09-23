@@ -222,6 +222,67 @@ export const appThemeSchema = z
 export type AppTheme = z.infer<typeof appThemeSchema>;
 
 /**
+ * The theme members a WRITE may clear with an explicit `null` (ggui#1308):
+ * #1145's "an explicit `null` is THE clear", one level down. Exactly the
+ * OPTIONAL members OUTSIDE the attestation — `overlayHash` covers
+ * `{ overlays, cssVariables, keyframes }` (`integrations/overlay-hash.ts`),
+ * so clearing `cssVariables` or `keyframes` by `null` would leave a stored
+ * hash that no longer attests the document; those change only through a
+ * re-projection with a recomputed hash. Required members never clear.
+ *
+ * Parties: the WRITER sends `<member>: null`; the SHARED WRITER stores the
+ * null-free document {@link splitAppThemeWrite} returns — writing it IS the
+ * removal, in the same write — and names every cleared member on the
+ * write's log line; the stored document never holds a `null`, so
+ * {@link appThemeSchema} — the stored and read shape — stays null-free.
+ * N−1: a door on a release before this one refuses `null` at the schema, so
+ * a writer sends it only once the accepting door serves.
+ */
+export const APP_THEME_CLEARABLE_MEMBERS = ['mode', 'name', 'frameless', 'fonts', 'imagery'] as const;
+export type AppThemeClearableMember = (typeof APP_THEME_CLEARABLE_MEMBERS)[number];
+
+/**
+ * The WRITE form of {@link appThemeSchema} (ggui#1308): identical, except
+ * that each {@link APP_THEME_CLEARABLE_MEMBERS} member also accepts `null`
+ * as a member-level clear. Built from `appThemeSchema.shape`, so the two
+ * cannot drift. Write doors validate with this; nothing reads with it.
+ */
+export const appThemeWriteSchema = z.strictObject({
+  ...appThemeSchema.shape,
+  mode: appThemeSchema.shape.mode.unwrap().nullable().optional(),
+  name: appThemeSchema.shape.name.unwrap().nullable().optional(),
+  frameless: appThemeSchema.shape.frameless.unwrap().nullable().optional(),
+  fonts: appThemeSchema.shape.fonts.unwrap().nullable().optional(),
+  imagery: appThemeSchema.shape.imagery.unwrap().nullable().optional(),
+});
+export type AppThemeWrite = z.infer<typeof appThemeWriteSchema>;
+
+/**
+ * Split a validated theme WRITE into the document to store (a valid
+ * {@link AppTheme}, no `null` in it) and the members it clears, in
+ * {@link APP_THEME_CLEARABLE_MEMBERS} order (ggui#1308). The shared writer
+ * stores `theme`, which already lacks every cleared member, so writing it
+ * IS the removal, in the same write; it names the `cleared` members on the
+ * write's log line. Pure; no I/O.
+ */
+export function splitAppThemeWrite(write: AppThemeWrite): {
+  readonly theme: AppTheme;
+  readonly cleared: readonly AppThemeClearableMember[];
+} {
+  const cleared = APP_THEME_CLEARABLE_MEMBERS.filter((member) => write[member] === null);
+  const { mode, name, frameless, fonts, imagery, ...attested } = write;
+  const theme: AppTheme = {
+    ...attested,
+    ...(mode != null ? { mode } : {}),
+    ...(name != null ? { name } : {}),
+    ...(frameless != null ? { frameless } : {}),
+    ...(fonts != null ? { fonts } : {}),
+    ...(imagery != null ? { imagery } : {}),
+  };
+  return { theme, cleared };
+}
+
+/**
  * The READ-door posture (ggui#1093 belt, 2026-09-15; VERSION-POLICY §3.6).
  *
  * `appThemeSchema` is the WRITE door: strict, an unknown top-level member is
@@ -421,10 +482,22 @@ export function appThemeWouldDropRefusalText(wouldDrop: readonly string[]): stri
     throw new Error('appThemeWouldDropRefusalText: a refusal must name at least one dropped member');
   }
   const members = wouldDrop.join(', ');
+  // ggui#1308 — a dropped member that a write may clear by `null` gets that precise path: it keeps
+  // every other stored member, where the whole-theme clear below leaves the app themeless first.
+  const clearable = wouldDrop.filter((member): member is AppThemeClearableMember =>
+    (APP_THEME_CLEARABLE_MEMBERS as readonly string[]).includes(member),
+  );
+  const memberClear =
+    clearable.length > 0
+      ? `${clearable.map((m) => `\`${m}\``).join(', ')} ${clearable.length === 1 ? 'can' : 'can each'} be cleared on its own: ` +
+        `send ${clearable.map((m) => `\`${m}: null\``).join(', ')} to clear just ${clearable.length === 1 ? 'that member' : 'those members'}, ` +
+        `keeping every other stored member. `
+      : '';
   return (
     `this write would drop stored theme members it does not carry — [${members}]. ` +
     `If you did not mean to drop them: read the stored theme and carry every member this write does not own, ` +
     `then recompute the attestation over the result. ` +
+    memberClear +
     `If you DID mean to drop them: send \`theme: null\` to clear the theme, then write the theme you want — ` +
     `the app has NO theme between those two writes.`
   );

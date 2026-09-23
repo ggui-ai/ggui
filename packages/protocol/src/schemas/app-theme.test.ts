@@ -12,6 +12,9 @@ import {
   appThemeWouldDropRefusalText,
   appThemeCarrySchema,
   appThemeGetResponseSchema,
+  APP_THEME_CLEARABLE_MEMBERS,
+  appThemeWriteSchema,
+  splitAppThemeWrite,
 } from './app-theme.js';
 import { canonicalOverlayJson } from '../integrations/overlay-hash.js';
 
@@ -407,5 +410,70 @@ describe('appThemeGetResponseSchema — what the theme GET promises (ggui#1155)'
   it('REFUSES an undeclared top-level member on the response — the door promises exactly this shape', () => {
     expect(appThemeGetResponseSchema.safeParse({ theme, extra: true }).success).toBe(false);
     expect(appThemeGetResponseSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+// ggui#1308 — a member-level clear by `null` on a theme WRITE (guuey#1654: "Follow the host" is an
+// absent `mode`, and the #1124 guard refuses a forward that omits it). #1145's rule one level down:
+// `null` on an OPTIONAL member OUTSIDE the attestation is a named clear of that member. Attested
+// members change only through a re-projection with a recomputed hash; required members never clear.
+describe('appThemeWriteSchema + splitAppThemeWrite — a member-level clear by null (ggui#1308)', () => {
+  const base: AppTheme = {
+    overlayHash: HASH,
+    overlays: { light: { '--ggui-color-primary-600': '#7c3aed' }, dark: { '--ggui-color-primary-600': '#a78bfa' } },
+    name: 'ocean',
+    mode: 'dark',
+  };
+
+  it('the clearable set is exactly the optional members OUTSIDE the attestation', () => {
+    expect([...APP_THEME_CLEARABLE_MEMBERS]).toEqual(['mode', 'name', 'frameless', 'fonts', 'imagery']);
+    // the attestation covers { overlays, cssVariables, keyframes } — none of them is clearable
+    const attested = Object.keys(JSON.parse(canonicalOverlayJson({ overlays: base.overlays, cssVariables: {}, keyframes: {} })));
+    for (const member of attested) expect(APP_THEME_CLEARABLE_MEMBERS as readonly string[]).not.toContain(member);
+  });
+
+  it.each(['mode', 'name', 'frameless', 'fonts', 'imagery'] as const)('`%s: null` is a named clear: accepted, split out, and the stored document is a valid AppTheme without it', (member) => {
+    const write = { ...base, [member]: null };
+    const parsed = appThemeWriteSchema.safeParse(write);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const { theme, cleared } = splitAppThemeWrite(parsed.data);
+    expect(cleared).toEqual([member]);
+    expect(member in theme).toBe(false);
+    expect(appThemeSchema.safeParse(theme).success).toBe(true);
+  });
+
+  it.each(['cssVariables', 'keyframes', 'overlays', 'overlayHash'] as const)('`%s: null` is refused — attested or required members never clear by null', (member) => {
+    expect(appThemeWriteSchema.safeParse({ ...base, [member]: null }).success).toBe(false);
+  });
+
+  it('the stored / read shape stays null-free: appThemeSchema still refuses `mode: null` (readers never see a null)', () => {
+    expect(appThemeSchema.safeParse({ ...base, mode: null }).success).toBe(false);
+  });
+
+  it('a write with no null (the previous release\'s shape, synthetic-equivalent) passes and splits to itself', () => {
+    const parsed = appThemeWriteSchema.safeParse(base);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const { theme, cleared } = splitAppThemeWrite(parsed.data);
+    expect(cleared).toEqual([]);
+    expect(theme).toEqual(base);
+  });
+
+  it('several clears at once are all named, in the canonical member order', () => {
+    const parsed = appThemeWriteSchema.safeParse({ ...base, name: null, mode: null });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(splitAppThemeWrite(parsed.data).cleared).toEqual(['mode', 'name']);
+  });
+
+  it('the wouldDrop refusal names the member-level clear for a CLEARABLE dropped member, and never offers it for an attested one', () => {
+    const text = appThemeWouldDropRefusalText(['mode', 'cssVariables']);
+    expect(text).toContain('`mode: null`');
+    expect(text).not.toContain('`cssVariables: null`');
+    // the whole-theme clear stays, for a writer who means to drop everything
+    expect(text).toContain('send `theme: null`');
+    expect(appThemeWouldDropRefusalText(['mode'])).toMatch(/: null` to clear just that member/);
+    expect(appThemeWouldDropRefusalText(['cssVariables'])).not.toMatch(/cleared on its own/);
   });
 });
