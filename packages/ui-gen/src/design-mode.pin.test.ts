@@ -177,10 +177,18 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // providers and every label verbatim. Removing the once-hint instead cost the true positive (9/12), so it stays.
 // Constrained boilerplate 8f1dfd89… → d030418c…, free boilerplate b9b86589… → a33e33a7…; both prompt
 // digests are byte-stable. INVARIANT 1 holds: the two arms' boilerplate hunks are byte-identical.
+// Re-recorded 2026-09-23 for ggui#1279 — the CONSTRAINED BOILERPLATE only (the variant B″ of
+// reliability/010 → 011, accepted by the founder): the chat layouts (`chat-universal`, `chat-mobile`)
+// stop drawing their own card chrome — they were `<Card padding="sm" shadow="sm">` while the chat shell
+// hint says the parent bubble provides border + shadow — and become a `<Box padding="md">` inline card
+// that says so, with the frame-sizing rule's line: the root fills the bubble, and PROSE takes the
+// reading cap inside it (`<Container maxWidth="sm">`, inert at bubble width). Fixture A is chat×mobile,
+// so its layout lines are the whole delta; fixture B (fullscreen×desktop) and the free arm are
+// untouched, and both prompt digests are byte-stable. Constrained boilerplate d030418c… → 2afbb69a….
 export const CONSTRAINED_PROMPT_SHA256 =
   '040bd0a3c00768e73df375b706e9b436537bf5efacbcd7b4f1ef5fd8b1a6a4ca';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  'd030418ca64aef40a12db280c0078bb730769a1909a86f1fcdf0d38d1c64532a';
+  '2afbb69a4c07a98058d56148718068bf00be63b172a609397da20d78bc12cb22';
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token

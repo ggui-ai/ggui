@@ -341,6 +341,7 @@ export function createUiGenerator(
         // Ignored by the constrained prompt (its shell/screen
         // descriptors stay byte-identical).
         const canvas = rendering ? canvasForRenderingContext(rendering) : undefined;
+        const shellType = harnessShellForRendering(rendering);
         const promptWithVariance = injectVariance(
           promptWithRendering,
           input.variance,
@@ -407,6 +408,8 @@ export function createUiGenerator(
           ...(onRetry !== undefined ? { onRetry } : {}),
           ...(designMode !== undefined ? { designMode } : {}),
           ...(canvas !== undefined ? { canvas } : {}),
+          // ggui#1279 — the shell the declared rendering composes for (chat only; see harnessShellForRendering).
+          ...(shellType !== undefined ? { shellType } : {}),
           ...(input.profile !== undefined ? { profile: input.profile } : {}),
           // Fixture props reach the in-loop probe + visual round only (never the prompt, never identity).
           ...(input.fixtureProps !== undefined ? { fixtureProps: input.fixtureProps } : {}),
@@ -526,6 +529,27 @@ function mapLlmProviderToDispatchProvider(provider: LlmProvider): ProviderName {
       return 'google';
     case 'openrouter':
       return 'openrouter';
+  }
+}
+
+/**
+ * ggui#1279 — the harness shell a declared rendering composes for. The canvas
+ * (`canvasForRenderingContext`) already follows the rendering; the WHAT leg's
+ * layout and the HOW leg's shell descriptor did not, so a declared chat card
+ * was scaffolded to "fill the frame" while the user prompt and the fit verdict
+ * treated it as an inline card. Only a declared CHAT shell changes anything.
+ * `fullscreen` IS the harness default, and `partial` has no layout of its own
+ * yet, so both pass no shell and those generations stay byte-identical — named
+ * here rather than guessed.
+ */
+function harnessShellForRendering(rendering: RenderingContext | undefined): 'chat' | undefined {
+  if (rendering === undefined) return undefined;
+  switch (rendering.shell) {
+    case 'chat':
+      return 'chat';
+    case 'fullscreen':
+    case 'partial':
+      return undefined;
   }
 }
 

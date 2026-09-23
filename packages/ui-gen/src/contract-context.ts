@@ -59,7 +59,7 @@ const SHELL_HINTS: Record<string, string> = {
 - Padding: use var(--ggui-spacing-2) for inner elements, var(--ggui-spacing-4) for sections. Tight.
 - Scrolling: parent scrolls (chat feed) — component should NOT have internal scroll
 - Layout: single column, compact. No sidebar. Stack everything vertically.
-- Width: width: 100% (fills parent bubble). Do NOT set max-width.`,
+- Width: the root is width: 100% (fills the bubble) — never cap the ROOT. A prose column inside it carries the reading cap (<Container maxWidth="sm">), which is inert at bubble width.`,
 
   fullscreen: `**Fullscreen Shell — Takes over entire viewport**
 - Container: the whole viewport, edge to edge — the frame stretches your root to its full height (you never set a viewport height yourself)
