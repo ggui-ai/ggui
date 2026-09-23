@@ -905,7 +905,8 @@ export async function runEvalRound(
       // the runtimeProbe stamp lands (Exp 48 found this exit surfacing
       // as "SKIP — no runtimeProbe stamp" in the bench: honest, but a
       // probe here is cheap and the shipped code deserves the signal).
-      // No feedback is granted — stuck means the LLM stopped converging.
+      // The RECURRING fails get no more feedback — stuck means the model
+      // saw them and stopped converging on them.
       const stuckExitProbe = await runProbeAtExit({
         harness,
         sourceCode: currentSource,
@@ -918,6 +919,36 @@ export async function runEvalRound(
         issues: [...evalResult.issues, ...stuckExitProbe.probeIssues],
         runtimeProbe: stuckExitProbe.meta,
       };
+      // ggui#1261 — a contract defect the exit probe diagnosed here was never
+      // DELIVERED: the stuck set is non-runtime by construction (runtime-only
+      // sets are exempt above), and the stuck premise is "the model saw these
+      // and did not resolve them". So it gets the same one round as at the
+      // clean-PASS and cap exits — the probe's diagnosis only, never the
+      // recurring fail; one attempt per finding; bounded at the cap + 1 (Exp
+      // 011, candidate r5: the one FAIL that shipped without a round).
+      const stuckContractFails = contractFeedbackFails(stuckExitProbe, prevFailFingerprints);
+      if (stuckContractFails.length > 0 && evalRoundsUsed < maxEvalRounds + CONTRACT_FEEDBACK_BONUS) {
+        const lines = stuckContractFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: stuck BUT contract probe fail never delivered — granting +1 turn ` +
+            `(ggui#1261; ${stuckContractFails.map((i) => i.subcategory).join(", ")})`,
+        );
+        return {
+          control: "feedback",
+          evalDone: false,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats: updatedPrevModeSubcats,
+          prevFailFingerprints: new Set([...currFailFingerprints, ...stuckContractFails.map(fingerprintFail)]),
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: lines.join("\n\n"),
+          isEvalFeedback: true,
+          lastDiffFailed: false,
+          contractFeedback: contractFeedbackRecord(stuckContractFails, currentSource),
+        };
+      }
       return {
         control: "break",
         evalDone: false,
