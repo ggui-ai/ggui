@@ -105,22 +105,47 @@ export type WithTrait<Own> =
  * div-rooted primitive (Box, Stack, Card) so trait composition lives
  * in exactly one place.
  */
+/**
+ * The expanded frame's DOM marks (ggui#1083): a surface primitive states
+ * that it IS a surface (`surface`) and whether it spans the frame's inset
+ * edge to edge (`bleed`). Only the `fit: 'fill'` rule reads them (the
+ * first-level surface's concentric radius and the bleed band's negative
+ * inset); every other context ignores them.
+ */
+export interface FrameMarks {
+  readonly surface?: string;
+  readonly bleed?: boolean;
+}
+
+/** `{ surface: 'hero', bleed: true }` → `data-ggui-surface="hero" data-ggui-bleed=""`. */
+function frameAttributes(frame: FrameMarks | undefined): {
+  readonly 'data-ggui-surface'?: string;
+  readonly 'data-ggui-bleed'?: '';
+} {
+  if (frame === undefined) return {};
+  return {
+    ...(frame.surface !== undefined ? { 'data-ggui-surface': frame.surface } : {}),
+    ...(frame.bleed === true ? { 'data-ggui-bleed': '' as const } : {}),
+  };
+}
+
 export function renderWithTrait(
   trait: TraitComponent | undefined,
   traitProps: TraitProps<TraitComponent>,
-  root: { readonly className?: string; readonly style: CSSProperties },
+  root: { readonly className?: string; readonly style: CSSProperties; readonly frame?: FrameMarks },
   children: ReactNode,
 ): ReactElement {
+  const marks = frameAttributes(root.frame);
   if (trait === undefined) {
     return createElement(
       'div',
-      { className: root.className, style: root.style },
+      { className: root.className, style: root.style, ...marks },
       children,
     );
   }
   return createElement(
     trait,
-    { ...traitProps, className: root.className, style: root.style },
+    { ...traitProps, className: root.className, style: root.style, ...marks },
     children,
   );
 }

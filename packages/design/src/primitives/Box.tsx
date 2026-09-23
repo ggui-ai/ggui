@@ -27,9 +27,16 @@ export function Box(props: WithTrait<BoxProps>) {
     radius,
     style,
     className,
+    bleed,
     as: Trait,
     ...traitProps
   } = props;
+  // ggui#1083 — a Box with a painted surface IS a surface; `bleed` may ride any Box.
+  const markedSurface = surface !== undefined && surface !== 'transparent' ? surface : undefined;
+  const frame =
+    markedSurface === undefined && bleed !== true
+      ? undefined
+      : { ...(markedSurface !== undefined ? { surface: markedSurface } : {}), ...(bleed === true ? { bleed: true } : {}) };
 
   // Compute padding with paddingX/paddingY overrides. Each spacing
   // prop resolves a SpacingScale name to its `--ggui-spacing-*` token.
@@ -84,6 +91,7 @@ export function Box(props: WithTrait<BoxProps>) {
       {
         className: className ? `${className} ${scope.className}` : scope.className,
         style: composedStyle,
+        ...(frame !== undefined ? { frame } : {}),
       },
       <>
         <style>{scope.css}</style>
@@ -95,7 +103,7 @@ export function Box(props: WithTrait<BoxProps>) {
   return renderWithTrait(
     Trait,
     traitProps,
-    { className, style: composedStyle },
+    { className, style: composedStyle, ...(frame !== undefined ? { frame } : {}) },
     children,
   );
 }

@@ -334,6 +334,22 @@ export function framelessSuppressionRule(scopeClass: string): string {
 }
 
 /**
+ * The expanded frame (ggui#1083 cut 2; `rnd/gen-ui/beauty/expanded-frame-direction.md` v1.2):
+ * inside a host's canvas panel the panel carries the one chrome, and the card fills it.
+ *
+ * - Its OUTER radius is the theme's `xl` radius stop, in every bucket. That is the rule the guuey
+ *   widget pins its panel table to (guuey `33afd73d0`, `panel-radius-sync.test.ts`: none 0 / soft
+ *   16 / round 24 = the forwarded `xl`), so the two sides read one definition.
+ * - Its INSET is the host's panel gap. guuey's `panelGap` default (16 px, guuey#1245) is a
+ *   cross-fleet constant: a builder's custom gap is invisible inside the frame, and concentricity
+ *   is then off by (gap − 16) px, visible only on the `round` bucket (24 − 16 = 8 px inner corner).
+ */
+export const EXPANDED_FRAME = { outerRadiusVar: '--ggui-shape-radius-xl', insetPx: 16 } as const;
+
+/** A first-level surface inset by the frame: concentric with the panel's corner — max(0, R − inset). */
+export const EXPANDED_FRAME_INNER_RADIUS = `max(0px, calc(var(${EXPANDED_FRAME.outerRadiusVar}) - ${EXPANDED_FRAME.insetPx}px))`;
+
+/**
  * The `fit: 'fill'` rule (ggui#1041): inside a host's canvas the mounted root
  * is the whole surface — no border, radius or shadow of its own, and it fills
  * the page. The host's panel carries the one chrome.
@@ -341,6 +357,7 @@ export function framelessSuppressionRule(scopeClass: string): string {
 export function fillFitRule(scopeClass: string): string {
   const s = scopeClass;
   const strip = 'border: none !important; border-radius: 0 !important; box-shadow: none !important;';
+  const inset = `${EXPANDED_FRAME.insetPx}px`;
   return [
     '',
     // The chain above the scope is the host's frame: the runtime's mount list
@@ -362,7 +379,26 @@ export function fillFitRule(scopeClass: string): string {
     // frame — the flex column fills it (ggui#1096: 884 px in an 836 frame).
     `.${s} > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; padding: 0 !important; }`,
     `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} min-height: 0 !important; flex: 1 1 auto; }`,
+    // ggui#1083 — the expanded frame's rhythm, inside the fill surface F (the root, or the one
+    // surface a wrapper root hands the fill to): F keeps the frame's inset; a first-level surface
+    // is concentric with the panel's corner; a `bleed` element takes the inset back and meets the
+    // panel's edge (square, since the panel's own corner clips it).
+    ...fillSurfaces(s).map((f) => `${f} { padding: ${inset} !important; }`),
+    ...fillSurfaces(s).map(
+      (f) => `${f} > [data-ggui-surface]:not([data-ggui-bleed]) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
+    ),
+    ...fillSurfaces(s).map(
+      (f) =>
+        `${f} > [data-ggui-bleed] { margin-left: -${inset} !important; margin-right: -${inset} !important; border-radius: 0 !important; }`,
+    ),
+    ...fillSurfaces(s).map((f) => `${f} > [data-ggui-bleed]:first-child { margin-top: -${inset} !important; }`),
+    ...fillSurfaces(s).map((f) => `${f} > [data-ggui-bleed]:last-child { margin-bottom: -${inset} !important; }`),
   ].join('\n');
+}
+
+/** The fill surface's two shapes: a root with several children, or the one child a wrapper root hands the fill to. */
+function fillSurfaces(s: string): readonly string[] {
+  return [`.${s} > :where(:not(style)):not(:has(> :only-child))`, `.${s} > :where(:not(style)) > :where(:only-child)`];
 }
 
 /**

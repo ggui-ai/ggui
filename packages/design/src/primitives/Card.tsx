@@ -42,9 +42,15 @@ export function Card(props: WithTrait<CardProps>) {
     surface,
     style,
     className,
+    bleed,
     as: Trait,
     ...traitProps
   } = props;
+  // ggui#1083 — a painted Card is a surface; the fill rule reads the marks.
+  const frame = {
+    ...(surface !== 'transparent' ? { surface: surface ?? 'default' } : {}),
+    ...(bleed === true ? { bleed: true } : {}),
+  };
 
   const resolvedPadding = resolveSpacing(padding);
 
@@ -86,6 +92,7 @@ export function Card(props: WithTrait<CardProps>) {
       {
         className: className ? `${className} ${scope.className}` : scope.className,
         style: composedStyle,
+        frame,
       },
       <>
         <style>{scope.css}</style>
@@ -97,7 +104,7 @@ export function Card(props: WithTrait<CardProps>) {
   return renderWithTrait(
     Trait,
     traitProps,
-    { className, style: composedStyle },
+    { className, style: composedStyle, frame },
     children,
   );
 }
