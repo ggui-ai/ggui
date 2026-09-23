@@ -200,6 +200,16 @@ export interface GenerationResultDisplay {
    * in `@ggui-ai/ui-gen` (same compile-time pin).
    */
   canvas?: 'xs-chat-card' | 'mobile-fullscreen-small' | 'md' | 'lg' | 'xl';
+  /**
+   * Present only when the harness's same-exchange guard (ggui#404) ended the
+   * coding loop — the tool the model kept repeating and how many times; no
+   * key otherwise. Reported, never scored. It says the loop ended, not that
+   * nothing shipped: the loop falls back to an earlier successful build when
+   * one exists, so whether the cell shipped is its compiled size's to say.
+   * Mirrors `SameExchangeBreak` in `@ggui-ai/ui-gen` (pinned at compile time
+   * in the benchmark reporter).
+   */
+  sameExchangeBreak?: { tool: string; repeats: number };
 }
 
 /**

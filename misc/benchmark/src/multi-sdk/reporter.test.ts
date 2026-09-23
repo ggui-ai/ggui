@@ -364,3 +364,25 @@ describe('#1040 / #1014 — the contract-behaviour failure kinds are an extensib
     expect(payloads.next.failures?.some((f) => f.kind === 'action-unreachable' && f.reason === 'behind-navigation')).toBe(true);
   });
 });
+
+describe('toDisplayReport — ggui#404 same-exchange break', () => {
+  it('carries sameExchangeBreak on a cell the guard ended, and no key on a cell it did not', () => {
+    const base = generatedRun('broken', null);
+    const broken: BenchmarkRunResult = {
+      ...base,
+      generation: {
+        compiledCode: '',
+        sourceCode: '',
+        tokens: { input: 1, output: 1, total: 2 },
+        generationTimeMs: 2700,
+        turnsUsed: 3,
+        passesUsed: 1,
+        sameExchangeBreak: { tool: 'get_available_icons', repeats: 3 },
+      },
+    };
+    const d = toDisplayReport(generateReport([broken, generatedRun('fine', null)], 0), 'rep-1', 'test');
+    const byCommit = new Map(d.results.map((r) => [r.commit.id, r]));
+    expect(byCommit.get('broken')?.generation?.sameExchangeBreak).toEqual({ tool: 'get_available_icons', repeats: 3 });
+    expect(byCommit.get('fine')?.generation).not.toHaveProperty('sameExchangeBreak');
+  });
+});

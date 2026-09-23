@@ -13,7 +13,7 @@ import type {
   VisualCanvasArtefactDisplay,
 } from '@ggui-ai/shared';
 import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
-import type { CanvasClass, DesignMode } from '@ggui-ai/ui-gen';
+import type { CanvasClass, DesignMode, SameExchangeBreak } from '@ggui-ai/ui-gen';
 import type { JudgeDisclosureDisplay } from '@ggui-ai/shared';
 import type { JudgeSampling } from './post-eval.js';
 import type {
@@ -765,6 +765,11 @@ function mapGeneration(r: BenchmarkRunResult): GenerationResultDisplay | null {
   if ('canvas' in gen && gen.canvas !== undefined) {
     result.canvas = gen.canvas;
   }
+  // ggui#404: the same-exchange guard ended the coding loop — present only
+  // then; copied verbatim, so a cell the guard did not end stays byte-identical.
+  if ('sameExchangeBreak' in gen && gen.sameExchangeBreak !== undefined) {
+    result.sameExchangeBreak = { tool: gen.sameExchangeBreak.tool, repeats: gen.sameExchangeBreak.repeats };
+  }
   return result;
 }
 
@@ -779,6 +784,13 @@ const _designModeVocabularyPinned: DesignMode extends NonNullable<GenerationResu
   ? true
   : never = true;
 const _canvasClassVocabularyPinned: CanvasClass extends NonNullable<GenerationResultDisplay['canvas']>
+  ? true
+  : never = true;
+// ggui#404: ui-gen's SameExchangeBreak must fit the display field, so a shape
+// change there fails here instead of dropping the field silently.
+const _sameExchangeBreakShapePinned: SameExchangeBreak extends NonNullable<
+  GenerationResultDisplay['sameExchangeBreak']
+>
   ? true
   : never = true;
 // The same pin for the two other display fields that carry a canvas class
