@@ -11,10 +11,11 @@
  * this file targets the sink surface specifically.
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import type { AuditEntry } from '@ggui-ai/mcp-server-core';
+import type { AuditEntry, GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import {
   InMemoryAuditSink,
   InMemoryAuthAdapter,
+  InMemoryGguiSessionStore,
   InMemoryTelemetrySink,
   NoopAuditSink,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -261,5 +262,47 @@ describe('createGguiServer — audit failure resilience', () => {
     expect(auditErr.length).toBeGreaterThanOrEqual(1);
     // Completion itself succeeded (it's the whole point of this test).
     expect(completion.token).toBeTruthy();
+  });
+});
+
+// ggui#1223 / #1305 — a session store without the optional
+// `recordSpentOneShot` is named ONCE at construction: spent `oneShot`
+// actions are not durable across a re-serve on it.
+describe('createGguiServer — spent oneShot durability warn', () => {
+  let server: GguiServer;
+  afterEach(async () => {
+    await server?.close();
+  });
+
+  function requiredMethodsOf(inner: GguiSessionStore): GguiSessionStore {
+    return {
+      create: (i) => inner.create(i),
+      get: (id) => inner.get(id),
+      list: (f) => inner.list(f),
+      update: (id, p) => inner.update(id, p),
+      delete: (id) => inner.delete(id),
+      commit: (i) => inner.commit(i),
+      appendEvent: (i) => inner.appendEvent(i),
+      listEventsSince: (id, since, limit) => inner.listEventsSince(id, since, limit),
+      observe: (id, o) => inner.observe(id, o),
+    };
+  }
+
+  it('warns once when the store does not implement recordSpentOneShot', () => {
+    const { capture, logger } = makeCaptureLogger();
+    server = createGguiServer({
+      logger,
+      renderChannel: true,
+      renderStore: requiredMethodsOf(new InMemoryGguiSessionStore()),
+    });
+    expect(
+      capture.filter((l) => l.level === 'warn' && l.event === 'spent_one_shots_not_durable'),
+    ).toHaveLength(1);
+  });
+
+  it('does not warn when the store implements it', () => {
+    const { capture, logger } = makeCaptureLogger();
+    server = createGguiServer({ logger, renderChannel: true });
+    expect(capture.filter((l) => l.event === 'spent_one_shots_not_durable')).toHaveLength(0);
   });
 });

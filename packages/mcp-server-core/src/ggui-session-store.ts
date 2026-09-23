@@ -24,6 +24,7 @@ import type {
   GguiSession,
   GguiSessionEvent,
   GguiSessionEventType,
+  SpentOneShotsRecord,
 } from '@ggui-ai/protocol';
 
 // Re-export the protocol-level types so downstream importers
@@ -436,4 +437,112 @@ export interface GguiSessionStore {
    * have already confirmed is visible to the caller.
    */
   getAuthoredSource?(id: string): Promise<string | undefined>;
+
+  /**
+   * Record one COMMITTED dispatch of a `oneShot` action on a card
+   * (ggui#1223 / #1305), so a re-served card renders it spent after a
+   * reload. The store keeps ONE {@link SpentOneShotsRecord} per render
+   * and applies {@link nextSpentOneShotsRecord}'s rule ATOMICALLY: the
+   * same card's epoch adds the action (a repeat is a no-op), a newer
+   * card's first spend REPLACES the record, and an older card's spend
+   * changes nothing. Rejects when the render does not exist.
+   *
+   * **The record is store-owned.** This method is its ONLY writer. Every
+   * read (`get`, `list`, the value `commit` returns) folds it onto the
+   * component render as `render.spentOneShots` ({@link withSpentOneShots}).
+   * `commit` never writes it ({@link withoutSpentOneShots}): a commit
+   * replaces the render from the caller's EARLIER read, so a spend landing
+   * in between would be erased by that stale copy. An amend or
+   * `props_update` therefore keeps the record, and a card minted by
+   * `ggui_update` starts fresh because its epoch no longer matches, not
+   * because anything was cleared.
+   *
+   * Optional, and additive: a store without it serves exactly the
+   * behaviour that predates it. The runtime's in-memory guard still
+   * suppresses a repeat on a live card, but a consumed `oneShot` renders
+   * live again after a re-serve. The server names that ONCE at
+   * construction (`spent_one_shots_not_durable`), and the conformance
+   * suite grades it as a named skip, never a pass.
+   */
+  recordSpentOneShot?(sessionId: string, spend: SpentOneShotSpend): Promise<void>;
+}
+
+/**
+ * One committed dispatch of a `oneShot` action, as the session writer
+ * records it (ggui#1223 / #1305). The input to
+ * {@link GguiSessionStore.recordSpentOneShot}.
+ */
+export interface SpentOneShotSpend {
+  /** History epoch of the card the dispatch happened on (#483). */
+  readonly epoch: number;
+  /** The `actionSpec` name, declared `oneShot` on that card. */
+  readonly action: string;
+}
+
+/**
+ * Refuse a malformed spend before any store writes it. The epoch is a
+ * history epoch (a non-negative safe integer) and the action a non-empty
+ * name, which is the same shape `spentOneShotsSchema` admits at the read door.
+ */
+export function assertSpentOneShotSpend(spend: SpentOneShotSpend): void {
+  if (!Number.isSafeInteger(spend.epoch) || spend.epoch < 0) {
+    throw new RangeError(
+      `recordSpentOneShot: epoch must be a non-negative safe integer, got ${String(spend.epoch)}`,
+    );
+  }
+  if (typeof spend.action !== 'string' || spend.action.length === 0) {
+    throw new RangeError('recordSpentOneShot: action must be a non-empty action name');
+  }
+}
+
+/**
+ * The record after one spend, or `null` when the spend changes nothing.
+ * This is the ONE spelling of the rule every backend applies; a backend
+ * with a conditional write expresses the same three arms as conditions
+ * rather than calling this.
+ *
+ * - no record, or a record from an OLDER card → `{ epoch, actions: [action] }`
+ *   (a new card's first spend REPLACES, never appends);
+ * - the SAME card, action not yet listed → the action appended;
+ * - the same card with the action already listed, or a record from a NEWER
+ *   card (this spend is on an older card) → `null`.
+ */
+export function nextSpentOneShotsRecord(
+  current: SpentOneShotsRecord | undefined,
+  spend: SpentOneShotSpend,
+): SpentOneShotsRecord | null {
+  assertSpentOneShotSpend(spend);
+  if (current === undefined || current.epoch < spend.epoch) {
+    return { epoch: spend.epoch, actions: [spend.action] };
+  }
+  if (current.epoch > spend.epoch || current.actions.includes(spend.action)) {
+    return null;
+  }
+  return { epoch: current.epoch, actions: [...current.actions, spend.action] };
+}
+
+/**
+ * Fold a store-owned record onto a render's READ view. Component renders
+ * only, because the field exists only on `ComponentGguiSession`. Whatever
+ * the render already carried is replaced, so the store's record is the
+ * only one a reader can see.
+ */
+export function withSpentOneShots(
+  render: GguiSession,
+  record: SpentOneShotsRecord | undefined,
+): GguiSession {
+  if (render.type !== 'component') return render;
+  const { spentOneShots: _prior, ...rest } = render;
+  return record === undefined ? rest : { ...rest, spentOneShots: record };
+}
+
+/**
+ * Strip a read-view record from a render about to be committed. `commit`
+ * persists the render WITHOUT it, because the record's only writer is
+ * {@link GguiSessionStore.recordSpentOneShot}.
+ */
+export function withoutSpentOneShots(render: GguiSession): GguiSession {
+  if (render.type !== 'component' || render.spentOneShots === undefined) return render;
+  const { spentOneShots: _storeOwned, ...rest } = render;
+  return rest;
 }

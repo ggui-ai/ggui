@@ -74,6 +74,7 @@ import {
   type ActiveConsumerRegistry,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler } from '../types.js';
+import { recordCommittedOneShot } from './record-committed-one-shot.js';
 
 // `kind` accepts the closed primary set OR an extension string. Zod
 // can't represent `(string & {})` directly; we use `z.string().min(1)`
@@ -237,6 +238,33 @@ export interface GguiSubmitActionHandlerDeps {
   };
 }
 
+/**
+ * Record a pipe-committed dispatch's `oneShot` spend (ggui#1223 / #1305).
+ * FAIL-OPEN: the gesture has already reached the agent, so a failed record
+ * degrades to the behaviour that predates it (the card re-serves live) and
+ * is named on one warn line, never allowed to fail the dispatch.
+ */
+async function recordDispatchSpend(
+  deps: GguiSubmitActionHandlerDeps,
+  sessionId: string,
+  action: string,
+  data: unknown,
+): Promise<void> {
+  const store = deps.renderStore;
+  if (store === undefined) return;
+  try {
+    const stored = await store.get(sessionId);
+    if (stored === null) return;
+    await recordCommittedOneShot({ store, sessionId, render: stored.render, action, data });
+  } catch (err) {
+    deps.logger?.warn?.('submit_action_spent_oneshot_persist_failed', {
+      sessionId,
+      action,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export function createGguiSubmitActionHandler(
   deps: GguiSubmitActionHandlerDeps = {},
 ) {
@@ -363,6 +391,11 @@ export function createGguiSubmitActionHandler(
                   : String(ledgerResult.reason),
             });
           }
+          // ggui#1223 / #1305 — the gesture is on the pipe, so a committed
+          // `oneShot` now spends its card durably. This never changes the
+          // answer: a dispatch that fails the card's contract was accepted
+          // above exactly as before and simply does not spend.
+          await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData);
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight
           // `ggui_consume` long-poll will drain this event soon. When

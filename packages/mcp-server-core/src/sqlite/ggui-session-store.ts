@@ -61,8 +61,14 @@ import type {
   EndUserIdentity,
   GguiSession,
   HostContextProjection,
+  SpentOneShotsRecord,
 } from '@ggui-ai/protocol';
-import { firstWriteEventSequence } from '../ggui-session-store.js';
+import {
+  firstWriteEventSequence,
+  nextSpentOneShotsRecord,
+  withoutSpentOneShots,
+  withSpentOneShots,
+} from '../ggui-session-store.js';
 import type {
   AppendEventInput,
   CommitGguiSessionInput,
@@ -72,6 +78,7 @@ import type {
   GguiSessionFilter,
   GguiSessionPatch,
   GguiSessionStore,
+  SpentOneShotSpend,
   StoredGguiSession,
 } from '../ggui-session-store.js';
 
@@ -183,6 +190,10 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     bumpSequence: SqliteStatement<unknown[]>;
     selectEventsFromSeq: SqliteStatement<unknown[]>;
     selectEventsSinceLimited: SqliteStatement<unknown[]>;
+    selectSpentOneShots: SqliteStatement<unknown[]>;
+    selectAllSpentOneShots: SqliteStatement<unknown[]>;
+    upsertSpentOneShots: SqliteStatement<unknown[]>;
+    deleteSpentOneShots: SqliteStatement<unknown[]>;
   };
 
   private idCounter = 0;
@@ -238,6 +249,19 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       // We fetch `limit + 1` to compute `hasMore` in a single query.
       selectEventsSinceLimited: this.db.prepare<unknown[]>(
         `SELECT * FROM render_events WHERE render_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
+      ),
+      // #1305 — the store-owned spent oneShot record, one row per render.
+      selectSpentOneShots: this.db.prepare<unknown[]>(
+        `SELECT * FROM render_spent_one_shots WHERE render_id = ?`,
+      ),
+      selectAllSpentOneShots: this.db.prepare<unknown[]>(
+        `SELECT * FROM render_spent_one_shots`,
+      ),
+      upsertSpentOneShots: this.db.prepare<unknown[]>(
+        `INSERT INTO render_spent_one_shots (render_id, epoch, actions) VALUES (?, ?, ?) ON CONFLICT(render_id) DO UPDATE SET epoch = excluded.epoch, actions = excluded.actions`,
+      ),
+      deleteSpentOneShots: this.db.prepare<unknown[]>(
+        `DELETE FROM render_spent_one_shots WHERE render_id = ?`,
       ),
     };
   }
@@ -306,7 +330,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
 
   async get(id: string): Promise<StoredGguiSession | null> {
     const row = asGguiSessionRow(this.stmts.getGguiSession.get(id));
-    return row ? rowToStored(row) : null;
+    return row ? this.readView(row) : null;
   }
 
   async list(filter: GguiSessionFilter): Promise<StoredGguiSession[]> {
@@ -314,6 +338,11 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       .all()
       .map((raw) => requireGguiSessionRow(raw));
     const now = this.now();
+    const spentByRender = new Map<string, SpentOneShotsRecord>();
+    for (const raw of this.stmts.selectAllSpentOneShots.all()) {
+      const spent = asSpentOneShotsRow(raw);
+      if (spent?.record !== undefined) spentByRender.set(spent.renderId, spent.record);
+    }
     const filtered: StoredGguiSession[] = [];
     for (const row of rows) {
       if (filter.appId !== undefined && row.app_id !== filter.appId) continue;
@@ -325,7 +354,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       }
       if (filter.hostName !== undefined && row.host_name !== filter.hostName) continue;
       if (filter.hostSessionId !== undefined && row.host_session_id !== filter.hostSessionId) continue;
-      const stored = rowToStored(row);
+      const stored = foldSpentOneShots(rowToStored(row), spentByRender.get(row.id));
       // Outcome facet (#495) — single definition lives in the protocol.
       if (filter.erroredOnly === true && !isErroredGguiSession(stored.render)) continue;
       filtered.push(stored);
@@ -349,7 +378,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       this.stmts.updateHostContext.run(JSON.stringify(patch.hostContext), id);
     }
     const updated = requireGguiSessionRow(this.stmts.getGguiSession.get(id));
-    return rowToStored(updated);
+    return this.readView(updated);
   }
 
   async delete(id: string): Promise<void> {
@@ -357,12 +386,15 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     // We still clear explicitly to be robust to SQLite builds where
     // `foreign_keys` was disabled.
     this.stmts.deleteRenderEvents.run(id);
+    this.stmts.deleteSpentOneShots.run(id);
     this.stmts.deleteRender.run(id);
     this.wakeWaiters(id, null);
   }
 
   async commit(input: CommitGguiSessionInput): Promise<StoredGguiSession> {
-    const incoming = input.render;
+    // The spent record is store-owned (#1305): a render carrying a copy of it
+    // (a read view the caller took earlier) never writes it.
+    const incoming = withoutSpentOneShots(input.render);
     const existing = asGguiSessionRow(
       this.stmts.getGguiSession.get(incoming.id),
     );
@@ -379,7 +411,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       const updated = requireGguiSessionRow(
         this.stmts.getGguiSession.get(incoming.id),
       );
-      return rowToStored(updated);
+      return this.readView(updated);
     }
     // First-write — mint a fresh row using the supplied lifecycle slice.
     const stored: StoredGguiSession = {
@@ -410,6 +442,29 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       stored.hostSession?.hostSessionId ?? null,
     );
     return stored;
+  }
+
+  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<void> {
+    // Read-decide-write under one `BEGIN IMMEDIATE` transaction, so two
+    // concurrent spends cannot both read the same record and lose one.
+    const txn = this.db.transaction((): void => {
+      if (!asGguiSessionRow(this.stmts.getGguiSession.get(sessionId))) {
+        throw new Error(
+          `SqliteGguiSessionStore.recordSpentOneShot: render not found: ${sessionId}`,
+        );
+      }
+      const current = asSpentOneShotsRow(this.stmts.selectSpentOneShots.get(sessionId));
+      const next = nextSpentOneShotsRecord(current?.record, spend);
+      if (next === null) return;
+      this.stmts.upsertSpentOneShots.run(sessionId, next.epoch, JSON.stringify(next.actions));
+    });
+    txn.immediate();
+  }
+
+  /** A row as a reader sees it: the store-owned spent record folded onto the render. */
+  private readView(row: GguiSessionRow): StoredGguiSession {
+    const spent = asSpentOneShotsRow(this.stmts.selectSpentOneShots.get(row.id));
+    return foldSpentOneShots(rowToStored(row), spent?.record);
   }
 
   async appendEvent(input: AppendEventInput): Promise<number> {
@@ -597,6 +652,18 @@ CREATE TABLE IF NOT EXISTS render_events (
   -- numerics in legacy rows. New writes are ISO strings.
   timestamp TEXT NOT NULL,
   PRIMARY KEY (render_id, seq),
+  FOREIGN KEY (render_id) REFERENCES renders(id) ON DELETE CASCADE
+);
+
+-- #1305 — the card's spent oneShot record, STORE-OWNED: written only by
+-- recordSpentOneShot, never by commit (which replaces the payload from the
+-- caller's earlier read). A sibling table rather than a renders column, so
+-- an existing database file gains it without an ALTER.
+CREATE TABLE IF NOT EXISTS render_spent_one_shots (
+  render_id TEXT PRIMARY KEY,
+  epoch INTEGER NOT NULL,
+  -- JSON array of action names.
+  actions TEXT NOT NULL,
   FOREIGN KEY (render_id) REFERENCES renders(id) ON DELETE CASCADE
 );
 `;
@@ -848,6 +915,39 @@ function rowToEvent(row: EventRow): GguiSessionEvent {
     timestamp,
     data: parseJsonValue(row.data) ?? null,
   };
+}
+
+/**
+ * Narrow a raw `render_spent_one_shots` row. Wrong COLUMN types fail loudly,
+ * like every other table here. An `actions` payload that parses but is not an
+ * array of non-empty names degrades to "no record" (`record: undefined`),
+ * matching the file's JSON-column posture.
+ */
+function asSpentOneShotsRow(
+  raw: unknown,
+): { readonly renderId: string; readonly record: SpentOneShotsRecord | undefined } | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw malformedRowError('render_spent_one_shots', undefined);
+  const { render_id, epoch, actions } = raw;
+  if (typeof render_id !== 'string' || typeof epoch !== 'number' || typeof actions !== 'string') {
+    throw malformedRowError('render_spent_one_shots', raw.render_id);
+  }
+  const parsed = parseJsonValue(actions);
+  const record =
+    Number.isSafeInteger(epoch) &&
+    epoch >= 0 &&
+    Array.isArray(parsed) &&
+    parsed.every((a): a is string => typeof a === 'string' && a.length > 0)
+      ? { epoch, actions: parsed }
+      : undefined;
+  return { renderId: render_id, record };
+}
+
+function foldSpentOneShots(
+  stored: StoredGguiSession,
+  record: SpentOneShotsRecord | undefined,
+): StoredGguiSession {
+  return { ...stored, render: withSpentOneShots(stored.render, record) };
 }
 
 /** Parse JSON, returning `undefined` on syntax failure. */

@@ -327,6 +327,41 @@ describe('handleInboundAction — server-side tool-hint derivation (consume-even
   });
 });
 
+// ggui#1223 / #1305 — a committed `oneShot` spends its card durably BEFORE
+// the ack, so a client holding the ack can reload and find the card spent.
+describe('handleInboundAction — the committed oneShot spend (#1305)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  async function spent(f: Fixture): Promise<unknown> {
+    const got = await f.store.get(f.sessionId);
+    return got?.render.type === 'component' ? got.render.spentOneShots : undefined;
+  }
+
+  it('a data:submit of a oneShot action is recorded on the card by the time the ack arrives', async () => {
+    fx = await bootSubscribed({
+      confirm: { label: 'Confirm', oneShot: true },
+      ping: { label: 'Ping' },
+    });
+    await submitAction(fx, { action: 'confirm', data: null });
+    expect(await spent(fx)).toEqual({ epoch: 0, actions: ['confirm'] });
+  });
+
+  it('an action the card does not declare oneShot leaves no record', async () => {
+    fx = await bootSubscribed({
+      confirm: { label: 'Confirm', oneShot: true },
+      ping: { label: 'Ping' },
+    });
+    await submitAction(fx, { action: 'ping', data: null });
+    expect(await spent(fx)).toBeUndefined();
+  });
+});
+
 describe('per-socket inbound ordering — inboundChain serializes async frame handling', () => {
   let fx: Fixture | null = null;
   afterEach(async () => {

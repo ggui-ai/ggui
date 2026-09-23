@@ -39,6 +39,11 @@ export {
 } from "./apply-ggui-session-patch.js";
 export { assertActionContract } from "./assert-action-contract.js";
 export {
+  recordCommittedOneShot,
+  type CommittedOneShotOutcome,
+  type RecordCommittedOneShotInput,
+} from "./record-committed-one-shot.js";
+export {
   assertContractNoRetiredFields,
   ContractRetiredFieldError,
 } from "./assert-contract-no-retired-fields.js";

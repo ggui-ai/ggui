@@ -3878,6 +3878,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     opts.renderStore ??
     (mcpAppsEnabled || opts.renderChannel ? new InMemoryGguiSessionStore() : undefined);
 
+  // ggui#1223 / #1305 — `recordSpentOneShot` is an OPTIONAL port method. A
+  // store without it serves the behaviour that predates it: the runtime still
+  // suppresses a repeat on a live card, but a consumed `oneShot` renders live
+  // again after a re-serve. Named ONCE here, at construction, never per
+  // dispatch.
+  if (renderStore !== undefined && renderStore.recordSpentOneShot === undefined) {
+    logger.warn("spent_one_shots_not_durable", {
+      store: renderStore.constructor.name,
+      detail:
+        "the session store does not implement recordSpentOneShot, so a consumed oneShot action renders live again after a re-serve",
+    });
+  }
+
   // Outbound stream replay buffer is hoisted here so the
   // `/ggui/console/timeline/*` mount can read its cursor alongside
   // GguiSessionStore events. Only constructed when the channel is

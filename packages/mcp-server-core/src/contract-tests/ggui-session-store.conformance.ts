@@ -476,5 +476,124 @@ export function runGguiSessionStoreConformance(
       });
     });
 
+    // ggui#1223 / #1305 — the card's spent `oneShot` actions. The record is
+    // STORE-OWNED: only `recordSpentOneShot` writes it, and every read folds it
+    // onto the component render as `render.spentOneShots`. `commit` never
+    // writes it, because a commit replaces the render from the caller's earlier
+    // read, and a spend landing in between would be lost to that stale copy.
+    // The method is OPTIONAL on the port: a store without it is graded with a
+    // named SKIP (spends are then not durable across a re-serve), never a pass.
+    describe('recordSpentOneShot — the per-card spent oneShot record', () => {
+      const NOT_IMPLEMENTED =
+        'store does not implement recordSpentOneShot — spent oneShot actions are not durable across a re-serve (optional port method, ggui#1305)';
+
+      async function spentOf(
+        store: GguiSessionStore,
+        id: string,
+      ): Promise<ComponentGguiSession['spentOneShots']> {
+        const got = await store.get(id);
+        return got !== null && got.render.type === 'component'
+          ? got.render.spentOneShots
+          : undefined;
+      }
+
+      it('a spend reads back on the component render as { epoch, actions }', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-spend', 'app-1') });
+          expect(await spentOf(store, 'r-spend')).toBeUndefined();
+          await record('r-spend', { epoch: 0, action: 'submit' });
+          expect(await spentOf(store, 'r-spend')).toEqual({ epoch: 0, actions: ['submit'] });
+        });
+      });
+
+      it('the same card: a repeat is idempotent and a second action adds', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-same', 'app-1') });
+          await record('r-same', { epoch: 0, action: 'submit' });
+          await record('r-same', { epoch: 0, action: 'submit' });
+          expect(await spentOf(store, 'r-same')).toEqual({ epoch: 0, actions: ['submit'] });
+          await record('r-same', { epoch: 0, action: 'cancel' });
+          const spent = await spentOf(store, 'r-same');
+          expect(spent?.epoch).toBe(0);
+          expect([...(spent?.actions ?? [])].sort()).toEqual(['cancel', 'submit']);
+        });
+      });
+
+      it("a newer card's first spend REPLACES the older card's record", async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-newer', 'app-1') });
+          await record('r-newer', { epoch: 0, action: 'submit' });
+          await record('r-newer', { epoch: 1, action: 'confirm' });
+          expect(await spentOf(store, 'r-newer')).toEqual({ epoch: 1, actions: ['confirm'] });
+        });
+      });
+
+      it("an older card's spend never touches a newer card's record", async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-stale', 'app-1') });
+          await record('r-stale', { epoch: 2, action: 'submit' });
+          await record('r-stale', { epoch: 1, action: 'cancel' });
+          expect(await spentOf(store, 'r-stale')).toEqual({ epoch: 2, actions: ['submit'] });
+        });
+      });
+
+      it('a commit in between never erases or rewrites the record — a stale or absent render copy is ignored', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-commit', 'app-1') });
+          await record('r-commit', { epoch: 0, action: 'submit' });
+          // An amend built from a read taken BEFORE the spend carries no record.
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-commit', 'app-1', '/* amended */') });
+          expect(await spentOf(store, 'r-commit')).toEqual({ epoch: 0, actions: ['submit'] });
+          // A render carrying a stale copy of the record must not overwrite the stored one.
+          const committed = await store.commit({
+            appId: 'app-1',
+            render: {
+              ...makeComponentGguiSession('r-commit', 'app-1', '/* amended twice */'),
+              spentOneShots: { epoch: 0, actions: [] },
+            },
+          });
+          expect(
+            committed.render.type === 'component' ? committed.render.spentOneShots : undefined,
+          ).toEqual({ epoch: 0, actions: ['submit'] });
+          expect(await spentOf(store, 'r-commit')).toEqual({ epoch: 0, actions: ['submit'] });
+        });
+      });
+
+      it('a spend on a render that does not exist rejects', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await expect(record('r-missing', { epoch: 0, action: 'submit' })).rejects.toThrow();
+        });
+      });
+    });
   });
 }

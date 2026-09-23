@@ -12,8 +12,17 @@
  * `runGguiSessionStoreConformance`) from `./contract-tests` — this
  * store and the sqlite one both do, in their `.test.ts` files.
  */
-import { isErroredGguiSession, type GguiSession } from '@ggui-ai/protocol';
-import { firstWriteEventSequence } from '../ggui-session-store.js';
+import {
+  isErroredGguiSession,
+  type GguiSession,
+  type SpentOneShotsRecord,
+} from '@ggui-ai/protocol';
+import {
+  firstWriteEventSequence,
+  nextSpentOneShotsRecord,
+  withoutSpentOneShots,
+  withSpentOneShots,
+} from '../ggui-session-store.js';
 import type {
   AppendEventInput,
   CommitGguiSessionInput,
@@ -23,6 +32,7 @@ import type {
   GguiSessionFilter,
   GguiSessionPatch,
   GguiSessionStore,
+  SpentOneShotSpend,
   StoredGguiSession,
 } from '../ggui-session-store.js';
 
@@ -41,6 +51,13 @@ interface RenderBucket {
    * at all.
    */
   authoredSource?: string;
+  /**
+   * The card's spent `oneShot` record (ggui#1223 / #1305), written ONLY by
+   * `recordSpentOneShot`. It is held beside `stored`, never inside
+   * `stored.render`, so a `commit` (which replaces the render) cannot erase
+   * it. Every read folds it onto the render via {@link readView}.
+   */
+  spentOneShots?: SpentOneShotsRecord;
 }
 
 export interface InMemoryGguiSessionStoreOptions {
@@ -138,14 +155,14 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
   async get(id: string): Promise<StoredGguiSession | null> {
     const bucket = this.buckets.get(id);
     if (!bucket) return null;
-    return cloneStored(withStatus(bucket.stored, this.now()));
+    return cloneStored(withStatus(readView(bucket), this.now()));
   }
 
   async list(filter: GguiSessionFilter): Promise<StoredGguiSession[]> {
     const now = this.now();
     const out: StoredGguiSession[] = [];
     for (const bucket of this.buckets.values()) {
-      const s = bucket.stored;
+      const s = readView(bucket);
       if (filter.appId !== undefined && s.appId !== filter.appId) continue;
       if (filter.userId !== undefined && s.userId !== filter.userId) continue;
       if (filter.createdAfter !== undefined && s.createdAt <= filter.createdAfter) continue;
@@ -190,7 +207,7 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
         : {}),
     };
     bucket.stored = merged;
-    return cloneStored(merged);
+    return cloneStored(readView(bucket));
   }
 
   async delete(id: string): Promise<void> {
@@ -220,11 +237,13 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
           ? { userId: input.userId }
           : {}),
         lastActivityAt: t,
-        render: incoming,
+        // The spent record is store-owned (#1305): a render carrying a copy
+        // of it (a read view the caller took earlier) never writes it.
+        render: withoutSpentOneShots(incoming),
       };
       existing.stored = merged;
       existing.authoredSource = input.sourceCode;
-      return cloneStored(merged);
+      return cloneStored(readView(existing));
     }
     // First-write — mint a fresh bucket using the supplied lifecycle slice.
     const stored: StoredGguiSession = {
@@ -238,7 +257,7 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
       createdAt: t,
       lastActivityAt: t,
       expiresAt: t + this.defaultTtlMs,
-      render: incoming,
+      render: withoutSpentOneShots(incoming),
     };
     this.buckets.set(stored.id, {
       stored,
@@ -251,6 +270,18 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
 
   async getAuthoredSource(id: string): Promise<string | undefined> {
     return this.buckets.get(id)?.authoredSource;
+  }
+
+  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<void> {
+    const bucket = this.buckets.get(sessionId);
+    if (!bucket) {
+      throw new Error(
+        `InMemoryGguiSessionStore.recordSpentOneShot: render not found: ${sessionId}`,
+      );
+    }
+    // Atomic by construction: read and write happen in one synchronous turn.
+    const next = nextSpentOneShotsRecord(bucket.spentOneShots, spend);
+    if (next !== null) bucket.spentOneShots = next;
   }
 
   async appendEvent(input: AppendEventInput): Promise<number> {
@@ -353,6 +384,14 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
       },
     };
   }
+}
+
+/** The stored row as a reader sees it: the store-owned spent record folded onto the render. */
+function readView(bucket: RenderBucket): StoredGguiSession {
+  return {
+    ...bucket.stored,
+    render: withSpentOneShots(bucket.stored.render, bucket.spentOneShots),
+  };
 }
 
 function cloneStored(s: StoredGguiSession): StoredGguiSession {

@@ -7,7 +7,10 @@
  */
 
 import type { GguiSessionStore, PendingEventConsumer } from "@ggui-ai/mcp-server-core";
-import { assertActionContract } from "@ggui-ai/mcp-server-handlers/renders";
+import {
+  assertActionContract,
+  recordCommittedOneShot,
+} from "@ggui-ai/mcp-server-handlers/renders";
 import type { ActionEnvelope, ConsumeEventEntry, GguiSession } from "@ggui-ai/protocol";
 import { ContractViolationError } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
@@ -305,6 +308,36 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
       return;
     }
     const seq: number = ledgerResult.value;
+
+    // ggui#1223 / #1305 — the gesture is in the ledger, so a committed
+    // `oneShot` now spends its card durably, BEFORE the ack: a client that
+    // holds the ack can reload and find the card spent. FAIL-OPEN, as on the
+    // tool path: a failed record is named and never withholds the ack.
+    if (envelope.type === "data:submit" && activeItem !== undefined) {
+      const payload = envelope.payload;
+      if (
+        payload !== null &&
+        typeof payload === "object" &&
+        !Array.isArray(payload) &&
+        typeof payload.action === "string"
+      ) {
+        try {
+          await recordCommittedOneShot({
+            store: deps.renderStore,
+            sessionId: sub.sessionId,
+            render: activeItem,
+            action: payload.action,
+            data: payload.data,
+          });
+        } catch (err) {
+          deps.logger.warn("render_channel_spent_oneshot_persist_failed", {
+            sessionId: sub.sessionId,
+            action: payload.action,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    }
 
     deps.send(ws, {
       type: "ack",

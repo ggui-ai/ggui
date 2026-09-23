@@ -18,8 +18,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   InMemoryActiveConsumerRegistry,
+  InMemoryGguiSessionStore,
   InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import { createGguiSubmitActionHandler } from './submit-action.js';
 
 const baseEnv = {
@@ -401,5 +404,79 @@ describe('createGguiSubmitActionHandler', () => {
     if (rejected.ok) throw new Error('expected reject');
     expect(rejected.code).toBe('INVALID_ACTION_KIND');
     expect(typeof rejected.message).toBe('string');
+  });
+
+  // ggui#1223 / #1305 — a pipe-committed dispatch of a `oneShot` action spends
+  // its card durably, so a re-served card renders it spent after a reload.
+  describe('the committed oneShot spend (#1305)', () => {
+    const sessionId = 'render-oneshot-1';
+    const oneShotCard: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt: 0,
+      lastActivityAt: 0,
+      expiresAt: 0,
+      epoch: 1,
+      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+    };
+    const dispatch = {
+      ...baseEnv,
+      sessionId,
+      kind: 'dispatch' as const,
+      payload: { intent: 'submit', actionData: null, uiContext: {} },
+    };
+
+    it('records the spend on the head card after the pipe append', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: oneShotCard });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      const got = await store.get(sessionId);
+      expect(got?.render.type === 'component' ? got.render.spentOneShots : undefined).toEqual({
+        epoch: 1,
+        actions: ['submit'],
+      });
+    });
+
+    it('fails OPEN: a store that cannot record still answers ok and names the failure on one warn line', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const inner = new InMemoryGguiSessionStore();
+      await inner.commit({ appId: 'app_1', render: oneShotCard });
+      const failing: GguiSessionStore = {
+        create: (i) => inner.create(i),
+        get: (id) => inner.get(id),
+        list: (f) => inner.list(f),
+        update: (id, p) => inner.update(id, p),
+        delete: (id) => inner.delete(id),
+        commit: (i) => inner.commit(i),
+        appendEvent: (i) => inner.appendEvent(i),
+        listEventsSince: (id, since, limit) => inner.listEventsSince(id, since, limit),
+        observe: (id, o) => inner.observe(id, o),
+        recordSpentOneShot: async (): Promise<void> => {
+          throw new Error('store down');
+        },
+      };
+      const warnings: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        renderStore: failing,
+        logger: { warn: (msg, data) => warnings.push({ msg, data }) },
+      });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect(warnings).toEqual([
+        {
+          msg: 'submit_action_spent_oneshot_persist_failed',
+          data: { sessionId, action: 'submit', error: 'store down' },
+        },
+      ]);
+      const drained = await consumer.consumeAndClear(sessionId, 100);
+      expect(drained.events.length).toBe(1);
+    });
   });
 });
