@@ -8,13 +8,16 @@
  *
  *   - `uncovered` — manifest names the overlay does not carry (minus the
  *     exclusion floor): a card would read an unset variable.
- *   - `unknown`   — overlay names nothing reads (minus the floor): the
- *     dead-key class; refused pre-launch.
+ *   - `unknown`   — overlay names this manifest does not list (minus the
+ *     floor). The projector's OWN release gate treats them as the dead-key
+ *     class (its derived overlays must report none). A WRITE door admits
+ *     and names them instead (ggui#1286): it cannot tell a newer
+ *     projector's name from a bug, and refusing breaks N−1 (new → old).
  *   - `warnings`  — a ramp whose lightness is not monotone from 50 to
  *     900 (§2.3: the state ladder depends on the ramp's direction).
  *
- * Coverage, `unknown` and the attestation hash are WRITE-door checks;
- * read doors validate shape only.
+ * Coverage (refused) and the attestation hash are WRITE-door checks and
+ * `unknown` is a write-door annotation; read doors validate shape only.
  */
 import { consumedTokenManifest } from './consumed-tokens';
 import { completeThemeVariables, hexToOklch } from './derive-theme-variables';

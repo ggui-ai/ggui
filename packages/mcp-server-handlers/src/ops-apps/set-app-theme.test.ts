@@ -7,7 +7,7 @@
  * result whose body is one of the four the protocol names, so every
  * write door (REST, AppSync, this one) says the same thing.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { canonicalOverlayHash, type AppTheme } from '@ggui-ai/protocol';
 import { isHandlerFailure, type HandlerContext } from '../types.js';
 import { AppNotFoundError } from './types.js';
@@ -109,19 +109,40 @@ describe('createSetAppThemeHandler — the four refusal bodies (ggui#987 §3.4)'
     expect(apps.getTheme(appId)).toBeUndefined();
   });
 
-  it('a key outside the manifest is refused as { unknown: { light, dark } } — unknown outranks uncovered', async () => {
+  // ggui#1286 (N−1, new → old): a key outside this door's manifest may be a name a NEWER projector
+  // emits. The door admits it, persists it verbatim and names it — never refuses, never drops.
+  it('ggui#1286: a --ggui-* key outside the manifest is ADMITTED, persisted verbatim and named once', async () => {
     const apps = new InMemoryAppsSource();
     const { appId } = await apps.create({ ownerSub: 'user-1' });
     const handler = createSetAppThemeHandler({
       apps,
-      overlayCoverage: () => ({ uncovered: ['--ggui-color-sunken'], unknown: ['--ggui-color-nope'], warnings: [] }),
+      // The unit under test is the door, not design's report: the stub reports the key as unknown.
+      overlayCoverage: () => ({ uncovered: [], unknown: ['--ggui-n1-future-probe'], warnings: [] }),
+    });
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const theme = await validTheme();
+    const result = await handler.handler({ appId, theme }, makeCtx());
+    expect(isHandlerFailure(result)).toBe(false);
+    expect(apps.getTheme(appId)).toEqual(theme);
+    const named = info.mock.calls.filter((c) => String(c[0]).includes('app_theme_unknown_overlay_names'));
+    expect(named).toHaveLength(1);
+    expect(named[0]![1]).toEqual({ appId, light: ['--ggui-n1-future-probe'], dark: ['--ggui-n1-future-probe'] });
+    info.mockRestore();
+  });
+
+  it('ggui#1286: unknown AND uncovered is refused as { uncovered } — coverage is the one name check that refuses', async () => {
+    const apps = new InMemoryAppsSource();
+    const { appId } = await apps.create({ ownerSub: 'user-1' });
+    const handler = createSetAppThemeHandler({
+      apps,
+      overlayCoverage: () => ({ uncovered: ['--ggui-color-sunken'], unknown: ['--ggui-n1-future-probe'], warnings: [] }),
     });
     const result = await handler.handler({ appId, theme: await validTheme() }, makeCtx());
     if (!isHandlerFailure(result)) throw new Error('expected a refusal');
     expect(result.data).toEqual({
       ok: false,
       code: 'invalid_app_config',
-      refusal: { unknown: { light: ['--ggui-color-nope'], dark: ['--ggui-color-nope'] } },
+      refusal: { uncovered: { light: ['--ggui-color-sunken'], dark: ['--ggui-color-sunken'] } },
     });
   });
 

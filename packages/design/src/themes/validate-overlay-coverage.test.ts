@@ -122,6 +122,13 @@ describe('N−1: the manifest grows only with a completion rule or a floor entry
     expect(r.unknown).toEqual([]);
   });
 
+  it('ggui#1286 mirror (new → old): TODAY\'s projection covers the PREVIOUS release\'s manifest, in both modes — a projector never stops emitting a name an older door requires (doors still refuse `uncovered`)', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const r = validateOverlayCoverage(deriveThemeVariables(lightTheme, mode), [...previous]);
+      expect(r.uncovered, mode).toEqual([]);
+    }
+  });
+
   it('every token added since the previous release completes from a previous-release projection, or is floored — named per token', () => {
     const added = consumedTokenManifest.filter((t) => !previous.has(t)).sort();
     // The growth this fixture knows about. A new token is a DECISION: add it here AND give it a

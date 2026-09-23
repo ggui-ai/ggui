@@ -97,7 +97,12 @@ export interface SetAppThemeDeps {
 
 /** The door's verdict on a raw body: the theme to persist, or why not. */
 export type AppThemeAdmission =
-  | { readonly ok: true; readonly theme: AppTheme }
+  | {
+      readonly ok: true;
+      readonly theme: AppTheme;
+      /** ggui#1286 — keys outside the manifest, admitted (never refused, never dropped) and named by the caller. */
+      readonly unknown: { readonly light: readonly string[]; readonly dark: readonly string[] };
+    }
   | { readonly ok: false; readonly refusal: AppThemeRefusalBody }
   | { readonly ok: false; readonly issues: readonly string[] };
 
@@ -113,9 +118,11 @@ function isV1Shape(raw: unknown): boolean {
 
 /**
  * Admit a raw theme body: shape, attestation, coverage — in that order,
- * first failure wins; `unknown` outranks `uncovered` because a key the
- * manifest does not name is the more fundamental disagreement. Exported
- * so any other in-process door runs exactly these checks.
+ * first failure wins. Exported so any other in-process door runs exactly
+ * these checks. Keys outside the manifest (`unknown`) are ADMITTED and
+ * returned, never refused (ggui#1286): a door on release N cannot tell a
+ * name a newer projector emits from a bug, and refusing breaks N−1 (new →
+ * old); the caller persists the theme verbatim and names them.
  */
 export async function admitAppTheme(
   raw: unknown,
@@ -135,13 +142,10 @@ export async function admitAppTheme(
   if (expected !== theme.overlayHash) return { ok: false, refusal: { overlayHash: 'mismatch' } };
   const light = overlayCoverage(theme.overlays.light);
   const dark = overlayCoverage(theme.overlays.dark);
-  if (light.unknown.length > 0 || dark.unknown.length > 0) {
-    return { ok: false, refusal: { unknown: { light: [...light.unknown], dark: [...dark.unknown] } } };
-  }
   if (light.uncovered.length > 0 || dark.uncovered.length > 0) {
     return { ok: false, refusal: { uncovered: { light: [...light.uncovered], dark: [...dark.uncovered] } } };
   }
-  return { ok: true, theme };
+  return { ok: true, theme, unknown: { light: [...light.unknown], dark: [...dark.unknown] } };
 }
 
 function refusalText(admission: Exclude<AppThemeAdmission, { ok: true }>): string {
@@ -157,6 +161,8 @@ function refusalText(admission: Exclude<AppThemeAdmission, { ok: true }>): strin
     // than a verdict (founder's ruling, 2026-09-16).
     return `invalid_app_config: ${appThemeWouldDropRefusalText(r.wouldDrop)}`;
   }
+  // Unreachable from this door since ggui#1286 (unknown keys are admitted); kept while the
+  // protocol refusal union carries the arm — doors already serving still emit it (N−1).
   if ('unknown' in r) return `invalid_app_config: keys outside the consumed-token manifest — light: [${r.unknown.light.join(', ')}] dark: [${r.unknown.dark.join(', ')}]`;
   return `invalid_app_config: consumed tokens left uncovered — light: [${r.uncovered.light.join(', ')}] dark: [${r.uncovered.dark.join(', ')}]`;
 }
@@ -190,6 +196,15 @@ export function createSetAppThemeHandler(deps: SetAppThemeDeps) {
         return handlerFailure(data, refusalText(admission));
       }
       const written = await deps.apps.setTheme({ appId, ownerSub, theme: admission.theme });
+      if (admission.unknown.light.length > 0 || admission.unknown.dark.length > 0) {
+        // ggui#1286 — persisted verbatim, NAMED once (the N−1 watch).
+        // eslint-disable-next-line no-console -- operator-visible structured event; handlers carry no logger
+        console.info('[ggui] app_theme_unknown_overlay_names', {
+          appId,
+          light: [...admission.unknown.light],
+          dark: [...admission.unknown.dark],
+        });
+      }
       return {
         ok: true,
         appId: written.appId,
