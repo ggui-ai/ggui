@@ -62,6 +62,22 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-23',
+    text:
+      'Evaluation-call cache accounting, announced (issue #1281): from the first run on a runner ' +
+      'image carrying commit a6f3a7e5b, a cell\'s token counts and cost include the in-loop ' +
+      'evaluation calls\' prompt-cache reads and writes. Before it, those calls contributed only ' +
+      'their non-cached input and their output, so the row\'s total and cached counts left out the ' +
+      'evaluator\'s cached prefix and the cost column priced none of it. From that run the ' +
+      '2026-09-19 convention — total = non-cached input + cache reads + cache creations + output, ' +
+      'cached = total − input − output — holds for the evaluation calls as well as the coding ' +
+      'turns. Totals and cached counts move up on every arm whose provider reports cache on those ' +
+      'calls, and costs move up by those tokens priced at the registry\'s cache rates, so token and ' +
+      'cost readings are not comparable across that run; the first run on the new image names ' +
+      'itself in its own receipt. Scores, corpus and judge panel unchanged; history is not ' +
+      'rewritten.',
+  },
+  {
     date: '2026-09-20',
     text:
       'Google cache accounting, announced (issue #1186): from the first run on a runner image ' +
