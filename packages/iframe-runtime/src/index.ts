@@ -80,6 +80,8 @@ export type {
   RelayDeadTapEvent,
   RelayIncapabilityEvent,
   RelayLatchTrigger,
+  ComponentEmptyEvent,
+  OneShotUnenforceableEvent,
   UnknownObservabilityEvent,
 } from './observability.js';
 export {
