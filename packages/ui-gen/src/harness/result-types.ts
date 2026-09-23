@@ -49,11 +49,25 @@ export type ModelRoles = Partial<Record<ModelRole, string>>;
 // Generation Result
 // =============================================================================
 
+/**
+ * The same-exchange guard (ggui#404) ended this generation: the coding model
+ * made one identical tool exchange (same tool, same input, same result)
+ * `repeats` times, so the loop stopped instead of burning its remaining turns.
+ * Present ONLY when that guard ended the run — whether anything shipped is
+ * the compiled code's to say (the loop falls back to an earlier build).
+ */
+export interface SameExchangeBreak {
+  readonly tool: string;
+  readonly repeats: number;
+}
+
 export interface GenerationResult extends AdapterResult {
   /** Number of generation passes the harness performed */
   passesUsed: number;
   /** Three-tier evaluation result (tier 0 + LLM tier 1+2 + visual) */
   evalResult?: EvalResult;
+  /** Set only when the same-exchange guard ended the run (ggui#404); no key otherwise. */
+  sameExchangeBreak?: SameExchangeBreak;
   /** Whether background improvement should be spawned (auto-improve mode) */
   needsBackgroundImprovement?: boolean;
   /** Whether at least one commit passed the self-check (compile + type check + lint) */

@@ -21,6 +21,7 @@ import { executeTool } from "../../coding-agent/tools.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
 import type { LLMAgent } from "../llm-router.js";
 import type { Harness } from "../types-public.js";
+import type { SameExchangeBreak } from "../result-types.js";
 import {
   APPLY_CHANGES_HASHLINE_TOOL,
   APPLY_CHANGES_HASHLINE_TOOL_FLAT,
@@ -244,6 +245,12 @@ export interface CodingTurnResult {
   readonly isEvalFeedback: boolean;
   readonly iconNamesCache: string | null;
   readonly preWarmedContext: PreWarmedEvalContext | null | undefined;
+  /**
+   * Set only on the `break` the same-exchange guard returns (ggui#404) — the
+   * one way a caller can tell this guard ended the run, since `break` is a
+   * control value many exits share. No key on any other turn.
+   */
+  readonly sameExchangeBreak?: SameExchangeBreak;
 }
 
 /**
@@ -637,6 +644,7 @@ ${closingInstruction}`;
         isEvalFeedback: false,
         iconNamesCache,
         preWarmedContext,
+        sameExchangeBreak: { tool: call.name, repeats: iconRepeats },
       };
     }
     return {
@@ -964,6 +972,7 @@ ${closingInstruction}`;
       isEvalFeedback: false,
       iconNamesCache,
       preWarmedContext,
+      sameExchangeBreak: { tool: call.name, repeats: sameExchangeRepeats },
     };
   }
 

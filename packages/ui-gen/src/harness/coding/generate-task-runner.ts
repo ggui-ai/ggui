@@ -20,9 +20,11 @@ import type { CodingSession } from "./init-session.js";
 import {
   runCodingTurn,
   type A1Phase,
+  type CodingTurnResult,
 } from "./run-coding-turn.js";
 import { runEvalRound } from "./run-eval-round.js";
 import type { TokenUsage } from "./run-eval-round.js";
+import type { SameExchangeBreak } from "../result-types.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -81,6 +83,11 @@ export interface GenerateTelemetry {
    * carry the round's before beside the source the generation ends with.
    */
   contractFeedback: ContractFeedbackRecord | undefined;
+  /**
+   * The same-exchange guard's record (ggui#404), set by the turn it ended —
+   * undefined unless that guard is what stopped the loop.
+   */
+  sameExchangeBreak: SameExchangeBreak | undefined;
   /** Latest compiled code — empty string until the first self-check pass. */
   compiledCode: string;
   /**
@@ -120,6 +127,7 @@ export function createTelemetry(): GenerateTelemetry {
     totalOut: 0,
     evalResult: undefined,
     contractFeedback: undefined,
+    sameExchangeBreak: undefined,
     compiledCode: "",
     pairedSource: "",
     selfCheckPassed: false,
@@ -145,6 +153,38 @@ export function absorbTokens(telemetry: GenerateTelemetry, usage: TokenUsage): v
   if (usage.cacheCreation !== undefined) {
     telemetry.cacheCreationTokens = (telemetry.cacheCreationTokens ?? 0) + usage.cacheCreation;
   }
+}
+
+/**
+ * Fold one coding turn's measurements into the run's telemetry — tokens (via
+ * {@link absorbTokens}), timings, the phase/outcome counters, and the
+ * same-exchange guard's record when that guard ended the turn (ggui#404). One
+ * function so every per-turn fact the result is assembled from lands in one
+ * place.
+ */
+export function absorbTurn(telemetry: GenerateTelemetry, turn: CodingTurnResult): void {
+  absorbTokens(telemetry, {
+    input: turn.tokens.input,
+    output: turn.tokens.output,
+    ...(turn.cacheReadTokens !== undefined ? { cacheRead: turn.cacheReadTokens } : {}),
+    ...(turn.cacheCreationTokens !== undefined ? { cacheCreation: turn.cacheCreationTokens } : {}),
+  });
+  telemetry.cumulativeLlmMs += turn.llmMs;
+  telemetry.cumulativeToolMs += turn.toolMs;
+  if (turn.phase) {
+    if (turn.phase === "scaffold") telemetry.counters.phases.scaffold++;
+    else if (turn.phase === "fill") telemetry.counters.phases.fill++;
+    else if (turn.phase === "impl") telemetry.counters.phases.impl++;
+    else if (turn.phase === "eval-fix") telemetry.counters.phases.evalFix++;
+    else telemetry.counters.phases.patch++;
+  }
+  if (turn.outcome) {
+    if (turn.outcome === "PASS") telemetry.counters.outcomes.pass++;
+    else if (turn.outcome === "PATCH_INVALID") telemetry.counters.outcomes.patchInvalid++;
+    else if (turn.outcome === "DIFF_FAIL") telemetry.counters.outcomes.diffFail++;
+    else telemetry.counters.outcomes.selfCheckFail++;
+  }
+  if (turn.sameExchangeBreak !== undefined) telemetry.sameExchangeBreak = turn.sameExchangeBreak;
 }
 
 export interface CreateGenerateRunnerInput {
@@ -230,30 +270,9 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         },
       );
 
-      absorbTokens(telemetry, {
-        input: turn.tokens.input,
-        output: turn.tokens.output,
-        ...(turn.cacheReadTokens !== undefined ? { cacheRead: turn.cacheReadTokens } : {}),
-        ...(turn.cacheCreationTokens !== undefined ? { cacheCreation: turn.cacheCreationTokens } : {}),
-      });
-      telemetry.cumulativeLlmMs += turn.llmMs;
-      telemetry.cumulativeToolMs += turn.toolMs;
+      absorbTurn(telemetry, turn);
       iconNamesCache = turn.iconNamesCache;
       preWarmedContext = turn.preWarmedContext;
-
-      if (turn.phase) {
-        if (turn.phase === "scaffold") telemetry.counters.phases.scaffold++;
-        else if (turn.phase === "fill") telemetry.counters.phases.fill++;
-        else if (turn.phase === "impl") telemetry.counters.phases.impl++;
-        else if (turn.phase === "eval-fix") telemetry.counters.phases.evalFix++;
-        else telemetry.counters.phases.patch++;
-      }
-      if (turn.outcome) {
-        if (turn.outcome === "PASS") telemetry.counters.outcomes.pass++;
-        else if (turn.outcome === "PATCH_INVALID") telemetry.counters.outcomes.patchInvalid++;
-        else if (turn.outcome === "DIFF_FAIL") telemetry.counters.outcomes.diffFail++;
-        else telemetry.counters.outcomes.selfCheckFail++;
-      }
 
       if (turn.control === "break") break;
       if (turn.control === "continue") {

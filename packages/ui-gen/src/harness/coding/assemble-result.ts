@@ -128,6 +128,8 @@ export async function assembleGenerationResult(
       telemetry.evalResult !== undefined && telemetry.contractFeedback !== undefined
         ? { ...telemetry.evalResult, contractFeedback: telemetry.contractFeedback }
         : telemetry.evalResult,
+    // ggui#404 — present only when the same-exchange guard ended the run.
+    ...(telemetry.sameExchangeBreak !== undefined ? { sameExchangeBreak: telemetry.sameExchangeBreak } : {}),
     needsBackgroundImprovement,
     selfCheckPassed: telemetry.selfCheckPassed,
     timing,

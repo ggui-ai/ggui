@@ -230,6 +230,22 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     expect("contractFeedback" in result.evalResult!).toBe(false);
   });
 
+  // ggui#404 — the same-exchange guard's record rides the result, present ONLY
+  // when that guard ended the run.
+  it("carries sameExchangeBreak when the guard ended the run, and no key otherwise", async () => {
+    const session = fakeSession();
+    const broke = createTelemetry();
+    broke.codingStartedAtMs = session.startedAtMs + 50;
+    broke.sameExchangeBreak = { tool: "cat", repeats: 3 };
+    const r1 = await assembleGenerationResult({ session, telemetry: broke, source: "" });
+    expect(r1.sameExchangeBreak).toEqual({ tool: "cat", repeats: 3 });
+
+    const clean = createTelemetry();
+    clean.codingStartedAtMs = session.startedAtMs + 50;
+    const r2 = await assembleGenerationResult({ session, telemetry: clean, source: "" });
+    expect("sameExchangeBreak" in r2).toBe(false);
+  });
+
   it("leaves cache-token fields undefined when telemetry omits them (truthful absence)", async () => {
     const session = fakeSession();
     const telemetry = createTelemetry();
