@@ -19,13 +19,18 @@
 export const GGUI_HOST_CAPABILITIES_HEADER = 'ggui-host-capabilities';
 
 /**
- * `ui-message-turn` — every `ui/message` the view posts becomes the next
- * agent turn: immediately when the conversation is idle, queued while a turn
- * is live; a drop is named by the host, never silent. A host declares it only
- * for a client that does this. Effect on a ggui server: a render response
- * omits its `nextStep: ggui_consume` hint, because a later gesture reaches
- * the agent as a turn anyway — so the agent ends its turn at paint.
- * Observable violation: a view's `ui/message` that never yields a turn.
+ * `ui-message-turn` — the host delivers every `ui/message` the view posts as
+ * a later agent turn (at once when no turn is in progress, after the live
+ * turn ends when one is, never by cancelling it), or answers that
+ * `ui/message` to the view in-band with an error, never a success: the error
+ * names the drop to the view that posted it. A host declares it only for a
+ * client that does this, per request (for the client driving that call).
+ * Effect on a ggui server: a render response omits its
+ * `nextStep: ggui_consume` hint, because a later gesture reaches the agent as
+ * a turn anyway — so the agent ends its turn at paint. A refused `ui/message`
+ * costs the wake-up, not the gesture, which is already on the consume pipe.
+ * Observable violation: a view's `ui/message` that neither yields a later
+ * turn nor is answered with an error.
  */
 export const HOST_CAPABILITY_UI_MESSAGE_TURN = 'ui-message-turn';
 
