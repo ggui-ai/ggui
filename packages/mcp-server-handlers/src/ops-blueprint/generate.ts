@@ -411,7 +411,11 @@ export function createGguiOpsGenerateBlueprintHandler(
 
       // 6. Persist the blueprint + code body.
       const componentCode = result.response.componentCode;
-      const codeHash = createHash("sha256").update(componentCode).digest("hex").slice(0, 32);
+      // The full sha256, the `CodeStore` key domain (`CODE_HASH_REGEX`) and
+      // the same key `ggui_ops_register_blueprint` computes for the same
+      // bytes. A 32-hex prefix here (ggui#1287) was refused by every
+      // conforming code store.
+      const codeHash = createHash("sha256").update(componentCode).digest("hex");
 
       // The advanced generator tunnels `validatorScore` through
       // `metadata` until the UiGenerator interface widens to carry

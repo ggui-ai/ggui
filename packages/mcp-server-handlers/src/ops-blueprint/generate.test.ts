@@ -18,9 +18,11 @@ import {
   InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
+  InMemoryCodeStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { findBlueprintExact, listBlueprints } from '../renders/blueprint-registry.js';
 import type { TelemetryEvent } from "@ggui-ai/mcp-server-core";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { GadgetNotRegisteredError } from "../renders/assert-gadgets.js";
 import type { GenerationCredentials } from "../renders/index.js";
@@ -170,7 +172,8 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
       model: "anthropic/claude-haiku-4-5",
     });
     expect(result.codeHash).toBeDefined();
-    expect(result.codeHash?.length).toBe(32);
+    // ggui#1287: the full sha256, the CodeStore's key domain, not a prefix.
+    expect(result.codeHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("dispatches through an explicit generator slug", async () => {
@@ -714,5 +717,39 @@ describe("ggui_ops_generate_blueprint — the cache mirror's intentSource (ggui#
     const rows = await listBlueprints(cacheRegistry, "app-1");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.intentSource).toBe(expected);
+  });
+});
+
+// ── ggui#1287 — generate keys code the way register and every CodeStore do ──
+//
+// `generate` computed `sha256(code).slice(0, 32)` since the tool's first
+// commit, while `register` uses the full 64 hex and `CodeStore` refuses
+// anything else (`CODE_HASH_REGEX`). This harness's `putCode` writes into the
+// in-memory BlueprintStore's own map, which has no guard, so the 32-hex key
+// never failed here. It failed the first time a hosted deployment bound
+// `putCode` to a real code store.
+describe("createGguiOpsGenerateBlueprintHandler — the code key is the CodeStore's (ggui#1287)", () => {
+  const CODE = "export default function Card() { return null; }";
+
+  it("the codeHash is the full sha256 of the generated code", async () => {
+    const deps = defaultDeps({ generator: makeMockGenerator({ componentCode: CODE }) });
+    const result = await createGguiOpsGenerateBlueprintHandler(deps).handler(
+      { contract: emptyContract() },
+      makeCtx("app-1"),
+    );
+    expect(result.codeHash).toBe(createHash("sha256").update(CODE).digest("hex"));
+  });
+
+  it("a putCode hook backed by a guarded CodeStore accepts the key, and the body reads back", async () => {
+    const codeStore = new InMemoryCodeStore();
+    const deps = {
+      ...defaultDeps({ generator: makeMockGenerator({ componentCode: CODE }) }),
+      putCode: (codeHash: string, body: string) => codeStore.put(codeHash, body),
+    };
+    const result = await createGguiOpsGenerateBlueprintHandler(deps).handler(
+      { contract: emptyContract() },
+      makeCtx("app-1"),
+    );
+    expect(await codeStore.get(result.codeHash ?? "")).toBe(CODE);
   });
 });
