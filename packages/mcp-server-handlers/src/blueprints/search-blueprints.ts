@@ -67,8 +67,12 @@ import {
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 
 /**
- * Matches the hosted `MIN_SIMILARITY_SCORE`. Below this is noise —
- * callers that want stricter matching post-filter by `score`.
+ * The similarity floor for blueprint reuse, on both paths: this tool
+ * drops a hit under it, and the handshake matcher (`matchBlueprint`)
+ * never offers its judge a candidate under it (ggui#1275) — one number,
+ * so the path that serves a reuse is never looser than the path that
+ * only lists candidates. Below this is noise; callers that want stricter
+ * matching post-filter by `score`.
  */
 export const MIN_SIMILARITY_SCORE = 0.3;
 

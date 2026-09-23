@@ -71,6 +71,7 @@ import {
 } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import { coverageGap, type CoverageGap } from './blueprint-coverage.js';
+import { MIN_SIMILARITY_SCORE } from '../blueprints/search-blueprints.js';
 
 /** An all-empty coverage gap — used for exact-key hits (canonical-key
  *  equality already implies full coverage) and for contract-less requests
@@ -162,13 +163,13 @@ export interface MatchBlueprintOptions {
   /** RAG top-K. Default 20 — balance between recall and prompt cost. */
   readonly topK?: number;
   /**
-   * Minimum cosine a candidate needs to reach the LLM judge. Default 0.2 —
-   * below this a candidate is clearly unrelated. Applied PER CANDIDATE
-   * (ggui#1275): a candidate under the floor is never offered to the judge,
-   * so it can never become a reuse; when even top-1 is under it, the judge
-   * is skipped entirely and the rerank cost is saved. (Loosened for Path-A;
-   * see the DEFAULT_MIN_COSINE note. The VALUE is rnd's to tune; the
-   * per-candidate semantics are this matcher's.)
+   * Minimum cosine a candidate needs to reach the LLM judge. Default
+   * {@link MIN_SIMILARITY_SCORE} (0.3) — the same floor
+   * `ggui_search_blueprints` applies, so the path that serves a reuse is
+   * never looser than the path that only lists candidates. Applied PER
+   * CANDIDATE (ggui#1275): a candidate under the floor is never offered to
+   * the judge, so it can never become a reuse; when even top-1 is under
+   * it, the judge is skipped entirely and the rerank cost is saved.
    */
   readonly minCosineForRerank?: number;
   /** LLM judge confidence threshold for treating a semantic-strategy decision as a hit. */
@@ -187,15 +188,23 @@ export interface MatchBlueprintOptions {
 }
 
 const DEFAULT_TOP_K = 20;
-// Loosened for Path-A: propose a cached blueprint more readily. The cosine
-// gate (skip the LLM judge below this) and the judge-confidence threshold
-// are both relaxed so a paraphrased / similar contract reaches — and is
-// accepted by — the semantic judge instead of cold-generating. Over-proposal
-// is safe here: the agent decision step plus the COVERAGE_GAP findings on a
-// non-covering hit are the safety valve (the cache proposes; the agent
-// disposes), so a slightly weaker match surfaces as a reviewable suggestion
-// rather than a silent wrong reuse.
-const DEFAULT_MIN_COSINE = 0.2;
+// The cosine floor is the shared similarity floor, not a matcher-local
+// number (ggui#1275). It was loosened to 0.2 for Path-A on the argument
+// that over-proposal is safe because the agent disposes of every proposal.
+// Measured on a development deployment, the valve is weak — calling agents
+// confirmed 84 % of semantic proposals, and 2 of the 8 reuses between 0.2
+// and 0.3 were wrong — so the floor went back to the one number both paths
+// share.
+// Cost, stated rather than hidden: a short intent that is the same task in
+// fewer words can embed under 0.3 and now cold-generates.
+const DEFAULT_MIN_COSINE = MIN_SIMILARITY_SCORE;
+// Loosened for Path-A: accept a semantic judge's pick more readily, so a
+// paraphrased / similar contract is reused instead of cold-generating.
+// Over-proposal is bounded by the agent decision step plus the COVERAGE_GAP
+// findings on a non-covering hit (the cache proposes; the agent disposes).
+// Not re-tuned by ggui#1275: separating right from wrong picks by
+// confidence is a measurement for the match-precision probe, not a number
+// to fit to eight samples.
 const DEFAULT_JUDGE_THRESHOLD = 0.5;
 
 /**
@@ -450,7 +459,7 @@ export async function matchBlueprint(
 
   // ggui#1275 — the floor is per candidate. Top-1 clearing it used to hand
   // ALL top-K to the judge, which could pick any of them (observed: a reuse
-  // at cosine 0.19 under the 0.2 floor because top-1 was 0.27). Only
+  // at cosine 0.19 under the then-0.2 floor because top-1 was 0.27). Only
   // candidates at or above the floor are eligible; top-1 is among them, so
   // the list is never empty here. The trace still carries the full top-K.
   const eligible = candidates.filter((c) => c.cosine >= minCosine);

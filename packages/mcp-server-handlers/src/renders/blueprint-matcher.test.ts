@@ -10,6 +10,7 @@ import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
 import { matchBlueprint } from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
 import { decideHandshake } from './decide-handshake.js';
+import { MIN_SIMILARITY_SCORE } from '../blueprints/search-blueprints.js';
 import type { HandlerContext } from '../types.js';
 import {
   setCacheTraceSink,
@@ -1177,5 +1178,100 @@ describe('matchBlueprint — the cosine floor is per candidate (ggui#1275)', () 
     await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' }, { minCosineForRerank: 0.1 });
     expect(offered[0]).toContain(alpha.id);
     expect(offered[0]).toContain(bravo.id);
+  });
+});
+
+// ── ggui#1275 follow-up (2) — ONE similarity floor, 0.3, on both paths ──
+//
+// rnd's verdict (c.5786466220): of the 8 dev semantic reuses under 0.3, 2
+// were wrong, and agents confirmed 84 % of semantic proposals — so the
+// proposal is usually served and the floor is the gate that matters. The
+// handshake matcher's default floor and `ggui_search_blueprints`' floor are
+// one constant, so the path that auto-serves is never the looser one.
+
+class MarkerEmbeddingProvider {
+  readonly id = 'marker-1275-floor';
+  readonly dimensions = 2;
+  constructor(private readonly cosines: ReadonlyMap<string, number>) {}
+  async embed(text: string): Promise<number[]> {
+    for (const [marker, cosine] of this.cosines) {
+      if (text.includes(marker)) return [cosine, Math.sqrt(1 - cosine ** 2)];
+    }
+    return [1, 0];
+  }
+}
+
+async function floorRegistry(cosines: ReadonlyMap<string, number>) {
+  const registry = {
+    embedding: new MarkerEmbeddingProvider(cosines),
+    vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
+  };
+  const ids = new Map<string, string>();
+  for (const marker of cosines.keys()) {
+    // A distinct contract per marker — one shared contract would dedup every
+    // registration onto the first row's id.
+    const contract: DataContract = {
+      contextSpec: { [marker.toLowerCase().replace(/-/g, '_')]: { schema: { type: 'string' }, default: '' } },
+    };
+    const bp = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract,
+      intent: `${marker} notepad`,
+      componentCode: marker,
+      source: { kind: 'user' },
+    });
+    ids.set(marker, bp.id);
+  }
+  return { registry, ids };
+}
+
+describe('matchBlueprint — one similarity floor on both paths (ggui#1275)', () => {
+  it('the floor is 0.3, and it is the search tool’s own constant', () => {
+    expect(MIN_SIMILARITY_SCORE).toBe(0.3);
+  });
+
+  it('by default, a 0.29 candidate never reaches the judge and never becomes a reuse', async () => {
+    const { registry, ids } = await floorRegistry(new Map([['CHARLIE-INTENT', 0.29]]));
+    let judgeCalled = false;
+    const llm = stubLlm(() => {
+      judgeCalled = true;
+      return { matchId: ids.get('CHARLIE-INTENT') ?? null, confidence: 0.92, reason: 'same task, fewer words' };
+    });
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' });
+    expect(judgeCalled).toBe(false);
+    expect(result.strategy).toBe('no-match');
+    expect(result.reason).toMatch(/match-skip-low-cosine/);
+  });
+
+  it('by default, a judge-preferred 0.29 candidate under a top-1 of 0.35 is not offered', async () => {
+    const { registry, ids } = await floorRegistry(
+      new Map([
+        ['DELTA-INTENT', 0.35],
+        ['CHARLIE-INTENT', 0.29],
+      ]),
+    );
+    const offered: string[] = [];
+    const llm = stubLlm(
+      { matchId: ids.get('CHARLIE-INTENT') ?? null, confidence: 0.92, reason: 'picked the 0.29 one' },
+      (u) => offered.push(u),
+    );
+    const result = await matchBlueprint({ registry, llm }, SCOPE, { intent: 'a query intent' });
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toContain(ids.get('DELTA-INTENT'));
+    expect(offered[0]).not.toContain(ids.get('CHARLIE-INTENT'));
+    expect(result.strategy).not.toBe('semantic');
+  });
+
+  it('by default, a candidate just above the shared floor still reaches the judge and can be reused', async () => {
+    const cosine = MIN_SIMILARITY_SCORE + 0.005;
+    const { registry, ids } = await floorRegistry(new Map([['ECHO-INTENT', cosine]]));
+    const result = await matchBlueprint(
+      { registry, llm: stubLlm({ matchId: ids.get('ECHO-INTENT') ?? null, confidence: 0.9, reason: 'close enough' }) },
+      SCOPE,
+      { intent: 'a query intent' },
+    );
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') expect(result.cosine).toBeCloseTo(cosine, 5);
   });
 });
