@@ -217,7 +217,7 @@ const EXPECTED_PASSING = [
  *
  *   - `bootstrap-bundle-fetch-failed` / `bootstrap-meta-missing`:
  *     setup needs `renderer-url-override` /
- *     `ui-initialize-response-override` — browser-level fault
+ *     `tool-result-override` — browser-level fault
  *     injection the host adapter throws on by design.
  *   - `props-update-roundtrip`: the assertion is on rendered DOM; the
  *     matcher returns `unmatchable-on-ws` (Path-B).

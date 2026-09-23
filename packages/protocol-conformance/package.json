@@ -51,6 +51,11 @@
       "import": "./dist/resource-read-conformance/index.js",
       "default": "./dist/resource-read-conformance/index.js"
     },
+    "./read-plane-only-conformance": {
+      "types": "./dist/read-plane-only-conformance/index.d.ts",
+      "import": "./dist/read-plane-only-conformance/index.js",
+      "default": "./dist/read-plane-only-conformance/index.js"
+    },
     "./n1-compat-conformance": {
       "types": "./dist/n1-compat-conformance/index.d.ts",
       "import": "./dist/n1-compat-conformance/index.js",

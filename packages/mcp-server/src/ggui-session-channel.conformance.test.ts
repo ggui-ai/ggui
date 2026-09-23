@@ -205,7 +205,7 @@ const EXPECTED_PASSING = [
  *
  *   - `bootstrap-bundle-fetch-failed` / `bootstrap-meta-missing`:
  *     setup needs `renderer-url-override` /
- *     `ui-initialize-response-override` — browser-host fault injection
+ *     `tool-result-override` — browser-host fault injection
  *     a WS channel server has no surface for; the host refuses.
  *   - `version-mismatch`: setup needs `server-version-override`. The
  *     channel exposes no per-render version seam (it always advertises
@@ -240,7 +240,7 @@ const EXPECTED_SKIPPED: Readonly<Record<string, string>> = {
   'domain-error/render-unknown-handshake': 'toolCallDriver',
   'domain-error/update-unknown-session': 'toolCallDriver',
   'bootstrap-bundle-fetch-failed': 'renderer-url-override',
-  'bootstrap-meta-missing': 'ui-initialize-response-override',
+  'bootstrap-meta-missing': 'tool-result-override',
   'props-update-roundtrip': 'Path-B',
   'refusal-envelope/refuse-after-fix-caller': 'refusalProjector',
   'refusal-envelope/refuse-after-fix-owner-with-balance': 'refusalProjector',
@@ -346,9 +346,10 @@ async function bootFirstPartyServer(): Promise<FirstPartyHarness> {
  *     being graded against a fabricated read.
  *
  * Refuse (kit records SKIP with the thrown message):
- *   - `renderer-url-override` / `ui-initialize-response-override` —
- *     browser-host bootstrap fault injection; a WS channel server has
- *     no renderer bundle and no `ui/initialize` responder to override.
+ *   - `renderer-url-override` / `ui-initialize-response-override` /
+ *     `tool-result-override` — browser-host bootstrap fault injection;
+ *     a WS channel server has no renderer bundle, no `ui/initialize`
+ *     responder and no tool result to forward.
  *   - `server-version-override` — `GguiSessionChannelOptions` exposes
  *     no version seam; the advertised version is the compiled-in
  *     `PROTOCOL_SCHEMA_VERSION` constant. No production seam is added
@@ -406,6 +407,10 @@ function createFirstPartyConformanceHost(harness: FirstPartyHarness): Conformanc
         case 'ui-initialize-response-override':
           throw new Error(
             'first-party channel server does not implement ui-initialize-response-override — ui/initialize is an MCP Apps host concern, not a live-channel frame',
+          );
+        case 'tool-result-override':
+          throw new Error(
+            'first-party channel server does not implement tool-result-override — forwarding a tool result is an MCP Apps host concern, not a live-channel frame',
           );
         case 'server-version-override':
           throw new Error(

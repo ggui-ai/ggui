@@ -6,6 +6,26 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The read-plane-only posture is normative, and graded (2026-09-24,
+ * additive, ggui#1304: MINOR, same draft stamp). SPEC §7.10.6 states the
+ * posture the reference server has run since ggui#537: a result publishes
+ * the render locator on `structuredContent.resourceUri` and the same
+ * value on `_meta.ui.resourceUri`, and carries neither the
+ * `ai.ggui/render` slice nor a live-channel token; the locator's read
+ * then mounts. A host that mounts the declaration-level shell against
+ * such a server MUST answer that read, and a host that advertises
+ * `serverResources` MUST answer `resources/read`. Kit: the new
+ * `read-plane-only-conformance` catalog grades the server; the
+ * host-helper catalog's H2 probe map gains `serverResources` →
+ * `resources/read`. Kit, same row: the `bootstrap-protocol` fixtures
+ * describe the live delivery paths (the inline global, the forwarded
+ * tool result's top-level `_meta`), a new `tool-result-override` setup
+ * directive drives the missing-slice failure, and that fixture expects
+ * `MISSING_META_GGUI_BOOTSTRAP`, the spelling emitters send (§5.5.2 now
+ * says so; `BOOTSTRAP_META_MISSING` names the same condition). No wire
+ * shape moves. No `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * Host-declared gesture delivery (2026-09-24, additive, ggui#1309: MINOR,
  * same draft stamp). New exports: `GGUI_HOST_CAPABILITIES_HEADER`
  * (`ggui-host-capabilities`), `HOST_CAPABILITY_UI_MESSAGE_TURN`

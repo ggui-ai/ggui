@@ -80,9 +80,10 @@ export type GguiSessionSeedInput =
  *     deferred.)
  *   - `MISSING_META_GGUI_BOOTSTRAP` — `params` is an object but
  *     `params._meta` is absent or carries no `ai.ggui/render` slice.
- *     The on-wire synonym is `BOOTSTRAP_META_MISSING`. (Name retained
- *     pre-R4 for the observability + host-postMessage protocol;
- *     cosmetic rename is deferred.)
+ *     This is the spelling emitted on `ggui:bootstrap-failed`;
+ *     `BOOTSTRAP_META_MISSING` is a synonym a host classifies alike
+ *     (SPEC §5.5.2). (Name retained pre-R4 for the observability +
+ *     host-postMessage protocol; cosmetic rename is deferred.)
  *   - `MALFORMED_BOOTSTRAP` — slice is present but fails business
  *     rules (no live mode and no static content, mode discriminators
  *     mutually exclusive, structural rejection by the combiner).

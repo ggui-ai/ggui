@@ -138,6 +138,7 @@ export type SetupStep =
   | RendererUrlOverrideStep
   | ServerVersionOverrideStep
   | UiInitializeResponseOverrideStep
+  | ToolResultOverrideStep
   | EmitEnvelopeStep;
 
 /**
@@ -239,15 +240,37 @@ export interface ServerVersionOverrideStep {
 
 /**
  * Substitute the MCP Apps `ui/initialize` response the host returns to
- * the iframe — drives bootstrap-failure paths like
- * `BOOTSTRAP_META_MISSING`. A browser-host (Path-B) concern: WS-only
- * hosts throw on it and the fixture skips.
+ * the iframe. A browser-host (Path-B) concern: WS-only hosts throw on it
+ * and the fixture skips.
+ *
+ * No shipped fixture authors it (ggui#1304). The spec-canonical
+ * `McpUiInitializeResult` carries no `ai.ggui/render` slice, so
+ * overriding it cannot drive a missing-slice failure; that path is
+ * driven by {@link ToolResultOverrideStep}. The directive stays in the
+ * vocabulary because the kit's authored shapes evolve additively.
  */
 export interface UiInitializeResponseOverrideStep {
   readonly type: 'ui-initialize-response-override';
   /** GguiSession the override scopes to (a prior `create-session`). */
   readonly sessionId: string;
   /** Response body the host returns from `ui/initialize` verbatim. */
+  readonly override: unknown;
+}
+
+/**
+ * Substitute the `ui/notifications/tool-result` the host forwards to the
+ * view: `override` is the `params` (a `CallToolResult`) the host sends
+ * verbatim, whose top-level `_meta` is where the `ai.ggui/render` slice
+ * rides. Drives the forwarded-result bootstrap failures, such as a
+ * result carrying neither the slice nor a locator
+ * (`MISSING_META_GGUI_BOOTSTRAP`). A browser-host (Path-B) concern:
+ * WS-only hosts throw on it and the fixture skips (ggui#1304).
+ */
+export interface ToolResultOverrideStep {
+  readonly type: 'tool-result-override';
+  /** GguiSession the override scopes to (a prior `create-session`). */
+  readonly sessionId: string;
+  /** The `params` the host forwards verbatim. */
   readonly override: unknown;
 }
 
@@ -387,7 +410,7 @@ export interface StreamUpdateBehavior {
  * Expect a bootstrap-failure postMessage envelope + the renderer's
  * {@link ProtocolError} of kind `'bootstrap'` with the matching
  * reason. Post-wire paths (`BUNDLE_FETCH_FAILED`,
- * `BOOTSTRAP_META_MISSING`) are pre-WS — they surface via
+ * `MISSING_META_GGUI_BOOTSTRAP`) are pre-WS — they surface via
  * `postMessage({type:'ggui:bootstrap-failed', …})` only, NOT on
  * the live channel.
  */
@@ -643,6 +666,10 @@ export interface TestCase {
  * copy per the drift-decoupling posture in the module docstring:
  * fixtures compile against the kit's frozen vocabulary, never the
  * live protocol or renderer types.
+ *
+ * `MISSING_META_GGUI_BOOTSTRAP` and `BOOTSTRAP_META_MISSING` name one
+ * condition; fixtures expect the first, the spelling reference
+ * emitters send (SPEC §5.5.2).
  */
 export type BootstrapFailureReason =
   | 'MISSING_TOOL_OUTPUT'

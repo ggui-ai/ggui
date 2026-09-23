@@ -1238,6 +1238,13 @@ export function parseSetupStep(fixtureName: string, step: unknown): HostSetupSte
     }
     return { kind: 'ui-initialize-response-override', sessionId, override: step['override'] };
   }
+  if (type === 'tool-result-override') {
+    const sessionId = requireStringField(fixtureName, type, step, 'sessionId');
+    if (!('override' in step)) {
+      throw malformedDirective(fixtureName, type, step, "missing the 'override' tool-result params");
+    }
+    return { kind: 'tool-result-override', sessionId, override: step['override'] };
+  }
   if (type === 'emit-envelope') {
     const channel = requireStringField(fixtureName, type, step, 'channel');
     if (!('payload' in step)) {
@@ -1246,7 +1253,7 @@ export function parseSetupStep(fixtureName: string, step: unknown): HostSetupSte
     return { kind: 'emit-envelope', channel, payload: step['payload'] };
   }
   throw new Error(
-    `protocol-conformance: fixture '${fixtureName}' authors unknown setup directive type='${type}'. The setup vocabulary is closed; known directives: create-session, renderer-url-override, server-version-override, ui-initialize-response-override, emit-envelope.`,
+    `protocol-conformance: fixture '${fixtureName}' authors unknown setup directive type='${type}'. The setup vocabulary is closed; known directives: create-session, renderer-url-override, server-version-override, ui-initialize-response-override, tool-result-override, emit-envelope.`,
   );
 }
 

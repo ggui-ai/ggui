@@ -86,6 +86,27 @@ describe('parseSetupStep — the shipped catalog parses against the closed union
   });
 });
 
+describe('parseSetupStep — tool-result-override, the forwarded-result fault seam (ggui#1304)', () => {
+  it('translates tool-result-override and keeps the forwarded params verbatim', () => {
+    const params = { content: [{ type: 'text', text: '{}' }], _meta: {} };
+    expect(
+      parseSetupStep('t', { type: 'tool-result-override', sessionId: 'rnd-1', override: params }),
+    ).toEqual({ kind: 'tool-result-override', sessionId: 'rnd-1', override: params });
+  });
+
+  it('throws when tool-result-override omits the forwarded params', () => {
+    expect(() =>
+      parseSetupStep('fixture-x', { type: 'tool-result-override', sessionId: 'rnd-1' }),
+    ).toThrowError(/missing the 'override' tool-result params/);
+  });
+
+  it('names tool-result-override in the closed vocabulary an unknown directive is refused against', () => {
+    expect(() => parseSetupStep('fixture-x', { type: 'nope', sessionId: 'rnd-1' })).toThrowError(
+      /tool-result-override/,
+    );
+  });
+});
+
 describe('parseSetupStep — unknown / malformed directives throw fixture-authoring errors', () => {
   it('throws on an unknown directive type, naming the closed vocabulary', () => {
     // The closed union makes a typo'd directive a compile-time error

@@ -1,18 +1,23 @@
 {
   "name": "bootstrap-meta-missing",
-  "description": "Host's `ui/initialize` response returns a tool-output without `_meta.ggui.bootstrap` (or missing the `runtimeUrl` field). Thin shell emits `postMessage({type:'ggui:bootstrap-failed', reason:'BOOTSTRAP_META_MISSING', message})` to the parent. No WS connection opens — live-channel envelopes are out of scope pre-handshake.",
+  "description": "The host mounts the declaration-level shell (`ui://ggui/render`) and forwards a `ui/notifications/tool-result` whose `CallToolResult` carries neither the `ai.ggui/render` slice nor a render locator on its top-level `_meta`, so no source yields a slice: nothing inline on `globalThis.__GGUI_META__`, no read-plane door to take, and no slice on the forwarded result. After its bounded wait the view emits `postMessage({type:'ggui:bootstrap-failed', reason:'MISSING_META_GGUI_BOOTSTRAP', message})` to the parent, the spelling every reference emitter uses (SPEC §5.5.2). `BOOTSTRAP_META_MISSING` names the same failure and hosts classify both alike. No WS connection opens; live-channel envelopes are out of scope before the slice is read. (Rewritten under ggui#1304: the fixture used to override `ui/initialize` and look for `_meta.ggui.bootstrap`, a delivery path that no longer exists.)",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-bootstrap-meta-missing-1" },
     {
-      "type": "ui-initialize-response-override",
+      "type": "create-session",
+      "sessionId": "ck-bootstrap-meta-missing-1"
+    },
+    {
+      "type": "tool-result-override",
       "sessionId": "ck-bootstrap-meta-missing-1",
       "override": {
-        "toolOutput": {
-          "_meta": {
-            "ggui": {}
+        "content": [
+          {
+            "type": "text",
+            "text": "{}"
           }
-        }
+        ],
+        "_meta": {}
       }
     }
   ],
@@ -25,7 +30,6 @@
   },
   "expectedBehavior": {
     "kind": "bootstrap-failure",
-    "reason": "BOOTSTRAP_META_MISSING",
-    "messageContains": "_meta.ggui.bootstrap"
+    "reason": "MISSING_META_GGUI_BOOTSTRAP"
   }
 }

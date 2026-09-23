@@ -18,6 +18,7 @@
  *   Throw (kit records SKIP, not FAIL):
  *     - renderer-url-override     — unimplemented (browser-level)
  *     - ui-initialize-response-override — unimplemented
+ *     - tool-result-override      — unimplemented (MCP Apps host concern)
  *
  * The "throw" set matches the conformance kit's `unmatchable-on-ws`
  * skip expectations — browser-level fault injection that requires a
@@ -166,6 +167,11 @@ export function createReferenceConformanceHost({
       if (step.kind === 'ui-initialize-response-override') {
         throw new Error(
           'reference server does not implement ui-initialize-response-override — MCP Apps host concern, out of scope',
+        );
+      }
+      if (step.kind === 'tool-result-override') {
+        throw new Error(
+          'reference server does not implement tool-result-override — forwarding a tool result is an MCP Apps host concern, out of scope',
         );
       }
       return unreachableSetupStep(step);

@@ -43,8 +43,11 @@ import { ClientContractViolationError } from '@ggui-ai/wire';
  *      `McpAppAiGguiMetaParseFailureReason` (`MISSING_TOOL_OUTPUT` /
  *      `MISSING_META_GGUI_BOOTSTRAP` / `MALFORMED_BOOTSTRAP` /
  *      `EXPIRED_BOOTSTRAP`). `MISSING_META_GGUI_BOOTSTRAP` and
- *      `BOOTSTRAP_META_MISSING` are synonyms — the latter is the
- *      on-wire name, the former the parse-internal name.
+ *      `BOOTSTRAP_META_MISSING` name one condition. The runtime and the
+ *      reference shell emit `MISSING_META_GGUI_BOOTSTRAP` on
+ *      `ggui:bootstrap-failed`; `BOOTSTRAP_META_MISSING` stays a member
+ *      so a host classifies either spelling as that condition
+ *      (SPEC §5.5.2).
  *
  *   2. **Post-parse orchestration failures** — `UI_INITIALIZE_FAILED`
  *      / `WS_HANDSHAKE_FAILED`. Matches `RendererBootFailureReason`.

@@ -47,7 +47,7 @@ import type { ActionSpecEntryDecl } from './types.js';
  * envelope drives the system under test.
  *
  * Closed union — the runner validates fixture-authored directives
- * before dispatch, so only these five kinds ever reach a host. A host
+ * before dispatch, so only these six kinds ever reach a host. A host
  * that does not implement one of them MUST throw (e.g.
  * `Error('host does not implement renderer-url-override')`) so the
  * runner records the fixture as SKIPPED with that reason — never
@@ -58,6 +58,7 @@ export type SetupStep =
   | RendererUrlOverrideSetup
   | ServerVersionOverrideSetup
   | UiInitializeResponseOverrideSetup
+  | ToolResultOverrideSetup
   | EmitEnvelopeSetup;
 
 export interface CreateGguiSessionSetup {
@@ -90,6 +91,13 @@ export interface ServerVersionOverrideSetup {
 /** Runtime form of `UiInitializeResponseOverrideStep` (see `./types`). */
 export interface UiInitializeResponseOverrideSetup {
   readonly kind: 'ui-initialize-response-override';
+  readonly sessionId: string;
+  readonly override: unknown;
+}
+
+/** Runtime form of `ToolResultOverrideStep` (see `./types`). */
+export interface ToolResultOverrideSetup {
+  readonly kind: 'tool-result-override';
   readonly sessionId: string;
   readonly override: unknown;
 }

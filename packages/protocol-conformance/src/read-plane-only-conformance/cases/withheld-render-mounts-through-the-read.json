@@ -1,0 +1,10 @@
+{
+  "name": "withheld-render-mounts-through-the-read",
+  "description": "SPEC §7.10.6: under the read-plane-only posture a committed render's result publishes the view's identity only — the render locator on structuredContent.resourceUri and the same value on _meta.ui.resourceUri (and on the legacy flat _meta['ui/resourceUri'] when present) — and carries neither the ai.ggui/render slice nor a live-channel token anywhere. A resources/read of that published locator then returns contents that declare a delivery channel.",
+  "expect": {
+    "locatorPrefix": "ui://ggui/render/",
+    "withheldMetaKeys": ["ai.ggui/render"],
+    "withheldCredentialKeys": ["wsToken"],
+    "read": "live-mount"
+  }
+}

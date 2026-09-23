@@ -68,8 +68,8 @@
  * v1 Path-B-only kinds (return `unmatchable-on-ws`):
  *
  *   - `bootstrap-failure` — the fault surface lives in the host's
- *     bootstrap-fetch + `ui/initialize` round-trip; the fixture's
- *     `renderer-url-override` / `ui-initialize-response-override`
+ *     bootstrap-fetch + forwarded tool result; the fixture's
+ *     `renderer-url-override` / `tool-result-override`
  *     setup directives are MCP-Apps-host concerns, not WS server
  *     concerns. The reference server's host adapter correctly throws
  *     "out of scope" on these directives — that's not a bug, it's
@@ -166,7 +166,7 @@ export function matchBehavior(
     return {
       kind: 'unmatchable-on-ws',
       reason:
-        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + `ui/initialize` postMessage round-trip, not a WS frame the server emits. The `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. The Path-B driver is not yet packaged — these fixtures skip until a browser-host adapter ships with the kit.',
+        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + forwarded `ui/notifications/tool-result` round-trip, not a WS frame the server emits. The `renderer-url-override` / `tool-result-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. The Path-B driver is not yet packaged — these fixtures skip until a browser-host adapter ships with the kit.',
     };
   }
   if (behavior.kind === 'props-update') {

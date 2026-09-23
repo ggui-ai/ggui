@@ -257,6 +257,28 @@ export type {
   RunResourceReadConformanceOptions,
 } from './resource-read-conformance/index.js';
 
+// Read-plane-only conformance (ggui#1304, SPEC §7.10.6) — the tool
+// RESULT under the read-plane-only posture: the locator on both slots,
+// one value, no slice, no live credential; and the published locator's
+// read mounts. Drives a live server through a scenario driver, like the
+// resource-read catalog above.
+export {
+  readPlaneOnlyCases,
+  runReadPlaneOnlyConformance,
+} from './read-plane-only-conformance/index.js';
+export type {
+  PreparedReadPlaneOnlyScenario,
+  ReadPlaneOnlyConformanceCase,
+  ReadPlaneOnlyConformanceResult,
+  ReadPlaneOnlyCriterion,
+  ReadPlaneOnlyExpectation,
+  ReadPlaneOnlyMismatch,
+  ReadPlaneOnlyScenario,
+  ReadPlaneOnlyScenarioDriver,
+  ReadPlaneOnlySkip,
+  RunReadPlaneOnlyConformanceOptions,
+} from './read-plane-only-conformance/index.js';
+
 // Runtime loader — look up a fixture by name from the inlined catalog.
 export { loadFixture, listFixtures, loadAllFixtures } from './loader.js';
 
