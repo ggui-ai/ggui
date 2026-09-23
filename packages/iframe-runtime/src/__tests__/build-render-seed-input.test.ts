@@ -12,12 +12,21 @@
  * Pure projection — no mount, no React.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
+const posted = vi.hoisted((): unknown[] => []);
+vi.mock('../observability.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../observability.js')>()),
+  postObservabilityToParent: (event: unknown) => posted.push(event),
+}));
+import type { ActionSpec } from '@ggui-ai/protocol';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import {
   buildGguiSessionSeedInput,
   hasStaticContentMeta,
   readPendingToolResults,
 } from '../runtime.js';
+import { buildRootWireConfig, StreamBus } from '../wire-config.js';
 
 const BASE: McpAppAiGguiRenderMeta = {
   sessionId: 'render_seed_1',
@@ -154,6 +163,90 @@ describe('buildGguiSessionSeedInput', () => {
     await expect(
       buildGguiSessionSeedInput({ ...BASE, codeUrl: 'http://localhost:7000/code/missing.js' }),
     ).rejects.toThrow(/codeUrl fetch failed \(404\)/);
+  });
+});
+
+// ggui#1178 — the seed half. A mount with no live session frame (past the WS
+// token's TTL, a host with no live channel, or the pre-WS window) paints from
+// this seed, and the one-shot guard reads the CURRENT render's actionSpec. A
+// seed that dropped the slice's spec left that mount unable to enforce
+// `oneShot`. Pinned here: a component seed carries the slice's spec whole, a
+// system seed never does, a slice without one leaves the key absent, and a seed
+// mounted as the current render stops a second one-shot gesture.
+describe('buildGguiSessionSeedInput — the slice’s actionSpec (ggui#1178)', () => {
+  const SPEC: ActionSpec = {
+    submit: { label: 'Submit', oneShot: true, nextStep: 'record_answer' },
+    cancel: { label: 'Cancel' },
+  };
+  const SOURCE = 'export default function C(){return null}';
+
+  it('a codeB64 component seed carries the slice’s actionSpec whole', async () => {
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: Buffer.from(SOURCE, 'utf8').toString('base64'),
+      actionSpec: SPEC,
+    });
+    expect(seed).not.toBeNull();
+    if (seed === null || seed.type === 'system') throw new Error('expected a component seed');
+    expect(seed.actionSpec).toEqual(SPEC);
+  });
+
+  it('a codeUrl component seed carries the slice’s actionSpec whole', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, status: 200, text: async () => SOURCE })),
+    );
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeUrl: 'http://localhost:7000/code/abc.js',
+      actionSpec: SPEC,
+    });
+    expect(seed).not.toBeNull();
+    if (seed === null || seed.type === 'system') throw new Error('expected a component seed');
+    expect(seed.actionSpec).toEqual(SPEC);
+  });
+
+  it('a slice with no actionSpec leaves the key absent (never an empty spec)', async () => {
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: Buffer.from(SOURCE, 'utf8').toString('base64'),
+    });
+    expect(seed).not.toBeNull();
+    expect(seed !== null && 'actionSpec' in seed).toBe(false);
+  });
+
+  it('a system seed never carries one, even when the slice does', async () => {
+    const seed = await buildGguiSessionSeedInput({ ...BASE, kind: 'no-credentials', actionSpec: SPEC });
+    expect(seed).not.toBeNull();
+    expect(seed !== null && 'actionSpec' in seed).toBe(false);
+  });
+
+  it('mounted as the current render, the seed stops a second one-shot gesture — and names nothing unenforceable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    posted.length = 0;
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: Buffer.from(SOURCE, 'utf8').toString('base64'),
+      actionSpec: SPEC,
+    });
+    const sent: WebSocketMessage[] = [];
+    const cfg = buildRootWireConfig({
+      sessionId: BASE.sessionId,
+      appId: BASE.appId,
+      getCurrentGguiSession: () => seed,
+      manager: { send: (msg: WebSocketMessage) => sent.push(msg) },
+      streamBus: new StreamBus(),
+    });
+
+    cfg.dispatch('submit', {});
+    cfg.dispatch('submit', {});
+
+    expect(sent, 'the second one-shot gesture never reaches the transport').toHaveLength(1);
+    const unenforceable = posted.filter(
+      (e) => typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'one-shot-unenforceable',
+    );
+    expect(unenforceable).toEqual([]);
+    warn.mockRestore();
   });
 });
 

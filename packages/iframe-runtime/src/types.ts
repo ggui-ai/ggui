@@ -47,9 +47,10 @@ type GguiSessionLedgerFields =
  * the seed with the authoritative `GguiSession`.
  *
  * Carries the SAME contract-spec fields a full `ComponentGguiSession` does
- * (`propsSpec` / `streamSpec` / `actionSpec`), as `undefined` on a
- * seed — so the channel handlers that read those after the
- * `type !== 'mcpApps' && type !== 'system'` narrowing stay type-clean.
+ * (`propsSpec` / `streamSpec` / `actionSpec`), so the channel handlers that
+ * read those after the `type !== 'mcpApps' && type !== 'system'` narrowing
+ * stay type-clean. On a seed, `propsSpec` and `streamSpec` are `undefined`;
+ * `actionSpec` is the slice's own when the slice carried one (ggui#1178).
  */
 export type GguiSessionSeedInput =
   | Omit<ComponentGguiSession, GguiSessionLedgerFields>

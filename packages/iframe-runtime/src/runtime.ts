@@ -1767,11 +1767,17 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
  * surface a typed boot failure. The four server-assigned ledger fields
  * are intentionally absent — the first ack reconciles the seed to a
  * full `GguiSession` (no fabrication).
+ *
+ * A component seed carries the slice's `actionSpec` when the slice has one
+ * (ggui#1178): a mount with no live session frame paints from this seed, and
+ * the one-shot guard reads the current render's spec, so a seed without it
+ * could not enforce `oneShot`. A system seed never carries one.
  */
 export async function buildGguiSessionSeedInput(
   meta: McpAppAiGguiRenderMeta,
 ): Promise<GguiSessionSeedInput | null> {
   const props = parseSeedProps(meta.propsJson);
+  const actionSpec = meta.actionSpec !== undefined ? { actionSpec: meta.actionSpec } : {};
 
   // System-card mode — `kind` keyed against the built-in registry.
   if (meta.kind !== undefined) {
@@ -1791,6 +1797,7 @@ export async function buildGguiSessionSeedInput(
       appId: meta.appId,
       componentCode: decodeCodeB64(meta.codeB64),
       ...(props !== undefined ? { props } : {}),
+      ...actionSpec,
     };
   }
 
@@ -1808,6 +1815,7 @@ export async function buildGguiSessionSeedInput(
     appId: meta.appId,
     componentCode,
     ...(props !== undefined ? { props } : {}),
+    ...actionSpec,
   };
 }
 
