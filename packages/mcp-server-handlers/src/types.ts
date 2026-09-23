@@ -94,6 +94,14 @@ export interface HandlerContext {
    */
   readonly credentialScope?: CredentialScope;
   /**
+   * The host's declared capabilities, parsed from the request's
+   * `Ggui-Host-Capabilities` header (ggui#1309, `parseHostCapabilitiesHeader`
+   * in `@ggui-ai/protocol`). Set by the host's own code, never by the model.
+   * Absent or empty ⇒ nothing declared, today's behaviour. The render handler
+   * reads `ui-message-turn` to omit its `ggui_consume` hint.
+   */
+  readonly hostCapabilities?: readonly string[];
+  /**
    * How the caller's identity was proved, forwarded verbatim from the
    * resolved `AuthResult.source` upstream of the handler.
    *

@@ -32,7 +32,13 @@
  * rules.
  */
 
-import { MCP_ERROR_CODES, isRecord, type JsonValue } from "@ggui-ai/protocol";
+import {
+  GGUI_HOST_CAPABILITIES_HEADER,
+  MCP_ERROR_CODES,
+  isRecord,
+  parseHostCapabilitiesHeader,
+  type JsonValue,
+} from "@ggui-ai/protocol";
 import type { AuthAdapter, AuthResult } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -456,6 +462,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         }
       }
 
+      const hostCapabilities = parseHostCapabilitiesHeader(req.headers[GGUI_HOST_CAPABILITIES_HEADER]);
       const ctx: HandlerContext = {
         appId: hasUrlAppId ? urlAppId : appIdFromIdentity(identity),
         requestId,
@@ -480,6 +487,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         ...(identity.credentialScope !== undefined
           ? { credentialScope: identity.credentialScope }
           : {}),
+        // ggui#1309 — what the HOST declares it does with a view's gestures,
+        // from its own connection header (never model-writable). Empty ⇒
+        // absent, so a host that declares nothing sees today's behaviour.
+        ...(hostCapabilities.length > 0 ? { hostCapabilities } : {}),
       };
       reqLogger.debug?.("mcp_request", { appId: ctx.appId });
 

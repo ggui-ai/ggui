@@ -63,6 +63,7 @@ import {
   renderInputEnvelopeSchema,
   renderInputRouteGuardSchema,
   PRE_GENERATION_REFUSAL_ROWS,
+  HOST_CAPABILITY_UI_MESSAGE_TURN,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -2676,7 +2677,13 @@ export function createGguiRenderHandler(
     const hasActions =
       effectiveContract.actionSpec !== undefined &&
       Object.keys(effectiveContract.actionSpec).length > 0;
-    const nextStep = hasActions
+    // ggui#1309 — a host that declares `ui-message-turn` delivers a later
+    // gesture as the next agent turn, so the in-turn long-poll buys nothing
+    // there: omit the hint and let the agent end its turn at paint. Declared
+    // by the host's own code (a request header), never by the model.
+    const hostDeliversGesturesAsTurns =
+      ctx.hostCapabilities?.includes(HOST_CAPABILITY_UI_MESSAGE_TURN) === true;
+    const nextStep = hasActions && !hostDeliversGesturesAsTurns
       ? {
           tool: 'ggui_consume' as const,
           // Imperative + honest: `timeout` MUST ride the hint —
@@ -2795,7 +2802,7 @@ export function createGguiRenderHandler(
         // 2. Prerequisite — handshake first, always.
         'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — a `rendered` or `failed` render consumes the handshake; a `refused` render or a recoverable validation error leaves it intact, so the same handshakeId works again once the fix lands. A call without `handshakeId` is rejected at input validation (-32602); an id that does not resolve fails as not found (`handshake_not_found`).',
         // 2b. Next step — driven by the response, not blanket-applied.
-        "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({sessionId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
+        "NEXT STEP: read the response. If it carries a `nextStep` field (emitted only with a non-empty actionSpec, and not when this host delivers gestures as new messages), it names ggui_consume({sessionId}): long-poll once for an immediate gesture, and if none arrives, end your turn. If the response has NO nextStep, end your turn — either the UI has no actions, or this host delivers the user's gestures to you as new messages; either way the user reads the UI and interacts or prompts you when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
         // 3. Recovery shape — what happens on validation failure.
         "RECOVERABLE FAILURES: contract_validation_failed / schema_mismatch_error / contract_violation (props — a missing required prop included) / override_contract_invalid all preserve the handshake — fix your input and retry on the SAME handshakeId. contract_validation_failed fires when the contract gate rejects the draft: a malformed inner JSON Schema (e.g. `propsSpec.properties.X.schema` missing `type`), or an `actionSpec[name].nextStep` / `streamSpec[channel].source.tool` naming a tool not declared in `agentCapabilities.tools` — every referenced tool MUST appear in agentCapabilities.tools (catalog discoverability; same-MCP and cross-MCP both go here). override_contract_invalid is the same gate on an `override.contract` (STRICT — drop the override and re-handshake with that draft, which repairs it). schema_mismatch_error fires when an actionSpec entry's `schema` is not a subset of the named tool's registered inputSchema, OR a streamSpec channel's `schema` doesn't accept the tool's return shape — adjust the action/channel schema to match the tool, or omit `nextStep` if the agent will compose the call from a different toolset entirely. Only handshake_not_found forces a re-handshake.",
         // 4. Mutation rule — never re-render.

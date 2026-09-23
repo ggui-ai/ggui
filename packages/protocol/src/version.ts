@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Host-declared gesture delivery (2026-09-24, additive, ggui#1309: MINOR,
+ * same draft stamp). New exports: `GGUI_HOST_CAPABILITIES_HEADER`
+ * (`ggui-host-capabilities`), `HOST_CAPABILITY_UI_MESSAGE_TURN`
+ * (`ui-message-turn`), `parseHostCapabilitiesHeader`. A host's own code
+ * declares the token on its MCP connection's header; `ggui_render` then
+ * omits its `nextStep: ggui_consume` hint, so the agent ends its turn at
+ * paint. Unknown tokens are ignored. No `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * A member-level clear on a theme write (2026-09-23, additive, ggui#1308:
  * MINOR, same draft stamp). New exports: `APP_THEME_CLEARABLE_MEMBERS`
  * (`mode`, `name`, `frameless`, `fonts`, `imagery` — the optional members

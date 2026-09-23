@@ -274,6 +274,73 @@ describe('mcp-endpoint-routes — credential scope threading (#498)', () => {
   });
 });
 
+/**
+ * Host capabilities threading (ggui#1309). The HOST's own code declares, on
+ * its MCP connection's `Ggui-Host-Capabilities` header, what it does with a
+ * view's gestures; the route parses it onto the handler context, where the
+ * render handler reads `ui-message-turn`. Proven over the real HTTP surface.
+ */
+const HOST_CAPS_ECHO_TOOL = 'host_caps_echo';
+
+function hostCapsEchoHandler(): SharedHandler<
+  Record<string, never>,
+  { caps: z.ZodString },
+  { caps: string }
+> {
+  return {
+    name: HOST_CAPS_ECHO_TOOL,
+    description: 'Echoes the host capabilities the route threaded onto ctx.',
+    inputSchema: {},
+    outputSchema: { caps: z.string() },
+    async handler(_input: Record<string, unknown>, ctx: HandlerContext): Promise<{ caps: string }> {
+      return { caps: JSON.stringify(ctx.hostCapabilities ?? null) };
+    },
+  };
+}
+
+async function echoHostCapsOverTheWire(
+  headerValue: string | undefined,
+): Promise<{ fx: BootedFixture; echoed: unknown }> {
+  const token = 'caps-tok';
+  const result: AuthResult = { identity: { kind: 'user', userId: 'u-1', roles: [] }, source: 'apikey' };
+  const fx = await boot({
+    auth: new InMemoryAuthAdapter({ seedTokens: [{ token, result }] }),
+    handlers: [hostCapsEchoHandler()],
+  });
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (headerValue !== undefined) headers['Ggui-Host-Capabilities'] = headerValue;
+  const transport = new StreamableHTTPClientTransport(new URL(`${fx.url}/mcp`), { requestInit: { headers } });
+  const client = new Client({ name: 'test-client', version: '0' }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const res = await client.callTool({ name: HOST_CAPS_ECHO_TOOL, arguments: {} });
+    const structured = res.structuredContent as { caps?: string } | undefined;
+    return { fx, echoed: JSON.parse(structured?.caps ?? 'null') };
+  } finally {
+    await client.close();
+  }
+}
+
+describe('mcp-endpoint-routes — host capabilities threading (ggui#1309)', () => {
+  let fx: BootedFixture;
+
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  it('the Ggui-Host-Capabilities header arrives on ctx.hostCapabilities, parsed', async () => {
+    const run = await echoHostCapsOverTheWire(' UI-Message-Turn , later-capability ');
+    fx = run.fx;
+    expect(run.echoed).toEqual(['ui-message-turn', 'later-capability']);
+  });
+
+  it('no header leaves the field absent — a host that declares nothing sees today’s behaviour', async () => {
+    const run = await echoHostCapsOverTheWire(undefined);
+    fx = run.fx;
+    expect(run.echoed).toBeNull();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Per-app authorization refusals carry the deployment's JSON-RPC `data`
 // (ggui#825). The per-app `authorize` hook refuses by throwing; the route

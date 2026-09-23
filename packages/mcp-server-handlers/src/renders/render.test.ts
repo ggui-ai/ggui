@@ -2939,3 +2939,32 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     expect(out.blueprintId).toBe(h.storedUuid);
   });
 });
+
+// ggui#1309 — the consume hint is omitted when the HOST declares that it delivers a view's
+// gestures as next turns (`Ggui-Host-Capabilities: ui-message-turn`, parsed onto the context by
+// the HTTP layer). The 25 s in-turn wait buys nothing there: a later click arrives as a turn.
+describe('ggui_render nextStep — gated on the host declaring ui-message-turn (ggui#1309)', () => {
+  const render = async (ctx: HandlerContext) => {
+    const { harness, handshakeId } = await buildAcceptCacheHarnessFor(AGENT_TOOL_CONTRACT, {
+      checkRenderContracts: makeSchemaCompatStub(),
+    });
+    const out = await harness.handler.handler({ handshakeId, props: {} }, ctx);
+    assertRenderSuccess(out);
+    return out;
+  };
+
+  it('an actionful render on a host that declares nothing still carries nextStep: ggui_consume (today)', async () => {
+    const out = await render(CTX);
+    expect(out.nextStep?.tool).toBe('ggui_consume');
+  });
+
+  it('the same render on a host declaring ui-message-turn carries NO nextStep — the agent ends its turn at paint', async () => {
+    const out = await render({ ...CTX, hostCapabilities: ['ui-message-turn'] });
+    expect(out.nextStep).toBeUndefined();
+  });
+
+  it('an unknown capability alone changes nothing — only the named token omits the hint', async () => {
+    const out = await render({ ...CTX, hostCapabilities: ['some-later-capability'] });
+    expect(out.nextStep?.tool).toBe('ggui_consume');
+  });
+});

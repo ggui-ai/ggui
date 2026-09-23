@@ -2,6 +2,7 @@ export * from "./version";
 export * from "./types/auth";
 export * from "./types/events";
 export * from "./types/render";
+export * from "./types/host-capabilities";
 export * from "./types/ggui-session-event";
 export * from "./types/thread";
 // Live-channel contract payload types — SubscribePayload / AckPayload /
