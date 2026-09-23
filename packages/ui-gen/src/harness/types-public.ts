@@ -21,7 +21,7 @@
 import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 import type { GadgetDescriptor, DataContract, JsonValue } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/axes.js";
-import type { EvalIssue, EvalTier, AxisCheck, RuntimeProbeStatus } from "../evaluation/types-public.js";
+import type { EvalIssue, EvalTier, AxisCheck, ProbeHostLoad, RuntimeProbeStatus } from "../evaluation/types-public.js";
 import type { LLMToolDef } from "../llm.js";
 import type { CacheTier, HarnessFragment } from "../fragments/index.js";
 import type { HarnessPolicy, ProcessMode } from "../policy.js";
@@ -140,14 +140,18 @@ export interface LLMEvaluator {
 export interface RuntimeRenderOutcome {
   /**
    * Whether the probe actually executed. `issues` is only probe
-   * evidence when `status === "ran"` — an `infra-skipped` or
-   * `not-applicable` outcome carries zero evidence and MUST NOT be
-   * scored as a pass by any consumer.
+   * evidence when `status === "ran"` — an `infra-skipped`,
+   * `not-applicable` or `timed-out` outcome carries zero evidence and
+   * MUST NOT be scored as a pass by any consumer.
    */
   readonly status: RuntimeProbeStatus;
   readonly issues: readonly EvalIssue[];
-  /** Populated for `infra-skipped` / `not-applicable` — why the probe didn't run. */
+  /** Populated for `infra-skipped` / `not-applicable` / `timed-out` — why the probe didn't finish. */
   readonly reason?: string;
+  /** `timed-out` only: how long the probe ran before it was stopped. */
+  readonly elapsedMs?: number;
+  /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
+  readonly hostLoad?: ProbeHostLoad;
 }
 
 export interface RuntimeRenderCheck {

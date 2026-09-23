@@ -23,7 +23,7 @@
 
 import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import { DEFAULT_RUNTIME_RENDER_CHECK } from './harness/check/runtime-render/index.js';
-import type { EvalIssue } from './evaluation/types-public.js';
+import type { EvalIssue, RuntimeProbeStatus } from './evaluation/types-public.js';
 
 /**
  * Caller-supplied blueprint payload. `contract` is `unknown` at the
@@ -74,6 +74,23 @@ export interface ValidateBlueprintInput {
  * the absence cleanly (selfCheck skips prop-coverage warnings; runtime
  * probe skip-warns).
  */
+/**
+ * The warning code for a probe that did not produce evidence. Exhaustive over
+ * the did-not-run statuses, so a new status is a compile error here instead of
+ * silently reading as whichever arm a ternary falls through to (ggui#1299:
+ * `timed-out` would otherwise have been labelled `probe-not-applicable`).
+ */
+function probeDidNotRunCode(status: Exclude<RuntimeProbeStatus, 'ran'>): string {
+  switch (status) {
+    case 'infra-skipped':
+      return 'runtime:probe-infra-failure';
+    case 'not-applicable':
+      return 'runtime:probe-not-applicable';
+    case 'timed-out':
+      return 'runtime:probe-timeout';
+  }
+}
+
 function asContract(x: RawContract): DataContract | undefined {
   if (typeof x !== 'object' || x === null) return undefined;
   return x as DataContract;
@@ -247,17 +264,15 @@ async function runtimeTier(input: RuntimeTierInput): Promise<RuntimeResult> {
       fixtureProps: asJsonObject(input.fixtureProps),
     });
     if (outcome.status !== 'ran') {
-      // Probe did not execute — infra failure or nothing to probe.
+      // Probe produced no evidence — infra failure, nothing to probe, or it
+      // ran out of wall-clock time before finishing.
       // Surface as a warning rather than a hard error so a flaky probe
       // doesn't permanently block legitimate blueprints — Claude can
       // retry, and host-level logs record the diagnostic for ops review.
       warnings.push({
         _kind: 'warning',
         tier: 'runtime',
-        code:
-          outcome.status === 'infra-skipped'
-            ? 'runtime:probe-infra-failure'
-            : 'runtime:probe-not-applicable',
+        code: probeDidNotRunCode(outcome.status),
         message: `Runtime probe did not run (${outcome.status}): ${outcome.reason ?? 'no reason recorded'}`,
       });
       return { errors, warnings };

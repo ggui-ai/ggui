@@ -349,6 +349,18 @@ async function runFastStage(
     ...(input.contract ? { contract: input.contract } : {}),
   };
   const result = await runRenderCheck(checkInput);
+  if (result.incomplete !== undefined) {
+    // ggui#1299: the check ran out of wall-clock time, so there is no
+    // evidence either way — the same posture as an unverified check
+    // (non-failing, the unverified score). The slow stage still gates.
+    return {
+      stage: 'fast',
+      ok: true,
+      score: UNVERIFIED_FAST_SCORE,
+      diagnostics: [],
+      durationMs: Date.now() - start,
+    };
+  }
   const diagnostics: StageDiagnostic[] = buildFastStageComplaints(
     result.issues as readonly RenderCheckIssue[],
   );
@@ -405,11 +417,14 @@ async function runSlowStage(
  * job is just to land above or below it. Per-issue gradations matter
  * less than getting the pass/fail boundary right.
  */
+/** Fast-stage score when nothing failed but something went unverified. */
+const UNVERIFIED_FAST_SCORE = 0.85;
+
 function scoreFromRenderCheck(issues: readonly RenderCheckIssue[]): number {
   const failed = issues.filter((i) => i.outcome === 'failed').length;
   const unverified = issues.filter((i) => i.outcome === 'unverified').length;
   if (failed === 0 && unverified === 0) return 1.0;
-  if (failed === 0) return 0.85;
+  if (failed === 0) return UNVERIFIED_FAST_SCORE;
   if (failed === 1) return 0.4;
   if (failed === 2) return 0.3;
   return 0.2;

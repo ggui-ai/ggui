@@ -54,11 +54,30 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
       return { status: "infra-skipped", issues: [], reason: message };
     }
 
+    const hostLoad = result.stats.hostLoad;
+    const load = hostLoad !== undefined ? { hostLoad } : {};
+
+    // ggui#1299: a check that ran out of wall-clock time is not a verdict on
+    // the component. It becomes the `timed-out` status (did-not-run, never a
+    // pass, never a crash), never an eval issue — so the coding agent is never
+    // told to fix a crash that did not happen.
+    if (result.incomplete !== undefined) {
+      const { elapsedMs, boundMs } = result.incomplete;
+      const loadNote =
+        hostLoad !== undefined
+          ? `; host load ${hostLoad.start.toFixed(1)} → ${hostLoad.end.toFixed(1)} on ${hostLoad.cores} CPUs`
+          : "";
+      const reason = `render check did not finish within ${boundMs} ms (stopped at ${elapsedMs} ms)${loadNote}`;
+      console.warn(`[runtime-render] probe timed out — ${reason}`);
+      return { status: "timed-out", issues: [], reason, elapsedMs, ...load };
+    }
+
     return {
       status: "ran",
       issues: result.issues
         .map(toEvalIssue)
         .filter((x): x is EvalIssue => x !== null),
+      ...load,
     };
   },
 };

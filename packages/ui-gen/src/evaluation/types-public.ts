@@ -74,8 +74,28 @@ export interface EvalIssue {
  *                       consumers MUST NOT count it as a pass.
  *   - `not-applicable`— nothing to probe (no compiled code, no contract
  *                       surface, or no runtimeRender check configured).
+ *   - `timed-out`     — probe started but did not finish inside its
+ *                       wall-clock bound (ggui#1299). Carries ZERO
+ *                       evidence about the component: on a contended
+ *                       host an ordinary component crosses the bound.
+ *                       Consumers MUST NOT count it as a pass, and MUST
+ *                       NOT count it as a crash either. `elapsedMs` and
+ *                       `hostLoad` say how long it ran and how busy the
+ *                       host was, so a reader can tell the two cases apart.
  */
-export type RuntimeProbeStatus = "ran" | "infra-skipped" | "not-applicable";
+export type RuntimeProbeStatus = "ran" | "infra-skipped" | "not-applicable" | "timed-out";
+
+/**
+ * The host's 1-minute load average at a probe's start and end, beside the
+ * number of CPUs the process can use (ggui#1299). A load well above
+ * `cores` means the probe competed for CPU; a wall-clock bound crossed
+ * there says more about the host than about the component.
+ */
+export interface ProbeHostLoad {
+  readonly start: number;
+  readonly end: number;
+  readonly cores: number;
+}
 
 /**
  * Probe execution meta stamped onto an `EvalResult` at the exit-decision
@@ -85,8 +105,12 @@ export type RuntimeProbeStatus = "ran" | "infra-skipped" | "not-applicable";
  */
 export interface RuntimeProbeMeta {
   readonly status: RuntimeProbeStatus;
-  /** Populated for `infra-skipped` / `not-applicable` — why the probe didn't run. */
+  /** Populated for `infra-skipped` / `not-applicable` / `timed-out` — why the probe didn't finish. */
   readonly reason?: string;
+  /** `timed-out` only: how long the probe ran before it was stopped. */
+  readonly elapsedMs?: number;
+  /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
+  readonly hostLoad?: ProbeHostLoad;
 }
 
 /**

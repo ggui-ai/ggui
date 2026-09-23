@@ -359,6 +359,8 @@ async function runProbeAtExit(input: {
   const meta: RuntimeProbeMeta = {
     status: outcome.status,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+    ...(outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {}),
+    ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
   };
   if (outcome.status !== "ran") {
     return { fired: false, recoverableFail: false, probeIssues: [], meta };

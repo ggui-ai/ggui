@@ -45,6 +45,7 @@ import {
   type ParentLink,
 } from "./host-boundary.js";
 import { hostGlobals, openRecord } from "../../../internal/open-record.js";
+import type { ProbeHostLoad } from "../../../evaluation/types-public.js";
 import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
 
 /**
@@ -118,13 +119,31 @@ export type InputPrimingDiagnostic =
   | { readonly primed: number }
   | { readonly error: string };
 
+/**
+ * The check started but did not finish (ggui#1299). The only kind is a
+ * wall-clock timeout in the isolated worker. It is not a verdict on the
+ * component: `issues` is empty and `ok` is false because nothing was
+ * verified, never because something failed.
+ */
+export interface RenderCheckIncomplete {
+  readonly kind: "timeout";
+  /** How long the worker ran before it was stopped. */
+  readonly elapsedMs: number;
+  /** The wall-clock bound it crossed. */
+  readonly boundMs: number;
+}
+
 export interface RenderCheckResult {
   readonly ok: boolean;
   readonly issues: readonly RenderCheckIssue[];
+  /** Present only when the check did not finish; see {@link RenderCheckIncomplete}. */
+  readonly incomplete?: RenderCheckIncomplete;
   readonly stats: {
     readonly actionsChecked: number;
     readonly streamsChecked: number;
     readonly renderMs: number;
+    /** Host load around an isolated check (absent in-process). */
+    readonly hostLoad?: ProbeHostLoad;
   };
 }
 

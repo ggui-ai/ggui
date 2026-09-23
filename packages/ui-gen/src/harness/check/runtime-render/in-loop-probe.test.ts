@@ -357,6 +357,35 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
     expect(result.evalResult?.runtimeProbe?.reason).toMatch(/document state workarounds/);
   });
 
+  it("probe self-reports timed-out — clean exit, no [runtime] feedback, stamp carries elapsed ms + host load (ggui#1299)", async () => {
+    // A check that ran out of wall-clock time is not a crash: the coding
+    // agent is never handed a crash to fix, and the stamp says the probe did
+    // not finish, with enough for a reader to see how busy the host was.
+    const hostLoad = { start: 301.2, end: 287.9, cores: 12 };
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({
+      status: "timed-out",
+      issues: [],
+      reason: "render check did not finish within 30000 ms (stopped at 30412 ms)",
+      elapsedMs: 30_412,
+      hostLoad,
+    }));
+    const probe: RuntimeRenderCheck = { id: "stub-runtime-render", run: probeRun };
+    const harness = buildStubHarness(probe);
+
+    const result = await runEvalRound(buildBaseCtx(harness), buildBaseInput());
+
+    expect(probeRun).toHaveBeenCalledTimes(1);
+    expect(result.control).toBe("break");
+    expect(result.evalDone).toBe(true);
+    expect(result.evalResult?.runtimeProbe).toEqual({
+      status: "timed-out",
+      reason: "render check did not finish within 30000 ms (stopped at 30412 ms)",
+      elapsedMs: 30_412,
+      hostLoad,
+    });
+    expect(result.evalResult?.issues.some((i) => i.subcategory?.startsWith("runtime:"))).toBe(false);
+  });
+
   it("no runtimeRender check configured — evalResult stamped not-applicable", async () => {
     const harness = buildStubHarness(undefined);
     const result = await runEvalRound(buildBaseCtx(harness), buildBaseInput());

@@ -96,6 +96,10 @@ describe('runRenderCheck isolation (#592)', () => {
       expect(result.ok).toBe(true);
       expect(result.stats.actionsChecked).toBe(1);
       expect(result.issues.filter((i) => i.outcome === 'failed')).toHaveLength(0);
+      // ggui#1299: every isolated check records the host load around it.
+      const load = result.stats.hostLoad;
+      expect(load?.cores).toBeGreaterThanOrEqual(1);
+      expect(Number.isFinite(load?.start) && Number.isFinite(load?.end)).toBe(true);
     } finally {
       clearInterval(poller);
     }
@@ -118,14 +122,26 @@ describe('runRenderCheck isolation (#592)', () => {
 describe('mapSandboxResultToCheckResult', () => {
   const t0 = 0;
 
-  it('maps timeout to a FAILED issue (component fault)', () => {
+  // ggui#1299: the bound is wall-clock, and a contended host crosses it on an
+  // ordinary card. A timeout is the check not finishing — never a verdict on
+  // the component, so no issue at all, and it carries its elapsed ms.
+  it('maps timeout to INCOMPLETE — no issue, the elapsed ms and the bound carried (ggui#1299)', () => {
     const result = mapSandboxResultToCheckResult(
-      sandboxResult({ outcome: 'timeout', exitCode: null }),
+      sandboxResult({ outcome: 'timeout', exitCode: null, durationMs: 30_412 }),
       t0,
     );
     expect(result.ok).toBe(false);
+    expect(result.issues).toEqual([]);
+    expect(result.incomplete).toEqual({ kind: 'timeout', elapsedMs: 30_412, boundMs: 30_000 });
+  });
+
+  it('still maps output overflow to a FAILED issue — its volume does not depend on host load', () => {
+    const result = mapSandboxResultToCheckResult(
+      sandboxResult({ outcome: 'overflow-stdout', exitCode: null }),
+      t0,
+    );
     expect(result.issues[0]?.outcome).toBe('failed');
-    expect(result.issues[0]?.reason).toContain('timed out');
+    expect(result.incomplete).toBeUndefined();
   });
 
   it('maps spawn-error to an UNVERIFIED issue (harness fault)', () => {

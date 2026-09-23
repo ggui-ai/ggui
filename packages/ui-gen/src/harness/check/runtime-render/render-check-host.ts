@@ -11,12 +11,23 @@
  * `unverified`, and nothing throws):
  *
  *   - worker exit 0 + parseable verdict → the verdict, verbatim.
- *   - timeout                    → `failed` (runaway component: the
- *     in-process check has no comparable wall-clock bound, the
- *     subprocess finally gives us one).
- *   - spawn-error / overflow / non-zero exit / unparseable stdout
+ *   - timeout                    → `incomplete` (ggui#1299): the check
+ *     did not finish, which is NOT a verdict on the component. The bound
+ *     is wall-clock, and on a contended host an ordinary component
+ *     crosses it; mapping it to `failed` reported crashes that never
+ *     happened. It carries its elapsed ms, and the host load (below)
+ *     says how busy the host was. React's own runaway guards ("Too many
+ *     re-renders", "Maximum update depth exceeded") throw, so they still
+ *     reach `render-no-throw` as `failed`; what now reads `incomplete`
+ *     is a check that ran out of wall-clock time, whatever the cause.
+ *   - overflow                   → `failed` (a pathological logging or
+ *     error loop; output volume does not depend on host load).
+ *   - spawn-error / non-zero exit / unparseable stdout
  *                                → `unverified` (the harness could not
  *     run the check; never blame the component for our plumbing).
+ *
+ * Every isolated check records the host's 1-minute load average at its
+ * start and end, and the CPUs available, on `stats.hostLoad`.
  *
  * Spawn resolution copies the proven `src/tools/render-check.ts`
  * pattern: prefer the built `dist/.../render-check-worker.js`; in
@@ -29,9 +40,11 @@
  */
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { availableParallelism, loadavg } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runSandboxed } from '@ggui-ai/sandbox';
 import type { SandboxResult } from '@ggui-ai/sandbox';
+import type { ProbeHostLoad } from '../../../evaluation/types-public.js';
 import type { RenderCheckResult, RunRenderCheckInput } from './render-check.js';
 
 /**
@@ -121,10 +134,12 @@ export function mapSandboxResultToCheckResult(
   t0: number,
 ): RenderCheckResult {
   if (result.outcome === 'timeout') {
-    return failed(
-      `render check timed out after ${CHECK_TIMEOUT_MS}ms in the isolated worker (likely infinite loop or runaway effect in the component).`,
-      t0,
-    );
+    return {
+      ok: false,
+      issues: [],
+      incomplete: { kind: 'timeout', elapsedMs: result.durationMs, boundMs: CHECK_TIMEOUT_MS },
+      stats: { actionsChecked: 0, streamsChecked: 0, renderMs: Date.now() - t0 },
+    };
   }
   if (result.outcome === 'overflow-stdout' || result.outcome === 'overflow-stderr') {
     return failed(
@@ -184,6 +199,7 @@ export async function runRenderCheckViaWorker(
     return unverified(err instanceof Error ? err.message : String(err), t0);
   }
 
+  const loadAtStart = loadavg()[0] ?? 0;
   const result = await runSandboxed({
     command: spawn.command,
     args: spawn.args,
@@ -197,5 +213,11 @@ export async function runRenderCheckViaWorker(
     env: { NODE_ENV: process.env.NODE_ENV ?? 'production' },
   });
 
-  return mapSandboxResultToCheckResult(result, t0);
+  const hostLoad: ProbeHostLoad = {
+    start: loadAtStart,
+    end: loadavg()[0] ?? 0,
+    cores: availableParallelism(),
+  };
+  const mapped = mapSandboxResultToCheckResult(result, t0);
+  return { ...mapped, stats: { ...mapped.stats, hostLoad } };
 }
