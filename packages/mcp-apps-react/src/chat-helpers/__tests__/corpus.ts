@@ -9,7 +9,7 @@
  * places in this package allowed to import @silverprotocol/* — and even
  * here, only to validate STIMULUS. Assertions live in ggui's terms.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,11 +28,26 @@ const FIXTURES = join(
 );
 const CACHE = join(FIXTURES, '.cache');
 
-export function loadLeg(scenario: string, framework: string) {
-  const read = (kind: string): unknown =>
-    JSON.parse(
-      readFileSync(join(CACHE, scenario, `${framework}.${kind}.json`), 'utf8'),
+/**
+ * Read one cached leg file, or fail NAMING THE FIX. The cache is gitignored
+ * and fetched, so a fresh worktree has none; a bare ENOENT reads like a
+ * pre-existing red and gets waved through (#1298).
+ */
+function readCached(scenario: string, framework: string, kind: string): unknown {
+  const file = `${scenario}/${framework}.${kind}.json`;
+  const path = join(CACHE, file);
+  if (!existsSync(path)) {
+    throw new Error(
+      `silverprotocol fixture cache is missing ${file} (under ${CACHE}). The cache is gitignored ` +
+        'and pinned by fixtures.lock.json: run `node oss/e2e/fixtures/silverprotocol/fetch-fixtures.mjs` ' +
+        'from the repo root (with a valid cache it is a no-network no-op).',
     );
+  }
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+export function loadLeg(scenario: string, framework: string) {
+  const read = (kind: string): unknown => readCached(scenario, framework, kind);
   return {
     native: read('native') as unknown[],
     agjson: read('agjson') as unknown[],
@@ -50,10 +65,7 @@ export function loadLeg(scenario: string, framework: string) {
  * (FIXTURES.md §Layer B + the transcript-contract gate).
  */
 export function loadLayerBLeg(scenario: string, framework: string) {
-  const read = (kind: string): unknown =>
-    JSON.parse(
-      readFileSync(join(CACHE, scenario, `${framework}.${kind}.json`), 'utf8'),
-    );
+  const read = (kind: string): unknown => readCached(scenario, framework, kind);
   return {
     native: read('native') as unknown[],
     provenance: read('provenance') as Record<string, unknown>,
