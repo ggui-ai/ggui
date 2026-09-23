@@ -29,8 +29,16 @@
  *   carrying a `hostCapabilities` object (empty is legal).
  * - `H2-advertisement-truthful` — every advertised capability with a
  *   probe mapping answers its method family (advertised ⊆ answered).
- *   An advertises-but-refuses helper makes the runtime's confirmed-
- *   failure latch structurally unreachable — the worst dead-tap shape.
+ *   The map: `serverTools` → `tools/call`, and `serverResources` →
+ *   `resources/read` (ggui#1304). An advertises-but-refuses helper
+ *   makes the runtime's confirmed-failure latch structurally
+ *   unreachable — the worst dead-tap shape. For the read, an answer is
+ *   a `ReadResourceResult` (a `contents` array) or the server's own
+ *   error forwarded in-band; a refusal, a drop, or a re-shaped result
+ *   fails, because the declaration-level shell mounts only from what
+ *   that read returns (the read-plane door, SPEC §7.1). Only an
+ *   ADVERTISED `serverResources` is probed: a helper that does not
+ *   advertise it is never sent `resources/read` and stays legal.
  * - `H3-refusal-honest` — an unsupported request is refused IN-BAND
  *   with JSON-RPC `-32601` naming the method. Silent drops fail: a
  *   refusal is recoverable, a hang leaves the runtime guessing.
@@ -56,6 +64,8 @@
  * `read-only`** — a LEGAL grade, with the R cases skipped, never
  * failed. `nonconforming` means a dishonesty case failed.
  */
+
+import { renderLocatorUri } from '../resource-read-conformance/index.js';
 
 /** Minimal JSON-RPC request the driver sends through the port. */
 export interface JsonRpcRequest {
@@ -185,6 +195,20 @@ const DEFAULT_REFUSAL_TIMEOUT_MS = 2_000;
 const UNSUPPORTED_PROBE_METHOD = 'ggui-conformance/unsupported-probe';
 
 /**
+ * The `resources/read` probe's URI: a well-formed render locator naming
+ * a render that does not exist, built with the kit's own locator grammar
+ * (one owner, `resource-read-conformance`; the kit never compiles against
+ * live protocol types). It is a locator on purpose, so a helper that
+ * forwards only `ui://ggui/render/` reads still forwards it; a relaying
+ * helper then hands back the server's own classification of the miss,
+ * which is an answer (ggui#1304).
+ */
+const RESOURCE_READ_PROBE_URI = renderLocatorUri({
+  kind: 'render',
+  session: 'conformance-probe',
+});
+
+/**
  * Containment styles a helper may legitimately apply to its mount
  * surfaces: sizing, layout participation, overflow clipping, and
  * stacking — never color, border, radius, shadow, or typography.
@@ -265,6 +289,35 @@ function isRefusal(resp: JsonRpcResponse | null): boolean {
 }
 
 /**
+ * Why an advertised `serverResources` is untruthful, or `undefined`
+ * when the read was answered: a `ReadResourceResult` (a `contents`
+ * array) or any in-band error other than the `-32601` refusal (the
+ * server's classification of the probe's miss, forwarded).
+ */
+function readProbeUntruthful(probe: {
+  response: JsonRpcResponse | null;
+  timedOut: boolean;
+}): string | undefined {
+  const resp = probe.response;
+  if (resp === null) {
+    return `serverResources advertised but resources/read was ${probe.timedOut ? 'not answered within the probe timeout' : 'silently dropped'} — a declaration-level shell against a read-plane-only server waits out its bound and fails with READ_DOOR_FAILED`;
+  }
+  if (isRefusal(resp)) {
+    return 'serverResources advertised but resources/read was refused (-32601) — a declaration-level shell against a read-plane-only server has no other way to reach its envelope';
+  }
+  if (resp.error !== undefined) return undefined;
+  const result = resp.result;
+  const hasContents =
+    typeof result === 'object' &&
+    result !== null &&
+    'contents' in result &&
+    Array.isArray(result.contents);
+  return hasContents
+    ? undefined
+    : 'serverResources advertised and resources/read answered, but not with a ReadResourceResult (no contents array) — the read must be forwarded verbatim; a re-shaped answer leaves the shell nothing to mount';
+}
+
+/**
  * Run the catalog against one helper port. Pure protocol driving —
  * safe anywhere node runs; a helper vendor calls this from their CI.
  */
@@ -312,6 +365,8 @@ export async function runHostHelperConformance(
 
   const advertisesServerTools =
     capabilities !== undefined && capabilities['serverTools'] !== undefined;
+  const advertisesServerResources =
+    capabilities !== undefined && capabilities['serverResources'] !== undefined;
 
   // ── relay probe (feeds H2 and R1) ─────────────────────────────────
   // The probe's `payload: {}` is non-primitive DELIBERATELY: helpers
@@ -340,14 +395,51 @@ export async function runHostHelperConformance(
     relayProbe.response !== null && relayProbe.response.error === undefined;
   const relayRefused = isRefusal(relayProbe.response);
 
+  // ── read probe (feeds H2, ggui#1304) ─────────────────────────────
+  // Sent only when `serverResources` is advertised: the capability is
+  // the spec's "host can proxy resource reads to the MCP server", and a
+  // helper that does not claim it owes no answer.
+  const readProbe = advertisesServerResources
+    ? await sendWithTimeout(
+        port,
+        request('resources/read', { uri: RESOURCE_READ_PROBE_URI }),
+        refusalTimeoutMs,
+      )
+    : undefined;
+
   // ── H2: advertisement truthfulness ────────────────────────────────
+  // One verdict per advertised capability in the probe map; the grade
+  // fails on any untruthful one and names only those.
+  const probed: { readonly claim: string; readonly untruthful?: string }[] = [];
+  if (advertisesServerTools) {
+    probed.push(
+      relayAnswered
+        ? { claim: 'serverTools advertised and tools/call answered' }
+        : {
+            claim: 'serverTools',
+            untruthful:
+              'serverTools advertised but tools/call was refused or dropped — the runtime latch is structurally unreachable on this shape (ggui#596)',
+          },
+    );
+  }
+  if (readProbe !== undefined) {
+    const untruthful = readProbeUntruthful(readProbe);
+    probed.push(
+      untruthful === undefined
+        ? { claim: 'serverResources advertised and resources/read answered' }
+        : { claim: 'serverResources', untruthful },
+    );
+  }
+  const untruthfulClaims = probed.flatMap((p) =>
+    p.untruthful === undefined ? [] : [p.untruthful],
+  );
   if (capabilities === undefined) {
     cases.push({
       id: 'H2-advertisement-truthful',
       outcome: 'skip',
       detail: 'no capabilities captured (H1 failed)',
     });
-  } else if (!advertisesServerTools) {
+  } else if (probed.length === 0) {
     cases.push({
       id: 'H2-advertisement-truthful',
       outcome: 'pass',
@@ -355,17 +447,16 @@ export async function runHostHelperConformance(
     });
   } else {
     cases.push(
-      relayAnswered
+      untruthfulClaims.length === 0
         ? {
             id: 'H2-advertisement-truthful',
             outcome: 'pass',
-            detail: 'serverTools advertised and tools/call answered',
+            detail: probed.map((p) => p.claim).join('; '),
           }
         : {
             id: 'H2-advertisement-truthful',
             outcome: 'fail',
-            detail:
-              'serverTools advertised but tools/call was refused or dropped — the runtime latch is structurally unreachable on this shape (ggui#596)',
+            detail: untruthfulClaims.join('; '),
           },
     );
   }

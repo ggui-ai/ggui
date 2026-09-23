@@ -168,6 +168,153 @@ describe('host-helper conformance — grading semantics (ggui#600)', () => {
   });
 });
 
+/**
+ * A helper advertising `serverResources` (the MCP Apps capability
+ * "host can proxy resource reads to the MCP server"), with its
+ * `resources/read` answer injected per test. `serverTools` is not
+ * advertised and `tools/call` is honestly refused, so the tools tier
+ * stays `read-only` and every grade below is about the read door alone.
+ */
+function resourceReadingPort(
+  answerRead: (req: JsonRpcRequest) => JsonRpcResponse | null,
+  seen: JsonRpcRequest[] = [],
+): HostHelperPort {
+  return {
+    async send(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
+      seen.push(req);
+      if (req.method === 'ui/initialize') {
+        return response(req.id, initializeResult({ serverResources: {} }));
+      }
+      if (req.method === 'resources/read') return answerRead(req);
+      return errorResponse(
+        req.id,
+        METHOD_NOT_SUPPORTED,
+        `method_not_supported: ${req.method}`,
+      );
+    },
+  };
+}
+
+function readUri(req: JsonRpcRequest): string {
+  const params = req.params;
+  if (typeof params !== 'object' || params === null || !('uri' in params)) {
+    return '';
+  }
+  const { uri } = params;
+  return typeof uri === 'string' ? uri : '';
+}
+
+describe('H2 — serverResources is answered by resources/read (ggui#1304)', () => {
+  it('a helper that advertises serverResources and forwards the read passes H2', async () => {
+    const report = await runHostHelperConformance(
+      resourceReadingPort((req) =>
+        response(req.id, {
+          contents: [
+            { uri: readUri(req), mimeType: 'text/html;profile=mcp-app', text: '<html></html>' },
+          ],
+        }),
+      ),
+    );
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('pass');
+    expect(h2?.detail).toContain('resources/read');
+    // The read door does not decide the tools tier.
+    expect(report.tier).toBe('read-only');
+    expect(report.failures).toEqual([]);
+  });
+
+  it("forwarding the server's own typed error is an answer, not a refusal", async () => {
+    // The probe names a render that does not exist, so a relaying
+    // helper legitimately hands back the server's classification.
+    const report = await runHostHelperConformance(
+      resourceReadingPort((req) => ({
+        jsonrpc: '2.0',
+        id: req.id,
+        error: { code: -32002, message: 'Resource not found' },
+      })),
+    );
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('pass');
+  });
+
+  it('advertising serverResources and refusing resources/read FAILS H2, naming the method', async () => {
+    const report = await runHostHelperConformance(
+      resourceReadingPort((req) =>
+        errorResponse(req.id, METHOD_NOT_SUPPORTED, 'method_not_supported'),
+      ),
+    );
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('fail');
+    expect(h2?.detail).toContain('serverResources');
+    expect(h2?.detail).toContain('resources/read');
+    expect(report.tier).toBe('nonconforming');
+  });
+
+  it('advertising serverResources and dropping resources/read FAILS H2', async () => {
+    const report = await runHostHelperConformance(
+      resourceReadingPort(() => null),
+      { refusalTimeoutMs: 50 },
+    );
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('fail');
+    expect(h2?.detail).toContain('resources/read');
+  });
+
+  it('answering the read with something other than a ReadResourceResult FAILS H2 — a re-shaped read breaks the door', async () => {
+    const report = await runHostHelperConformance(
+      resourceReadingPort((req) => response(req.id, { html: '<html></html>' })),
+    );
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('fail');
+    expect(h2?.detail).toContain('contents');
+  });
+
+  it('the probe reads a render locator, so a helper that forwards only ui://ggui/render/ reads still forwards it', async () => {
+    const seen: JsonRpcRequest[] = [];
+    await runHostHelperConformance(
+      resourceReadingPort((req) => response(req.id, { contents: [] }), seen),
+    );
+    const reads = seen.filter((r) => r.method === 'resources/read');
+    expect(reads).toHaveLength(1);
+    expect(readUri(reads[0]!).startsWith('ui://ggui/render/')).toBe(true);
+  });
+
+  it('a helper that does not advertise serverResources is never sent resources/read and stays legal', async () => {
+    const seen: JsonRpcRequest[] = [];
+    const inner = relayingPort();
+    const report = await runHostHelperConformance({
+      async send(req) {
+        seen.push(req);
+        return inner.send(req);
+      },
+    });
+    expect(seen.some((r) => r.method === 'resources/read')).toBe(false);
+    expect(report.tier).toBe('relaying');
+    expect(report.failures).toEqual([]);
+  });
+
+  it('with both capabilities advertised, one untruthful probe fails H2 even when the other answers', async () => {
+    const report = await runHostHelperConformance({
+      async send(req) {
+        if (req.method === 'ui/initialize') {
+          return response(
+            req.id,
+            initializeResult({ serverTools: {}, serverResources: {} }),
+          );
+        }
+        if (req.method === 'tools/call') {
+          return response(req.id, { structuredContent: { ok: true } });
+        }
+        return errorResponse(req.id, METHOD_NOT_SUPPORTED, `method_not_supported: ${req.method}`);
+      },
+    });
+    const h2 = report.cases.find((c) => c.id === 'H2-advertisement-truthful');
+    expect(h2?.outcome).toBe('fail');
+    expect(h2?.detail).toContain('resources/read');
+    expect(h2?.detail).not.toContain('tools/call was refused');
+  });
+});
+
 describe('C-grades — zero ungoverned chrome (round-6 doctrine @6e15724a1)', () => {
   it('a containment-only chrome audit passes C1', async () => {
     const report = await runHostHelperConformance(relayingPort(), {
