@@ -64,6 +64,19 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-23',
     text:
+      'Report field added, not a method change (issue #404): from the first run on a runner image ' +
+      'carrying commit 3cccad688, a cell\'s generation record in the published report carries ' +
+      'sameExchangeBreak — the tool the model kept repeating and how many times — when the ' +
+      'harness\'s same-exchange guard ended the coding loop, and no such field otherwise. It is ' +
+      'reported, never scored: no bar, no page view, and scores and pass do not move. It says the ' +
+      'loop ended, not that nothing shipped — the loop falls back to an earlier successful build ' +
+      'when one exists — so a count reads it beside the cell\'s compiled size. Rows before that run ' +
+      'do not carry the field, and a missing field there is not a zero. Corpus, judge panel and ' +
+      'every arm unchanged; history is not rewritten.',
+  },
+  {
+    date: '2026-09-23',
+    text:
       'Evaluation-call cache accounting, announced (issue #1281): from the first run on a runner ' +
       'image carrying commit a6f3a7e5b, a cell\'s token counts and cost include the in-loop ' +
       'evaluation calls\' prompt-cache reads and writes. Before it, those calls contributed only ' +
