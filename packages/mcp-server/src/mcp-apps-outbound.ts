@@ -246,12 +246,42 @@ function showFailure(summary,detail,retry){
 function postNotification(method,params){
   try{window.parent.postMessage({jsonrpc:'2.0',method:method,params:params||{}},'*');}catch(e){}
 }
-function postRpc(method,params){
+function postRpc(method,params,timeoutMs){
   return new Promise(function(res,rej){
     var id=rpcId++;pending[id]={res:res,rej:rej};
+    // Optional bound (#1302): a host that never answers must not leave a
+    // wait with no end. The late answer, if any, finds no pending entry.
+    if(timeoutMs){
+      setTimeout(function(){
+        if(!pending[id])return;
+        delete pending[id];
+        rej(new Error('no answer to '+method+' within '+(timeoutMs/1000)+'s'));
+      },timeoutMs);
+    }
     try{window.parent.postMessage({jsonrpc:'2.0',id:id,method:method,params:params||{}},'*');}
     catch(e){delete pending[id];rej(e);}
   });
+}
+// The tool-result wait is BOUNDED (#1302), with the same bound and the same
+// reason the hosted runtime uses (iframe-runtime POSTMESSAGE_BOOT_TIMEOUT_MS,
+// MISSING_META_GGUI_BOOTSTRAP), so the two shells report one thing for a host
+// that never delivers. It is armed after ui/initialize and again after a door
+// miss, and disarmed by any tool result that carries an envelope or a locator.
+var TOOL_RESULT_WAIT_MS=30000;
+var READ_DOOR_WAIT_MS=30000;
+var toolResultTimer=null;
+function disarmToolResultWait(){
+  if(toolResultTimer!==null){clearTimeout(toolResultTimer);toolResultTimer=null;}
+}
+function armToolResultWait(cause){
+  disarmToolResultWait();
+  setOverlay('Waiting for tool result…');
+  toolResultTimer=setTimeout(function(){
+    toolResultTimer=null;
+    var msg='MISSING_META_GGUI_BOOTSTRAP: no tool result carrying a usable ai.ggui/render envelope arrived within '+(TOOL_RESULT_WAIT_MS/1000)+'s'+(cause?' (after '+cause+')':'')+'.';
+    showFailure('This view did not receive its content',msg,startInit);
+    postBootstrapFailed('MISSING_META_GGUI_BOOTSTRAP',msg);
+  },TOOL_RESULT_WAIT_MS);
 }
 function postBootstrapFailed(reason,message){
   // Surface every shell-layer bootstrap-failure path as a typed
@@ -345,7 +375,7 @@ window.addEventListener('message',function(ev){
     // Spec-compliant hosts: m.params IS the CallToolResult; _meta is
     // at the top level.
     var specMeta=readMetaFromCallToolResult(m.params);
-    if(specMeta){mountFromMeta(specMeta);return;}
+    if(specMeta){disarmToolResultWait();mountFromMeta(specMeta);return;}
     // Read-plane door (ggui#537). A server running the read-plane-only
     // posture publishes only the view's IDENTITY on the result -- the
     // ui:// locator on structuredContent.resourceUri and the spec
@@ -358,7 +388,7 @@ window.addEventListener('message',function(ev){
     // removed the /r/<shortCode> HTTP fallback with the bearer-by-
     // obscurity model; this door is the spec-canonical replacement.
     var locator=readLocatorFromCallToolResult(m.params);
-    if(locator){mountFromLocator(locator);return;}
+    if(locator){disarmToolResultWait();mountFromLocator(locator);return;}
   }
 });
 function readLocatorFromCallToolResult(params){
@@ -389,11 +419,12 @@ async function mountFromLocator(uri){
   if(mounted)return;
   setOverlay('Resolving view…');
   var res;
-  try{res=await postRpc('resources/read',{uri:uri});}
+  try{res=await postRpc('resources/read',{uri:uri},READ_DOOR_WAIT_MS);}
   catch(e){
-    var rmsg='READ_DOOR_FAILED: the host could not read '+uri+' -- '+(e&&e.message||JSON.stringify(e));
-    showFailure('This view could not be resolved',rmsg,function(){mountFromLocator(uri);});
-    postBootstrapFailed('MALFORMED_BOOTSTRAP',rmsg);
+    // A door miss (rejected, or no answer within the bound) is not a
+    // malformed bootstrap: fall through to the bounded tool-result wait, as
+    // the hosted runtime does, and keep the cause for the failure it may end in.
+    armToolResultWait('READ_DOOR_FAILED: the host could not read '+uri+' -- '+(e&&e.message||JSON.stringify(e)));
     return;
   }
   var c=res&&res.contents&&res.contents[0];
@@ -412,7 +443,9 @@ async function mountFromLocator(uri){
 function startInit(){
   setOverlay('Initializing…');
   var initTimer=setTimeout(function(){
-    showFailure('This view did not hear back from its host','INIT_TIMEOUT: no response to ui/initialize within 3s.',startInit);
+    var imsg='INIT_TIMEOUT: no response to ui/initialize within 3s.';
+    showFailure('This view did not hear back from its host',imsg,startInit);
+    postBootstrapFailed('UI_INITIALIZE_FAILED',imsg);
   },3000);
   postRpc('ui/initialize',{
     appCapabilities:{},
@@ -425,10 +458,12 @@ function startInit(){
     // the slice envelope in _meta — the spec-canonical delivery channel.
     // The ui/initialize result itself carries no slice meta (the
     // McpUiInitializeResult schema defines no such field).
-    setOverlay('Waiting for tool result…');
+    armToolResultWait(null);
   }).catch(function(e){
     clearTimeout(initTimer);
-    showFailure('This view could not connect to its host','ui/initialize failed: '+(e&&e.message||JSON.stringify(e)),startInit);
+    var fmsg='ui/initialize failed: '+(e&&e.message||JSON.stringify(e));
+    showFailure('This view could not connect to its host',fmsg,startInit);
+    postBootstrapFailed('UI_INITIALIZE_FAILED',fmsg);
   });
 }
 startInit();
