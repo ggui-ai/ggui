@@ -19,7 +19,7 @@ import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'node:module';
-import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
@@ -346,9 +346,12 @@ async function bundleForRendering(
   sampleProps: Record<string, unknown>,
   designSrc: string = resolve(resolveDesignPackageDir(), 'src'),
 ): Promise<string> {
-  // Write component + entry to temp files for esbuild
-  const tmpDir = resolve(tmpdir(), 'ggui-visual-eval-' + Date.now());
-  mkdirSync(tmpDir, { recursive: true });
+  // Write component + entry to temp files for esbuild — in a directory of THIS
+  // call's own. `mkdtempSync` is atomic and unique: a timestamp-named directory
+  // was shared by two bundles started in the same millisecond, so the first
+  // build read the second's component (a judge scoring the wrong generation)
+  // and the first's cleanup deleted the files the second was building.
+  const tmpDir = mkdtempSync(resolve(tmpdir(), 'ggui-visual-eval-'));
   const componentFile = resolve(tmpDir, 'component.tsx');
   const entryFile = resolve(tmpDir, 'entry.tsx');
 
@@ -439,8 +442,8 @@ try {
 
     return result.outputFiles[0]?.text ?? '';
   } finally {
-    try { unlinkSync(entryFile); } catch { /* cleanup */ }
-    try { unlinkSync(componentFile); } catch { /* cleanup */ }
+    // The whole per-call directory; `force` makes an already-absent path a no-op.
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
