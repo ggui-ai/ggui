@@ -38,7 +38,7 @@ A report of remote code execution, an authentication or authorization bypass, or
 Once a fix is available:
 
 1. We publish the fixed wave on npm
-2. We may publish a GitHub Security Advisory on `ggui-ai/ggui` crediting you, unless you ask to stay anonymous
+2. We may publish a GitHub Security Advisory on `ggui-ai/ggui` crediting you with your consent
 3. If we publish an advisory, we name it (and the CVE, if one is assigned) in that wave's release notes
 
 We appreciate responsible disclosure and credit reporters in advisories with their consent.
