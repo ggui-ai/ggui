@@ -416,7 +416,12 @@ export async function executeTool(
         changes: normalizedChanges,
       });
       if (!patchResult.ok) {
-        return { result: `FAILED: ${patchResult.error}`, error: true };
+        // ggui#1261: the engine refused the patch (overlap, line bounds, missing range) before
+        // anything applied. Say so in the log, and call it what it is — PATCH_INVALID, like every
+        // other structural refusal in this tool — so the turn is never counted as a self-check
+        // failure that did not run.
+        console.log(`[coding-agent] apply_changes: REJECTED | ${patchResult.error}`);
+        return { result: `PATCH_INVALID: ${patchResult.error}`, error: true };
       }
       const candidate = patchResult.sourceAfter ?? currentFile;
 

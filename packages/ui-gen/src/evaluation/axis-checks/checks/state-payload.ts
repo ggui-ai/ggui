@@ -79,16 +79,41 @@ function runStateCoversPayload(input: AxisCheckInput): EvalIssue[] {
   return issues;
 }
 
+/**
+ * Whether a `useState` initializer reads `props.<name>`: directly, or through a local bound from
+ * it (`const initial = normalize(props.initialProfile)` then `useState(initial.name)`, or a
+ * destructure `const { name } = props.initialProfile ?? {}` then `useState(name)`). The property
+ * this check guards is "form state is seeded from the prop", not a spelling: ggui#1261's Exp 011
+ * cell re-seeded correctly through a normalized local, was refused, and spent a turn restoring
+ * the literal form.
+ */
+function seedsFromProp(src: string, name: string): boolean {
+  const propRef = `props\\??\\.${name}\\b`;
+  const initializerReads = (ref: string): boolean =>
+    new RegExp(`useState(?:<[^>]*>)?\\s*\\([\\s\\S]{0,400}?${ref}`).test(src);
+  if (initializerReads(propRef)) return true;
+  const locals = new Set<string>();
+  for (const m of src.matchAll(new RegExp(`(?:const|let|var)\\s+(\\w+)\\s*(?::[^=]{1,80})?=\\s*[^;]{0,300}?${propRef}`, "g"))) {
+    const id = m[1];
+    if (id !== undefined) locals.add(id);
+  }
+  for (const m of src.matchAll(new RegExp(`(?:const|let|var)\\s*\\{([^}]{1,400})\\}\\s*=\\s*[^;]{0,300}?${propRef}`, "g"))) {
+    for (const part of (m[1] ?? "").split(",")) {
+      const id = part.split(":").pop()?.split("=")[0]?.trim();
+      if (id !== undefined && /^\w+$/.test(id)) locals.add(id);
+    }
+  }
+  for (const id of locals) if (initializerReads(`\\b${id}\\b`)) return true;
+  return false;
+}
+
 function runInitialValuesSeeded(input: AxisCheckInput): EvalIssue[] {
   if (input.compiledCode === null) return [];
   const src = input.sourceCode;
   const initialProps = getInitialValuePropNames(input.contract);
   const issues: EvalIssue[] = [];
   for (const name of initialProps) {
-    const re = new RegExp(
-      `useState(?:<[^>]*>)?\\s*\\([\\s\\S]{0,400}?props\\.${name}\\b`,
-    );
-    if (re.test(src)) continue;
+    if (seedsFromProp(src, name)) continue;
     issues.push(
       mkIssue(
         "state.payload.initial_values_seeded",
