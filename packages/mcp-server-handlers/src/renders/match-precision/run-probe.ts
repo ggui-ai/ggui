@@ -31,19 +31,41 @@
  *   (reads ANTHROPIC_API_KEY or ~/.ggui/credentials.json; ~30-40
  *   Haiku calls ≈ well under $1)
  *
- * Experiment: rnd/gen-ui/economy/experiments/001-match-precision-instrument.md
+ * Arms (env, all optional; unset = the historical run above):
+ *   - `RND_EMBEDDER_MODULE` — another embedding geometry (see
+ *     `resolveEmbedding`).
+ *   - `RND_JUDGE_MODULE` (+ `RND_JUDGE_LABEL`) — another rerank judge
+ *     behind the same `LLMCaller` seam (see `resolveJudge`).
+ *   - `RND_TOP_K`, `RND_MIN_COSINE`, `RND_JUDGE_THRESHOLD` — pass those
+ *     `matchBlueprint` options explicitly, so a run measures the judge
+ *     at a stated gate whatever default its checkout carries; `0` for
+ *     `RND_MIN_COSINE` opens the gate (every candidate reaches the
+ *     judge), for a floor sweep read offline from the recorded cosines.
+ *   - `RND_OUT_DIR` — output directory, resolved against the working
+ *     directory (default: the repo's `.tmp/rnd-economy-001`).
+ * Every run records, per pair and run, the top-K the matcher retrieved
+ * (id, cosine, cached intent) and each judge call (order, wall-clock,
+ * candidates shown, decision or error).
+ *
+ * Experiments: rnd/gen-ui/economy/experiments/001-match-precision-instrument.md
+ * (and 002, the second-judge arm)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve as pathResolve } from 'node:path';
+import { basename, join, resolve as pathResolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import {
   InMemoryBlueprintIndex,
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createLocalEmbeddingProvider } from '@ggui-ai/embedding-local';
-import type { LLMCaller } from '@ggui-ai/negotiator';
-import { anthropicProbeJudge } from '../probe-anthropic-judge.js';
-import { matchBlueprint } from '../blueprint-matcher.js';
+import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
+import { isRecord } from '@ggui-ai/protocol';
+import {
+  anthropicProbeJudge,
+  DEFAULT_PROBE_JUDGE_MODEL,
+} from '../probe-anthropic-judge.js';
+import { matchBlueprint, type MatchBlueprintOptions } from '../blueprint-matcher.js';
 import {
   findBlueprintsByEmbedding,
   registerBlueprint,
@@ -57,7 +79,10 @@ import { PAIRS, STUB_CODE, type MatchPair } from './pairs.js';
 
 const SCOPE = 'match-precision-probe';
 const DEBATED_RUNS = 3;
-const OUT_DIR = pathResolve(process.cwd(), '../../../.tmp/rnd-economy-001');
+const OUT_DIR = pathResolve(
+  process.cwd(),
+  process.env['RND_OUT_DIR'] ?? '../../../.tmp/rnd-economy-001',
+);
 
 // --- judge plumbing (same shape as cache-reuse-probe.ts) -------------------
 
@@ -73,6 +98,157 @@ function resolveKey(): string {
   return k;
 }
 
+/**
+ * The rerank judge for this run.
+ *
+ * Default: the Anthropic probe judge (the control every receipted
+ * number was taken under).
+ *
+ * Judge arm: set `RND_JUDGE_MODULE` to the absolute path of a module
+ * exporting `createJudge(): LLMCaller` and the SAME pairs run with that
+ * caller behind the rerank's `callStructured` seam — the matcher, the
+ * prompt and the candidate list are unchanged; only who answers moves.
+ * Loaded by path, like `RND_EMBEDDER_MODULE`, so this script names no
+ * provider. `RND_JUDGE_LABEL` names the arm in the summary and the
+ * output file (default: the module's file name).
+ */
+async function resolveJudge(): Promise<{ readonly llm: LLMCaller; readonly label: string }> {
+  const modulePath = process.env['RND_JUDGE_MODULE'];
+  if (modulePath === undefined || modulePath.length === 0) {
+    return { llm: anthropicProbeJudge(resolveKey()), label: DEFAULT_PROBE_JUDGE_MODEL };
+  }
+  const mod = (await import(pathResolve(modulePath))) as {
+    createJudge?: () => LLMCaller;
+  };
+  if (typeof mod.createJudge !== 'function') {
+    throw new Error(`RND_JUDGE_MODULE (${modulePath}) must export createJudge(): LLMCaller`);
+  }
+  const llm = mod.createJudge();
+  if (typeof llm.callStructured !== 'function') {
+    throw new Error(
+      `RND_JUDGE_MODULE (${modulePath}) createJudge() returned an LLMCaller without callStructured — the rerank judge answers through a forced tool`,
+    );
+  }
+  const label = process.env['RND_JUDGE_LABEL'];
+  return {
+    llm,
+    label:
+      label !== undefined && label.length > 0
+        ? label
+        : basename(modulePath).replace(/\.[cm]?[jt]s$/, ''),
+  };
+}
+
+/** A whole or fractional number from the env, range-checked; unset ⇒ undefined. */
+function numberFromEnv(
+  name: string,
+  lo: number,
+  hi: number,
+  whole: boolean,
+): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.length === 0) return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < lo || value > hi || (whole && !Number.isInteger(value))) {
+    throw new Error(`${name}=${raw} is not a ${whole ? 'whole ' : ''}number in [${lo}, ${hi}]`);
+  }
+  return value;
+}
+
+/** The `matchBlueprint` options this run passes — empty ⇒ production defaults. */
+function resolveMatchOptions(): MatchBlueprintOptions {
+  const topK = numberFromEnv('RND_TOP_K', 1, 200, true);
+  const minCosineForRerank = numberFromEnv('RND_MIN_COSINE', 0, 1, false);
+  const judgeThreshold = numberFromEnv('RND_JUDGE_THRESHOLD', 0, 1, false);
+  return {
+    ...(topK !== undefined ? { topK } : {}),
+    ...(minCosineForRerank !== undefined ? { minCosineForRerank } : {}),
+    ...(judgeThreshold !== undefined ? { judgeThreshold } : {}),
+  };
+}
+
+// --- judge-call recording --------------------------------------------------
+
+/** One call through the judge seam, as the probe saw it. */
+interface JudgeCallRecord {
+  /** 1-based order across the whole probe run — a judge module's own log joins on it. */
+  readonly seq: number;
+  readonly wallMs: number;
+  /** Candidates the judge was shown (the rerank message's own `CANDIDATES (n)` count). */
+  readonly shown: number | null;
+  readonly outcome:
+    | { readonly kind: 'decision'; readonly matchId: string | null; readonly confidence: number }
+    | { readonly kind: 'unparsed' }
+    | { readonly kind: 'threw'; readonly message: string };
+}
+
+function readDecision(raw: unknown): JudgeCallRecord['outcome'] {
+  if (!isRecord(raw)) return { kind: 'unparsed' };
+  const matchId = raw['matchId'];
+  const confidence = raw['confidence'];
+  return (typeof matchId === 'string' || matchId === null) && typeof confidence === 'number'
+    ? { kind: 'decision', matchId, confidence }
+    : { kind: 'unparsed' };
+}
+
+/**
+ * Wrap a judge so every structured call is recorded — the rerank itself
+ * reports no latency or raw decision to the matcher's trace, and turns a
+ * thrown call into a quiet no-match, so without this a failed call reads
+ * exactly like a declined one. Errors are recorded and re-thrown
+ * unchanged; the matcher still sees what the judge did.
+ */
+function recordingJudge(inner: LLMCaller): {
+  readonly llm: LLMCaller;
+  /** The calls since the last take, in order. */
+  take(): readonly JudgeCallRecord[];
+} {
+  const structured = inner.callStructured?.bind(inner);
+  if (structured === undefined) {
+    throw new Error('recordingJudge: the judge has no callStructured');
+  }
+  let seq = 0;
+  let pending: JudgeCallRecord[] = [];
+  const llm: LLMCaller = {
+    call: (system, user, maxTokens) => inner.call(system, user, maxTokens),
+    async callStructured<T>(
+      system: string,
+      user: string,
+      tool: ToolSchema,
+      maxTokens?: number,
+    ): Promise<T> {
+      seq += 1;
+      const n = seq;
+      const shownMatch = /^CANDIDATES \((\d+)\)$/m.exec(user);
+      const shown = shownMatch !== null ? Number(shownMatch[1]) : null;
+      const t0 = performance.now();
+      try {
+        const out = await structured<T>(system, user, tool, maxTokens);
+        pending.push({ seq: n, wallMs: performance.now() - t0, shown, outcome: readDecision(out) });
+        return out;
+      } catch (err) {
+        pending.push({
+          seq: n,
+          wallMs: performance.now() - t0,
+          shown,
+          outcome: { kind: 'threw', message: err instanceof Error ? err.message : String(err) },
+        });
+        throw err;
+      }
+    },
+  };
+  return {
+    llm,
+    take() {
+      const out = pending;
+      pending = [];
+      return out;
+    },
+  };
+}
+
+type RecordingJudge = ReturnType<typeof recordingJudge>;
+
 // --- result shapes ---------------------------------------------------------
 
 interface RunRecord {
@@ -82,6 +258,14 @@ interface RunRecord {
   readonly judgeConfidence: number | undefined;
   readonly judgeReason: string | undefined;
   readonly hitBlueprintIntent: string | undefined;
+  /** The top-K the matcher retrieved (its trace's candidate list), best first. */
+  readonly candidates: readonly {
+    readonly id: string;
+    readonly cosine: number;
+    readonly cachedIntent: string | undefined;
+  }[];
+  /** Every judge call this run made, in order (none when the gate or a key decided). */
+  readonly judgeCalls: readonly JudgeCallRecord[];
 }
 
 interface PairResult {
@@ -106,8 +290,9 @@ interface PairResult {
 
 async function runPair(
   pair: MatchPair,
-  llm: LLMCaller,
+  judge: RecordingJudge,
   embedding: BlueprintRegistryDeps['embedding'],
+  options: MatchBlueprintOptions,
 ): Promise<PairResult> {
   const registry: BlueprintRegistryDeps = {
     embedding,
@@ -135,11 +320,24 @@ async function runPair(
       },
     });
     try {
-      const result = await matchBlueprint({ registry, llm }, SCOPE, {
-        intent: pair.probe.intent,
-        ...(pair.probe.contract !== undefined ? { contract: pair.probe.contract } : {}),
-        ...(pair.probe.variance !== undefined ? { variance: pair.probe.variance } : {}),
-      });
+      const result = await matchBlueprint(
+        { registry, llm: judge.llm },
+        SCOPE,
+        {
+          intent: pair.probe.intent,
+          ...(pair.probe.contract !== undefined ? { contract: pair.probe.contract } : {}),
+          ...(pair.probe.variance !== undefined ? { variance: pair.probe.variance } : {}),
+        },
+        options,
+      );
+      const recorded = {
+        candidates: (traced?.candidates ?? []).map((c) => ({
+          id: c.key,
+          cosine: c.score,
+          cachedIntent: c.cachedIntent,
+        })),
+        judgeCalls: judge.take(),
+      };
       runs.push(
         result.strategy === 'no-match'
           ? {
@@ -149,6 +347,7 @@ async function runPair(
               judgeConfidence: traced?.judgeConfidence,
               judgeReason: result.judgeReason ?? traced?.judgeReason,
               hitBlueprintIntent: undefined,
+              ...recorded,
             }
           : {
               strategy: result.strategy,
@@ -157,6 +356,7 @@ async function runPair(
               judgeConfidence: result.judgeConfidence,
               judgeReason: traced?.judgeReason,
               hitBlueprintIntent: result.blueprint.intent,
+              ...recorded,
             },
       );
     } finally {
@@ -248,22 +448,33 @@ async function resolveEmbedding(): Promise<BlueprintRegistryDeps['embedding']> {
   return provider;
 }
 
+/** Nearest-rank percentile of a non-empty sample; null when empty. */
+function percentile(values: readonly number[], p: number): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
+}
+
 async function main(): Promise<void> {
-  const llm = anthropicProbeJudge(resolveKey());
+  const resolvedJudge = await resolveJudge();
+  const judge = recordingJudge(resolvedJudge.llm);
+  const options = resolveMatchOptions();
   const embedding = await resolveEmbedding();
-  process.stdout.write(`embedding provider: ${embedding.id}\n`);
+  process.stdout.write(
+    `embedding provider: ${embedding.id} · judge: ${resolvedJudge.label} · options: ${JSON.stringify(options)}\n`,
+  );
   mkdirSync(OUT_DIR, { recursive: true });
 
   const results: PairResult[] = [];
   for (const pair of PAIRS) {
-    const r = await runPair(pair, llm, embedding);
+    const r = await runPair(pair, judge, embedding, options);
     results.push(r);
     const first = r.runs[0];
     const flag = r.tier === 'debated' ? '~' : r.verdictOk && r.strategyOk && r.decisionOk ? 'ok' : 'XX';
     process.stdout.write(
       `[${flag}] ${r.id.padEnd(26)} ${String(first.strategy).padEnd(10)} ` +
         `decision=${String(first.decision).padEnd(24)} cos=${first.cosine?.toFixed(3) ?? '  -  '} ` +
-        `judge=${first.judgeConfidence?.toFixed(2) ?? '  - '}` +
+        `judge=${first.judgeConfidence?.toFixed(2) ?? '  - '} calls=${first.judgeCalls.length}` +
         (r.h1
           ? ` | h1 intent=${r.h1.intentOnlyTop1?.toFixed(3)} c+i=${r.h1.contractPlusIntentTop1?.toFixed(3)}`
           : '') +
@@ -302,12 +513,28 @@ async function main(): Promise<void> {
     return verdicts.every((v) => v === verdicts[0]);
   });
 
+  // Every judge call of the run (all runs of all pairs), for the
+  // paired latency read and the error count.
+  const calls = results.flatMap((r) => r.runs.flatMap((run) => run.judgeCalls));
+  const answeredMs = calls
+    .filter((c) => c.outcome.kind === 'decision')
+    .map((c) => c.wallMs);
+
+  const overridden = Object.keys(options).length > 0;
   const summary = {
     probedAt: new Date().toISOString(),
     pairs: results.length,
-    thresholds: 'production defaults (no overrides passed)',
+    thresholds: overridden ? options : 'production defaults (no overrides passed)',
     embedding: embedding.id,
-    judgeModel: 'claude-haiku-4-5',
+    judgeModel: resolvedJudge.label,
+    judgeCalls: {
+      total: calls.length,
+      decided: answeredMs.length,
+      unparsed: calls.filter((c) => c.outcome.kind === 'unparsed').length,
+      threw: calls.filter((c) => c.outcome.kind === 'threw').length,
+      p50Ms: percentile(answeredMs, 50),
+      p95Ms: percentile(answeredMs, 95),
+    },
     recall_shouldHit: pct(recallOk, shouldHit.length),
     falseHits_mustMiss: pct(falseHits.length, mustMiss.length),
     falseHitIds: falseHits.map((r) => r.id),
@@ -321,12 +548,25 @@ async function main(): Promise<void> {
 
   // The default (local) geometry keeps the historical `results.json`
   // name; alternate-embedder runs write alongside it so geometries can
-  // be diffed without clobbering the series.
+  // be diffed without clobbering the series. A judge arm or an explicit
+  // option set names all three axes, so every arm of a paired run gets
+  // its own file.
+  const embedderArm = (process.env['RND_EMBEDDER_MODULE'] ?? '').length > 0;
+  const judgeArm = (process.env['RND_JUDGE_MODULE'] ?? '').length > 0;
+  const optionTag = [
+    options.topK !== undefined ? `k${options.topK}` : '',
+    options.minCosineForRerank !== undefined ? `c${options.minCosineForRerank}` : '',
+    options.judgeThreshold !== undefined ? `j${options.judgeThreshold}` : '',
+  ].join('');
   const outName =
-    process.env['RND_EMBEDDER_MODULE'] === undefined ||
-    process.env['RND_EMBEDDER_MODULE'].length === 0
-      ? 'results.json'
-      : `results-${embedding.id}.json`;
+    judgeArm || overridden
+      ? `results-${[embedding.id, resolvedJudge.label, optionTag]
+          .filter((part) => part.length > 0)
+          .join('-')
+          .replace(/[^\w.-]+/g, '_')}.json`
+      : embedderArm
+        ? `results-${embedding.id}.json`
+        : 'results.json';
   writeFileSync(
     pathResolve(OUT_DIR, outName),
     JSON.stringify({ summary, results }, null, 2),

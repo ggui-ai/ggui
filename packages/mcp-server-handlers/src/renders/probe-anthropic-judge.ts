@@ -17,7 +17,7 @@ import type { LLMCaller, ToolSchema } from "@ggui-ai/negotiator";
 import { anthropicRejectsForcedToolChoice, isRecord } from "@ggui-ai/protocol";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_PROBE_JUDGE_MODEL = "claude-haiku-4-5";
+export const DEFAULT_PROBE_JUDGE_MODEL = "claude-haiku-4-5";
 const PROBE_ANSWER_BUDGET = 512;
 
 /**
