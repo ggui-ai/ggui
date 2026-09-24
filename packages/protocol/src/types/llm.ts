@@ -168,15 +168,16 @@ const MODEL_ROWS = defineModelRegistry({
   // ggui#1252 (2026-09-23) — strings quoted from platform.claude.com, fetched
   // 2026-09-23: pricing "Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok |
   // $0.20 / MTok | $20 / MTok"; model-deprecations "claude-opus-5-5 | Active |
-  // N/A | Not sooner than September 22, 2027". 1M context. Not in the lineup
-  // (founder ruling 2026-09-23: support ships, no default and no lineup move).
+  // N/A | Not sooner than September 22, 2027". 1M context. On the lineup since
+  // ggui#1266 (founder D2(a), 2026-09-23: "Yes, replace Opus 5 once it's live
+  // (Opus 5 marked legacy)").
   "anthropic/claude-opus-5-5": {
     id: "anthropic/claude-opus-5-5",
     provider: "anthropic",
     displayName: "Claude Opus 5.5",
     tier: "premium",
     state: "active",
-    lineup: false,
+    lineup: true,
     retireNotBefore: "2027-09-22",
     costs: {
       inputPer1M: 4.0,
@@ -190,13 +191,15 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
+  // Legacy since ggui#1266 (founder D2(a)): Opus 5.5 replaces it on the front
+  // page; it stays selectable under "See all models".
   "anthropic/claude-opus-5": {
     id: "anthropic/claude-opus-5",
     provider: "anthropic",
     displayName: "Claude Opus 5",
     tier: "premium",
-    state: "active",
-    lineup: true,
+    state: "legacy",
+    lineup: false,
     retireNotBefore: "2027-07-24",
     costs: {
       inputPer1M: 5.0,
@@ -442,13 +445,15 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1050000,
     supportsTools: true,
   },
+  // On the lineup since ggui#1266 (founder D2(c), 2026-09-23: "Put GPT-6 Luna
+  // on the front page once it's live") — the first OpenAI row on the front page.
   "openai/gpt-6-luna": {
     id: "openai/gpt-6-luna",
     provider: "openai",
     displayName: "GPT-6 Luna",
     tier: "fast",
     state: "active",
-    lineup: false,
+    lineup: true,
     costs: {
       inputPer1M: 0.1,
       outputPer1M: 0.5,

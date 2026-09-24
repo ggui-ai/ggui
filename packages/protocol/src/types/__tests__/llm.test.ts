@@ -62,12 +62,13 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
 });
 
 describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
-  it('the legacy set is exactly Fable 5, Opus 4.7, Opus 4.6, Sonnet 4.6 — everything else is active', () => {
+  it('the legacy set is exactly Fable 5, Opus 5, Opus 4.7, Opus 4.6, Sonnet 4.6 — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5)', () => {
     const legacy = ids().filter((id) => MODEL_REGISTRY[id].state === 'legacy');
     expect(legacy).toEqual([
       'anthropic/claude-fable-5',
       'anthropic/claude-opus-4-6',
       'anthropic/claude-opus-4-7',
+      'anthropic/claude-opus-5',
       'anthropic/claude-sonnet-4-6',
     ]);
     for (const id of ids()) {
@@ -75,18 +76,22 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
     }
   });
 
-  it('the lineup is exactly Fable 5.1 · Opus 5 · Sonnet 5 · Haiku 4.5, every member active, derived once', () => {
+  it('the lineup is exactly Fable 5.1 · Opus 5.5 · Sonnet 5 · Haiku 4.5 · GPT-6 Luna, every member active, derived once (ggui#1266: the first OpenAI row on the front page)', () => {
     const lineup = ids().filter((id) => MODEL_REGISTRY[id].lineup);
     expect(lineup).toEqual([
       'anthropic/claude-fable-5-1',
       'anthropic/claude-haiku-4-5',
-      'anthropic/claude-opus-5',
+      'anthropic/claude-opus-5-5',
       'anthropic/claude-sonnet-5',
+      'openai/gpt-6-luna',
     ]);
     expect([...MODEL_LINEUP].sort()).toEqual(lineup);
     for (const id of lineup) expect(MODEL_REGISTRY[id].state, id).toBe('active');
     expect(isLineupModel('anthropic/claude-fable-5-1')).toBe(true);
     expect(isLineupModel('anthropic/claude-fable-5')).toBe(false);
+    // ggui#1266 — Opus 5 is legacy (still selectable under "See all models"), off the front page.
+    expect(isLineupModel('anthropic/claude-opus-5')).toBe(false);
+    expect(MODEL_REGISTRY['anthropic/claude-opus-5'].state).toBe('legacy');
     expect(isLineupModel('openai/gpt-5.4')).toBe(false);
   });
 
@@ -152,7 +157,8 @@ describe('MODEL_REGISTRY — GPT-6 Astra row (ggui#977)', () => {
 
 /**
  * ggui#1252 (2026-09-23) — the support batch's three rows (ggui#1251: support
- * ships, no default moves, none joins the lineup). Every number is quoted on
+ * ships, no default moves, none joins the lineup — ggui#1266 later puts Opus
+ * 5.5 and GPT-6 Luna on the lineup, pinned above). Every number is quoted on
  * the issue from the vendor page, fetched 2026-09-23:
  *   - platform.claude.com pricing: "Claude Opus 5.5 | $4 / MTok | $5 / MTok |
  *     $8 / MTok | $0.20 / MTok | $20 / MTok", footnote 2 "0.05x the base
@@ -166,14 +172,14 @@ describe('MODEL_REGISTRY — GPT-6 Astra row (ggui#977)', () => {
  * different quantity.
  */
 describe('MODEL_REGISTRY — the new-models support rows (ggui#1252)', () => {
-  it('carries anthropic/claude-opus-5-5 exactly as quoted: 4 / 20, write 5, read 0.2 (0.05×), floor 2027-09-22, not lineup', () => {
+  it('carries anthropic/claude-opus-5-5 exactly as quoted: 4 / 20, write 5, read 0.2 (0.05×), floor 2027-09-22, on the lineup since ggui#1266', () => {
     expect(MODEL_REGISTRY['anthropic/claude-opus-5-5']).toEqual({
       id: 'anthropic/claude-opus-5-5',
       provider: 'anthropic',
       displayName: 'Claude Opus 5.5',
       tier: 'premium',
       state: 'active',
-      lineup: false,
+      lineup: true,
       retireNotBefore: '2027-09-22',
       costs: { inputPer1M: 4.0, outputPer1M: 20.0, cacheWritePer1M: 5.0, cacheReadPer1M: 0.2 },
       maxTokens: 1000000,
@@ -195,14 +201,14 @@ describe('MODEL_REGISTRY — the new-models support rows (ggui#1252)', () => {
     });
   });
 
-  it('carries openai/gpt-6-luna exactly as quoted: 0.1 / 0.5, write 0.125, read 0.01, 1,050,000 context, no floor, not lineup', () => {
+  it('carries openai/gpt-6-luna exactly as quoted: 0.1 / 0.5, write 0.125, read 0.01, 1,050,000 context, no floor, on the lineup since ggui#1266', () => {
     expect(MODEL_REGISTRY['openai/gpt-6-luna']).toEqual({
       id: 'openai/gpt-6-luna',
       provider: 'openai',
       displayName: 'GPT-6 Luna',
       tier: 'fast',
       state: 'active',
-      lineup: false,
+      lineup: true,
       costs: { inputPer1M: 0.1, outputPer1M: 0.5, cacheWritePer1M: 0.125, cacheReadPer1M: 0.01 },
       maxTokens: 1050000,
       supportsTools: true,
@@ -220,17 +226,10 @@ describe('MODEL_REGISTRY — the new-models support rows (ggui#1252)', () => {
       const ref = modelRefOfRoute(route);
       expect(ref).toBe(`${route.provider}/${route.model}`);
       if (!isModelId(ref)) throw new Error(`${ref} is not a registry ModelId`);
-      expect(isLineupModel(ref), ref).toBe(false);
     }
   });
 
-  it('no default moves in this slice: DEFAULT_MODEL is unchanged and none of the three is a lineup member', () => {
+  it('DEFAULT_MODEL is unchanged by the support batch and by the lineup flip (ggui#1266); the pool default is the deployment\'s, not this constant', () => {
     expect(DEFAULT_MODEL).toBe('anthropic/claude-haiku-4-5');
-    expect([...MODEL_LINEUP].sort()).toEqual([
-      'anthropic/claude-fable-5-1',
-      'anthropic/claude-haiku-4-5',
-      'anthropic/claude-opus-5',
-      'anthropic/claude-sonnet-5',
-    ]);
   });
 });
