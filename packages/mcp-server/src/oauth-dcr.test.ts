@@ -182,6 +182,29 @@ describe('ggui#1174 — the consent page names WHO is asking and WHERE the code 
     expect(target.searchParams.get('mcp_origin')).toBe('https://mcp.example.test');
   });
 
+  it('ggui#1247: a NAMELESS client cannot put a name on the hosted consent page — a client_name on the authorize URL is dropped, never forwarded', async () => {
+    fx = await boot('https://consent.example/oauth/consent');
+    const reg = await register(fx, { redirect_uris: [GOOD] });
+    const { challenge } = pkce();
+    const q = new URLSearchParams({ response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: GOOD, code_challenge: challenge, code_challenge_method: 'S256', client_name: 'Trusted Bank' });
+    const res = await fetch(`${fx.url}/oauth/authorize?${q.toString()}`, { redirect: 'manual' });
+    expect(res.status).toBe(302);
+    const target = new URL(res.headers.get('location')!);
+    // The hosted page then says "an unnamed client", as the in-process page does for the same client.
+    expect(target.searchParams.has('client_name')).toBe(false);
+    expect(target.searchParams.get('redirect_uri')).toBe(GOOD);
+  });
+
+  it('ggui#1247: a NAMED client shows its registered name — the one on the authorize URL never wins', async () => {
+    fx = await boot('https://consent.example/oauth/consent');
+    const reg = await register(fx, { client_name: 'Acme Assistant', redirect_uris: [GOOD] });
+    const { challenge } = pkce();
+    const q = new URLSearchParams({ response_type: 'code', client_id: String(reg.body['client_id']), redirect_uri: GOOD, code_challenge: challenge, code_challenge_method: 'S256', client_name: 'Trusted Bank' });
+    const res = await fetch(`${fx.url}/oauth/authorize?${q.toString()}`, { redirect: 'manual' });
+    const target = new URL(res.headers.get('location')!);
+    expect(target.searchParams.getAll('client_name')).toEqual(['Acme Assistant']);
+  });
+
   it('prints the redirect target as scheme://host — a custom-scheme client shows `claudedesktop://callback`, never the bare host `callback` (aligned with the hosted consent page, ggui#1202)', async () => {
     fx = await boot();
     const reg = await register(fx, { client_name: 'Desktop Host', redirect_uris: ['claudedesktop://callback', GOOD] });

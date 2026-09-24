@@ -644,6 +644,11 @@ export async function handleAuthorizeGet(
     // is DISPLAY-ONLY and self-asserted at DCR (a stranger chose it); the
     // honest signal on any consent page is `redirect_uri`, which the server
     // binds by exact match to what that client registered.
+    // ggui#1247 — only the REGISTERED name ever reaches the page. The loop
+    // above forwards every authorize-URL param, so drop any `client_name`
+    // it carried: a nameless client (the name is optional in RFC 7591) then
+    // shows as "an unnamed client", as the in-process page says.
+    target.searchParams.delete('client_name');
     if (v.client.clientName !== undefined) {
       target.searchParams.set('client_name', v.client.clientName);
     }
