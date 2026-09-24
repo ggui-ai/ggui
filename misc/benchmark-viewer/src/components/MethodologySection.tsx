@@ -62,6 +62,19 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-25',
+    text:
+      'Corpus change, announced (issue #1325): from the first run on a runner image carrying ' +
+      'commit 34039b416, the Chat Interface prompt asks for other participants\' messages on "a ' +
+      'muted neutral background" instead of naming surfaceVariant, a colour role the design ' +
+      'system retired on 2026-09-10 (issue #989). Between those dates every Chat Interface cell ' +
+      'was asked for a token that no longer existed: the generator\'s own token check rejected ' +
+      'it while the judges still asked for it, so that commit measured a contradiction in its ' +
+      'prompt as well as the model. Chat Interface results are not comparable across this ' +
+      'change; every other commit, the judge panel and every arm are unchanged; history is not ' +
+      'rewritten.',
+  },
+  {
     date: '2026-09-23',
     text:
       'Instrument change, announced (issue #1299): from the first run on a runner image carrying ' +
