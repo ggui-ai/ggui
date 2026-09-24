@@ -92,14 +92,14 @@ function stubLlm(
     async call() {
       throw new Error('text-mode not used');
     },
-    async callStructured<T>(
+    async callStructured(
       _system: string,
       user: string,
       _tool: ToolSchema,
-    ): Promise<T> {
+    ): Promise<unknown> {
       onUser?.(user);
       const value = typeof ret === 'function' ? await ret() : ret;
-      return value as unknown as T;
+      return value;
     },
   };
 }

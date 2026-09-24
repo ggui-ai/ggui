@@ -99,12 +99,12 @@ export function buildAnthropicLlmCaller(
         'negotiator dev caller: text-mode not exercised — use callStructured',
       );
     },
-    async callStructured<T>(
+    async callStructured(
       systemPrompt: string,
       userMessage: string,
       tool: ToolSchema,
       maxTokens?: number,
-    ): Promise<T> {
+    ): Promise<unknown> {
       // `temperature` deprecated on Haiku 4.5+ — Anthropic rejects with
       // HTTP 400. Residual stochasticity stays bounded via canonical-key
       // normalization downstream.
@@ -162,7 +162,7 @@ export function buildAnthropicLlmCaller(
           `anthropic: no tool_use block in response (stop_reason=${json.stop_reason ?? 'unknown'})`,
         );
       }
-      return toolBlock.input as T;
+      return toolBlock.input;
     },
   };
 }

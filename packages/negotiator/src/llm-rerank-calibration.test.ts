@@ -73,12 +73,12 @@ function buildAnthropicLlmCaller(apiKey: string): LLMCaller {
     async call(): Promise<string> {
       throw new Error('calibration: text-mode not used — use callStructured');
     },
-    async callStructured<T>(
+    async callStructured(
       systemPrompt: string,
       userMessage: string,
       tool: ToolSchema,
       maxTokens?: number,
-    ): Promise<T> {
+    ): Promise<unknown> {
       const body = {
         model: HAIKU_MODEL,
         max_tokens: maxTokens ?? 1024,
@@ -114,7 +114,7 @@ function buildAnthropicLlmCaller(apiKey: string): LLMCaller {
           `anthropic: no tool_use block in response (stop_reason=${json.stop_reason ?? 'unknown'})`,
         );
       }
-      return toolBlock.input as T;
+      return toolBlock.input;
     },
   };
 }

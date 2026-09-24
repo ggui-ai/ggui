@@ -211,19 +211,19 @@ function recordingJudge(inner: LLMCaller): {
   let pending: JudgeCallRecord[] = [];
   const llm: LLMCaller = {
     call: (system, user, maxTokens) => inner.call(system, user, maxTokens),
-    async callStructured<T>(
+    async callStructured(
       system: string,
       user: string,
       tool: ToolSchema,
       maxTokens?: number,
-    ): Promise<T> {
+    ): Promise<unknown> {
       seq += 1;
       const n = seq;
       const shownMatch = /^CANDIDATES \((\d+)\)$/m.exec(user);
       const shown = shownMatch !== null ? Number(shownMatch[1]) : null;
       const t0 = performance.now();
       try {
-        const out = await structured<T>(system, user, tool, maxTokens);
+        const out = await structured(system, user, tool, maxTokens);
         pending.push({ seq: n, wallMs: performance.now() - t0, shown, outcome: readDecision(out) });
         return out;
       } catch (err) {

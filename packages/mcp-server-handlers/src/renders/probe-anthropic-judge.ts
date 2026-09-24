@@ -36,7 +36,7 @@ export function anthropicProbeJudge(
     async call(): Promise<string> {
       throw new Error("probe judge: text mode unused — the probes use callStructured");
     },
-    async callStructured<T>(system: string, user: string, tool: ToolSchema): Promise<T> {
+    async callStructured(system: string, user: string, tool: ToolSchema): Promise<unknown> {
       const refusesForcedTool = anthropicRejectsForcedToolChoice(model);
       const res = await fetch(ANTHROPIC_MESSAGES_URL, {
         method: "POST",
@@ -88,7 +88,7 @@ export function anthropicProbeJudge(
           `anthropic: no "${tool.name}" tool_use block in the response (stop_reason=${stopReason})`
         );
       }
-      return block["input"] as T;
+      return block["input"];
     },
   };
 }

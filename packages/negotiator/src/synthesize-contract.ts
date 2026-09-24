@@ -634,7 +634,7 @@ async function callSynthesizeTool(
   user: string,
 ): Promise<unknown> {
   if (typeof llm.callStructured === 'function') {
-    return llm.callStructured<SynthesizeToolInput>(
+    return llm.callStructured(
       system,
       user,
       SYNTHESIZE_TOOL,

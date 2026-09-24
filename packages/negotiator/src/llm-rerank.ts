@@ -153,6 +153,7 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
+/** The rerank tool's input once {@link parseToolInput} has validated it. */
 interface RerankToolInput {
   matchId: string | null;
   confidence: number;
@@ -169,7 +170,7 @@ function clampConfidence(value: unknown): number {
 function parseToolInput(
   raw: unknown,
   candidateIds: ReadonlySet<string>,
-): { matchId: string | null; confidence: number; reason: string } {
+): RerankToolInput {
   if (raw === null || typeof raw !== 'object') {
     return { matchId: null, confidence: 0, reason: 'parse-failed: non-object tool input' };
   }
@@ -241,7 +242,7 @@ export async function rerankCandidates(
 
   let toolInput: unknown;
   try {
-    toolInput = await deps.llm.callStructured<RerankToolInput>(
+    toolInput = await deps.llm.callStructured(
       RERANK_SYSTEM_PROMPT,
       userMessage,
       RERANK_TOOL,

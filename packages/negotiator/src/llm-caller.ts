@@ -24,9 +24,10 @@
  *   model text. Implementations MUST NOT inject tool-use blocks when
  *   the caller didn't request them — the text path is used as a
  *   regex-JSON fallback.
- * - `callStructured?<T>(...)` is OPTIONAL. When present, it MUST
- *   return the input of the supplied `ToolSchema`'s tool, parsed as
- *   `T`, or THROW — never return anything else. It forces the tool
+ * - `callStructured?(...)` is OPTIONAL. When present, it MUST
+ *   return the input of the supplied `ToolSchema`'s tool, as the model
+ *   produced it (`unknown`: the caller parses it; ggui#1317), or THROW —
+ *   never return anything else. It forces the tool
  *   where the model allows that; a model that refuses a forced tool
  *   (the always-thinking family) is asked for it without forcing, so
  *   the call can end with no tool input, and that ending is a throw.
@@ -67,12 +68,12 @@ export interface LLMCaller {
    * this method — consumers detect absence and fall back to regex JSON
    * extraction on the text path.
    */
-  callStructured?<T>(
+  callStructured?(
     systemPrompt: string,
     userMessage: string,
     tool: ToolSchema,
     maxTokens?: number,
-  ): Promise<T>;
+  ): Promise<unknown>;
 }
 
 /**

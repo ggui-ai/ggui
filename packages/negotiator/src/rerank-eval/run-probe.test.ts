@@ -17,11 +17,11 @@ function oracleStubLlm(): LLMCaller {
     async call() {
       throw new Error('text-mode not used');
     },
-    async callStructured<T>(
+    async callStructured(
       _systemPrompt: string,
       userMessage: string,
       _tool: ToolSchema,
-    ): Promise<T> {
+    ): Promise<unknown> {
       // The harness builds userMessage with `id: <pair.id>` for the
       // current request — but actually the message has ids for the
       // CANDIDATES, not the pair. We need to identify the pair some
@@ -37,7 +37,7 @@ function oracleStubLlm(): LLMCaller {
         confidence: pair.goldMatchId === null ? 0.1 : 0.95,
         reason: 'oracle stub — returns gold',
       };
-      return result as unknown as T;
+      return result;
     },
   };
 }
@@ -53,11 +53,11 @@ function topCosineStubLlm(): LLMCaller {
     async call() {
       throw new Error('text-mode not used');
     },
-    async callStructured<T>(
+    async callStructured(
       _systemPrompt: string,
       userMessage: string,
       _tool: ToolSchema,
-    ): Promise<T> {
+    ): Promise<unknown> {
       // Parse out the candidate ids in order; the eval pairs already
       // sort by descending cosine, so id[0] is top-cosine.
       const ids = [...userMessage.matchAll(/^ {2}id: ([^\n]+)/gm)].map(
@@ -68,7 +68,7 @@ function topCosineStubLlm(): LLMCaller {
         confidence: 0.9,
         reason: 'top-cosine stub — always picks first',
       };
-      return result as unknown as T;
+      return result;
     },
   };
 }
@@ -98,11 +98,11 @@ describe('runProbe harness', () => {
       async call() {
         return '';
       },
-      async callStructured<T>(
+      async callStructured(
         _system: string,
         userMessage: string,
         _tool: ToolSchema,
-      ): Promise<T> {
+      ): Promise<unknown> {
         const intentMatch = userMessage.match(/intent: ([^\n]+)/);
         const intent = intentMatch?.[1] ?? '';
         const pair = EVAL_PAIRS.find((p) => p.query.intent === intent);
@@ -110,7 +110,7 @@ describe('runProbe harness', () => {
           matchId: pair?.goldMatchId ?? null,
           confidence: 0.5,
           reason: 'low conf',
-        } as unknown as T;
+        };
       },
     };
     const report = await runProbe({ llm: lowConfStub });

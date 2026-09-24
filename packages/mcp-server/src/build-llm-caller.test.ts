@@ -84,11 +84,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
       { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk-ant-test' },
     );
-    const result = await caller.callStructured!<{
-      matchId: string;
-      confidence: number;
-      reason: string;
-    }>(
+    const result = await caller.callStructured!(
       'system',
       'user',
       {

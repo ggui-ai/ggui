@@ -30,14 +30,14 @@ function captureLlm(
     async call() {
       throw new Error('text-mode not used by synthesizer');
     },
-    async callStructured<T>(
+    async callStructured(
       system: string,
       user: string,
       tool: ToolSchema,
-    ): Promise<T> {
+    ): Promise<unknown> {
       capture?.push({ system, user, tool });
       const value = typeof ret === 'function' ? await (ret as () => unknown)() : ret;
-      return value as T;
+      return value;
     },
   };
 }

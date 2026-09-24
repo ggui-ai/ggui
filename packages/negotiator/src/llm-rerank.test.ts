@@ -20,13 +20,13 @@ function stubLlm(
     async call() {
       throw new Error('text-mode not used by rerank');
     },
-    async callStructured<T>(
+    async callStructured(
       _systemPrompt: string,
       _userMessage: string,
       _tool: ToolSchema,
-    ): Promise<T> {
+    ): Promise<unknown> {
       const value = typeof ret === 'function' ? await ret() : ret;
-      return value as T;
+      return value;
     },
   };
 }

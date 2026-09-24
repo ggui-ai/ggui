@@ -117,12 +117,12 @@ export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKey
     },
   };
   if (isAnthropic) {
-    caller.callStructured = async <T>(
+    caller.callStructured = async (
       systemPrompt: string,
       userMessage: string,
       tool: { name: string; description: string; input_schema: Record<string, unknown> },
       maxTokens?: number
-    ): Promise<T> => {
+    ): Promise<unknown> => {
       const result = await anthropicCallStructured({
         apiKey: providerKey.key,
         model: selection.model,
@@ -131,7 +131,7 @@ export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKey
         tool,
         maxTokens,
       });
-      return result as T;
+      return result;
     };
   }
   return caller;
