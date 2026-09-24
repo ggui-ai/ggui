@@ -35,10 +35,10 @@ A report of remote code execution, an authentication or authorization bypass, or
 
 ## Disclosure
 
-Once a fix is available we will:
+Once a fix is available:
 
-1. Publish the fixed wave on npm
-2. Publish a GitHub Security Advisory on `ggui-ai/ggui` crediting you, unless you ask to stay anonymous
-3. Name the advisory (and the CVE, if one is assigned) in that wave's release notes
+1. We publish the fixed wave on npm
+2. We may publish a GitHub Security Advisory on `ggui-ai/ggui` crediting you, unless you ask to stay anonymous
+3. If we publish an advisory, we name it (and the CVE, if one is assigned) in that wave's release notes
 
 We appreciate responsible disclosure and credit reporters in advisories with their consent.
