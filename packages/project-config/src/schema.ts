@@ -606,10 +606,12 @@ export const GguiJsonV1 = z.strictObject({
    *   (e.g. `color-scheme: dark` injection).
    *
    * Absent (`theme: undefined`) means use the shipped default tokens
-   * from `@ggui-ai/design` (currently `lightTheme`).
+   * from `@ggui-ai/design` (currently `lightTheme`). `null` means the
+   * same locally; `ggui deploy` sends it as the clear for the app's
+   * stored theme.
    */
-  theme: ThemeConfigSchema.optional().describe(
-    'Theme selection. Accepts a preset id (string), a `{ preset, mode, overrides }` object, or a `{ file, mode }` object pointing at a DTCG JSON tokens file. Absent = shipped default tokens.',
+  theme: ThemeConfigSchema.nullable().optional().describe(
+    'Theme selection. Accepts a preset id (string), a `{ preset, mode, overrides }` object, or a `{ file, mode }` object pointing at a DTCG JSON tokens file. Absent = shipped default tokens. `null` = the same locally, and on `ggui deploy` it clears the app\'s stored theme.',
   ),
 
   /** Agent-runtime config for `ggui serve`. Absent means the
@@ -634,12 +636,14 @@ export const GguiJsonV1 = z.strictObject({
    * Connect-Claude card flow handles per-user keys at request time).
    * Present → use this route verbatim; the schema-side
    * `parseAnyLlmRoute` transform yields a typed `LlmRoute` so the
-   * dispatch path never sees a string.
+   * dispatch path never sees a string. `null` means the same as absent
+   * locally; `ggui deploy` sends it as the clear for the app's stored
+   * generation route.
    *
    * See {@link GenerationConfig}.
    */
-  generation: GenerationSchema.optional().describe(
-    'Explicit UI-generation LLM route. `model` accepts canonical `provider:model` or LiteLLM `provider/model` form. Absent + a boot key resolves → server hard-fails (operator must pick a model). Absent + no key → graceful per-user fallback flow.',
+  generation: GenerationSchema.nullable().optional().describe(
+    'Explicit UI-generation LLM route. `model` accepts canonical `provider:model` or LiteLLM `provider/model` form. Absent + a boot key resolves → server hard-fails (operator must pick a model). Absent + no key → graceful per-user fallback flow. `null` = the same as absent locally, and on `ggui deploy` it clears the app\'s stored generation route.',
   ),
 
   /**

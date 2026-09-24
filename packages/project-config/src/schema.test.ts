@@ -91,6 +91,11 @@ describe('ggui.json schema — capability declarations', () => {
     expect(parsed.theme).toBe('./theme.json');
   });
 
+  it('accepts `theme: null` — the deploy\'s explicit clear (#1164)', () => {
+    const parsed = parseGguiJson({ ...MINIMAL_V1, theme: null });
+    expect(parsed.theme).toBeNull();
+  });
+
   it('accepts a list of mcpMount module specifiers', () => {
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
@@ -700,6 +705,11 @@ describe('ggui.json schema — generation block (slice #43 — explicit LlmRoute
   it('absent generation is fine (the CLI hard-fails downstream when a key resolves)', () => {
     const parsed = parseGguiJson(MINIMAL_V1);
     expect(parsed.generation).toBeUndefined();
+  });
+
+  it('accepts `generation: null` — the deploy\'s explicit clear (#1164)', () => {
+    const parsed = parseGguiJson({ ...MINIMAL_V1, generation: null });
+    expect(parsed.generation).toBeNull();
   });
 
   // 2b M0.1 — generation.keySource

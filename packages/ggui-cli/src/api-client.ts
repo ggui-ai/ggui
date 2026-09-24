@@ -344,8 +344,10 @@ export async function patchAppConfig(
   patch: {
     gadgets?: GadgetDescriptor[];
     publicEnv?: Record<string, string>;
-    generation?: { model: string; keySource: 'own' | 'managed' };
-    theme?: AppTheme;
+    /** `null` clears the app's stored generation route. */
+    generation?: { model: string; keySource: 'own' | 'managed' } | null;
+    /** `null` clears the app's stored theme. */
+    theme?: AppTheme | null;
   },
 ): Promise<PatchAppConfigResponse> {
   return withAuthRetry(

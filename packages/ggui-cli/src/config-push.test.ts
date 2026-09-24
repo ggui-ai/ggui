@@ -25,8 +25,8 @@ const mocks = vi.hoisted(() => ({
       patch: {
         gadgets?: GadgetDescriptor[];
         publicEnv?: Record<string, string>;
-        generation?: { model: string; keySource: 'own' | 'managed' };
-        theme?: AppTheme;
+        generation?: { model: string; keySource: 'own' | 'managed' } | null;
+        theme?: AppTheme | null;
       },
     ) => Promise<{ updated: string[] }>
   >(),
@@ -160,6 +160,10 @@ describe('readGenerationFromGguiJson', () => {
     expect(readGenerationFromGguiJson({ app: {} })).toBeUndefined();
   });
 
+  it('returns null for an explicit `generation: null` — the deploy clears the stored route', () => {
+    expect(readGenerationFromGguiJson({ generation: null })).toBeNull();
+  });
+
   it('returns undefined when generation is present but model is absent', () => {
     expect(readGenerationFromGguiJson({ generation: {} })).toBeUndefined();
     expect(readGenerationFromGguiJson({ generation: { keySource: 'own' } })).toBeUndefined();
@@ -202,6 +206,16 @@ describe('readThemeFromGguiJson', () => {
 
   it('returns undefined when the theme field is absent', async () => {
     expect(await readThemeFromGguiJson(projectRoot, makeThemeManifest(undefined))).toBeUndefined();
+  });
+
+  it('returns null for an explicit `theme: null` — the deploy clears the stored theme', async () => {
+    expect(await readThemeFromGguiJson(projectRoot, { ...makeThemeManifest(undefined), theme: null })).toBeNull();
+  });
+
+  it('returns null for `theme: null` without parsing the rest of the manifest', async () => {
+    // A clear needs nothing else from the file: a manifest the theme path
+    // could not parse still clears.
+    expect(await readThemeFromGguiJson(projectRoot, { theme: null })).toBeNull();
   });
 
   it('resolves a preset theme to the v2 projection: both overlays, attestation, label, default mode', async () => {
@@ -350,6 +364,41 @@ describe('runConfigPushStep', () => {
     expect(patch.publicEnv).toBeUndefined();
 
     stdoutSpy.mockRestore();
+  });
+
+  it('sends `theme: null` and `generation: null` for explicit nulls and says so', async () => {
+    const gguiJson = {
+      app: { gadgets: [structuredClone(STDLIB_GADGETS[0]!)] },
+      theme: null,
+      generation: null,
+    };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.theme).toBeNull();
+    expect(patch.generation).toBeNull();
+    const out = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(out).toContain('theme cleared');
+    expect(out).toContain('generation cleared');
+  });
+
+  it('sends neither theme nor generation when both are absent', async () => {
+    const gguiJson = { app: { gadgets: [structuredClone(STDLIB_GADGETS[0]!)] } };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect('theme' in patch).toBe(false);
+    expect('generation' in patch).toBe(false);
+    const out = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(out).not.toContain('cleared');
   });
 
   it('sends publicEnv when present and non-empty', async () => {

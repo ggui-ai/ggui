@@ -164,8 +164,10 @@ export function loadTheme(options: LoadThemeOptions): LoadThemeResult {
 
   const themeConfig = manifest.theme;
 
-  // ── Default path (no `theme` declared) ──────────────────────────
-  if (themeConfig === undefined) {
+  // ── Default path (no `theme` declared, or `null`) ───────────────
+  // `null` is the deploy's explicit clear (#1164); locally it means exactly
+  // what absent means: the shipped default tokens.
+  if (themeConfig === undefined || themeConfig === null) {
     return {
       ok: true,
       theme: {

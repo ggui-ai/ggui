@@ -92,6 +92,16 @@ describe('loadTheme — default path', () => {
     expect(result.theme.overlays.dark['--ggui-color-ground']).toBeDefined();
   });
 
+  it('treats `theme: null` exactly like absent — the shipped default (#1164)', () => {
+    const cleared = loadTheme({ projectRoot: tmp, manifest: makeGgui({ theme: null }) });
+    const absent = loadTheme({ projectRoot: tmp, manifest: makeGgui() });
+    expect(cleared.ok).toBe(true);
+    expect(absent.ok).toBe(true);
+    if (!cleared.ok || !absent.ok) return;
+    expect(cleared.theme.source).toBe('default');
+    expect(cleared.theme.overlays).toEqual(absent.theme.overlays);
+  });
+
   it('throws when projectRoot is not absolute', () => {
     expect(() =>
       loadTheme({ projectRoot: 'relative', manifest: makeGgui() }),

@@ -69,21 +69,22 @@ export function readPublicEnvFromGguiJson(gguiJson: unknown): Record<string, str
  * re-validates via `parseAnyLlmRoute` server-side; the CLI just forwards.
  *
  * Returns `{ model, keySource }` when `generation.model` is present.
+ * Returns `null` for an explicit `"generation": null` — the deploy clears
+ * the app's stored generation route (`generation: null` on the wire).
  * Returns `undefined` when the generation block is absent or has no model —
- * the deploy then leaves the app's generation untouched (an explicit
- * `generation: null` on the wire is the only clear; `ggui.json` has no null
- * form for the block, so this reader never emits one).
+ * the deploy then leaves the app's generation untouched.
  * Throws when the generation block is structurally invalid.
  */
 export function readGenerationFromGguiJson(
   gguiJson: unknown,
-): { model: string; keySource: 'own' | 'managed' } | undefined {
+): { model: string; keySource: 'own' | 'managed' } | null | undefined {
   const schema = z.object({
     generation: z
       .object({
         model: z.string().min(1).optional(),
         keySource: z.enum(['own', 'managed']).optional(),
       })
+      .nullable()
       .optional(),
   });
   const result = schema.safeParse(gguiJson);
@@ -92,32 +93,13 @@ export function readGenerationFromGguiJson(
       `ggui.json: generation is invalid — ${result.error.issues[0]?.message ?? 'malformed generation block'}`,
     );
   }
+  if (result.data.generation === null) return null;
   const model = result.data.generation?.model;
   if (!model) return undefined;
   return { model, keySource: result.data.generation?.keySource ?? 'managed' };
 }
 
 
-/**
- * Resolve the developer's local `ggui.json#theme` into a concrete,
- * injection-safe {@link AppTheme} ready to PATCH to the cloud.
- *
- * Returns `undefined` when no `theme` field is declared (deploy leaves the
- * app's theme untouched — an explicit `theme: null` on the wire is the only
- * clear, on every door; `ggui.json` has no null form for `theme`, so this
- * reader never emits one).
- *
- * When a theme IS declared we parse the FULL manifest (via `parseGguiJson`)
- * — `loadTheme` requires the typed `GguiJsonV1` shape and resolves relative
- * `theme.file` paths against `projectRoot`, so a partial slice will not do.
- *
- * Throws with a clear, local message when:
- *   - the manifest is structurally invalid (so deploy fails before the wire);
- *   - the theme cannot be loaded (e.g. an unregistered preset id);
- *   - the resolved overlay fails `appThemeSchema` — the SAME validator the
- *     backend enforces, so a deploy fails loud LOCALLY rather than with a
- *     confusing 422.
- */
 /** What `ggui.json#theme` resolves to for a deploy. */
 export interface ThemeRead {
   /** The projection the PATCH ships. */
@@ -131,16 +113,39 @@ export interface ThemeRead {
   readonly declaredFaceFamilies: readonly string[];
 }
 
+/**
+ * Resolve the developer's local `ggui.json#theme` into a concrete,
+ * injection-safe {@link AppTheme} ready to PATCH to the cloud.
+ *
+ * Returns `undefined` when no `theme` field is declared: the deploy leaves
+ * the app's theme untouched.
+ *
+ * Returns `null` for an explicit `"theme": null`: the deploy clears the
+ * app's stored theme (`theme: null` on the wire). A clear needs nothing else
+ * from the file, so the manifest is not parsed.
+ *
+ * When a theme IS declared we parse the FULL manifest (via `parseGguiJson`)
+ * — `loadTheme` requires the typed `GguiJsonV1` shape and resolves relative
+ * `theme.file` paths against `projectRoot`, so a partial slice will not do.
+ *
+ * Throws with a clear, local message when:
+ *   - the manifest is structurally invalid (so deploy fails before the wire);
+ *   - the theme cannot be loaded (e.g. an unregistered preset id);
+ *   - the resolved overlay fails `appThemeSchema` — the SAME validator the
+ *     backend enforces, so a deploy fails loud LOCALLY rather than with a
+ *     confusing 422.
+ */
 export async function readThemeFromGguiJson(
   projectRoot: string,
   gguiJson: unknown,
-): Promise<ThemeRead | undefined> {
+): Promise<ThemeRead | null | undefined> {
   // Cheap pre-check on the raw value: no `theme` field → nothing to push,
-  // and we avoid forcing a full-manifest parse on theme-less deploys.
+  // `null` → a clear; either way no full-manifest parse.
   const presence = z
     .object({ theme: z.unknown().optional() })
     .safeParse(gguiJson);
   if (!presence.success || presence.data.theme === undefined) return undefined;
+  if (presence.data.theme === null) return null;
 
   // A theme is declared — `loadTheme` needs the fully-typed manifest.
   let manifest;
@@ -266,8 +271,9 @@ export async function runConfigPushStep(
   }
 
   let publicEnv: Record<string, string>;
-  let generation: { model: string; keySource: 'own' | 'managed' } | undefined;
-  let theme: AppTheme | undefined;
+  // `null` = the deploy's explicit clear; `undefined` = leave it untouched.
+  let generation: { model: string; keySource: 'own' | 'managed' } | null | undefined;
+  let theme: AppTheme | null | undefined;
 
   const gadgetsRead = readGadgetsFromGguiJson(readResult.value);
   if (!gadgetsRead.ok) {
@@ -298,8 +304,8 @@ export async function runConfigPushStep(
     // `loadTheme` resolves relative `theme.file` paths against the directory
     // containing ggui.json — the same root convention `storage.*.path` uses.
     const read = await readThemeFromGguiJson(dirname(gguiJsonPath), readResult.value);
-    theme = read?.theme;
-    if (read !== undefined && read.declaredFaceFamilies.length > 0) {
+    theme = read === null ? null : read?.theme;
+    if (read != null && read.declaredFaceFamilies.length > 0) {
       // ggui#990/#1093: the PATCH now CARRIES the faces (`AppTheme.fonts`)
       // and a server on this release inlines them in the shell it serves.
       // A deployment still running an older release cannot — so the deploy
@@ -346,8 +352,18 @@ export async function runConfigPushStep(
     Object.keys(publicEnv).length > 0
       ? ` + ${Object.keys(publicEnv).length} publicEnv key(s)`
       : '';
-  const generationLine = generation !== undefined ? ` + model ${generation.model}` : '';
-  const themeLine = theme !== undefined ? ` + theme ${theme.name ?? theme.mode}` : '';
+  const generationLine =
+    generation === null
+      ? ' + generation cleared'
+      : generation !== undefined
+        ? ` + model ${generation.model}`
+        : '';
+  const themeLine =
+    theme === null
+      ? ' + theme cleared'
+      : theme !== undefined
+        ? ` + theme ${theme.name ?? theme.mode}`
+        : '';
   process.stdout.write(`  ${gadgetLine}${envLine}${generationLine}${themeLine}\n`);
 
   return 0;
