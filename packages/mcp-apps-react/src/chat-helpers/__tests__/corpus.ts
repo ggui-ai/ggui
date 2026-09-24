@@ -9,6 +9,7 @@
  * places in this package allowed to import @silverprotocol/* — and even
  * here, only to validate STIMULUS. Assertions live in ggui's terms.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,34 @@ const FIXTURES = join(
 const CACHE = join(FIXTURES, '.cache');
 
 /**
+ * Fail NAMING THE FIX when the cache does not match fixtures.lock.json: stale
+ * from an earlier pin, or corrupt. A stale cache used to surface as a bare
+ * assertion diff on whichever golden had moved (the 0.7.0 corpus re-pin,
+ * #1298). The check is fetch-fixtures' own `--verify-only`, so the checksum
+ * has ONE implementation; `verify` is injectable for the loader's tests.
+ */
+export function assertCacheMatchesLock(
+  verify: () => void = () => {
+    execFileSync(process.execPath, [join(FIXTURES, 'fetch-fixtures.mjs'), '--verify-only'], {
+      stdio: 'pipe',
+    });
+  },
+): void {
+  try {
+    verify();
+  } catch (err) {
+    const detail = err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err);
+    throw new Error(
+      'silverprotocol fixture cache does not match fixtures.lock.json (stale from an earlier pin, or ' +
+        'corrupt): run `node oss/e2e/fixtures/silverprotocol/fetch-fixtures.mjs` from the repo root. ' +
+        `(${detail})`,
+    );
+  }
+}
+
+let cacheMatchesLock = false;
+
+/**
  * Read one cached leg file, or fail NAMING THE FIX. The cache is gitignored
  * and fetched, so a fresh worktree has none; a bare ENOENT reads like a
  * pre-existing red and gets waved through (#1298).
@@ -42,6 +71,10 @@ function readCached(scenario: string, framework: string, kind: string): unknown 
         'and pinned by fixtures.lock.json: run `node oss/e2e/fixtures/silverprotocol/fetch-fixtures.mjs` ' +
         'from the repo root (with a valid cache it is a no-network no-op).',
     );
+  }
+  if (!cacheMatchesLock) {
+    assertCacheMatchesLock();
+    cacheMatchesLock = true;
   }
   return JSON.parse(readFileSync(path, 'utf8'));
 }

@@ -5,7 +5,7 @@
  * pre-existing red (#1298, ggui-main's catch on the 0.6.5 bump).
  */
 import { describe, expect, it } from 'vitest';
-import { loadLeg } from './corpus.js';
+import { assertCacheMatchesLock, loadLeg } from './corpus.js';
 
 describe('corpus loader — a missing fixture names its fix', () => {
   it('a leg absent from the cache throws naming fetch-fixtures.mjs and the missing file', () => {
@@ -17,5 +17,19 @@ describe('corpus loader — a missing fixture names its fix', () => {
     const leg = loadLeg('app-spec-structured-result', 'openai');
     expect(leg.native.length).toBeGreaterThan(0);
     expect(leg.agjson.length).toBeGreaterThan(0);
+  });
+});
+
+describe('corpus loader — a stale cache names its fix (#1298 re-pin)', () => {
+  it('a cache that does not match fixtures.lock.json throws naming fetch-fixtures.mjs', () => {
+    const stale = (): void => {
+      throw new Error('checksum mismatch');
+    };
+    expect(() => assertCacheMatchesLock(stale)).toThrow(/does not match fixtures\.lock\.json/);
+    expect(() => assertCacheMatchesLock(stale)).toThrow(/fetch-fixtures\.mjs/);
+  });
+
+  it('the real check passes on the current cache (control: it does not block valid data)', () => {
+    expect(() => assertCacheMatchesLock()).not.toThrow();
   });
 });
