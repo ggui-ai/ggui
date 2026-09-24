@@ -310,6 +310,9 @@ describe('silverprotocol corpus — app-update-sonnet5/claude.agjson.json', () =
     'text.delta',
     'text.end',
     'message.end',
+    // Corpus cohort 0.7.0 (c0cb37c6, #1298): the Claude facet closes the turn
+    // at the result frame, after this vendor event, per AgJSON draft.4.
+    'ext.anthropic.result-meta',
     'turn.done',
   ];
 

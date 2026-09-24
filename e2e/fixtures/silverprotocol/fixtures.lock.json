@@ -1,8 +1,8 @@
 {
   "comment": "Pinned silverprotocol corpus consumption (#426 Spec A). Refresh = edit this file in a reviewed PR, never silently. Contract: FIXTURES.md in the pinned tree — assert only its stable set. See docs/superpowers/specs/2026-08-07-cassette-contract-tier-design.md.",
   "repo": "silverprotocol/typescript-sdk",
-  "commit": "6d25529c7a3fa846698c6eb7d22033f7647cd5ce",
-  "cohort": "0.4.1",
+  "commit": "c0cb37c6cdd39a090ebaa4c39ccd8991bbd9b84f",
+  "cohort": "0.7.0",
   "corpusPath": "packages/e2e/corpus",
   "legs": [
     {
@@ -28,5 +28,5 @@
     }
   ],
   "files": ["native", "agjson", "provenance"],
-  "sha256": "e5a66393524492850fcd0eaea787fa15d4e736ea4751844706e2e34911040c55"
+  "sha256": "254e87390c01c7402d4476653a796de6c93e2d438f036fbeaa9bb80f00c6b426"
 }
