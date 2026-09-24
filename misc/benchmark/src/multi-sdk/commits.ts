@@ -550,7 +550,7 @@ Message list:
 - Scrollable area showing messages (initial from props, new ones from stream)
 - Each message shows: sender name, message text, formatted timestamp
 - Messages from the current user (where sender matches props.currentUser) align right with primary color background
-- Messages from others align left with surfaceVariant background
+- Messages from others align left with a muted neutral background
 - Group consecutive messages from same sender
 
 Input area at the bottom:
