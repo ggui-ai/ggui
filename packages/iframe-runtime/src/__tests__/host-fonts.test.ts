@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const posted: unknown[] = [];
 vi.mock('../observability', () => ({ postObservabilityToParent: (e: unknown) => posted.push(e) }));
-import { installHostFonts, HOST_FONTS_STYLE_ID, __resetHostFontsForTest } from '../host-fonts';
+import { installHostFonts, trackThemeFontFaces, HOST_FONTS_STYLE_ID, __resetHostFontsForTest } from '../host-fonts';
 
 // ggui#987 §5 — the card installs the faces it is handed, replace-on-payload, and reports a blocked src once.
 describe('installHostFonts', () => {
@@ -52,5 +52,50 @@ describe('installHostFonts', () => {
     Object.assign(ours, { effectiveDirective: 'font-src', blockedURI: 'https://cdn.acme.example/acme.woff2' });
     document.dispatchEvent(ours);
     expect(posted).toEqual([{ kind: 'font-face-blocked', family: 'Acme', host: 'cdn.acme.example' }]);
+  });
+});
+
+// ggui#1147 — the runtime composes the stored theme's faces into the chrome CSS
+// (`#ggui-theme-vars`), including mid-session. `font-src` is fixed at mount, so a
+// face on a NEW origin can be blocked, and the reporter used to know only the
+// host-announced faces (and was armed only by `installHostFonts`).
+describe('trackThemeFontFaces', () => {
+  beforeEach(() => {
+    __resetHostFontsForTest();
+    posted.length = 0;
+  });
+
+  const violation = (blockedURI: string): Event => {
+    const ev = new Event('securitypolicyviolation');
+    Object.assign(ev, { effectiveDirective: 'font-src', blockedURI });
+    return ev;
+  };
+
+  it('a CSP-blocked THEME face is reported as font-face-blocked, with no host fonts installed', () => {
+    trackThemeFontFaces(
+      ":root { --ggui-x: 1; }\n@font-face { font-family: 'Brand Serif'; src: url('https://fonts.newcdn.example/brand.woff2'); }",
+    );
+    document.dispatchEvent(violation('https://fonts.newcdn.example'));
+    expect(posted).toEqual([{ kind: 'font-face-blocked', family: 'Brand Serif', host: 'fonts.newcdn.example' }]);
+  });
+
+  it('host faces and theme faces are both matched', () => {
+    installHostFonts("@font-face { font-family: 'Host Sans'; src: url('https://host.example/h.woff2'); }");
+    trackThemeFontFaces("@font-face { font-family: 'Brand Serif'; src: url('https://fonts.newcdn.example/b.woff2'); }");
+    document.dispatchEvent(violation('https://host.example'));
+    document.dispatchEvent(violation('https://fonts.newcdn.example'));
+    expect(posted).toEqual([
+      { kind: 'font-face-blocked', family: 'Host Sans', host: 'host.example' },
+      { kind: 'font-face-blocked', family: 'Brand Serif', host: 'fonts.newcdn.example' },
+    ]);
+  });
+
+  it('a later theme composition replaces the tracked theme faces', () => {
+    trackThemeFontFaces("@font-face { font-family: 'Old'; src: url('https://old.example/o.woff2'); }");
+    trackThemeFontFaces("@font-face { font-family: 'New'; src: url('https://new.example/n.woff2'); }");
+    document.dispatchEvent(violation('https://old.example'));
+    expect(posted).toEqual([]);
+    document.dispatchEvent(violation('https://new.example'));
+    expect(posted).toEqual([{ kind: 'font-face-blocked', family: 'New', host: 'new.example' }]);
   });
 });

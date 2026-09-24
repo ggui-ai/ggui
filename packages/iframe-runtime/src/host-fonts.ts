@@ -15,6 +15,12 @@
  * cross-origin — hence the (family, host) key); the card reports it to
  * the embedding host ONCE per (family, host) as `font-face-blocked`,
  * so the operator sees the allowlist gap instead of a silent fallback.
+ *
+ * The stored theme's own faces are composed into the chrome CSS
+ * (`#ggui-theme-vars`) by the renderer, mid-session included, while
+ * `font-src` is fixed at mount. A face on an origin the mount did not
+ * admit is blocked, so those faces are tracked too
+ * ({@link trackThemeFontFaces}) and reported the same way (ggui#1147).
  */
 import { postObservabilityToParent } from './observability.js';
 
@@ -30,6 +36,8 @@ interface InstalledFace {
 }
 
 let installedFaces: readonly InstalledFace[] = [];
+/** The stored theme's faces, from the composed chrome CSS (ggui#1147). */
+let themeFaces: readonly InstalledFace[] = [];
 const reported = new Set<string>();
 let violationListener: ((ev: Event) => void) | null = null;
 
@@ -81,7 +89,7 @@ function onViolation(ev: Event): void {
   // ours only when it names one of OUR `src`s — another stylesheet's
   // font on the same host is not this face's failure.
   const carriesPath = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/./i.test(v.blockedURI);
-  for (const face of installedFaces) {
+  for (const face of [...installedFaces, ...themeFaces]) {
     if (carriesPath ? !face.srcs.has(v.blockedURI) : !face.hosts.has(host)) continue;
     const key = `${face.family}\u0000${host}`;
     if (reported.has(key)) continue;
@@ -105,10 +113,25 @@ export function installHostFonts(fontsCss: string): void {
   }
   if (el.textContent !== fontsCss) el.textContent = fontsCss;
   installedFaces = parseFaces(fontsCss);
-  if (violationListener === null) {
-    violationListener = onViolation;
-    document.addEventListener('securitypolicyviolation', violationListener);
-  }
+  armViolationReporter();
+}
+
+function armViolationReporter(): void {
+  if (violationListener !== null) return;
+  violationListener = onViolation;
+  document.addEventListener('securitypolicyviolation', violationListener);
+}
+
+/**
+ * Track the stored theme's `@font-face` rules from the composed chrome CSS
+ * the renderer writes into `#ggui-theme-vars`, replacing the previous set.
+ * Arms the reporter on its own, so a session whose host announces no fonts
+ * still reports a blocked theme face (ggui#1147).
+ */
+export function trackThemeFontFaces(themeCss: string): void {
+  if (typeof document === 'undefined') return;
+  themeFaces = parseFaces(themeCss);
+  armViolationReporter();
 }
 
 /** @internal — test isolation: drop the style, the report ledger, and the listener. */
@@ -116,6 +139,7 @@ export function __resetHostFontsForTest(): void {
   if (typeof document === 'undefined') return;
   document.getElementById(HOST_FONTS_STYLE_ID)?.remove();
   installedFaces = [];
+  themeFaces = [];
   reported.clear();
   if (violationListener !== null) {
     document.removeEventListener('securitypolicyviolation', violationListener);

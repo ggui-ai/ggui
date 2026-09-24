@@ -43,6 +43,7 @@ import { createRoot } from 'react-dom/client';
 // silently diverge here.
 import type { AppTheme } from '@ggui-ai/protocol/wire';
 import { postObservabilityToParent } from './observability.js';
+import { trackThemeFontFaces } from './host-fonts.js';
 import {
   stripMarkers,
   rewriteImports,
@@ -591,6 +592,10 @@ export async function mountReactRoot(
       if (styleEl.textContent !== rootCss) {
         styleEl.textContent = rootCss;
       }
+      // ggui#1147: the chrome CSS carries the stored theme's @font-face rules,
+      // mid-session included, while `font-src` was fixed at mount. Track them so
+      // a blocked face is reported as `font-face-blocked`, not lost silently.
+      trackThemeFontFaces(rootCss);
     }
 
     const componentElement =
