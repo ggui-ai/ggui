@@ -185,8 +185,14 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // reading cap inside it (`<Container maxWidth="sm">`, inert at bubble width). Fixture A is chat×mobile,
 // so its layout lines are the whole delta; fixture B (fullscreen×desktop) and the free arm are
 // untouched, and both prompt digests are byte-stable. Constrained boilerplate d030418c… → 2afbb69a….
+// Re-recorded 2026-09-24 for ggui#1083 cut 2 part B (the expanded frame's `bleed` word): FRAME_SIZING
+// — a HARD section both arms share — gains one fullscreen bullet (the frame keeps a 16 px inset; a band
+// meant to run edge to edge takes `bleed`), so BOTH prompt digests move together; the boilerplate
+// digests are byte-stable. Constrained 040bd0a3… → 66a883d8…, free 5f8196ac… → 0b94b4ff…. INVARIANT 1
+// holds: the shared bullet is byte-identical in both arms. The `bleed` prop reaches the primitives
+// reference through the generated docs, not the prompt.
 export const CONSTRAINED_PROMPT_SHA256 =
-  '040bd0a3c00768e73df375b706e9b436537bf5efacbcd7b4f1ef5fd8b1a6a4ca';
+  '66a883d89b5fddd0f5539a73c5af77ae6bf694c77d0a914e4b084705bcd2babc';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '2afbb69a4c07a98058d56148718068bf00be63b172a609397da20d78bc12cb22';
 
@@ -234,8 +240,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // scaffold moved, so the other three digests are byte-stable. Free prompt 71ef8019… → 5f8196ac…
 // (read against a REBUILT design dist — the pin reads the manifest from the built package, so a
 // stale dist reports no move where CI's fresh build does).
+// Re-recorded 2026-09-24 for ggui#1083 cut 2 part B — see the constrained note (the shared FRAME_SIZING bullet).
 export const FREE_PROMPT_SHA256 =
-  '5f8196acd8223abd3004e6a010a0da3e8e62d88fafb75bf3d5f6e44138db8429';
+  '0b94b4ff4d93734c82cbc5b51fcfb4f59493c79efa39e14f7f886ac12684c515';
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
