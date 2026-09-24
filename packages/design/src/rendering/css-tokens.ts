@@ -350,6 +350,14 @@ export const EXPANDED_FRAME = { outerRadiusVar: '--ggui-shape-radius-xl', insetP
 export const EXPANDED_FRAME_INNER_RADIUS = `max(0px, calc(var(${EXPANDED_FRAME.outerRadiusVar}) - ${EXPANDED_FRAME.insetPx}px))`;
 
 /**
+ * What bleeds inside the expanded frame (ggui#1083 cut 2, the founder's pick (B)): an element
+ * that declares `bleed`, and a `surface="hero"` band that is the fill surface's FIRST child.
+ * The second is inferred from position, not declared by the card, so a card served before
+ * `bleed` existed keeps its opening hero band edge to edge.
+ */
+export const EXPANDED_FRAME_BLEEDS = '[data-ggui-bleed], [data-ggui-surface="hero"]:first-child';
+
+/**
  * The `fit: 'fill'` rule (ggui#1041): inside a host's canvas the mounted root
  * is the whole surface — no border, radius or shadow of its own, and it fills
  * the page. The host's panel carries the one chrome.
@@ -381,18 +389,22 @@ export function fillFitRule(scopeClass: string): string {
     `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} min-height: 0 !important; flex: 1 1 auto; }`,
     // ggui#1083 — the expanded frame's rhythm, inside the fill surface F (the root, or the one
     // surface a wrapper root hands the fill to): F keeps the frame's inset; a first-level surface
-    // is concentric with the panel's corner; a `bleed` element takes the inset back and meets the
-    // panel's edge (square, since the panel's own corner clips it).
+    // is concentric with the panel's corner; a bleeding element takes the inset back and meets
+    // the panel's edge (square, since the panel's own corner clips it). An element bleeds when it
+    // says so (`bleed`), or when it is a hero band that OPENS the card (`EXPANDED_FRAME_BLEEDS`):
+    // the founder's pick (B), so the cards already served, which open on a hero band and cannot
+    // learn a new prop, keep that band edge to edge.
     ...fillSurfaces(s).map((f) => `${f} { padding: ${inset} !important; }`),
     ...fillSurfaces(s).map(
-      (f) => `${f} > [data-ggui-surface]:not([data-ggui-bleed]) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
+      (f) =>
+        `${f} > [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     ),
     ...fillSurfaces(s).map(
       (f) =>
-        `${f} > [data-ggui-bleed] { margin-left: -${inset} !important; margin-right: -${inset} !important; border-radius: 0 !important; }`,
+        `${f} > :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -${inset} !important; margin-right: -${inset} !important; border-radius: 0 !important; }`,
     ),
-    ...fillSurfaces(s).map((f) => `${f} > [data-ggui-bleed]:first-child { margin-top: -${inset} !important; }`),
-    ...fillSurfaces(s).map((f) => `${f} > [data-ggui-bleed]:last-child { margin-bottom: -${inset} !important; }`),
+    ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -${inset} !important; }`),
+    ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -${inset} !important; }`),
   ].join('\n');
 }
 

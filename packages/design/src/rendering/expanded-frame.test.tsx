@@ -8,7 +8,9 @@
  *   ggui-side mirror of that guard.
  * - The frame's INSET is guuey's `panelGap` default, 16 px — a cross-fleet constant.
  * - The fill rule gives the fill surface that inset, makes a first-level surface concentric with
- *   the panel's corner, and lets a `bleed` element take the inset back. Only under `fit: 'fill'`.
+ *   the panel's corner, and lets a bleeding element take the inset back. Only under `fit: 'fill'`.
+ * - What bleeds (the founder's pick (B)): an element that declares `bleed`, and a `surface="hero"`
+ *   band that OPENS the card, so a card served before `bleed` existed keeps its band edge to edge.
  * - Card and Box mark themselves (`data-ggui-surface`, `data-ggui-bleed`) so the rule can see them.
  */
 import { readFileSync } from 'node:fs';
@@ -20,7 +22,13 @@ import { Box } from '../primitives/Box';
 import { Card } from '../primitives/Card';
 import { deriveThemeVariables } from '../themes/derive-theme-variables';
 import type { DtcgTheme } from '../themes/types';
-import { composeThemeCss, EXPANDED_FRAME, EXPANDED_FRAME_INNER_RADIUS, fillFitRule } from './css-tokens';
+import {
+  composeThemeCss,
+  EXPANDED_FRAME,
+  EXPANDED_FRAME_BLEEDS,
+  EXPANDED_FRAME_INNER_RADIUS,
+  fillFitRule,
+} from './css-tokens';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const stored: DtcgTheme = JSON.parse(
@@ -64,15 +72,16 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
     expect(rule).toContain('.s1 > :where(:not(style)) > :where(:only-child) { padding: 16px !important; }');
   });
 
-  it('a first-level surface takes the concentric radius; a bleed element takes the inset back and squares off', () => {
+  it('a first-level surface takes the concentric radius; a bleeding element takes the inset back and squares off', () => {
+    expect(EXPANDED_FRAME_BLEEDS).toBe('[data-ggui-bleed], [data-ggui-surface="hero"]:first-child');
     expect(rule).toContain(
-      `> [data-ggui-surface]:not([data-ggui-bleed]) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
+      `> [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     );
     expect(rule).toContain(
-      '> [data-ggui-bleed] { margin-left: -16px !important; margin-right: -16px !important; border-radius: 0 !important; }',
+      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -16px !important; margin-right: -16px !important; border-radius: 0 !important; }`,
     );
-    expect(rule).toContain('> [data-ggui-bleed]:first-child { margin-top: -16px !important; }');
-    expect(rule).toContain('> [data-ggui-bleed]:last-child { margin-bottom: -16px !important; }');
+    expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -16px !important; }`);
+    expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -16px !important; }`);
   });
 
   it('an inline (non-fill) composition carries none of it', () => {
@@ -80,6 +89,56 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
     expect(inline).not.toContain('data-ggui-bleed');
     expect(inline).not.toContain('data-ggui-surface');
     expect(composeThemeCss({ layer: 'tree', scopeClass: 's1', fit: 'fill' })).toContain('data-ggui-bleed');
+  });
+});
+
+describe("what bleeds, on a card's real markup (the founder's pick (B))", () => {
+  // jsdom evaluates the bleed selector itself; it does not evaluate the fill surface's `:has` /
+  // `:where` prefix (every element reads false there), so the prefix is pinned as text above and
+  // its behaviour is receipted on Chromium frames.
+  function children(card: string): Element[] {
+    document.body.innerHTML = `<div class="s1">${card}</div>`;
+    return [...document.querySelectorAll('.s1 > * > *')];
+  }
+  const bleeds = (el: Element) => el.matches(`:is(${EXPANDED_FRAME_BLEEDS})`);
+
+  it('an opening hero band bleeds without declaring it; a hero band further down does not', () => {
+    const kids = children(
+      renderToStaticMarkup(
+        <Card>
+          <Box surface="hero">opening band</Box>
+          <Card>first-level card</Card>
+          <Box surface="hero">a later hero block</Box>
+        </Card>,
+      ),
+    );
+    expect(kids.map(bleeds)).toEqual([true, false, false]);
+  });
+
+  it('an opening Card on the hero surface bleeds too: the rule reads the surface, not the primitive', () => {
+    const kids = children(
+      renderToStaticMarkup(
+        <Box surface="default">
+          <Card surface="hero">hero card</Card>
+          <Box>rest</Box>
+        </Box>,
+      ),
+    );
+    expect(kids.map(bleeds)).toEqual([true, false]);
+  });
+
+  it('an opening band on any other surface keeps the inset unless it declares bleed', () => {
+    const kids = children(
+      renderToStaticMarkup(
+        <Card>
+          <Box surface="accent">accent band</Box>
+          <Box surface="elevated" bleed>
+            declared band
+          </Box>
+        </Card>,
+      ),
+    );
+    expect(kids.map(bleeds)).toEqual([false, true]);
   });
 });
 

@@ -250,7 +250,7 @@ export const FRAME_SIZING = `## Sizing — the frame owns the height and the wid
 The host sizes the iframe; the component never sizes itself to the viewport. NEVER write \`100vh\` / \`100dvh\` / \`100svh\` (or an \`h-screen\` / \`min-h-screen\` class) as a height on any element:
 - An inline card takes its natural height. A content-sized frame is measured FROM the content, so a \`100vh\` root can never shrink and grows the frame on every re-measure.
 - Under fullscreen the frame already stretches your root to its full height. Centre inside it with flex (\`display: flex; flex-direction: column; justify-content: center\`), never with a viewport height.
-- Under fullscreen the frame also keeps a 16 px inset between your content and the panel's edge — leave it. A band that is MEANT to run edge to edge (a hero header band, a full-width strip of rows) takes \`bleed\` (\`<Box surface="hero" bleed>…</Box>\`); only such a band should, and \`bleed\` is ignored outside fullscreen.
+- Under fullscreen the frame also keeps a 16 px inset between your content and the panel's edge — leave it. A \`surface="hero"\` band that OPENS the card runs edge to edge on its own. Any other band that is MEANT to run edge to edge (a full-width strip of rows, a closing action bar) takes \`bleed\` (\`<Box surface="sunken" bleed>…</Box>\`); only such a band should, and \`bleed\` is ignored outside fullscreen.
 - To fill a parent that has a height use \`height: 100%\` or \`flex: 1\`; a viewport unit is only ever a \`max-height\` cap on a scroll region.
 
 The width works the same way, and the mistake is the mirror image: **your outermost element FILLS the frame; a width cap belongs INSIDE it, on the column that holds text.**

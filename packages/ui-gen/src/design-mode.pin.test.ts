@@ -191,8 +191,12 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // digests are byte-stable. Constrained 040bd0a3… → 66a883d8…, free 5f8196ac… → 0b94b4ff…. INVARIANT 1
 // holds: the shared bullet is byte-identical in both arms. The `bleed` prop reaches the primitives
 // reference through the generated docs, not the prompt.
+// Re-recorded 2026-09-24 for ggui#1083 cut 2's (B), the founder's pick: the same FRAME_SIZING bullet
+// now says a `surface="hero"` band that OPENS the card runs edge to edge on its own, and moves its
+// `bleed` example to another band, so BOTH prompt digests move together again; the boilerplate
+// digests are byte-stable. Constrained 66a883d8… → be40b232…, free 0b94b4ff… → 077a3387….
 export const CONSTRAINED_PROMPT_SHA256 =
-  '66a883d89b5fddd0f5539a73c5af77ae6bf694c77d0a914e4b084705bcd2babc';
+  'be40b232e7e6c99e8650c532eeb76e61cc2235ee2faed1a0a7d6f2eda5979999';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '2afbb69a4c07a98058d56148718068bf00be63b172a609397da20d78bc12cb22';
 
@@ -241,8 +245,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // (read against a REBUILT design dist — the pin reads the manifest from the built package, so a
 // stale dist reports no move where CI's fresh build does).
 // Re-recorded 2026-09-24 for ggui#1083 cut 2 part B — see the constrained note (the shared FRAME_SIZING bullet).
+// Re-recorded 2026-09-24 for ggui#1083 cut 2's (B) — see the constrained note (the opening hero band).
 export const FREE_PROMPT_SHA256 =
-  '0b94b4ff4d93734c82cbc5b51fcfb4f59493c79efa39e14f7f886ac12684c515';
+  '077a338778e38f8ae03424d2996046690e4d57a0dad741f526427ba70f91b9fd';
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
