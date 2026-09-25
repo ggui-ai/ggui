@@ -329,7 +329,7 @@ export function suggestManifestTokens(name: string): readonly string[] {
   for (let n = own; n >= 2; n--) {
     const prefix = `--${segments.slice(0, n).join('-')}-`;
     const family = consumedTokenManifest.filter((token) => token.startsWith(prefix));
-    if (family.length > 0) return rolesFirst(family);
+    if (family.length > 0) return wordHitsFirst(name, rolesFirst(family));
   }
   const words = new Set(
     segments
@@ -342,6 +342,18 @@ export function suggestManifestTokens(name: string): readonly string[] {
       token.split('-').some((segment) => words.has(segment.toLowerCase())),
     ),
   );
+}
+
+/**
+ * Names that carry the invented name's last word lead the list: `--ggui-color-inverse` names `inverseLink` and
+ * `inverseOutline` before the rest of the colour family, since those are what the model was reaching for. The word is
+ * the last segment when it has four letters or more; shorter or empty suffixes leave the order alone.
+ */
+function wordHitsFirst(name: string, family: readonly string[]): readonly string[] {
+  const word = name.slice(name.lastIndexOf('-') + 1).toLowerCase();
+  if (word.length < 4) return family;
+  const hit = (token: string): boolean => token.slice(token.lastIndexOf('-') + 1).toLowerCase().includes(word);
+  return [...family.filter(hit), ...family.filter((token) => !hit(token))];
 }
 
 /** Role names (a non-numeric last segment) before ramp steps, so the taught vocabulary leads a long family. */

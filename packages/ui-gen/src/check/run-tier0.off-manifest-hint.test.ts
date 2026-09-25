@@ -46,6 +46,14 @@ describe('suggestManifestTokens (ggui#1325)', () => {
     expect(spacing.every((token) => token.startsWith('--ggui-spacing-'))).toBe(true);
   });
 
+  it('names carrying the invented word lead the family: --ggui-color-inverse → inverseLink, inverseOutline first (the cell reliability/014 surfaced)', () => {
+    const near = suggestManifestTokens('--ggui-color-inverse');
+    expect(near.slice(0, 2).sort()).toEqual(['--ggui-color-inverseLink', '--ggui-color-inverseOutline']);
+    expect(near.every((token) => token.startsWith('--ggui-color-'))).toBe(true);
+    // a word too short to mean anything leaves the roles-first order alone
+    expect(suggestManifestTokens('--ggui-color-red')[0]).toBe(suggestManifestTokens('--ggui-color-')[0]);
+  });
+
   it('a name near nothing yields nothing, so the hint falls back to the manifest’s general shape', () => {
     expect(suggestManifestTokens('--ggui-zzzz-qqqq')).toEqual([]);
   });
@@ -74,6 +82,12 @@ export default function C(props: Props) {
     const fix = await offManifestFix('--ggui-motion-duration-normal');
     for (const token of DURATIONS) expect(fix).toContain(`var(${token})`);
     expect(fix).not.toContain('was retired');
+  }, 30_000);
+
+  it('--ggui-color-inverse: the fix leads with the two inverse names', async () => {
+    const fix = await offManifestFix('--ggui-color-inverse');
+    expect(fix.startsWith('Nearest names in the manifest: var(--ggui-color-inverse')).toBe(true);
+    expect(fix.indexOf('var(--ggui-color-inverseLink)')).toBeLessThan(fix.indexOf('var(--ggui-color-container)'));
   }, 30_000);
 
   it('an empty-suffix colour name: the fix leads with roles and counts the rest', async () => {
