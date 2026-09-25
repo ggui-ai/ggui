@@ -1,0 +1,27 @@
+{
+  "name": "release-9-1-handshake-suggestion",
+  "description": "The ggui_handshake suggestion in the shape ggui tag 9.1 (60a234ce0, serving prod) emits on a cache hit: `origin: cache`, the templated `match-semantic` rationale, a full `blueprintMeta` WITHOUT `matchedIntent`, and the contract summary. Built with that release's own `blueprintKey` / `summarizeContract` / `decide-handshake` cache-hit shape (the suggestion schema, key and summary code are unchanged since 60a234ce0). Today's handshakeSuggestionSchema MUST accept it: `blueprintMeta.matchedIntent` (#1336) is optional, so a consumer holding this release's payload keeps parsing (VERSION-POLICY §3.6).",
+  "release": {
+    "label": "ggui tag 9.1",
+    "sha": "60a234ce0"
+  },
+  "wire": "handshake-suggestion",
+  "payload": {
+    "origin": "cache",
+    "rationale": "match-semantic: a saved interface matches this intent — reusing it",
+    "blueprintMeta": {
+      "blueprintId": "bp_3f6c2a9e-8d41-4b7a-9c15-2e7f0b6d4a18",
+      "contractHash": "a84bfa0945745fee",
+      "codeHash": "d6b5657622c1bb6b6c33576a187b3f3d320337c90d6a2298a24a28e78cea13fc",
+      "source": {
+        "kind": "llm",
+        "generator": "ui-gen-default",
+        "model": "anthropic/claude-haiku-4-5"
+      },
+      "variance": {},
+      "selectedReason": "match-semantic: a saved interface matches this intent — reusing it"
+    },
+    "proposedContractSummary": "slots=∅; actions=archive(id); streams=∅; props=messages:array!"
+  },
+  "expect": "accepted"
+}

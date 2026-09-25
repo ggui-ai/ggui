@@ -168,6 +168,7 @@ const EXPECTED_PASSING = [
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',
   'n1-compat/release-2-render-meta',
+  'n1-compat/release-9-1-handshake-suggestion',
   // The `registry-completeness` catalog (ggui#786). These four rows
   // grade the closed refusal-code REGISTRY — a protocol artifact this
   // server already embeds via `@ggui-ai/protocol` — not any server

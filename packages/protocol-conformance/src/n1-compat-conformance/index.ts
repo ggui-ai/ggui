@@ -14,7 +14,7 @@
  * Pure-function catalog: no transport, no adopter input — graded on every
  * `runConformance()` and by the kit's own unit lane.
  */
-import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, handshakeSuggestionSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
@@ -24,12 +24,13 @@ import release2AppThemeV2 from './cases/release-2-app-theme-v2.json' with { type
 import release2RenderMeta from './cases/release-2-render-meta.json' with { type: 'json' };
 import release2GenerationProfile from './cases/release-2-generation-profile.json' with { type: 'json' };
 import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-blueprint.json' with { type: 'json' };
+import release91HandshakeSuggestion from './cases/release-9-1-handshake-suggestion.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint', 'handshake-suggestion'] as const;
 
 /** `backward`: the previous release's payload against today's parser. `forward`: a later release's payload against today's READ door. */
 export const N1_COMPAT_DIRECTIONS = ['backward', 'forward'] as const;
@@ -116,6 +117,7 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release2RenderMeta,
   release2GenerationProfile,
   release2OpsGenerateBlueprint,
+  release91HandshakeSuggestion,
   forwardAppThemeUnknownMember,
   forwardAppThemeCarryUnknownMember,
   forwardRenderMetaUnknownMember,
@@ -210,6 +212,15 @@ function gradeRenderMeta(payload: unknown): { pass: boolean; detail: string } {
   };
 }
 
+// ggui#1336 — the handshake suggestion the served release emits must keep parsing
+// when the suggestion gains an optional member (`blueprintMeta.matchedIntent`).
+function gradeHandshakeSuggestion(payload: unknown): { pass: boolean; detail: string } {
+  const r = handshakeSuggestionSchema.safeParse(payload);
+  return r.success
+    ? { pass: true, detail: 'handshakeSuggestionSchema: accepted' }
+    : { pass: false, detail: `handshakeSuggestionSchema refused the previous release's suggestion: ${r.error.issues.map((i) => i.message).join('; ')}` };
+}
+
 /** Grade every N−1 case against the protocol as shipped. */
 export function runN1CompatConformance(): readonly N1CompatResult[] {
   return N1_COMPAT_CASES.map((c) => {
@@ -224,6 +235,8 @@ export function runN1CompatConformance(): readonly N1CompatResult[] {
           ? gradeRenderMeta(c.payload)
           : c.wire === 'generation-profile'
             ? gradeGenerationProfile(c.payload)
+          : c.wire === 'handshake-suggestion'
+            ? gradeHandshakeSuggestion(c.payload)
             : gradeOpsGenerateBlueprint(c.payload);
     return { name: c.name, direction: c.direction, pass: graded.pass, detail: `${c.release.label} (${c.release.sha}) → ${graded.detail}` };
   });

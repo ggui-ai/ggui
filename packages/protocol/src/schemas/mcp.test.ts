@@ -127,6 +127,16 @@ describe('renderCacheMarkerSchema', () => {
 });
 
 describe('ggui_handshake — MVB-5 three-step handshake', () => {
+  // #1336: a judged cache hit echoes the stored card's intent to a LATER
+  // request of the same app (`blueprintMeta.matchedIntent`), so the text an
+  // agent reads before writing `intent` must say so — the task, never the person.
+  it("intent's description says it is stored and shown to later requests, and must not name the end user", () => {
+    const d = (handshakeInputSchema.shape.intent.description ?? '').toLowerCase();
+    expect(d).toContain('stored');
+    expect(d).toContain('later requests');
+    expect(d).toContain('never the end user');
+  });
+
   it('accepts a minimal input — intent + blueprintDraft (contract only)', () => {
     const parsed = handshakeInputSchema.parse({
       intent: 'show weather',

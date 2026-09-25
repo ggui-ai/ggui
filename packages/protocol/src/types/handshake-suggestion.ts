@@ -146,6 +146,23 @@ export interface BlueprintMeta {
    * score 0.92'`.
    */
   readonly selectedReason?: string;
+  /**
+   * The stored intent of the blueprint a JUDGED cache hit proposes — the
+   * string the reuse judge compared against this request, truncated to
+   * `MATCHED_INTENT_MAX_CHARS` (280) characters. It lets the agent, which
+   * holds the conversation, compare the card's purpose with its own
+   * request and decline (`forceCreate`, or a render `override`).
+   *
+   * Present only on a semantic (judge-picked) hit from the requesting
+   * app's OWN pool. ABSENT on an exact-key hit (no judge ran), on a hit
+   * from a pool shared across apps, and on `agent` / `synth` origins (no
+   * stored card). The intent is whatever the requesting app's own pool
+   * stored — written for an earlier request of that app, by its operator,
+   * or by the publisher of a blueprint it installed — so a server MUST NOT
+   * emit it for a card from a shared pool: one app's stored intent never
+   * reaches another app's agent. Consumers MUST tolerate absence.
+   */
+  readonly matchedIntent?: string;
 }
 
 /**

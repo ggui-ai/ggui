@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  MATCHED_INTENT_MAX_CHARS,
   blueprintMetaSchema,
   handshakeSuggestionSchema,
 } from './handshake-suggestion.js';
@@ -91,5 +92,40 @@ describe('handshakeSuggestionSchema — proposedContractSummary (optional, D5)',
       blueprintMeta: baseMeta,
     });
     expect(parsed.proposedContractSummary).toBeUndefined();
+  });
+});
+
+describe('blueprintMetaSchema — optional matchedIntent (#1336)', () => {
+  it('parses WITH a matchedIntent (a judged cache hit names the card it proposes)', () => {
+    const parsed = blueprintMetaSchema.parse({
+      ...baseMeta,
+      matchedIntent: 'Gmail inbox for email triage',
+    });
+    expect(parsed.matchedIntent).toBe('Gmail inbox for email triage');
+  });
+
+  it('parses WITHOUT a matchedIntent (exact, seed, agent and synth suggestions)', () => {
+    expect(blueprintMetaSchema.parse(baseMeta).matchedIntent).toBeUndefined();
+  });
+
+  it('accepts exactly MATCHED_INTENT_MAX_CHARS characters and refuses one more', () => {
+    expect(MATCHED_INTENT_MAX_CHARS).toBe(280);
+    const at = { ...baseMeta, matchedIntent: 'x'.repeat(MATCHED_INTENT_MAX_CHARS) };
+    const over = { ...baseMeta, matchedIntent: 'x'.repeat(MATCHED_INTENT_MAX_CHARS + 1) };
+    expect(blueprintMetaSchema.safeParse(at).success).toBe(true);
+    expect(blueprintMetaSchema.safeParse(over).success).toBe(false);
+  });
+
+  it('refuses an empty matchedIntent — the member is absent, never blank', () => {
+    expect(blueprintMetaSchema.safeParse({ ...baseMeta, matchedIntent: '' }).success).toBe(false);
+  });
+
+  it('rides the full suggestion', () => {
+    const parsed = handshakeSuggestionSchema.parse({
+      origin: 'cache',
+      rationale: 'match-semantic: a saved interface matches this intent — reusing it',
+      blueprintMeta: { ...baseMeta, matchedIntent: 'Gmail inbox for email triage' },
+    });
+    expect(parsed.blueprintMeta.matchedIntent).toBe('Gmail inbox for email triage');
   });
 });

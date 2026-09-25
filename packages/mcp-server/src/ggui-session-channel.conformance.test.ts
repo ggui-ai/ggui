@@ -178,6 +178,7 @@ const EXPECTED_PASSING = [
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',
   'n1-compat/release-2-render-meta',
+  'n1-compat/release-9-1-handshake-suggestion',
   // theme-binding — the kit's theme catalog folded into runConformance()
   // (ggui#987): 13 rows, graded on this server's own read door.
   'theme-binding/app-theme-v1-base',

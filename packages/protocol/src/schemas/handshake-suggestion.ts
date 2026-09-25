@@ -90,6 +90,13 @@ export const blueprintDraftObjectSchema = z
 /** `BlueprintDraft` — input shape on the handshake. */
 export const blueprintDraftSchema: z.ZodType<BlueprintDraft> = blueprintDraftObjectSchema as z.ZodType<BlueprintDraft>;
 
+/**
+ * Ceiling on {@link BlueprintMeta.matchedIntent}, in characters — the same
+ * truncation the reuse judge applies to a candidate's stored intent, so the
+ * agent reads exactly the string the judge read.
+ */
+export const MATCHED_INTENT_MAX_CHARS = 280;
+
 /** `BlueprintMeta` — projected onto the handshake response. */
 export const blueprintMetaSchema: z.ZodType<BlueprintMeta> = z
   .object({
@@ -99,6 +106,7 @@ export const blueprintMetaSchema: z.ZodType<BlueprintMeta> = z
     source: blueprintSourceSchema.optional(),
     variance: blueprintVarianceSchema,
     selectedReason: z.string().optional(),
+    matchedIntent: z.string().min(1).max(MATCHED_INTENT_MAX_CHARS).optional(),
   })
   .strict() as z.ZodType<BlueprintMeta>;
 

@@ -6,6 +6,24 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The handshake suggestion names the card a judged hit proposes
+ * (2026-09-26, additive, ggui#1336: MINOR, same draft stamp).
+ * `BlueprintMeta.matchedIntent?` carries the stored intent the reuse judge
+ * compared with the request, capped at `MATCHED_INTENT_MAX_CHARS` (280,
+ * the judge's own truncation), so the agent (which holds the
+ * conversation) can decline a proposal it reads as the wrong card. Present
+ * only on a judged hit from the requesting app's own pool, never from a
+ * pool shared across apps. DECLARED in this change, EMITTED one release
+ * later: every output object reaches `tools/list` closed
+ * (`additionalProperties: false`, ggui#1333), so a host that cached the
+ * previous release's schema would refuse a member it did not name. The
+ * `intent` input's description now says it is stored and shown to later
+ * requests of the same app, and names the task, never the end user.
+ * Kit: the `n1-compat` catalog gains the `handshake-suggestion` wire and
+ * tag 9.1's cache-hit suggestion as a BACKWARD case. No
+ * `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * The read-plane-only posture is normative, and graded (2026-09-24,
  * additive, ggui#1304: MINOR, same draft stamp). SPEC §7.10.6 states the
  * posture the reference server has run since ggui#537: a result publishes

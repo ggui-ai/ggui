@@ -209,11 +209,19 @@ export const handshakeInputSchema = z.object({
   /**
    * Concise semantic identity of the UI. Same intent across calls =
    * same component reused. Required — drives blueprint-search keying
-   * (intent tokens contribute to the intent axis).
+   * (intent tokens contribute to the intent axis). Stored with the
+   * generated interface and shown to later requests of the same app
+   * that reuse it (`blueprintMeta.matchedIntent`, #1336) — so it names
+   * the task, never the end user.
    * @example "Gmail inbox for email triage"
    * @example "Current weather conditions"
    */
-  intent: z.string().min(1).describe('Concise purpose — same intent = same component reused. e.g. "Gmail inbox for email triage"'),
+  intent: z
+    .string()
+    .min(1)
+    .describe(
+      'Concise purpose — same intent = same component reused. e.g. "Gmail inbox for email triage". Stored with the interface and shown to later requests of this app that reuse it: describe the task, never the end user (no names, emails or personal details).',
+    ),
   /**
    * Agent's draft — contract (required) + variance + generator hint.
    * The contract drives the blueprint-search embed/structural axes
