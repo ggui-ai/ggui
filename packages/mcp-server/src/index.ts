@@ -50,6 +50,15 @@ export type {
   GguiServer,
   OpsBundleDeps,
 } from './server.js';
+// The handshake negotiator's LLM caller (the rerank judge + the contract
+// synthesizer). Exported so a deployment that builds its own negotiator
+// reuses this one Anthropic structured-call implementation — and can bound
+// it with an abort signal — instead of carrying a copy.
+export { AnthropicStructuredCallError, buildLlmCaller } from './llm-backed-negotiator.js';
+export type {
+  AnthropicStructuredCallFailureKind,
+  BuildLlmCallerOptions,
+} from './llm-backed-negotiator.js';
 // Control plane (`/control`) — the composition that projects every
 // `protocol`- and `ops`-tagged handler onto one anonymous-capable
 // route with per-tool auth + confirmation gates. `createGguiServer`

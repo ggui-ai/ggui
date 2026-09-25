@@ -84,7 +84,27 @@ import { selectAdapter } from "@ggui-ai/ui-gen/providers";
  *   - `@ggui-ai/negotiator/synthesize-contract` (cold-path contract
  *     synthesizer)
  */
-export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKeyRef): LLMCaller {
+export interface BuildLlmCallerOptions {
+  /**
+   * Aborts every request this caller makes — both `call` (through the
+   * provider adapter) and `callStructured` (the direct `/v1/messages`
+   * request). A caller that bounds the call's wall-clock time passes a
+   * timed signal here so the bound cancels the request itself rather than
+   * racing it. Absent ⇒ the requests run unbounded, as before.
+   *
+   * The signal is bound for this caller's lifetime and shared by every
+   * request it makes: once it fires, every later request on this caller
+   * rejects at once. A caller that bounds each call builds one caller per
+   * bound, never caches one with a timed signal.
+   */
+  readonly signal?: AbortSignal;
+}
+
+export function buildLlmCaller(
+  selection: LlmSelection,
+  providerKey: ProviderKeyRef,
+  options: BuildLlmCallerOptions = {}
+): LLMCaller {
   const adapter = selectAdapter(selection.provider);
   const isAnthropic = selection.provider === "anthropic";
   // `selection` IS an `LlmRoute & {inference params}` — the typed
@@ -106,6 +126,7 @@ export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKey
         systemPrompt,
         userPrompt: userMessage,
         ...(maxTokens !== undefined ? { maxTokens } : {}),
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
       });
       if (!result.ok) {
         throw new Error(
@@ -130,6 +151,7 @@ export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKey
         userMessage,
         tool,
         maxTokens,
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
       });
       return result;
     };
@@ -218,6 +240,7 @@ async function anthropicCallStructured(args: {
     input_schema: Record<string, unknown>;
   };
   maxTokens?: number;
+  signal?: AbortSignal;
 }): Promise<unknown> {
   const answerBudget = args.maxTokens ?? 1024;
   const refusesForcedTool = anthropicRejectsForcedToolChoice(args.model);
@@ -257,6 +280,7 @@ async function anthropicCallStructured(args: {
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    ...(args.signal !== undefined ? { signal: args.signal } : {}),
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
