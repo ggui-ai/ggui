@@ -222,8 +222,8 @@ const visualEnabled = hasFlag(['--visual']);
 // The published run sets neither flag; the image sets BENCH_PLAYWRIGHT=1 so
 // validateContractBehavior runs for every cell (contractBehavior field).
 const panelPrompt = getArg(['--panel-prompt'], process.env.BENCH_PANEL_PROMPT ?? 'default');
-if (panelPrompt !== 'default' && panelPrompt !== 'arm-neutral' && panelPrompt !== 'design-system') {
-  console.error(`  ✗ --panel-prompt must be 'default', 'arm-neutral' or 'design-system' (got '${panelPrompt}')`);
+if (panelPrompt !== 'default' && panelPrompt !== 'arm-neutral') {
+  console.error(`  ✗ --panel-prompt must be 'default' or 'arm-neutral' (got '${panelPrompt}')`);
   process.exit(1);
 }
 const playwrightEnabled = hasFlag(['--playwright']) || process.env.BENCH_PLAYWRIGHT === '1';

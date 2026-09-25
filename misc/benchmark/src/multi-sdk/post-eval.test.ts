@@ -260,35 +260,18 @@ describe('arm-neutral panel prompt (#973 §5b — experiment-lane promptVersion;
   });
 });
 
-describe('design-system panel prompt (#1350 — experiment-lane promptVersion; the published page keeps the default)', () => {
-  const dims = ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation'];
-  const blocks = (prompt: string): string[] => prompt.split(/\n(?=\d\. \*\*)/);
-
-  it('carries its own promptVersion, distinct from the default and the arm-neutral one', () => {
-    const { promptVersion } = selectPanelPrompt('design-system');
-    expect(promptVersion).toBe('aesthetic-eval.v4-panel-design-system-candidate');
-    expect(promptVersion).not.toBe(AESTHETIC_PROMPT_VERSION_PANEL);
+describe('default panel prompt v4 (#1350 — the design-system rubric is the public judge)', () => {
+  it('is versioned aesthetic-eval.v4-panel', () => {
+    expect(selectPanelPrompt(undefined).promptVersion).toBe('aesthetic-eval.v4-panel');
+    expect(AESTHETIC_PROMPT_VERSION_PANEL).toBe('aesthetic-eval.v4-panel');
   });
 
-  it('no longer names the retired roles and names the current ones', () => {
-    const { prompt } = selectPanelPrompt('design-system');
+  it('no longer names the retired roles, names the current ones, and puts typed variants first', () => {
+    const { prompt } = selectPanelPrompt(undefined);
     expect(prompt).not.toMatch(/onSurface/);
     expect(prompt).not.toMatch(/\bsurface\b/);
     for (const role of ['container/onContainer', 'sunken/onSunken', 'outline', 'link', 'primary-*']) expect(prompt).toContain(role);
     expect(prompt).toMatch(/typed variants first/);
-  });
-
-  it('is the default with ONLY dimension 2 changed — the other dimensions and the JSON shape are byte-identical', () => {
-    const def = blocks(selectPanelPrompt(undefined).prompt);
-    const cand = blocks(selectPanelPrompt('design-system').prompt);
-    expect(cand).toHaveLength(def.length);
-    const changed = def.map((b, i) => b !== cand[i]);
-    expect(changed.filter(Boolean)).toHaveLength(1);
-    expect(cand[changed.indexOf(true)]).toMatch(/^2\. \*\*designTokens\*\*/);
-    for (const k of dims) expect(selectPanelPrompt('design-system').prompt).toContain(`"${k}"`);
-  });
-
-  it('control: the default still names the retired roles (so the tests above measure a real difference)', () => {
-    expect(selectPanelPrompt(undefined).prompt).toMatch(/onSurface/);
+    for (const k of ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation']) expect(prompt).toContain(`"${k}"`);
   });
 });
