@@ -191,6 +191,14 @@ overrides:
   "adm-zip@<0.6.1": ^0.6.1
   # GHSA-9rgm-9g3h-6x36 (devalue.parse DoS, fixed 5.9.2; transitive via astro, build-time) — whole-major floor
   "devalue@5": ^5.9.2
+  # GHSA-5p2g-fcmc-qvqq + GHSA-w3rx-r6r6-pgpr (image-size <=2.0.2 infinite-loop DoS): metro@0.83.8 drops
+  # image-size. The metro family pins itself EXACTLY, so these floor its ENTRY points (react-native and
+  # its CLI plugin declare ^0.83.x) and the 0.83.8 siblings follow; dev-only (react-native is a devDep).
+  "metro@0.83": ^0.83.8
+  "metro-config@0.83": ^0.83.8
+  "metro-core@0.83": ^0.83.8
+  "metro-runtime@0.83": ^0.83.8
+  "metro-source-map@0.83": ^0.83.8
   "immutable@<3.8.3": ^3.8.3
   # Exact-pinned SAME as root (ggui#430) — force ONE dispatcher copy per
   # tree, and the same one in both trees. Moved 0.3.1 → 0.4.0 with the
@@ -482,6 +490,20 @@ overrides:
   lru.min: 1.1.5
   mariadb: 3.5.4
   memfs: 4.66.1
+  metro: 0.83.8
+  metro-babel-transformer: 0.83.8
+  metro-cache: 0.83.8
+  metro-cache-key: 0.83.8
+  metro-config: 0.83.8
+  metro-core: 0.83.8
+  metro-file-map: 0.83.8
+  metro-minify-terser: 0.83.8
+  metro-resolver: 0.83.8
+  metro-runtime: 0.83.8
+  metro-source-map: 0.83.8
+  metro-symbolicate: 0.83.8
+  metro-transform-plugins: 0.83.8
+  metro-transform-worker: 0.83.8
   mikro-orm: 6.6.16
   mysql2: 3.24.4
   node-abi: 3.94.0
@@ -489,6 +511,7 @@ overrides:
   node-releases: 2.0.52
   nodemailer: 9.1.1
   nwsapi: 2.2.24
+  ob1: 0.83.8
   own-keys: 1.0.2
   package-manager-detector: 1.8.0
   path-expression-matcher: 1.6.2
