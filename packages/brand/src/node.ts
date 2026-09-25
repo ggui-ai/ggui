@@ -27,6 +27,7 @@ export interface CardStyle {
   readonly letterSpacing?: number;
   readonly lineHeight?: number;
   readonly textTransform?: 'uppercase';
+  readonly whiteSpace?: 'pre-line';
 }
 
 export interface CardNodeProps {

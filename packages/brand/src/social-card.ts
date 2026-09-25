@@ -13,9 +13,13 @@ export interface SocialCardInput {
   readonly surface?: string;
   /** One line of tracked caps above the headline. Defaults to {@link DEFAULT_EYEBROW}. */
   readonly eyebrow?: string;
-  /** The headline: at most two lines at the card's scale. */
+  /**
+   * The headline: at most two lines at the card's scale. Where it breaks is
+   * design, so a `\n` places the break; without one, the line wraps where it
+   * runs out of room.
+   */
   readonly title: string;
-  /** An optional line under the headline, at most two lines. */
+  /** An optional line under the headline, at most two lines; a `\n` places the break. */
   readonly description?: string;
   /**
    * The footer. `url` is the surface's address (left, mono). `fact` is one
@@ -37,6 +41,13 @@ const EYEBROW_TOP = 313; // baseline ≈ 330 at Geist Mono 20, line-height 1
 const HEADLINE_TOP = 342; // first baseline ≈ 400 at Inter Bold 64, line-height 1.1
 const FOOTER_LEFT_TOP = 542; // baseline ≈ 562 at Geist Mono 24
 const FOOTER_RIGHT_TOP = 545; // same baseline at Geist Mono 20
+
+/** Refuse text whose hard breaks alone make more than two lines. */
+function assertAtMostTwoLines(field: 'title' | 'description', text: string): void {
+  if (text.split('\n').length > 2) {
+    throw new RangeError(`social card ${field} must be at most two lines; got ${text.split('\n').length}`);
+  }
+}
 
 /** Tracking in em, as satori's pixel letter-spacing. */
 function track(em: number, fontSize: number): number {
@@ -78,7 +89,8 @@ function badge(word: string): CardNode {
         letterSpacing: track(0.16, 22),
         textTransform: 'uppercase',
         borderRadius: 2,
-        padding: '6px 12px',
+        // Measured on the reference card: 44 px tall, text + 48 wide.
+        padding: '11px 24px',
         lineHeight: 1,
       },
       children: word,
@@ -91,6 +103,8 @@ function badge(word: string): CardNode {
  * faces come from `socialCardFonts()`), or pass it to Next's `ImageResponse`.
  */
 export function renderSocialCard(input: SocialCardInput): CardNode {
+  assertAtMostTwoLines('title', input.title);
+  if (input.description !== undefined) assertAtMostTwoLines('description', input.description);
   const body: CardChild[] = [
     el('div', {
       style: {
@@ -101,6 +115,7 @@ export function renderSocialCard(input: SocialCardInput): CardNode {
         lineHeight: 1.1,
         letterSpacing: track(-0.02, 64),
         color: BRAND_COLORS.ink,
+        whiteSpace: 'pre-line',
       },
       children: input.title,
     }),
@@ -116,6 +131,7 @@ export function renderSocialCard(input: SocialCardInput): CardNode {
           fontSize: 30,
           lineHeight: 1.4,
           color: BRAND_COLORS.ink3,
+          whiteSpace: 'pre-line',
         },
         children: input.description,
       }),

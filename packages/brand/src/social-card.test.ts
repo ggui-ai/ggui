@@ -49,7 +49,9 @@ describe('renderSocialCard — the reference placements', () => {
     expect(badgeRow!.props.style).toMatchObject({ left: 592, top: 88, height: 100, alignItems: 'center' });
     const badge = nodes(badgeRow!)[0]!;
     expect(textOf(badge)).toBe('DOCS');
-    expect(badge.props.style).toMatchObject({ background: '#292929', color: '#F4F3ED', fontFamily: 'Geist Mono', fontSize: 22, borderRadius: 2, textTransform: 'uppercase' });
+    expect(badge.props.style).toMatchObject({ background: '#292929', color: '#F4F3ED', fontFamily: 'Geist Mono', fontSize: 22, borderRadius: 2, textTransform: 'uppercase', lineHeight: 1 });
+    // Measured on the reference card: a 44 px-tall badge, text + 48 wide.
+    expect(badge.props.style?.padding).toBe('11px 24px');
   });
 
   it('sets the eyebrow, headline and footer on the contract grid', () => {
@@ -80,9 +82,29 @@ describe('renderSocialCard — the reference placements', () => {
   });
 });
 
+describe('renderSocialCard — where a line breaks is the lane\'s', () => {
+  it('honours a hard break in the title (pre-line), so the lane places it', () => {
+    const card = renderSocialCard({ ...DOCS, title: 'Agents describe.\nInterfaces appear.' });
+    const headline = nodes(nodes(card)[4]!)[0]!;
+    expect(textOf(headline)).toBe('Agents describe.\nInterfaces appear.');
+    expect(headline.props.style?.whiteSpace).toBe('pre-line');
+  });
+
+  it('honours a hard break in the description too', () => {
+    const card = renderSocialCard({ ...DOCS, description: 'One.\nTwo.' });
+    const desc = nodes(nodes(card)[4]!)[1]!;
+    expect(desc.props.style?.whiteSpace).toBe('pre-line');
+  });
+
+  it('refuses a title or description that breaks into more than two lines', () => {
+    expect(() => renderSocialCard({ ...DOCS, title: 'a\nb\nc' })).toThrow(/at most two lines/);
+    expect(() => renderSocialCard({ ...DOCS, description: 'a\nb\nc' })).toThrow(/at most two lines/);
+  });
+});
+
 describe('renderSocialCard — renders with satori and the bundled faces', () => {
   it('produces a 1200 × 630 SVG for a card with a badge and a description', async () => {
-    const svg = await satori(renderSocialCard({ ...DOCS, description: 'A second line.' }), {
+    const svg = await satori(renderSocialCard({ ...DOCS, title: 'Agents describe.\nInterfaces appear.', description: 'A second line.' }), {
       width: SOCIAL_CARD_SIZE.width,
       height: SOCIAL_CARD_SIZE.height,
       fonts: socialCardFonts(),
