@@ -39,7 +39,7 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
   {
     label: 'designTokens',
     definition:
-      'Does it use ggui design tokens? var(--ggui-color-*) for colors (especially semantic: surface, onSurface, outline) and var(--ggui-spacing-*) for padding/margins — no hardcoded hex colors, no rgba()/hsl(), no raw pixel values for spacing.',
+      "Do colour and spacing come from the ggui design system? The primitives' typed variants first (Button/Badge/Alert variant, Text/Heading tones); raw CSS only through var(--ggui-color-*) roles (container/onContainer, sunken/onSunken, outline, link, primary-*) and var(--ggui-spacing-*) — no hardcoded hex colors, no rgba()/hsl(), no custom gradients, no literal fallbacks, no raw pixel values for spacing. (Runs judged with aesthetic-eval.v4-panel. Earlier runs used the definition quoted in the 2026-09-25 changelog entry.)",
   },
   {
     label: 'hierarchy',
@@ -64,6 +64,24 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  * announced here, dated, because run-to-run comparability is the product.
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
+  {
+    date: '2026-09-25',
+    text:
+      'Methodology change, announced (issue #1350): from the first run judged with panel prompt ' +
+      'aesthetic-eval.v4-panel (each row\'s judge disclosure names its prompt version), the ' +
+      'design-tokens dimension reads what the generator is taught: the design system\'s typed ' +
+      'variants first, and raw CSS only through its current colour roles. Before it, the judges ' +
+      'were asked "Does it use ggui design tokens? var(--ggui-color-*) for colors (especially ' +
+      'semantic: surface, onSurface, outline)" — two of those roles were retired on 2026-09-10 ' +
+      '(issue #989), and a component taking every colour through a variant read as a miss. ' +
+      'Measured before the switch by re-judging 96 generations both ways in one session: design ' +
+      'tokens +3.2 points (95% interval 1.2 to 5.3), overall score +1.0 (0.3 to 1.7), data ' +
+      'presentation +0.9 (0.4 to 1.5), and no generation changed between pass and fail. Each ' +
+      'shift is within the noise of re-judging a single generation (3.8 points for design ' +
+      'tokens, 1.4 overall). Design-tokens and overall scores are not comparable across this ' +
+      'change; the other four dimensions\' definitions, the corpus and the judge models are ' +
+      'unchanged; history is not rewritten.',
+  },
   {
     date: '2026-09-25',
     text:
