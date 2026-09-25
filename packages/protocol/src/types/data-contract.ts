@@ -1151,11 +1151,12 @@ export function deriveContextDefault(entry: ContextEntry): JsonValue | undefined
 export interface DataContract {
   /**
    * `intent` is NOT a contract field. The canonical intent (RAG
-   * embedding search, contract hash key, prompt rendering, cache
-   * scope) comes from the outer pipeline (the flat `intent` field on
-   * `ggui_handshake`, the operator prompt for harness benchmarks),
-   * which is the single source of truth for "the purpose of this UI".
-   * `hashContract` takes `(contract, intent)`;
+   * embedding search, the reuse judge, prompt rendering) comes from the
+   * outer pipeline (the flat `intent` field on `ggui_handshake`, the
+   * operator prompt for harness benchmarks), which is the single source
+   * of truth for "the purpose of this UI". It is NOT part of the reuse
+   * key: `blueprintKey(contract)` hashes the contract alone, so
+   * rewording the intent never moves the key.
    * `buildContractsContext` takes `(contract, intent)`.
    *
    * No `interaction` mode field — the four specs

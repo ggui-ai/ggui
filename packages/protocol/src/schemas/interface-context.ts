@@ -1,8 +1,13 @@
 /**
- * Interface-context schema — the client's viewport/platform snapshot every
- * handshake and every `InvokeEvent` carries. Its own module (ggui#819) so
- * the browser entry (`@ggui-ai/protocol/wire`) reaches it without the
- * tool schemas that used to share its file.
+ * Interface-context schema — a client's viewport/platform snapshot.
+ *
+ * Where it travels: the optional `interfaceContext` field of the `/invoke`
+ * request body (`invokeRequestSchema`, client → agent), and the host React
+ * providers' context. It is NOT on the `ggui_handshake` input, NOT on the
+ * `ActionEnvelope`, and no ggui server reads it.
+ *
+ * Its own module (ggui#819) so the browser entry (`@ggui-ai/protocol/wire`)
+ * reaches it without the tool schemas that used to share its file.
  */
 import { z } from 'zod';
 

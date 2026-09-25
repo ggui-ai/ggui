@@ -53,8 +53,10 @@ export interface ActionEventValue<TData = unknown> {
  * Fields that are NOT on this envelope, and why:
  *   - `appId` — the server resolves it from the render; client-claimed
  *     values are ignored for enforcement.
- *   - `user` / `userId` / `deviceInfo` / `interfaceContext` — diagnostic
- *     metadata captured at subscribe time, not per-delivery.
+ *   - `user` / `userId` — diagnostic metadata captured at subscribe time,
+ *     not per-delivery.
+ *   - `deviceInfo` / `interfaceContext` — no ggui server reads a client's
+ *     device snapshot, per delivery or at subscribe.
  *   - `componentId` / `contractHash` — diagnostic; no enforcement
  *     consumer.
  *   - `timestamp` — the server uses its own clock for ordering + log
