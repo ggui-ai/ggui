@@ -415,25 +415,52 @@ export async function dispatchGeneration(
     { provider: routerProvider, modelId: resolvedModel },
   );
 
-  // ── Axis-keyed primitives doc slice ──
-  // When the resolved policy flips to axis-keyed, rebuild the first-turn
-  // system prompt with a sliced PRIMITIVES_DOCUMENTATION derived from the
-  // classification. The slice typically cuts the system prompt by ~80 KB
-  // (~20K tokens). Surface awareness is preserved — the name-only primitive
-  // catalog already lives in the system prompt above the sliced block.
-  // Always logs `[simple] primitive-doc-bytes` telemetry so both modes
-  // are auditable post-hoc.
+  // ── The primitives reference the first-turn prompt carries ──
+  // The system prompt embeds PRIMITIVES_DOCUMENTATION (markdown) verbatim.
+  // Three policy knobs decide what is SENT in its place, composed in this
+  // order (ggui#1324, speed/002 — the slice applies to the format in force;
+  // slicing the markdown before the TS swap sent a sliced markdown doc about
+  // the size of the full TS doc, which speed/001 measured as a trim):
+  //   1. primitiveDocFormat: "markdown" (the embedded doc) or "ts" (its
+  //      TypeScript-interface form, ~55% smaller, same information);
+  //   2. primitiveDocSlice: "full", or an axis-keyed allowlist from the
+  //      classification ("axis-keyed", or "axis-keyed+contract" which adds the
+  //      inputs the contract implies) applied to THAT format's doc;
+  //   3. primitiveIndex: a name-only index that replaces whatever is left
+  //      (tool-driven docs; wins when on).
+  // Every cell logs `[simple] primitive-doc-bytes … mode=…` (the slice) and
+  // `[simple] system-prompt-bytes … doc-format=… doc-bytes=…` (what is sent),
+  // so a prompt-size claim is auditable from the log, not inferred.
   let systemPromptOverride: string | undefined;
   {
     const { PRIMITIVES_DOCUMENTATION } = await import("../validation/index.js");
     const fullBytes = Buffer.byteLength(PRIMITIVES_DOCUMENTATION, "utf8");
+    const docFormat = resolvedPolicy.context.primitiveDocFormat ?? "markdown";
+    const indexMode = resolvedPolicy.context.primitiveIndex ?? "off";
     const mode = resolvedPolicy.context.primitiveDocSlice ?? "full";
+
+    let doc = PRIMITIVES_DOCUMENTATION;
+    if (docFormat === "ts" && indexMode === "off") {
+      const { PRIMITIVES_DOCUMENTATION_TS } = await import("../tools/get-primitives-ts.js");
+      doc = PRIMITIVES_DOCUMENTATION_TS;
+      const tsBytes = Buffer.byteLength(doc, "utf8");
+      console.log(
+        `[simple] primitive-doc-ts-bytes=${tsBytes} baseline=${fullBytes} drop=${((1 - tsBytes / fullBytes) * 100).toFixed(1)}%`,
+      );
+    }
+    const formatBytes = Buffer.byteLength(doc, "utf8");
+
     if (mode === "axis-keyed" || mode === "axis-keyed+contract") {
-      const { computePrimitiveAllowlist, computeContractPrimitives, slicePrimitiveDocumentation } =
-        await import("../harness/primitive-slice.js");
+      const {
+        computePrimitiveAllowlist,
+        computeContractPrimitives,
+        slicePrimitiveDocumentation,
+        slicePrimitiveDocumentationTs,
+      } = await import("../harness/primitive-slice.js");
       let allowlist = computePrimitiveAllowlist(classification);
       if (mode === "axis-keyed+contract") {
-        allowlist = [...new Set([...allowlist, ...computeContractPrimitives(effectiveContract)])].sort();
+        const fromContract = computeContractPrimitives(effectiveContract);
+        allowlist = [...new Set([...allowlist, ...fromContract])].sort();
       }
       // Apply policy-driven excludes — some policy profiles drop
       // near-synonym layout primitives (e.g. Row/Box/Spacer).
@@ -442,61 +469,41 @@ export async function dispatchGeneration(
         const excludeSet = new Set(excludes);
         allowlist = allowlist.filter((p) => !excludeSet.has(p));
       }
-      const sliced = slicePrimitiveDocumentation(
-        PRIMITIVES_DOCUMENTATION,
-        allowlist,
-      );
-      const slicedBytes = Buffer.byteLength(sliced, "utf8");
+      doc =
+        docFormat === "ts" && indexMode === "off"
+          ? slicePrimitiveDocumentationTs(doc, allowlist)
+          : slicePrimitiveDocumentation(doc, allowlist);
+      const slicedBytes = Buffer.byteLength(doc, "utf8");
       const excludeTag = excludes.length ? ` excludes=${excludes.join(",")}` : "";
       console.log(
-        `[simple] primitive-doc-bytes=${slicedBytes} mode=${mode} baseline=${fullBytes} drop=${((1 - slicedBytes / fullBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`,
-      );
-      systemPromptOverride = harness.how.systemPrompt.replace(
-        PRIMITIVES_DOCUMENTATION,
-        sliced,
+        `[simple] primitive-doc-bytes=${slicedBytes} mode=${mode} baseline=${formatBytes} drop=${((1 - slicedBytes / formatBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`,
       );
     } else {
       console.log(
-        `[simple] primitive-doc-bytes=${fullBytes} mode=full baseline=${fullBytes} drop=0.0%`,
+        `[simple] primitive-doc-bytes=${formatBytes} mode=full baseline=${formatBytes} drop=0.0%`,
       );
     }
 
     // ── Tool-driven primitive docs ──
-    // Layers on top of axis-keyed slicing — if slicing already trimmed
-    // the doc, the index replaces whatever's left. When both are
-    // active, the index wins (it is a more aggressive cut). The two are
-    // mutually exclusive in practice via profile selection; this
-    // ordering just defines the tiebreak.
-    const indexMode = resolvedPolicy.context.primitiveIndex ?? "off";
+    // A name-only index replaces whatever is left (it is the more
+    // aggressive cut). The two are mutually exclusive in practice via
+    // profile selection; this ordering just defines the tiebreak.
     if (indexMode !== "off") {
       const { buildPrimitiveIndex } = await import("../harness/primitive-index.js");
-      const index = buildPrimitiveIndex(PRIMITIVES_DOCUMENTATION, indexMode);
-      const indexBytes = Buffer.byteLength(index, "utf8");
+      doc = buildPrimitiveIndex(PRIMITIVES_DOCUMENTATION, indexMode);
+      const indexBytes = Buffer.byteLength(doc, "utf8");
       console.log(
         `[simple] primitive-index-bytes=${indexBytes} mode=${indexMode} baseline=${fullBytes} drop=${((1 - indexBytes / fullBytes) * 100).toFixed(1)}%`,
       );
-      systemPromptOverride = (systemPromptOverride ?? harness.how.systemPrompt).replace(
-        PRIMITIVES_DOCUMENTATION,
-        index,
-      );
     }
 
-    // ── TypeScript-interface processed doc ──
-    // Replace the markdown-table doc with the TS-interface format
-    // version (~55% smaller, same info). Mutually exclusive with index
-    // modes.
-    const docFormat = resolvedPolicy.context.primitiveDocFormat ?? "markdown";
-    if (docFormat === "ts" && indexMode === "off") {
-      const { PRIMITIVES_DOCUMENTATION_TS } = await import("../tools/get-primitives-ts.js");
-      const tsBytes = Buffer.byteLength(PRIMITIVES_DOCUMENTATION_TS, "utf8");
-      console.log(
-        `[simple] primitive-doc-ts-bytes=${tsBytes} baseline=${fullBytes} drop=${((1 - tsBytes / fullBytes) * 100).toFixed(1)}%`,
-      );
-      systemPromptOverride = (systemPromptOverride ?? harness.how.systemPrompt).replace(
-        PRIMITIVES_DOCUMENTATION,
-        PRIMITIVES_DOCUMENTATION_TS,
-      );
+    if (doc !== PRIMITIVES_DOCUMENTATION) {
+      systemPromptOverride = harness.how.systemPrompt.replace(PRIMITIVES_DOCUMENTATION, doc);
     }
+    const sentPrompt = systemPromptOverride ?? harness.how.systemPrompt;
+    console.log(
+      `[simple] system-prompt-bytes=${Buffer.byteLength(sentPrompt, "utf8")} doc-format=${docFormat === "ts" && indexMode === "off" ? "ts" : docFormat} doc-bytes=${Buffer.byteLength(doc, "utf8")} mode=${indexMode !== "off" ? `index:${indexMode}` : mode}`,
+    );
 
     // ── plan→impl pipeline augmentation ──
     // Append a 2-phase flow description when planFirstTurn is active so

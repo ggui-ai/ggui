@@ -279,3 +279,50 @@ export function slicePrimitiveDocumentation(
 
   return preamble + kept.join("");
 }
+
+/**
+ * Slice the TypeScript-interface primitives reference
+ * (`PRIMITIVES_DOCUMENTATION_TS`) by the same allowlist the markdown
+ * slicer takes (ggui#1324, speed/002).
+ *
+ * The TS doc is a sequence of SECTIONS, each opened by a header line
+ * `// <Name> — <description>` and carrying that name's `interface`, its
+ * `// Example:` and the usage snippet that follows; category banners
+ * (`// ═══…`) sit between sections. A section whose `<Name>` is a KNOWN
+ * primitive is kept iff `<Name>` is in the allowlist. Every other line is
+ * kept: the preamble, the banners, the `CRITICAL` guidance sections, the
+ * support-type sections (`SelectOption`, `TableColumn`, …) and any section
+ * the slicer does not know — the same guidance rule as
+ * {@link slicePrimitiveDocumentation}. Allowing every known name returns the
+ * doc byte-identical.
+ *
+ * With no section header found the doc is returned whole (defensive, as the
+ * markdown slicer does when it finds no `### ` sections).
+ */
+export function slicePrimitiveDocumentationTs(
+  fullDoc: string,
+  allowlist: readonly string[],
+): string {
+  const allow = new Set(allowlist);
+  const lines = fullDoc.split("\n");
+  let sawHeader = false;
+  let keep = true;
+  const kept: string[] = [];
+  for (const line of lines) {
+    const header = TS_SECTION_HEADER.exec(line);
+    if (header !== null) {
+      sawHeader = true;
+      const name = header[1]!;
+      keep = !KNOWN_PRIMITIVE_SECTIONS.has(name) || allow.has(name);
+    } else if (TS_SECTION_BANNER.test(line)) {
+      keep = true;
+    }
+    if (keep) kept.push(line);
+  }
+  return sawHeader ? kept.join("\n") : fullDoc;
+}
+
+/** `// Button — A clickable button …`: the line that opens a TS-doc section. */
+const TS_SECTION_HEADER = /^\/\/ ([A-Za-z]+) — /;
+/** `// ═══…`: a category banner between TS-doc sections; always kept. */
+const TS_SECTION_BANNER = /^\/\/ ═/;
