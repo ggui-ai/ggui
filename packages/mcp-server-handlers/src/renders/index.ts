@@ -310,6 +310,7 @@ export {
   type CompileResult as InstalledBlueprintCompileResult,
   type InstalledBlueprintEntry,
   type InstalledBlueprintsProvider,
+  type InstalledBlueprintsWalk,
 } from "./installed-blueprints-provider.js";
 export {
   createInMemoryProvisionalPreviewRegistry,

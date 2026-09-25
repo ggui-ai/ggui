@@ -107,9 +107,10 @@ export interface BlueprintPool {
   readonly scope?: string;
   /**
    * Optional marketplace-install bridge wired into THIS pool's store.
-   * The matcher calls `ensureCached(scope)` before querying so installed
-   * blueprints lazily compile + populate the same store the matcher
-   * reads. Naturally per-pool — it populates one scope.
+   * The matcher starts `ensureCached(scope)` and reads the exact key while
+   * it runs; only a hit the walk can never evict is served before it settles
+   * (ggui#1370). Installed blueprints lazily compile + populate the same
+   * store the matcher reads. Naturally per-pool — it populates one scope.
    */
   readonly installedBlueprints?: InstalledBlueprintsProvider;
   /** Optional human label for warn/trace lines. */

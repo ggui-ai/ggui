@@ -17,7 +17,7 @@ import {
 import type { DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import { matchBlueprint } from './blueprint-matcher.js';
-import { findBlueprintExact, listBlueprints } from './blueprint-registry.js';
+import { findBlueprintExact, listBlueprints, registerBlueprint } from './blueprint-registry.js';
 import {
   createInstalledBlueprintsProvider,
   type InstalledBlueprintEntry,
@@ -613,5 +613,69 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     );
     expect(direct?.source).toEqual({ kind: 'user' });
     expect(direct?.installed).toBe(true);
+  });
+});
+
+describe('walk reporting and dedup bindings (ggui#1370)', () => {
+  it('reports every walk through onWalk, and a throwing callback neither poisons the scope nor skips the sweep', async () => {
+    const deps = makeDeps();
+    const walks: Array<{ scope: string; entries: number; evicted: number; listedRows: number; sweepMs: number }> = [];
+    const onWalk = vi.fn((walk: { scope: string; entries: number; evicted: number; listedRows: number; sweepMs: number }) => {
+      walks.push(walk);
+      throw new Error('reporter went off the rails');
+    });
+    const callCount = { current: 0 };
+    const provider = createInstalledBlueprintsProvider({
+      installedBlueprints: () => {
+        callCount.current += 1;
+        return callCount.current === 1
+          ? [entry({ id: 'vendor:counter:1.0.0', contract: COUNTER_CONTRACT, intent: 'counter' })]
+          : [];
+      },
+      compile: async () => ({ kind: 'ok', code: 'x' }),
+      deps,
+      onWalk,
+    });
+    await provider.ensureCached(SCOPE);
+    expect(await listBlueprints(deps, SCOPE)).toHaveLength(1);
+    await provider.ensureCached(SCOPE);
+    expect(await listBlueprints(deps, SCOPE)).toHaveLength(0);
+    expect(onWalk).toHaveBeenCalledTimes(2);
+    expect(walks[0]).toMatchObject({ scope: SCOPE, entries: 1, evicted: 0 });
+    expect(walks[1]).toMatchObject({ scope: SCOPE, entries: 0, evicted: 1 });
+    expect(walks[1]!.sweepMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not record a local binding for a dedup onto a non-bridge row, so an uninstall never deletes a cold-gen row', async () => {
+    const deps = makeDeps();
+    const cold = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: COUNTER_CONTRACT,
+      intent: 'counter',
+      componentCode: 'export default () => "cold-gen";',
+      source: { kind: 'user' },
+    });
+    const callCount = { current: 0 };
+    const provider = createInstalledBlueprintsProvider({
+      installedBlueprints: () => {
+        callCount.current += 1;
+        return callCount.current === 1
+          ? [entry({ id: 'vendor:counter:1.0.0', contract: COUNTER_CONTRACT, intent: 'counter' })]
+          : [];
+      },
+      compile: async () => ({ kind: 'ok', code: 'export default () => "installed";' }),
+      deps,
+    });
+    await provider.ensureCached(SCOPE);
+    // The install dedups onto the cold-gen row: one row, still not bridge-owned.
+    let rows = await listBlueprints(deps, SCOPE);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(cold.id);
+    expect(rows[0]!.installed).toBeUndefined();
+    await provider.ensureCached(SCOPE);
+    rows = await listBlueprints(deps, SCOPE);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(cold.id);
+    expect(await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(COUNTER_CONTRACT))).not.toBeNull();
   });
 });

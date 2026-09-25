@@ -142,7 +142,10 @@ export interface MatchBlueprintDeps {
   readonly llm?: LLMCaller;
   /**
    * Optional marketplace-install bridge. When set, the
-   * matcher calls `ensureCached(scope)` before consulting the
+   * matcher STARTS `ensureCached(scope)` and reads the exact key while it
+   * runs: a hit the walk can never evict (not bridge-owned) is served at
+   * once; a bridge-owned hit, a miss and the semantic tier all wait for
+   * it (ggui#1370). Before #1370 the matcher awaited the walk before
    * registry — installed blueprints lazily compile + populate the
    * same vector store the matcher reads, so the next lookup sees
    * them. Idempotent per scope; subsequent calls are cheap no-ops.
@@ -297,92 +300,91 @@ export async function matchBlueprint(
     return { strategy: 'no-match', reason, candidates: [] };
   }
 
-  // ─── Lazy install-to-cache bridge ─────────────────────────────────
-  //
-  // If an installedBlueprints provider is wired, ensure marketplace-
-  // installed entries for this scope have been compiled + cached
-  // before we consult the registry. Every call re-runs discovery (a
-  // metadata-only read — entry ids + contracts, never compiled code)
-  // so install/uninstall is detected on the next match; the expensive
-  // compile + register walk runs only when the discovered set's
-  // signature changed since the last walk. Best-effort: a provider
-  // error never sinks the match.
+  // ggui#1370 — start the installed-blueprints walk, but do NOT wait for it
+  // before the exact-key read. On a scope's first call per process the walk
+  // enumerates the scope (a whole-index walk on a store that cannot list
+  // by scope) before it can settle; an exact-key hit that the walk can never evict — a row
+  // that is not bridge-owned — is served at once while the walk finishes in
+  // the background (memoised per scope, errors swallowed). Everything else
+  // waits: a bridge-owned hit is re-read AFTER the walk because its orphan
+  // sweep may have evicted it (the G4 stale-cache guarantee); a miss is
+  // re-read because the walk may have compiled + registered an install; and
+  // the semantic tier never runs before the walk, since an uninstalled
+  // vector is servable there. No hit-count write is issued before the walk
+  // settles either — a bump racing the sweep's delete would re-create the
+  // uninstalled vector.
+  let ensured: Promise<void> = Promise.resolve();
   if (deps.installedBlueprints) {
+    const ensureArg =
+      query.contract !== undefined ? { contractKey: expectedKey } : undefined;
+    let started: Promise<void>;
     try {
-      const ensureArg =
-        query.contract !== undefined
-          ? { contractKey: expectedKey }
-          : undefined;
-      await deps.installedBlueprints.ensureCached(scope, ensureArg);
+      started = Promise.resolve(deps.installedBlueprints.ensureCached(scope, ensureArg));
     } catch (err) {
-      // eslint-disable-next-line no-console -- operator-visible signal; provider should never throw
+      started = Promise.reject(err);
+    }
+    ensured = started.catch((err: unknown) => {
       console.warn(
         `[blueprint-matcher] installedBlueprints.ensureCached threw — ignoring: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
-    }
+    });
   }
 
-  // ─── Strategy: exact-key fast-path (agent supplied a contract) ─────
-  //
-  // Canonical-key equality lookup — free, deterministic. Hit ⇒
-  // guaranteed reuse, return immediately (no LLM). Miss ⇒ FALL THROUGH
-  // to the semantic strategy below.
-  //
-  // A fuzzy match to a contract-bearing request is served PROACTIVELY —
-  // proposing a similar cached UI is the whole point of the cache. Two
-  // safety properties keep that safe + honest:
-  //   1. ATOMIC reuse — the caller commits the cached blueprint's OWN
-  //      contract + componentCode together, never the request's contract
-  //      under cached code, so wiring is always internally coherent.
-  //   2. INFORMATIONAL coverage — `coverageGap(candidate, request)` is
-  //      attached to every semantic hit (below). A non-empty gap (the
-  //      cached UI lacks a surface the request declares — e.g. the
-  //      2026-05-09 missing-minus case) is NOT dropped; it is reported on
-  //      `hit.coverage` so the decision layer surfaces `COVERAGE_GAP` warn
-  //      findings and the agent can OVERRIDE. Agent override is the safety
-  //      valve, not a hard drop: the cache proposes; the agent disposes.
   if (query.contract !== undefined) {
-    try {
-      const exact = await findBlueprintExact(
-        {
-          vectorStore: deps.registry.vectorStore,
-          index: deps.registry.index,
-        },
-        scope,
-        kind,
-        expectedKey,
-        variantKey(query.variance),
-      );
-      if (exact) {
-        bumpHitBestEffort(deps.registry, scope, exact.id);
-        const reason = 'match-exact: this contract already has a saved interface — reusing it';
-        emit({
-          decision: 'match-exact',
-          strategy: 'exact-key',
-          reason,
-          candidates: [],
-          winningBlueprintId: exact.id,
-        });
-        return {
-          strategy: 'exact-key',
-          blueprint: exact,
-          cosine: 1,
-          reason,
-          coverage: EMPTY_GAP,
-        };
+    type ExactRow = NonNullable<Awaited<ReturnType<typeof findBlueprintExact>>>;
+    const lookupExact = async (): Promise<ExactRow | null> => {
+      try {
+        return await findBlueprintExact(
+          {
+            vectorStore: deps.registry.vectorStore,
+            index: deps.registry.index,
+          },
+          scope,
+          kind,
+          expectedKey,
+          variantKey(query.variance),
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[blueprint-matcher] exact-key lookup failed: ${msg}`);
+        return null;
       }
-    } catch (err) {
-      // Backend errors fall through to no-match — never crash the
-      // handshake on a registry hiccup.
-      const msg = err instanceof Error ? err.message : String(err);
-      // eslint-disable-next-line no-console -- operator-visible signal; exact-key lookup should never fail
-      console.warn(`[blueprint-matcher] exact-key lookup failed: ${msg}`);
+    };
+    const serveExact = (exact: ExactRow): BlueprintMatchResult => {
+      const reason = 'match-exact: this contract already has a saved interface — reusing it';
+      emit({
+        decision: 'match-exact',
+        strategy: 'exact-key',
+        reason,
+        candidates: [],
+        winningBlueprintId: exact.id,
+      });
+      return {
+        strategy: 'exact-key',
+        blueprint: exact,
+        cosine: 1,
+        reason,
+        coverage: EMPTY_GAP,
+      };
+    };
+
+    // ─── Strategy: exact-key fast-path (agent supplied a contract) ─────
+    const early = await lookupExact();
+    if (early !== null && early.installed !== true) {
+      const id = early.id;
+      void ensured.then(() => bumpHitBestEffort(deps.registry, scope, id));
+      return serveExact(early);
     }
-    // Exact-key MISS → fall through to the semantic strategy below. A
-    // non-covering candidate is no longer dropped — the matcher proposes
-    // it and reports the coverage gap on the hit for the decision layer.
+    await ensured;
+    const settled = await lookupExact();
+    if (settled !== null) {
+      bumpHitBestEffort(deps.registry, scope, settled.id);
+      return serveExact(settled);
+    }
+  } else {
+    await ensured;
   }
 
   if (options.disableSemantic === true) {

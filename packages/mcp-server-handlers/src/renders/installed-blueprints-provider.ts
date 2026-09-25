@@ -157,7 +157,8 @@ export interface InstalledBlueprintCacheIssue {
     | 'compile-failed'
     | 'register-failed'
     | 'compile-threw'
-    | 'stale-row-evicted';
+    | 'stale-row-evicted'
+    | 'walk-report-threw';
   readonly message: string;
 }
 
@@ -171,6 +172,21 @@ export type CompileResult =
   | { kind: 'ok'; code: string }
   | { kind: 'missing-entry'; tried: readonly string[] }
   | { kind: 'failure'; errors: readonly string[] };
+
+/**
+ * What one completed walk did (ggui#1370). `listedRows` is how many rows
+ * the enumeration returned for the scope — NOT a completeness receipt: an
+ * adapter that returns a partial listing on a failed page reports the
+ * partial count. `evicted` counts the local unbinds and the orphan
+ * evictions the two sweeps performed.
+ */
+export interface InstalledBlueprintsWalk {
+  readonly scope: string;
+  readonly entries: number;
+  readonly evicted: number;
+  readonly listedRows: number;
+  readonly sweepMs: number;
+}
 
 export interface CreateInstalledBlueprintsProviderOptions {
   /**
@@ -203,6 +219,13 @@ export interface CreateInstalledBlueprintsProviderOptions {
    * only signal that an entry didn't land.
    */
   readonly onIssue?: (issue: InstalledBlueprintCacheIssue) => void;
+  /**
+   * Called once per completed walk (ggui#1370) so the walk's cost is
+   * visible wherever this provider runs — a server typically logs it.
+   * Runs inside its own try/catch: a throwing reporter is surfaced through
+   * `onIssue` (`walk-report-threw`) and never poisons the scope's state.
+   */
+  readonly onWalk?: (walk: InstalledBlueprintsWalk) => void;
   /**
    * Per-entry compile timeout in milliseconds. esbuild is generally
    * bounded but a pathological source (or a hung native binary)
@@ -333,9 +356,43 @@ export function createInstalledBlueprintsProvider(
     Map<string, { readonly exactKey: string; readonly id: string }>
   >();
 
+  interface WalkTally {
+    evicted: number;
+    listedRows: number;
+  }
+
   async function walkScope(
     scope: string,
     entries: readonly InstalledBlueprintEntry[],
+  ): Promise<void> {
+    const startedAt = Date.now();
+    const tally: WalkTally = { evicted: 0, listedRows: 0 };
+    try {
+      await walkScopeInner(scope, entries, tally);
+    } finally {
+      try {
+        options.onWalk?.({
+          scope,
+          entries: entries.length,
+          evicted: tally.evicted,
+          listedRows: tally.listedRows,
+          sweepMs: Date.now() - startedAt,
+        });
+      } catch (err) {
+        options.onIssue?.({
+          id: '<walk-report>',
+          manifestPath: scope,
+          kind: 'walk-report-threw',
+          message: `onWalk threw: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+  }
+
+  async function walkScopeInner(
+    scope: string,
+    entries: readonly InstalledBlueprintEntry[],
+    tally: WalkTally,
   ): Promise<void> {
     const compileTimeoutMs = options.compileTimeoutMs ?? DEFAULT_COMPILE_TIMEOUT_MS;
     for (const entry of entries) {
@@ -385,19 +442,27 @@ export function createInstalledBlueprintsProvider(
           intent: entry.intent,
           ...(entry.intentSource !== undefined ? { intentSource: entry.intentSource } : {}),
         });
-        let bucket = registeredBindings.get(scope);
-        if (!bucket) {
-          bucket = new Map();
-          registeredBindings.set(scope, bucket);
+        // Record a local binding only for a row this bridge OWNS
+        // (`installed: true`). A dedup onto a non-bridge row at the same
+        // key — a cold-gen mint that got there first — must not be bound:
+        // the local sweep above unbinds by remembered key on uninstall and
+        // would otherwise delete a row the orphan sweep's own contract
+        // leaves alone (ggui#1370).
+        if (registered.installed === true) {
+          let bucket = registeredBindings.get(scope);
+          if (!bucket) {
+            bucket = new Map();
+            registeredBindings.set(scope, bucket);
+          }
+          bucket.set(registered.contractKey, {
+            exactKey: composeExactKey(
+              registered.kind,
+              registered.contractKey,
+              registered.variantKey,
+            ),
+            id: registered.id,
+          });
         }
-        bucket.set(registered.contractKey, {
-          exactKey: composeExactKey(
-            registered.kind,
-            registered.contractKey,
-            registered.variantKey,
-          ),
-          id: registered.id,
-        });
       } catch (err) {
         options.onIssue?.({
           id: entry.id,
@@ -450,6 +515,7 @@ export function createInstalledBlueprintsProvider(
         }
         try {
           await options.deps.vectorStore.deleteVector(scope, binding.id);
+          tally.evicted += 1;
         } catch {
           // Best-effort — the enumeration-based scan retries when
           // the row is visible.
@@ -497,6 +563,7 @@ export function createInstalledBlueprintsProvider(
       });
       return;
     }
+    tally.listedRows = cached.length;
     for (const row of cached) {
       if (row.installed !== true) continue;
       const key = row.contractKey;
@@ -509,6 +576,7 @@ export function createInstalledBlueprintsProvider(
           scope,
           row.id,
         );
+        tally.evicted += 1;
         options.onIssue?.({
           id: row.id,
           manifestPath: scope,
