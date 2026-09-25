@@ -329,7 +329,7 @@ const run = async () => {
   const { installVariantConsoleTag } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variant-log-tag.ts'));
   installVariantConsoleTag();
   const { LocalStorage, savedComponentsFromResults } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
-  const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
+  const { resolveRunCommits } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
   const { resolveRunVariants } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
   const {
@@ -377,14 +377,16 @@ const run = async () => {
   // request and hiding missing fixtures. Registered fixture drift (e.g.
   // flight-status.fixture.ts existing but never wired into commits.ts)
   // surfaces here rather than getting swallowed.
-  const knownIds = new Set(BENCHMARK_COMMITS.map(c => c.id));
-  const unknown = commits.filter(id => !knownIds.has(id));
-  if (unknown.length > 0) {
-    console.error(`  ✗ Unknown commit ID(s): ${unknown.join(', ')}`);
-    console.error(`  Available: ${[...knownIds].sort().join(', ')}`);
+  // The public corpus plus the experiment corpus (EXPERIMENT_COMMITS, outside
+  // the public matrix) are addressable; the default list above is the public
+  // corpus only, so an unflagged run is unchanged.
+  let selectedCommits;
+  try {
+    selectedCommits = resolveRunCommits(commits);
+  } catch (e) {
+    console.error(`  ✗ ${e instanceof Error ? e.message : String(e)}`);
     process.exit(1);
   }
-  const selectedCommits = BENCHMARK_COMMITS.filter(c => commits.includes(c.id));
   if (selectedCommits.length === 0) {
     console.error(`  No matching commits for: ${commits.join(', ')}`);
     process.exit(1);

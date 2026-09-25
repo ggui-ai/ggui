@@ -1339,3 +1339,105 @@ export const PERSONALIZATION_COMMITS: BenchmarkCommit[] = [
     },
   },
 ];
+
+// =============================================================================
+// Experiment corpus — outside the public matrix
+// =============================================================================
+//
+// Fixtures a registered experiment names by `--commit <id>`. Never part of
+// BENCHMARK_COMMITS, so the published run's corpus, and the comparability of
+// every published row, are unchanged by anything added here.
+
+/**
+ * `booking-confirm` (ggui#1223, rnd reliability/013, drafted by ggui-team-rnd):
+ * one card carrying both directions of the oneShot rule — `confirm` is declared
+ * `oneShot: true` (a second confirm places a second reservation) beside a
+ * repeatable `edit`. The eight public cards are the undeclared control. Its
+ * bar 3 (a seeded spent record paints the control spent at first paint) needs
+ * runtime state, not a prop, so it is read by the reference runtime test on
+ * the generated source, not by this corpus.
+ */
+export const EXPERIMENT_COMMITS: BenchmarkCommit[] = [
+  {
+    id: 'booking-confirm',
+    name: 'Table Booking Confirmation',
+    description: 'A reservation summary with one once-only Confirm; the confirm is declared oneShot on the contract',
+    complexity: 'medium',
+    expectedMinScore: 65,
+    shellType: 'chat',
+    screen: 'desktop',
+    prompt: `Build a table-booking confirmation card for a restaurant.
+
+  Show the reservation the visitor is about to confirm, all from props:
+  - Restaurant name and neighbourhood
+  - Date, time and party size
+  - The table or area (e.g. "Window table", "Patio")
+  - Any note the visitor left (optional)
+  - A cancellation line from props (e.g. "Free cancellation until 2 hours before")
+
+  One primary action: a "Confirm booking" button that calls the confirm action with the booking id. Confirming places
+  the reservation — it is the one thing on this card that must not happen twice. A secondary "Change details" link calls
+  the edit action with the booking id; that one may be pressed any number of times.
+
+  Requirements:
+  - Everything shown comes from props; no invented restaurant, date or price
+  - Use the design system's primitives and tokens for all styling
+  - Keep the card compact: it renders in the chat panel`,
+    contract: {
+      propsSpec: {
+        properties: {
+          bookingId: { schema: { type: 'string' }, required: true, description: 'The reservation being confirmed' },
+          restaurant: { schema: { type: 'string' }, required: true, description: 'Restaurant name' },
+          neighbourhood: { schema: { type: 'string' }, required: false, description: 'Where the restaurant is' },
+          date: { schema: { type: 'string' }, required: true, description: 'Booking date, already formatted for display' },
+          time: { schema: { type: 'string' }, required: true, description: 'Booking time, already formatted for display' },
+          partySize: { schema: { type: 'number' }, required: true, description: 'Number of guests' },
+          table: { schema: { type: 'string' }, required: false, description: 'Table or area, e.g. "Window table"' },
+          note: { schema: { type: 'string' }, required: false, description: 'A note the visitor left for the restaurant' },
+          cancellation: { schema: { type: 'string' }, required: true, description: 'The cancellation terms, one line' },
+        },
+      },
+      actionSpec: {
+        confirm: {
+          label: 'Confirm booking',
+          description: 'Places the reservation. Once-only: a second confirm would place a second reservation.',
+          oneShot: true,
+          nextStep: 'booking_confirm',
+          example: { bookingId: 'bk_7f3a' },
+        },
+        edit: {
+          label: 'Change details',
+          description: 'Reopen the booking details for editing; may be pressed any number of times',
+          nextStep: 'booking_edit',
+          example: { bookingId: 'bk_7f3a' },
+        },
+      },
+    },
+    props: {
+      bookingId: 'bk_7f3a',
+      restaurant: 'Harbor & Vine',
+      neighbourhood: 'Old Port',
+      date: 'Saturday 4 October',
+      time: '7:30 pm',
+      partySize: 4,
+      table: 'Window table',
+      note: 'One guest is vegetarian',
+      cancellation: 'Free cancellation until 2 hours before',
+    },
+  },
+];
+
+/**
+ * Resolve the commits a run names. The public corpus and the experiment corpus
+ * are both addressable by id; unknown ids throw (a silent drop once turned a
+ * 4-commit request into "3/3 passed"). Returned in corpus order.
+ */
+export function resolveRunCommits(ids: readonly string[]): BenchmarkCommit[] {
+  const all = [...BENCHMARK_COMMITS, ...EXPERIMENT_COMMITS];
+  const known = new Set(all.map((c) => c.id));
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown commit ID(s): ${unknown.join(', ')}. Available: ${[...known].sort().join(', ')}`);
+  }
+  return all.filter((c) => ids.includes(c.id));
+}
