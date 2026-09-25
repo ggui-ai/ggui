@@ -6,6 +6,7 @@ import {
   type RerankQuery,
 } from './llm-rerank.js';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
+import { MATCHED_INTENT_MAX_CHARS } from '@ggui-ai/protocol';
 
 interface StubReturn {
   matchId: string | null;
@@ -154,6 +155,38 @@ describe('rerankCandidates', () => {
     });
     const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
     expect(decision.latencyMs).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe('candidate intent cut — one constant with blueprintMeta.matchedIntent (ggui#1336)', () => {
+  function capture(): { llm: LLMCaller; messages: string[] } {
+    const messages: string[] = [];
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructured(_systemPrompt: string, userMessage: string): Promise<unknown> {
+        messages.push(userMessage);
+        return { matchId: null, confidence: 0, reason: 'captured' };
+      },
+    };
+    return { llm, messages };
+  }
+
+  it('cuts a long stored intent to MATCHED_INTENT_MAX_CHARS − 1 characters and "…", and passes one at the cap verbatim', async () => {
+    const long = 'x'.repeat(MATCHED_INTENT_MAX_CHARS + 50);
+    const atCap = 'y'.repeat(MATCHED_INTENT_MAX_CHARS);
+    const { llm, messages } = capture();
+    await rerankCandidates({ llm }, QUERY, [
+      { id: 'bp-long', cachedIntent: long, cachedContractSummary: 'slots=∅; actions=∅; streams=∅' },
+      { id: 'bp-cap', cachedIntent: atCap, cachedContractSummary: 'slots=∅; actions=∅; streams=∅' },
+    ]);
+    const message = messages[0] ?? '';
+    // What the judge reads is exactly what a judged hit later hands the agent.
+    expect(message).toContain(`  intent: ${long.slice(0, MATCHED_INTENT_MAX_CHARS - 1)}…`);
+    expect(message).not.toContain(long);
+    expect(message).toContain(`  intent: ${atCap}`);
+    expect(MATCHED_INTENT_MAX_CHARS).toBe(280);
   });
 });
 

@@ -12,6 +12,7 @@
  * judge restores precision. Combined break-even hit rate is ~10%;
  * realistic workloads observe 30-70%.
  */
+import { MATCHED_INTENT_MAX_CHARS } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 
 /**
@@ -135,7 +136,11 @@ function buildUserMessage(
   for (const c of candidates) {
     lines.push('---');
     lines.push(`  id: ${c.id}`);
-    lines.push(`  intent: ${truncate(c.cachedIntent, 280)}`);
+    // The cap is the protocol's `MATCHED_INTENT_MAX_CHARS`: the same
+    // string the judge reads here is what a judged hit hands back to the
+    // agent as `blueprintMeta.matchedIntent` (ggui#1336), so the two cuts
+    // are one constant, not two literals that happen to agree.
+    lines.push(`  intent: ${truncate(c.cachedIntent, MATCHED_INTENT_MAX_CHARS)}`);
     lines.push(`  contract: ${c.cachedContractSummary}`);
     if (typeof c.cosine === 'number') {
       lines.push(`  cosine: ${c.cosine.toFixed(3)}`);
