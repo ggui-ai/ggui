@@ -203,6 +203,14 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(d).toMatch(/VARIANCE_GAP[\s\S]{0,200}DEFAULT TO ACCEPT/i);
     });
 
+    it('names blueprintMeta.matchedIntent and the decline path, so the agent knows what the member is for (#1336)', () => {
+      const d = description();
+      expect(d).toMatch(/picked by the reuse judge/);
+      // The member is explained AND paired with its decline: an agent that reads
+      // a wrong card's purpose must be told to re-handshake with forceCreate.
+      expect(d).toMatch(/matchedIntent[\s\S]{0,300}forceCreate: true/);
+    });
+
     it('teaches the variance/data boundary (design signals vs per-user data)', () => {
       const d = description();
       // variance = design-shaping signals; per-user data → props/contextSpec.
@@ -626,6 +634,48 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.action).toBe('reuse');
       expect(out.suggestion).toEqual(cachedSuggestion);
       expect(out.suggestion.blueprintMeta.codeHash).toBe('code_hash_abc');
+    });
+
+    it('carries `blueprintMeta.matchedIntent` through the output strip gate, and the advertised output names it inside a closed object (#1336, #1333)', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const judged: HandshakeSuggestion = {
+        origin: 'cache',
+        rationale: 'match-semantic: a saved interface matches this intent — reusing it',
+        blueprintMeta: {
+          blueprintId: 'bp_judged',
+          contractHash: 'hash_judged',
+          variance: {},
+          matchedIntent: 'Weekly haircut availability grid',
+        },
+      };
+      const negotiator: HandshakeNegotiator = {
+        decide: () => ({
+          action: 'reuse',
+          reason: 'judged hit',
+          suggestion: judged,
+          effectiveContract: {} as DataContract,
+        }),
+      };
+      const handler = createGguiHandshakeHandler({ kvStore, negotiator });
+      const out = await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      // The output schema is the strip gate (an undeclared member vanishes);
+      // since step A declared this one, it reaches the wire.
+      expect(out.suggestion.blueprintMeta.matchedIntent).toBe('Weekly haircut availability grid');
+
+      // The premise the two-step landing rests on (#1333): the SDK advertises
+      // the output object CLOSED, and after step A it names the member with
+      // its cap — a host that cached this schema accepts step B's emission.
+      const projected = z.toJSONSchema(z.object(handler.outputSchema), { io: 'output' });
+      const child = (
+        node: z.core.JSONSchema.BaseSchema | undefined,
+        name: string,
+      ): z.core.JSONSchema.BaseSchema | undefined => {
+        const v = node?.properties?.[name];
+        return typeof v === 'object' ? v : undefined;
+      };
+      const blueprintMeta = child(child(projected, 'suggestion'), 'blueprintMeta');
+      expect(blueprintMeta?.additionalProperties).toBe(false);
+      expect(child(blueprintMeta, 'matchedIntent')?.maxLength).toBe(280);
     });
 
     it('propagates an `origin: synth` suggestion with amendments', async () => {

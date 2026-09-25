@@ -46,6 +46,7 @@
 
 import { createHash } from 'node:crypto';
 import {
+  MATCHED_INTENT_MAX_CHARS,
   dataContractSchema,
   lintContract,
   summarizeContract,
@@ -227,6 +228,17 @@ export interface HandshakeDecisionAdapter {
 
 /** Decide-input shape — derived from the negotiator contract (single source of truth). */
 export type HandshakeDecideInput = Parameters<HandshakeNegotiator['decide']>[0];
+
+/**
+ * `blueprintMeta.matchedIntent` (#1336) for a judged hit: the stored intent,
+ * cut the way the reuse judge cuts a candidate's intent (llm-rerank.ts), so
+ * the agent reads exactly the string the judge compared. Blank → absent.
+ */
+function matchedIntentOf(intent: string): string | undefined {
+  if (intent.trim().length === 0) return undefined;
+  if (intent.length <= MATCHED_INTENT_MAX_CHARS) return intent;
+  return `${intent.slice(0, MATCHED_INTENT_MAX_CHARS - 1)}…`;
+}
 
 /** Operational vs programmer-error classifier — bugs re-throw, ops fail open. */
 function isOperationalError(err: unknown): boolean {
@@ -610,6 +622,10 @@ export async function decideHandshake(
     // satisfiable (see {@link isFulfillable}).
     const agentCaps = parsedDraft.data.agentCapabilities?.tools;
     const semanticHits: BlueprintMatchHit[] = [];
+    // Judged hits from the requesting app's OWN pool — the only ones whose
+    // stored intent may reach this agent (`blueprintMeta.matchedIntent`,
+    // #1336). A pool shared across apps never contributes one.
+    const ownPoolHits = new Set<BlueprintMatchHit>();
     // The keys every pool probe below reads the index at — computed ONCE from the
     // same arguments `matchBlueprint` receives (its `expectedKey` is this
     // `blueprintKey(contract)`; it composes the exact key with the default kind),
@@ -689,6 +705,7 @@ export async function decideHandshake(
           isFulfillable(matchResult.blueprint.contract, agentCaps).ok
         ) {
           semanticHits.push(matchResult);
+          if (scope === ctx.appId) ownPoolHits.add(matchResult);
         }
       } catch (err) {
         if (!isOperationalError(err)) throw err;
@@ -710,7 +727,18 @@ export async function decideHandshake(
         if (aGap !== bGap) return aGap ? b : a; // empty-gap wins
         return (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a;
       });
-      const reuse = buildCacheReuseResult(best.blueprint, best.reason, best.cosine, 'match-semantic');
+      const cacheReuse = buildCacheReuseResult(best.blueprint, best.reason, best.cosine, 'match-semantic');
+      const matchedIntent = ownPoolHits.has(best) ? matchedIntentOf(best.blueprint.intent) : undefined;
+      const reuse =
+        matchedIntent === undefined
+          ? cacheReuse
+          : {
+              ...cacheReuse,
+              suggestion: {
+                ...cacheReuse.suggestion,
+                blueprintMeta: { ...cacheReuse.suggestion.blueprintMeta, matchedIntent },
+              },
+            };
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
       // what the cached UI lacks before accepting; a variance-divergent
       // reuse additionally carries a VARIANCE_GAP warn finding so the agent

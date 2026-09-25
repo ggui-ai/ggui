@@ -12,7 +12,9 @@
  */
 import { createHash } from 'node:crypto';
 import {
+  MATCHED_INTENT_MAX_CHARS,
   dataContractSchema,
+  handshakeSuggestionSchema,
   summarizeContract,
   type DataContract,
 } from '@ggui-ai/protocol';
@@ -327,10 +329,15 @@ function hit(strategy: 'exact-key' | 'semantic', over: {
   reason?: string;
   judgeConfidence?: number;
   coverage?: BlueprintMatchHit['coverage'];
+  intent?: string;
 } = {}): BlueprintMatchResult {
   return {
     strategy,
-    blueprint: mkBlueprint({ id: over.id ?? `bp-${strategy}`, contractKey: over.id ?? strategy }),
+    blueprint: mkBlueprint({
+      id: over.id ?? `bp-${strategy}`,
+      contractKey: over.id ?? strategy,
+      ...(over.intent !== undefined ? { intent: over.intent } : {}),
+    }),
     cosine: strategy === 'exact-key' ? 1 : 0.8,
     reason: over.reason ?? `${strategy} match`,
     coverage: over.coverage ?? EMPTY_GAP,
@@ -457,6 +464,167 @@ describe('decideHandshake — forceCreate (ggui#1335)', () => {
     expect(r.suggestion.origin).toBe('cache');
     expect(preMatch).toHaveBeenCalledOnce();
     expect(mockMatch).toHaveBeenCalledOnce();
+  });
+});
+
+// #1336 — the agent sees the card a JUDGED hit proposes, but never a card
+// from a pool shared across apps (one app's stored intent never reaches
+// another app's agent) and never on an exact-key hit (no judge ran).
+describe('decideHandshake — blueprintMeta.matchedIntent (#1336)', () => {
+  it("carries the stored intent on a semantic hit from the app's own pool", async () => {
+    mockMatch.mockResolvedValueOnce(
+      hit('semantic', { id: 'bp-sem', judgeConfidence: 0.9, intent: 'Weekly haircut availability grid' }),
+    );
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.matchedIntent).toBe('Weekly haircut availability grid');
+  });
+
+  it('treats a pool whose scope IS the requesting app as its own pool', async () => {
+    mockMatch.mockResolvedValueOnce(hit('semantic', { id: 'bp-sem', judgeConfidence: 0.9, intent: 'own card' }));
+    const r = await decideHandshake(adapter({ pools: [pool({ scope: CTX.appId })] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.suggestion.blueprintMeta.matchedIntent).toBe('own card');
+  });
+
+  it('omits it on a semantic hit from a pool shared across apps', async () => {
+    mockMatch
+      .mockResolvedValueOnce(miss)
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-shared', judgeConfidence: 0.9, intent: 'another app’s card' }));
+    const r = await decideHandshake(adapter({ pools: [pool(), pool({ scope: 'shared' })] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-shared');
+    expect(r.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
+  });
+
+  it('omits it on an exact-key hit (no judge ran)', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek', intent: 'exact card' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-ek');
+    expect(r.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
+  });
+
+  it('cuts a long stored intent the way the judge cuts a candidate — 279 characters and "…" — and passes a 280-character intent verbatim', async () => {
+    const long = 'x'.repeat(MATCHED_INTENT_MAX_CHARS + 50);
+    mockMatch.mockResolvedValueOnce(hit('semantic', { id: 'bp-long', judgeConfidence: 0.9, intent: long }));
+    const cut = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    const got = cut.suggestion.blueprintMeta.matchedIntent ?? '';
+    expect(got).toHaveLength(MATCHED_INTENT_MAX_CHARS);
+    expect(got.endsWith('…')).toBe(true);
+    expect(got.slice(0, -1)).toBe(long.slice(0, MATCHED_INTENT_MAX_CHARS - 1));
+    expect(handshakeSuggestionSchema.safeParse(cut.suggestion).success).toBe(true);
+
+    const exact = 'y'.repeat(MATCHED_INTENT_MAX_CHARS);
+    mockMatch.mockResolvedValueOnce(hit('semantic', { id: 'bp-exact', judgeConfidence: 0.9, intent: exact }));
+    const kept = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(kept.suggestion.blueprintMeta.matchedIntent).toBe(exact);
+  });
+
+  it('emits the OWN pool card when it wins over a shared-pool hit, and nothing when the shared card wins', async () => {
+    // Own 0.92 beats shared 0.65 → the own card is proposed, with its intent.
+    mockMatch
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-own', judgeConfidence: 0.92, intent: 'own card' }))
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-shared', judgeConfidence: 0.65, intent: 'shared card' }));
+    const won = await decideHandshake(adapter({ pools: [pool(), pool({ scope: 'shared' })] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(won.suggestion.blueprintMeta.blueprintId).toBe('bp-own');
+    expect(won.suggestion.blueprintMeta.matchedIntent).toBe('own card');
+
+    // Own 0.65 loses to shared 0.92 → the shared card is proposed and carries
+    // NO intent, even though the own pool DID contribute a judged hit: the
+    // member follows the card that won, never the pool that participated.
+    mockMatch
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-own', judgeConfidence: 0.65, intent: 'own card' }))
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-shared', judgeConfidence: 0.92, intent: 'shared card' }));
+    const lost = await decideHandshake(adapter({ pools: [pool(), pool({ scope: 'shared' })] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(lost.suggestion.blueprintMeta.blueprintId).toBe('bp-shared');
+    expect(lost.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
+  });
+
+  it('keeps it when gap findings are appended to the reuse (the merge spreads the suggestion that carries it)', async () => {
+    mockMatch.mockResolvedValueOnce({
+      strategy: 'semantic',
+      blueprint: mkBlueprint({ id: 'bp-gapped', intent: 'gapped card', variance: { persona: 'minimalist' } }),
+      cosine: 0.8,
+      reason: 'semantic match',
+      coverage: EMPTY_GAP,
+      judgeConfidence: 0.9,
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: { persona: 'power-user' } },
+      ctx: CTX,
+    });
+    expect(r.suggestion.validationFindings?.some((f) => f.code === 'VARIANCE_GAP')).toBe(true);
+    expect(r.suggestion.blueprintMeta.matchedIntent).toBe('gapped card');
+  });
+
+  it('omits it when the stored intent is blank', async () => {
+    mockMatch.mockResolvedValueOnce(hit('semantic', { id: 'bp-blank', judgeConfidence: 0.9, intent: '   ' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-blank');
+    expect(r.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
+  });
+
+  it('omits it on a pre-match hit and on a create (agent) suggestion', async () => {
+    const preResult = buildCacheReuseResult(
+      mkBlueprint({ id: 'curated-1', intent: 'curated card' }),
+      'curated',
+      1,
+      'match-exact',
+    );
+    const pre = await decideHandshake(
+      adapter({ preMatch: vi.fn(async () => preResult), pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(pre.suggestion.origin).toBe('cache');
+    expect(pre.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
+
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    const created = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(created.suggestion.origin).toBe('agent');
+    expect(created.suggestion.blueprintMeta).not.toHaveProperty('matchedIntent');
   });
 });
 
