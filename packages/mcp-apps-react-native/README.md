@@ -1,6 +1,6 @@
 # @ggui-ai/mcp-apps-react-native
 
-React Native SDK for [ggui](https://ggui.ai) — the interface layer
+MCP Apps host helper for React Native, from [ggui](https://ggui.ai) — the interface layer
 between AI agents and humans. Agents describe UIs in natural language
 over MCP; ggui generates ephemeral interfaces. This package lets you
 embed those interfaces in a React Native or Expo app.

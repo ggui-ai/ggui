@@ -1,9 +1,10 @@
 /**
  * DynamicComponent — alias for ReactComponentRenderer.
  *
- * Public mount surface for compiled component code outside the
- * `<GguiRender>` lifecycle — preview routes and ad-hoc blueprint
- * viewers pass `{ id, componentCode }`.
+ * Public mount surface for compiled component code, for preview
+ * routes and ad-hoc blueprint viewers that pass `{ id, componentCode }`.
+ * A live render mounts in the view's iframe through an MCP Apps host
+ * (`@mcp-ui/client`'s `AppRenderer` on the web), never here.
  *
  * Post-Phase-B: the old `StackItemRenderer` (which scoped a wire
  * provider per stack item via `LegacyScopableWireConfig.scope()`) is

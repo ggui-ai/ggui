@@ -34,7 +34,7 @@ export interface GguiProviderProps {
    * (e.g., browser Permissions API, or a custom confirmation dialog).
    *
    * @param permission - The Web Permissions API name being requested
-   *   (e.g., `'camera'`, `'microphone'`, `'geolocation'`). The SDK
+   *   (e.g., `'camera'`, `'microphone'`, `'geolocation'`). The helper
    *   pre-validates the name against `KNOWN_PERMISSION_NAMES` before
    *   invoking this handler, so an unknown name surfaces as a
    *   `UnknownPermissionNameError` to the caller without ever
@@ -70,7 +70,7 @@ export interface GguiProviderProps {
 }
 
 /**
- * Root provider for the ggui React SDK.
+ * Root provider for the React host helper.
  *
  * Wraps the application (or a subtree) with shared configuration needed by
  * all ggui hooks and components: app identity, WebSocket endpoint, adapter
@@ -126,7 +126,7 @@ export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext
     async (permission: string): Promise<PermissionStatus> => {
       // Gate on `KNOWN_PERMISSION_NAMES` (the Web Permissions API
       // enum). With no host-advertised `AdapterType[]` allow-list,
-      // the SDK is the last line of defense against typos or
+      // the helper is the last line of defense against typos or
       // unsupported names slipping into the runtime cache.
       if (!KNOWN_PERMISSION_NAMES_SET.has(permission)) {
         throw new UnknownPermissionNameError({ observedName: permission });

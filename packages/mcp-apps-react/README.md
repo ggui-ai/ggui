@@ -1,6 +1,6 @@
 # @ggui-ai/mcp-apps-react
 
-React SDK for [ggui](https://ggui.ai) — the interface layer between AI
+MCP Apps host helper for React, from [ggui](https://ggui.ai) — the interface layer between AI
 agents and humans. Agents describe UIs in natural language over MCP;
 ggui generates ephemeral interfaces. This package lets you embed those
 interfaces in a React web app.

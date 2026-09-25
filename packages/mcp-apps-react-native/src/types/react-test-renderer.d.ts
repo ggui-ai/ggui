@@ -3,7 +3,7 @@
  *
  * `react-test-renderer@19` does not ship its own types, and there is no
  * matching `@types/react-test-renderer@19` on npm. We only need a tiny
- * surface (`create`, `act`, `ReactTestRenderer.toJSON()`) for the SDK's
+ * surface (`create`, `act`, `ReactTestRenderer.toJSON()`) for the package's
  * test files — full fidelity is not required.
  */
 declare module 'react-test-renderer' {

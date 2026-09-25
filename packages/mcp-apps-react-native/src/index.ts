@@ -1,5 +1,5 @@
 /**
- * @ggui-ai/mcp-apps-react-native - React Native SDK for ggui
+ * @ggui-ai/mcp-apps-react-native - MCP Apps host helper for React Native
  *
  * Provides React Native components, hooks, and utilities for embedding ggui
  * agent interfaces in mobile applications. The host primitive is
@@ -78,7 +78,7 @@ export type {
 // ProtocolError typed union — the canonical shape for every failure
 // the renderer classifies outward. `<McpAppIframe onError>` surfaces
 // it; embedding apps pattern-match on `err.kind`. The sibling package
-// `@ggui-ai/iframe-runtime` owns the declaration; the RN SDK re-exports
+// `@ggui-ai/iframe-runtime` owns the declaration; this host helper re-exports
 // it at parity with `@ggui-ai/mcp-apps-react` so consumers have a single import
 // point per platform.
 export type {

@@ -89,7 +89,7 @@ export interface UseInvokeOptions {
   };
   /**
    * Optional callback fired once per `send()` when the response transport
-   * shape is known. Mirrors the RN SDK's option so the two signatures align
+   * shape is known. Mirrors the RN host helper's option so the two signatures align
    * at the facade level.
    *
    *   'streaming' — fetch returned a ReadableStream (SSE path)

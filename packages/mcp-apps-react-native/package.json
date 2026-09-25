@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/mcp-apps-react-native",
   "version": "0.23.0",
-  "description": "React Native SDK for ggui — components and hooks for embedding agent-generated UIs in mobile apps.",
+  "description": "React Native host helper for MCP Apps — components and hooks for embedding agent-generated UIs in mobile apps.",
   "keywords": [
     "ggui",
     "react-native",
@@ -9,7 +9,7 @@
     "mcp",
     "ai-agent",
     "generative-ui",
-    "sdk"
+    "mcp-apps"
   ],
   "license": "Apache-2.0",
   "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/mcp-apps-react-native",

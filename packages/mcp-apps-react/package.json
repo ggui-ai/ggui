@@ -1,14 +1,14 @@
 {
   "name": "@ggui-ai/mcp-apps-react",
   "version": "0.23.0",
-  "description": "React SDK for ggui — components and hooks for embedding agent-generated UIs in web apps.",
+  "description": "React host helper for MCP Apps — components and hooks for embedding agent-generated UIs in web apps.",
   "keywords": [
     "ggui",
     "react",
     "mcp",
     "ai-agent",
     "generative-ui",
-    "sdk"
+    "mcp-apps"
   ],
   "license": "Apache-2.0",
   "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/mcp-apps-react",

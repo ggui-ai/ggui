@@ -68,7 +68,7 @@ export interface GguiContextValue {
   /** Base URL for design system modules in WebView import map */
   designSystemUrl?: string;
   /**
-   * App config (endpointUrl, defaultShellType, etc). Mirrors the web SDK's
+   * App config (endpointUrl, defaultShellType, etc). Mirrors the web host helper's
    * context field — `useInvoke` reads `endpointUrl` from here when the
    * caller doesn't override it. Populated by {@link GguiProvider} via its
    * `appConfig` prop.
@@ -106,7 +106,7 @@ export function useGguiContext(): GguiContextValue {
  * for this capability — callers MUST handle that case (e.g. render
  * a fallback UI). Grant decisions live on `clientCapabilities.gadgets
  * [*].permission` and surface to the iframe via `Permissions-Policy`;
- * the SDK context just exposes whatever the host wired into
+ * the helper's context just exposes whatever the host wired into
  * `adapterImpls`.
  *
  * Mirrors {@link useAdapter} in `@ggui-ai/mcp-apps-react`. Capability packages

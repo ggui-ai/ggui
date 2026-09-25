@@ -105,7 +105,7 @@ export function useGguiContext(): GguiContextValue {
  * for this capability — callers MUST handle that case (e.g. render
  * a fallback UI). Grant decisions live on `clientCapabilities.gadgets
  * [*].permission` and surface to the iframe via `Permissions-Policy`;
- * the SDK context just exposes whatever the host wired into
+ * the helper's context just exposes whatever the host wired into
  * `adapterImpls`.
  *
  * Type safety comes from capability packages or host apps augmenting

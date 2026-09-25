@@ -1,5 +1,5 @@
 /**
- * @ggui-ai/mcp-apps-react - React SDK for ggui
+ * @ggui-ai/mcp-apps-react - MCP Apps host helper for React
  *
  * Provides React components, hooks, and utilities for embedding ggui agent
  * interfaces in web applications: the invoke conversation loop, MCP Apps
@@ -42,7 +42,7 @@ export type {
 // `@mcp-ui/client`, imported directly) surfaces it; embedding apps
 // pattern-match on `err.kind`. The sibling package
 // `@ggui-ai/iframe-runtime` owns the declaration; `@ggui-ai/mcp-apps-react`
-// re-exports it so consumers pulling from the React SDK don't need a
+// re-exports it so consumers pulling from this host helper don't need a
 // direct renderer import.
 export type {
   ProtocolError,

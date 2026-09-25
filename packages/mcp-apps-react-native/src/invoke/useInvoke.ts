@@ -100,7 +100,7 @@ export interface UseInvokeOptions {
    *   - `ggui_render` / `ggui_update` / `ggui_handshake` — paired by
    *     `tool_use_id` with an inline `tool_result` block on the same
    *     assistant turn. Consumers watch for the pair and mount their
-   *     renderer (e.g. `<McpAppIframe>` on the web SDK) using the
+   *     renderer (e.g. this package's `<McpAppIframe>`) using the
    *     bootstrap metadata off the paired tool_result.
    *   - `ggui_render_blueprint` — a pure client tool (no server result to
    *     pair with); the consumer resolves the blueprint name locally.
@@ -409,7 +409,7 @@ function makeTransportError(message: string): InvokeError {
  * tool_result's content payload if one is present. Tolerant of arbitrary
  * nested shapes — agents may put the id directly on the result or under
  * a wrapper like `{ result: { hostSessionId } }`. Wire field and
- * SDK-side name are both `hostSessionId`.
+ * helper-side name are both `hostSessionId`.
  */
 function extractHostSessionIdFromContent(content: unknown): string | null {
   if (typeof content !== 'object' || content === null) return null;
