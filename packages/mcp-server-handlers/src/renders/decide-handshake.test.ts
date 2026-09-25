@@ -38,6 +38,7 @@ import {
   type BlueprintPool,
   type HandshakeDecisionAdapter,
 } from './decide-handshake.js';
+import type { HandshakeNegotiatorResult } from './handshake.js';
 
 vi.mock('./blueprint-matcher.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./blueprint-matcher.js')>();
@@ -141,6 +142,7 @@ describe('buildCacheReuseResult', () => {
       },
       'match-semantic: judge matched (confidence=0.90)',
       0.87,
+    'match-exact',
     );
     expect(result.action).toBe('reuse');
     // Atomic: served contract is the CACHED blueprint's own contract.
@@ -186,6 +188,7 @@ describe('buildCacheReuseResult', () => {
       },
       'r',
       1,
+    'match-exact',
     );
     expect(r.suggestion.blueprintMeta.source).toEqual({ kind: 'user' });
   });
@@ -204,6 +207,7 @@ describe('buildCacheReuseResult', () => {
       },
       'match-semantic',
       0.9,
+      'match-semantic',
     );
     expect(r.suggestion.blueprintMeta.variance).toEqual(variance);
   });
@@ -218,14 +222,14 @@ describe('buildCacheReuseResult', () => {
       variance: {},
       source: { kind: 'user' } as const,
     };
-    expect(buildCacheReuseResult(bp, 'r', 0.5)).toEqual(buildCacheReuseResult(bp, 'r', 0.5));
+    expect(buildCacheReuseResult(bp, 'r', 0.5, 'match-exact')).toEqual(buildCacheReuseResult(bp, 'r', 0.5, 'match-exact'));
   });
 });
 
 describe('buildCreateFallback', () => {
   it('keeps a CLEAN draft verbatim with origin:agent and no findings', () => {
     const clean: DataContract = { propsSpec: { properties: {} } };
-    const r = buildCreateFallback(clean, 'no-creds: ...');
+    const r = buildCreateFallback(clean, 'no-creds: ...', 'no-creds');
     expect(r.action).toBe('create');
     expect(r.suggestion.origin).toBe('agent');
     expect(r.effectiveContract).toEqual(clean);
@@ -255,7 +259,9 @@ describe('buildCreateFallback', () => {
         bad: { type: 'object' }, // flat schema, no wrapper — refused
       },
     };
-    const r = buildCreateFallback(partly, 'no-creds: ...');
+    const r = buildCreateFallback(partly, 'no-creds: ...', 'no-creds');
+    // ggui#1343: the salvaged-subset arm carries the fallback kind too.
+    expect('reasonKind' in r ? r.reasonKind : undefined).toBe('no-creds');
     if (r.action === 'declined') throw new Error('expected a salvaged create, got declined');
     expect(r.action).toBe('create');
     expect(r.suggestion.origin).toBe('synth');
@@ -273,7 +279,7 @@ describe('buildCreateFallback', () => {
 
   it('DECLINES a draft with nothing salvageable — no contract, no `{}`, findings loud', () => {
     const malformed = { propsSpec: 'not-an-object' };
-    const r = buildCreateFallback(malformed, 'no-creds: ...');
+    const r = buildCreateFallback(malformed, 'no-creds: ...', 'no-creds');
     expect(r.action).toBe('declined');
     expect(r.effectiveContract).toBeNull();
     expect(r.suggestion.origin).toBe('agent');
@@ -287,7 +293,7 @@ describe('buildCreateFallback', () => {
   });
 
   it('defaults blueprintMeta.variance to {} when no requestVariance is threaded', () => {
-    const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r');
+    const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r', 'no-creds');
     expect(r.suggestion.blueprintMeta.variance).toEqual({});
   });
 
@@ -296,6 +302,7 @@ describe('buildCreateFallback', () => {
     const r = buildCreateFallback(
       { propsSpec: { properties: {} } },
       'r',
+      'no-creds',
       requestVariance,
     );
     expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
@@ -348,6 +355,7 @@ describe('decideHandshake — pre-match', () => {
       },
       'curated',
       1,
+    'match-exact',
     );
     const preMatch = vi.fn(async () => preResult);
     const r = await decideHandshake(
@@ -410,6 +418,7 @@ describe('decideHandshake — forceCreate (ggui#1335)', () => {
       },
       'curated',
       1,
+    'match-exact',
     );
   const clean: EnsureConformingResult = {
     contract: {},
@@ -1566,5 +1575,64 @@ describe('decideHandshake — create / fallback', () => {
     );
     expect(r.action).toBe('create');
     expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
+  });
+});
+
+describe('reasonKind — the bounded kind beside every reason (ggui#1343)', () => {
+  const kindOf = (r: HandshakeNegotiatorResult): string | undefined =>
+    'reasonKind' in r ? r.reasonKind : undefined;
+  const cleanWith = (method: EnsureConformingResult['method']): EnsureConformingResult =>
+    method === 'declined'
+      ? { contract: null, origin: 'agent', method, findings: [], reasoning: 'declined' }
+      : {
+          contract: {},
+          origin: method === 'verbatim' ? 'agent' : 'synth',
+          method,
+          findings: [],
+          reasoning: `reasoning for ${method}`,
+        };
+
+  it('an exact-key reuse → match-exact', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+    expect(r.action).toBe('reuse');
+    expect(kindOf(r)).toBe('match-exact');
+  });
+
+  it('a semantic reuse → match-semantic', async () => {
+    mockMatch.mockResolvedValueOnce(hit('semantic', { id: 'bp-sem' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+    expect(r.action).toBe('reuse');
+    expect(kindOf(r)).toBe('match-semantic');
+  });
+
+  it.each(['verbatim', 'normalized', 'llm-repair', 'salvaged-subset'] as const)(
+    'a create whose conforming method is %s → the same kind',
+    async (method) => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(cleanWith(method));
+      const r = await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+      expect(r.action).toBe('create');
+      expect(kindOf(r)).toBe(method);
+    },
+  );
+
+  it('no LLM for the configured provider → no-creds', async () => {
+    mockMatch.mockResolvedValue(miss);
+    const r = await decideHandshake(adapter({ resolveLlm: () => undefined, pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('create');
+    expect(kindOf(r)).toBe('no-creds');
+  });
+
+  it('an operational failure under the repair → negotiator-degraded', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockRejectedValue(new Error('provider 5xx'));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+    expect(r.action).toBe('create');
+    expect(kindOf(r)).toBe('negotiator-degraded');
   });
 });

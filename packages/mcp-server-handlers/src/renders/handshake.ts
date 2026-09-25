@@ -35,7 +35,7 @@
  * The handler returns a single `suggestion` carrying `origin`
  * (cache | agent | synth) plus an ALWAYS-PRESENT `blueprintMeta`.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DomainError } from '@ggui-ai/protocol';
 import type { GeneratorId } from '@ggui-ai/protocol';
 import { z } from 'zod';
@@ -314,6 +314,13 @@ export interface HandshakeNegotiatorDeclined {
 export interface HandshakeNegotiatorDecision {
   readonly action: 'create' | 'reuse' | 'update' | 'replace';
   readonly reason: string;
+  /**
+   * The bounded kind of `reason` (see {@link HandshakeReasonKind}).
+   * Optional on the type because {@link HandshakeNegotiator} is a published
+   * interface a host may implement; every negotiator this package ships
+   * sets it, and telemetry reads an absent kind as `'unclassified'`.
+   */
+  readonly reasonKind?: HandshakeReasonKind;
   readonly suggestion: HandshakeSuggestion;
   /**
    * Effective contract the accept-path gen / cache-delivery runs
@@ -348,6 +355,34 @@ export interface HandshakeNegotiatorDecision {
 
 /** What a negotiator answers: a decision to render against, or a decline. */
 export type HandshakeNegotiatorResult = HandshakeNegotiatorDecision | HandshakeNegotiatorDeclined;
+
+/**
+ * The bounded KIND of a decision's reason — derived where the reason is
+ * built, never parsed out of its text (ggui#1343). The `handshake.decided`
+ * telemetry line carries this kind plus a hash of the reason text, so the
+ * free text (which on a repair is the repair model's own sentence about the
+ * agent's draft, and on a reuse can name the contract's fields) never
+ * reaches a log.
+ *
+ *   - `curated-prematch` — a deployment's pre-match tier hit;
+ *   - `match-exact` / `match-semantic` — the find-similar tiers;
+ *   - `verbatim` / `normalized` / `llm-repair` / `salvaged-subset` — a
+ *     create, by how the draft was made to conform;
+ *   - `no-creds` — a create with no LLM to repair with;
+ *   - `negotiator-degraded` — a create after an operational failure;
+ *   - `no-negotiator` — the default path when none is bound.
+ */
+export type HandshakeReasonKind =
+  | 'curated-prematch'
+  | 'match-exact'
+  | 'match-semantic'
+  | 'verbatim'
+  | 'normalized'
+  | 'llm-repair'
+  | 'salvaged-subset'
+  | 'no-creds'
+  | 'negotiator-degraded'
+  | 'no-negotiator';
 
 export interface GguiHandshakeHandlerDeps {
   /**
@@ -426,8 +461,11 @@ export interface GguiHandshakeHandlerDeps {
    *   - `origin` — `cache | agent | synth` from the suggestion
    *   - `action` — `'create' | 'reuse' | …` from the negotiator
    *   - `selectedBlueprintId` — the provisional id on the suggestion
-   *   - `selectionReason` — `suggestion.rationale` /
-   *                          `blueprintMeta.selectedReason`
+   *   - `selectionReasonKind` — the decision's bounded reason kind
+   *                              (`'unclassified'` when unset)
+   *   - `selectionReasonHash` — sha256 prefix of `blueprintMeta.selectedReason`
+   *                              / `suggestion.rationale`; the text itself
+   *                              never rides (ggui#1343)
    *   - `selectionConfidence` — surfaced when the negotiator's
    *                              `selectVariant` ran AND the
    *                              orchestration carried confidence
@@ -871,6 +909,7 @@ export function createGguiHandshakeHandler(
         appId: ctx.appId,
         handshakeId,
         record,
+        ...(negotiated.reasonKind !== undefined ? { reasonKind: negotiated.reasonKind } : {}),
       });
 
       // Emit handshake_completed.
@@ -953,6 +992,7 @@ function buildDefaultAgentSuggestion(
       draftContract: blueprintDraft.contract,
       reason:
         'no-negotiator-bound: draft failed validation and no negotiator (LLM) is bound to repair it. Bind a HandshakeNegotiator to enable repair.',
+      kind: 'no-negotiator',
       variance,
     });
   }
@@ -975,6 +1015,7 @@ function buildDefaultAgentSuggestion(
   return {
     action: 'create',
     reason: suggestion.rationale,
+    reasonKind: 'no-negotiator',
     suggestion,
     effectiveContract: contract,
   };
@@ -1211,7 +1252,14 @@ export interface HandshakeDecidedAttributes {
   readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
   readonly origin: 'cache' | 'agent' | 'synth';
   readonly selectedBlueprintId: string;
-  readonly selectionReason: string;
+  /**
+   * The bounded kind of the selection reason (ggui#1343), `'unclassified'`
+   * when the negotiator set none. The reason's TEXT is never on the line:
+   * `selectionReasonHash` is the first 16 hex chars of its sha256, enough
+   * to correlate rows that share a reason without carrying it.
+   */
+  readonly selectionReasonKind: HandshakeReasonKind | 'unclassified';
+  readonly selectionReasonHash: string;
   readonly selectionConfidence?: number;
   /**
    * The armed props-schema hash the record persists — same attribute
@@ -1248,6 +1296,8 @@ function emitHandshakeDecided(
     readonly appId: string;
     readonly handshakeId: string;
     readonly record: HandshakeRecord;
+    /** The decision's bounded reason kind; absent ⇒ `'unclassified'`. */
+    readonly reasonKind?: HandshakeReasonKind;
   },
 ): void {
   if (!sink) return;
@@ -1260,7 +1310,9 @@ function emitHandshakeDecided(
     handshakeId: args.handshakeId,
     action: record.action,
     origin: record.suggestion.origin,
-    selectionReason: reason,
+    // ggui#1343: the kind and a hash of the text — never the text.
+    selectionReasonKind: args.reasonKind ?? 'unclassified',
+    selectionReasonHash: createHash('sha256').update(reason).digest('hex').slice(0, 16),
     // Provenance (cache origin only) — flattened through the shared
     // codec so telemetry rows use the same key vocabulary as stores.
     ...(meta.source ? blueprintSourceToFlat(meta.source) : {}),

@@ -38,6 +38,7 @@ import type {
   HandshakeNegotiatorDeclined,
   HandshakeNegotiatorDecision,
   HandshakeNegotiatorResult,
+  HandshakeReasonKind,
 } from './handshake.js';
 
 /** ERROR findings from the deterministic gate, in the wire shape. */
@@ -95,6 +96,8 @@ export function buildDeclined(args: {
 export function buildSalvagedOrDeclined(args: {
   readonly draftContract: unknown;
   readonly reason: string;
+  /** The bounded kind of `reason` — why no repair ran (ggui#1343). */
+  readonly kind: HandshakeReasonKind;
   readonly variance?: BlueprintVariance;
 }): HandshakeNegotiatorResult {
   const errorFindings = errorFindingsOf(args.draftContract);
@@ -130,6 +133,7 @@ export function buildSalvagedOrDeclined(args: {
   const decision: HandshakeNegotiatorDecision = {
     action: 'create',
     reason: suggestion.rationale,
+    reasonKind: args.kind,
     suggestion,
     effectiveContract: contract,
   };

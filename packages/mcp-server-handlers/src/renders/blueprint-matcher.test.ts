@@ -631,6 +631,10 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
     expect(ev.winningBlueprintId).toBe(stored.id);
     expect(ev.judgeConfidence).toBeCloseTo(0.85);
     expect(ev.judgeReason).toBe('paraphrase match');
+    // ggui#1343 control: the judge's text still reaches the CACHE TRACE
+    // (dev/staging 'logger' mode) even though the telemetry log line
+    // carries only a kind + hash.
+    expect(ev.reason).toContain('paraphrase match');
   });
 
   it('emits nothing when no sink is registered', async () => {

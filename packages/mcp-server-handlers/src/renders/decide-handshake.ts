@@ -366,6 +366,8 @@ export function buildCacheReuseResult(
    * wire's `cacheHit.similarity` (ggui#564).
    */
   matchCosine: number,
+  /** The find-similar tier that hit (ggui#1343). */
+  kind: 'match-exact' | 'match-semantic',
 ): HandshakeNegotiatorResult {
   const codeHash = createHash('sha256')
     .update(blueprint.componentCode)
@@ -397,6 +399,7 @@ export function buildCacheReuseResult(
   return {
     action: 'reuse',
     reason,
+    reasonKind: kind,
     suggestion,
     effectiveContract: blueprint.contract,
     // Matched-ref for the paired render's §6 point-read.
@@ -422,6 +425,8 @@ export function buildCacheReuseResult(
 export function buildCreateFallback(
   draftContract: unknown,
   reason: string,
+  /** WHY no repair ran (ggui#1343): the bounded kind beside `reason`. */
+  kind: 'no-creds' | 'negotiator-degraded',
   requestVariance?: BlueprintVariance,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(draftContract);
@@ -446,6 +451,7 @@ export function buildCreateFallback(
     return {
       action: 'create',
       reason,
+      reasonKind: kind,
       suggestion,
       effectiveContract: contract,
     };
@@ -455,6 +461,7 @@ export function buildCreateFallback(
   return buildSalvagedOrDeclined({
     draftContract,
     reason,
+    kind,
     ...(requestVariance !== undefined ? { variance: requestVariance } : {}),
   });
 }
@@ -661,6 +668,7 @@ export async function decideHandshake(
             // Exact-key = canonical-contract identity — cosine 1 by
             // definition (the matcher hard-sets it; no retrieval ran).
             1,
+            'match-exact',
           );
         }
         if (
@@ -689,7 +697,7 @@ export async function decideHandshake(
         if (aGap !== bGap) return aGap ? b : a; // empty-gap wins
         return (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a;
       });
-      const reuse = buildCacheReuseResult(best.blueprint, best.reason, best.cosine);
+      const reuse = buildCacheReuseResult(best.blueprint, best.reason, best.cosine, 'match-semantic');
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
       // what the cached UI lacks before accepting; a variance-divergent
       // reuse additionally carries a VARIANCE_GAP warn finding so the agent
@@ -719,6 +727,7 @@ export async function decideHandshake(
     return buildCreateFallback(
       draftContract,
       'no-creds: no LLM available for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.',
+      'no-creds',
       variance,
     );
   }
@@ -767,6 +776,8 @@ export async function decideHandshake(
     return {
       action: 'create',
       reason: conforming.reasoning,
+      // The conforming METHOD is the create's bounded kind (ggui#1343).
+      reasonKind: conforming.method,
       suggestion,
       effectiveContract: conforming.contract,
     };
@@ -776,6 +787,7 @@ export async function decideHandshake(
     return buildCreateFallback(
       draftContract,
       `negotiator-degraded: ${errorClass} during decision LLM call — ${errMessage(err)}. Falling back to bare-create; the paired ggui_render will still generate the UI.`,
+      'negotiator-degraded',
       variance,
     );
   }

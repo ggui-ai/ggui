@@ -17,6 +17,7 @@
  *   - alternatives carry through when negotiator supplies them
  */
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { InMemoryKeyValueStore } from '@ggui-ai/mcp-server-core/in-memory';
 import { z } from 'zod';
 import {
@@ -1019,7 +1020,14 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       // suggestion nor the telemetry attribute carries one.
       expect(out.suggestion.blueprintMeta.blueprintId).toBeUndefined();
       expect(attrs['selectedBlueprintId']).toBeUndefined();
-      expect(attrs['selectionReason']).toBeTruthy();
+      // ggui#1343: the log line carries a bounded reason KIND and a hash of
+      // the text, never the text itself. The OSS default (no negotiator
+      // bound) is the 'no-negotiator' kind.
+      expect(attrs['selectionReason']).toBeUndefined();
+      expect(attrs['selectionReasonKind']).toBe('no-negotiator');
+      expect(attrs['selectionReasonHash']).toBe(
+        createHash('sha256').update(out.suggestion.rationale).digest('hex').slice(0, 16),
+      );
       // Agent origin ⇒ no provenance — the flat source keys are
       // absent (cache-only on BlueprintMeta).
       expect(attrs['sourceKind']).toBeUndefined();
@@ -1112,12 +1120,57 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       const attrs = events[0]!.attributes;
       expect(attrs['origin']).toBe('cache');
       expect(attrs['selectedBlueprintId']).toBe('bp_picked');
-      expect(attrs['selectionReason']).toContain('persona match');
+      // ggui#1343: a negotiator that sets no reasonKind reads 'unclassified';
+      // its selectedReason is hashed, never carried.
+      expect(attrs['selectionReason']).toBeUndefined();
+      expect(attrs['selectionReasonKind']).toBe('unclassified');
+      expect(attrs['selectionReasonHash']).toBe(
+        createHash('sha256').update('persona match (data-dense) conf=0.87').digest('hex').slice(0, 16),
+      );
       expect(attrs['selectionConfidence']).toBe(0.87);
       // Cache origin ⇒ provenance flattened through the shared codec.
       expect(attrs['sourceKind']).toBe('llm');
       expect(attrs['sourceGenerator']).toBe('ui-gen-advanced');
       expect(attrs['sourceModel']).toBe('anthropic/claude-opus-4-7');
+    });
+
+    it('never carries the free text of a reason — a repair sentence and a contract field name stay off the log line (ggui#1343)', async () => {
+      const events: Array<{ attributes: Record<string, unknown> }> = [];
+      const telemetrySink = {
+        emit(event: {
+          name: string;
+          at: number;
+          attributes?: Readonly<Record<string, string | number | boolean>>;
+        }) {
+          events.push({ attributes: { ...(event.attributes ?? {}) } });
+        },
+      };
+      const rationale =
+        'repaired the agent draft to pass validateContract — the field pickSlot was renamed to slot';
+      const negotiator: HandshakeNegotiator = {
+        decide: () => ({
+          action: 'create',
+          reason: rationale,
+          reasonKind: 'llm-repair',
+          suggestion: {
+            origin: 'synth',
+            rationale,
+            blueprintMeta: { contractHash: 'hash_y', variance: {} },
+          },
+          effectiveContract: {} as DataContract,
+        }),
+      };
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore, negotiator, telemetrySink });
+      await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      const attrs = events[0]!.attributes;
+      expect(attrs['selectionReasonKind']).toBe('llm-repair');
+      expect(attrs['selectionReasonHash']).toMatch(/^[0-9a-f]{16}$/);
+      for (const [key, value] of Object.entries(attrs)) {
+        if (typeof value !== 'string') continue;
+        expect(value, `attribute ${key} leaks the reason text`).not.toContain('pickSlot');
+        expect(value, `attribute ${key} leaks the reason text`).not.toContain('repaired');
+      }
     });
 
     it('absent telemetrySink is a noop (no throw)', async () => {
