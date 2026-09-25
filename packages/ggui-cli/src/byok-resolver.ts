@@ -33,6 +33,16 @@
  *      deployments swap in a different `ProviderKeyStore` binding at
  *      composition time and bypass this resolver entirely.
  *
+ *   3. **The local CLI login** (`ggui serve --local-cli-login`, ggui#1185) —
+ *      opt-in, anthropic only, and consulted LAST, so any real key above
+ *      always wins. It returns no key at all: the credential is the
+ *      {@link CLAUDE_CODE_LOGIN_CREDENTIAL} sentinel, which routes
+ *      generation through Claude Code as the Agent SDK ships it, signed in
+ *      with the Claude login already on this machine (the one the `claude`
+ *      command uses). ggui never stores that login; a
+ *      `CLAUDE_CODE_OAUTH_TOKEN` set in the environment is passed to Claude
+ *      Code unchanged.
+ *
  * **Explicitly NOT a source:** `ggui.json#secrets` or any other
  * project-file location. Plaintext secrets in a project file that
  * gets committed is a footgun, called out in the OSS-split plan
@@ -50,6 +60,7 @@ import type {
   ProviderKeyStore,
 } from '@ggui-ai/mcp-server-core';
 import { PlaintextFileProviderKeyStore } from '@ggui-ai/mcp-server-core/plaintext';
+import { CLAUDE_CODE_LOGIN_CREDENTIAL } from '@ggui-ai/ui-gen';
 import { getCredentialsFile } from './paths.js';
 
 /**
@@ -87,7 +98,7 @@ export const PROVIDER_ENV_NAMES: Readonly<
  */
 export interface ByokKeyResolution {
   readonly key: string;
-  readonly source: 'env' | 'credentials-file';
+  readonly source: 'env' | 'credentials-file' | 'claude-code-login';
   readonly provider: LlmProvider;
   /**
    * Which env-var name produced the key (for `source: 'env'`). Lets
@@ -123,6 +134,15 @@ export interface ByokResolverOptions {
    * lookup. `undefined` triggers the default-store construction.
    */
   readonly fileStore?: ProviderKeyStore | null;
+  /**
+   * ggui#1185 — the operator opted in to generating with the Claude login
+   * already on this machine, the one the `claude` command uses (`ggui serve
+   * --local-cli-login`). When true, an anthropic lookup that finds no key
+   * resolves to {@link CLAUDE_CODE_LOGIN_CREDENTIAL} instead of `null`.
+   * Every other provider is unaffected, and a real anthropic key always
+   * wins. Default `false`: nothing changes for anyone who does not opt in.
+   */
+  readonly localCliLogin?: boolean;
 }
 
 /**
@@ -250,6 +270,16 @@ export function createByokResolver(
           provider,
         );
         if (userHit) return userHit;
+      }
+
+      // Last (opt-in, anthropic only): the local CLI login, after every
+      // real-key step above, so a real key always wins.
+      if (opts.localCliLogin === true && provider === 'anthropic') {
+        return {
+          key: CLAUDE_CODE_LOGIN_CREDENTIAL,
+          source: 'claude-code-login',
+          provider,
+        };
       }
 
       return null;

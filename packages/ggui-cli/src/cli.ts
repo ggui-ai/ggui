@@ -659,7 +659,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     // `blueprints` dep regardless of manifest state.
     const blueprintsForGen = blueprintProvider ?? new InMemoryBlueprintProvider();
     generationBinding = await probeGenerationBinding({
-      resolver: createByokResolver(),
+      resolver: createByokResolver({ localCliLogin: parsed.localCliLogin }),
       blueprints: blueprintsForGen,
       ...(configuredRoute ? { configuredRoute } : {}),
       onNoCredentials: (ctx, story) => {
@@ -685,7 +685,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     );
     const blueprintsForGen = blueprintProvider ?? new InMemoryBlueprintProvider();
     generationBinding = await probeGenerationBinding({
-      resolver: createByokResolver(),
+      resolver: createByokResolver({ localCliLogin: parsed.localCliLogin }),
       blueprints: blueprintsForGen,
       ...(configuredRoute ? { configuredRoute } : {}),
     });
@@ -722,6 +722,13 @@ async function runServeCommand(args: string[]): Promise<number> {
     return 1;
   }
   process.stdout.write(`${describeGenerationBinding(generationBinding)}\n`);
+  // ggui#1185: the flag covers anthropic routes only. Say so rather than
+  // let it sit silently unused when this server generates elsewhere.
+  if (parsed.localCliLogin && generationBinding.provider !== 'anthropic') {
+    process.stderr.write(
+      `ggui serve: --local-cli-login covers anthropic routes only; this server generates on ${generationBinding.provider}, so the flag has no effect.\n`,
+    );
+  }
 
   // Build seed pools from --seed-pool flags BEFORE composing the backend
   // factory. `buildSeedPool` is async (reads + indexes the directory

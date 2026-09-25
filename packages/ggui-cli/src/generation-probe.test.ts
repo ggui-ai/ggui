@@ -12,6 +12,8 @@ import {
 } from './generation-probe.js';
 import type { LlmRoute } from '@ggui-ai/mcp-server';
 import type { ByokKeyResolution, ByokResolver } from './byok-resolver.js';
+import { createByokResolver } from './byok-resolver.js';
+import { CLAUDE_CODE_LOGIN_CREDENTIAL } from '@ggui-ai/ui-gen';
 
 // ─── Fixtures ────────────────────────────────────────────────
 
@@ -245,6 +247,19 @@ describe('probeGenerationBinding', () => {
     expect(seen.find((c) => c.userScope === 'user-42')).toBeDefined();
   });
 
+  it('the local CLI login reaches generation as the provider key, with its own boot source (ggui#1185)', async () => {
+    const resolver = createByokResolver({ env: {}, fileStore: null, localCliLogin: true });
+    const binding = await probeGenerationBinding({
+      resolver,
+      blueprints: emptyBlueprints,
+    });
+    expect(binding.bootResolved).toBe(true);
+    expect(binding.provider).toBe('anthropic');
+    expect(binding.keySource).toBe('claude-code-login');
+    const creds = await binding.generation.resolveLlm({ appId: 'user-42', requestId: 'r' });
+    expect(creds?.providerKey).toEqual({ provider: 'anthropic', key: CLAUDE_CODE_LOGIN_CREDENTIAL });
+  });
+
   it('resolveLlm returns null when no key resolves at request time', async () => {
     const resolver = makeResolver({});
     const binding = await probeGenerationBinding({
@@ -415,6 +430,20 @@ describe('describeGenerationBinding', () => {
       keyEnvName: 'ANTHROPIC_API_KEY',
     });
     expect(line).toBe('generation: anthropic / claude-opus-4-7 (env: ANTHROPIC_API_KEY)');
+  });
+
+  it('names the local CLI login as its own source, never as a key file (ggui#1185)', () => {
+    const line = describeGenerationBinding({
+      generation: stubGen,
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5',
+      bootResolved: true,
+      keySource: 'claude-code-login',
+    });
+    expect(line).toBe(
+      "generation: anthropic / claude-haiku-4-5 (the claude command's login on this machine — your Claude plan's terms and usage limits apply)",
+    );
+    expect(line).not.toContain('credentials-file');
   });
 
   it('renders credentials-file variant', () => {

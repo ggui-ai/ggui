@@ -83,5 +83,8 @@ export type {
 // go through this helper instead of `new Anthropic(...)` so future
 // header / baseURL tweaks land in one place.
 export { createAnthropicClient } from './adapters/claude/client.js';
+// ggui#1185: the credential a key resolver returns to select the local CLI
+// login path (`ggui serve --local-cli-login`); never a real key.
+export { CLAUDE_CODE_LOGIN_CREDENTIAL } from './adapters/claude/claude-code-login.js';
 export { AESTHETIC_BRIEF_MAX_CHARS, type GenerationProfileInput } from './boilerplate/styling-profile.js';
 export { EFFORT_DIALS, EFFORT_TABLE_VERSION, effortDials, type EffortDials } from './effort.js';

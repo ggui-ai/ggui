@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PlaintextFileProviderKeyStore } from '@ggui-ai/mcp-server-core/plaintext';
+import { CLAUDE_CODE_LOGIN_CREDENTIAL } from '@ggui-ai/ui-gen';
 import type { LlmProvider, ProviderKeyStore } from '@ggui-ai/mcp-server-core';
 import {
   createByokResolver,
@@ -94,6 +95,54 @@ describe('PROVIDER_ENV_NAMES — locked env-var mapping', () => {
     expect(
       (PROVIDER_ENV_NAMES as Record<string, unknown>)['bedrock'],
     ).toBeUndefined();
+  });
+});
+
+describe('createByokResolver — local CLI login (ggui#1185)', () => {
+  it('without the opt-in, a missing anthropic key is still null', async () => {
+    const resolver = createByokResolver({ env: {}, fileStore: null });
+    expect(await resolver.resolve('anthropic')).toBeNull();
+  });
+
+  it('with the opt-in and no anthropic key, resolves to the login credential', async () => {
+    const resolver = createByokResolver({ env: {}, fileStore: null, localCliLogin: true });
+    expect(await resolver.resolve('anthropic')).toEqual({
+      key: CLAUDE_CODE_LOGIN_CREDENTIAL,
+      source: 'claude-code-login',
+      provider: 'anthropic',
+    });
+  });
+
+  it('a real anthropic key always wins over the login', async () => {
+    const resolver = createByokResolver({
+      env: { ANTHROPIC_API_KEY: 'sk-ant-real' },
+      fileStore: null,
+      localCliLogin: true,
+    });
+    const result = await resolver.resolve('anthropic');
+    expect(result?.key).toBe('sk-ant-real');
+    expect(result?.source).toBe('env');
+  });
+
+  it('a key in the credentials file also wins over the login', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ggui-byok-login-'));
+    try {
+      const store = new PlaintextFileProviderKeyStore({ filename: join(dir, 'credentials.json') });
+      await store.set(BYOK_GLOBAL_APP_SCOPE, 'anthropic', 'sk-ant-file');
+      const resolver = createByokResolver({ env: {}, fileStore: store, localCliLogin: true });
+      const result = await resolver.resolve('anthropic');
+      expect(result?.key).toBe('sk-ant-file');
+      expect(result?.source).toBe('credentials-file');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('covers anthropic only: other providers stay null', async () => {
+    const resolver = createByokResolver({ env: {}, fileStore: null, localCliLogin: true });
+    for (const provider of ['openai', 'google', 'openrouter'] as const) {
+      expect(await resolver.resolve(provider)).toBeNull();
+    }
   });
 });
 

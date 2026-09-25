@@ -147,6 +147,17 @@ export interface ParsedServeFlags {
    */
   multiUser: boolean;
   /**
+   * ggui#1185 — generate with the Claude login already on this machine
+   * (the one the `claude` command uses), when no Anthropic API key is set.
+   * Claude Code runs as the Agent SDK ships it, unmodified. Opt-in; default
+   * `false`, so nothing changes for anyone who does not pass it. A real
+   * `ANTHROPIC_API_KEY` (env or credentials file) always wins, and only
+   * anthropic routes are covered. It is for the operator's own use:
+   * one person's Claude plan never serves other users, so it is refused
+   * with {@link multiUser} and {@link publicDemo}.
+   */
+  localCliLogin: boolean;
+  /**
    * Server-level MCP instructions preset (the string injected into
    * the LLM's system prompt above the tool catalog). Operator-tunable
    * advisory level for tool-use posture:
@@ -266,6 +277,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     withholdResultMeta: false,
     publicDemo: false,
     multiUser: false,
+    localCliLogin: false,
     oauth: false,
     seedPools: [],
     browserOrigins: [],
@@ -317,6 +329,10 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     }
     if (arg === '--oauth') {
       out.oauth = true;
+      continue;
+    }
+    if (arg === '--local-cli-login') {
+      out.localCliLogin = true;
       continue;
     }
     if (arg === '--public-base-url') {
@@ -430,6 +446,16 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
         'Multi-user requires real per-user identities (kind:"user" / kind:"app"); ' +
         'the any-bearer modes collapse every caller to kind:"builder" which the ' +
         'multi-user gate rejects. Drop the other flag and pair with real bearers.',
+    };
+  }
+  if (out.localCliLogin && (out.multiUser || out.publicDemo)) {
+    return {
+      ...out,
+      error:
+        '--local-cli-login is incompatible with --multi-user and --public-demo. ' +
+        'It generates on the Claude plan the `claude` command on this machine is ' +
+        'signed in to, which is for your own use: one person\'s plan never serves ' +
+        'other users. Use provider API keys for a shared or public server.',
     };
   }
   return out;
@@ -820,9 +846,10 @@ export interface RunServeOptions {
    * Parsed flags. The `error` field must already be handled upstream.
    * `seedPools` is omitted too — it's parse output the CLI consumes to
    * build the shared `BlueprintPool[]` (fed straight into the backend
-   * factory), NOT a `runServe` lifecycle input.
+   * factory), NOT a `runServe` lifecycle input. `localCliLogin` likewise
+   * (ggui#1185): the CLI hands it to the key resolver before `runServe`.
    */
-  readonly flags: Readonly<Omit<ParsedServeFlags, 'error' | 'seedPools'>>;
+  readonly flags: Readonly<Omit<ParsedServeFlags, 'error' | 'seedPools' | 'localCliLogin'>>;
   /** Build the backend. Called once, after flag parsing. */
   readonly backendFactory: ServeBackendFactory;
   /**
@@ -1071,6 +1098,14 @@ Options:
                          resolves at the operator 'global' scope — a
                          follow-up will thread per-user BYOK through
                          ggui_render.)
+  --local-cli-login      Generate with the Claude login already on this
+                         machine (the one \`claude\` uses) when no
+                         ANTHROPIC_API_KEY is set, instead of an API key.
+                         Anthropic routes only; a real key always wins. Your
+                         Claude plan's terms and usage limits apply, and
+                         generation is about 2x slower (2.2x at the median)
+                         than with an API key. For your own use: refused with
+                         --multi-user and --public-demo.
   --public-base-url <u>  Override the public base URL used to compose
                          iframe-runtime + shortCode URLs. Set this to a
                          tunnel URL (https://<random>.trycloudflare.com)

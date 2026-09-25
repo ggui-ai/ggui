@@ -24,6 +24,30 @@ import {
   type ServeBackend,
 } from './serve-command.js';
 
+describe('parseServeFlags --local-cli-login (ggui#1185)', () => {
+  it('is off by default', () => {
+    expect(parseServeFlags([]).localCliLogin).toBe(false);
+  });
+
+  it('turns on with the flag', () => {
+    const f = parseServeFlags(['--local-cli-login']);
+    expect(f.error).toBeUndefined();
+    expect(f.localCliLogin).toBe(true);
+  });
+
+  it('is refused with --multi-user: one person\'s plan never serves other users', () => {
+    const f = parseServeFlags(['--local-cli-login', '--multi-user']);
+    expect(f.error).toMatch(/--local-cli-login/);
+    expect(f.error).toMatch(/--multi-user/);
+  });
+
+  it('is refused with --public-demo for the same reason', () => {
+    const f = parseServeFlags(['--local-cli-login', '--public-demo']);
+    expect(f.error).toMatch(/--local-cli-login/);
+    expect(f.error).toMatch(/--public-demo/);
+  });
+});
+
 describe('parseServeFlags --seed-pool', () => {
   it('collects repeated --seed-pool paths into an array', () => {
     const f = parseServeFlags(['--seed-pool', './a', '--seed-pool', './b']);
@@ -52,6 +76,7 @@ describe('parseServeFlags', () => {
       withholdResultMeta: false,
       publicDemo: false,
       multiUser: false,
+      localCliLogin: false,
       oauth: false,
       seedPools: [],
       browserOrigins: [],

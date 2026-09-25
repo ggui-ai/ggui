@@ -320,6 +320,21 @@ export async function probeGenerationBinding(
   return result;
 }
 
+/** The banner's words for where the boot credential came from. */
+function keySourceLabel(binding: GenerationBinding): string {
+  switch (binding.keySource) {
+    case 'env':
+      return binding.keyEnvName ? `env: ${binding.keyEnvName}` : 'env';
+    case 'credentials-file':
+      return 'credentials-file';
+    // ggui#1185: no key at all. Say what runs and whose terms apply.
+    case 'claude-code-login':
+      return "the claude command's login on this machine — your Claude plan's terms and usage limits apply";
+    case undefined:
+      return 'credentials-file';
+  }
+}
+
 /**
  * Render a single operator-facing banner line describing the
  * generation binding. Always returns a string — when boot didn't
@@ -332,6 +347,7 @@ export async function probeGenerationBinding(
  *   `generation: anthropic / claude-haiku-4-5 (env: ANTHROPIC_API_KEY)`
  *   `generation: openai / gpt-4o (credentials-file)`
  *   `generation: anthropic / claude-haiku-4-5 (no boot key — per-user fallback)`
+ *   `generation: anthropic / claude-haiku-4-5 (the claude command's login on this machine — …)` (ggui#1185)
  */
 export function describeGenerationBinding(
   binding: GenerationBinding,
@@ -339,12 +355,7 @@ export function describeGenerationBinding(
   if (!binding.bootResolved) {
     return `generation: ${binding.provider} / ${binding.model} (no boot key — per-user fallback)`;
   }
-  const src =
-    binding.keySource === 'env'
-      ? binding.keyEnvName
-        ? `env: ${binding.keyEnvName}`
-        : 'env'
-      : 'credentials-file';
+  const src = keySourceLabel(binding);
   const conflict =
     binding.keyShadowedEnvNames !== undefined && binding.keyEnvName !== undefined
       ? ` — ${binding.keyEnvName} won; ${binding.keyShadowedEnvNames.join(', ')} also set and differs (rotate both or unset one, ggui#1132)`
