@@ -1067,3 +1067,36 @@ This matters for the queued follow-ups: **P1 rewrites both wizard fixture prompt
   - **Hard stop $8**: no panel is issued that could cross it. The run also stops after 3 consecutive failed panels (a limit-signal proxy).
   - An overrun is named to exec before it is spent. If a provider does not count its thinking tokens in the reported output, cost is under-measured, and that is reported as a confound.
 - **Keys**: exactly `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY`, extracted inside the launch; never printed.
+
+### Exp 013 — Result (2026-09-25; appended under the pre-registration, nothing above changed)
+
+- **Run**:
+  - The pre-registration was committed as `4e6f53f22` at 07:34:59Z, before any call.
+  - Pilot 07:35:28–07:36:11Z: 4 panels, **$0.0583**, projecting **$2.84**. The worst case, allowing 2 000 unreported Gemini thinking tokens per call, was about $6.3. Both are ≤ $8, so the run fired at 07:36:36Z. The full run ended at 08:01:09Z.
+  - **192 / 192 panels**, all three judges on every panel, 0 failed, 0 limit signals. **Spend $2.60 measured** (founder: stop $8; not reached).
+  - Checkout `4e6f53f22` (candidate prompt from `013642115`); sample pinned by the manifest (`fa98e8fda56eede2`).
+- **R1, per-dimension paired delta (candidate − current), n = 96**:
+
+  | Dimension        | Mean      | 95 % interval  | SD    | Interval   |
+  | ---------------- | --------- | -------------- | ----- | ---------- |
+  | **designTokens** | **+3.20** | [+1.20, +5.26] | 10.01 | excludes 0 |
+  | layout           | +0.05     | [−0.44, +0.54] | 2.40  | includes 0 |
+  | hierarchy        | −0.07     | [−0.46, +0.33] | 1.94  | includes 0 |
+  | polish           | +0.72     | [−0.22, +1.60] | 4.56  | includes 0 |
+  | dataPresentation | +0.94     | [+0.38, +1.49] | 2.81  | excludes 0 |
+
+- **R2, panel score**: **+0.97**, [+0.26, +1.67], SD 3.52. **Pass flips at 70: 0 fail → pass, 0 pass → fail.**
+- **R3, noise floor** (same-session current re-judge − stored Exp 012, same prompt), mean and SD:
+  - designTokens −0.16, SD **3.78**; score −0.25, SD **1.36**; layout −0.10, SD 1.28; hierarchy −0.05, SD 1.22; polish −0.27, SD 2.13.
+  - dataPresentation −0.66, [−1.11, −0.20], SD 2.27: the panel scores that dimension slightly lower today than on 09-24 under an unchanged prompt. The R1 pairs are same-session, so this cancels there.
+- **R4, per arm** (informational): designTokens gpt-6-luna +3.74, [+0.90, +6.56]; openai-fast +2.67, [−0.20, +5.50].
+- **Reading, as pre-stated**:
+  - The designTokens interval **excludes 0**, but its mean (+3.20) is **not beyond** the noise floor's SD (3.78). So the registered clause _"moves designTokens by that amount"_ is **not triggered**: the shift is detectable across 96 sources, and smaller than one re-judge's per-source noise.
+  - **Crosstalk:** dataPresentation's interval also excludes 0 (+0.94). Any adoption note says the change moves more than one dimension.
+  - The score moves about +1 with no pass/fail change on this sample.
+  - Plainly: the corrected rubric raises designTokens by about 3 points and the panel score by about 1 on average, varies widely per source (SD 10), and changes no pass outcome.
+- **Confounds pinned**:
+  - Cost is from the router's token counts. Gemini's reported outputs are about 100–125 tokens, so any thinking tokens it does not report are unmeasured; the worst-case bound above still clears $8.
+  - Judges only; Exp 012's sources and prompts, including chat-interface's original line; one session.
+- **Note for future registrations** (not a re-reading): comparing an interval's **mean** against a **per-source** SD is a strict test; the mean's own standard error is SD/√n. It stands as registered here. A later registration should state which it means.
+- **What it names (for the owners, not decided here)**: adopting the candidate as the public judge is ggui-main's placement and the founder's word. If adopted, the page changelog can state these magnitudes, with designTokens and score marked not comparable across the change.
