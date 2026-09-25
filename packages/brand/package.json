@@ -1,0 +1,56 @@
+{
+  "name": "@ggui-ai/brand",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The ggui brand kit: the wordmark geometry, the brand tokens, the vendored faces, and one renderer for the estate's social cards.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "brand",
+    "wordmark",
+    "og-image",
+    "satori"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "fonts",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist.staging-$$ && tsc -p tsconfig.build.json --outDir dist.staging-$$ && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "satori": "0.33.5",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/brand"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/brand",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
+}

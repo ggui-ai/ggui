@@ -34,6 +34,9 @@ packages:
   - "packages/ui-registry"
   - "packages/ui-visual-tester"
   - "packages/wire"
+  # Workspace-private, not published: the brand kit (wordmark, tokens, faces,
+  # the social-card renderer). Its consumers bundle it.
+  - "packages/brand"
   # OSS e2e suites — journeys (Playwright), wire-scenario contract suite,
   # and the Tier-2 MCP Apps host simulator (vitest, no browser).
   - "e2e/journeys"
