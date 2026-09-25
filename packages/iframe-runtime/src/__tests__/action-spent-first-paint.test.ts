@@ -90,6 +90,31 @@ describe('useActionSpent at first paint (ggui#1223)', () => {
     expect(el.querySelector('button')?.textContent).toBe('Submitted');
   });
 
+  it('a spend carried by a later frame repaints the control spent through the runtime’s notice, with no re-render from above', async () => {
+    let current: GguiSession = makeRender({ epoch: 2 });
+    const listeners = new Set<() => void>();
+    const config = buildRootWireConfig({
+      sessionId: current.id,
+      appId: 'app_x',
+      getCurrentGguiSession: () => current,
+      renderChanges: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      manager: { send: vi.fn() },
+      streamBus: new StreamBus(),
+    });
+    const el = await paint(createElement(ActionSpentContext.Provider, { value: config.actionSpent }, createElement(Probe)));
+    expect(el.querySelector('button')?.textContent).toBe('Confirm');
+    await act(async () => {
+      current = makeRender({ epoch: 2, spentOneShots: { epoch: 2, actions: ['confirm'] } }); // the frame from another tab
+      for (const notify of listeners) notify();
+    });
+    expect(el.querySelector('button')?.textContent).toBe('Submitted');
+  });
+
   it('N−1: with no ActionSpentContext the hook reads false, and the guard still stops the dispatch', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { config, send } = configFor(makeRender({ epoch: 2, spentOneShots: { epoch: 2, actions: ['confirm'] } }));

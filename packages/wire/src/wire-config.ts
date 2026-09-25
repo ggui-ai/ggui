@@ -169,6 +169,17 @@ export interface BuildWireConfigOptions {
    */
   readonly getSpentOneShots?: () => readonly string[] | undefined;
   /**
+   * The host's notice that the values behind {@link getActiveActionSpec} and
+   * {@link getSpentOneShots} may have changed without a gesture on this card:
+   * a render update, a later live frame carrying a spend recorded elsewhere
+   * (another tab). The returned {@link ActionSpentSource} forwards each notice
+   * to its subscribers, so `useActionSpent` re-reads at once instead of
+   * waiting for a React re-render that a memoized subtree may never get
+   * (ggui#1223). Optional: without it, such a change is read on the next
+   * render. Returns the unsubscribe, as `subscribe` does.
+   */
+  readonly spentInputsChanged?: (listener: () => void) => () => void;
+  /**
    * Validate the built envelope before emission. Defaults to wire's
    * own {@link validateOutboundActionEnvelope}. The iframe runtime
    * injects its precompiled-validator variant so the dispatch never
@@ -228,6 +239,16 @@ export interface BuildWireConfigOptions {
 }
 
 /**
+ * What {@link buildWireConfig} returns: the {@link WireConfig} a
+ * `<GguiWireProvider>` takes, plus the card's {@link ActionSpentSource}, which
+ * reads the one-shot guard's own spent set (ggui#1223). A runtime provides the
+ * source through `ActionSpentContext` (`@ggui-ai/wire/internal`) so
+ * `useActionSpent` can read it. It is not a `WireConfig` member, so the
+ * generation prompt's WireConfig reference does not change.
+ */
+export type BuiltWireConfig = WireConfig & { readonly actionSpent: ActionSpentSource };
+
+/**
  * Build a `WireConfig` over the shared dispatch/subscribe pipeline.
  *
  * Dispatch: resolve the active actionSpec through the thunk → build
@@ -243,16 +264,6 @@ export interface BuildWireConfigOptions {
  * `complete`) wire hooks consume. Reserved-channel late subscribers
  * are caught up synchronously from the bus's bounded replay ring.
  */
-/**
- * What {@link buildWireConfig} returns: the {@link WireConfig} a
- * `<GguiWireProvider>` takes, plus the card's {@link ActionSpentSource}, which
- * reads the one-shot guard's own spent set (ggui#1223). A runtime provides the
- * source through `ActionSpentContext` (`@ggui-ai/wire/internal`) so
- * `useActionSpent` can read it. It is not a `WireConfig` member, so the
- * generation prompt's WireConfig reference does not change.
- */
-export type BuiltWireConfig = WireConfig & { readonly actionSpent: ActionSpentSource };
-
 export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
   let internalSeq = 0;
   const nextClientSeq =
@@ -283,6 +294,9 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
     opts.getActiveActionSpec()?.[actionName]?.oneShot === true &&
     (spentOneShots.has(actionName) || opts.getSpentOneShots?.()?.includes(actionName) === true);
   const spentListeners = new Set<() => void>();
+  const notifySpent = (): void => {
+    for (const listener of [...spentListeners]) listener();
+  };
   const actionSpent: ActionSpentSource = {
     isSpent,
     subscribe: (listener) => {
@@ -292,6 +306,9 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
       };
     },
   };
+  // A config lives as long as its render, so the host notice is held for
+  // the same lifetime and never released here.
+  opts.spentInputsChanged?.(notifySpent);
 
   return {
     actionSpent,
@@ -349,7 +366,7 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
       // WILL receive this gesture, so the next one is the suppressible repeat.
       if (isOneShot && !spentOneShots.has(actionName)) {
         spentOneShots.add(actionName);
-        for (const listener of [...spentListeners]) listener();
+        notifySpent();
       }
       opts.emitEnvelope(envelope);
     },

@@ -42,7 +42,7 @@ import type { ReactNode } from 'react';
 import type { AppTheme, GguiSession } from '@ggui-ai/protocol/wire';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
-import { GguiWireProvider, type ActionSpentSource, type WireConfig } from '@ggui-ai/wire';
+import { GguiWireProvider, type BuiltWireConfig } from '@ggui-ai/wire';
 import { ActionSpentContext } from '@ggui-ai/wire/internal';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
@@ -66,11 +66,10 @@ export interface RenderItemOptions {
    *  `buildRootWireConfig(...)` (see `wire-config.ts`). `null` ⇒ the
    *  component mounts without a wire provider (standalone — matches
    *  today's DynamicComponent fallback when no GguiRender parent is
-   *  present). When the config carries the card's `actionSpent` source
-   *  (every `buildRootWireConfig` config does, ggui#1223), the component also
-   *  mounts inside `ActionSpentContext`, so `useActionSpent` reads the
-   *  one-shot guard's own spent set. */
-  readonly scopedWireConfig: (WireConfig & { readonly actionSpent?: ActionSpentSource }) | null;
+   *  present). The config carries the card's `actionSpent` source
+   *  (ggui#1223), and the component mounts inside `ActionSpentContext` too,
+   *  so `useActionSpent` reads the one-shot guard's own spent set. */
+  readonly scopedWireConfig: BuiltWireConfig | null;
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this render. */
   readonly streamBus: StreamBus;
@@ -353,17 +352,13 @@ export async function mountRender(
    */
   function wrapInScopedProvider(mountedComponent: ReactNode): ReactNode {
     const config = currentOpts.scopedWireConfig;
-    const spentWrapped =
-      config?.actionSpent === undefined
-        ? mountedComponent
-        : createElement(ActionSpentContext.Provider, { value: config.actionSpent, children: mountedComponent });
     const wireWrapped =
       config === null
         ? mountedComponent
-        : createElement(
-            GguiWireProvider,
-            { config, children: spentWrapped },
-          );
+        : createElement(GguiWireProvider, {
+            config,
+            children: createElement(ActionSpentContext.Provider, { value: config.actionSpent, children: mountedComponent }),
+          });
     return currentOpts.wrapOuter !== undefined
       ? currentOpts.wrapOuter(wireWrapped)
       : wireWrapped;

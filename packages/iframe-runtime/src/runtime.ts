@@ -4709,6 +4709,15 @@ async function bootProduction(opts: {
       // through `currentRender`-returning thunks so they always see the
       // latest snapshot without holding stale refs.
       let currentRender: GguiSession | GguiSessionSeedInput | null = null;
+      // ggui#1223 — who to tell when `currentRender` is replaced, so the card's
+      // spent state (read through `getCurrentGguiSession`) is re-read at once.
+      const renderListeners = new Set<() => void>();
+      const onRenderChange = (listener: () => void): (() => void) => {
+        renderListeners.add(listener);
+        return () => {
+          renderListeners.delete(listener);
+        };
+      };
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
@@ -4765,6 +4774,7 @@ async function bootProduction(opts: {
         sessionId: meta.sessionId,
         appId: meta.appId,
         getCurrentGguiSession: () => currentRender,
+        renderChanges: onRenderChange,
         manager,
         streamBus,
         onDispatchEnvelope: (envelope) => {
@@ -4933,6 +4943,7 @@ async function bootProduction(opts: {
 
       const applyRender = async (render: GguiSession | GguiSessionSeedInput): Promise<void> => {
         currentRender = render;
+        for (const listener of [...renderListeners]) listener();
         if (renderHandle === null) {
           renderHandle = await mountRender(renderInto, buildOpts(render));
           return;

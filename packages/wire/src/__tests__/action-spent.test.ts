@@ -8,7 +8,7 @@
  * (`actionSpent`). These pins hold the source and the guard to ONE answer.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActionSpec } from '@ggui-ai/protocol/wire';
+import type { ActionSpec, JsonValue } from '@ggui-ai/protocol/wire';
 import { buildWireConfig, StreamBus, type BuildWireConfigOptions } from '../wire-config';
 
 const SPEC: ActionSpec = {
@@ -16,14 +16,24 @@ const SPEC: ActionSpec = {
   log: { label: 'Log' },
 };
 
-function harness(opts: { record?: readonly string[]; valid?: boolean } = {}) {
-  const emitted: unknown[] = [];
+function harness(opts: { record?: () => readonly string[]; valid?: boolean; notices?: Set<() => void> } = {}) {
+  const emitted: JsonValue[] = [];
   const base: BuildWireConfigOptions = {
     app: { appId: 'a', appName: 'a' },
     render: { sessionId: 's1', isConnected: true },
     auth: { isAuthenticated: false },
     getActiveActionSpec: () => SPEC,
-    ...(opts.record !== undefined ? { getSpentOneShots: () => opts.record } : {}),
+    ...(opts.record !== undefined ? { getSpentOneShots: opts.record } : {}),
+    ...(opts.notices !== undefined
+      ? {
+          spentInputsChanged: (listener: () => void) => {
+            opts.notices?.add(listener);
+            return () => {
+              opts.notices?.delete(listener);
+            };
+          },
+        }
+      : {}),
     validateEnvelope: () =>
       opts.valid === false
         ? { valid: false, violations: [{ field: 'data', message: 'rejected on purpose' }] }
@@ -46,14 +56,14 @@ afterEach(() => {
 
 describe('actionSpent — the guard’s set, as data (ggui#1223)', () => {
   it('a persisted record spends a oneShot action BEFORE any gesture, and the guard agrees on the first press', () => {
-    const { config, emitted } = harness({ record: ['confirm'] });
+    const { config, emitted } = harness({ record: () => ['confirm'] });
     expect(config.actionSpent.isSpent('confirm')).toBe(true);
     config.dispatch('confirm', {});
     expect(emitted).toHaveLength(0);
   });
 
   it('an action NOT declared oneShot is never spent, even when its name is in the record', () => {
-    const { config, emitted } = harness({ record: ['log'] });
+    const { config, emitted } = harness({ record: () => ['log'] });
     expect(config.actionSpent.isSpent('log')).toBe(false);
     config.dispatch('log', {});
     expect(emitted).toHaveLength(1);
@@ -79,6 +89,19 @@ describe('actionSpent — the guard’s set, as data (ggui#1223)', () => {
     expect(emitted).toHaveLength(0);
     expect(config.actionSpent.isSpent('confirm')).toBe(false);
     expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('a spend that arrives on a later frame reaches subscribers through the host’s notice, and reads spent at once', () => {
+    let record: readonly string[] = [];
+    const notices = new Set<() => void>();
+    const { config } = harness({ record: () => record, notices });
+    const heard = vi.fn();
+    config.actionSpent.subscribe(heard);
+    expect(config.actionSpent.isSpent('confirm')).toBe(false);
+    record = ['confirm']; // the runtime replaced its render with one whose record carries the spend
+    for (const notify of notices) notify();
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(config.actionSpent.isSpent('confirm')).toBe(true);
   });
 
   it('a repeating action never notifies; an unsubscribed listener hears nothing', () => {

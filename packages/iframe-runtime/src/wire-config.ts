@@ -72,6 +72,12 @@ export interface BuildRootWireConfigOptions {
    * WireConfig.
    */
   readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
+  /**
+   * The runtime's notice that the current render was replaced (a props
+   * update, a later live frame), so the card's spent state is re-read at
+   * once (ggui#1223). Passed through as wire's `spentInputsChanged`.
+   */
+  readonly renderChanges?: (listener: () => void) => () => void;
   /** Handle to the renderer's WS manager; used for outbound `action` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */
@@ -216,6 +222,7 @@ export function buildRootWireConfig(
         : undefined;
     },
     onActionSpecAbsent: nameUnenforceableOnce,
+    ...(opts.renderChanges !== undefined ? { spentInputsChanged: opts.renderChanges } : {}),
     // ggui#1223 — the card's persisted spent `oneShot` names. A re-served card
     // boots a new iframe, so the guard's in-memory set starts empty; the
     // render's record says what this card already spent. It counts only when
