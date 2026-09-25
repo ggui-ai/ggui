@@ -1041,3 +1041,29 @@ This matters for the queued follow-ups: **P1 rewrites both wizard fixture prompt
 - **One of the control's three stuck cells was provoked by the instrument.** `openai-fast` chat-interface r5's only token failure was `--ggui-color-surfaceVariant`, and the bench's own chat-interface prompt asked for `surfaceVariant` — a role #989 retired on 2026-09-10. All 19 of Exp 012's failure lines naming it (11 candidate, 8 control) are in chat-interface cells, and the judges' functionality check asked for "the requested surfaceVariant background" too. The other two stuck cells (onboarding-wizard r3 and r8) failed on motion names no bench prompt contains — the model's own, and #1325's measure.
 - **The decision is unchanged**: both arms saw the same prompt, and the candidate hit the same contradiction (11 lines) without a stuck cell. What changes is the sentence above that calls all three stuck cells the served default's behaviour: two are.
 - **Fixed in `34039b416`**: the prompt now asks for "a muted neutral background" and names no token; announced on the page's methodology changelog (2026-09-25). Chat-interface is not comparable across that change.
+
+## Experiment 013 — PRE-REGISTRATION: the design-system judge prompt, re-judged on Exp 012's saved sources (#1350)
+
+- **Status**: pre-registered before any judge call; every number goes under a `### Exp 013 — Result` heading and changes nothing here. Founder ruling via ggui-team-exec (verbatim): _"Yes, pilot first, stop $8"_. ggui-main placed #1350 in milestone 13.
+- **Question**: how much does the public text judge's **designTokens** dimension, and the panel score, move when dimension 2 reads what the constrained system prompt teaches (typed variants first; raw CSS only through the current roles) instead of naming two retired roles (`surface`, `onSurface`) and asking for raw CSS variables?
+- **Instrument**: `evaluateAestheticsPanel` (`oss/misc/benchmark/src/multi-sdk/post-eval.ts`), panel haiku-4.5 / gpt-5.4-mini / gemini-3.5-flash, from checkout `013642115`. Two prompts:
+  - **current**: `aesthetic-eval.v3-panel`, what Exp 012 and the public rows judge with;
+  - **candidate**: `aesthetic-eval.v4-panel-design-system-candidate`, identical except dimension 2 (ggui-team-rnd's wording on #1350; a unit test pins that exactly one block differs).
+- **Sample**: Exp 012's saved sources, runs 1–6 × 8 commits × 2 arms = **96**, pinned by `.tmp/exp013/manifest.json` (per-source sha256; manifest sha256 prefix `fa98e8fda56eede2`). Each source is judged with the task prompt and contract it was generated from; chat-interface gets its Exp 012 prompt line back. No new generations.
+- **Design**: every source is judged under **both** prompts in the same session, and which prompt goes first alternates by source, so time and order effects cancel in the pair.
+- **Readouts** (reported, not bars):
+  1. per-dimension paired delta (candidate − current), mean and 95 % bootstrap interval (10 000 resamples, fixed seed), for all five dimensions. **designTokens** is the target; the other four have identical text, so their deltas measure crosstalk plus noise.
+  2. panel-score paired delta, and pass flips at 70 in each direction.
+  3. **noise floor**: the stored Exp 012 score against the same-session current-prompt re-judge, paired, per dimension (mean and SD). This is the panel's test–retest noise under an unchanged prompt.
+  4. designTokens delta per arm (informational).
+  5. measured spend.
+- **Pre-stated reading**:
+  - A designTokens interval that excludes 0 and a mean beyond the noise floor's SD means the rubric change moves designTokens by that amount; that number goes into the page changelog if it is adopted.
+  - A control dimension whose interval excludes 0 is reported as crosstalk, and any adoption note says the change moves more than one dimension.
+  - **Nothing is decided here.** Adoption (the public run judging with the candidate) is ggui-main's placement and the founder's word, announced on the page's dated changelog, with designTokens and score not comparable across it.
+- **Spend and stops**:
+  - A **pilot** of the first 2 sources × both prompts (4 panels, under $0.25) measures cost from the judges' own token counts × registry prices ($ per M in/out: haiku 1/5, gpt-5.4-mini 0.75/4.5, gemini-3.5-flash 1.5/9).
+  - The projection is the pilot's mean per panel × 192 × (the 96-source mean size ÷ the pilot's mean size). The rest fires only if the projection is ≤ $8.
+  - **Hard stop $8**: no panel is issued that could cross it. The run also stops after 3 consecutive failed panels (a limit-signal proxy).
+  - An overrun is named to exec before it is spent. If a provider does not count its thinking tokens in the reported output, cost is under-measured, and that is reported as a confound.
+- **Keys**: exactly `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY`, extracted inside the launch; never printed.
