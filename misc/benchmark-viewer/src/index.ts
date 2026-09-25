@@ -14,7 +14,7 @@ export { DimensionScores } from './components/DimensionScores';
 export { TrendChart } from './components/TrendChart';
 export { MethodologySection } from './components/MethodologySection';
 
-export { httpJsonSource } from './data-source';
+export { httpJsonSource, rawDataIndexHref } from './data-source';
 export type { BenchmarkDataSource } from './data-source';
 
 export {

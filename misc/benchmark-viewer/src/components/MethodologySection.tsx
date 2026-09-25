@@ -1,6 +1,7 @@
 import type { BenchmarkMeta } from '@ggui-ai/shared';
 import type { CommitSummary } from '../types';
 import { formatJudge } from '../format';
+import { rawDataIndexHref } from '../data-source';
 
 interface Props {
   /**
@@ -15,8 +16,10 @@ interface Props {
    */
   commits?: CommitSummary[];
   /**
-   * Base URL of the data source (index.json + per-day reports). When
-   * provided, a "raw data" link is rendered. Omitted → no link.
+   * Base the reader-facing "raw data" link resolves against — the directory
+   * holding index.json and the per-day reports, absolute or root-relative
+   * (`/data/`), with a trailing slash. When provided, the link is rendered.
+   * Omitted → no link.
    */
   rawDataUrl?: string;
 }
@@ -575,7 +578,7 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
             <p>
               Every report on this dashboard is served as plain JSON.{' '}
               <a
-                href={new URL('index.json', rawDataUrl).toString()}
+                href={rawDataIndexHref(rawDataUrl)}
                 className="font-mono text-ink underline underline-offset-2 hover:text-ink-3"
                 target="_blank"
                 rel="noreferrer"

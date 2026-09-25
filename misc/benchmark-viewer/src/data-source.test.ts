@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { httpJsonSource } from './data-source';
+import { httpJsonSource, rawDataIndexHref } from './data-source';
 
 describe('httpJsonSource', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -86,5 +86,19 @@ describe('httpJsonSource', () => {
         multiSdk: { reportPath: '2026-05-06/multi-sdk.json', successRate: 1, totalRuns: 12 },
       }),
     ).rejects.toThrow(/500/);
+  });
+});
+
+describe('rawDataIndexHref (#906)', () => {
+  it('keeps a root-relative base on the page origin', () => {
+    expect(rawDataIndexHref('/data/')).toBe('/data/index.json');
+  });
+
+  it('resolves an absolute base unchanged', () => {
+    expect(rawDataIndexHref('https://example.com/data/')).toBe('https://example.com/data/index.json');
+  });
+
+  it('throws when the base lacks a trailing slash', () => {
+    expect(() => rawDataIndexHref('/data')).toThrow(/must end with a slash/);
   });
 });

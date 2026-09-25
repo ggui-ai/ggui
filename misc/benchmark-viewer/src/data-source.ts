@@ -26,6 +26,21 @@ export interface BenchmarkDataSource {
  *
  * `baseUrl` MUST end with a trailing slash for path resolution to compose correctly.
  */
+/**
+ * The href of a data set's run index, for the reader-facing "raw data" link.
+ *
+ * `base` is the directory the index lives in: absolute
+ * (`https://example.com/data/`) or root-relative (`/data/`). A root-relative
+ * base keeps the link on the page's own origin, which is what a reader
+ * should cite. Like {@link httpJsonSource}, `base` MUST end with a slash.
+ */
+export function rawDataIndexHref(base: string): string {
+  if (!base.endsWith('/')) {
+    throw new Error(`rawDataIndexHref: base must end with a slash, got "${base}".`);
+  }
+  return `${base}index.json`;
+}
+
 export function httpJsonSource(baseUrl: string): BenchmarkDataSource {
   if (!baseUrl.endsWith('/')) {
     throw new Error(
