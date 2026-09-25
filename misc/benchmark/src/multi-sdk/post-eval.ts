@@ -166,15 +166,47 @@ Respond with ONLY a JSON object, no markdown:
   "critique": "<2-3 sentences summarizing the main issues>"
 }`;
 
-export type PanelPrompt = 'default' | 'arm-neutral';
+/**
+ * Design-system candidate for #1350 (Exp 013): identical to the default except
+ * dimension 2. The default's dimension 2 names two colour roles the design
+ * system retired (`surface`, `onSurface`, #989) and asks for raw CSS variables,
+ * while the constrained system prompt teaches the primitives' typed variants
+ * first and raw CSS only through the current roles — so a component that takes
+ * every colour through a variant reads as a miss. This rewords dimension 2 to
+ * what the prompt teaches (ggui-team-rnd's wording on #1350). Built from the
+ * default so the other four dimensions cannot drift; used only when the runner
+ * is told `panelPrompt: 'design-system'` — the published run never is, so the
+ * page's methodology is unchanged. Disclosed per judge via promptVersion.
+ */
+const DIM2_DEFAULT = `2. **designTokens** (20%): Does it use ggui design tokens? Check for:
+   - var(--ggui-color-*) for colors (especially semantic: surface, onSurface, outline)
+   - var(--ggui-spacing-*) for padding/margins
+   - NO hardcoded hex colors, NO rgba()/hsl(), NO raw pixel values for spacing`;
+
+const DIM2_DESIGN_SYSTEM = `2. **designTokens** (20%): Do colour and spacing come from the ggui design system? Check for:
+   - the primitives' typed variants first (Button/Badge/Alert variant, Text/Heading tones)
+   - raw CSS only through var(--ggui-color-*) roles (container/onContainer, sunken/onSunken, outline, link, primary-*) and var(--ggui-spacing-*)
+   - NO hardcoded hex colors, NO rgba()/hsl(), NO custom gradients, NO literal fallbacks, NO raw pixel values for spacing`;
+
+if (!AESTHETIC_EVAL_PROMPT.includes(DIM2_DEFAULT)) {
+  throw new Error('post-eval: the default prompt no longer contains the dimension-2 block the design-system candidate replaces');
+}
+const AESTHETIC_EVAL_PROMPT_DESIGN_SYSTEM = AESTHETIC_EVAL_PROMPT.replace(DIM2_DEFAULT, DIM2_DESIGN_SYSTEM);
+
+export type PanelPrompt = 'default' | 'arm-neutral' | 'design-system';
 
 export const AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL = 'aesthetic-eval.v3-panel-arm-neutral' as const;
+export const AESTHETIC_PROMPT_VERSION_PANEL_DESIGN_SYSTEM = 'aesthetic-eval.v4-panel-design-system-candidate' as const;
 
 /** Resolve which panel prompt + version a run judges with. */
 export function selectPanelPrompt(kind: PanelPrompt | undefined): { prompt: string; promptVersion: string } {
-  return kind === 'arm-neutral'
-    ? { prompt: AESTHETIC_EVAL_PROMPT_ARM_NEUTRAL, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL }
-    : { prompt: AESTHETIC_EVAL_PROMPT, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL };
+  if (kind === 'arm-neutral') {
+    return { prompt: AESTHETIC_EVAL_PROMPT_ARM_NEUTRAL, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL };
+  }
+  if (kind === 'design-system') {
+    return { prompt: AESTHETIC_EVAL_PROMPT_DESIGN_SYSTEM, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL_DESIGN_SYSTEM };
+  }
+  return { prompt: AESTHETIC_EVAL_PROMPT, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL };
 }
 
 

@@ -259,3 +259,36 @@ describe('arm-neutral panel prompt (#973 §5b — experiment-lane promptVersion;
     for (const k of ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation']) expect(prompt).toContain(`"${k}"`);
   });
 });
+
+describe('design-system panel prompt (#1350 — experiment-lane promptVersion; the published page keeps the default)', () => {
+  const dims = ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation'];
+  const blocks = (prompt: string): string[] => prompt.split(/\n(?=\d\. \*\*)/);
+
+  it('carries its own promptVersion, distinct from the default and the arm-neutral one', () => {
+    const { promptVersion } = selectPanelPrompt('design-system');
+    expect(promptVersion).toBe('aesthetic-eval.v4-panel-design-system-candidate');
+    expect(promptVersion).not.toBe(AESTHETIC_PROMPT_VERSION_PANEL);
+  });
+
+  it('no longer names the retired roles and names the current ones', () => {
+    const { prompt } = selectPanelPrompt('design-system');
+    expect(prompt).not.toMatch(/onSurface/);
+    expect(prompt).not.toMatch(/\bsurface\b/);
+    for (const role of ['container/onContainer', 'sunken/onSunken', 'outline', 'link', 'primary-*']) expect(prompt).toContain(role);
+    expect(prompt).toMatch(/typed variants first/);
+  });
+
+  it('is the default with ONLY dimension 2 changed — the other dimensions and the JSON shape are byte-identical', () => {
+    const def = blocks(selectPanelPrompt(undefined).prompt);
+    const cand = blocks(selectPanelPrompt('design-system').prompt);
+    expect(cand).toHaveLength(def.length);
+    const changed = def.map((b, i) => b !== cand[i]);
+    expect(changed.filter(Boolean)).toHaveLength(1);
+    expect(cand[changed.indexOf(true)]).toMatch(/^2\. \*\*designTokens\*\*/);
+    for (const k of dims) expect(selectPanelPrompt('design-system').prompt).toContain(`"${k}"`);
+  });
+
+  it('control: the default still names the retired roles (so the tests above measure a real difference)', () => {
+    expect(selectPanelPrompt(undefined).prompt).toMatch(/onSurface/);
+  });
+});
