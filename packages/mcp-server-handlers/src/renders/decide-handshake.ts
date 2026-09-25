@@ -32,6 +32,9 @@
  *      LLM loop, guaranteeing a contract the handshake backstop accepts.
  *      No LLM available ⇒ a deterministic no-repair create fallback.
  *
+ * `forceCreate` on the input skips steps 1 and 2 outright: a caller that
+ * asked for a fresh build is never handed a cache suggestion.
+ *
  * ## Failure posture
  *
  * Operational errors (registry hiccup, provider 5xx, pre-match backend
@@ -466,6 +469,11 @@ export async function decideHandshake(
   input: HandshakeDecideInput,
 ): Promise<HandshakeNegotiatorResult> {
   const { intent, blueprintDraft, gadgets, ctx } = input;
+  // The agent asked for a fresh build (typically after an unwanted cache
+  // suggestion): no tier that can propose the cache runs — neither the
+  // deployment pre-match nor find-similar — and the decision goes straight
+  // to validate/repair + create, matching the render path's force-create.
+  const forceCreate = input.forceCreate === true;
   // The agent's draft contract (untrusted). Reassigned in place to the
   // canonicalized contract by the Slice-2 step below so the create / repair
   // path (ensureConformingContract + buildCreateFallback) hashes the same
@@ -544,7 +552,7 @@ export async function decideHandshake(
 
   // Tier 0 — deployment-specific pre-match (e.g. a curated catalog).
   // Runs first so a curated / byte-exact hit wins over find-similar.
-  if (adapter.preMatch) {
+  if (!forceCreate && adapter.preMatch) {
     const declaredAgentTools = parsedDraft.success
       ? Object.keys(parsedDraft.data.agentCapabilities?.tools ?? {})
       : [];
@@ -564,14 +572,18 @@ export async function decideHandshake(
   // the synth/repair create path reuses it.
   const llm = await adapter.resolveLlm(ctx);
 
-  // ggui#607 — resolve the reuse policy once; 'exact-only' threads
-  // disableSemantic into every pool probe below.
-  const reuseMode = adapter.reuseMode ? await adapter.reuseMode(ctx) : 'full';
-
   // Tier 1 — find-similar across pools (exact-key free + semantic
   // find+judge). Reuse the cached blueprint ATOMICALLY; a coverage gap is
   // informational (surfaced as COVERAGE_GAP warn findings, not a drop).
-  if (adapter.pools && adapter.pools.length > 0 && parsedDraft.success) {
+  if (
+    !forceCreate &&
+    adapter.pools &&
+    adapter.pools.length > 0 &&
+    parsedDraft.success
+  ) {
+    // ggui#607 — resolve the reuse policy once; 'exact-only' threads
+    // disableSemantic into every pool probe below.
+    const reuseMode = adapter.reuseMode ? await adapter.reuseMode(ctx) : 'full';
     // The requesting agent's declared MCP tools (a set keyed by bare
     // toolName) — the basis for the reuse fulfillability gate. A cached
     // blueprint is only proposed for reuse when these SUPERSET the

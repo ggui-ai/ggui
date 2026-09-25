@@ -394,6 +394,62 @@ describe('decideHandshake — pre-match', () => {
   });
 });
 
+describe('decideHandshake — forceCreate (ggui#1335)', () => {
+  // A pre-match AND a pool that would both reuse: the only thing that can
+  // keep the decision off the cache is forceCreate itself.
+  const curated = () =>
+    buildCacheReuseResult(
+      {
+        id: 'curated-1',
+        contractKey: 'c1',
+        variantKey: 'cv1',
+        componentCode: 'x',
+        contract: {},
+        variance: {},
+        source: { kind: 'curated' },
+      },
+      'curated',
+      1,
+    );
+  const clean: EnsureConformingResult = {
+    contract: {},
+    origin: 'agent',
+    method: 'verbatim',
+    findings: [],
+    reasoning: 'clean',
+  };
+
+  it('never proposes the cache: skips the pre-match, every pool probe and the reuse-policy read', async () => {
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-ek' }));
+    mockEnsure.mockResolvedValue(clean);
+    const preMatch = vi.fn(async () => curated());
+    const reuseMode = vi.fn(() => 'full' as const);
+    const r = await decideHandshake(
+      adapter({ preMatch, reuseMode, pools: [pool(), pool({ scope: 'shared' })] }),
+      { intent: 'i', blueprintDraft: DRAFT, forceCreate: true, ctx: CTX },
+    );
+    expect(r.action).toBe('create');
+    expect(r.suggestion.origin).not.toBe('cache');
+    expect(preMatch).not.toHaveBeenCalled();
+    expect(mockMatch).not.toHaveBeenCalled();
+    expect(reuseMode).not.toHaveBeenCalled();
+    expect(mockEnsure).toHaveBeenCalledOnce();
+  });
+
+  it('control: the same adapter WITHOUT forceCreate reuses', async () => {
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-ek' }));
+    const preMatch = vi.fn(async () => undefined);
+    const r = await decideHandshake(
+      adapter({ preMatch, pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, forceCreate: false, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.origin).toBe('cache');
+    expect(preMatch).toHaveBeenCalledOnce();
+    expect(mockMatch).toHaveBeenCalledOnce();
+  });
+});
+
 describe('decideHandshake — find-similar across pools', () => {
   it('reuses on an exact-key hit and does NOT query later pools', async () => {
     mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
