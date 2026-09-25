@@ -42,7 +42,8 @@ import type { ReactNode } from 'react';
 import type { AppTheme, GguiSession } from '@ggui-ai/protocol/wire';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
-import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
+import { GguiWireProvider, type ActionSpentSource, type WireConfig } from '@ggui-ai/wire';
+import { ActionSpentContext } from '@ggui-ai/wire/internal';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
   mountProvisional,
@@ -65,8 +66,11 @@ export interface RenderItemOptions {
    *  `buildRootWireConfig(...)` (see `wire-config.ts`). `null` ⇒ the
    *  component mounts without a wire provider (standalone — matches
    *  today's DynamicComponent fallback when no GguiRender parent is
-   *  present). */
-  readonly scopedWireConfig: WireConfig | null;
+   *  present). When the config carries the card's `actionSpent` source
+   *  (every `buildRootWireConfig` config does, ggui#1223), the component also
+   *  mounts inside `ActionSpentContext`, so `useActionSpent` reads the
+   *  one-shot guard's own spent set. */
+  readonly scopedWireConfig: (WireConfig & { readonly actionSpent?: ActionSpentSource }) | null;
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this render. */
   readonly streamBus: StreamBus;
@@ -348,12 +352,17 @@ export async function mountRender(
    * mount. When absent, the wire provider is the only wrapper.
    */
   function wrapInScopedProvider(mountedComponent: ReactNode): ReactNode {
+    const config = currentOpts.scopedWireConfig;
+    const spentWrapped =
+      config?.actionSpent === undefined
+        ? mountedComponent
+        : createElement(ActionSpentContext.Provider, { value: config.actionSpent, children: mountedComponent });
     const wireWrapped =
-      currentOpts.scopedWireConfig === null
+      config === null
         ? mountedComponent
         : createElement(
             GguiWireProvider,
-            { config: currentOpts.scopedWireConfig, children: mountedComponent },
+            { config, children: spentWrapped },
           );
     return currentOpts.wrapOuter !== undefined
       ? currentOpts.wrapOuter(wireWrapped)

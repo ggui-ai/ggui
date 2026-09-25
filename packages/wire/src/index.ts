@@ -8,6 +8,7 @@ export {
   type WireStreamPayload,
 } from './context';
 export { useAction } from './useAction';
+export { useActionSpent, type ActionSpentSource } from './action-spent';
 export { useGguiContext } from './useGguiContext';
 export { useStream, type StreamResult } from './useStream';
 export { useContract, type InferredContractHooks, type ManualContractHooks } from './useContract';
@@ -29,4 +30,5 @@ export {
   RESERVED_CHANNEL_REPLAY_MAX,
   buildWireConfig,
   type BuildWireConfigOptions,
+  type BuiltWireConfig,
 } from './wire-config';

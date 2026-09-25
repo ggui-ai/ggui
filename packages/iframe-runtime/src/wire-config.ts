@@ -22,7 +22,7 @@ import {
   ClientContractViolationError,
   buildWireConfig,
   StreamBus,
-  type WireConfig,
+  type BuiltWireConfig,
 } from '@ggui-ai/wire';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { validateOutboundActionEnvelope } from './validation.js';
@@ -151,7 +151,7 @@ export interface BuildRootWireConfigOptions {
  */
 export function buildRootWireConfig(
   opts: BuildRootWireConfigOptions,
-): WireConfig {
+): BuiltWireConfig {
   const emitProtocolError: ProtocolErrorEmitter =
     opts.onProtocolError ?? defaultProtocolErrorEmitter;
 

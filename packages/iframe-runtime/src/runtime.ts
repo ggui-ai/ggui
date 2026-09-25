@@ -135,7 +135,7 @@ import {
   type RenderItemHandle,
   type RenderItemOptions,
 } from './render-item.js';
-import type { WireConfig } from '@ggui-ai/wire';
+import type { BuiltWireConfig, WireConfig } from '@ggui-ai/wire';
 import {
   fromBootstrapFailure,
   type BootstrapFailureReason,
@@ -4823,7 +4823,7 @@ async function bootProduction(opts: {
       // Post-render-identity-collapse the WireConfig is bound to the
       // single render at boot, so there's no per-render scope factory
       // — every dispatch resolves through `getCurrentGguiSession`.
-      const buildScopedWireFor = (render: GguiSession | GguiSessionSeedInput): WireConfig | null => {
+      const buildScopedWireFor = (render: GguiSession | GguiSessionSeedInput): BuiltWireConfig | null => {
         if (render.type === 'mcpApps' || render.type === 'system') return null;
         return rootConfig;
       };

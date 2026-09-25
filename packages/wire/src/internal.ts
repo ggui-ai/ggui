@@ -6,6 +6,10 @@
  * `globalThis.__ggui__.wire` and generated component code cannot reach
  * it; the import rewriter refuses the specifier in generated code. No
  * compatibility promise is made on this subpath.
+ *
+ * `ActionSpentContext` (ggui#1223) is here for the same reason: the runtime
+ * provides the card's spent state through it, and generated code reads that
+ * state only through `useActionSpent` and cannot provide its own.
  */
 export {
   claimConnectionWriter,
@@ -18,3 +22,4 @@ export {
   type ConnectionStore,
   type ConnectionWriter,
 } from './connection-store';
+export { ActionSpentContext } from './action-spent';

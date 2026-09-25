@@ -102,6 +102,11 @@ export const WIRE_EXPORTS = [
   'useGguiContext',
   'useContract',
   'useWireContext',
+  // ggui#1223: a `oneShot` action's spent state, as data. It is served here
+  // one release BEFORE the triad teaches it, because a card that imports a name
+  // its runtime's shim lacks fails at module link. A card generated to use it
+  // must never meet a runtime without it.
+  'useActionSpent',
   // Provider component
   'GguiWireProvider',
 ] as const;

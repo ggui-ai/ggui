@@ -28,6 +28,7 @@ import {
   ClientContractViolationError,
   validateOutboundActionEnvelope,
 } from './contract';
+import type { ActionSpentSource } from './action-spent';
 import type { DispatchSuppressedInfo, WireConfig } from './context';
 import { payloadSignature } from './dispatch-dedup';
 
@@ -242,7 +243,17 @@ export interface BuildWireConfigOptions {
  * `complete`) wire hooks consume. Reserved-channel late subscribers
  * are caught up synchronously from the bus's bounded replay ring.
  */
-export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
+/**
+ * What {@link buildWireConfig} returns: the {@link WireConfig} a
+ * `<GguiWireProvider>` takes, plus the card's {@link ActionSpentSource}, which
+ * reads the one-shot guard's own spent set (ggui#1223). A runtime provides the
+ * source through `ActionSpentContext` (`@ggui-ai/wire/internal`) so
+ * `useActionSpent` can read it. It is not a `WireConfig` member, so the
+ * generation prompt's WireConfig reference does not change.
+ */
+export type BuiltWireConfig = WireConfig & { readonly actionSpent: ActionSpentSource };
+
+export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
   let internalSeq = 0;
   const nextClientSeq =
     opts.nextClientSeq ??
@@ -265,8 +276,25 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
   // new iframe) arrives through `getSpentOneShots` (ggui#1223) and counts the
   // same as this set.
   const spentOneShots = new Set<string>();
+  // ggui#1223 — the same set as data. `isSpent` is the guard's own test,
+  // asked before a gesture; listeners hear this card's committed spends
+  // (anything else that changes the answer arrives with a render update).
+  const isSpent = (actionName: string): boolean =>
+    opts.getActiveActionSpec()?.[actionName]?.oneShot === true &&
+    (spentOneShots.has(actionName) || opts.getSpentOneShots?.()?.includes(actionName) === true);
+  const spentListeners = new Set<() => void>();
+  const actionSpent: ActionSpentSource = {
+    isSpent,
+    subscribe: (listener) => {
+      spentListeners.add(listener);
+      return () => {
+        spentListeners.delete(listener);
+      };
+    },
+  };
 
   return {
+    actionSpent,
     app: opts.app,
     render: opts.render,
     auth: opts.auth,
@@ -277,9 +305,7 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
       const actionSpec = opts.getActiveActionSpec();
       if (actionSpec === undefined) opts.onActionSpecAbsent?.(actionName);
       const isOneShot = actionSpec?.[actionName]?.oneShot === true;
-      const spent =
-        spentOneShots.has(actionName) || opts.getSpentOneShots?.()?.includes(actionName) === true;
-      if (isOneShot && spent) {
+      if (isSpent(actionName)) {
         // NEVER SILENT — the runtime's diagnostic channel (`console.warn`)
         // carries the actionId and `oneShot` as the reason, and the dispatch
         // does NOT reach the agent (no `emitEnvelope`). The structured sink
@@ -321,7 +347,10 @@ export function buildWireConfig(opts: BuildWireConfigOptions): WireConfig {
       }
       // Spend only on a committed fire — the marker records that the agent
       // WILL receive this gesture, so the next one is the suppressible repeat.
-      if (isOneShot) spentOneShots.add(actionName);
+      if (isOneShot && !spentOneShots.has(actionName)) {
+        spentOneShots.add(actionName);
+        for (const listener of [...spentListeners]) listener();
+      }
       opts.emitEnvelope(envelope);
     },
     subscribe: (channelName, handler) => {
