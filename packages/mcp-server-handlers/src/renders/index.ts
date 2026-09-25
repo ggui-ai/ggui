@@ -285,6 +285,7 @@ export {
   type GguiHandshakeHandlerDeps,
   type HandshakeNegotiator,
   type HandshakeNegotiatorResult,
+  type HandshakeReasonKind,
   type HandshakeRecord,
   type HandshakeStoredInput,
   type HandshakeStoredTarget,
