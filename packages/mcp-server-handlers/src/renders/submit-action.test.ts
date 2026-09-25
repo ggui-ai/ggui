@@ -16,6 +16,7 @@
  * fail-soft client-side.
  */
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
   InMemoryActiveConsumerRegistry,
   InMemoryGguiSessionStore,
@@ -111,6 +112,28 @@ describe('createGguiSubmitActionHandler', () => {
         ctx,
       );
       expect(out).toEqual({ ok: true });
+    });
+  });
+
+  describe('declares CONTRACT_VIOLATION on the advertised output (#1358 step 1 — declared, not yet emitted)', () => {
+    it('the closed output schema names the code and the `violations` member, so a host that caches it accepts the gate\'s answer next release', () => {
+      const h = createGguiSubmitActionHandler();
+      const projected = z.toJSONSchema(z.object(h.outputSchema), { io: 'output' });
+      // The parse IS the assertion: the object is closed (#1333), the enum
+      // carries the new code beside the two it had, and `violations` is an
+      // array of the protocol's ContractViolation shape.
+      z.object({
+        additionalProperties: z.literal(false),
+        properties: z.object({
+          code: z.object({ enum: z.tuple([z.literal('INVALID_ACTION_KIND'), z.literal('PIPE_NOT_FOUND'), z.literal('CONTRACT_VIOLATION')]) }),
+          violations: z.object({
+            type: z.literal('array'),
+            items: z.object({
+              properties: z.object({ field: z.object({ type: z.literal('string') }), message: z.object({ type: z.literal('string') }) }),
+            }),
+          }),
+        }),
+      }).parse(projected);
     });
   });
 

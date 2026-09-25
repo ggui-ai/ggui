@@ -62,7 +62,7 @@
  * ...}` input. Every render IS the addressable scope.
  */
 import { z } from 'zod';
-import type { ConsumeEventEntry } from '@ggui-ai/protocol';
+import { contractViolationSchema, type ConsumeEventEntry, type ContractViolation } from '@ggui-ai/protocol';
 import {
   SUBMIT_ACTION_KINDS,
   isGguiSubmitActionInput,
@@ -130,7 +130,17 @@ const outputSchema = {
    *     sessionId whose pipe is closed/missing. iframe-runtime
    *     branches on this to fall through to `ui/message`.
    */
-  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND']).optional(),
+  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION']).optional(),
+  /**
+   * The contract findings behind a `CONTRACT_VIOLATION` answer — the same
+   * facts the live channel's error frame carries (ggui#1358). DECLARED in
+   * this release and not yet emitted: the relay does not run the
+   * `actionSpec` gate yet, and this tool's output reaches `tools/list`
+   * closed, so a host that cached the previous release's schema would
+   * refuse a code or member it did not name (ggui#1333). The gate lands
+   * one release after this declaration serves.
+   */
+  violations: z.array(contractViolationSchema).optional(),
   /** Human-readable diagnostic on `ok:false`. */
   message: z.string().optional(),
   /**
@@ -166,8 +176,10 @@ type UserActionAccepted = {
 
 type UserActionRejected = {
   readonly ok: false;
-  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND';
+  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION';
   readonly message: string;
+  /** Present only with `code: 'CONTRACT_VIOLATION'` (ggui#1358; not yet emitted). */
+  readonly violations?: ContractViolation[];
 };
 
 type UserActionOutput = UserActionAccepted | UserActionRejected;

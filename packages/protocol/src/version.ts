@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The relay declares its contract-violation answer (2026-09-25,
+ * additive, ggui#1358: MINOR, same draft stamp). `contractViolationSchema`
+ * is the zod mirror of `ContractViolation`; `ggui_runtime_submit_action`'s
+ * output `code` enum gains `CONTRACT_VIOLATION` and the output gains an
+ * optional `violations: ContractViolation[]`. SPEC §4.7's handler contract
+ * and §2.4's failure modes name the relay's answer beside the live
+ * channel's frame. DECLARED here, ENFORCED one release later: the relay
+ * does not yet run the `actionSpec` gate, and the tool's output reaches
+ * `tools/list` closed (ggui#1333), so a host must cache a schema naming the
+ * code before any server answers with it. No `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * The handshake suggestion names the card a judged hit proposes
  * (2026-09-25, additive, ggui#1336: MINOR, same draft stamp).
  * `BlueprintMeta.matchedIntent?` carries the stored intent the reuse judge

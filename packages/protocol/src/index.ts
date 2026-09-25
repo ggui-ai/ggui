@@ -94,6 +94,7 @@ export * from "./types/portable-blueprint";
 export * from "./schemas/blueprint";
 export * from "./types/handshake-suggestion";
 export * from "./schemas/handshake-suggestion";
+export * from "./schemas/contract-violation";
 // Operator-class blueprint tool schemas. Lives alongside the blueprint
 // type schemas so handlers + a hosted deployment + console + fixtures all import
 // the wire shape from one place.
