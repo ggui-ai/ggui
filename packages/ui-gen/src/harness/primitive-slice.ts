@@ -23,6 +23,7 @@
 // prompt-build time and modifies the LLM's *initial* conditioning
 // uniformly — it cannot contaminate a retry trajectory mid-run.
 
+import type { DataContract, JsonSchema } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/index.js";
 
 /** Primitives every fixture needs — layout + typography + core interaction.
@@ -160,6 +161,62 @@ export function computePrimitiveAllowlist(
     for (const p of additions) set.add(p);
   }
   return [...set].sort();
+}
+
+/**
+ * The input primitives a contract's own fields imply (ggui#1324).
+ *
+ * The axis-keyed allowlist is derived from the classification alone, so a card
+ * whose axes do not say "form" still loses the inputs its contract needs: the
+ * #45 kanban canary edits a task's title and priority through an action
+ * payload, and the axis slice dropped `Input` / `TextArea` / `Select`.
+ *
+ * Walks every context slot's schema and every action payload's schema down to
+ * its leaves (object `properties`, array `items`) and maps each leaf type:
+ * an `enum` → `Select`, `RadioGroup`; `string` → `Input`, `TextArea`,
+ * `FormField`; `number` / `integer` → `Input`, `Slider`; `boolean` →
+ * `Checkbox`, `Toggle`. A declared stream adds `Spinner` and `Badge`. Props are
+ * display data and add nothing (the classification covers display). Returns a
+ * sorted array.
+ */
+export function computeContractPrimitives(
+  contract: DataContract | undefined,
+): readonly string[] {
+  const out = new Set<string>();
+  if (!contract) return [];
+  for (const slot of Object.values(contract.contextSpec ?? {})) addLeaves(slot.schema, out);
+  for (const action of Object.values(contract.actionSpec ?? {})) {
+    if (action.schema) addLeaves(action.schema, out);
+  }
+  if (Object.keys(contract.streamSpec ?? {}).length > 0) {
+    out.add("Spinner");
+    out.add("Badge");
+  }
+  return [...out].sort();
+}
+
+function addLeaves(schema: JsonSchema, out: Set<string>): void {
+  for (const child of Object.values(schema.properties ?? {})) addLeaves(child, out);
+  if (schema.items) addLeaves(schema.items, out);
+  if (schema.enum && schema.enum.length > 0) {
+    out.add("Select");
+    out.add("RadioGroup");
+    return;
+  }
+  const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
+  for (const t of types) {
+    if (t === "string") {
+      out.add("Input");
+      out.add("TextArea");
+      out.add("FormField");
+    } else if (t === "number" || t === "integer") {
+      out.add("Input");
+      out.add("Slider");
+    } else if (t === "boolean") {
+      out.add("Checkbox");
+      out.add("Toggle");
+    }
+  }
 }
 
 /**

@@ -123,6 +123,13 @@ describe("resolveRunPolicyForProfile (framework for future experiments)", () => 
     }
   });
 
+  it("ggui#1324 ctx-slice-primitives-v2 flips primitiveDocSlice to axis-keyed+contract", () => {
+    const resolved = resolveRunPolicyForProfile("ctx-slice-primitives-v2", harness, { provider: "openai" });
+    expect(resolved.context.primitiveDocSlice).toBe("axis-keyed+contract");
+    // One-dimension experiment: nothing else moves.
+    expect({ ...resolved.context, primitiveDocSlice: harness.policy.context.primitiveDocSlice }).toEqual(harness.policy.context);
+  });
+
   it("#45 ctx-slice-primitives-v1 flips primitiveDocSlice to axis-keyed", () => {
     // Experiment #45: axis-keyed primitives doc slice — first fresh
     // family after dupe-break retirement. Context-shaping lever;

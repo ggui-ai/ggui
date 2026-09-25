@@ -2,9 +2,11 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  computeContractPrimitives,
   computePrimitiveAllowlist,
   slicePrimitiveDocumentation,
 } from "./primitive-slice";
+import type { DataContract } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/index.js";
 // Static import — was dynamic inside each `it()`, which tipped over
 // vitest's 5s default timeout under parallel turbo load
@@ -257,5 +259,67 @@ Input description.
     );
     expect(slicedList).not.toContain("### Stepper");
     expect(slicedList).not.toContain("### Stat");
+  });
+});
+
+// ggui#1324 — the contract rules on top of the #45 slice.
+describe("computeContractPrimitives (ggui#1324)", () => {
+  // The #45 canary's contract shape: no slots; the edit arrives through an
+  // action payload whose nested `data` carries a string title and an enum.
+  const kanban: DataContract = {
+    propsSpec: {
+      properties: {
+        tasks: { schema: { type: "array", items: { type: "object", properties: { id: { type: "string" } } } }, required: true },
+      },
+    },
+    actionSpec: {
+      taskUpdate: {
+        label: "Task Updated",
+        schema: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["create", "move", "edit", "delete"] },
+            taskId: { type: "string" },
+            data: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                priority: { type: "string", enum: ["low", "medium", "high"] },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it("adds nothing for an absent or props-only contract", () => {
+    expect(computeContractPrimitives(undefined)).toEqual([]);
+    expect(computeContractPrimitives({ propsSpec: { properties: { rows: { schema: { type: "array" } } } } })).toEqual([]);
+  });
+
+  it("walks a nested action payload to its leaves: strings imply text inputs, enums imply a picker", () => {
+    expect(computeContractPrimitives(kanban)).toEqual(["FormField", "Input", "RadioGroup", "Select", "TextArea"]);
+  });
+
+  it("maps slot types: boolean → Checkbox/Toggle, number → Input/Slider; a stream adds Spinner/Badge", () => {
+    const c: DataContract = {
+      contextSpec: { enabled: { schema: { type: "boolean" } }, volume: { schema: { type: "number" } } },
+      streamSpec: { progress: { schema: { type: "object" } } },
+    };
+    expect(computeContractPrimitives(c)).toEqual(["Badge", "Checkbox", "Input", "Slider", "Spinner", "Toggle"]);
+  });
+
+  it("closes the #45 kanban gap: the axis slice alone lacks Input/TextArea, the union carries them into the doc", () => {
+    const cls = fakeClassification({ render: "list", state: "merge", writes: "per-item", realtime: "merge" });
+    const axisOnly = computePrimitiveAllowlist(cls);
+    expect(axisOnly).not.toContain("Input");
+    expect(axisOnly).not.toContain("TextArea");
+    const union = [...new Set([...axisOnly, ...computeContractPrimitives(kanban)])].sort();
+    const sliced = slicePrimitiveDocumentation(PRIMITIVES_DOCUMENTATION, union);
+    expect(sliced).toMatch(/^### Input\b/m);
+    expect(sliced).toMatch(/^### TextArea\b/m);
+    expect(sliced).toMatch(/^### Select\b/m);
+    expect(slicePrimitiveDocumentation(PRIMITIVES_DOCUMENTATION, axisOnly)).not.toMatch(/^### Input\b/m);
   });
 });

@@ -428,10 +428,13 @@ export async function dispatchGeneration(
     const { PRIMITIVES_DOCUMENTATION } = await import("../validation/index.js");
     const fullBytes = Buffer.byteLength(PRIMITIVES_DOCUMENTATION, "utf8");
     const mode = resolvedPolicy.context.primitiveDocSlice ?? "full";
-    if (mode === "axis-keyed") {
-      const { computePrimitiveAllowlist, slicePrimitiveDocumentation } =
+    if (mode === "axis-keyed" || mode === "axis-keyed+contract") {
+      const { computePrimitiveAllowlist, computeContractPrimitives, slicePrimitiveDocumentation } =
         await import("../harness/primitive-slice.js");
       let allowlist = computePrimitiveAllowlist(classification);
+      if (mode === "axis-keyed+contract") {
+        allowlist = [...new Set([...allowlist, ...computeContractPrimitives(effectiveContract)])].sort();
+      }
       // Apply policy-driven excludes — some policy profiles drop
       // near-synonym layout primitives (e.g. Row/Box/Spacer).
       const excludes = resolvedPolicy.context.primitiveDocExcludes ?? [];
@@ -446,7 +449,7 @@ export async function dispatchGeneration(
       const slicedBytes = Buffer.byteLength(sliced, "utf8");
       const excludeTag = excludes.length ? ` excludes=${excludes.join(",")}` : "";
       console.log(
-        `[simple] primitive-doc-bytes=${slicedBytes} mode=axis-keyed baseline=${fullBytes} drop=${((1 - slicedBytes / fullBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`,
+        `[simple] primitive-doc-bytes=${slicedBytes} mode=${mode} baseline=${fullBytes} drop=${((1 - slicedBytes / fullBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`,
       );
       systemPromptOverride = harness.how.systemPrompt.replace(
         PRIMITIVES_DOCUMENTATION,

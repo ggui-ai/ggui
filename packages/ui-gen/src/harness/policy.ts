@@ -252,6 +252,17 @@ export function resolveRunPolicyForProfile(
     };
   }
 
+  //   ctx-slice-primitives-v2 (ggui#1324) — the #45 slice plus the input
+  //   primitives the contract's slots and action payloads imply.
+  if (profile === "ctx-slice-primitives-v2") {
+    return {
+      context: {
+        ...harness.policy.context,
+        primitiveDocSlice: "axis-keyed+contract",
+      },
+    };
+  }
+
   // Archived experimental profiles:
   //
   //   experiment-40-provider-asymmetric — provider-specific tier-0 labels

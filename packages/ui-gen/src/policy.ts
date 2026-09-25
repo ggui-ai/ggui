@@ -86,12 +86,15 @@ export interface ContextPolicy {
    * Axis-keyed primitives doc slice. When `"axis-keyed"`, the first-turn
    * system prompt injects only the allowlisted primitives derived from
    * the classification, shrinking the ~130 KB monolith to ~30–50 KB.
-   * Default `"full"`.
+   * `"axis-keyed+contract"` adds the input primitives the contract's own
+   * fields imply (ggui#1324: the axis slice alone dropped `Input` /
+   * `TextArea` from a card that edits a string). Default `"full"`.
    */
-  readonly primitiveDocSlice?: "full" | "axis-keyed";
+  readonly primitiveDocSlice?: "full" | "axis-keyed" | "axis-keyed+contract";
   /**
-   * Primitives to exclude from the axis-keyed slice. Only meaningful
-   * when `primitiveDocSlice === "axis-keyed"`.
+   * Primitives to exclude from the axis-keyed slice (applied after the
+   * contract additions under `"axis-keyed+contract"`). Only meaningful
+   * when `primitiveDocSlice` is one of the two slice modes.
    */
   readonly primitiveDocExcludes?: readonly string[];
   /**
