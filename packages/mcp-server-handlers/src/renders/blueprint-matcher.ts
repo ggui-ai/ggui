@@ -141,14 +141,13 @@ export interface MatchBlueprintDeps {
    */
   readonly llm?: LLMCaller;
   /**
-   * Optional marketplace-install bridge. When set, the
-   * matcher STARTS `ensureCached(scope)` and reads the exact key while it
-   * runs: a hit the walk can never evict (not bridge-owned) is served at
-   * once; a bridge-owned hit, a miss and the semantic tier all wait for
-   * it (ggui#1370). Before #1370 the matcher awaited the walk before
-   * registry — installed blueprints lazily compile + populate the
-   * same vector store the matcher reads, so the next lookup sees
-   * them. Idempotent per scope; subsequent calls are cheap no-ops.
+   * Optional marketplace-install bridge. When set, the matcher STARTS
+   * `ensureCached(scope)` and reads the exact key while it runs: a hit
+   * the walk can never evict (not bridge-owned) is served at once; a
+   * bridge-owned hit, a miss and the semantic tier all wait for it
+   * (ggui#1370). Installed blueprints lazily compile + populate the same
+   * vector store the matcher reads, so the next lookup sees them.
+   * Idempotent per scope; subsequent calls are cheap no-ops.
    *
    * Best-effort: ensureCached failures are swallowed so a broken
    * installed-blueprint compile can't sink an otherwise-healthy

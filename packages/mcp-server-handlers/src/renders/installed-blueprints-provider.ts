@@ -220,8 +220,9 @@ export interface CreateInstalledBlueprintsProviderOptions {
    */
   readonly onIssue?: (issue: InstalledBlueprintCacheIssue) => void;
   /**
-   * Called once per completed walk (ggui#1370) so the walk's cost is
-   * visible wherever this provider runs — a server typically logs it.
+   * Called once per walk (ggui#1370), including a walk that threw part
+   * way, whose counts are then partial — so the walk's cost is visible
+   * wherever this provider runs; a server typically logs it.
    * Runs inside its own try/catch: a throwing reporter is surfaced through
    * `onIssue` (`walk-report-threw`) and never poisons the scope's state.
    */
