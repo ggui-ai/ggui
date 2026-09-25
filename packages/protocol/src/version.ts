@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The relay enforces the action contract at receipt (2026-09-26, ggui#1358
+ * step 2: a first-party server meets a MUST it had missed on one path —
+ * VERSION-POLICY §1.3, "the bar was always there"; same draft stamp).
+ * `ggui_runtime_submit_action` now validates a dispatch's `actionData`
+ * against the render's `actionSpec[intent].schema` before the pipe and
+ * ledger writes, exactly as the live channel does, and answers a failing
+ * dispatch `{ ok: false, code: 'CONTRACT_VIOLATION', message, violations }`
+ * — the code and member declared one release earlier (entry below). A card
+ * with no `actionSpec`, a non-component render, or a server with no render
+ * store has nothing to enforce and passes as before; a store read that
+ * fails is named on one warn line and the dispatch passes ungated. No
+ * `PROTOCOL_VERSION` move.
  * The consume result declares its next-call hint (2026-09-26, additive,
  * ggui#1399: MINOR, same draft stamp). `gguiConsumeOutputSchema` gains an
  * optional `nextStep: { tool: 'ggui_amend', description, example, args:

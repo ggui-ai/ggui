@@ -62,7 +62,12 @@
  * ...}` input. Every render IS the addressable scope.
  */
 import { z } from 'zod';
-import { contractViolationSchema, type ConsumeEventEntry, type ContractViolation } from '@ggui-ai/protocol';
+import {
+  ContractViolationError,
+  contractViolationSchema,
+  type ConsumeEventEntry,
+  type ContractViolation,
+} from '@ggui-ai/protocol';
 import {
   SUBMIT_ACTION_KINDS,
   isGguiSubmitActionInput,
@@ -72,8 +77,10 @@ import {
 import {
   PendingPipeNotFoundError,
   type ActiveConsumerRegistry,
+  type StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler } from '../types.js';
+import { assertActionContract } from './assert-action-contract.js';
 import { recordCommittedOneShot } from './record-committed-one-shot.js';
 
 // `kind` accepts the closed primary set OR an extension string. Zod
@@ -133,12 +140,11 @@ const outputSchema = {
   code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION']).optional(),
   /**
    * The contract findings behind a `CONTRACT_VIOLATION` answer — the same
-   * facts the live channel's error frame carries (ggui#1358). DECLARED in
-   * this release and not yet emitted: the relay does not run the
-   * `actionSpec` gate yet, and this tool's output reaches `tools/list`
-   * closed, so a host that cached the previous release's schema would
-   * refuse a code or member it did not name (ggui#1333). The gate lands
-   * one release after this declaration serves.
+   * facts the live channel's error frame carries (ggui#1358). The code and
+   * this member were DECLARED one release before the relay's `actionSpec`
+   * gate began answering with them: this tool's output reaches `tools/list`
+   * closed, so a host that cached the previous release's schema would have
+   * refused a code or member it did not name (ggui#1333).
    */
   violations: z.array(contractViolationSchema).optional(),
   /** Human-readable diagnostic on `ok:false`. */
@@ -178,7 +184,7 @@ type UserActionRejected = {
   readonly ok: false;
   readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION';
   readonly message: string;
-  /** Present only with `code: 'CONTRACT_VIOLATION'` (ggui#1358; not yet emitted). */
+  /** Present only with `code: 'CONTRACT_VIOLATION'` (ggui#1358). */
   readonly violations?: ContractViolation[];
 };
 
@@ -256,16 +262,41 @@ export interface GguiSubmitActionHandlerDeps {
  * degrades to the behaviour that predates it (the card re-serves live) and
  * is named on one warn line, never allowed to fail the dispatch.
  */
+/**
+ * Read the dispatch's render row for the `actionSpec` gate (ggui#1358).
+ * `null` = no such render; `undefined` = no store, or the store failed to
+ * read (named on one warn line) — either way there is no spec to enforce.
+ */
+async function readStoredRenderForGate(
+  deps: GguiSubmitActionHandlerDeps,
+  sessionId: string,
+): Promise<StoredGguiSession | null | undefined> {
+  const store = deps.renderStore;
+  if (store === undefined) return undefined;
+  try {
+    return await store.get(sessionId);
+  } catch (err) {
+    deps.logger?.warn?.('submit_action_gate_store_read_failed', {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  }
+}
+
 async function recordDispatchSpend(
   deps: GguiSubmitActionHandlerDeps,
   sessionId: string,
   action: string,
   data: unknown,
+  preloaded: StoredGguiSession | null | undefined,
 ): Promise<void> {
   const store = deps.renderStore;
   if (store === undefined) return;
   try {
-    const stored = await store.get(sessionId);
+    // The gate already read the row for this dispatch (ggui#1358); one read
+    // serves both. `undefined` means the gate could not read it — read here.
+    const stored = preloaded === undefined ? await store.get(sessionId) : preloaded;
     if (stored === null) return;
     await recordCommittedOneShot({ store, sessionId, render: stored.render, action, data });
   } catch (err) {
@@ -354,6 +385,38 @@ export function createGguiSubmitActionHandler(
         // `{intent, actionData, uiContext}` — JSON-typed by the protocol,
         // so the entry below IS a ConsumeEventEntry without a cast.
         const dispatchPayload = env.payload;
+        // ggui#1358 — the relay runs the SAME `actionSpec` gate the live
+        // channel runs at receipt (SPEC §4.7 "Server-side handler contract",
+        // §2.4 "Failure modes"): a dispatch whose payload fails the card's
+        // contract is answered CONTRACT_VIOLATION and never reaches the pipe,
+        // the ledger, or the one-shot spend. The gate needs the card's spec,
+        // read from the render store; a card that declares no `actionSpec`,
+        // a non-component render, or a server with no store has nothing to
+        // enforce and passes as before. A store read that FAILS is named on
+        // one warn line and the dispatch passes ungated: the card's own
+        // validator already refused what this gate refuses, and an
+        // unreadable store must not turn every gesture into a refusal.
+        const stored = await readStoredRenderForGate(deps, env.sessionId);
+        const activeActionSpec =
+          stored !== null && stored !== undefined && stored.render.type === 'component'
+            ? stored.render.actionSpec
+            : undefined;
+        try {
+          assertActionContract(activeActionSpec, {
+            action: dispatchPayload.intent,
+            data: dispatchPayload.actionData,
+          });
+        } catch (err) {
+          if (err instanceof ContractViolationError) {
+            return {
+              ok: false,
+              code: 'CONTRACT_VIOLATION',
+              message: err.message,
+              violations: err.violations,
+            };
+          }
+          throw err;
+        }
         const actionEnvelope: ConsumeEventEntry = {
           type: 'action',
           sessionId: env.sessionId,
@@ -407,7 +470,7 @@ export function createGguiSubmitActionHandler(
           // `oneShot` now spends its card durably. This never changes the
           // answer: a dispatch that fails the card's contract was accepted
           // above exactly as before and simply does not spend.
-          await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData);
+          await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored);
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight
           // `ggui_consume` long-poll will drain this event soon. When

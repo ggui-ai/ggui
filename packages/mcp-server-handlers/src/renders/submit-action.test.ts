@@ -429,6 +429,90 @@ describe('createGguiSubmitActionHandler', () => {
     expect(typeof rejected.message).toBe('string');
   });
 
+  // ggui#1358 step 2 — the relay validates `actionData` against the card's
+  // `actionSpec` at receipt, exactly as the WebSocket ingress does. A failing
+  // dispatch is answered CONTRACT_VIOLATION and never reaches the pipe, the
+  // ledger, or the one-shot spend.
+  describe('validates actionData against the card\'s actionSpec at receipt (#1358 step 2)', () => {
+    const sessionId = 'render-gated-1';
+    const gatedCard: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt: 0,
+      lastActivityAt: 0,
+      expiresAt: 0,
+      epoch: 1,
+      actionSpec: {
+        confirm: {
+          label: 'Confirm',
+          oneShot: true,
+          schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        },
+      },
+    };
+    const dispatchWith = (intent: string, actionData: unknown) => ({
+      ...baseEnv,
+      sessionId,
+      kind: 'dispatch' as const,
+      payload: { intent, actionData, uiContext: {} },
+    });
+    async function boot() {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: gatedCard });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      return { consumer, store, h };
+    }
+
+    it('answers CONTRACT_VIOLATION with the violations when actionData fails the declared schema, and writes nothing', async () => {
+      const { consumer, store, h } = await boot();
+      const out = await h.handler(dispatchWith('confirm', { id: 42 }), ctx);
+      expect(out.ok).toBe(false);
+      if (out.ok) throw new Error('expected a refusal');
+      expect(out.code).toBe('CONTRACT_VIOLATION');
+      expect(typeof out.message).toBe('string');
+      expect(out.violations?.length ?? 0).toBeGreaterThan(0);
+      expect(out.violations?.[0]).toMatchObject({ field: expect.any(String), message: expect.any(String) });
+      // Nothing reached the pipe, the ledger, or the spend record.
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(0);
+      const ledger = await store.listEventsSince(sessionId, 0, 10);
+      expect(ledger?.events ?? []).toHaveLength(0);
+      const got = await store.get(sessionId);
+      expect(got?.render.type === 'component' ? got.render.spentOneShots : undefined).toBeUndefined();
+    });
+
+    it('answers CONTRACT_VIOLATION for an action the card never declared', async () => {
+      const { consumer, h } = await boot();
+      const out = await h.handler(dispatchWith('nope', null), ctx);
+      expect(out.ok).toBe(false);
+      if (out.ok) throw new Error('expected a refusal');
+      expect(out.code).toBe('CONTRACT_VIOLATION');
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(0);
+    });
+
+    it('accepts a dispatch that satisfies the schema, pipes it, and spends the oneShot (control)', async () => {
+      const { consumer, store, h } = await boot();
+      expect(await h.handler(dispatchWith('confirm', { id: 'x' }), ctx)).toEqual({ ok: true });
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(1);
+      const got = await store.get(sessionId);
+      expect(got?.render.type === 'component' ? got.render.spentOneShots : undefined).toEqual({ epoch: 1, actions: ['confirm'] });
+    });
+
+    it('does not gate when the card declares no actionSpec (nothing to enforce, as on the live channel)', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      const { actionSpec: _dropped, ...noSpec } = gatedCard;
+      await store.commit({ appId: 'app_1', render: noSpec });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      expect(await h.handler(dispatchWith('anything', { free: true }), ctx)).toEqual({ ok: true });
+    });
+  });
+
   // ggui#1223 / #1305 — a pipe-committed dispatch of a `oneShot` action spends
   // its card durably, so a re-served card renders it spent after a reload.
   describe('the committed oneShot spend (#1305)', () => {
