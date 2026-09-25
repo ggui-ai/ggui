@@ -106,7 +106,14 @@ export const blueprintMetaSchema: z.ZodType<BlueprintMeta> = z
     source: blueprintSourceSchema.optional(),
     variance: blueprintVarianceSchema,
     selectedReason: z.string().optional(),
-    matchedIntent: z.string().min(1).max(MATCHED_INTENT_MAX_CHARS).optional(),
+    matchedIntent: z
+      .string()
+      .min(1)
+      .max(MATCHED_INTENT_MAX_CHARS)
+      .optional()
+      .describe(
+        "The stored purpose of the saved interface this suggestion proposes, as the reuse judge read it (at most 280 characters). Present only when the judge picked a saved interface from this app's own pool; absent on an exact match, on agent/synth proposals, and on any interface from a pool shared across apps. Compare it with your intent — if it names a different task, call ggui_handshake again with forceCreate: true.",
+      ),
   })
   .strict() as z.ZodType<BlueprintMeta>;
 

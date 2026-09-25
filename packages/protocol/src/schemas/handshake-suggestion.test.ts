@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
   MATCHED_INTENT_MAX_CHARS,
   blueprintMetaSchema,
@@ -118,6 +119,16 @@ describe('blueprintMetaSchema — optional matchedIntent (#1336)', () => {
 
   it('refuses an empty matchedIntent — the member is absent, never blank', () => {
     expect(blueprintMetaSchema.safeParse({ ...baseMeta, matchedIntent: '' }).success).toBe(false);
+  });
+
+  it('carries a description that names the member’s meaning and the decline path, so tools/list explains it to the agent', () => {
+    const projected = z.toJSONSchema(blueprintMetaSchema, { io: 'output' });
+    const member = projected.properties?.['matchedIntent'];
+    const description = typeof member === 'object' ? member.description : undefined;
+    expect(description).toMatch(/as the reuse judge read it/);
+    expect(description).toMatch(/forceCreate: true/);
+    // OSS purity: the text ships to every self-hoster's LLM; no deployment wording.
+    expect(description).not.toMatch(/cloud|tier|platform|pod/i);
   });
 
   it('rides the full suggestion', () => {

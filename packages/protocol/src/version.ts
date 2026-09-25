@@ -7,7 +7,7 @@
  *
  * --------------------------------------------------------------------
  * The handshake suggestion names the card a judged hit proposes
- * (2026-09-26, additive, ggui#1336: MINOR, same draft stamp).
+ * (2026-09-25, additive, ggui#1336: MINOR, same draft stamp).
  * `BlueprintMeta.matchedIntent?` carries the stored intent the reuse judge
  * compared with the request, capped at `MATCHED_INTENT_MAX_CHARS` (280,
  * the judge's own truncation), so the agent (which holds the
@@ -17,6 +17,8 @@
  * later: every output object reaches `tools/list` closed
  * (`additionalProperties: false`, ggui#1333), so a host that cached the
  * previous release's schema would refuse a member it did not name. The
+ * member carries a `.describe()` naming its meaning and the decline path
+ * (`forceCreate`), so the agent that receives it knows what it is for. The
  * `intent` input's description now says it is stored and shown to later
  * requests of the same app, and names the task, never the end user.
  * Kit: the `n1-compat` catalog gains the `handshake-suggestion` wire and
