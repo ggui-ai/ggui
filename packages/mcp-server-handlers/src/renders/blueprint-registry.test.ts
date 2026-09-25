@@ -1575,3 +1575,76 @@ describe('registerBlueprint — intentSource (ggui#1275)', () => {
     }
   });
 });
+
+describe('maybeEvictLowestHitBlueprint — a fallback is logged, never silent (ggui#1371)', () => {
+  // The warn is once per process per reason, so each case imports a fresh
+  // module instance: the dedup state cannot leak between tests.
+  async function freshRegistry(): Promise<typeof import('./blueprint-registry.js')> {
+    vi.resetModules();
+    return import('./blueprint-registry.js');
+  }
+
+  function capContract(seed: number): DataContract {
+    return { contextSpec: { [`cap_${seed}`]: { schema: { type: 'string' }, default: '' } } };
+  }
+
+  function warnLines(spy: { mock: { calls: unknown[][] } }, event: string): string[] {
+    return spy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes(event));
+  }
+
+  it('warns once per process when the count gate fails and the whole-scope walk runs instead', async () => {
+    const reg = await freshRegistry();
+    const deps = makeDeps();
+    deps.index.countIds = async () => {
+      throw new Error('AccessDeniedException: not authorized to perform dynamodb:Query');
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (let i = 1; i <= 3; i++) {
+        await reg.registerBlueprint(
+          deps,
+          SCOPE,
+          { kind: 'template', contract: capContract(i), intent: `c${i}`, componentCode: 'x', source: { kind: 'user' } },
+          { maxPerKind: 10 },
+        );
+      }
+      const lines = warnLines(warn, 'blueprint_evict_count_gate_failed');
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('AccessDeniedException');
+    } finally {
+      warn.mockRestore();
+    }
+    // Behaviour unchanged: every registration still lands.
+    expect(await reg.listBlueprints(deps, SCOPE)).toHaveLength(3);
+  });
+
+  it('warns once per process when the enumeration fails and eviction is skipped', async () => {
+    const reg = await freshRegistry();
+    const deps = makeDeps();
+    // At the cap, so the gate sends the call to the enumeration.
+    deps.index.countIds = async () => 99;
+    const original = deps.vectorStore.listByScope.bind(deps.vectorStore);
+    let failEnumeration = true;
+    deps.vectorStore.listByScope = async (scope: string) => {
+      if (failEnumeration) throw new Error('ListVectors throttled');
+      return original(scope);
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (let i = 1; i <= 2; i++) {
+        await reg.registerBlueprint(
+          deps,
+          SCOPE,
+          { kind: 'template', contract: capContract(10 + i), intent: `e${i}`, componentCode: 'x', source: { kind: 'user' } },
+          { maxPerKind: 1 },
+        );
+      }
+      const lines = warnLines(warn, 'blueprint_evict_enumeration_failed');
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('ListVectors throttled');
+    } finally {
+      warn.mockRestore();
+      failEnumeration = false;
+    }
+  });
+});

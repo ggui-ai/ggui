@@ -428,6 +428,29 @@ function warnDroppedRow(id: string, reason: string): void {
   );
 }
 
+/**
+ * Eviction fallbacks already warned this process, by reason. A fallback is
+ * not an error (the cap is a soft ceiling), but a silent one hid that every
+ * registration was paying a whole-scope walk (ggui#1371). One line per
+ * process per reason makes it visible without flooding the log.
+ */
+const warnedEvictionFallbacks = new Set<string>();
+
+function warnEvictionFallback(
+  event: 'blueprint_evict_count_gate_failed' | 'blueprint_evict_enumeration_failed',
+  consequence: string,
+  err: unknown,
+): void {
+  if (warnedEvictionFallbacks.has(event)) return;
+  warnedEvictionFallbacks.add(event);
+  // eslint-disable-next-line no-console -- operator-visible degradation notice
+  console.warn(
+    `[ggui] blueprint registry: ${event} — ${consequence}: ${
+      err instanceof Error ? err.message : String(err)
+    } (logged once per process)`,
+  );
+}
+
 function readScalarString(
   value: string | number | boolean | null | undefined,
 ): string | undefined {
@@ -797,8 +820,14 @@ async function maybeEvictLowestHitBlueprint(
     try {
       const count = await deps.index.countIds(scope, `${kind}:`);
       if (count < cap) return;
-    } catch {
-      // Fall through to the enumeration below.
+    } catch (err) {
+      // Fall through to the enumeration below: counting is an optimization,
+      // so the walk still runs; the warn makes its cost visible.
+      warnEvictionFallback(
+        'blueprint_evict_count_gate_failed',
+        'the cap count failed, so this registration walks the whole scope instead',
+        err,
+      );
     }
   }
   let bucket: VectorRowSummary[];
@@ -810,7 +839,12 @@ async function maybeEvictLowestHitBlueprint(
       const k = readScalarString(entry.metadata[METADATA_KEYS.kind]);
       return k === kind;
     });
-  } catch {
+  } catch (err) {
+    warnEvictionFallback(
+      'blueprint_evict_enumeration_failed',
+      'the scope enumeration failed, so eviction is skipped and the bucket may exceed its cap',
+      err,
+    );
     return;
   }
 
