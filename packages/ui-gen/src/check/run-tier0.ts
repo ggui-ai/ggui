@@ -295,6 +295,60 @@ function detectCertainDoubleWiredActions(
  * fallback ban it paints nothing.
  */
 const MANIFEST_TOKENS: ReadonlySet<string> = new Set(consumedTokenManifest);
+
+/**
+ * Role names retired by ggui#987 that generated code still invents, each
+ * with the manifest name that replaced it (ggui#1325). The self-check names
+ * the successor, so the model does not spend a turn guessing another name.
+ */
+const RETIRED_TOKEN_SUCCESSORS: ReadonlyMap<string, string> = new Map([
+  ['--ggui-color-surface', '--ggui-color-container'],
+  ['--ggui-color-onSurface', '--ggui-color-onContainer'],
+  ['--ggui-color-surfaceVariant', '--ggui-color-sunken'],
+  ['--ggui-color-onSurfaceVariant', '--ggui-color-onSunken'],
+]);
+
+/**
+ * The manifest names nearest an invented one (ggui#1325): a retired role's
+ * successor when there is one; otherwise the names sharing the invented
+ * name's longest family prefix at a segment boundary
+ * (`--ggui-motion-duration-normal` → fast, base, slow); otherwise the names
+ * sharing any of its segments of four letters or more
+ * (`--ggui-duration-slow` → the motion durations). Empty when nothing is
+ * near, so the hint falls back to the manifest's general shape.
+ */
+export function suggestManifestTokens(name: string): readonly string[] {
+  const successor = RETIRED_TOKEN_SUCCESSORS.get(name);
+  if (successor !== undefined) return [successor];
+  const segments = name.split('-').filter((segment) => segment.length > 0);
+  for (let n = segments.length - 1; n >= 2; n--) {
+    const prefix = `--${segments.slice(0, n).join('-')}-`;
+    const family = consumedTokenManifest.filter((token) => token.startsWith(prefix));
+    if (family.length > 0) return family;
+  }
+  const words = new Set(
+    segments
+      .slice(1)
+      .filter((segment) => segment.length >= 4)
+      .map((segment) => segment.toLowerCase()),
+  );
+  return consumedTokenManifest.filter((token) =>
+    token.split('-').some((segment) => words.has(segment.toLowerCase())),
+  );
+}
+
+/** The sentence that names the real token first (ggui#1325); empty when nothing in the manifest is near. */
+function offManifestHint(name: string): string {
+  const successor = RETIRED_TOKEN_SUCCESSORS.get(name);
+  if (successor !== undefined) {
+    return `"${name}" was retired (ggui#987); the current name is var(${successor}). `;
+  }
+  const near = suggestManifestTokens(name);
+  if (near.length === 0) return '';
+  const shown = near.slice(0, 8).map((token) => `var(${token})`).join(', ');
+  const more = near.length > 8 ? ` (and ${near.length - 8} more in that family)` : '';
+  return `Nearest names in the manifest: ${shown}${more}. `;
+}
 const TOKEN_REF_RE = /var\(\s*(--ggui-[a-zA-Z0-9-]+)/g;
 
 /** Map wire kind to the matching `@ggui-ai/wire` hook name. */
@@ -790,7 +844,7 @@ export async function runTier0Checks(
         subcategory: 'off-manifest-token',
         severity: 'critical',
         description: `Token "${name}" is not in the design system's token manifest — no theme defines it, so it renders unset.`,
-        fix: `Choose a token that exists: the closed vocabulary is the manifest the design-system docs list (colors: var(--ggui-color-primary-500), var(--ggui-color-onContainer), …; spacing: var(--ggui-spacing-4); type: var(--ggui-font-size-sm)). Never invent a name and never add a literal fallback.`,
+        fix: `${offManifestHint(name)}Choose a token that exists: the closed vocabulary is the manifest the design-system docs list (colors: var(--ggui-color-primary-500), var(--ggui-color-onContainer), …; spacing: var(--ggui-spacing-4); type: var(--ggui-font-size-sm)). Never invent a name and never add a literal fallback.`,
         line: lineNum,
       });
     }

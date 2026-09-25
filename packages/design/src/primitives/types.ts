@@ -390,7 +390,7 @@ export interface BoxProps extends BaseProps {
    * - `'default'` — base container surface (most common)
    * - `'elevated'` — same fill, intended to be paired with shadow
    *   (use Card.shadow for actual elevation)
-   * - `'sunken'` — recessed / inset region (`surfaceVariant` token)
+   * - `'sunken'` — recessed / inset region (the `sunken` role; `surfaceVariant` was retired by ggui#987)
    * - `'accent'` — highlighted / branded fill (`primary-50` token)
    * - `'inverted'` — dark surface in light mode, light in dark
    *   (testimonials, code-snippet cards, hero panels). The surface owns
