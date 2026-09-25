@@ -320,11 +320,16 @@ const RETIRED_TOKEN_SUCCESSORS: ReadonlyMap<string, string> = new Map([
 export function suggestManifestTokens(name: string): readonly string[] {
   const successor = RETIRED_TOKEN_SUCCESSORS.get(name);
   if (successor !== undefined) return [successor];
+  // Family prefixes at the name's own segment boundaries, longest first: for
+  // `--ggui-motion-duration-normal` that is `--ggui-motion-duration-`, then
+  // `--ggui-motion-`; an empty-suffix name such as `--ggui-color-` (the model
+  // stopped mid-name) is its own longest prefix, so it gets the colour family.
   const segments = name.split('-').filter((segment) => segment.length > 0);
-  for (let n = segments.length - 1; n >= 2; n--) {
+  const own = name.endsWith('-') ? segments.length : segments.length - 1;
+  for (let n = own; n >= 2; n--) {
     const prefix = `--${segments.slice(0, n).join('-')}-`;
     const family = consumedTokenManifest.filter((token) => token.startsWith(prefix));
-    if (family.length > 0) return family;
+    if (family.length > 0) return rolesFirst(family);
   }
   const words = new Set(
     segments
@@ -332,9 +337,17 @@ export function suggestManifestTokens(name: string): readonly string[] {
       .filter((segment) => segment.length >= 4)
       .map((segment) => segment.toLowerCase()),
   );
-  return consumedTokenManifest.filter((token) =>
-    token.split('-').some((segment) => words.has(segment.toLowerCase())),
+  return rolesFirst(
+    consumedTokenManifest.filter((token) =>
+      token.split('-').some((segment) => words.has(segment.toLowerCase())),
+    ),
   );
+}
+
+/** Role names (a non-numeric last segment) before ramp steps, so the taught vocabulary leads a long family. */
+function rolesFirst(tokens: readonly string[]): readonly string[] {
+  const isRole = (token: string): boolean => !/^\d+$/.test(token.slice(token.lastIndexOf('-') + 1));
+  return [...tokens.filter(isRole), ...tokens.filter((token) => !isRole(token))];
 }
 
 /** The sentence that names the real token first (ggui#1325); empty when nothing in the manifest is near. */
