@@ -16,7 +16,7 @@
     "@guuey/mcp-apps-host": "0.18.2",
     "@guuey/threads": "0.18.2",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@silverprotocol/core": "0.7.0",
+    "@silverprotocol/core": "0.6.5",
     "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
