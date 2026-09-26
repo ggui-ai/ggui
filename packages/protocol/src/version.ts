@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The register door takes the fit facts (2026-09-26, additive,
+ * ggui#1427: MINOR, same draft stamp). `opsRegisterBlueprintInputSchema`
+ * gains four optional non-identity inputs: `intent` (the request's own
+ * sentence, symmetric with `*_generate_*`'s), `judgedCanvases` (a
+ * non-empty list — unknown is omission, never an empty list, which would
+ * declare a card judged on no canvas), `aestheticPreset { id, version? }`
+ * and `directionDigest` (normalised sha256 hex). None joins the cache
+ * identity; each rides the cache row for the semantic reuse pre-filter
+ * (`fits()`: data-shape, surface, direction), and an omitted fact reads
+ * not-evaluated. The schema is strict and its only senders are the
+ * server's own in-process registrars, so an older control-plane caller
+ * never sends the keys and nothing skews across a release. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The relay enforces the action contract at receipt (2026-09-26, ggui#1358
  * step 2: a first-party server meets a MUST it had missed on one path —
  * VERSION-POLICY §1.3, "the bar was always there"; same draft stamp).

@@ -1648,3 +1648,67 @@ describe('maybeEvictLowestHitBlueprint — a fallback is logged, never silent (g
     }
   });
 });
+
+describe('registerBlueprint — the fit facts on the row (ggui#1427)', () => {
+  it('round-trips judgedCanvases, aestheticPreset and directionDigest through registration and both read-backs', async () => {
+    const deps = makeDeps();
+    const registered = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: FEEDBACK_CONTRACT,
+      intent: 'rate the meal',
+      componentCode: 'x',
+      source: { kind: 'user' },
+      judgedCanvases: ['xs-chat-card', 'md'],
+      aestheticPreset: { id: 'editorial', version: '3' },
+      directionDigest: 'a'.repeat(64),
+    });
+    expect(registered.judgedCanvases).toEqual(['xs-chat-card', 'md']);
+    expect(registered.aestheticPreset).toEqual({ id: 'editorial', version: '3' });
+    expect(registered.directionDigest).toBe('a'.repeat(64));
+    const listed = await listBlueprints({ vectorStore: deps.vectorStore }, SCOPE);
+    expect(listed[0]?.judgedCanvases).toEqual(['xs-chat-card', 'md']);
+    expect(listed[0]?.aestheticPreset).toEqual({ id: 'editorial', version: '3' });
+    expect(listed[0]?.directionDigest).toBe('a'.repeat(64));
+    const [hit] = await findBlueprintsByEmbedding(deps, SCOPE, { intent: 'rate the meal' });
+    expect(hit?.blueprint.judgedCanvases).toEqual(['xs-chat-card', 'md']);
+    expect(hit?.blueprint.aestheticPreset).toEqual({ id: 'editorial', version: '3' });
+    expect(hit?.blueprint.directionDigest).toBe('a'.repeat(64));
+  });
+
+  it('a preset without a version round-trips as id alone', async () => {
+    const deps = makeDeps();
+    await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: FEEDBACK_CONTRACT,
+      intent: 'rate the meal',
+      componentCode: 'x',
+      source: { kind: 'user' },
+      aestheticPreset: { id: 'editorial' },
+    });
+    const listed = await listBlueprints({ vectorStore: deps.vectorStore }, SCOPE);
+    expect(listed[0]?.aestheticPreset).toEqual({ id: 'editorial' });
+  });
+
+  it('absent facts write nothing: the row is byte-identical to one written before the facts existed, and reads back without them', async () => {
+    const deps = makeDeps();
+    const registered = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: FEEDBACK_CONTRACT,
+      intent: 'rate the meal',
+      componentCode: 'x',
+      source: { kind: 'user' },
+    });
+    const rows = await deps.vectorStore.listByScope(SCOPE);
+    const keys = Object.keys(rows[0]!.metadata);
+    for (const k of ['judgedCanvases', 'aestheticPresetId', 'aestheticPresetVersion', 'directionDigest']) {
+      expect(keys).not.toContain(k);
+    }
+    expect(registered.judgedCanvases).toBeUndefined();
+    expect(registered.aestheticPreset).toBeUndefined();
+    expect(registered.directionDigest).toBeUndefined();
+    const listed = await listBlueprints({ vectorStore: deps.vectorStore }, SCOPE);
+    expect('judgedCanvases' in listed[0]!).toBe(false);
+    expect('aestheticPreset' in listed[0]!).toBe(false);
+    expect('directionDigest' in listed[0]!).toBe(false);
+  });
+});

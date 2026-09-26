@@ -4,7 +4,7 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from "@ggui-ai/mcp-server-core/in-memory";
-import type { DataContract } from "@ggui-ai/protocol";
+import { opsRegisterBlueprintInputSchema, type DataContract } from "@ggui-ai/protocol";
 import { blueprintKey, variantKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -376,5 +376,72 @@ describe("ggui_ops_register_blueprint — the cache mirror's intentSource (ggui#
     const rows = await listBlueprints(cacheRegistry, "app-1");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.intentSource).toBe(expected);
+  });
+});
+
+describe("ggui_ops_register_blueprint — the fit facts and the non-identity intent (ggui#1427)", () => {
+  function deps() {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const vectorStore = new InMemoryVectorStore();
+    const embedding = new MockEmbeddingProvider();
+    const index = new InMemoryBlueprintIndex();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      putCode: (codeHash, body) => { blueprintStore.putCode(codeHash, body); },
+      cacheRegistry: { embedding, vectorStore, index },
+    });
+    return { handler, vectorStore, index };
+  }
+
+  it("stores the four on the cache row: intent makes the row authored; judgedCanvases, aestheticPreset and directionDigest read back", async () => {
+    const { handler, vectorStore, index } = deps();
+    await handler.handler(
+      {
+        contract: SAMPLE_CONTRACT,
+        componentCode: SAMPLE_CODE,
+        intent: "rate the meal you just had",
+        judgedCanvases: ["xs-chat-card", "md"],
+        aestheticPreset: { id: "editorial", version: "3" },
+        directionDigest: "a".repeat(64),
+      },
+      makeCtx("app-1")
+    );
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", blueprintKey(SAMPLE_CONTRACT));
+    expect(found).not.toBeNull();
+    expect(found!.intent).toBe("rate the meal you just had");
+    expect(found!.intentSource).toBeUndefined();
+    expect(found!.judgedCanvases).toEqual(["xs-chat-card", "md"]);
+    expect(found!.aestheticPreset).toEqual({ id: "editorial", version: "3" });
+    expect(found!.directionDigest).toBe("a".repeat(64));
+  });
+
+  it("stores nothing for absent inputs — the row reads not-evaluated for every fact, and a persona-only intent stays a fallback", async () => {
+    const { handler, vectorStore, index } = deps();
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, persona: "minimalist" }, makeCtx("app-1"));
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", blueprintKey(SAMPLE_CONTRACT), variantKey({ persona: "minimalist" }));
+    expect(found).not.toBeNull();
+    expect(found!.intentSource).toBe("fallback");
+    expect(found!.judgedCanvases).toBeUndefined();
+    expect(found!.aestheticPreset).toBeUndefined();
+    expect(found!.directionDigest).toBeUndefined();
+  });
+
+  it("intent is not part of the cache identity: two registrations that differ only in intent share the variant key and dedupe", async () => {
+    const { handler, index } = deps();
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, intent: "rate the meal" }, makeCtx("app-1"));
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, intent: "score tonight's dinner" }, makeCtx("app-1"));
+    const ids = await Promise.all([
+      index.getId("app-1", `template:${blueprintKey(SAMPLE_CONTRACT)}:${variantKey(undefined)}`),
+    ]);
+    expect(ids[0]).toBeTruthy();
+  });
+});
+
+describe("ggui_ops_register_blueprint — an empty judgedCanvases is refused at the door (ggui#1427, protocol's review)", () => {
+  it("rejects `judgedCanvases: []` — unknown is omission; a declared empty list would mint a card no request can ever fit", () => {
+    const parsed = opsRegisterBlueprintInputSchema.safeParse({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, judgedCanvases: [] });
+    expect(parsed.success).toBe(false);
+    expect(opsRegisterBlueprintInputSchema.safeParse({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, judgedCanvases: ["md"] }).success).toBe(true);
+    expect(opsRegisterBlueprintInputSchema.safeParse({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE }).success).toBe(true);
   });
 });

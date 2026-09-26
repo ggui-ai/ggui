@@ -1374,3 +1374,146 @@ describe('matchBlueprint — a stand-in intent never reaches the judge (ggui#127
     if (result.strategy === 'exact-key') expect(result.blueprint.id).toBe(ids.get('FOXTROT-INTENT'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// ggui#1427 — `fits()` as a pre-filter on the judge's top-K (semantic tier),
+// observe mode on the exact tier. The judge only ever ranks candidates that
+// fit; the pool declines only when none is left or the judge says no-match.
+// ---------------------------------------------------------------------------
+describe('matchBlueprint — fits pre-filter (ggui#1427)', () => {
+  const NO_COSINE_GATE = { minCosineForRerank: -1 };
+  const CARD_CONTRACT: DataContract = {
+    propsSpec: { properties: { rating: { schema: { type: 'number' }, required: true } } },
+  };
+  /** A judge pair that records the candidate ids it was offered and picks the first. */
+  function recordingJudge(seen: string[][]) {
+    return {
+      judge: async (_q: unknown, candidates: ReadonlyArray<{ readonly id: string }>) => {
+        seen.push(candidates.map((c) => c.id));
+        const first = candidates[0];
+        return { matchId: first?.id ?? null, confidence: first === undefined ? 0 : 0.9, reason: 'first fitting', latencyMs: 0 };
+      },
+      threshold: 0.5,
+    };
+  }
+  const events: CacheTraceEvent[] = [];
+  const sink: CacheTraceSink = { emit: (e) => { events.push(e); } };
+  afterEach(() => { setCacheTraceSink(null); events.length = 0; });
+
+  it('the judge sees only fitting candidates; a dropped candidate is named with its miss kind on the result and the trace', async () => {
+    setCacheTraceSink(sink);
+    const registry = makeRegistry();
+    const fitting = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: CARD_CONTRACT, intent: 'rate the meal', componentCode: 'a', source: { kind: 'user' },
+      judgedCanvases: ['md', 'lg'],
+    });
+    // A distinct variance: the same contract under the same variance would
+    // dedupe onto `fitting` (first write wins), and the test needs two rows.
+    const chatOnly = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: CARD_CONTRACT, intent: 'rate the meal, chat card', componentCode: 'b', source: { kind: 'user' },
+      variance: { persona: 'chat' },
+      judgedCanvases: ['xs-chat-card'],
+    });
+    const seen: string[][] = [];
+    const result = await matchBlueprint(
+      { registry, rerank: recordingJudge(seen) },
+      SCOPE,
+      { intent: 'rate the meal', fit: { canvas: 'md' } },
+      NO_COSINE_GATE,
+    );
+    expect(seen).toEqual([[fitting.id]]);
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      expect(result.blueprint.id).toBe(fitting.id);
+      expect(result.fit).toEqual({ fits: true, checks: { 'data-shape': 'not-evaluated', surface: 'hit', direction: 'not-evaluated' } });
+    }
+    expect(result.fitDeclined).toEqual([{ id: chatOnly.id, miss: 'surface' }]);
+    const ev = events.find((e) => e.decision === 'match-semantic');
+    expect(ev?.candidates.map((c) => [c.key, c.fit?.checks.surface])).toEqual(
+      expect.arrayContaining([[fitting.id, 'hit'], [chatOnly.id, 'miss']]),
+    );
+  });
+
+  it('declines without a judge call when no candidate fits — the reason names the miss kinds', async () => {
+    setCacheTraceSink(sink);
+    const registry = makeRegistry();
+    const chatOnly = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: CARD_CONTRACT, intent: 'rate the meal', componentCode: 'b', source: { kind: 'user' },
+      judgedCanvases: ['xs-chat-card'],
+    });
+    const seen: string[][] = [];
+    const result = await matchBlueprint(
+      { registry, rerank: recordingJudge(seen) },
+      SCOPE,
+      { intent: 'rate the meal', fit: { canvas: 'md' } },
+      NO_COSINE_GATE,
+    );
+    expect(seen).toEqual([]);
+    expect(result.strategy).toBe('no-match');
+    // The agent-facing reason stays plain; the trace reason names the kinds.
+    expect(result.reason).toMatch(/fits this request/);
+    expect(result.fitDeclined).toEqual([{ id: chatOnly.id, miss: 'surface' }]);
+    const ev = events.find((e) => e.decision === 'no-match');
+    expect(ev?.reason).toMatch(/none fits .*\(miss: surface\)/);
+    expect(ev?.candidates[0]?.fit?.miss).toBe('surface');
+  });
+
+  it('data-shape runs from the contracts on the semantic path: a required prop the draft types incompatibly drops the candidate; integer satisfies number', async () => {
+    const registry = makeRegistry();
+    const cached = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: CARD_CONTRACT, intent: 'rate the meal', componentCode: 'a', source: { kind: 'user' },
+    });
+    const seen: string[][] = [];
+    const incompatible = await matchBlueprint(
+      { registry, rerank: recordingJudge(seen) },
+      SCOPE,
+      { intent: 'rate the meal', contract: { propsSpec: { properties: { rating: { schema: { type: 'string' } } } } } },
+      NO_COSINE_GATE,
+    );
+    expect(seen).toEqual([]);
+    expect(incompatible.strategy).toBe('no-match');
+    expect(incompatible.fitDeclined).toEqual([{ id: cached.id, miss: 'data-shape' }]);
+    const compatible = await matchBlueprint(
+      { registry, rerank: recordingJudge(seen) },
+      SCOPE,
+      { intent: 'rate the meal', contract: { propsSpec: { properties: { rating: { schema: { type: 'integer' } } } } } },
+      NO_COSINE_GATE,
+    );
+    expect(seen).toEqual([[cached.id]]);
+    expect(compatible.strategy).toBe('semantic');
+  });
+
+  it('with no fit facts declared on either side, every candidate reaches the judge exactly as before', async () => {
+    const registry = makeRegistry();
+    const a = await registerBlueprint(registry, SCOPE, { kind: 'template', contract: NOTEPAD_CONTRACT, intent: 'notepad', componentCode: 'a', source: { kind: 'user' } });
+    const seen: string[][] = [];
+    const result = await matchBlueprint({ registry, rerank: recordingJudge(seen) }, SCOPE, { intent: 'a notepad' }, NO_COSINE_GATE);
+    expect(seen).toEqual([[a.id]]);
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      expect(result.fit?.checks).toEqual({ 'data-shape': 'not-evaluated', surface: 'not-evaluated', direction: 'not-evaluated' });
+    }
+    expect(result.fitDeclined).toEqual([]);
+  });
+
+  it('the exact tier observes, never acts: a mis-fitting exact hit is still served, with would-miss named by kind', async () => {
+    setCacheTraceSink(sink);
+    const registry = makeRegistry();
+    const exact = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: CARD_CONTRACT, intent: 'rate the meal', componentCode: 'a', source: { kind: 'user' },
+      judgedCanvases: ['xs-chat-card'], aestheticPreset: { id: 'editorial', version: '3' },
+    });
+    const result = await matchBlueprint(
+      { registry },
+      SCOPE,
+      { intent: 'rate the meal', contract: CARD_CONTRACT, fit: { canvas: 'md', aestheticPreset: { id: 'editorial', version: '3' } } },
+    );
+    expect(result.strategy).toBe('exact-key');
+    if (result.strategy === 'exact-key') {
+      expect(result.blueprint.id).toBe(exact.id);
+      expect(result.fit).toEqual({ fits: false, miss: 'surface', checks: { 'data-shape': 'hit', surface: 'miss', direction: 'hit' } });
+    }
+    const ev = events.find((e) => e.decision === 'match-exact');
+    expect(ev?.fit?.miss).toBe('surface');
+  });
+});

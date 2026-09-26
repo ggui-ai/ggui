@@ -108,6 +108,7 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
       ? { onBlueprintMatch: over.onBlueprintMatch }
       : {}),
     ...(over.reuseMode !== undefined ? { reuseMode: over.reuseMode } : {}),
+    ...(over.resolveRequestFit !== undefined ? { resolveRequestFit: over.resolveRequestFit } : {}),
   };
 }
 
@@ -828,6 +829,28 @@ describe('decideHandshake — find-similar across pools', () => {
     });
     expect(r.action).toBe('reuse');
     expect(r.suggestion.blueprintMeta.variance).toEqual(matchedVariance);
+  });
+});
+
+describe('decideHandshake — resolveRequestFit (ggui#1427)', () => {
+  it('resolves the request fit facts once per decision and hands them to every pool probe as the query fit', async () => {
+    mockMatch.mockResolvedValueOnce(miss).mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const resolveRequestFit = vi.fn(() => ({ canvas: 'md', aestheticPreset: { id: 'editorial' }, directionDigest: 'd'.repeat(64) }));
+    await decideHandshake(
+      adapter({ pools: [pool({ label: 'first' }), pool({ label: 'second' })], resolveRequestFit }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(resolveRequestFit).toHaveBeenCalledTimes(1);
+    expect(mockMatch).toHaveBeenCalledTimes(2);
+    for (const call of mockMatch.mock.calls) {
+      expect(call[2]).toMatchObject({ fit: { canvas: 'md', aestheticPreset: { id: 'editorial' }, directionDigest: 'd'.repeat(64) } });
+    }
+  });
+
+  it('without the dep, the query carries no fit key — nothing evaluated, as before', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+    expect(mockMatch.mock.calls[0]?.[2]).not.toHaveProperty('fit');
   });
 });
 

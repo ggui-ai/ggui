@@ -267,7 +267,11 @@ export function createGguiOpsRegisterBlueprintHandler(
       // dual-write — see #358.
       if (deps.cacheRegistry) {
         try {
+          // ggui#1427 — the request's own sentence, when the caller has it
+          // (symmetric with `*_generate_*`'s `intent`): prompt-only, never
+          // part of the cache identity.
           const intentForCache =
+            parsed.intent ??
             parsed.seedPrompt ??
             normalizedPersona ??
             `operator-registered blueprint (${blueprintId})`;
@@ -275,10 +279,19 @@ export function createGguiOpsRegisterBlueprintHandler(
             kind: "template",
             contract,
             intent: intentForCache,
-            // ggui#1275 — only a seed prompt states the UI's task. A
-            // persona describes the agent and the placeholder describes
-            // nothing: both are stand-ins the matcher's judge never sees.
-            intentSource: parsed.seedPrompt !== undefined ? "authored" : "fallback",
+            // ggui#1275 — an explicit intent or a seed prompt states the
+            // UI's task. A persona describes the agent and the placeholder
+            // describes nothing: both are stand-ins the matcher's judge
+            // never sees.
+            intentSource:
+              parsed.intent !== undefined || parsed.seedPrompt !== undefined
+                ? "authored"
+                : "fallback",
+            // ggui#1427 — the fit facts `fits()` reads before the judge
+            // ranks this row. Absent inputs write nothing (not-evaluated).
+            ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
+            ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
+            ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
             componentCode,
             // Same user-arm provenance as the MVB row above — one
             // handler call, one provenance claim across both stores.

@@ -212,6 +212,38 @@ export const opsRegisterBlueprintInputSchema = z
       .describe(
         'Optional originating prompt for audit + round-tripping (e.g. the prose the operator originally fed into `*_generate_*` before exporting).',
       ),
+    intent: z
+      .string()
+      .trim()
+      .max(OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS)
+      .optional()
+      .describe(
+        `What this interface is for, in the request's own words (at most ${OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS} characters) — the sentence the semantic reuse judge compares against. Not part of the cache identity: two calls that differ only in \`intent\` share a variant key. When omitted, the cache row's intent falls back to \`seedPrompt\`, then \`persona\` (a stand-in the judge never sees).`,
+      ),
+    judgedCanvases: z
+      .array(z.string().min(1))
+      .min(1)
+      .optional()
+      .describe(
+        'The canvas classes this interface was judged on (e.g. `xs-chat-card`, `md`). A request declaring a canvas outside this list is not offered this interface for semantic reuse. Omit when unknown: the fact then reads not-evaluated.',
+      ),
+    aestheticPreset: z
+      .object({
+        id: z.string().min(1),
+        version: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional()
+      .describe(
+        'The aesthetic preset this interface was generated under — the id, and the resolved version when known. A request served under a different preset (or a pinned version that differs) is not offered this interface for semantic reuse. Omit when unknown.',
+      ),
+    directionDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional()
+      .describe(
+        'sha256 (hex) of the direction text this interface was generated under, normalised: trimmed, whitespace collapsed, lowercased. A request whose current direction digests differently is not offered this interface for semantic reuse. Omit when unknown.',
+      ),
     setAsOperatorDefault: z
       .boolean()
       .optional()

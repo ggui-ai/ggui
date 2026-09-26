@@ -101,6 +101,8 @@
  *   - `miss-empty-intent` / `miss-empty-scope` / `miss-below-threshold`
  *     / `miss-key-mismatch` / `miss-empty-code` — legacy miss buckets.
  */
+import type { FitVerdict } from './fits.js';
+
 export type CacheTraceDecision =
   | 'match-exact'
   | 'match-semantic'
@@ -149,6 +151,8 @@ export interface CacheTraceCandidate {
   readonly key: string;
   readonly score: number;
   readonly cachedIntent?: string;
+  /** ggui#1427 — the candidate's fit verdict, when the matcher ran the pre-filter. */
+  readonly fit?: FitVerdict;
 }
 
 /**
@@ -211,6 +215,13 @@ export interface CacheTraceEvent {
   readonly candidates: ReadonlyArray<CacheTraceCandidate>;
   /** Set when `decision === 'hit'`. The cache key of the winning entry. */
   readonly winningBlueprintId?: string;
+  /**
+   * ggui#1427 — the served candidate's fit verdict: on a semantic hit it
+   * fits by construction (the judge ranked only fitting candidates); on an
+   * exact-key hit it is OBSERVED — a miss here is a `would-miss`, never a
+   * decline.
+   */
+  readonly fit?: FitVerdict;
   /**
    * Synthesis details when the negotiator's cold path invoked the
    * contract synthesizer. Absent on:
@@ -507,6 +518,8 @@ interface CacheTraceScoresRecord {
   readonly chosenCosine?: number;
   /** Top five `{key, score}` — never `cachedIntent`. */
   readonly candidatesJson: string;
+  /** ggui#1427 — `fits`, `miss:<kind>` (semantic) or `would-miss:<kind>` (exact, observed). */
+  readonly fit?: string;
   readonly cosineNoveltyDistance?: number;
   readonly agentClassification?: 'confirm' | 'override';
   readonly synthFired?: boolean;
@@ -560,8 +573,15 @@ export function createScoresJsonCacheTraceSink(): CacheTraceSink {
           candidatesJson: JSON.stringify(
             event.candidates
               .slice(0, CACHE_TRACE_STDOUT_CANDIDATES_CAP)
-              .map((c) => ({ key: c.key, score: c.score })),
+              .map((c) => ({
+                key: c.key,
+                score: c.score,
+                ...(c.fit !== undefined ? { fit: fitLabel(c.fit, 'miss') } : {}),
+              })),
           ),
+          ...(event.fit !== undefined
+            ? { fit: fitLabel(event.fit, event.strategy === 'exact-key' ? 'would-miss' : 'miss') }
+            : {}),
           ...(event.cosineNoveltyDistance !== undefined
             ? { cosineNoveltyDistance: event.cosineNoveltyDistance }
             : {}),
@@ -667,4 +687,9 @@ export const CACHE_TRACE_INTENT_MAX_BYTES = 4096;
 export function truncateCacheTraceIntent(intent: string): string {
   if (intent.length <= CACHE_TRACE_INTENT_MAX_BYTES) return intent;
   return `${intent.slice(0, CACHE_TRACE_INTENT_MAX_BYTES)}…[truncated]`;
+}
+
+/** ggui#1427 — one word per verdict for the log line: `fits`, or `<prefix>:<first miss kind>`. */
+export function fitLabel(verdict: FitVerdict, missPrefix: 'miss' | 'would-miss'): string {
+  return verdict.fits ? 'fits' : `${missPrefix}:${verdict.miss ?? 'unknown'}`;
 }

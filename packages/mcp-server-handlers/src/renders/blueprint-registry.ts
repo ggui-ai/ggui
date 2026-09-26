@@ -55,6 +55,7 @@ import type {
 // ops-blueprint) name the index type from one barrel without reaching
 // into `@ggui-ai/mcp-server-core` directly.
 export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
+import type { AestheticPresetRef } from './fits.js';
 import {
   blueprintSourceToFlat,
   flatToBlueprintSource,
@@ -122,6 +123,18 @@ export interface Blueprint {
    * {@link BlueprintIntentSource}.
    */
   readonly intentSource?: 'fallback';
+  /**
+   * The fit facts (ggui#1427) — what the interface was built and judged FOR,
+   * read by `fits()` before the semantic judge ranks it. Non-identity: none
+   * is part of the reuse key. Each is absent when the writer did not declare
+   * it, and an absent fact reads `not-evaluated`, never a miss.
+   */
+  /** The canvas classes the interface was judged on. */
+  readonly judgedCanvases?: readonly string[];
+  /** The aesthetic preset (and resolved version, when known) it was generated under. */
+  readonly aestheticPreset?: AestheticPresetRef;
+  /** `directionDigest()` of the direction text it was generated under. */
+  readonly directionDigest?: string;
   /** Generated component source. Empty string when generation hasn't happened yet. */
   readonly componentCode: string;
   /**
@@ -272,6 +285,12 @@ export interface RegisterBlueprintInput {
    * sources are which.
    */
   readonly intentSource?: BlueprintIntentSource;
+  /** See {@link Blueprint.judgedCanvases}. Absent writes nothing. */
+  readonly judgedCanvases?: readonly string[];
+  /** See {@link Blueprint.aestheticPreset}. Absent writes nothing. */
+  readonly aestheticPreset?: AestheticPresetRef;
+  /** See {@link Blueprint.directionDigest}. Absent writes nothing. */
+  readonly directionDigest?: string;
   readonly componentCode: string;
   /**
    * Authored (pre-compile) source body, when the generator distinguishes
@@ -379,6 +398,14 @@ const METADATA_KEYS = {
   installed: 'installed',
   sourceCodeHash: 'sourceCodeHash',
   intentSource: 'intentSource',
+  // ggui#1427 — the fit facts, scalar-encoded: the canvas list as a JSON
+  // string, the preset as two scalars, the digest as itself. Small by
+  // construction (a handful of short words, a 64-hex digest), so they stay
+  // within the filterable-metadata budget of production vector-store backends.
+  judgedCanvases: 'judgedCanvases',
+  aestheticPresetId: 'aestheticPresetId',
+  aestheticPresetVersion: 'aestheticPresetVersion',
+  directionDigest: 'directionDigest',
 } as const;
 
 function blueprintToMetadata(
@@ -408,7 +435,45 @@ function blueprintToMetadata(
     ...(bp.sourceCodeHash !== undefined
       ? { [METADATA_KEYS.sourceCodeHash]: bp.sourceCodeHash }
       : {}),
+    ...(bp.judgedCanvases !== undefined
+      ? { [METADATA_KEYS.judgedCanvases]: JSON.stringify(bp.judgedCanvases) }
+      : {}),
+    ...(bp.aestheticPreset !== undefined
+      ? {
+          [METADATA_KEYS.aestheticPresetId]: bp.aestheticPreset.id,
+          ...(bp.aestheticPreset.version !== undefined && bp.aestheticPreset.version !== null
+            ? { [METADATA_KEYS.aestheticPresetVersion]: bp.aestheticPreset.version }
+            : {}),
+        }
+      : {}),
+    ...(bp.directionDigest !== undefined
+      ? { [METADATA_KEYS.directionDigest]: bp.directionDigest }
+      : {}),
   };
+}
+
+/**
+ * The stored canvas list back to a string array. A malformed value drops
+ * the FACT (it reads not-evaluated), never the row.
+ */
+function readJudgedCanvases(raw: string | number | boolean | null | undefined): readonly string[] | undefined {
+  const str = readScalarString(raw);
+  if (str === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(str);
+    return Array.isArray(parsed) && parsed.every((x): x is string => typeof x === 'string') ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readAestheticPreset(
+  metadata: Record<string, string | number | boolean | null>,
+): AestheticPresetRef | undefined {
+  const id = readScalarString(metadata[METADATA_KEYS.aestheticPresetId]);
+  if (id === undefined) return undefined;
+  const version = readScalarString(metadata[METADATA_KEYS.aestheticPresetVersion]);
+  return version !== undefined ? { id, version } : { id };
 }
 
 /**
@@ -555,6 +620,9 @@ function rowToBlueprint(
   // an error, just absence. `sourceCode` itself never round-trips (it
   // was never persisted); only the hash does.
   const sourceCodeHash = readScalarString(metadata[METADATA_KEYS.sourceCodeHash]);
+  const judgedCanvases = readJudgedCanvases(metadata[METADATA_KEYS.judgedCanvases]);
+  const aestheticPreset = readAestheticPreset(metadata);
+  const directionDigest = readScalarString(metadata[METADATA_KEYS.directionDigest]);
   return {
     id: key,
     kind: kindStr,
@@ -571,6 +639,9 @@ function rowToBlueprint(
     ...(intentIsFallback ? { intentSource: 'fallback' } : {}),
     ...(lastHitAt !== undefined ? { lastHitAt } : {}),
     ...(sourceCodeHash !== undefined ? { sourceCodeHash } : {}),
+    ...(judgedCanvases !== undefined ? { judgedCanvases } : {}),
+    ...(aestheticPreset !== undefined ? { aestheticPreset } : {}),
+    ...(directionDigest !== undefined ? { directionDigest } : {}),
   };
 }
 
@@ -740,6 +811,16 @@ export async function registerBlueprint(
     source: input.source,
     ...(input.installed === true ? { installed: true } : {}),
     ...(input.intentSource === 'fallback' ? { intentSource: 'fallback' } : {}),
+    ...(input.judgedCanvases !== undefined ? { judgedCanvases: [...input.judgedCanvases] } : {}),
+    ...(input.aestheticPreset !== undefined
+      ? {
+          aestheticPreset:
+            input.aestheticPreset.version !== undefined && input.aestheticPreset.version !== null
+              ? { id: input.aestheticPreset.id, version: input.aestheticPreset.version }
+              : { id: input.aestheticPreset.id },
+        }
+      : {}),
+    ...(input.directionDigest !== undefined ? { directionDigest: input.directionDigest } : {}),
     ...(warnFindings.length > 0
       ? { validationWarnings: warnFindings }
       : {}),

@@ -79,6 +79,7 @@ export {
   type CacheTraceEvent,
   type CacheTraceSink,
   type CacheTraceValidatorFinding,
+  fitLabel,
 } from "./cache-trace-sink.js";
 export {
   createGguiConsumeHandler,
@@ -310,6 +311,21 @@ export {
   type HandshakeDecideInput,
   type HandshakeDecisionAdapter,
 } from "./decide-handshake.js";
+// ggui#1427 — `fits()`: the three code checks before the judge, and the
+// direction digest a registrar computes for the row.
+export {
+  directionDigest,
+  fits,
+  jsonSchemaTypesCompatible,
+  type AestheticPresetRef,
+  type FitCandidate,
+  type FitCheck,
+  type FitDeclined,
+  type FitKind,
+  type FitRequest,
+  type FitVerdict,
+  type RequestFitFacts,
+} from "./fits.js";
 export {
   installToCache,
   installedBlueprintIntent,

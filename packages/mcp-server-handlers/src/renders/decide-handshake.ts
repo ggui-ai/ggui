@@ -70,6 +70,7 @@ import {
   type MatchBlueprintDeps,
   type RerankPair,
 } from './blueprint-matcher.js';
+import type { RequestFitFacts } from './fits.js';
 import type { CoverageGap } from './blueprint-coverage.js';
 import { isFulfillable } from './blueprint-fulfillability.js';
 import type { BlueprintRegistryDeps } from './blueprint-registry.js';
@@ -174,6 +175,18 @@ export interface HandshakeDecisionAdapter {
   readonly reuseMode?: (
     ctx: HandlerContext,
   ) => Promise<'full' | 'exact-only'> | 'full' | 'exact-only';
+  /**
+   * ggui#1427 — the request's declared fit facts (the canvas it will mount
+   * on, the aesthetic preset and direction digest it is served under), for
+   * `fits()` to compare against each candidate's row before the judge ranks
+   * it. Resolved once per decision and handed to every pool probe. Absent ⇒
+   * nothing declared: only data-shape (from the draft contract) evaluates.
+   * The server this package ships declares nothing; a deployment resolves
+   * these from wherever it keeps a request's presentation facts.
+   */
+  resolveRequestFit?(
+    ctx: HandlerContext,
+  ): Promise<RequestFitFacts | undefined> | RequestFitFacts | undefined;
   /**
    * Optional deployment-specific pre-match, run BEFORE the find-similar
    * probe so a curated / byte-exact hit wins over everything — e.g. a
@@ -615,6 +628,8 @@ export async function decideHandshake(
     // ggui#607 — resolve the reuse policy once; 'exact-only' threads
     // disableSemantic into every pool probe below.
     const reuseMode = adapter.reuseMode ? await adapter.reuseMode(ctx) : 'full';
+    // ggui#1427 — the request's fit facts, resolved once for every pool probe.
+    const requestFit = adapter.resolveRequestFit ? await adapter.resolveRequestFit(ctx) : undefined;
     // The requesting agent's declared MCP tools (a set keyed by bare
     // toolName) — the basis for the reuse fulfillability gate. A cached
     // blueprint is only proposed for reuse when these SUPERSET the
@@ -655,6 +670,7 @@ export async function decideHandshake(
             intent,
             contract: parsedDraft.data,
             ...(variance !== undefined ? { variance } : {}),
+            ...(requestFit !== undefined ? { fit: requestFit } : {}),
           },
           ...(reuseMode === 'exact-only'
             ? [{ disableSemantic: true } as const]

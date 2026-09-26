@@ -46,6 +46,7 @@
  */
 import type { LLMCaller } from '@ggui-ai/negotiator';
 import { llmRerankJudge, type RerankJudge } from '@ggui-ai/negotiator';
+import { fits, type FitDeclined, type FitVerdict, type RequestFitFacts } from './fits.js';
 import {
   summarizeContract,
   type DataContract,
@@ -95,6 +96,15 @@ export interface BlueprintMatchHit {
   readonly cosine: number;
   /** Free-text reason for trace logs / handshake reason field. */
   readonly reason: string;
+  /**
+   * ggui#1427 — the served candidate's fit verdict. A semantic hit fits by
+   * construction (the judge ranked only fitting candidates). An exact-key
+   * hit is OBSERVED, never declined: `fits: false` here is a would-miss,
+   * named by kind, for the deployment to count.
+   */
+  readonly fit?: FitVerdict;
+  /** ggui#1427 — candidates the pre-filter dropped before the judge (semantic path only). */
+  readonly fitDeclined?: readonly FitDeclined[];
   /** When strategy='semantic', the LLM judge's confidence; undefined for exact-key. */
   readonly judgeConfidence?: number;
   /**
@@ -125,6 +135,8 @@ export interface BlueprintMatchMiss {
    * when LLM was unavailable or rerank short-circuited.
    */
   readonly judgeReason?: string;
+  /** ggui#1427 — candidates the pre-filter dropped before the judge, named by miss kind (semantic path only). */
+  readonly fitDeclined?: readonly FitDeclined[];
 }
 
 export type BlueprintMatchResult = BlueprintMatchHit | BlueprintMatchMiss;
@@ -248,6 +260,12 @@ export async function matchBlueprint(
     readonly intent: string;
     readonly contract?: DataContract;
     readonly variance?: BlueprintVariance;
+    /**
+     * ggui#1427 — the request's declared fit facts (canvas, aesthetic
+     * preset, direction digest). Absent facts evaluate nothing; data-shape
+     * runs from `contract` alone.
+     */
+    readonly fit?: RequestFitFacts;
   },
   options: MatchBlueprintOptions = {},
 ): Promise<BlueprintMatchResult> {
@@ -277,12 +295,18 @@ export async function matchBlueprint(
     winningBlueprintId?: string;
     judgeConfidence?: number;
     judgeReason?: string;
+    fit?: FitVerdict;
+    verdicts?: ReadonlyMap<string, FitVerdict>;
   }): void => {
-    const traceCandidates: CacheTraceCandidate[] = args.candidates.map((c) => ({
-      key: c.blueprint.id,
-      score: c.cosine,
-      cachedIntent: c.blueprint.intent,
-    }));
+    const traceCandidates: CacheTraceCandidate[] = args.candidates.map((c) => {
+      const fit = args.verdicts?.get(c.blueprint.id);
+      return {
+        key: c.blueprint.id,
+        score: c.cosine,
+        cachedIntent: c.blueprint.intent,
+        ...(fit !== undefined ? { fit } : {}),
+      };
+    });
     // Cosine distance to the nearest registered blueprint — populated
     // only when RAG retrieval produced at least one candidate.
     // `1 - top.cosine` mirrors `validateContractNovelty`'s distance
@@ -311,11 +335,29 @@ export async function matchBlueprint(
       ...(args.judgeReason !== undefined
         ? { judgeReason: args.judgeReason }
         : {}),
+      ...(args.fit !== undefined ? { fit: args.fit } : {}),
       ...(cosineNoveltyDistance !== undefined
         ? { cosineNoveltyDistance }
         : {}),
     });
   };
+
+  // ggui#1427 — the request's side of `fits()`: the draft contract for
+  // data-shape plus whatever facts the caller declared. Computed once.
+  const fitRequest = {
+    ...(query.contract !== undefined ? { contract: query.contract } : {}),
+    ...(query.fit ?? {}),
+  };
+  const verdictFor = (bp: Blueprint): FitVerdict =>
+    fits(
+      {
+        contract: bp.contract,
+        ...(bp.judgedCanvases !== undefined ? { judgedCanvases: bp.judgedCanvases } : {}),
+        ...(bp.aestheticPreset !== undefined ? { aestheticPreset: bp.aestheticPreset } : {}),
+        ...(bp.directionDigest !== undefined ? { directionDigest: bp.directionDigest } : {}),
+      },
+      fitRequest,
+    );
 
   if (trimmedIntent.length === 0) {
     const reason = 'empty intent — no match attempted';
@@ -378,12 +420,18 @@ export async function matchBlueprint(
     };
     const serveExact = (exact: ExactRow): BlueprintMatchResult => {
       const reason = 'match-exact: this contract already has a saved interface — reusing it';
+      // ggui#1427 — the exact tier OBSERVES `fits`, never acts on it: the
+      // canonical key is the contract alone, so an exact hit can mis-fit on
+      // surface or direction today. The verdict rides the result and the
+      // trace as a would-miss for the deployment to count; the hit is served.
+      const fit = verdictFor(exact);
       emit({
         decision: 'match-exact',
         strategy: 'exact-key',
         reason,
         candidates: [],
         winningBlueprintId: exact.id,
+        fit,
       });
       return {
         strategy: 'exact-key',
@@ -391,6 +439,7 @@ export async function matchBlueprint(
         cosine: 1,
         reason,
         coverage: EMPTY_GAP,
+        fit,
       };
     };
 
@@ -506,6 +555,21 @@ export async function matchBlueprint(
       ? ` (${eligible.length} of ${candidates.length} candidates at or above minCosine=${minCosine} with an authored intent)`
       : '';
 
+  // ggui#1427 — (3) `fits()` as a pre-filter on the judge's top-K: the three
+  // code checks (data-shape, surface, direction) are typed comparisons that
+  // cost nothing, so the judge only ever ranks candidates that fit. A dropped
+  // candidate is recorded with its first miss; the pool declines only when
+  // no candidate is left, or the judge then says no-match. Verdicts are
+  // computed for the whole top-K so the trace carries every candidate's.
+  const verdicts = new Map<string, FitVerdict>(
+    candidates.map((c) => [c.blueprint.id, verdictFor(c.blueprint)] as const),
+  );
+  const fitting = eligible.filter((c) => verdicts.get(c.blueprint.id)?.fits === true);
+  const fitDeclined: FitDeclined[] = eligible.flatMap((c) => {
+    const v = verdicts.get(c.blueprint.id);
+    return v !== undefined && !v.fits && v.miss !== undefined ? [{ id: c.blueprint.id, miss: v.miss }] : [];
+  });
+
   if (eligible.length === 0) {
     // Top-1 cleared the floor, but every candidate that did carries a
     // stand-in intent — nothing the judge could honestly compare.
@@ -521,13 +585,30 @@ export async function matchBlueprint(
     return { strategy: 'no-match', reason, candidates };
   }
 
-  // Run the LLM rerank judge.
+  if (fitting.length === 0) {
+    // Every candidate with a stated intent misses a declared fact — nothing
+    // the judge may rank. Named by kind so declined-by-miss is countable.
+    const kinds = [...new Set(fitDeclined.map((d) => d.miss))].join(', ');
+    const reason =
+      'no-match: no saved interface close enough fits this request — a new one will be generated';
+    const traceReason = `no-match: ${eligible.length} candidates at or above minCosine=${minCosine} with an authored intent, none fits the request's declared facts (miss: ${kinds}); judge skipped`;
+    emit({
+      decision: 'no-match',
+      strategy: 'semantic',
+      reason: traceReason,
+      candidates,
+      verdicts,
+    });
+    return { strategy: 'no-match', reason, candidates, fitDeclined };
+  }
+
+  // Run the LLM rerank judge — over the fitting candidates only.
   const decision = await rerank.judge(
     {
       intent: trimmedIntent,
       contractSummary: summarizeContract(query.contract),
     },
-    eligible.map((c) => ({
+    fitting.map((c) => ({
       id: c.blueprint.id,
       cachedIntent: c.blueprint.intent,
       cachedContractSummary: summarizeContract(c.blueprint.contract),
@@ -542,7 +623,7 @@ export async function matchBlueprint(
         : 'no-match-low-confidence: the closest saved interface is not a confident match — a new one will be generated';
     const traceReason =
       decision.matchId === null
-        ? `no-match: judge declined all ${eligible.length} candidates (confidence=${decision.confidence.toFixed(2)})${floorNote}`
+        ? `no-match: judge declined all ${fitting.length} candidates (confidence=${decision.confidence.toFixed(2)})${floorNote}`
         : `no-match-low-confidence: judge picked ${decision.matchId} but confidence=${decision.confidence.toFixed(2)} < threshold=${judgeThreshold}`;
     emit({
       decision:
@@ -552,16 +633,18 @@ export async function matchBlueprint(
       candidates,
       judgeConfidence: decision.confidence,
       judgeReason: decision.reason,
+      verdicts,
     });
     return {
       strategy: 'no-match',
       reason,
       candidates,
       judgeReason: decision.reason,
+      fitDeclined,
     };
   }
 
-  const matched = eligible.find((c) => c.blueprint.id === decision.matchId);
+  const matched = fitting.find((c) => c.blueprint.id === decision.matchId);
   if (!matched) {
     // Defensive — rerankCandidates already guards against unknown ids
     // by collapsing to null, but a future change could re-introduce
@@ -576,12 +659,14 @@ export async function matchBlueprint(
       candidates,
       judgeConfidence: decision.confidence,
       judgeReason: decision.reason,
+      verdicts,
     });
     return {
       strategy: 'no-match',
       reason,
       candidates,
       judgeReason: decision.reason,
+      fitDeclined,
     };
   }
 
@@ -605,7 +690,10 @@ export async function matchBlueprint(
     winningBlueprintId: matched.blueprint.id,
     judgeConfidence: decision.confidence,
     judgeReason: decision.reason,
+    verdicts,
+    ...(verdicts.get(matched.blueprint.id) !== undefined ? { fit: verdicts.get(matched.blueprint.id) } : {}),
   });
+  const matchedFit = verdicts.get(matched.blueprint.id);
   return {
     strategy: 'semantic',
     blueprint: matched.blueprint,
@@ -613,6 +701,8 @@ export async function matchBlueprint(
     judgeConfidence: decision.confidence,
     reason,
     coverage,
+    ...(matchedFit !== undefined ? { fit: matchedFit } : {}),
+    fitDeclined,
   };
 }
 
