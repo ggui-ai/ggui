@@ -38,6 +38,26 @@ describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', (
     expect(lintContract(out).errors).toEqual([]);
   });
 
+  it('lifts a wrapper-level `required: [...]` into each listed entry\'s `required: true` instead of dropping the declaration (ggui#1432)', () => {
+    const draft = {
+      propsSpec: {
+        required: ['bookingId', 'date', 'ghost'], // the agent said these are required — in JSON Schema's spelling
+        properties: {
+          bookingId: { schema: { type: 'string' } },
+          date: { schema: { type: 'string' }, required: false }, // explicit on the entry: the entry wins
+          note: { schema: { type: 'string' } },
+        },
+      },
+    };
+    const out = normalizeDraft(draft) as { propsSpec: { required?: unknown; properties: Record<string, Record<string, unknown>> } };
+    expect(out.propsSpec.required).toBeUndefined();
+    expect(out.propsSpec.properties['bookingId']?.['required']).toBe(true);
+    expect(out.propsSpec.properties['date']?.['required']).toBe(false);
+    expect(out.propsSpec.properties['note']).not.toHaveProperty('required');
+    expect(out.propsSpec.properties['ghost']).toBeUndefined();
+    expect(lintContract(out).errors).toEqual([]);
+  });
+
   it('drops a stray propsSpec-wrapper `additionalProperties` key (R4)', () => {
     const draft = {
       propsSpec: {

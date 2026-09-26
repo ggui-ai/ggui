@@ -11,6 +11,12 @@
  *
  * This pass fixes the mechanical classes deterministically, preserving
  * the agent's intent exactly:
+ *   - lifts a wrapper-level `propsSpec.required: [...]` (JSON Schema's
+ *     spelling of the same declaration) into each listed entry's
+ *     `required: true` before the key goes — the agent said which props
+ *     are required, and the served contract keeps saying it (ggui#1432);
+ *     an entry's own explicit `required` wins, and a name with no entry
+ *     lifts nothing;
  *   - strips keys the protocol's `.strict()` spec schemas would reject,
  *     keeping only the allowed keys at each wrapper / entry level;
  *   - canonicalizes every inner JSON Schema via {@link normalizeSchema}
@@ -129,15 +135,26 @@ export function normalizeDraft(draft: unknown): unknown {
   const out: Record<string, unknown> = { ...draft };
 
   // propsSpec wrapper: keep {description, properties}; clean each PropEntry.
+  // A wrapper-level `required: [...]` is the agent's declaration in JSON
+  // Schema's spelling — lift it into the listed entries before the key
+  // goes, so the served contract still says which props are required.
   if (isRecord(out['propsSpec'])) {
+    const wrapper = out['propsSpec'];
     const ps: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(out['propsSpec'])) {
+    for (const [key, value] of Object.entries(wrapper)) {
       if (PROPS_WRAPPER_KEYS.has(key)) ps[key] = value;
     }
     if (isRecord(ps['properties'])) {
-      ps['properties'] = cleanEntryMap(ps['properties'], PROP_ENTRY_KEYS, [
-        'schema',
-      ]);
+      const cleaned = cleanEntryMap(ps['properties'], PROP_ENTRY_KEYS, ['schema']);
+      const declaredRequired = Array.isArray(wrapper['required'])
+        ? wrapper['required'].filter((name): name is string => typeof name === 'string')
+        : [];
+      for (const name of declaredRequired) {
+        const entry = cleaned[name];
+        if (!isRecord(entry) || entry['required'] !== undefined) continue; // no entry, or the entry's own word wins
+        cleaned[name] = { ...entry, required: true };
+      }
+      ps['properties'] = cleaned;
     }
     out['propsSpec'] = ps;
   }
