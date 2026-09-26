@@ -193,6 +193,15 @@ export const MODELS = {
     'anthropic/claude-sonnet-4.6',
     'anthropic/claude-opus-4.7',
     // OpenAI family
+    // GPT-6 on OpenRouter — listed after the OpenRouter tools smoke the
+    // founder gated them on passed (ggui#1267, 2026-09-26): fresh agent
+    // per call, `tool_choice: required`, 3/3 tool calls returned per id,
+    // 0 errors. `anthropic/claude-opus-5.5` passed the same smoke and is
+    // NOT listed yet: its dotted id resolves to no price row, and an
+    // autocomplete entry a deployment cannot price is copy ahead of
+    // enforcement (accepted by shape regardless — see `ModelOf`).
+    'openai/gpt-6-sol',
+    'openai/gpt-6-luna',
     'openai/gpt-5.6-sol',
     'openai/gpt-5.6-terra',
     'openai/gpt-5.6-luna',

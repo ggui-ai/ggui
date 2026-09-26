@@ -57,6 +57,17 @@ describe('MODELS registry', () => {
     }
   });
 
+  it('openrouter autocomplete carries the GPT-6 ids that passed the OpenRouter tools smoke (ggui#1267, founder D3)', () => {
+    // 2026-09-26 clean smoke, fresh agent per call, tool_choice required:
+    // 3/3 tool calls returned per id, 0 errors (ggui#1267). Opus 5.5 passed
+    // the same smoke and is NOT listed yet: its dotted OpenRouter id has no
+    // price row on the pricing table a deployment resolves against, and an
+    // autocomplete entry that cannot be priced is copy ahead of enforcement.
+    expect(MODELS.openrouter).toContain('openai/gpt-6-luna');
+    expect(MODELS.openrouter).toContain('openai/gpt-6-sol');
+    expect(MODELS.openrouter).not.toContain('anthropic/claude-opus-5.5');
+  });
+
   it('openrouter known entries follow `<author>/<model>` shape', () => {
     for (const id of MODELS.openrouter) {
       expect(id, `openrouter id "${id}"`).toMatch(/^[A-Za-z0-9._:-]+\/[A-Za-z0-9._:-]+$/);
