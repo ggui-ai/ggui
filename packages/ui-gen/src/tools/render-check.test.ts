@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { tryRender, generateSampleProps } from './render-check';
+import { tryRender } from './render-check.js';
+import { generateSampleProps } from '../check/sample-props.js';
 import * as esbuild from 'esbuild';
 import type { PropsSpec } from '@ggui-ai/protocol';
 

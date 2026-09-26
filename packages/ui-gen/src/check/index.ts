@@ -51,3 +51,4 @@ export {
 
 // runTier0 orchestrator
 export { runTier0, runTier0Checks } from "./run-tier0.js";
+export { generateSampleProps } from "./sample-props.js";

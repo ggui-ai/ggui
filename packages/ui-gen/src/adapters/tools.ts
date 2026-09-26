@@ -20,7 +20,8 @@ import { validateAllContracts } from '../check/index.js';
 import { typecheck } from '../check/index.js';
 import { lintReactHooks } from '../check/index.js';
 import ts from 'typescript';
-import { tryRender, generateSampleProps } from '../tools/render-check.js';
+import { tryRender } from '../tools/render-check.js';
+import { generateSampleProps } from '../check/sample-props.js';
 
 /**
  * Context for creating generator tools.
