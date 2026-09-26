@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   llmRerankJudge,
   rerankCandidates,
@@ -301,10 +301,19 @@ describe('RerankJudge — the judge seam (ggui#1235)', () => {
         return { matchId: 'bp-notepad-1', confidence: 0.85, reason: 'paraphrased' };
       },
     };
-    const judge: RerankJudge = llmRerankJudge(llm);
-    const viaJudge = await judge(QUERY, CANDIDATES);
-    const direct = await rerankCandidates({ llm }, QUERY, CANDIDATES);
-    expect(viaJudge).toEqual(direct);
+    // `latencyMs` is a wall-clock MEASUREMENT of each call, not part of the
+    // decision's content: on a slow runner one call reads 0 ms and the next
+    // 1 ms (the 0.24.0 publish-gate, ggui-ai/ggui run 36234141834), so the
+    // clock is held still and the two decisions are compared whole.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const judge: RerankJudge = llmRerankJudge(llm);
+      const viaJudge = await judge(QUERY, CANDIDATES);
+      const direct = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+      expect(viaJudge).toEqual(direct);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(seen).toHaveLength(2);
     expect(seen[0]).toEqual(seen[1]);
     expect(seen[0]!.system).toBe(RERANK_SYSTEM_PROMPT);
