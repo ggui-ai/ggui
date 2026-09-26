@@ -218,25 +218,24 @@ Rules:
 
 /**
  * A control that fires an action the user would not mean to repeat must not
- * stay armed (ggui#1108 MITIGATION — the fix is one-shot-ness DECLARED on the
- * action and enforced by the runtime; this reduces exposure meanwhile). Both
- * arms, one HARD section: the model knows from the request and the contract
- * which actions are terminal, which no static rule of ours can infer.
+ * stay armed (ggui#1108). One-shot-ness is DECLARED on the action
+ * (`actionSpec.<name>.oneShot`), enforced by the runtime, and readable by the
+ * component through `useActionSpent` (ggui#1223) — so a declared action's
+ * control renders from data that survives a reload, and the local-state guard
+ * remains only as the fallback for an action the contract failed to declare.
+ * Both arms, one HARD section: the contract says which actions are once; where
+ * it does not, the request may, and no static rule of ours can infer it from a
+ * verb.
  */
 export const TERMINAL_ACTIONS = `## Actions the user means once
 
 A second press is a mistake only when it would make a SECOND THING HAPPEN IN THE WORLD — a second booking, a second charge, a second order, a second application sent. If pressing again would only write the SAME STATE AGAIN — saving, updating, renaming, setting a preference, toggling — nothing is duplicated and the control stays armed.
 
-Guard a control only where you have evidence, not a feeling about the verb: the request itself names a one-time commitment — "submit the application", "place the order", "confirm the booking".
+**The contract says which actions are once.** An action the contract declares \`oneShot: true\` (in the Contract block above) is guarded by the runtime — a second dispatch is dropped — and its spent state is DATA you read, never state you hold: render its control from \`const spent = useActionSpent('<name>')\`, \`disabled={spent}\`, and say so in the label or beside it ("Submitted", "Request sent") — a control that is disabled without explanation reads as broken. The hook's answer survives a reload and a second tab; \`useState(false)\` does not, so a reloaded card built on local state re-arms a control that already fired.
 
-**When in doubt, leave it armed.** A control the user cannot press a second time has lost them something that worked — save, edit, save again is ordinary. A control left armed is only what every interface does by default.
+**An action the contract does not declare \`oneShot\` stays armed.** Never guard one from a feeling about the verb — "confirm", "submit", "place" alone are not evidence. Guard it only where the request itself names a one-time commitment the contract failed to declare ("submit the application", "place the order"), and then with local state as the fallback: \`const [submitted, setSubmitted] = useState(false)\` set in the handler, \`disabled={submitted}\` with a label — knowing that this state lives with the component, not with the request, and starts fresh on a re-render with new props.
 
-When you do guard one:
-- Hold a small piece of state for it and set it in the handler: \`const [submitted, setSubmitted] = useState(false)\`.
-- \`disabled={submitted}\` on the control that fires it, and say so in the label or beside it ("Submitted", "Request sent") — a control that is disabled without explanation reads as broken.
-- A card re-rendered with new props starts fresh; the state above lives with the component, not with the request.
-
-Nothing in the wire DECLARES one-shot-ness yet, which is why the test is what a second press would DO — not how final the word sounds.`;
+**When in doubt, leave it armed.** A control the user cannot press a second time has lost them something that worked — save, edit, save again is ordinary. A control left armed is only what every interface does by default.`;
 
 /**
  * The frame owns the height — the component never sizes itself to the
