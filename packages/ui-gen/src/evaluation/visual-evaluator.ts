@@ -14,7 +14,7 @@
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import { build } from 'esbuild';
-import { fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
+import { EXPANDED_FRAME, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -162,6 +162,8 @@ export function canvasFitPolicy(canvas: CanvasClass): CanvasFitPolicy {
  * `fillFitRule` targets — the judge's counterpart of the runtime's mount list.
  */
 export const JUDGE_SCOPE_CLASS = 'ggui-judge-scope';
+/** The panel the judge draws round a fill canvas's scope on its stand-in host page (ggui#1083 cut 3) — see {@link canvasChrome}. */
+export const JUDGE_PANEL_CLASS = 'ggui-judge-panel';
 
 /**
  * How the judge composes a canvas (ggui#1100): the served runtime stretches
@@ -172,6 +174,37 @@ export const JUDGE_SCOPE_CLASS = 'ggui-judge-scope';
  */
 export function canvasFit(canvas: CanvasClass): 'fill' | undefined {
   return displayModeForCanvas(canvas) === 'fullscreen' ? 'fill' : undefined;
+}
+/** What the judge's stand-in host draws round a fill canvas: the embedding shell's floating panel on its scrim, or nothing. */
+export type CanvasChrome = 'panel' | undefined;
+/**
+ * The host stand-in round a fill canvas (ggui#1083 cut 3, ggui#1067 §5): the embedding shell floats
+ * the card in a panel on its scrim — a hairline, the theme's `xl` radius, `shadow-sm`, a 16 px gap —
+ * only when expanded at ≥ 601 px; below that the card owns the phone edge to edge. So the panel
+ * canvases are the fill canvases from `md` up (the shell's panel reaches `lg` / `xl` on wide windows)
+ * and `mobile-fullscreen-small` carries no chrome. The panel is the design's ONE definition
+ * (`expandedFramePanelRule`), never a second drawing, and the judge pads its window by the panel's
+ * gap so the CARD's box stays the canvas box ({@link judgeWindow}): the frame the founder approves
+ * carries the chrome the visitor sees, and the card is measured where it was before.
+ */
+export function canvasChrome(canvas: CanvasClass): CanvasChrome {
+  return canvasFit(canvas) === 'fill' && canvas !== 'mobile-fullscreen-small' ? 'panel' : undefined;
+}
+/** The browser window for a canvas: the canvas box, plus the panel's gap on every side when the judge draws the panel. */
+export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome): CanvasViewport {
+  if (chrome === undefined) return viewport;
+  const gap = 2 * EXPANDED_FRAME.insetPx;
+  return { width: viewport.width + gap, height: viewport.height + gap };
+}
+/**
+ * The card's height on a panelled page: the panel grows with the card and carries the gap above and
+ * below it. A document shorter than the gap laid out no panel (the panel alone is a viewport tall), so
+ * there is no reading — `null`, never a negative height.
+ */
+function cardHeight(documentHeight: number | null, chrome: CanvasChrome): number | null {
+  if (documentHeight === null || chrome === undefined) return documentHeight;
+  const gap = 2 * EXPANDED_FRAME.insetPx;
+  return documentHeight < gap ? null : documentHeight - gap;
 }
 
 /**
@@ -451,7 +484,9 @@ function buildRenderHTML(
   bundledCode: string,
   cssTokens?: string,
   fit?: 'fill',
+  chrome?: CanvasChrome,
 ): string {
+  if (chrome === 'panel' && fit !== 'fill') throw new Error("the judge's panel frames a fill canvas only (ggui#1083 cut 3)");
   // Default to the design tokens production's no-theme branch injects
   // (getCssTokens → default theme, light) — ggui#613: under the s4
   // fallback ban the generated component's `var(--ggui-*)` references
@@ -473,15 +508,15 @@ function buildRenderHTML(
       /* ggui#1083 — the host stand-in (neutral-50) under the theme's scrim (its tint at
          its opacity): the ground a frosted host puts under the card, so the judge scores
          the card where the visitor sees it. */
-      background: color-mix(in oklch, var(--ggui-scrim-tint, var(--ggui-color-ground, #ffffff)) calc(var(--ggui-scrim-opacity, 0.45) * 100%), var(--ggui-color-neutral-50, #ffffff));
+      ${expandedFrameScrimDecls()}
       color: var(--ggui-color-neutral-900, #111827);
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
-    ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) : ''}
+    ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
   </style>
 </head>
 <body>
-  <div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>
+  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' ? '</div>' : ''}
   <script type="importmap">
   {
     "imports": {
@@ -802,6 +837,8 @@ interface CanvasFrame {
   readonly viewport: CanvasViewport;
   readonly policy: CanvasFitPolicy;
   readonly fit: 'fill' | undefined;
+  /** The host stand-in drawn round the scope (ggui#1083 cut 3) — the window is padded by its gap; `viewport` stays the card's box. */
+  readonly chrome: CanvasChrome;
   /** `true` when `canvasViewports` carried an entry for this canvas, whatever its value. */
   readonly declared: boolean;
   readonly attempt: ScreenshotAttempt;
@@ -819,9 +856,12 @@ async function frameCanvas(
   const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
   const policy = canvasFitPolicy(canvas);
   const fit = canvasFit(canvas);
-  const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit) : html;
-  const attempt = await captureScreenshotDetailed(canvasHtml, viewport, deps, policy.capture);
-  return { viewport, policy, fit, declared: declaredBox !== undefined, attempt };
+  const chrome = canvasChrome(canvas);
+  const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome) : html;
+  const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome), deps, policy.capture);
+  // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
+  const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };
+  return { viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt };
 }
 
 /**

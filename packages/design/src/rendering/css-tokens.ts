@@ -358,6 +358,77 @@ export const EXPANDED_FRAME_INNER_RADIUS = `max(0px, calc(var(${EXPANDED_FRAME.o
 export const EXPANDED_FRAME_BLEEDS = '[data-ggui-bleed], [data-ggui-surface="hero"]:first-child';
 
 /**
+ * The scrim a host stand-in paints under the expanded frame (ggui#1083 cut 1 → cut 3): the theme's
+ * `scrim.tone` at its `scrim.opacity` over the mode's `neutral-50` — the ground a frosted host puts
+ * under the card (the embedding shell mixes the same tint at the same opacity over the host page,
+ * `--guuey-widget-scrim-{tint,opacity}` ← AppTheme `scrim`). Declarations for a page's `body`, so the
+ * judge's page and the served-preview harness sit the card on one scrim.
+ */
+export function expandedFrameScrimDecls(): string {
+  return `background: ${expandedFrameScrim('var(--ggui-color-neutral-50, #ffffff)')};`;
+}
+/**
+ * The scrim's colour over a ground of the caller's: the theme's tint at its opacity, mixed over `over` —
+ * a stand-in page mixes over its own ground (`expandedFrameScrimDecls`); a replica with a host page
+ * behind it mixes over `transparent` and adds the blur only a host page can be behind.
+ */
+export function expandedFrameScrim(over: string): string {
+  return (
+    'color-mix(in oklch, var(--ggui-scrim-tint, var(--ggui-color-ground, #ffffff)) ' +
+    `calc(var(--ggui-scrim-opacity, 0.45) * 100%), ${over})`
+  );
+}
+/**
+ * The panel chrome a host draws around the expanded frame (ggui#1083 cut 3, ggui#1067 §5): what the
+ * visitor sees between the scrim and the fill card. The embedding shell's canvas panel is
+ * `rounded-panel shadow-sm ring-1 ring-guuey-ink/[0.06]` at the theme's `shape.radius` bucket; this is
+ * that chrome read from the AppTheme bucket the card composes with, so a stand-in and the shell agree:
+ *  - radius: the frame's own outer radius (`EXPANDED_FRAME.outerRadiusVar`, the `xl` stop the shell's
+ *    panel table pins to — none 0 / soft 16 / round 24);
+ *  - hairline: the theme's ink on its ground at the shell's 6 %, as a 1 px ring (`onGround` follows the
+ *    mode, as the shell's ink does);
+ *  - elevation: the `sm` shadow stop (the shell's `shadow-sm`, the "SUBTLE" call);
+ *  - ground: the mode's `neutral-50` — the stand-in host's own panel colour, visible only under a card
+ *    that paints no ground of its own;
+ *  - `overflow: clip`, so the card's square corners take the panel's — clip, never hidden/auto: a
+ *    scroll container would swallow the overflow a judge measures on the document.
+ *
+ * Rule 0 holds: ggui's runtime NEVER composes this (the fill rule strips the card's own silhouette;
+ * a second chrome is the frame-in-frame fault). It exists for the surfaces that STAND IN for a host —
+ * the judge's page and the served-preview harness — so the frame the founder approves carries the
+ * hairline, radius and elevation the visitor sees.
+ */
+export const EXPANDED_FRAME_CHROME = {
+  radius: `var(${EXPANDED_FRAME.outerRadiusVar})`,
+  hairline: 'color-mix(in srgb, var(--ggui-color-onGround) 6%, transparent)',
+  shadowVar: '--ggui-shape-shadow-sm',
+  ground: 'var(--ggui-color-neutral-50)',
+} as const;
+/** The panel's own declarations — one string for every host stand-in (a judge's div, a harness's iframe panel). */
+export function expandedFramePanelDecls(): string {
+  const c = EXPANDED_FRAME_CHROME;
+  return `border-radius: ${c.radius}; box-shadow: 0 0 0 1px ${c.hairline}, var(${c.shadowVar}); background: ${c.ground}; overflow: clip;`;
+}
+/**
+ * A judge page's panel (ggui#1083 cut 3): the scope mounts INSIDE a panel that sits the frame's gap in
+ * from the page's edges and grows with the card, so a full-page capture unrolls what the visitor
+ * scrolls inside the panel. Inside it the scope's frame IS the panel, so its anchor moves from `100vh`
+ * to the panel's height, `100vh − 2·gap` — still a viewport length, never a percentage (ggui#1073).
+ * Specificity does the ordering: `.panel > .scope` (0,2,0) outranks the fill rule's `.scope` anchor,
+ * and `body > .panel` (0,1,1) outranks its `:has(> .scope) { margin: 0 }` (which zeroes the runtime's
+ * mount list; here the scope's parent is the panel, and the margin is the gap).
+ */
+export function expandedFramePanelRule(panelClass: string, scopeClass: string): string {
+  const gap = EXPANDED_FRAME.insetPx;
+  return [
+    '',
+    `.${panelClass} { ${expandedFramePanelDecls()} }`,
+    `body > .${panelClass} { margin: ${gap}px; }`,
+    `.${panelClass} > .${scopeClass} { min-height: calc(100vh - ${2 * gap}px); }`,
+  ].join('\n');
+}
+
+/**
  * The `fit: 'fill'` rule (ggui#1041): inside a host's canvas the mounted root
  * is the whole surface — no border, radius or shadow of its own, and it fills
  * the page. The host's panel carries the one chrome.

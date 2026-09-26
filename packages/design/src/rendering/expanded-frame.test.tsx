@@ -28,6 +28,11 @@ import {
   EXPANDED_FRAME_BLEEDS,
   EXPANDED_FRAME_INNER_RADIUS,
   fillFitRule,
+  EXPANDED_FRAME_CHROME,
+  expandedFramePanelDecls,
+  expandedFramePanelRule,
+  expandedFrameScrim,
+  expandedFrameScrimDecls,
 } from './css-tokens';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -162,5 +167,57 @@ describe('Card and Box mark themselves for the frame', () => {
     expect(plain).not.toContain('data-ggui-surface');
     expect(plain).not.toContain('data-ggui-bleed');
     expect(renderToStaticMarkup(<Box surface="transparent">x</Box>)).not.toContain('data-ggui-surface');
+  });
+});
+
+describe('the panel chrome — one definition for every host stand-in (ggui#1083 cut 3)', () => {
+  it("the chrome's radius is the frame's outer radius, its hairline the theme's ink at 6 %, its elevation the sm stop, its ground neutral-50, and it clips", () => {
+    expect(EXPANDED_FRAME_CHROME.radius).toBe(`var(${EXPANDED_FRAME.outerRadiusVar})`);
+    expect(expandedFramePanelDecls()).toBe(
+      'border-radius: var(--ggui-shape-radius-xl); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ggui-color-onGround) 6%, transparent), var(--ggui-shape-shadow-sm); background: var(--ggui-color-neutral-50); overflow: clip;',
+    );
+  });
+
+  it('every variable the chrome and the scrim name is provided by the projection, in both modes', () => {
+    const named = ['--ggui-shape-radius-xl', '--ggui-color-onGround', '--ggui-shape-shadow-sm', '--ggui-color-neutral-50', '--ggui-scrim-tint', '--ggui-scrim-opacity'];
+    for (const mode of ['light', 'dark'] as const) {
+      const v = deriveThemeVariables(stored, mode);
+      for (const name of named) expect(v[name], `${mode} ${name}`).toBeDefined();
+    }
+  });
+
+  it("for the shell's three ladders the panel's radius IS the widget's panel radius, and the elevation is the theme's own sm stop", () => {
+    for (const g of GUUEY) {
+      const v = deriveThemeVariables(withLadder(g.ladder), 'light');
+      expect(Number.parseFloat(v['--ggui-shape-radius-xl'] ?? 'NaN'), g.bucket).toBe(g.panelPx);
+      // The stored theme states its `sm` shadow; the panel's elevation is that stop, not the ladder default.
+      expect(v['--ggui-shape-shadow-sm']).toBe(stored.shape.shadow!.sm!.$value);
+    }
+  });
+
+  it("a judge page's panel rule: the panel sits the gap in from the page, and the scope's anchor inside it is the panel's height — a viewport length, never a percentage", () => {
+    const rule = expandedFramePanelRule('p1', 's1');
+    expect(rule).toContain(`.p1 { ${expandedFramePanelDecls()} }`);
+    expect(rule).toContain('body > .p1 { margin: 16px; }');
+    expect(rule).toContain('.p1 > .s1 { min-height: calc(100vh - 32px); }');
+    expect(rule).not.toContain('min-height: 100%');
+    // clip, never a scroll container: the judge measures the document's overflow.
+    expect(rule).not.toMatch(/overflow:\s*(hidden|auto|scroll)/);
+  });
+
+  it("rule 0: the runtime's composition carries no chrome — neither the tree under fill nor the page layer", () => {
+    for (const css of [composeThemeCss({ layer: 'tree', scopeClass: 's1', fit: 'fill' }), composeThemeCss({ layer: 'page' })]) {
+      expect(css).not.toContain(expandedFramePanelDecls());
+      expect(css).not.toContain('--ggui-shape-shadow-sm)');
+    }
+  });
+
+  it("the scrim: the tint at its opacity over a ground — a judge page's body mixes over neutral-50, a replica over transparent", () => {
+    expect(expandedFrameScrimDecls()).toBe(
+      'background: color-mix(in oklch, var(--ggui-scrim-tint, var(--ggui-color-ground, #ffffff)) calc(var(--ggui-scrim-opacity, 0.45) * 100%), var(--ggui-color-neutral-50, #ffffff));',
+    );
+    expect(expandedFrameScrim('transparent')).toBe(
+      'color-mix(in oklch, var(--ggui-scrim-tint, var(--ggui-color-ground, #ffffff)) calc(var(--ggui-scrim-opacity, 0.45) * 100%), transparent)',
+    );
   });
 });

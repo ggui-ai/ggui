@@ -1,7 +1,8 @@
 /**
  * Per-canvas visual judging — ARM-NEUTRAL (the same judge either design
  * mode). With `config.canvases` set, `runVisualEvaluation` renders the
- * SAME html shell once per class at `CANVAS_VIEWPORTS[class]`, judges
+ * SAME html shell once per class at `CANVAS_VIEWPORTS[class]` (in a window
+ * padded by the host panel's gap on md/lg/xl — ggui#1083 cut 3), judges
  * each screenshot, returns one `{canvas, viewport, score, passed,
  * screenshotPng}` per class, and folds them into the single-shot fields
  * (score = mean, passed = every canvas passed). Unset = today's single
@@ -9,8 +10,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
+import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
 import { CANVAS_CLASSES, CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
+  JUDGE_PANEL_CLASS,
+  canvasChrome,
+  judgeWindow,
   runVisualEvaluation,
   runVisualEval,
   summarizeVisualResult,
@@ -28,12 +33,16 @@ function recordingDeps(scores: readonly number[]): VisualEvalDeps & { launched: 
   const launch = async (o: LaunchOptions): Promise<ScreenshotBrowser> => {
     launched.push(o);
     const width = o.defaultViewport?.width ?? 0;
+    // A real page's document is the card plus the panel's gap when the judge drew the panel (ggui#1083 cut 3).
+    let panelled = false;
     return {
       newPage: async () => ({
-        setContent: async () => {},
+        setContent: async (html: string) => {
+          panelled = html.includes(JUDGE_PANEL_CLASS);
+        },
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
-        evaluate: async () => 0,
+        evaluate: async () => (panelled ? 2 * EXPANDED_FRAME.insetPx : 0),
         screenshot: async () => new Uint8Array([width >> 8, width & 0xff]),
       }),
       close: async () => {},
@@ -71,11 +80,12 @@ describe('runVisualEvaluation — per-canvas mode', () => {
     for (const c of result!.canvases!) {
       expect(c.viewport).toEqual(CANVAS_VIEWPORTS[c.canvas]);
       expect(c.screenshotPng).toBeInstanceOf(Buffer);
-      // The PNG the judge saw at this class was captured at this class's width.
-      expect(c.screenshotPng.readUInt16BE(0)).toBe(CANVAS_VIEWPORTS[c.canvas].width);
+      // The PNG the judge saw at this class was captured at this class's WINDOW — the class box, plus
+      // the host panel's gap on md/lg/xl (ggui#1083 cut 3) — and reported at the class box.
+      expect(c.screenshotPng.readUInt16BE(0)).toBe(judgeWindow(CANVAS_VIEWPORTS[c.canvas], canvasChrome(c.canvas)).width);
     }
-    expect(deps.launched.map((o) => o.defaultViewport)).toEqual(CANVAS_CLASSES.map((c) => CANVAS_VIEWPORTS[c]));
-    expect(deps.judged).toEqual(CANVAS_CLASSES.map((c) => CANVAS_VIEWPORTS[c].width));
+    expect(deps.launched.map((o) => o.defaultViewport)).toEqual(CANVAS_CLASSES.map((c) => judgeWindow(CANVAS_VIEWPORTS[c], canvasChrome(c))));
+    expect(deps.judged).toEqual(CANVAS_CLASSES.map((c) => judgeWindow(CANVAS_VIEWPORTS[c], canvasChrome(c)).width));
     // Scores + aggregate: mean(90,80,60,85,95) = 82; md failed the 70 threshold → passed=false.
     expect(result!.canvases!.map((c) => c.score)).toEqual([90, 80, 60, 85, 95]);
     expect(result!.canvases!.map((c) => c.passed)).toEqual([true, true, false, true, true]);

@@ -8,9 +8,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
+import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
   CONTENT_HEIGHT_EXPRESSION,
+  JUDGE_PANEL_CLASS,
   canvasFitPolicy,
   canvasOverflowIssue,
   runVisualEvaluationDetailed,
@@ -28,14 +30,19 @@ function fitDeps(contentHeight: number | (() => Promise<number>), score = 85): V
   const expressions: string[] = [];
   const launch = async (o: LaunchOptions): Promise<ScreenshotBrowser> => {
     const width = o.defaultViewport?.width ?? 0;
+    // A real page's document is the card plus the panel's gap when the judge drew the panel (ggui#1083 cut 3).
+    let panelled = false;
     return {
       newPage: async () => ({
-        setContent: async () => {},
+        setContent: async (html: string) => {
+          panelled = html.includes(JUDGE_PANEL_CLASS);
+        },
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
         evaluate: async (expression: string) => {
           expressions.push(expression);
-          return typeof contentHeight === 'function' ? contentHeight() : contentHeight;
+          const card = typeof contentHeight === 'function' ? await contentHeight() : contentHeight;
+          return card + (panelled ? 2 * EXPANDED_FRAME.insetPx : 0);
         },
         screenshot: async (opts: { fullPage: boolean }) => {
           captures.push({ width, fullPage: opts.fullPage });
@@ -89,7 +96,8 @@ describe('the fit measurement in the per-canvas round (ggui#1027)', () => {
     expect(deps.captures).toEqual([
       { width: 400, fullPage: false },
       { width: 390, fullPage: true },
-      { width: 1024, fullPage: true },
+      // lg is captured at its window: the class box plus the host panel's gap (ggui#1083 cut 3).
+      { width: 1056, fullPage: true },
     ]);
     const [xs, mfs, lg] = result!.canvases!;
     expect(xs).toMatchObject({ canvas: 'xs-chat-card', contentHeight: 1289, overflow: true, score: 85, passed: false });
