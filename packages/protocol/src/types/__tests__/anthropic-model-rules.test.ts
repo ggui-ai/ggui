@@ -227,6 +227,10 @@ const VENDOR_FORCED_TOOL_TABLE: Readonly<Record<string, VendorForcedToolRow>> = 
     rejectsForcedToolChoice: false,
     receipt: "OpenRouter spelling of Claude Opus 4.7 — (B) `any`, `tool`",
   },
+  "claude-opus-5.5": {
+    rejectsForcedToolChoice: true,
+    receipt: "OpenRouter spelling of Claude Opus 5.5 (listed ggui#1267) — (A) names Claude Opus 5.5; (B) `auto`, `none` only",
+  },
 };
 
 /**
@@ -249,8 +253,8 @@ const ROUTABLE_ANTHROPIC_IDS: readonly string[] = [
 const ROUTABLE_NORMALIZED = [...new Set(ROUTABLE_ANTHROPIC_IDS.map(normalizeAnthropicModelId))].sort();
 
 describe("anthropicRejectsForcedToolChoice — pinned against the vendor over every routable Anthropic id (ggui#1268)", () => {
-  it("the routable union is 15 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
-    expect(ROUTABLE_NORMALIZED).toHaveLength(15);
+  it("the routable union is 16 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
+    expect(ROUTABLE_NORMALIZED).toHaveLength(16);
   });
 
   it("every routable Anthropic id has a vendor-quoted row — a new one without a receipt fails here", () => {
@@ -266,7 +270,7 @@ describe("anthropicRejectsForcedToolChoice — pinned against the vendor over ev
   it("the predicate agrees with the vendor on every routable spelling, in both directions", () => {
     const rows = Object.values(VENDOR_FORCED_TOOL_TABLE);
     // Both directions are exercised, not just one: the table holds both answers.
-    expect(rows.filter((r) => r.rejectsForcedToolChoice)).toHaveLength(2);
+    expect(rows.filter((r) => r.rejectsForcedToolChoice)).toHaveLength(3);
     expect(rows.filter((r) => !r.rejectsForcedToolChoice)).toHaveLength(13);
     for (const raw of ROUTABLE_ANTHROPIC_IDS) {
       const row = VENDOR_FORCED_TOOL_TABLE[normalizeAnthropicModelId(raw)];

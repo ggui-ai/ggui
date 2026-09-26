@@ -6,14 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
- * `MODELS.openrouter` gains `openai/gpt-6-sol` and `openai/gpt-6-luna`
- * (2026-09-27, additive, ggui#1267: MINOR, same draft stamp). Autocomplete
- * only — every `<author>/<model>` string was already accepted by shape
- * under `openrouter`. Listed after the OpenRouter tools smoke the founder
- * gated them on (D3) passed on a clean session: 3/3 tool calls returned
- * per id with `tool_choice: required`, 0 errors. `anthropic/claude-opus-5.5`
- * passed the same smoke and stays unlisted until its dotted id resolves to
- * a price row. No PROTOCOL_VERSION move.
+ * `MODELS.openrouter` gains `openai/gpt-6-sol`, `openai/gpt-6-luna` and
+ * `anthropic/claude-opus-5.5` (2026-09-27, additive, ggui#1267: MINOR,
+ * same draft stamp). Autocomplete only — every `<author>/<model>` string
+ * was already accepted by shape under `openrouter`. Listed after the
+ * OpenRouter tools smoke the founder gated them on (D3) passed on a clean
+ * session: 3/3 tool calls returned per id with `tool_choice: required`,
+ * 0 errors. Opus 5.5 followed the two GPT-6 ids by one landing: its dotted
+ * id listed only once it resolved to a price row (the dashed Anthropic
+ * tail tried after the dotted one). No PROTOCOL_VERSION move.
  * --------------------------------------------------------------------
  * The register door takes the fit facts (2026-09-26, additive,
  * ggui#1427: MINOR, same draft stamp). `opsRegisterBlueprintInputSchema`

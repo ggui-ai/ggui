@@ -186,6 +186,12 @@ export const MODELS = {
     // uses dash (`claude-haiku-4-5`) — preserve OpenRouter's wire form.
 
     // Anthropic family
+    // Opus 5.5 on OpenRouter — listed after the OpenRouter tools smoke the
+    // founder gated it on passed (ggui#1267, 2026-09-26: fresh agent per
+    // call, `tool_choice: required`, 3/3 tool calls returned, 0 errors) AND
+    // its dotted id resolves to a price row (the dashed Anthropic tail is
+    // tried after the dotted one). OpenRouter keeps the dot.
+    'anthropic/claude-opus-5.5',
     'anthropic/claude-fable-5',
     'anthropic/claude-opus-5',
     'anthropic/claude-sonnet-5',
@@ -196,10 +202,8 @@ export const MODELS = {
     // GPT-6 on OpenRouter — listed after the OpenRouter tools smoke the
     // founder gated them on passed (ggui#1267, 2026-09-26): fresh agent
     // per call, `tool_choice: required`, 3/3 tool calls returned per id,
-    // 0 errors. `anthropic/claude-opus-5.5` passed the same smoke and is
-    // NOT listed yet: its dotted id resolves to no price row, and an
-    // autocomplete entry a deployment cannot price is copy ahead of
-    // enforcement (accepted by shape regardless — see `ModelOf`).
+    // 0 errors. Every `<author>/<model>` string is accepted by shape
+    // regardless — see `ModelOf`; the list is autocomplete.
     'openai/gpt-6-sol',
     'openai/gpt-6-luna',
     'openai/gpt-5.6-sol',
