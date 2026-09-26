@@ -38,13 +38,13 @@ describe('composeThemeCss — one composition, three callers', () => {
     expect(() => composeThemeCss({ layer: 'tree', appTheme: APP })).toThrow(/scopeClass/);
   });
 
-  it("'chrome' = the :root ladder + color-scheme + the variable layers, no keyframes; 'page' = chrome + the mode's keyframes", () => {
+  it("'chrome' = the :root ladder + color-scheme + the variable layers, no keyframes; 'page' = chrome + the body size + the mode's keyframes", () => {
     const chrome = composeThemeCss({ layer: 'chrome', mode: 'light', appTheme: APP });
     expect(chrome.startsWith(getCssTokens('light'))).toBe(true);
     expect(chrome.endsWith(`:root{color-scheme:light;${toCssDecls(APP.overlays.light)}${toCssDecls(APP.cssVariables)}}`)).toBe(true);
     expect(chrome).not.toContain(APP.keyframes.light);
     const page = composeThemeCss({ layer: 'page', mode: 'light', appTheme: APP });
-    expect(page).toBe(chrome + APP.keyframes.light);
+    expect(page).toBe(`${chrome}body{font-size: var(--ggui-font-size-base);}${APP.keyframes.light}`);
     const dark = composeThemeCss({ layer: 'page', mode: 'dark', appTheme: APP });
     expect(dark).toContain('color-scheme:dark;--ggui-color-onContainer: #111111;');
     expect(dark.endsWith('}')).toBe(true);
@@ -106,6 +106,43 @@ describe('composeThemeCss — one composition, three callers', () => {
 
   it('no app theme ⇒ chrome is the ladder plus a bare color-scheme block', () => {
     expect(composeThemeCss({ layer: 'chrome', mode: 'light' })).toBe(`${getCssTokens('light')}:root{color-scheme:light;}`);
+  });
+});
+
+describe("body copy is set at the theme's base size (ggui#1274)", () => {
+  /** The plain (non-custom-property) declarations of every rule whose selector is exactly `selector`. */
+  const plainDecls = (css: string, selector: string): string[] => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const out: string[] = [];
+    for (const rule of css.matchAll(new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`, 'g'))) {
+      for (const decl of rule[1]!.split(';')) {
+        const d = decl.trim();
+        if (d !== '' && !d.startsWith('--')) out.push(d.replace(/\s*:\s*/, ': '));
+      }
+    }
+    return out;
+  };
+  const BASE_SIZE = 'font-size: var(--ggui-font-size-base)';
+
+  it("the scope root sets it, so text outside a Text primitive follows the theme's body size instead of the browser's 16px", () => {
+    expect(plainDecls(composeThemeCss({ layer: 'tree', scopeClass: 's1', mode: 'light', appTheme: APP }), '.s1')).toContain(BASE_SIZE);
+    expect(plainDecls(composeThemeCss({ layer: 'tree', scopeClass: 's1', mode: 'dark', appTheme: APP }), '.s1')).toContain(BASE_SIZE);
+    // The unthemed scope (the default ladder) and the host-helper's scoped block take the same rule.
+    expect(plainDecls(getScopedCssTokens('s2', 'light'), '.s2')).toContain(BASE_SIZE);
+  });
+
+  it("the page a judge renders sets it on its body, so the judge reads the size a visitor reads", () => {
+    expect(plainDecls(composeThemeCss({ layer: 'page', mode: 'light', appTheme: APP }), 'body')).toContain(BASE_SIZE);
+    expect(plainDecls(composeThemeCss({ layer: 'page', mode: 'light' }), 'body')).toContain(BASE_SIZE);
+  });
+
+  it("the chrome block does not: the embedding document's body is the host's frame, and html is never sized (a rem base would scale every rem in the card twice)", () => {
+    const chrome = composeThemeCss({ layer: 'chrome', mode: 'light', appTheme: APP });
+    expect(plainDecls(chrome, 'body')).toEqual([]);
+    for (const css of [chrome, composeThemeCss({ layer: 'page', mode: 'light', appTheme: APP }), composeThemeCss({ layer: 'tree', scopeClass: 's1', mode: 'light', appTheme: APP })]) {
+      expect(plainDecls(css, 'html')).toEqual([]);
+      expect(plainDecls(css, ':root').filter((d) => d.startsWith('font-size'))).toEqual([]);
+    }
   });
 });
 

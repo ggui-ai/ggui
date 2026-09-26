@@ -424,10 +424,23 @@ function structuralScaffolding(scopeClass: string): string {
 }
 
 /**
- * Apply the theme's `font-family` + base body color to the scope root
- * so unstyled descendants (h1-h6 / button / etc — primitives that
- * don't explicitly set `font-family`) inherit the active theme's sans
- * stack instead of the user-agent default, and plain text resolves
+ * The size body copy is set at: the theme's `base` stop, which a host's
+ * `typeScale.body.size` (or its ramp's `base`) moves. `<Text>` already reads
+ * it; this is what text OUTSIDE a Text primitive inherits, instead of the
+ * browser's 16px (ggui#1274). The default ladder states `16px`, so an
+ * unthemed card paints what it painted before. It lands on the scope root
+ * (the tree) and on a scope-less page's `body` (the judge), never on `html`:
+ * a `rem` base on the root element would scale every `rem` in the card by
+ * itself a second time.
+ */
+const BODY_COPY_SIZE = 'font-size: var(--ggui-font-size-base);';
+
+/**
+ * Apply the theme's `font-family`, body size and base body color to the
+ * scope root so unstyled descendants (h1-h6 / button / etc — primitives
+ * that don't explicitly set `font-family`) inherit the active theme's sans
+ * stack instead of the user-agent default, plain text is set at the
+ * theme's body size ({@link BODY_COPY_SIZE}), and it resolves
  * `--ggui-color-onGround` without a Text/Heading wrapper. The scope
  * root stays TRANSPARENT (no `background`): inside an MCP-Apps host
  * iframe the host's card chrome shows through; primitives that need a
@@ -436,6 +449,7 @@ function structuralScaffolding(scopeClass: string): string {
 function baseInheritsRule(scopeClass: string): string {
   return `.${scopeClass} {
   font-family: var(--ggui-font-family-sans);
+  ${BODY_COPY_SIZE}
   color: var(--ggui-color-onGround);
   background-color: transparent;
 }`;
@@ -595,6 +609,9 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
   let css = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);
   if (opts.hostPalette) css += `:root{${toCssDecls(opts.hostPalette)}}`;
   css += `:root{color-scheme:${m};${layers.map(toCssDecls).join('')}}`;
+  // A page has no scope root, so its body takes the size the tree's scope root
+  // sets: the judge reads body copy at the size a visitor reads it (ggui#1274).
+  if (opts.layer === 'page') css += `body{${BODY_COPY_SIZE}}`;
   if (opts.layer === 'page' && opts.appTheme) css += opts.appTheme.keyframes?.[m] ?? '';
   // The declared faces ride the DOCUMENT-level layers (ggui#1093): the family
   // the theme names loads wherever the theme is composed — the runtime's
