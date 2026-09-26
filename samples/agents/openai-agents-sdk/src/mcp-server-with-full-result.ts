@@ -43,6 +43,7 @@
  * abstract).
  */
 import { MCPServerStreamableHttp } from '@openai/agents';
+import { listModelVisibleTools } from '@ggui-ai/agent-server';
 
 export interface McpCallToolResult {
   readonly content?: ReadonlyArray<unknown>;
@@ -101,6 +102,7 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
   private readonly fetchUrl: string;
   private readonly serverName: string;
   private readonly authHeader: string;
+  private readonly bearer: string;
   /**
    * Monotonically-increasing JSON-RPC id per instance. Started at a
    * large arbitrary offset so collisions with the SDK's own
@@ -120,6 +122,22 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
     this.fetchUrl = opts.url;
     this.serverName = opts.name;
     this.authHeader = `Bearer ${opts.bearer}`;
+    this.bearer = opts.bearer;
+  }
+
+  /**
+   * The tools the SDK may offer the model: this server's `tools/list`,
+   * minus every tool whose `_meta.ui.visibility` lacks "model" (SPEC §4.7;
+   * the app-only ggui_runtime_* tools). The SDK's own `listTools` parses
+   * each tool through a schema that drops `_meta`, so the visibility is
+   * read by `listModelVisibleTools` and applied here by name.
+   */
+  override async listTools(): ReturnType<MCPServerStreamableHttp['listTools']> {
+    const [tools, visible] = await Promise.all([
+      super.listTools(),
+      listModelVisibleTools({ url: this.fetchUrl, bearer: this.bearer }),
+    ]);
+    return tools.filter((tool) => visible.has(tool.name));
   }
 
   /**

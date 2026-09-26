@@ -25,11 +25,12 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
-import type {
-  AgentAdapter,
-  AgentInput,
-  NormalizedMessage,
-  McpCallToolResult,
+import {
+  listModelVisibleTools,
+  type AgentAdapter,
+  type AgentInput,
+  type NormalizedMessage,
+  type McpCallToolResult,
 } from '@ggui-ai/agent-server';
 
 /**
@@ -125,44 +126,16 @@ export interface ClaudeAgentSdkAdapterOptions {
   readonly maxTurns?: number;
   /**
    * Per-server tool allowlist. MCP tools auto-namespace as
-   * `mcp__<server>__<tool>`; this map declares which prefixes the
-   * agent is allowed to call. Conventional defaults are wired below;
-   * operators can override.
+   * `mcp__<server>__<tool>`; this map declares which of them the agent
+   * is allowed to call. When absent, every server's tools that the model
+   * may be offered are allowed: those whose `_meta.ui.visibility`
+   * includes "model" or declares none (SPEC §4.7), read from each
+   * server's `tools/list` once per process. The app-only tools (the six
+   * `ggui_runtime_*`) are therefore never allowed by default.
    */
   readonly allowedToolsByServer?: Record<string, ReadonlyArray<string>>;
 }
 
-const DEFAULT_ALLOWED_TOOLS: Record<string, ReadonlyArray<string>> = {
-  // Every ggui MCP tool tagged audience:['agent'] (servers/ggui exposes
-  // these on /mcp). The Claude Agent SDK's `allowedTools` matches EXACT
-  // names — there is no `mcp__ggui` server-wildcard — so each agent-facing
-  // tool must be listed, or the SDK denies it ("permission not granted").
-  // Keep this in sync as the protocol adds agent-facing tools.
-  ggui: [
-    // render loop
-    'mcp__ggui__ggui_handshake',
-    'mcp__ggui__ggui_render',
-    'mcp__ggui__ggui_update',
-    'mcp__ggui__ggui_amend',
-    'mcp__ggui__ggui_emit',
-    'mcp__ggui__ggui_consume',
-    'mcp__ggui__ggui_get_session',
-    'mcp__ggui__ggui_list_sessions',
-    // blueprint reuse (blueprint-first)
-    'mcp__ggui__ggui_search_blueprints',
-    'mcp__ggui__ggui_render_blueprint',
-    'mcp__ggui__ggui_list_featured_blueprints',
-    // app discovery
-    'mcp__ggui__ggui_list_gadgets',
-    'mcp__ggui__ggui_list_themes',
-  ],
-  todo: [
-    'mcp__todo__todo_list',
-    'mcp__todo__todo_add',
-    'mcp__todo__todo_toggle',
-    'mcp__todo__todo_delete',
-  ],
-};
 
 /**
  * Per-process record of which chat ids have produced at least one
@@ -191,8 +164,33 @@ export function createClaudeAgentSdkAdapter(
   }
   const model = opts.model ?? 'claude-sonnet-4-6';
   const maxTurns = opts.maxTurns ?? 50;
-  const allowedToolsByServer =
-    opts.allowedToolsByServer ?? DEFAULT_ALLOWED_TOOLS;
+  const allowedToolsByServer = opts.allowedToolsByServer;
+
+  // The default allowlist: each server's model-visible tools, listed once
+  // per process. A failed listing (a server not up yet) is not memoised:
+  // the next run retries it, and this run still sees the rejection.
+  let modelVisibleAllowed: Promise<string[]> | null = null;
+  function resolveAllowedTools(input: AgentInput): Promise<string[]> {
+    if (allowedToolsByServer) {
+      return Promise.resolve(
+        Object.keys(input.mcpServers).flatMap((name) => allowedToolsByServer[name] ?? []),
+      );
+    }
+    if (!modelVisibleAllowed) {
+      const init = Promise.all(
+        Object.entries(input.mcpServers).map(async ([name, cfg]) =>
+          [...(await listModelVisibleTools({ url: cfg.url, bearer: cfg.bearer }))].map(
+            (tool) => `mcp__${name}__${tool}`,
+          ),
+        ),
+      ).then((perServer) => perServer.flat());
+      modelVisibleAllowed = init;
+      init.catch(() => {
+        if (modelVisibleAllowed === init) modelVisibleAllowed = null;
+      });
+    }
+    return modelVisibleAllowed;
+  }
 
   return {
     name: 'claude-agent-sdk',
@@ -202,7 +200,7 @@ export function createClaudeAgentSdkAdapter(
         apiKey,
         model,
         maxTurns,
-        allowedToolsByServer,
+        resolveAllowedTools,
       });
     },
   };
@@ -213,9 +211,9 @@ async function* runOnce(args: {
   readonly apiKey: string;
   readonly model: string;
   readonly maxTurns: number;
-  readonly allowedToolsByServer: Record<string, ReadonlyArray<string>>;
+  readonly resolveAllowedTools: (input: AgentInput) => Promise<string[]>;
 }): AsyncIterable<NormalizedMessage> {
-  const { input, apiKey, model, maxTurns, allowedToolsByServer } = args;
+  const { input, apiKey, model, maxTurns, resolveAllowedTools } = args;
 
   const systemPrompt =
     input.systemPrompt === null
@@ -236,11 +234,7 @@ async function* runOnce(args: {
     };
   }
 
-  const allowedTools: string[] = [];
-  for (const name of Object.keys(input.mcpServers)) {
-    const tools = allowedToolsByServer[name];
-    if (tools) allowedTools.push(...tools);
-  }
+  const allowedTools = await resolveAllowedTools(input);
 
   // Multi-turn session continuity via the SDK's filesystem store.
   // The SDK requires a UUID-shaped sessionId; the library mints

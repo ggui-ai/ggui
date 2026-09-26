@@ -21,11 +21,12 @@ import {
 } from '@google/adk';
 import { ThinkingLevel } from '@google/genai';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
-import type {
-  AgentAdapter,
-  AgentInput,
-  McpCallToolResult,
-  NormalizedMessage,
+import {
+  listModelVisibleTools,
+  type AgentAdapter,
+  type AgentInput,
+  type McpCallToolResult,
+  type NormalizedMessage,
 } from '@ggui-ai/agent-server';
 
 const APP_NAME = 'ggui-agent-google-adk';
@@ -87,7 +88,7 @@ export function createGoogleAdkAdapter(
 
   let sharedStateInit: Promise<SharedState> | null = null;
 
-  function buildSharedState(input: AgentInput): SharedState {
+  async function buildSharedState(input: AgentInput): Promise<SharedState> {
     const instruction =
       input.systemPrompt === null
         ? ''
@@ -95,17 +96,28 @@ export function createGoogleAdkAdapter(
 
     // One MCPToolset per server. Bearer is the library-resolved one
     // per server entry — uniformly threaded as the auth header.
-    const tools: MCPToolset[] = Object.values(input.mcpServers).map(
-      (cfg) =>
-        new MCPToolset({
-          type: 'StreamableHTTPConnectionParams',
-          url: cfg.url,
-          header: {
-            Authorization: `Bearer ${cfg.bearer}`,
-            'Content-Type': 'application/json',
-            Accept: 'application/json, text/event-stream',
-          },
-        }),
+    //
+    // SPEC §4.7: a host must not offer the model a tool whose
+    // `_meta.ui.visibility` lacks "model" (the app-only ggui_runtime_*
+    // tools). ADK's tool predicate cannot see a tool's `_meta`, so each
+    // toolset gets the server's model-visible names as its filter, read
+    // from the declared visibility, never from a hand-kept list.
+    const tools: MCPToolset[] = await Promise.all(
+      Object.values(input.mcpServers).map(
+        async (cfg) =>
+          new MCPToolset(
+            {
+              type: 'StreamableHTTPConnectionParams',
+              url: cfg.url,
+              header: {
+                Authorization: `Bearer ${cfg.bearer}`,
+                'Content-Type': 'application/json',
+                Accept: 'application/json, text/event-stream',
+              },
+            },
+            [...(await listModelVisibleTools({ url: cfg.url, bearer: cfg.bearer }))],
+          ),
+      ),
     );
 
     const agent = new LlmAgent({
@@ -199,9 +211,14 @@ export function createGoogleAdkAdapter(
         input,
         getState: async () => {
           if (!sharedStateInit) {
-            sharedStateInit = Promise.resolve().then(() =>
-              buildSharedState(input),
-            );
+            // Building lists each server's tools, so it can fail on a server
+            // that is not up yet. A rejected build is not memoised: the
+            // next run retries it, and this caller still sees the rejection.
+            const init = buildSharedState(input);
+            sharedStateInit = init;
+            init.catch(() => {
+              if (sharedStateInit === init) sharedStateInit = null;
+            });
           }
           const state = await sharedStateInit;
           assertSharedStateMatches(state, input);
