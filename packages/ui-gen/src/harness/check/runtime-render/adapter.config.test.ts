@@ -64,4 +64,10 @@ describe('createRuntimeRenderCheck — bounds reach runRenderCheck (ggui#1380 C2
     await createRuntimeRenderCheck({ maxConcurrent: 2 }).run(INPUT);
     expect(captured.options).toEqual([undefined]);
   });
+
+  it('a bad bound is refused at construction, not at the first probe: timeoutMs 0 / NaN, heapMb 0 → RangeError', () => {
+    expect(() => createRuntimeRenderCheck({ timeoutMs: 0 })).toThrow(RangeError);
+    expect(() => createRuntimeRenderCheck({ timeoutMs: NaN })).toThrow(RangeError);
+    expect(() => createRuntimeRenderCheck({ heapMb: 0 })).toThrow(RangeError);
+  });
 });

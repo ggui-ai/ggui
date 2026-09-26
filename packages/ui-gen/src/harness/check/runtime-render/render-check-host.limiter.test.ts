@@ -139,4 +139,23 @@ describe('createRuntimeRenderCheck({ maxConcurrent }) — K slots, FIFO (ggui#13
     expect(() => createRuntimeRenderCheck({ maxConcurrent: 0 })).toThrow(RangeError);
     expect(() => createRuntimeRenderCheck({ maxConcurrent: 1.5 })).toThrow(RangeError);
   });
+
+  it('a check that waited for a slot reports the wait as queuedMs, apart from its own elapsedMs; one that did not wait has no queuedMs key', async () => {
+    const check = createRuntimeRenderCheck({ maxConcurrent: 1 });
+    const p1 = run(check, 1);
+    const p2 = run(check, 2);
+    await spawnedCount(1);
+    await new Promise<void>((r) => setTimeout(r, 120));
+    spawned.calls[0]?.resolve(cleanExit());
+    const o1 = await p1;
+    await spawnedCount(2);
+    spawned.calls[1]?.resolve(cleanExit());
+    const o2 = await p2;
+    expect(o1.status).toBe('ran');
+    expect(o1).not.toHaveProperty('queuedMs');
+    expect(o2.status).toBe('ran');
+    expect(o2.queuedMs).toBeGreaterThanOrEqual(100);
+    // the second check's own clock starts when its slot is acquired — the wait is not inside elapsedMs
+    expect(o2.elapsedMs).toBeLessThan(o2.queuedMs ?? 0);
+  });
 });

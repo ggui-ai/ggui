@@ -185,7 +185,7 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     expect(result.evalResult?.runtimeProbeRepair).toEqual({
       attempted: true,
       compiled: true,
-      after: { status: "ran", verdict: "pass", elapsedMs: 18 },
+      trigger: { status: "ran", verdict: "fail", failChecks: ["render-no-throw"], elapsedMs: 40 },
     });
     expect(result.compiledCode.length).toBeGreaterThan(0);
   }, 60_000);

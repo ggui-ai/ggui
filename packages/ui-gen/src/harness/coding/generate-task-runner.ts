@@ -12,7 +12,7 @@
 
 import type { Classification } from "../../classifier/index.js";
 import type { JsonValue } from "@ggui-ai/protocol";
-import type { ContractFeedbackRecord, EvalResult } from "../../evaluation/types-public.js";
+import type { ContractFeedbackRecord, EvalResult, RuntimeProbeMeta } from "../../evaluation/types-public.js";
 import type { Harness, Task, TaskContext } from "../types-public.js";
 import type { SingleComponentParams } from "../runtime.js";
 import type { TaskRunner } from "../index.js";
@@ -85,6 +85,8 @@ export interface GenerateTelemetry {
    * Stays `false` on every other lane.
    */
   probeRepairUsed: boolean;
+  /** ggui#1380 C2b — the probe that bought the repair turn (the first probe-only round's meta), recorded on round 2 as `trigger`. */
+  probeRepairTrigger: RuntimeProbeMeta | undefined;
   /**
    * ggui#1261 — the contract-feedback round, once one fired: kept across the
    * rounds after it (each rebuilds `evalResult`) so the assembled result can
@@ -135,6 +137,7 @@ export function createTelemetry(): GenerateTelemetry {
     totalOut: 0,
     evalResult: undefined,
     probeRepairUsed: false,
+    probeRepairTrigger: undefined,
     contractFeedback: undefined,
     sameExchangeBreak: undefined,
     compiledCode: "",
@@ -386,6 +389,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
             onProgress: params.onProgress,
             probeOnly: session.probeOnlyEnabled,
             probeRepairUsed: telemetry.probeRepairUsed,
+            ...(telemetry.probeRepairTrigger !== undefined ? { probeRepairTrigger: telemetry.probeRepairTrigger } : {}),
           },
           {
             compiledCode: telemetry.compiledCode,
@@ -410,7 +414,10 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         if (round.control === "break") break;
         // round.control === "feedback" — set next coding turn input.
         // On the probe-only lane this is the one repair turn (ggui#1380).
-        if (session.probeOnlyEnabled) telemetry.probeRepairUsed = true;
+        if (session.probeOnlyEnabled) {
+          telemetry.probeRepairUsed = true;
+          telemetry.probeRepairTrigger = round.evalResult?.runtimeProbe;
+        }
         lastResultText = round.lastResultText;
         isEvalFeedback = round.isEvalFeedback;
         lastDiffFailed = round.lastDiffFailed;

@@ -114,6 +114,8 @@ export interface RuntimeProbeMetaDetail {
   readonly renderMs?: number;
   /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
   readonly hostLoad?: ProbeHostLoad;
+  /** Time the check waited for a probe slot before it started, ms; present only when > 0 (ggui#1380 C2b). */
+  readonly queuedMs?: number;
 }
 
 /**
@@ -163,8 +165,8 @@ export type RuntimeProbeMeta = GenerationRuntimeProbeOutcome & RuntimeProbeMetaD
  * The two arms are exclusive by type.
  */
 export type RuntimeProbeRepair =
-  | { readonly attempted: true; readonly compiled: false; readonly after?: never }
-  | { readonly attempted: true; readonly compiled: true; readonly after: RuntimeProbeMeta };
+  | { readonly attempted: true; readonly compiled: false; readonly trigger?: never }
+  | { readonly attempted: true; readonly compiled: true; readonly trigger: RuntimeProbeMeta };
 
 /**
  * Per-criterion execution status — three-valued so "the criterion

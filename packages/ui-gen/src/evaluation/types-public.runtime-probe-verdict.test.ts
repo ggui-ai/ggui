@@ -7,7 +7,7 @@
  * timing/host fields on every arm; `failChecks` is typed on the engine's
  * check-kind name. `RuntimeProbeRepair` is the not-compiled arm or the
  * compiled arm with the re-probe's meta — `recoverableFailAfter` is gone,
- * derivable from `after.verdict` and `after.failChecks`. Pinned without
+ * derivable from the top-level verdict (the re-probe) beside `trigger`. Pinned without
  * `@ts-expect-error`: exact unions by `toEqualTypeOf`, refusals by
  * `.not.toMatchTypeOf`, the legal arms as `satisfies` controls.
  */
@@ -19,12 +19,13 @@ import type { ProbeHostLoad, RuntimeProbeMeta, RuntimeProbeRepair } from './type
 type FailMeta = Extract<RuntimeProbeMeta, { verdict: 'fail' }>;
 
 describe('RuntimeProbeMeta carries the verdict (ggui#1380)', () => {
-  it('is the metadata outcome union with reason / renderMs / hostLoad on every arm', () => {
+  it('is the metadata outcome union with reason / renderMs / hostLoad / queuedMs on every arm', () => {
     expectTypeOf<RuntimeProbeMeta>().toEqualTypeOf<
       GenerationRuntimeProbeOutcome & {
         readonly reason?: string;
         readonly renderMs?: number;
         readonly hostLoad?: ProbeHostLoad;
+        readonly queuedMs?: number;
       }
     >();
     expectTypeOf<FailMeta['failChecks'][number]>().toEqualTypeOf<RenderCheckKind>();
@@ -47,25 +48,22 @@ describe('RuntimeProbeMeta carries the verdict (ggui#1380)', () => {
 
   it('the repair record is the not-compiled arm or the compiled arm with the re-probe meta', () => {
     expectTypeOf<RuntimeProbeRepair>().toEqualTypeOf<
-      | { readonly attempted: true; readonly compiled: false; readonly after?: never }
-      | { readonly attempted: true; readonly compiled: true; readonly after: RuntimeProbeMeta }
+      | { readonly attempted: true; readonly compiled: false; readonly trigger?: never }
+      | { readonly attempted: true; readonly compiled: true; readonly trigger: RuntimeProbeMeta }
     >();
     expectTypeOf<{ attempted: true; compiled: true }>().not.toMatchTypeOf<RuntimeProbeRepair>();
-    expectTypeOf<{ attempted: true; compiled: false; after: { status: 'ran'; verdict: 'pass' } }>().not.toMatchTypeOf<RuntimeProbeRepair>();
-    expectTypeOf<{ attempted: true; compiled: true; after: { status: 'ran' } }>().not.toMatchTypeOf<RuntimeProbeRepair>();
+    expectTypeOf<{ attempted: true; compiled: false; trigger: { status: 'ran'; verdict: 'pass' } }>().not.toMatchTypeOf<RuntimeProbeRepair>();
+    expectTypeOf<{ attempted: true; compiled: true; trigger: { status: 'ran' } }>().not.toMatchTypeOf<RuntimeProbeRepair>();
     // Controls.
     const notCompiled = { attempted: true, compiled: false } satisfies RuntimeProbeRepair;
-    const stillCrashing = {
-      attempted: true,
-      compiled: true,
-      after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 700 },
-    } satisfies RuntimeProbeRepair;
-    const fixed = { attempted: true, compiled: true, after: { status: 'ran', verdict: 'pass', elapsedMs: 500 } } satisfies RuntimeProbeRepair;
-    const reprobeTimedOut = { attempted: true, compiled: true, after: { status: 'timed-out', reason: 'did not finish' } } satisfies RuntimeProbeRepair;
-    // `recoverableFailAfter` is derived, never stored: the crash class is still there iff …
-    const crashStill = [notCompiled, stillCrashing, fixed, reprobeTimedOut].map(
-      (r: RuntimeProbeRepair) => r.compiled && r.after.verdict === 'fail' && r.after.failChecks.includes('render-no-throw'),
+    const trigger = { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 } satisfies RuntimeProbeMeta;
+    const compiled = { attempted: true, compiled: true, trigger } satisfies RuntimeProbeRepair;
+    // `recoverableFailAfter` is derived, never stored: on a compiled repair the
+    // re-probe is the record's top level and the crash that bought the turn is
+    // the trigger — each recorded once.
+    const bought = [notCompiled, compiled].map(
+      (r: RuntimeProbeRepair) => (r.compiled ? r.trigger.verdict === 'fail' && r.trigger.failChecks.includes('render-no-throw') : 'top level is the trigger'),
     );
-    expect(crashStill).toEqual([false, true, false, false]);
+    expect(bought).toEqual(['top level is the trigger', true]);
   });
 });

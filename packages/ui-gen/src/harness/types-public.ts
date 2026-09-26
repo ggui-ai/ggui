@@ -158,6 +158,8 @@ export interface RuntimeRenderOutcome {
   readonly renderMs?: number;
   /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
   readonly hostLoad?: ProbeHostLoad;
+  /** Time the check waited for a probe slot before it started, ms; present only when > 0 (ggui#1380 C2b). */
+  readonly queuedMs?: number;
 }
 
 export interface RuntimeRenderCheck {

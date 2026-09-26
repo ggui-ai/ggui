@@ -562,7 +562,10 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
  * and a field the arm requires cannot be dropped. Absent stays absent.
  */
 function metadataProbeOutcome(meta: RuntimeProbeMeta): GenerationRuntimeProbeOutcome {
-  const elapsed = meta.elapsedMs !== undefined ? { elapsedMs: meta.elapsedMs } : {};
+  const elapsed = {
+    ...(meta.elapsedMs !== undefined ? { elapsedMs: meta.elapsedMs } : {}),
+    ...(meta.queuedMs !== undefined ? { queuedMs: meta.queuedMs } : {}),
+  };
   if (meta.status !== "ran") return { status: meta.status, ...elapsed };
   if (meta.verdict === "pass") return { status: "ran", verdict: "pass", ...elapsed };
   return { status: "ran", verdict: "fail", failChecks: meta.failChecks, ...elapsed };
@@ -575,7 +578,7 @@ function metadataProbeOutcome(meta: RuntimeProbeMeta): GenerationRuntimeProbeOut
  */
 function metadataProbeRepair(repair: RuntimeProbeRepair): GenerationRuntimeProbeRepair {
   return repair.compiled
-    ? { attempted: true, compiled: true, after: metadataProbeOutcome(repair.after) }
+    ? { attempted: true, compiled: true, trigger: metadataProbeOutcome(repair.trigger) }
     : { attempted: true, compiled: false };
 }
 

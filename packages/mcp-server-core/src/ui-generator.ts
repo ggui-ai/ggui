@@ -290,9 +290,11 @@ export type GenerationRuntimeProbeCheck =
  * `fail` on any failing check. The REPAIR turn (see
  * {@link GenerationRuntimeProbeRepair}) fires on the `render-no-throw`
  * class only — a card that crashes on first render; every other failing
- * check is recorded here and never repaired. So on a stream of records the
- * crash-class FAIL rate is `verdict === 'fail' && failChecks.includes('render-no-throw')`
- * and the repair-success rate is `repair.compiled && repair.after.verdict === 'pass'`.
+ * check is recorded here and never repaired. `failChecks` is ordered as
+ * {@link GenerationRuntimeProbeCheck} declares its members — the constant's
+ * order (so `render-no-throw` leads whenever present), not a severity
+ * ranking. The rates a reader derives (crash that happened, crash that was
+ * served, repair success) are stated on {@link GenerationRuntimeProbeRepair}.
  *
  * The `?: never` members are what make the refusals hold structurally: a
  * `ran` record without a verdict, a no-verdict status carrying one, and a
@@ -305,6 +307,8 @@ export type GenerationRuntimeProbeOutcome =
       readonly failChecks?: never;
       /** Wall-clock of the probe, ms. */
       readonly elapsedMs?: number;
+      /** Time the check waited for a probe slot before it started, ms; present only when > 0. */
+      readonly queuedMs?: number;
     }
   | {
       readonly status: 'ran';
@@ -313,6 +317,8 @@ export type GenerationRuntimeProbeOutcome =
       readonly failChecks: readonly [GenerationRuntimeProbeCheck, ...GenerationRuntimeProbeCheck[]];
       /** Wall-clock of the probe, ms. */
       readonly elapsedMs?: number;
+      /** Time the check waited for a probe slot before it started, ms; present only when > 0. */
+      readonly queuedMs?: number;
     }
   | {
       readonly status: 'timed-out' | 'infra-skipped' | 'not-applicable';
@@ -320,19 +326,35 @@ export type GenerationRuntimeProbeOutcome =
       readonly failChecks?: never;
       /** Wall-clock of the probe, ms; absent when nothing ran (`not-applicable`). */
       readonly elapsedMs?: number;
+      /** Time the check waited for a probe slot before it started, ms; present only when > 0. */
+      readonly queuedMs?: number;
     };
 
 /**
  * What came of the one repair turn a render crash buys (ggui#1380). Present
- * on a {@link GenerationRuntimeProbe} only when a repair turn was bought:
- * `compiled: false` means the repair did not pass self-check, so no re-probe
- * ran (the pre-repair card is served) and there is no `after`;
- * `compiled: true` always carries `after`, the re-probe's own outcome — its
- * status, and its verdict when it ran. The two arms are exclusive by type.
+ * on a {@link GenerationRuntimeProbe} only when a repair turn was bought.
+ * The record's top-level outcome is ALWAYS the served card's last probe;
+ * this record adds what that alone would lose:
+ *
+ *   - `compiled: false` — the repair did not pass self-check, so no re-probe
+ *     ran and the pre-repair card is served: the top-level outcome IS the
+ *     probe that bought the turn, so nothing is repeated here;
+ *   - `compiled: true` — the repaired card is served and the top-level
+ *     outcome is its re-probe; `trigger` is the probe that BOUGHT the turn
+ *     (its verdict is `fail` with `render-no-throw` among its checks, plus
+ *     whatever else failed alongside), so a crash that HAPPENED and a crash
+ *     that was SERVED are each recorded once, never the same probe twice.
+ *
+ * The two arms are exclusive by type. On a stream of records:
+ *   - crash that happened  = `repair !== undefined ||
+ *     (verdict === 'fail' && failChecks.includes('render-no-throw'))`;
+ *   - crash that was served = `verdict === 'fail' &&
+ *     failChecks.includes('render-no-throw')` (the top level);
+ *   - repair success        = `repair?.compiled === true && verdict === 'pass'`.
  */
 export type GenerationRuntimeProbeRepair =
-  | { readonly attempted: true; readonly compiled: false; readonly after?: never }
-  | { readonly attempted: true; readonly compiled: true; readonly after: GenerationRuntimeProbeOutcome };
+  | { readonly attempted: true; readonly compiled: false; readonly trigger?: never }
+  | { readonly attempted: true; readonly compiled: true; readonly trigger: GenerationRuntimeProbeOutcome };
 
 /**
  * What the runtime-render probe did on this generation, when the engine ran

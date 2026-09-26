@@ -43,18 +43,21 @@ describe('GenerationRuntimeProbe (ggui#1380)', () => {
           readonly verdict: 'pass';
           readonly failChecks?: never;
           readonly elapsedMs?: number;
+          readonly queuedMs?: number;
         }
       | {
           readonly status: 'ran';
           readonly verdict: 'fail';
           readonly failChecks: FailChecks;
           readonly elapsedMs?: number;
+          readonly queuedMs?: number;
         }
       | {
           readonly status: 'timed-out' | 'infra-skipped' | 'not-applicable';
           readonly verdict?: never;
           readonly failChecks?: never;
           readonly elapsedMs?: number;
+          readonly queuedMs?: number;
         }
     >();
   });
@@ -67,8 +70,8 @@ describe('GenerationRuntimeProbe (ggui#1380)', () => {
 
   it('repair is exactly the not-compiled arm or the compiled arm with the re-probe outcome', () => {
     expectTypeOf<GenerationRuntimeProbeRepair>().toEqualTypeOf<
-      | { readonly attempted: true; readonly compiled: false; readonly after?: never }
-      | { readonly attempted: true; readonly compiled: true; readonly after: GenerationRuntimeProbeOutcome }
+      | { readonly attempted: true; readonly compiled: false; readonly trigger?: never }
+      | { readonly attempted: true; readonly compiled: true; readonly trigger: GenerationRuntimeProbeOutcome }
     >();
   });
 
@@ -85,33 +88,42 @@ describe('GenerationRuntimeProbe (ggui#1380)', () => {
     expectTypeOf<{ status: 'infra-skipped'; verdict: 'fail'; failChecks: readonly ['render-no-throw'] }>().not.toMatchTypeOf<GenerationRuntimeProbeOutcome>();
     // compiled with no after; not compiled with an after
     expectTypeOf<{ attempted: true; compiled: true }>().not.toMatchTypeOf<GenerationRuntimeProbeRepair>();
-    expectTypeOf<{ attempted: true; compiled: false; after: { status: 'ran'; verdict: 'pass' } }>().not.toMatchTypeOf<GenerationRuntimeProbeRepair>();
+    expectTypeOf<{ attempted: true; compiled: false; trigger: { status: 'ran'; verdict: 'fail'; failChecks: readonly ['render-no-throw'] } }>().not.toMatchTypeOf<GenerationRuntimeProbeRepair>();
     // controls: the legal arms are admitted by the same assertion
     expectTypeOf<{ status: 'ran'; verdict: 'pass' }>().toMatchTypeOf<GenerationRuntimeProbeOutcome>();
     expectTypeOf<{ status: 'ran'; verdict: 'fail'; failChecks: readonly ['render-no-throw'] }>().toMatchTypeOf<GenerationRuntimeProbeOutcome>();
     expectTypeOf<{ status: 'timed-out' }>().toMatchTypeOf<GenerationRuntimeProbeOutcome>();
     expectTypeOf<{ attempted: true; compiled: false }>().toMatchTypeOf<GenerationRuntimeProbeRepair>();
-    expectTypeOf<{ attempted: true; compiled: true; after: { status: 'ran'; verdict: 'pass' } }>().toMatchTypeOf<GenerationRuntimeProbeRepair>();
+    expectTypeOf<{ attempted: true; compiled: true; trigger: { status: 'ran'; verdict: 'fail'; failChecks: readonly ['render-no-throw'] } }>().toMatchTypeOf<GenerationRuntimeProbeRepair>();
   });
 
-  it('narrowing on `compiled` yields the re-probe outcome, and on its `verdict` the failed checks, with no optional check', () => {
-    const repairs: readonly GenerationRuntimeProbeRepair[] = [
-      { attempted: true, compiled: false },
-      { attempted: true, compiled: true, after: { status: 'ran', verdict: 'pass', elapsedMs: 3 } },
-      { attempted: true, compiled: true, after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw', 'prop-sensitivity'] } },
-      { attempted: true, compiled: true, after: { status: 'ran', verdict: 'fail', failChecks: ['action-wiring'] } },
-      { attempted: true, compiled: true, after: { status: 'timed-out', elapsedMs: 30_000 } },
+  it('narrowing on `compiled` yields the trigger (the probe that bought the turn); the three rates the docblock names derive from a record with no optional check', () => {
+    const crash: GenerationRuntimeProbeOutcome = { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 };
+    const records: readonly GenerationRuntimeProbe[] = [
+      // served clean, no repair
+      { status: 'ran', verdict: 'pass', elapsedMs: 3 },
+      // a crash served at the turn cap: no repair record, the top level is the crash
+      { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
+      // a repair that did not compile: the top level IS the trigger
+      { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw', 'prop-sensitivity'], repair: { attempted: true, compiled: false } },
+      // a repair that fixed the crash
+      { status: 'ran', verdict: 'pass', elapsedMs: 30, repair: { attempted: true, compiled: true, trigger: crash } },
+      // a repair whose re-probe still crashes
+      { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45, repair: { attempted: true, compiled: true, trigger: crash } },
+      // a repair whose re-probe timed out
+      { status: 'timed-out', elapsedMs: 30_000, repair: { attempted: true, compiled: true, trigger: crash } },
     ];
-    const after = repairs.map((r) => (r.compiled ? r.after.status : 'no re-probe'));
-    expect(after).toEqual(['no re-probe', 'ran', 'ran', 'ran', 'timed-out']);
+    const triggers = records.map((r) => (r.repair?.compiled ? r.repair.trigger.status : 'no trigger recorded'));
+    expect(triggers).toEqual(['no trigger recorded', 'no trigger recorded', 'no trigger recorded', 'ran', 'ran', 'ran']);
 
-    // The two rates the docblock names, derived with the narrowing alone.
-    const repairSucceeded = repairs.map((r) => r.compiled && r.after.verdict === 'pass');
-    expect(repairSucceeded).toEqual([false, true, false, false, false]);
-    const crashStillThere = repairs.map(
-      (r) => r.compiled && r.after.verdict === 'fail' && r.after.failChecks.includes('render-no-throw'),
+    const crashHappened = records.map(
+      (r) => r.repair !== undefined || (r.verdict === 'fail' && r.failChecks.includes('render-no-throw')),
     );
-    expect(crashStillThere).toEqual([false, false, true, false, false]);
+    expect(crashHappened).toEqual([false, true, true, true, true, true]);
+    const crashServed = records.map((r) => r.verdict === 'fail' && r.failChecks.includes('render-no-throw'));
+    expect(crashServed).toEqual([false, true, true, false, true, false]);
+    const repairSucceeded = records.map((r) => r.repair?.compiled === true && r.verdict === 'pass');
+    expect(repairSucceeded).toEqual([false, false, false, true, false, false]);
   });
 
   it('a `ran` record narrows on `verdict` to the failed checks — the crash-class rate is one `includes`', () => {

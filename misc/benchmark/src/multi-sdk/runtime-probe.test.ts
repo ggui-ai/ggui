@@ -43,4 +43,21 @@ describe('deriveRuntimeProbeVerdict (#973 — the console-only verdict becomes a
     const v = deriveRuntimeProbeVerdict(evalWith([], { status: 'ran', verdict: 'pass' }));
     expect(v).toEqual({ status: 'ran', passed: true, failures: 0, warnings: 0 });
   });
+
+  it("agrees with the engine's own verdict on the probe meta (ggui#1380 C1b): two derivations of one fact, pinned equal", () => {
+    const fixtures: EvalResult[] = [
+      evalWith([issue('runtime:render-no-throw', 'fail'), issue('runtime:action-wiring:save', 'fail')], {
+        status: 'ran',
+        verdict: 'fail',
+        failChecks: ['render-no-throw', 'action-wiring'],
+      }),
+      evalWith([], { status: 'ran', verdict: 'pass' }),
+      evalWith([], { status: 'timed-out', reason: 'did not finish' }),
+    ];
+    for (const ev of fixtures) {
+      const derived = deriveRuntimeProbeVerdict(ev);
+      const engine = ev.runtimeProbe?.verdict === 'pass';
+      expect(derived.passed).toBe(engine);
+    }
+  });
 });

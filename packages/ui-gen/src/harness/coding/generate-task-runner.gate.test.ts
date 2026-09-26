@@ -217,7 +217,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
       attempted: true,
       compiled: true,
-      after: { status: 'ran', verdict: 'pass', elapsedMs: 30 },
+      trigger: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
     });
   });
 
@@ -237,7 +237,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
       attempted: true,
       compiled: true,
-      after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45 },
+      trigger: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
     });
   });
 
@@ -281,7 +281,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
       attempted: true,
       compiled: true,
-      after: { status: 'ran', verdict: 'pass', elapsedMs: 30 },
+      trigger: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
     });
     expect(telemetry.compiledCode).toBe(REPAIRED);
   });

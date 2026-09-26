@@ -102,10 +102,18 @@ export interface EvalRoundContext {
    * ggui#1380 — whether this generation already spent its one repair turn.
    * `false` on the first probe-only round: a recoverable render crash there
    * buys the turn. `true` on the second: the round breaks whatever the probe
-   * reads and records the repair's after. Meaningful on the probe-only lane
-   * only.
+   * reads and records the repair with the probe that bought it as `trigger`.
+   * Meaningful on the probe-only lane only.
    */
   readonly probeRepairUsed: boolean;
+  /**
+   * ggui#1380 C2b — on the second probe-only round, the probe that bought the
+   * repair turn (the first round's meta), recorded as `runtimeProbeRepair.trigger`
+   * so the crash that happened is never lost behind the re-probe. The runner
+   * sets it together with `probeRepairUsed`; a re-probe round without it is a
+   * harness defect.
+   */
+  readonly probeRepairTrigger?: RuntimeProbeMeta;
 }
 
 /**
@@ -405,6 +413,7 @@ function probeMetaOf(outcome: RuntimeRenderOutcome, probeIssues: readonly EvalIs
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
     ...(outcome.renderMs !== undefined ? { renderMs: outcome.renderMs } : {}),
     ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
+    ...(outcome.queuedMs !== undefined ? { queuedMs: outcome.queuedMs } : {}),
   };
   const elapsed = outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {};
   if (outcome.status !== "ran") {
@@ -568,6 +577,7 @@ export async function runEvalRound(
     onProgress,
     probeOnly,
     probeRepairUsed,
+    probeRepairTrigger,
   } = ctx;
   const { compiledCode, prevModeSubcats, prevFailFingerprints } = input;
   let { evalRoundsUsed, preWarmedContext } = input;
@@ -607,9 +617,13 @@ export async function runEvalRound(
       const recoverableFail = exitProbe.fired && exitProbe.recoverableFail;
       if (probeRepairUsed) {
         // This round IS the re-probe (a repair that did not compile never
-        // reaches a round — the runner stamps `compiled: false` itself), so
-        // the repair record carries the re-probe's whole meta as its after.
-        const repair: RuntimeProbeRepair = { attempted: true, compiled: true, after: exitProbe.meta };
+        // reaches a round — the runner stamps `compiled: false` itself). The
+        // top level is the re-probe; the record names the probe that bought
+        // the turn as `trigger`, so each probe is recorded exactly once.
+        if (probeRepairTrigger === undefined) {
+          throw new Error("harness defect: a probe-only re-probe round without the probe that bought the repair turn");
+        }
+        const repair: RuntimeProbeRepair = { attempted: true, compiled: true, trigger: probeRepairTrigger };
         evalResult = { ...probeOnlyResult, runtimeProbeRepair: repair };
         console.log(
           `[simple] eval round ${evalRoundsUsed}: probe-only re-probe after the repair turn — ` +

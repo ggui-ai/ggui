@@ -13,6 +13,7 @@ import {
   type RenderCheckKind,
   type RunRenderCheckOptions,
 } from "./render-check.js";
+import { resolveRenderCheckHostBounds } from "./render-check-host.js";
 import { prepareMockupProps } from "./prepare-mockup.js";
 
 /**
@@ -41,8 +42,8 @@ export interface RuntimeRenderProbeConfig {
  */
 function createSlotLimiter(
   maxConcurrent: number | undefined
-): <T>(task: () => Promise<T>) => Promise<T> {
-  if (maxConcurrent === undefined) return (task) => task();
+): <T>(task: (waitedMs: number) => Promise<T>) => Promise<T> {
+  if (maxConcurrent === undefined) return (task) => task(0);
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
     throw new RangeError(
       `createRuntimeRenderCheck: maxConcurrent must be a positive integer, got ${maxConcurrent}`
@@ -50,15 +51,17 @@ function createSlotLimiter(
   }
   let active = 0;
   const waiting: Array<() => void> = [];
-  const acquire = (): Promise<void> => {
+  /** Resolves with the time the caller actually WAITED for a slot: 0 when one was free. */
+  const acquire = (): Promise<number> => {
     if (active < maxConcurrent) {
       active += 1;
-      return Promise.resolve();
+      return Promise.resolve(0);
     }
-    return new Promise<void>((resolve) => {
+    const enqueuedAt = Date.now();
+    return new Promise<number>((resolve) => {
       waiting.push(() => {
         active += 1;
-        resolve();
+        resolve(Date.now() - enqueuedAt);
       });
     });
   };
@@ -68,13 +71,18 @@ function createSlotLimiter(
     if (next !== undefined) next();
   };
   return async (task) => {
-    await acquire();
+    const waitedMs = await acquire();
     try {
-      return await task();
+      return await task(waitedMs);
     } finally {
       release();
     }
   };
+}
+
+/** `{ queuedMs }` when the check actually waited for a slot, `{}` when one was free. */
+function queuedField(queuedMs: number): { readonly queuedMs?: number } {
+  return queuedMs > 0 ? { queuedMs } : {};
 }
 
 /** The `runRenderCheck` options a config maps to — `undefined` when no bound is set. */
@@ -98,6 +106,8 @@ export function createRuntimeRenderCheck(
 ): RuntimeRenderCheck {
   const limit = createSlotLimiter(config.maxConcurrent);
   const options = toRenderCheckOptions(config);
+  // A bad bound is refused here, at construction, never at the first probe.
+  if (options !== undefined) resolveRenderCheckHostBounds(options.bounds);
   return {
     id: "runtime-render",
     run: async (input) => {
@@ -119,19 +129,27 @@ export function createRuntimeRenderCheck(
       // how long it took, so a reader of the probe meta can tell a 2 s probe
       // from a 30 s one on the same status. The two not-applicable returns
       // above carry nothing: nothing ran.
-      const t0 = Date.now();
+      // The clock starts when the slot is acquired, so `elapsedMs` is the
+      // check's own wall-clock; the time the check actually WAITED for a slot
+      // is `queuedMs` (present only when it queued) — a latency reader needs
+      // the two apart exactly when a serving deployment queues more probes
+      // than it has slots. A check that found a slot free carries no key.
+      let queuedMs = 0;
+      let t0 = Date.now();
       let result;
       try {
-        result = await limit(() =>
-          runRenderCheck(
+        result = await limit((waitedMs) => {
+          queuedMs = waitedMs;
+          t0 = Date.now();
+          return runRenderCheck(
             {
               sourceCode,
               mockupProps: mockup.props,
               contract,
             },
             options
-          )
-        );
+          );
+        });
       } catch (e) {
         // Triad audit (2026-04-27): every error that escapes `runRenderCheck`
         // is an INFRA problem — happy-dom import failure, ESM/CJS interop
@@ -149,7 +167,7 @@ export function createRuntimeRenderCheck(
         // Block channel — consumers surface it as did-not-run, never pass.
         const message = e instanceof Error ? e.message : String(e);
         console.warn(`[runtime-render] probe skipped — infra failure: ${message}`);
-        return { status: "infra-skipped", issues: [], reason: message, elapsedMs: Date.now() - t0 };
+        return { status: "infra-skipped", issues: [], reason: message, elapsedMs: Date.now() - t0, ...queuedField(queuedMs) };
       }
 
       const hostLoad = result.stats.hostLoad;
@@ -170,13 +188,14 @@ export function createRuntimeRenderCheck(
         // One clock for every status that reached the worker: the adapter's
         // wall-clock around the check. The worker's own reading survives in
         // `reason` ("stopped at N ms").
-        return { status: "timed-out", issues: [], reason, elapsedMs: Date.now() - t0, ...load };
+        return { status: "timed-out", issues: [], reason, elapsedMs: Date.now() - t0, ...queuedField(queuedMs), ...load };
       }
 
       return {
         status: "ran",
         issues: result.issues.map(toEvalIssue).filter((x): x is EvalIssue => x !== null),
         elapsedMs: Date.now() - t0,
+        ...queuedField(queuedMs),
         renderMs: result.stats.renderMs,
         ...load,
       };

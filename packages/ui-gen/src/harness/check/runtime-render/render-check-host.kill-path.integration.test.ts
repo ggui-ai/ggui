@@ -12,23 +12,29 @@
 //      worker spawns one, writes both pids to a file, then hangs; after the
 //      run under the host's bounds for the same input neither pid is alive.
 //      No process-group kill in this cut — the stdin-EOF shape is the pin;
-//   3. the BUILT worker (`dist/harness/check/runtime-render/
-//      render-check-worker.js`, tsup's explicit entry) still runs `main()`
-//      when it is the process entry: spawned directly it answers with a
-//      verdict. A wrong entry guard exits without one, which the host maps
-//      to `unverified` — so this pin fails loudly instead of silently
-//      turning every probe into "could not run". Needs the dist built
-//      (`pnpm --filter @ggui-ai/ui-gen build`) — a missing dist FAILS here,
-//      it never skips.
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+//   3. the entry guard: the worker runs `main()` when it is the PROCESS
+//      ENTRY — spawned the way the host spawns it when no dist exists (the
+//      source `.ts` through the tsx `--import` route, `resolveWorkerSpawn()`),
+//      it answers with a verdict; spawned through a SYMLINKED path it still
+//      answers (the guard resolves both sides through the filesystem). A
+//      wrong guard exits without a verdict, which the host maps to
+//      `unverified` — so this pin fails loudly instead of silently turning
+//      every probe into "could not run". The dist-only fact — that the
+//      worker ships as its own entry so `import.meta.url` names it — is a
+//      CONFIG pin (render-check-worker.entry.test.ts), not a build here.
+//
+// Not a unit test (real children and grandchildren, > 100 ms, real deps):
+// hence the `.integration.test.ts` suffix; ui-gen's single vitest config
+// runs it in the same job.
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runSandboxed } from '@ggui-ai/sandbox';
 import {
   mapSandboxResultToCheckResult,
   resolveRenderCheckHostBounds,
+  resolveWorkerSpawn,
   runRenderCheckViaWorker,
 } from './render-check-host.js';
 
@@ -127,17 +133,11 @@ describe('the kill path at the configured bound (ggui#1380 C2)', () => {
     );
   }, 30_000);
 
-  it('the BUILT worker answers with a verdict when spawned as the process entry (entry guard on the dist path)', async () => {
-    const distWorker = fileURLToPath(
-      new URL('../../../../dist/harness/check/runtime-render/render-check-worker.js', import.meta.url),
-    );
-    if (!existsSync(distWorker)) {
-      throw new Error(`dist worker missing at ${distWorker} — run \`pnpm --filter @ggui-ai/ui-gen build\` first`);
-    }
+  async function spawnWorkerAsEntry(args: readonly string[]): Promise<{ exitCode: number | null; outcome: string; ok: boolean; unverified: number }> {
     const t0 = Date.now();
     const sandbox = await runSandboxed({
       command: process.execPath,
-      args: [distWorker],
+      args: [...args],
       timeoutMs: 30_000,
       nodeHeapMb: 512,
       stdin: JSON.stringify({
@@ -148,9 +148,36 @@ describe('the kill path at the configured bound (ggui#1380 C2)', () => {
       env: { NODE_ENV: 'production' },
     });
     const verdict = mapSandboxResultToCheckResult(sandbox, t0);
-    expect(sandbox.outcome).toBe('exit');
-    expect(sandbox.exitCode).toBe(0);
-    expect(verdict.issues.filter((i) => i.outcome === 'unverified')).toEqual([]);
-    expect(verdict.ok).toBe(true);
+    return {
+      exitCode: sandbox.exitCode,
+      outcome: sandbox.outcome,
+      ok: verdict.ok,
+      unverified: verdict.issues.filter((i) => i.outcome === 'unverified').length,
+    };
+  }
+
+  it('the worker answers with a verdict when spawned as the process entry — the way the host spawns it here (source through tsx)', async () => {
+    const spawn = resolveWorkerSpawn();
+    expect(spawn.command).toBe(process.execPath);
+    const result = await spawnWorkerAsEntry(spawn.args);
+    expect(result.outcome).toBe('exit');
+    expect(result.exitCode).toBe(0);
+    expect(result.unverified).toBe(0);
+    expect(result.ok).toBe(true);
+  }, 30_000);
+
+  it('the worker answers through a SYMLINKED spawn path too — the entry guard resolves both sides through the filesystem', async () => {
+    const spawn = resolveWorkerSpawn();
+    const workerPath = spawn.args[spawn.args.length - 1];
+    if (workerPath === undefined) throw new Error('the host spawn carries no worker path');
+    const dir = mkdtempSync(join(tmpdir(), 'ggui-worker-link-'));
+    scratch.push(dir);
+    const link = join(dir, `worker-link${workerPath.endsWith('.ts') ? '.ts' : '.js'}`);
+    symlinkSync(realpathSync(workerPath), link);
+    const result = await spawnWorkerAsEntry([...spawn.args.slice(0, -1), link]);
+    expect(result.outcome).toBe('exit');
+    expect(result.exitCode).toBe(0);
+    expect(result.unverified).toBe(0);
+    expect(result.ok).toBe(true);
   }, 30_000);
 });

@@ -38,7 +38,7 @@ vi.mock('@ggui-ai/sandbox', async (importOriginal) => {
   };
 });
 
-const { DEFAULT_RENDER_CHECK_HOST_BOUNDS, runRenderCheckViaWorker } = await import(
+const { DEFAULT_RENDER_CHECK_HOST_BOUNDS, resolveRenderCheckHostBounds, runRenderCheckViaWorker } = await import(
   './render-check-host.js'
 );
 
@@ -90,5 +90,19 @@ describe('runRenderCheckViaWorker — subprocess bounds as inputs (ggui#1380 C2)
     // kill-path test with a real timeout. Here only the threading is pinned.
     expect(result.incomplete).toBeUndefined();
     expect(lastOptions().timeoutMs).toBe(4_000);
+  });
+
+  it('refuses a timeoutMs that is not an integer ≥ 2, and a heapMb that is not a positive integer (RangeError at construction, like maxConcurrent)', () => {
+    for (const timeoutMs of [0, 1, 1.5, NaN, -3]) {
+      expect(() => resolveRenderCheckHostBounds({ timeoutMs })).toThrow(RangeError);
+    }
+    for (const heapMb of [0, NaN, 2.5, -1]) {
+      expect(() => resolveRenderCheckHostBounds({ heapMb })).toThrow(RangeError);
+    }
+  });
+
+  it('the grace never reaches 0: timeoutMs 2 → grace 1, timeoutMs 3 → grace 1', () => {
+    expect(resolveRenderCheckHostBounds({ timeoutMs: 2 }).gracePeriodMs).toBe(1);
+    expect(resolveRenderCheckHostBounds({ timeoutMs: 3 }).gracePeriodMs).toBe(1);
   });
 });

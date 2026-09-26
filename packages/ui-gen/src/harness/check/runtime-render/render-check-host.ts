@@ -93,8 +93,17 @@ export function resolveRenderCheckHostBounds(
 ): RenderCheckHostBounds {
   const timeoutMs = bounds.timeoutMs ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.timeoutMs;
   const heapMb = bounds.heapMb ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.heapMb;
+  // Refused at construction, like `maxConcurrent`: a 0 / NaN / fractional
+  // bound would otherwise flow into the sandbox's flags as a nonsense number.
+  // `timeoutMs` needs room for a grace of at least 1 ms below it.
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 2) {
+    throw new RangeError(`render-check: timeoutMs must be an integer ≥ 2, got ${timeoutMs}`);
+  }
+  if (!Number.isInteger(heapMb) || heapMb < 1) {
+    throw new RangeError(`render-check: heapMb must be a positive integer, got ${heapMb}`);
+  }
   const requestedGrace = bounds.gracePeriodMs ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.gracePeriodMs;
-  const gracePeriodMs = Math.min(requestedGrace, Math.floor(timeoutMs / 2));
+  const gracePeriodMs = Math.max(1, Math.min(requestedGrace, Math.floor(timeoutMs / 2)));
   return { timeoutMs, heapMb, gracePeriodMs };
 }
 
@@ -113,7 +122,12 @@ const CHECK_STDOUT_CAP = 2 * 1024 * 1024;
 
 const WORKER_BASENAME = 'render-check-worker';
 
-function resolveWorkerSpawn(): { command: string; args: string[] } {
+/**
+ * How the host spawns the worker from THIS location: the built dist sibling
+ * when one exists, else the source `.ts` through tsx. Exported so the entry
+ * guard can be pinned with the same spawn the host makes (no build needed).
+ */
+export function resolveWorkerSpawn(): { command: string; args: string[] } {
   const jsCandidates = [
     // Sibling — when import.meta.url is already .../harness/check/runtime-render/.
     new URL(`./${WORKER_BASENAME}.js`, import.meta.url),
