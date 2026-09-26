@@ -17,6 +17,7 @@ import {
 import type { AnyAdapterConfig } from "@ggui-ai/ui-gen/adapters/base";
 import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters";
 import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
+import { appGenerationProfileSchema, type AppGenerationProfile } from "@ggui-ai/protocol";
 import { runWithVariantTag } from "./variant-log-tag.js";
 import type { AdapterResult } from "@ggui-ai/ui-gen/adapters/types";
 import type { ModelRoles } from "@ggui-ai/ui-gen/harness/result-types";
@@ -49,6 +50,18 @@ import {
 } from "./types.js";
 import type { BenchmarkStorage } from "./storage/types.js";
 import { getDefaultVariants } from "./variants.js";
+
+/**
+ * The opt-in styling profile for a bench run (rnd, ggui#991): `GGUI_BENCH_PROFILE_JSON` is an app's
+ * `generation.profile` object, parsed through protocol's door schema — a value the door would refuse
+ * refuses the run at start, never mid-run. Unset: `undefined`, and the prompt is byte-identical.
+ */
+function readBenchProfile(): AppGenerationProfile | undefined {
+  const raw = process.env.GGUI_BENCH_PROFILE_JSON;
+  if (raw === undefined || raw === '') return undefined;
+  return appGenerationProfileSchema.parse(JSON.parse(raw));
+}
+const benchProfile = readBenchProfile();
 
 /** At most this many browser sessions at once, across all cells of a run. */
 const BROWSER_CONCURRENCY = 2;
@@ -455,6 +468,12 @@ export class BenchmarkRunner {
             // Absent → the constrained default path, nothing recorded.
             ...(this.config.designMode !== undefined ? { designMode: this.config.designMode } : {}),
             ...(this.config.canvas !== undefined ? { canvas: this.config.canvas } : {}),
+            // Opt-in styling profile (rnd, ggui#991's with/without receipt):
+            // GGUI_BENCH_PROFILE_JSON carries an app's `generation.profile`
+            // object verbatim, parsed through protocol's door schema so a
+            // value the door would refuse refuses here too. Unset (the default,
+            // and every CI run): no profile, the prompt byte-identical.
+            ...(benchProfile !== undefined ? { profile: benchProfile } : {}),
             // Thread the bench commit's registered wrapper catalog
             // so plugin-aware commits (Leaflet, Mapbox, …) see the
             // same `clientCapabilities — registered catalog` table
