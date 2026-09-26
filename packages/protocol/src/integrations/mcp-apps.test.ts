@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  toolVisibleToModel,
   MCP_APPS_UI_CAPABILITY,
   GGUI_RENDER_RESOURCE_URI,
   GGUI_RENDER_RESOURCE_MIME,
@@ -1020,5 +1021,25 @@ describe('parseMcpAppAiGguiRenderMeta — spentOneShots on the slice (ggui#1223)
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.meta?.spentOneShots).toBeUndefined();
     expect(called).toBe(false);
+  });
+});
+
+/**
+ * `toolVisibleToModel` — the reference predicate for SEP-1865's visibility
+ * rule (ggui#1414): a host offers a tool to the model iff its
+ * `_meta.ui.visibility` is absent (the spec's default) or includes
+ * `'model'`. Hosts pin this predicate instead of re-deriving it; the
+ * host-helper conformance kit grades a host's own filter against it.
+ */
+describe('toolVisibleToModel — the host-side visibility predicate (ggui#1414)', () => {
+  it("offers a tool with no visibility (the spec default) and one that names 'model'", () => {
+    expect(toolVisibleToModel(undefined)).toBe(true);
+    expect(toolVisibleToModel(['model'])).toBe(true);
+    expect(toolVisibleToModel(['model', 'app'])).toBe(true);
+  });
+
+  it("withholds a tool whose visibility lacks 'model' — the six ggui_runtime_* app-only tools", () => {
+    expect(toolVisibleToModel(['app'])).toBe(false);
+    expect(toolVisibleToModel([])).toBe(false);
   });
 });

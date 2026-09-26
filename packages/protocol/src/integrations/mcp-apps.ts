@@ -96,6 +96,28 @@ export const GGUI_RENDER_UI_META = {
 export type McpAppsToolVisibility = 'model' | 'app';
 
 /**
+ * The host-side visibility predicate (ggui#1414) — SEP-1865's rule as one
+ * function hosts pin instead of re-deriving: a tool is offered to the MODEL
+ * iff its `_meta.ui.visibility` is absent (the spec's default) or includes
+ * `'model'`. A tool whose visibility names only `'app'` (ggui's six
+ * `ggui_runtime_*` tools) MUST NOT reach the model: the server cannot tell
+ * a view-issued call from a model-issued one on the wire, so this door is
+ * the host's, and the host-helper conformance kit grades a host's own
+ * filter against this predicate (`M1-model-tool-set`).
+ *
+ * An explicit empty list (`[]`) is read literally — nobody is named, so the
+ * model is not — which is stricter than the upstream ext-apps helper that
+ * treats only `['app']` as app-only; ggui never emits `[]`, and a host
+ * built on the upstream helper still grades identically on every tool ggui
+ * serves.
+ */
+export function toolVisibleToModel(
+  visibility: readonly McpAppsToolVisibility[] | undefined,
+): boolean {
+  return visibility === undefined || visibility.includes('model');
+}
+
+/**
  * Phase B render-identity collapse — the previously two-slice wire
  * (`ai.ggui/session` + `ai.ggui/stack-item`) is merged into ONE slice
  * (`ai.ggui/render`). Consumers parse with {@link parseMcpAppAiGguiRenderMeta}

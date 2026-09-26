@@ -581,8 +581,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   // whose hostname already says "mcp" may serve it at `/` so the
   // bare-root URL is the universal endpoint — no path repeat.
   // Exposes audience tags ['agent', 'runtime'] — runtime tools stay
-  // routable on the same endpoint but invisible to the agent's
-  // `tools/list` via the `_meta.ui.visibility: ['app']` filter.
+  // routable on the same endpoint and ARE listed on its `tools/list`;
+  // their `_meta.ui.visibility: ['app']` marker asks a conforming HOST to
+  // withhold them from the model (SPEC §4.7 host obligation, ggui#1414) —
+  // the server validates the marker's shape and enforces nothing.
   app.post(universalMcpPath, agentMcpHandler);
 
   // Per-app endpoint — only mounted when the deployment opts in

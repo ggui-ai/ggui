@@ -242,6 +242,7 @@ describe('first-party helpers — iframe-runtime embed host (reference model)', 
     // Ungraded optional classes stay skipped — no audit, no theme.
     expect(byId['C1-containment-only']).toBe('skip');
     expect(byId['T1-theme-coverage']).toBe('skip');
+    expect(byId['M1-model-tool-set']).toBe('skip');
   });
 
   it('pins the source refusal shape: bare -32601 that does not name the method', async () => {

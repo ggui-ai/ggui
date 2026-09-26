@@ -60,11 +60,24 @@
  *   reference validate is `@ggui-ai/design`'s `validateThemeCoverage`
  *   bound to the shipped `consumed-tokens.manifest.json` tokens.
  *
+ * - `M1-model-tool-set` — OPTIONAL like T1, graded when the host supplies
+ *   the filter it uses to derive the MODEL's tool list from a served
+ *   `tools/list` (ggui#1414): the result must withhold every tool whose
+ *   `_meta.ui.visibility` lacks `'model'` (ggui's six `ggui_runtime_*`
+ *   app-only tools) and keep every other tool. SEP-1865 assigns this door
+ *   to the host, and the server cannot observe a violation — a
+ *   view-issued and a model-issued call are indistinguishable on the wire
+ *   — so the kit is where a host proves it. Absent ⇒ `skip`.
+ *
  * A helper that refuses the relay honestly is graded **tier
  * `read-only`** — a LEGAL grade, with the R cases skipped, never
  * failed. `nonconforming` means a dishonesty case failed.
  */
 
+import {
+  toolVisibleToModel,
+  type McpAppsToolVisibility,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { renderLocatorUri } from '../resource-read-conformance/index.js';
 
 /** Minimal JSON-RPC request the driver sends through the port. */
@@ -150,6 +163,56 @@ export interface ThemeCoverageOptions {
   readonly validate: (registration: unknown) => ThemeCoverageValidationResult;
 }
 
+/**
+ * A tool as a host sees it on a served `tools/list` — the two fields the
+ * visibility door reads. Nothing else on a tool declaration decides who may
+ * call it.
+ */
+export interface ServedToolDeclaration {
+  readonly name: string;
+  readonly _meta?: {
+    readonly ui?: { readonly visibility?: readonly McpAppsToolVisibility[] };
+  };
+}
+
+/** The M1 grade's input: the host's own model-facing filter. */
+export interface ModelToolSetOptions {
+  /**
+   * The function the host uses to derive the MODEL's tool list from a
+   * served `tools/list` (names only). The kit feeds
+   * {@link MODEL_TOOL_SET_FIXTURE} and grades the result against
+   * `toolVisibleToModel`.
+   */
+  readonly offeredToModel: (
+    served: readonly ServedToolDeclaration[],
+  ) => readonly string[];
+}
+
+/**
+ * A served-equivalent shape the M1 grade feeds a host's filter (ggui#1414):
+ * agent tools as ggui declares them — `ggui_render` and `ggui_update` stamp
+ * `visibility: ['model']`, the others carry no marker (the spec's default)
+ * — and ggui's six app-only `ggui_runtime_*` tools. The list is static and
+ * the names are the protocol's own, so it grades the FILTER a host applies,
+ * never the host's live `tools/list`: a host that filters by name rather
+ * than by visibility passes only as long as this list matches what its
+ * server lists, which is why the grade wants the filter and the SPEC
+ * points at the predicate.
+ */
+export const MODEL_TOOL_SET_FIXTURE: readonly ServedToolDeclaration[] = [
+  { name: 'ggui_handshake' },
+  { name: 'ggui_render', _meta: { ui: { visibility: ['model'] } } },
+  { name: 'ggui_update', _meta: { ui: { visibility: ['model'] } } },
+  { name: 'ggui_consume' },
+  { name: 'ggui_amend' },
+  { name: 'ggui_runtime_submit_action', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_pull', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_sync_context', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_refresh_ws_token', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_telemetry', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_declare_tool_catalog', _meta: { ui: { visibility: ['app'] } } },
+];
+
 export interface HostHelperConformanceOptions {
   /**
    * How long a refusal may take before it counts as a hang (H4 /
@@ -159,7 +222,8 @@ export interface HostHelperConformanceOptions {
   readonly refusalTimeoutMs?: number;
   /**
    * Chrome audit for the C-grades. Absent ⇒ C cases report `skip`
-   * (self-certification pending) — the tier is decided by H/R alone.
+   * (self-certification pending) — the tier is decided by H/R and by
+   * whichever optional grades (C1, T1, M1) were supplied.
    */
   readonly chromeAudit?: ChromeAudit;
   /**
@@ -168,6 +232,12 @@ export interface HostHelperConformanceOptions {
    * unthemed helper surface has no coverage obligation.
    */
   readonly themeCoverage?: ThemeCoverageOptions;
+  /**
+   * The host's model-facing tool filter for the M1 grade (ggui#1414).
+   * Absent ⇒ M1 reports `skip` — the door is still the host's obligation;
+   * it is just not graded here.
+   */
+  readonly modelToolSet?: ModelToolSetOptions;
 }
 
 export type HostHelperCaseOutcome = 'pass' | 'fail' | 'skip' | 'warn';
@@ -197,8 +267,7 @@ const UNSUPPORTED_PROBE_METHOD = 'ggui-conformance/unsupported-probe';
 /**
  * The `resources/read` probe's URI: a well-formed render locator naming
  * a render that does not exist, built with the kit's own locator grammar
- * (one owner, `resource-read-conformance`; the kit never compiles against
- * live protocol types). It is a locator on purpose, so a helper that
+ * (one owner, `resource-read-conformance`; the kit compiles against the protocol's published integrations only where a predicate IS the contract (`toolVisibleToModel`), never against live wire types). It is a locator on purpose, so a helper that
  * forwards only `ui://ggui/render/` reads still forwards it; a relaying
  * helper then hands back the server's own classification of the miss,
  * which is an answer (ggui#1304).
@@ -632,6 +701,52 @@ export async function runHostHelperConformance(
         id: 'T1-theme-coverage',
         outcome: 'fail',
         detail: `consumed-token manifest not covered — ${perMode.join('; ')} (cover the tokens or declare explicit inherit; silence is not a legal way to inherit)`,
+      });
+    }
+  }
+
+  // ── M1: the model's tool set withholds app-only tools ─────────────
+  if (options.modelToolSet === undefined) {
+    cases.push({
+      id: 'M1-model-tool-set',
+      outcome: 'skip',
+      detail:
+        'no model-facing filter supplied — the visibility door is still the host\'s obligation (SEP-1865), just not graded here (supply modelToolSet to grade)',
+    });
+  } else {
+    const offered = new Set(
+      options.modelToolSet.offeredToModel(MODEL_TOOL_SET_FIXTURE),
+    );
+    const leaked = MODEL_TOOL_SET_FIXTURE.filter(
+      (t) => !toolVisibleToModel(t._meta?.ui?.visibility) && offered.has(t.name),
+    ).map((t) => t.name);
+    const withheld = MODEL_TOOL_SET_FIXTURE.filter(
+      (t) => toolVisibleToModel(t._meta?.ui?.visibility) && !offered.has(t.name),
+    ).map((t) => t.name);
+    const served = new Set(MODEL_TOOL_SET_FIXTURE.map((t) => t.name));
+    const unknown = [...offered].filter((name) => !served.has(name));
+    if (leaked.length === 0 && withheld.length === 0 && unknown.length === 0) {
+      cases.push({
+        id: 'M1-model-tool-set',
+        outcome: 'pass',
+        detail: `the model's tool set withholds every app-only tool and keeps every model-visible one (${offered.size} offered)`,
+      });
+    } else {
+      const parts = [
+        leaked.length > 0
+          ? `app-only tools offered to the model (${leaked.length}): ${leaked.join(', ')} — a model holding the app credential can call them`
+          : undefined,
+        withheld.length > 0
+          ? `model-visible tools withheld (${withheld.length}): ${withheld.join(', ')} — the agent cannot run the loop without them`
+          : undefined,
+        unknown.length > 0
+          ? `names offered that the server never listed (${unknown.length}): ${unknown.join(', ')} — the list is not derived from tools/list`
+          : undefined,
+      ].filter((part): part is string => part !== undefined);
+      cases.push({
+        id: 'M1-model-tool-set',
+        outcome: 'fail',
+        detail: parts.join('; '),
       });
     }
   }

@@ -22,34 +22,37 @@
  *
  * Why `runtime` (vs `agent`) — ROUTE PLACEMENT:
  *   - `runtime`-tagged handlers ARE routed on the agent endpoint:
- *     `filterHandlersByAudience(handlers, ["agent", "runtime"])`
- *     (`@ggui-ai/mcp-server` server.ts:4621), mounted at the universal
- *     `/mcp` path (server.ts:4640-4641) with `appId` resolved from the
- *     same auth identity (server.ts:4629-4632). So the runtime library's
+ *     `filterHandlersByAudience(handlers, DATA_PLANE_AUDIENCES)`
+ *     (`@ggui-ai/mcp-server` mcp-endpoint-routes.ts), mounted at the
+ *     universal `/mcp` path with `appId` resolved from the same auth
+ *     identity. So the runtime library's
  *     call lands on the same route + resolves the same `appId` as the
  *     agent's `ggui_handshake`.
  *   - The `audience` tag controls ROUTE PLACEMENT ONLY. It does NOT
  *     hide the tool from the LLM's `tools/list`, and there is NO
- *     call-time gate rejecting any caller class (server.ts:4336-4343).
+ *     call-time gate rejecting any caller class.
  *
  * Why `_meta.ui.visibility: ['app']` IS set here — LLM-LIST HIDING:
  *   - LLM-`tools/list` hiding is done by `_meta.ui.visibility: ['app']`,
- *     NOT by the `runtime` audience tag (types.ts:219-222; the two
- *     sibling runtime handlers both carry it — submit-action.ts:237,
- *     sync-context.ts:135). Without the marker this tool would appear on
+ *     NOT by the `runtime` audience tag (the sibling runtime handlers
+ *     carry it too — submit-action.ts, sync-context.ts, runtime-pull.ts,
+ *     refresh-ws-token.ts, runtime-telemetry.ts). Without the marker this
+ *     tool would appear on
  *     the agent's `tools/list`, and an LLM could call it and poison the
  *     per-app catalog. With it, spec-compliant hosts (claude.ai, Claude
  *     Desktop) filter it out of the MODEL's list.
- *   - The marker is ADVISORY for direct callers: ggui's own canonical
+ *   - The marker is ADVISORY to the server on EVERY route: the canonical
  *     `/mcp` dispatch executes a `visibility:['app']` tool for ANY
- *     credentialed caller — it never rejects. The only server-ENFORCED
- *     visibility gate (403 `visibility_denied`,
- *     mcp-apps-inbound.ts:280-285) lives on the SEPARATE `/mcp-apps/
- *     tools-call` iframe-proxy route, which gates iframe-originated
- *     calls against a DOWNSTREAM connector's `tools/list` — never the
- *     canonical `/mcp` route. So Task 4's backend-LIBRARY direct call
- *     (its own credential, not an iframe relay) is NOT blocked by the
- *     marker. It is set purely to keep the tool off the LLM's list.
+ *     credentialed caller and never rejects, and there is no enforced
+ *     visibility gate anywhere else (the iframe-proxy route that once
+ *     carried a 403 `visibility_denied` was deleted in the orphan
+ *     campaign, 34e2c7276). A view-issued and a model-issued call are
+ *     indistinguishable on the wire, so the door is the HOST's (SPEC
+ *     §4.7 "Host obligation", ggui#1414; the kit grades it as
+ *     `M1-model-tool-set`), and a backend-library direct call with its
+ *     own credential is NOT blocked by the marker. A server-checkable
+ *     view-origin proof is ggui#1415. The marker is set purely to keep
+ *     the tool off the LLM's list on conforming hosts.
  */
 import {
   declareToolCatalogInputSchema,

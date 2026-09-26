@@ -18,10 +18,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  MODEL_TOOL_SET_FIXTURE,
   runHostHelperConformance,
   type HostHelperPort,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type ServedToolDeclaration,
   type ThemeCoverageValidationResult,
 } from './index.js';
 
@@ -481,5 +483,87 @@ describe('T-grades — token coverage (ggui#600 grade class 4, #598 manifest)', 
     expect(t1?.outcome).toBe('skip');
     expect(t1?.detail).toContain('no theme registration supplied');
     expect(report.tier).toBe('read-only');
+  });
+});
+
+/**
+ * M1 — the host's MODEL-facing tool set excludes app-only tools (ggui#1414).
+ *
+ * SEP-1865 assigns the visibility door to the host: a tool whose
+ * `_meta.ui.visibility` lacks `'model'` MUST NOT be offered to the model.
+ * The server cannot observe a violation (a view-issued and a model-issued
+ * call are indistinguishable on the wire), so the kit grades the host's own
+ * filter, implementation-as-callbacks: the host supplies the function it
+ * uses to derive the model's tool list from a served `tools/list`, the kit
+ * feeds the fixture catalog (model tools, six app-only runtime tools) and
+ * grades the result against the reference predicate.
+ */
+describe('M1 — model tool set excludes app-only tools (ggui#1414)', () => {
+  const offerByVisibility = (served: readonly ServedToolDeclaration[]): readonly string[] =>
+    served
+      .filter((t) => t._meta?.ui?.visibility === undefined || t._meta.ui.visibility.includes('model'))
+      .map((t) => t.name);
+
+  it('is skipped, not failed, when the host supplies no filter', async () => {
+    const report = await runHostHelperConformance(relayingPort());
+    expect(report.cases.find((c) => c.id === 'M1-model-tool-set')?.outcome).toBe('skip');
+    expect(report.tier).toBe('relaying');
+  });
+
+  it('passes a host whose filter withholds exactly the app-only tools and keeps the rest', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      modelToolSet: { offeredToModel: offerByVisibility },
+    });
+    expect(report.cases.find((c) => c.id === 'M1-model-tool-set')?.outcome).toBe('pass');
+    expect(report.tier).toBe('relaying');
+  });
+
+  it('FAILS a host that offers every served tool, naming the app-only tools it leaked', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      modelToolSet: { offeredToModel: (served) => served.map((t) => t.name) },
+    });
+    const m1 = report.cases.find((c) => c.id === 'M1-model-tool-set');
+    expect(m1?.outcome).toBe('fail');
+    expect(m1?.detail).toContain('ggui_runtime_submit_action');
+    expect(m1?.detail).toContain('ggui_runtime_refresh_ws_token');
+    expect(report.tier).toBe('nonconforming');
+    expect(report.failures).toContain('M1-model-tool-set');
+  });
+
+  it('FAILS a host that withholds a model tool, naming it — over-filtering is a dead card too', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      modelToolSet: {
+        offeredToModel: (served) => offerByVisibility(served).filter((n) => n !== 'ggui_consume'),
+      },
+    });
+    const m1 = report.cases.find((c) => c.id === 'M1-model-tool-set');
+    expect(m1?.outcome).toBe('fail');
+    expect(m1?.detail).toContain('ggui_consume');
+  });
+
+  it('FAILS a filter that offers names not on the served list, naming them — a list not derived from tools/list is a broken filter', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      modelToolSet: { offeredToModel: (served) => [...offerByVisibility(served), 'ggui_invented_tool'] },
+    });
+    const m1 = report.cases.find((c) => c.id === 'M1-model-tool-set');
+    expect(m1?.outcome).toBe('fail');
+    expect(m1?.detail).toContain('ggui_invented_tool');
+  });
+
+  it('the fixture is a served-equivalent shape: six app-only runtime tools, the rest model-visible or unmarked', () => {
+    const appOnly = MODEL_TOOL_SET_FIXTURE.filter((t) => t._meta?.ui?.visibility?.includes('model') === false);
+    expect(appOnly.map((t) => t.name).sort()).toEqual([
+      'ggui_runtime_declare_tool_catalog',
+      'ggui_runtime_pull',
+      'ggui_runtime_refresh_ws_token',
+      'ggui_runtime_submit_action',
+      'ggui_runtime_sync_context',
+      'ggui_runtime_telemetry',
+    ]);
+    expect(MODEL_TOOL_SET_FIXTURE.some((t) => t._meta === undefined)).toBe(true);
+    // Served fidelity: `ggui_handshake` carries no marker on the wire; the
+    // explicit ['model'] entries are the two that stamp GGUI_RENDER_UI_META.
+    expect(MODEL_TOOL_SET_FIXTURE.find((t) => t.name === 'ggui_handshake')?._meta).toBeUndefined();
+    expect(MODEL_TOOL_SET_FIXTURE.filter((t) => t._meta?.ui?.visibility?.includes('model')).map((t) => t.name).sort()).toEqual(['ggui_render', 'ggui_update']);
   });
 });
