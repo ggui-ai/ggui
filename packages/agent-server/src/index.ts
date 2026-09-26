@@ -57,7 +57,9 @@ export {
 export {
   callMcpResourcesRead,
   callMcpToolsCall,
+  listModelVisibleTools,
   parseMcpResponse,
+  type McpListedTool,
 } from './mcp-client.js';
 
 export {

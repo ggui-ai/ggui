@@ -26,6 +26,10 @@
  * {@link parseMcpResponse} on the upstream body.
  */
 import type { AgentToolEntry, JsonSchema } from '@ggui-ai/protocol';
+import {
+  toolVisibleToModel,
+  type McpAppsToolVisibility,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
  * Parse a streamable-HTTP MCP response body. Returns the inner
@@ -379,18 +383,46 @@ export async function callMcpInitialize(args: {
  * `name` (the bare tool name), `inputSchema` (always present), plus
  * optional `description` / `outputSchema`.
  */
+/**
+ * One tool from an MCP server's `tools/list`, narrowed to what this client
+ * reads. `visibility` is the tool's declared `_meta.ui.visibility` (MCP
+ * Apps): which callers the server lets it be offered to. Absent means the
+ * server declared none, which the MCP Apps default reads as offered to
+ * both the model and the app (ggui#1416).
+ */
+export interface McpListedTool {
+  readonly name: string;
+  readonly description?: string;
+  readonly inputSchema: JsonSchema;
+  readonly outputSchema?: JsonSchema;
+  readonly visibility?: readonly McpAppsToolVisibility[];
+}
+
+function isToolVisibility(value: unknown): value is McpAppsToolVisibility {
+  return value === 'model' || value === 'app';
+}
+
+/**
+ * A tool's declared `_meta.ui.visibility`, narrowed to the members MCP Apps
+ * defines. `undefined` when the tool declares none (no `_meta.ui`, or no
+ * `visibility` array there). Unknown members are dropped, so a list naming
+ * only values this client does not know is an EMPTY list, offered to no
+ * one, never read as the "declared none" default.
+ */
+function readToolVisibility(meta: unknown): readonly McpAppsToolVisibility[] | undefined {
+  if (meta === null || typeof meta !== 'object' || !('ui' in meta)) return undefined;
+  const ui = meta.ui;
+  if (ui === null || typeof ui !== 'object' || !('visibility' in ui)) return undefined;
+  const visibility = ui.visibility;
+  if (!Array.isArray(visibility)) return undefined;
+  return visibility.filter(isToolVisibility);
+}
+
 export async function callMcpToolsList(args: {
   readonly url: string;
   readonly bearer: string;
   readonly signal?: AbortSignal;
-}): Promise<
-  Array<{
-    name: string;
-    description?: string;
-    inputSchema: JsonSchema;
-    outputSchema?: JsonSchema;
-  }>
-> {
+}): Promise<McpListedTool[]> {
   const rpcId = nextRpcId++;
   const response = await fetch(args.url, {
     method: 'POST',
@@ -421,6 +453,7 @@ export async function callMcpToolsList(args: {
           readonly description?: unknown;
           readonly inputSchema?: unknown;
           readonly outputSchema?: unknown;
+          readonly _meta?: unknown;
         }>;
       }
     | undefined;
@@ -430,29 +463,20 @@ export async function callMcpToolsList(args: {
   // Narrow the wire shape to our typed return. A tool without a string
   // `name` or an object `inputSchema` is malformed for our purposes; the
   // MCP spec requires both, so skip anything that doesn't satisfy them.
-  const tools: Array<{
-    name: string;
-    description?: string;
-    inputSchema: JsonSchema;
-    outputSchema?: JsonSchema;
-  }> = [];
+  const tools: McpListedTool[] = [];
   for (const t of result.tools) {
     if (typeof t.name !== 'string') continue;
     if (t.inputSchema === null || typeof t.inputSchema !== 'object') continue;
-    const tool: {
-      name: string;
-      description?: string;
-      inputSchema: JsonSchema;
-      outputSchema?: JsonSchema;
-    } = {
+    const visibility = readToolVisibility(t._meta);
+    tools.push({
       name: t.name,
       inputSchema: t.inputSchema as JsonSchema,
-    };
-    if (typeof t.description === 'string') tool.description = t.description;
-    if (t.outputSchema !== null && typeof t.outputSchema === 'object') {
-      tool.outputSchema = t.outputSchema as JsonSchema;
-    }
-    tools.push(tool);
+      ...(typeof t.description === 'string' ? { description: t.description } : {}),
+      ...(t.outputSchema !== null && typeof t.outputSchema === 'object'
+        ? { outputSchema: t.outputSchema as JsonSchema }
+        : {}),
+      ...(visibility !== undefined ? { visibility } : {}),
+    });
   }
   return tools;
 }
@@ -494,6 +518,10 @@ export async function buildAgentCatalog(
   const catalog: Record<string, AgentToolEntry> = {};
   for (const { key, serverInfo, tools } of perServer) {
     for (const tool of tools) {
+      // SPEC §4.7 (ggui#1416): a tool whose visibility lacks "model" (the
+      // app-only ggui_runtime_* tools) is not the agent's capability, so it
+      // is neither offered to the model nor declared to ggui as one.
+      if (!toolVisibleToModel(tool.visibility)) continue;
       if (Object.prototype.hasOwnProperty.call(catalog, tool.name)) {
         console.warn(
           `[agent-server] duplicate bare tool name "${tool.name}" — server "${key}" (${serverInfo.name}) collides with an earlier server; keeping the first.`,
@@ -509,4 +537,20 @@ export async function buildAgentCatalog(
     }
   }
   return catalog;
+}
+
+/**
+ * The names of one MCP server's tools that a host may offer the model
+ * (SPEC §4.7, ggui#1416): every tool whose declared visibility includes
+ * `"model"`, or that declares none. A host gives these to its agent SDK's
+ * tool filter so the app-only tools (the six `ggui_runtime_*`) are never
+ * offered, by visibility rather than by a hand-kept list of names.
+ */
+export async function listModelVisibleTools(server: {
+  readonly url: string;
+  readonly bearer: string;
+  readonly signal?: AbortSignal;
+}): Promise<ReadonlySet<string>> {
+  const tools = await callMcpToolsList(server);
+  return new Set(tools.filter((tool) => toolVisibleToModel(tool.visibility)).map((tool) => tool.name));
 }

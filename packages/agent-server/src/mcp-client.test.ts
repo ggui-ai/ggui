@@ -16,6 +16,7 @@ import {
   buildAgentCatalog,
   callMcpInitialize,
   callMcpToolsList,
+  listModelVisibleTools,
 } from './mcp-client.js';
 
 describe('CLIENT_INFO version parity', () => {
@@ -352,5 +353,60 @@ describe('callMcpToolsCall network-failure semantics', () => {
       /failed after 3 attempts: fetch failed ← connect ENOTFOUND/,
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * ggui#1416 — SPEC §4.7's host obligation: a host MUST NOT offer the model a
+ * tool whose `_meta.ui.visibility` lacks `"model"`. The six
+ * `ggui_runtime_*` tools are app-only (`visibility: ['app']`). The catalog
+ * the agent declares, and the tool names a sample hands its SDK, both
+ * come from one read of each tool's declared visibility.
+ */
+describe('tool visibility (ggui#1416)', () => {
+  const VISIBILITY_TOOLS = {
+    jsonrpc: '2.0',
+    id: 2,
+    result: {
+      tools: [
+        { name: 'ggui_render', inputSchema: { type: 'object' }, _meta: { ui: { visibility: ['model', 'app'] } } },
+        { name: 'ggui_runtime_pull', inputSchema: { type: 'object' }, _meta: { ui: { visibility: ['app'] } } },
+        { name: 'todo_add', inputSchema: { type: 'object' } },
+      ],
+    },
+  };
+
+  function stubServer(): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((_url, init: RequestInit) => {
+        const sent = JSON.parse(init.body as string) as { method: string };
+        return Promise.resolve(
+          sent.method === 'initialize' ? jsonResponse(INIT_RESULT) : jsonResponse(VISIBILITY_TOOLS),
+        );
+      }),
+    );
+  }
+
+  it('callMcpToolsList carries each tool\'s declared visibility, and none when undeclared', async () => {
+    stubServer();
+    const tools = await callMcpToolsList({ url: 'http://localhost:9999/mcp', bearer: 'dev' });
+    expect(tools.map((t) => [t.name, t.visibility])).toEqual([
+      ['ggui_render', ['model', 'app']],
+      ['ggui_runtime_pull', ['app']],
+      ['todo_add', undefined],
+    ]);
+  });
+
+  it('buildAgentCatalog declares only the tools the model may be offered', async () => {
+    stubServer();
+    const catalog = await buildAgentCatalog({ ggui: { url: 'http://localhost:9999/mcp', bearer: 'dev' } });
+    expect(Object.keys(catalog).sort()).toEqual(['ggui_render', 'todo_add']);
+  });
+
+  it('listModelVisibleTools returns exactly the model-visible names', async () => {
+    stubServer();
+    const names = await listModelVisibleTools({ url: 'http://localhost:9999/mcp', bearer: 'dev' });
+    expect([...names].sort()).toEqual(['ggui_render', 'todo_add']);
   });
 });
