@@ -4,6 +4,8 @@
 // legitimate output mechanism here (telemetry to stdout per row).
 /* eslint-disable no-console */
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import {
   MODEL_REGISTRY,
@@ -497,6 +499,18 @@ export class BenchmarkRunner {
           cacheRead: generation.cacheReadTokens,
         },
       );
+
+      // Opt-in source dump for an experiment's code-property reads (rnd
+      // reliability/013, ggui#1223): with GGUI_BENCH_SOURCES_DIR set, every
+      // cell's generated source is written there as one file, named by variant,
+      // commit and time, so a bar that greps or mounts the source reads the
+      // exact text the cell scored. Unset (the default, and every CI run), this
+      // block is skipped and no file is written.
+      const sourcesDir = process.env.GGUI_BENCH_SOURCES_DIR;
+      if (sourcesDir !== undefined && sourcesDir !== '' && generation.sourceCode) {
+        mkdirSync(sourcesDir, { recursive: true });
+        writeFileSync(join(sourcesDir, `${variant.id}-${commit.id}-${Date.now()}.tsx`), generation.sourceCode, 'utf8');
+      }
 
       // Post-generation analysis (lightweight, no AWS needed)
       const postGeneration = runPostGeneration(generation, commit);
