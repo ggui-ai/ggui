@@ -2852,7 +2852,10 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
       { mintId: () => id },
     );
 
-  async function buildWithHook(hook: (e: ResolutionEvent) => void, opts: { forceCreate?: boolean } = {}) {
+  async function buildWithHook(
+    hook: (e: ResolutionEvent) => void,
+    opts: { forceCreate?: boolean; proposes?: boolean } = {},
+  ) {
     const handshakeStore = new InMemoryKeyValueStore();
     const renderStore = new InMemoryGguiSessionStore();
     const vectorStore = new InMemoryVectorStore();
@@ -2860,11 +2863,23 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     const storedUuid = 'bp_11111111-1111-4111-8111-111111111111';
     await registerAt({ vectorStore, index }, CONTRACT, storedUuid);
     const handshakeId = 'hs-resolution-1';
-    const base = buildRecord({
+    const record = buildRecord({
       handshakeId,
       origin: 'cache',
       matchedBlueprint: { id: storedUuid, contractKey: blueprintKey(CONTRACT), variantKey: variantKey(undefined) },
     });
+    // A cache handshake names the card it proposes on its suggestion, as the
+    // decide core writes it (#1328: the event carries it as proposedBlueprintId).
+    const base: HandshakeRecord =
+      opts.proposes === false
+        ? record
+        : {
+            ...record,
+            suggestion: {
+              ...record.suggestion,
+              blueprintMeta: { ...record.suggestion.blueprintMeta, blueprintId: storedUuid },
+            },
+          };
     await seedHandshake(
       handshakeStore,
       handshakeId,
@@ -2889,6 +2904,10 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
       served: 'stored',
       blueprintId: h.storedUuid,
       identity: 'existing',
+      appId: APP_ID,
+      handshakeId: h.handshakeId,
+      sessionId: out.sessionId,
+      proposedBlueprintId: h.storedUuid,
     });
   });
 
@@ -2905,6 +2924,10 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
       indexRead: 'miss',
       served: 'fresh',
       identity: 'minted',
+      appId: APP_ID,
+      handshakeId: h.handshakeId,
+      sessionId: out.sessionId,
+      proposedBlueprintId: h.storedUuid,
     });
     expect(events[0]?.blueprintId).toBe(out.blueprintId);
     expect(events[0]?.blueprintId).toMatch(/^bp_/);
@@ -2927,6 +2950,16 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
       identity: 'existing',
       blueprintId: reaimedUuid,
     });
+  });
+
+  it('(j) a handshake that proposed nothing: the request context rides the event and proposedBlueprintId is ABSENT, not undefined (#1328)', async () => {
+    const events: ResolutionEvent[] = [];
+    const h = await buildWithHook((e) => events.push(e), { proposes: false });
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ appId: APP_ID, handshakeId: h.handshakeId, sessionId: out.sessionId });
+    expect(events[0] !== undefined && 'proposedBlueprintId' in events[0]).toBe(false);
   });
 
   it('(j) a throwing observer never breaks the render', async () => {

@@ -486,6 +486,30 @@ export interface BlueprintResolutionEvent {
   readonly blueprintId?: string;
   /** `existing` = an already-bound row's id; `minted` = this render's registration created the row; `unregistered` = the best-effort registration failed and no id was minted. */
   readonly identity: 'existing' | 'minted' | 'unregistered';
+  /**
+   * The app this render belongs to. Request context on the event;
+   * neutral observability field, same posture as
+   * {@link GguiSessionPostSuccessArgs.cacheHit}.
+   */
+  readonly appId?: string;
+  /**
+   * The handshake this render consumed. Request context on the event;
+   * neutral observability field, same posture as
+   * {@link GguiSessionPostSuccessArgs.cacheHit}.
+   */
+  readonly handshakeId?: string;
+  /**
+   * The render session this resolution served. Request context on the
+   * event; neutral observability field, same posture as
+   * {@link GguiSessionPostSuccessArgs.cacheHit}.
+   */
+  readonly sessionId?: string;
+  /**
+   * The blueprint the consumed handshake proposed — present only when it
+   * proposed one. Request context on the event; neutral observability
+   * field, same posture as {@link GguiSessionPostSuccessArgs.cacheHit}.
+   */
+  readonly proposedBlueprintId?: string;
 }
 
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
@@ -1998,6 +2022,17 @@ export function createGguiRenderHandler(
       // ggui#1131 (d) — what the resolution observer will be told, decided as the path runs.
       let indexReadAttempted = false;
       let registrationIdentity: BlueprintResolutionEvent['identity'] = 'unregistered';
+      // The request context both resolution emits carry (#1328).
+      const proposedBlueprintId = handshakeRecord.suggestion.blueprintMeta.blueprintId;
+      const resolutionContext: Pick<
+        BlueprintResolutionEvent,
+        'appId' | 'handshakeId' | 'sessionId' | 'proposedBlueprintId'
+      > = {
+        appId: ctx.appId,
+        handshakeId: parsed.handshakeId,
+        sessionId,
+        ...(proposedBlueprintId !== undefined ? { proposedBlueprintId } : {}),
+      };
       const resolutionStrategy: BlueprintResolutionEvent['strategy'] = forceCreate
         ? 'force-create'
         : override !== undefined
@@ -2188,6 +2223,7 @@ export function createGguiRenderHandler(
           served: 'stored',
           blueprintId: blueprintHit.id,
           identity: 'existing',
+          ...resolutionContext,
         });
 
         // Authored source — resolve the body
@@ -2432,6 +2468,7 @@ export function createGguiRenderHandler(
               served: 'fresh',
               ...(outcome.blueprintId !== undefined ? { blueprintId: outcome.blueprintId } : {}),
               identity: registrationIdentity,
+              ...resolutionContext,
             });
           }
         }
