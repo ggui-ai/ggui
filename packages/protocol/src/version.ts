@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The consume result declares its next-call hint (2026-09-26, additive,
+ * ggui#1399: MINOR, same draft stamp). `gguiConsumeOutputSchema` gains an
+ * optional `nextStep: { tool: 'ggui_amend', description, example, args:
+ * { sessionId } }` — the render → consume chain's shape, closing the loop
+ * from the drained gesture back to the card: present iff `events` is
+ * non-empty, absent on an empty drain, the decision the agent's. SPEC §7.3
+ * names it. DECLARED here, EMITTED one release later: the handler returns
+ * no hint yet, and the tool's output reaches `tools/list` closed
+ * (ggui#1333), so a host must cache a schema naming the member before any
+ * server answers with it. No `PROTOCOL_VERSION` move.
+ *
+ * --------------------------------------------------------------------
  * The relay declares its contract-violation answer (2026-09-25,
  * additive, ggui#1358: MINOR, same draft stamp). `contractViolationSchema`
  * is the zod mirror of `ContractViolation`; `ggui_runtime_submit_action`'s

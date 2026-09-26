@@ -1525,10 +1525,44 @@ describe('ggui_consume and ggui_list_sessions own their wire shapes in the proto
     expect(() => gguiSessionStatusSchema.parse('closed')).toThrow();
   });
 
-  it('gguiConsumeOutputSchema: events (entries), status (enum), client (optional observations) — nothing else', () => {
-    expect(Object.keys(gguiConsumeOutputSchema.shape)).toEqual(['events', 'status', 'client']);
+  it('gguiConsumeOutputSchema: events (entries), status (enum), client (optional observations), nextStep (optional hint) — nothing else', () => {
+    expect(Object.keys(gguiConsumeOutputSchema.shape)).toEqual(['events', 'status', 'client', 'nextStep']);
     expect(gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'expired' })).toEqual({ events: [ENTRY], status: 'expired' });
     expect(() => gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'draining' })).toThrow();
+  });
+
+  describe('gguiConsumeOutputSchema.nextStep — the consume → amend hint (ggui#1399 step 1: declared, not yet emitted)', () => {
+    const hint = {
+      tool: 'ggui_amend',
+      description: 'Repaint this card in place with the state the gesture changed.',
+      example: "ggui_amend({ sessionId: 's-1', kind: 'replace', props: { … } })",
+      args: { sessionId: 's-1' },
+    };
+
+    it("parses the previous release's payload unchanged — no nextStep is the N−1 shape", () => {
+      expect(gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'active' })).toEqual({ events: [ENTRY], status: 'active' });
+    });
+
+    it('parses a well-formed hint and carries it through', () => {
+      expect(gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'active', nextStep: hint })).toEqual({
+        events: [ENTRY],
+        status: 'active',
+        nextStep: hint,
+      });
+    });
+
+    it('the hint names ggui_amend and nothing else, and its args carry the session id', () => {
+      expect(() => gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'active', nextStep: { ...hint, tool: 'ggui_update' } })).toThrow();
+      expect(() => gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'active', nextStep: { ...hint, args: {} } })).toThrow();
+      expect(() => gguiConsumeOutputSchema.parse({ events: [ENTRY], status: 'active', nextStep: { tool: 'ggui_amend', args: { sessionId: 's-1' } } })).toThrow();
+    });
+
+    it('the member carries a description the agent reads from tools/list', () => {
+      // The call shape the text shows must be one amendInputSchema accepts
+      // (a `kind` discriminator; a bare `{sessionId, props}` is refused).
+      expect(gguiConsumeOutputSchema.shape.nextStep.description).toMatch(/ggui_amend\(\{ sessionId, kind: 'replace', props \}\)/);
+      expect(gguiConsumeOutputSchema.shape.nextStep.description).toMatch(/absent/i);
+    });
   });
 
   it('gguiListSessionsOutputSchema wraps the closed summary rows', () => {

@@ -21,7 +21,7 @@
  *   - drain_ack + activeConsumerRegistry + slow-consume telemetry
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import type { ComponentGguiSession, ConsumeEventEntry, JsonValue } from '@ggui-ai/protocol';
 import {
   InMemoryActiveConsumerRegistry,
@@ -766,5 +766,70 @@ describe('a malformed stored row is a HandlerFailure, never a thrown error (ggui
     expect(isHandlerFailure(out)).toBe(true);
     if (!isHandlerFailure(out)) return;
     expect(out.data).toEqual({ events: [], status: 'expired' });
+  });
+});
+
+describe('declares nextStep → ggui_amend on the advertised output (ggui#1399 step 1 — declared, not yet emitted)', () => {
+  it('the closed output schema names the hint, so a host that caches it accepts the emit next release', () => {
+    const h = createGguiConsumeHandler({
+      pendingEventConsumer: new InMemoryPendingEventConsumer(),
+      renderStore: new InMemoryGguiSessionStore(),
+    });
+    const projected = z.toJSONSchema(z.object(h.outputSchema), { io: 'output' });
+    // The parse IS the assertion: the object is closed (#1333) and carries
+    // an optional nextStep whose tool is the single literal ggui_amend and
+    // whose args require the session id.
+    z.object({
+      additionalProperties: z.literal(false),
+      required: z.array(z.string()).refine((r) => !r.includes('nextStep')),
+      properties: z.object({
+        nextStep: z.object({
+          properties: z.object({
+            tool: z.object({ const: z.literal('ggui_amend') }),
+            args: z.object({ required: z.tuple([z.literal('sessionId')]) }),
+          }),
+          required: z.tuple([z.literal('tool'), z.literal('description'), z.literal('example'), z.literal('args')]),
+        }),
+      }),
+    }).parse(projected);
+  });
+
+  it('a non-empty drain carries NO nextStep yet — the emit is the next release (the step-2 tripwire)', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated('render-1');
+    const renderStore = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    await renderStore.commit({
+      appId: 'app-1',
+      render: {
+        id: 'render-1',
+        appId: 'app-1',
+        type: 'component',
+        componentCode: '/* card */',
+        eventSequence: 0,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60_000,
+      },
+    });
+    await consumer.append('render-1', {
+      id: 'evt-1',
+      envelope: {
+        type: 'action',
+        sessionId: 'render-1',
+        intent: 'confirm',
+        actionData: null,
+        uiContext: {},
+        actionId: 'a1',
+        firedAt: new Date(now).toISOString(),
+      },
+      createdAt: new Date(now).toISOString(),
+    });
+    const h = createGguiConsumeHandler({ pendingEventConsumer: consumer, renderStore });
+    const out = await h.handler({ sessionId: 'render-1', timeout: 0 }, { appId: 'app-1', requestId: 'r-1399' });
+    expect(isHandlerFailure(out)).toBe(false);
+    if (isHandlerFailure(out)) return;
+    expect(out.events).toHaveLength(1);
+    expect(out).not.toHaveProperty('nextStep');
   });
 });

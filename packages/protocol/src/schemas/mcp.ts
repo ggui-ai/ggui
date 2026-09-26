@@ -1646,16 +1646,42 @@ export const pendingEventSchema = z.object({
 });
 
 /**
- * `ggui_consume`'s output — the drained rows, the session's state, and the
- * client's observations when the host sent any (ggui#817 part C2). The
- * handler registers `.shape`; `tools/list` therefore advertises the entry
- * vocabulary and the status enum instead of a free-form record and a free
- * string.
+ * `ggui_consume`'s output — the drained rows, the session's state, the
+ * client's observations when the host sent any (ggui#817 part C2), and the
+ * consume → amend hint on a non-empty drain (ggui#1399). The handler
+ * registers `.shape`; `tools/list` therefore advertises the entry
+ * vocabulary, the status enum and the hint's shape instead of a free-form
+ * record and a free string.
  */
 export const gguiConsumeOutputSchema = z.object({
   events: z.array(consumeEventEntrySchema),
   status: gguiSessionStatusSchema,
   client: clientObservationsSchema.optional(),
+  /**
+   * The consume → amend hint (ggui#1399): the render → consume chain the
+   * agent follows is a hint on the RESULT it just read, and this closes the
+   * loop from the drained gesture back to the card. Mirrors the render
+   * output's `nextStep` shape (`args.sessionId` is the literal value the
+   * agent passes — copy-paste). Present iff `events` is non-empty; absent on
+   * an empty drain (nothing to react to). The server cannot know whether a
+   * gesture changed what the user sees, so the description carries that
+   * clause and the decision stays the agent's.
+   *
+   * DECLARED in step 1, EMITTED in step 2 one release later: every tool
+   * output reaches `tools/list` closed (ggui#1333), so a host must cache a
+   * schema naming the member before any server answers with it.
+   */
+  nextStep: z
+    .object({
+      tool: z.literal('ggui_amend'),
+      description: z.string(),
+      example: z.string(),
+      args: z.object({ sessionId: z.string() }),
+    })
+    .optional()
+    .describe(
+      "Next-call hint — when events is non-empty, points the agent at ggui_amend({ sessionId, kind: 'replace', props }) (or kind: 'merge' with a patch) to repaint THIS card in place with whatever the gestures changed; a new render is the exception, for a milestone worth a card in the transcript. Absent when events is empty.",
+    ),
 });
 
 /** `ggui_list_sessions`' output — the closed summary rows (ggui#817 part C2). */
