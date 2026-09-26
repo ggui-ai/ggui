@@ -60,7 +60,7 @@ describe('runVisualFit — the fit verdict without the vision judge', () => {
     expect(deps.captures).toEqual([{ width: 384, height: 516, fullPage: false }]);
     expect(outcome.status).toBe('measured');
     if (outcome.status !== 'measured') return;
-    expect(outcome.readings).toEqual([{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 535, overflow: true, declared: true }]);
+    expect(outcome.readings).toEqual([{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 535, overflow: true, inkRatio: null, declared: true }]);
     expect(outcome.issues).toHaveLength(1);
     const issue = outcome.issues[0]!;
     expect(issue).toMatchObject({ tier: 2, result: 'fail', category: 'visual', subcategory: 'canvas-overflow', severity: 'critical' });
@@ -85,7 +85,7 @@ describe('runVisualFit — the fit verdict without the vision judge', () => {
     expect(outcome).toEqual({
       status: 'measured',
       issues: [],
-      readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 516, overflow: false, declared: true }],
+      readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 516, overflow: false, inkRatio: null, declared: true }],
     });
   });
 

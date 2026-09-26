@@ -116,9 +116,9 @@ describe('runVisualEvaluation — per-canvas mode', () => {
       // overflow, judged with a measurable height); judged at the class viewport here, so `declared: false`.
       fit: { canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: false, overflowPx: 0 },
       canvases: [
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
         // ggui#1100: a fullscreen canvas is composed with the runtime's fit and says so; the inline card carries no `fit`.
-        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false, judge: { k: 1, rule: 'median', samples: [90], sigma: 0, notes: [expect.any(String)] }, fit: 'fill' },
+        { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median', samples: [90], sigma: 0, notes: [expect.any(String)] }, fit: 'fill' },
       ],
     });
   });

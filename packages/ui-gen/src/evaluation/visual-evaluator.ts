@@ -15,6 +15,7 @@ import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import { build } from 'esbuild';
 import { EXPANDED_FRAME, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
+import { readInkExtent, type InkExtent } from './ink-extent.js';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -121,6 +122,12 @@ export interface CanvasVisualResult {
   /** `contentHeight > viewport.height` — a measurement; what it MEANS is {@link canvasFitPolicy}'s. */
   overflow: boolean;
   /** How `score` was reached — always present (ggui#1072). */
+  /**
+   * ggui#1120 — how far down the capture anything was painted (the last inked row over the measured
+   * region's height, read against the capture's dominant colour, inside a drawn panel's chrome); `0`
+   * is the blank the judge fails, `null` an unreadable capture.
+   */
+  inkRatio: number | null;
   judge: CanvasJudgeRecord;
   /** How the judge composed the mount (ggui#1100): `'fill'` on every fullscreen canvas, absent on the inline card. */
   fit?: 'fill';
@@ -164,6 +171,13 @@ export function canvasFitPolicy(canvas: CanvasClass): CanvasFitPolicy {
 export const JUDGE_SCOPE_CLASS = 'ggui-judge-scope';
 /** The panel the judge draws round a fill canvas's scope on its stand-in host page (ggui#1083 cut 3) — see {@link canvasChrome}. */
 export const JUDGE_PANEL_CLASS = 'ggui-judge-panel';
+/**
+ * How far in from a panelled page's edges the ink is read (ggui#1120): past the panel's gap, its
+ * largest rounded corner (the `round` bucket, 24 px — the scrim shows through the corner) and its
+ * 1 px hairline, so the host's chrome never counts as paint. The card's own inset is 16 px, so the
+ * band skipped inside the card is 25 px of a canvas — reported ratios are over the region.
+ */
+export const JUDGE_INK_INSET_PX = EXPANDED_FRAME.insetPx + 24 + 1;
 
 /**
  * How the judge composes a canvas (ggui#1100): the served runtime stretches
@@ -251,6 +265,22 @@ export function canvasOverflowIssue(
   };
 }
 
+/** ggui#1120 — the deterministic blank: the capture is one flat colour, so the component mounted and painted nothing. */
+export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport): EvaluationIssue {
+  const classBox = CANVAS_VIEWPORTS[canvas];
+  const box = isDeclaredViewport(canvas, viewport)
+    ? `declared ${viewport.width}×${viewport.height}; class box ${classBox.width}×${classBox.height}`
+    : `${viewport.width}×${viewport.height}`;
+  return {
+    dimension: 'canvas-blank',
+    severity: 'critical',
+    description: `Nothing painted on the ${canvas} canvas (${box}): the capture is one flat colour — the component mounted and rendered no pixels.`,
+    fix:
+      'Return and paint the component tree: a root that renders nothing is a blank, not an empty state. Check that the ' +
+      'default export returns its JSX, that no early return yields null on the sample props, and that the first paint ' +
+      'shows visible content.',
+  };
+}
 /**
  * `runVisualEvaluation`'s result. Identical to `EvaluationResult` when
  * `config.canvases` is unset; with canvases set, `canvases` holds the
@@ -842,6 +872,22 @@ interface CanvasFrame {
   /** `true` when `canvasViewports` carried an entry for this canvas, whatever its value. */
   readonly declared: boolean;
   readonly attempt: ScreenshotAttempt;
+  /** The capture's ink extent (ggui#1120); `null` when there is no capture or it could not be read. */
+  readonly ink: InkExtent | null;
+}
+/** The capture's ink extent (ggui#1120), read inside a drawn panel's chrome; an unreadable capture is reported, never blank. */
+function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass): InkExtent | null {
+  if (png === null) return null;
+  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : 0);
+  if ('reason' in ink) {
+    console.warn(`[visual-eval] ink extent unreadable at canvas ${canvas}: ${ink.reason}`);
+    return null;
+  }
+  return ink;
+}
+/** The deterministic blank verdict (ggui#1120): an issue when the frame read no ink at all; `null` otherwise, an unreadable capture included. */
+function blankVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+  return frame.ink !== null && frame.ink.lastInkRow === null ? canvasBlankIssue(canvas, frame.viewport) : null;
 }
 
 async function frameCanvas(
@@ -861,7 +907,7 @@ async function frameCanvas(
   const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome), deps, policy.capture);
   // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
   const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };
-  return { viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt };
+  return { viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt, ink: readInk(captured.png, chrome, canvas) };
 }
 
 /**
@@ -1024,6 +1070,13 @@ export async function runVisualEvaluationDetailed(
         result.issues.push(fitIssue);
         if (policy.overflow === 'fail') result.passed = false;
       }
+      // The blank verdict (ggui#1120): deterministic, critical on every canvas — a render that painted nothing fails.
+      const blankIssue = blankVerdict(canvas, frame);
+      if (blankIssue !== null) {
+        result.issues.push(blankIssue);
+        result.passed = false;
+      }
+      const inkRatio = frame.ink?.ratio ?? null;
       perCanvasResults.push(result);
       perCanvas.push({
         canvas,
@@ -1033,6 +1086,7 @@ export async function runVisualEvaluationDetailed(
         screenshotPng: screenshot,
         contentHeight,
         overflow,
+        inkRatio,
         judge: judgeRecord,
         ...(fit !== undefined ? { fit } : {}),
         ...(frame.declared ? { declared: true as const } : {}),
@@ -1040,6 +1094,7 @@ export async function runVisualEvaluationDetailed(
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
           `${result.passed ? 'pass' : 'FAIL'} | content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${policy.overflow})` : ''} ` +
+          `ink=${inkRatio ?? '?'}${blankIssue !== null ? ' BLANK' : ''} ` +
           `| in=${response.inputTokens} out=${response.outputTokens}`,
       );
     }
@@ -1143,6 +1198,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     passed: c.passed,
     contentHeight: c.contentHeight,
     overflow: c.overflow,
+    inkRatio: c.inkRatio,
     judge: c.judge,
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
   }));
@@ -1356,6 +1412,8 @@ export interface CanvasFitReading {
   readonly viewport: CanvasViewport;
   readonly contentHeight: number | null;
   readonly overflow: boolean;
+  /** ggui#1120 — the capture's ink ratio; `0` is the blank, `null` an unreadable capture. */
+  readonly inkRatio: number | null;
   /** `true` when the order declared this canvas's box. */
   readonly declared?: true;
 }
@@ -1409,16 +1467,21 @@ export async function runVisualFit(
     const overflow = contentHeight !== null && contentHeight > frame.viewport.height;
     const verdict = fitVerdict(canvas, frame);
     if (verdict !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, verdict)));
+    const blank = blankVerdict(canvas, frame);
+    if (blank !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, blank)));
+    const inkRatio = frame.ink?.ratio ?? null;
     readings.push({
       canvas,
       viewport: frame.viewport,
       contentHeight,
       overflow,
+      inkRatio,
       ...(frame.declared ? { declared: true as const } : {}),
     });
     console.log(
       `[visual-fit] canvas=${canvas} ${frame.viewport.width}×${frame.viewport.height} ` +
-        `content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${frame.policy.overflow})` : ''} | no judge`,
+        `content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${frame.policy.overflow})` : ''} ` +
+        `ink=${inkRatio ?? '?'}${blank !== null ? ' BLANK' : ''} | no judge`,
     );
   }
   return { status: 'measured', issues, readings };

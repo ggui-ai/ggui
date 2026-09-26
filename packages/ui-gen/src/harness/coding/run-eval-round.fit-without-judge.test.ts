@@ -48,12 +48,12 @@ const FIT_FAIL: EvalIssue = {
 const MEASURED_OVERFLOW: VisualFitOutcome = {
   status: 'measured',
   issues: [FIT_FAIL],
-  readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 535, overflow: true, declared: true }],
+  readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 535, overflow: true, inkRatio: null, declared: true }],
 };
 const MEASURED_FITS: VisualFitOutcome = {
   status: 'measured',
   issues: [],
-  readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 516, overflow: false, declared: true }],
+  readings: [{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 516, overflow: false, inkRatio: null, declared: true }],
 };
 
 interface Calls {

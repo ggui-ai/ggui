@@ -347,6 +347,13 @@ export interface CanvasVisualSummary {
   contentHeight: number | null;
   /** `contentHeight > viewport.height` — measured on every canvas, judged per `canvasFitPolicy`. */
   overflow: boolean;
+  /**
+   * ggui#1120 — how far down the capture anything was painted: the last inked row over the measured
+   * region's height (inside a drawn host panel's chrome on md/lg/xl), read from the screenshot's
+   * pixels against their dominant colour. `0` is the blank the judge fails (`canvas-blank`); every
+   * other value is reported, never scored. `null` when the capture could not be read.
+   */
+  inkRatio: number | null;
   /** How `score` was reached — always present (ggui#1072). */
   judge: CanvasJudgeRecord;
   /**

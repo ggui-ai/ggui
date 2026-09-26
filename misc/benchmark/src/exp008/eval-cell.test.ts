@@ -174,7 +174,7 @@ describe('toVisualOutcome — typed against ui-gen\'s VisualEvaluationResult (th
     issues: [],
     inputTokens: 3000,
     outputTokens: 200,
-    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 820, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } }],
+    canvases: [{ canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 81, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 820, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } }],
   };
   it('maps finalScore/passed/canvases/tokens; null stays null', () => {
     expect(toVisualOutcome(null)).toBeNull();
@@ -239,7 +239,7 @@ describe('evaluateCell — the EVAL task core with injected judges', () => {
       visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
       visual: async () => ({
         score: 80, passed: true,
-        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [80], sigma: 0, notes: ['ok'] } }],
+        canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 80, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [80], sigma: 0, notes: ['ok'] } }],
       }),
       now: () => new Date('2026-09-10T00:00:00.000Z'),
     });
@@ -537,8 +537,8 @@ describe('#1105 — the ROW names what the read door stripped (end to end, not o
 
 describe("a canvas row's passed flag (ggui#1027 fit + the judge's threshold), pinned on the served shape", () => {
   // The judge (ui-gen visual-evaluator) computes passed; eval-cell copies it onto the row with score + overflow.
-  const overflowRow = { canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 720 }, score: 83, passed: false, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 1180, overflow: true, judge: { k: 1, rule: 'median' as const, samples: [83], sigma: 0, notes: ['ok'] } };
-  const lowRow = { canvas: 'md' as const, viewport: { width: 768, height: 1024 }, score: 67, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [67], sigma: 0, notes: ['ok'] } };
+  const overflowRow = { canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 720 }, score: 83, passed: false, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 1180, overflow: true, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [83], sigma: 0, notes: ['ok'] } };
+  const lowRow = { canvas: 'md' as const, viewport: { width: 768, height: 1024 }, score: 67, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 900, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [67], sigma: 0, notes: ['ok'] } };
   const serve = async () => {
     const dir = cellDir();
     const report = await evaluateCell(readCellInputs(dir), {
@@ -584,7 +584,7 @@ describe('#1072 — K on the eval task and the aggregation record on the row', (
     const report = await evaluateCell(readCellInputs(dir), {
       dir, playwright: neverLaunch, panel,
       visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60, k: 3, kCanvases: ['xs-chat-card', 'md'] },
-      visual: async () => ({ score: 78, passed: true, canvases: [{ canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 640 }, score: 78, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 600, overflow: false, judge }] }),
+      visual: async () => ({ score: 78, passed: true, canvases: [{ canvas: 'xs-chat-card' as const, viewport: { width: 400, height: 640 }, score: 78, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 600, overflow: false, inkRatio: null, judge }] }),
     });
     expect(report.visualCanvases?.[0]?.judge).toEqual(judge);
     expect(report.visualCanvases?.[0]?.score).toBe(78);
@@ -633,7 +633,7 @@ describe('#1100 — fit on the eval-cell row', () => {
     const report = await evaluateCell(readCellInputs(dir), {
       dir, playwright: neverLaunch, panel,
       visualJudge: { provider: 'claude', model: 'claude-sonnet-5', passThreshold: 60 },
-      visual: async () => ({ score: 72, passed: true, canvases: [{ canvas: 'lg' as const, viewport: { width: 1024, height: 768 }, score: 72, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 768, overflow: false, judge, fit: 'fill' as const }] }),
+      visual: async () => ({ score: 72, passed: true, canvases: [{ canvas: 'lg' as const, viewport: { width: 1024, height: 768 }, score: 72, passed: true, screenshotPng: Buffer.from('89504e47', 'hex'), contentHeight: 768, overflow: false, inkRatio: null, judge, fit: 'fill' as const }] }),
     });
     expect(report.visualCanvases?.[0]).toMatchObject({ canvas: 'lg', fit: 'fill' });
   });

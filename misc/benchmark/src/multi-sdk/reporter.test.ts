@@ -340,7 +340,7 @@ describe('per-canvas visual summary reaches the published row (#973)', () => {
       ...run,
       tierEvaluation: {
         ...run.tierEvaluation!,
-        visual: { score: 74, passed: true, design: { src: '/d/src', srcSha256: 'ab'.repeat(32) }, themeMode: 'dark' as const, canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true, contentHeight: 900, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [74], sigma: 0, notes: ['ok'] } }] },
+        visual: { score: 74, passed: true, design: { src: '/d/src', srcSha256: 'ab'.repeat(32) }, themeMode: 'dark' as const, canvases: [{ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 74, passed: true, contentHeight: 900, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [74], sigma: 0, notes: ['ok'] } }] },
       },
     };
     const d = toDisplayReport(generateReport([withVisual], 0), 'rep-v', 'test');

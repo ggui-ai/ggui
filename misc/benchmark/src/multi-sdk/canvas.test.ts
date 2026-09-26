@@ -22,7 +22,7 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
     const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
     const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
     const out = persistCanvasScreenshots(dir, [
-      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } },
+      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } },
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ canvas: 'md', viewport: { width: 768, height: 1024 }, score: 81, passed: true, contentHeight: 1000, overflow: false, judge: { k: 1, rule: 'median', samples: [81], sigma: 0, notes: ['ok'] } });
@@ -43,7 +43,7 @@ describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summar
   it('maps the evaluator summary and leaves artefact absent', () => {
     const te: EvalResult = {
       issues: [], pass: [],
-      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, judge: { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] } }] },
+      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] } }] },
     };
     expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, judge: { k: 1, rule: 'median', samples: [72], sigma: 0, notes: ['ok'] } }]);
   });
@@ -59,8 +59,8 @@ describe('#1100 — the row carries how the judge composed each canvas', () => {
     const te: EvalResult = {
       issues: [], pass: [],
       visual: { score: 70, passed: true, canvases: [
-        { canvas: 'md', viewport: { width: 768, height: 1024 }, score: 70, passed: true, contentHeight: 1024, overflow: false, judge: j, fit: 'fill' },
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 70, passed: true, contentHeight: 600, overflow: false, judge: j },
+        { canvas: 'md', viewport: { width: 768, height: 1024 }, score: 70, passed: true, contentHeight: 1024, overflow: false, inkRatio: null, judge: j, fit: 'fill' },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 70, passed: true, contentHeight: 600, overflow: false, inkRatio: null, judge: j },
       ] },
     };
     const rows = visualCanvasesFromTierEvaluation(te) ?? [];

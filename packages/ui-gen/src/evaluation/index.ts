@@ -103,10 +103,14 @@ export {
   captureScreenshotDetailed,
   canvasFitPolicy,
   canvasOverflowIssue,
+  canvasBlankIssue,
+  JUDGE_INK_INSET_PX,
   CONTENT_HEIGHT_EXPRESSION,
   runVisualEval,
   summarizeVisualResult,
 } from './visual-evaluator.js';
+export { readInkExtent, decodePng, INK_TOLERANCE } from './ink-extent.js';
+export type { InkExtent, InkUnreadable, PixelRegion, DecodedImage } from './ink-extent.js';
 export type {
   VisualEvalConfig,
   VisualEvalContext,
