@@ -161,6 +161,129 @@ describe('rerankCandidates', () => {
   });
 });
 
+describe('tokenCost — the judge reports what the provider metered, and absence means unmetered (ggui#1418)', () => {
+  const PICK = { matchId: 'bp-notepad-1', confidence: 0.9, reason: 'same notepad' };
+  const USAGE = { input: 812, output: 47 };
+
+  it('a caller with callStructuredMetered is asked through it, and its usage is the decision\'s tokenCost', async () => {
+    const plain = vi.fn(async () => PICK);
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      callStructured: plain,
+      async callStructuredMetered() {
+        return { value: PICK, usage: USAGE };
+      },
+    };
+    const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(decision.matchId).toBe('bp-notepad-1');
+    expect(decision.tokenCost).toEqual(USAGE);
+    expect(plain).not.toHaveBeenCalled();
+  });
+
+  it('a caller with only callStructuredMetered is structured-capable (never "does not support callStructured")', async () => {
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructuredMetered() {
+        return { value: PICK, usage: USAGE };
+      },
+    };
+    const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(decision.matchId).toBe('bp-notepad-1');
+    expect(decision.tokenCost).toEqual(USAGE);
+  });
+
+  it('a metered call whose provider reported no usage leaves tokenCost absent, never { 0, 0 }', async () => {
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructuredMetered() {
+        return { value: PICK };
+      },
+    };
+    const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(decision.matchId).toBe('bp-notepad-1');
+    expect('tokenCost' in decision).toBe(false);
+  });
+
+  it('a caller with only callStructured (every LLMCaller written before the metered method) is unmetered: tokenCost absent', async () => {
+    const decision = await rerankCandidates({ llm: stubLlm(PICK) }, QUERY, CANDIDATES);
+    expect(decision.matchId).toBe('bp-notepad-1');
+    expect('tokenCost' in decision).toBe(false);
+  });
+
+  it('a metered call that throws is unmetered (the provider may have billed it; nothing says how much)', async () => {
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructuredMetered() {
+        throw new Error('upstream-529');
+      },
+    };
+    const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(decision.reason).toMatch(/upstream-529/);
+    expect('tokenCost' in decision).toBe(false);
+  });
+
+  it('a metered call whose tool input fails to parse still reports the usage it spent', async () => {
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructuredMetered() {
+        return { value: 'not-an-object', usage: USAGE };
+      },
+    };
+    const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(decision.reason).toMatch(/parse-failed/);
+    expect(decision.tokenCost).toEqual(USAGE);
+  });
+
+  it('a class-based caller keeps its `this` on both methods (a lost binding would read as a throw and a no-match)', async () => {
+    class Metering implements LLMCaller {
+      private readonly usage = USAGE;
+      async call(): Promise<string> {
+        throw new Error('text-mode not used by rerank');
+      }
+      async callStructuredMetered(): Promise<{ value: unknown; usage: typeof USAGE }> {
+        return { value: PICK, usage: this.usage };
+      }
+    }
+    class Plain implements LLMCaller {
+      private readonly pick = PICK;
+      async call(): Promise<string> {
+        throw new Error('text-mode not used by rerank');
+      }
+      async callStructured(): Promise<unknown> {
+        return this.pick;
+      }
+    }
+    const metered = await rerankCandidates({ llm: new Metering() }, QUERY, CANDIDATES);
+    expect(metered.matchId).toBe('bp-notepad-1');
+    expect(metered.tokenCost).toEqual(USAGE);
+    const plain = await rerankCandidates({ llm: new Plain() }, QUERY, CANDIDATES);
+    expect(plain.matchId).toBe('bp-notepad-1');
+  });
+
+  it('a decision made with no provider call reports a true zero: the empty-candidate short-circuit and the no-structured-method decline', async () => {
+    const empty = await rerankCandidates({ llm: stubLlm(PICK) }, QUERY, []);
+    expect(empty.tokenCost).toEqual({ input: 0, output: 0 });
+    const textOnly: LLMCaller = {
+      async call() {
+        return '';
+      },
+    };
+    const declined = await rerankCandidates({ llm: textOnly }, QUERY, CANDIDATES);
+    expect(declined.reason).toMatch(/does not support callStructured/);
+    expect(declined.tokenCost).toEqual({ input: 0, output: 0 });
+  });
+});
+
 describe('candidate intent cut — one constant with blueprintMeta.matchedIntent (ggui#1336)', () => {
   function capture(): { llm: LLMCaller; messages: string[] } {
     const messages: string[] = [];

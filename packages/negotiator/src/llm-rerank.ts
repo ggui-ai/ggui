@@ -13,7 +13,7 @@
  * realistic workloads observe 30-70%.
  */
 import { MATCHED_INTENT_MAX_CHARS } from '@ggui-ai/protocol';
-import type { LLMCaller, ToolSchema } from './llm-caller.js';
+import type { LLMCaller, TokenUsage, ToolSchema } from './llm-caller.js';
 
 /**
  * One candidate blueprint for the LLM judge to consider.
@@ -70,12 +70,14 @@ export interface RerankDecision {
   /** Wall-clock latency of the LLM call. */
   readonly latencyMs: number;
   /**
-   * Token cost of the call — for the cache-trace sink and cost
-   * accounting. Implementations that can't surface token counts may
-   * report `{input: 0, output: 0}` and the cost-per-call gate will
-   * have to be measured externally.
+   * Tokens the decision cost, as the provider reported them — for the
+   * cache-trace sink and cost accounting. ABSENT means unmetered, never
+   * zero: the judge called a provider and has no count for the call (a
+   * caller without `callStructuredMetered`, a provider that reported no
+   * usage, or a call that threw). `{ input: 0, output: 0 }` is a true
+   * zero: the decision was made without a provider call (ggui#1418).
    */
-  readonly tokenCost: { readonly input: number; readonly output: number };
+  readonly tokenCost?: TokenUsage;
 }
 
 /** Query the user's request the judge is matching against. */
@@ -235,7 +237,8 @@ export async function rerankCandidates(
   const userMessage = buildUserMessage(query, candidates);
   const candidateIds = new Set(candidates.map((c) => c.id));
 
-  if (typeof deps.llm.callStructured !== 'function') {
+  const { callStructured, callStructuredMetered } = deps.llm;
+  if (typeof callStructuredMetered !== 'function' && typeof callStructured !== 'function') {
     return {
       matchId: null,
       confidence: 0,
@@ -246,14 +249,18 @@ export async function rerankCandidates(
     };
   }
 
+  // The metered method when the caller has it (its usage is the decision's
+  // cost), else the plain one (unmetered: no tokenCost).
   let toolInput: unknown;
+  let usage: TokenUsage | undefined;
   try {
-    toolInput = await deps.llm.callStructured(
-      RERANK_SYSTEM_PROMPT,
-      userMessage,
-      RERANK_TOOL,
-      512,
-    );
+    if (typeof callStructuredMetered === 'function') {
+      const metered = await callStructuredMetered.call(deps.llm, RERANK_SYSTEM_PROMPT, userMessage, RERANK_TOOL, 512);
+      toolInput = metered.value;
+      usage = metered.usage;
+    } else if (typeof callStructured === 'function') {
+      toolInput = await callStructured.call(deps.llm, RERANK_SYSTEM_PROMPT, userMessage, RERANK_TOOL, 512);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
@@ -261,7 +268,6 @@ export async function rerankCandidates(
       confidence: 0,
       reason: `llm-rerank: callStructured threw — ${message}`,
       latencyMs: Date.now() - startedAt,
-      tokenCost: { input: 0, output: 0 },
     };
   }
 
@@ -271,10 +277,7 @@ export async function rerankCandidates(
     confidence: parsed.confidence,
     reason: parsed.reason,
     latencyMs: Date.now() - startedAt,
-    // Token cost surfacing requires LLMCaller-level instrumentation
-    // we don't have today. Default to zero; the cost gate is measured
-    // out-of-band from billing data during the probe.
-    tokenCost: { input: 0, output: 0 },
+    ...(usage !== undefined ? { tokenCost: usage } : {}),
   };
 }
 

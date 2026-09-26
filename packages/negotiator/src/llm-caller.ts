@@ -35,6 +35,15 @@
  *   that can't produce tool input at all simply omit this method;
  *   consumers fall back to `call` + regex JSON extraction. Absence is
  *   not an error.
+ * - `callStructuredMetered?(...)` is OPTIONAL: `callStructured`'s contract
+ *   (the tool input, or a throw), with the call's token usage beside it
+ *   as the provider reported it. `usage` is ABSENT when the provider
+ *   reported none, never zeros: a consumer reads absence as "unmetered".
+ *   A consumer that has it prefers it to `callStructured`; an
+ *   implementation that cannot read usage omits it, and every caller
+ *   written without it keeps compiling. It is a method rather than a
+ *   usage callback because judges run concurrently, and a result carries
+ *   its own usage where a callback would need correlating to its call.
  * - `ToolSchema.input_schema` follows the OpenAI tool-use JSON
  *   Schema convention. Implementations that use a different
  *   tool-use protocol (e.g., Anthropic's variant) MUST translate at
@@ -46,6 +55,18 @@ export interface ToolSchema {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+}
+
+/** Tokens one provider call consumed, as the provider reported them. */
+export interface TokenUsage {
+  readonly input: number;
+  readonly output: number;
+}
+
+/** A call's result with the usage the provider reported for it; `usage` absent = unmetered. */
+export interface Metered<T> {
+  readonly value: T;
+  readonly usage?: TokenUsage;
 }
 
 /** Chat-model dispatcher consumed by the negotiator's synthesis + judge primitives. */
@@ -74,6 +95,19 @@ export interface LLMCaller {
     tool: ToolSchema,
     maxTokens?: number,
   ): Promise<unknown>;
+
+  /**
+   * {@link callStructured}, with the call's token usage beside the tool
+   * input (see the normative semantics above). Omit it when the provider's
+   * usage cannot be read; consumers then fall back to `callStructured` and
+   * treat the call as unmetered.
+   */
+  callStructuredMetered?(
+    systemPrompt: string,
+    userMessage: string,
+    tool: ToolSchema,
+    maxTokens?: number,
+  ): Promise<Metered<unknown>>;
 }
 
 /**
