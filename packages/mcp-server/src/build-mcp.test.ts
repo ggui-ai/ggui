@@ -14,7 +14,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { z, type ZodRawShape } from 'zod';
-import { renderOutputSchema } from '@ggui-ai/protocol';
+import { renderOutputSchema, type ComponentGguiSession } from '@ggui-ai/protocol';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { createGguiRuntimePullHandler } from '@ggui-ai/mcp-server-handlers/renders';
 import {
   handlerFailure,
   type HandlerContext,
@@ -629,5 +631,120 @@ describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
     });
     expect(poisoned.isError).toBe(true);
     expect(poisoned.structuredContent).toBeUndefined();
+  });
+});
+
+/**
+ * `ggui_runtime_pull`'s success line carries the session id (ggui#1377).
+ *
+ * The first and last successful pull per session bound how long a served
+ * card stayed mounted — an upper bound on mount time, read from the logs.
+ * Three pins, against the REAL pull handler so the tool name and its input
+ * are the shipping ones:
+ *
+ *   1. a successful pull's `tool_invoked` line carries `sessionId`;
+ *   2. a pull that throws (unknown or cross-app session) carries none — the
+ *      value on the line is only ever a session the caller's app owns,
+ *      never raw caller input;
+ *   3. another tool whose input also names a session carries none — the
+ *      field is pull's, not a transport-wide change.
+ */
+describe('buildMcpServer — ggui_runtime_pull logs its sessionId (#1377)', () => {
+  const info = { name: 'test', version: '0.0.1' };
+
+  interface LogCall {
+    readonly event: string;
+    readonly fields: Record<string, unknown>;
+  }
+
+  function capturingLogger(calls: LogCall[]): Logger {
+    const logger: Logger = {
+      info: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      warn: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      error: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      debug: () => undefined,
+      child: () => logger,
+    };
+    return logger;
+  }
+
+  async function seededStore(sessionId: string): Promise<InMemoryGguiSessionStore> {
+    const store = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    const render: ComponentGguiSession = {
+      id: sessionId,
+      appId: baseCtx.appId,
+      type: 'component',
+      componentCode: 'export default () => null;',
+      eventSequence: 0,
+      createdAt: now,
+      lastActivityAt: now,
+      expiresAt: now + 60_000,
+    };
+    await store.commit({ render, appId: baseCtx.appId });
+    return store;
+  }
+
+  async function invokedLines(
+    handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+    call: { name: string; arguments: Record<string, unknown> },
+  ): Promise<LogCall[]> {
+    const calls: LogCall[] = [];
+    const server = buildMcpServer(info, handlers, () => baseCtx, capturingLogger(calls));
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'pull-log-test', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      await client.callTool(call).catch(() => undefined);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+    return calls.filter((c) => c.event === 'tool_invoked');
+  }
+
+  it('a successful pull carries the pulled sessionId', async () => {
+    const store = await seededStore('render-log-1');
+    const invoked = await invokedLines(
+      [createGguiRuntimePullHandler({ renderStore: store })],
+      { name: 'ggui_runtime_pull', arguments: { sessionId: 'render-log-1' } },
+    );
+    expect(invoked.length).toBe(1);
+    expect(invoked[0]?.fields).toMatchObject({
+      tool: 'ggui_runtime_pull',
+      appId: 'app-1',
+      outcome: 'success',
+      sessionId: 'render-log-1',
+    });
+  });
+
+  it('a pull that throws on an unknown session logs no sessionId', async () => {
+    const store = await seededStore('render-log-1');
+    const invoked = await invokedLines(
+      [createGguiRuntimePullHandler({ renderStore: store })],
+      { name: 'ggui_runtime_pull', arguments: { sessionId: 'not-a-session' } },
+    );
+    expect(invoked.length).toBe(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_runtime_pull', outcome: 'error' });
+    expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
+  });
+
+  it("another tool's success line carries no sessionId, even when its input names one", async () => {
+    const other: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'synth_session_tool',
+      description: 'synthetic tool whose input names a session',
+      inputSchema: { sessionId: z.string() },
+      outputSchema: { ok: z.boolean() },
+      async handler() {
+        return { ok: true };
+      },
+    };
+    const invoked = await invokedLines([other], {
+      name: 'synth_session_tool',
+      arguments: { sessionId: 'render-log-1' },
+    });
+    expect(invoked.length).toBe(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'synth_session_tool', outcome: 'success' });
+    expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
   });
 });

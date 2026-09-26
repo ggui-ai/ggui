@@ -280,6 +280,26 @@ function classifyFailurePayload(
   };
 }
 
+/**
+ * The session a successful `ggui_runtime_pull` read, for its
+ * `tool_invoked` line (ggui#1377). The first and last successful pull per
+ * session bound how long a served card stayed mounted: an upper bound on
+ * mount time, read from the logs, never true view time.
+ *
+ * Only the SUCCESS line carries it, and only for pull: the pull handler
+ * throws on an unknown or cross-app session before it returns, so a value
+ * that reaches this line is a session the caller's app owns, never raw
+ * caller input. Every other tool's line is unchanged.
+ */
+function pulledSessionField(
+  tool: string,
+  input: Record<string, unknown>,
+): { readonly sessionId?: string } {
+  if (tool !== 'ggui_runtime_pull') return {};
+  const sessionId = input['sessionId'];
+  return typeof sessionId === 'string' ? { sessionId } : {};
+}
+
 export function buildMcpServer(
   info: ServerInfo,
   handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
@@ -415,6 +435,7 @@ export function buildMcpServer(
           tool: handler.name,
           appId: ctx.appId,
           outcome: 'success',
+          ...pulledSessionField(handler.name, input),
           elapsedMs: Date.now() - start,
         });
         // When the handler's output carries a `nextStep`, lead the
