@@ -23,44 +23,33 @@
  * repair loop, where reasoning earns its keep.
  */
 
+import {
+  actionEntrySchema,
+  agentToolEntrySchema,
+  contextEntrySchema,
+  propEntrySchema,
+  propsSpecSchema,
+  streamChannelEntrySchema,
+} from '@ggui-ai/protocol';
 import { normalizeSchema } from './normalize-schema.js';
 
-// Allowed-key sets mirror the protocol `.strict()` schemas
-// (schemas/data-contract.ts). Stripping anything outside these is safe:
-// the strict schema would reject it as CTR_SHAPE_UNRECOGNIZED_KEYS.
-const PROPS_WRAPPER_KEYS = new Set(['description', 'properties']);
-const PROP_ENTRY_KEYS = new Set([
-  'description',
-  'schema',
-  'required',
-  'default',
-  'example',
-  'sourceTool',
-]);
-const CONTEXT_ENTRY_KEYS = new Set([
-  'description',
-  'schema',
-  'default',
-  'debounceMs',
-  'example',
-]);
-const ACTION_ENTRY_KEYS = new Set([
-  'description',
-  'label',
-  'schema',
-  'example',
-  'icon',
-  'confirm',
-  'nextStep',
-]);
-const STREAM_ENTRY_KEYS = new Set(['description', 'schema', 'source']);
-const AGENT_TOOL_KEYS = new Set(['serverInfo', 'toolInfo', 'usage', 'example']);
+// Allowed-key sets are DERIVED from the protocol's `.strict()` spec
+// schemas (schemas/data-contract.ts) — never hand-copied. A hand-copied
+// mirror drifts the day the schema grows: `oneShot` joined
+// `actionEntrySchema` on 2026-09-15 (ggui#1108) and a stale mirror here
+// stripped it from every repaired draft for eleven days (ggui#1421).
+// Stripping anything outside these sets is safe: the strict schema
+// would reject it as CTR_SHAPE_UNRECOGNIZED_KEYS.
+const PROPS_WRAPPER_KEYS: ReadonlySet<string> = new Set(Object.keys(propsSpecSchema.shape));
+const PROP_ENTRY_KEYS: ReadonlySet<string> = new Set(Object.keys(propEntrySchema.shape));
+const CONTEXT_ENTRY_KEYS: ReadonlySet<string> = new Set(Object.keys(contextEntrySchema.shape));
+const ACTION_ENTRY_KEYS: ReadonlySet<string> = new Set(Object.keys(actionEntrySchema.shape));
+const STREAM_ENTRY_KEYS: ReadonlySet<string> = new Set(Object.keys(streamChannelEntrySchema.shape));
+const AGENT_TOOL_KEYS: ReadonlySet<string> = new Set(Object.keys(agentToolEntrySchema.shape));
 /** Inner keys of an {@link AgentToolEntry.toolInfo} (the MCP descriptor). */
-const AGENT_TOOL_INFO_KEYS = new Set([
-  'inputSchema',
-  'description',
-  'outputSchema',
-]);
+const AGENT_TOOL_INFO_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(agentToolEntrySchema.shape.toolInfo.shape),
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

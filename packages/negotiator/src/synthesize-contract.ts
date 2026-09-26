@@ -44,9 +44,10 @@ import {
   type GadgetDescriptor,
   type JsonSchema,
 } from '@ggui-ai/protocol';
-import { lintContract, type ContractIssue } from '@ggui-ai/protocol';
+import { lintContract, type ContractIssue, type SuggestionFinding } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 import { normalizeSchema } from './normalize-schema.js';
+import { findDroppedActionEntries, isMemberDropOf, restoreDraftActionMembers } from './preserve-action-members.js';
 import {
   draftSeedPropKeys,
   findDroppedSeedSurfaces,
@@ -102,6 +103,16 @@ export interface SynthesizeContractResult {
    * findings without re-running the detector.
    */
   readonly findings: readonly ContractValidationFinding[];
+  /**
+   * What a repair-in-place could NOT keep of the agent's draft
+   * (ggui#1421): one `REPAIR_MEMBER_DROPPED` per declared action-entry
+   * member the merged contract cannot carry, one `REPAIR_ENTRY_DROPPED`
+   * per draft action the contract no longer carries under its name.
+   * Empty on the cold path (no draft) and whenever every declaration
+   * survived. The caller surfaces these to the agent beside the gate's
+   * own findings, so a drop is never silent.
+   */
+  readonly dropped: readonly SuggestionFinding[];
 }
 
 /**
@@ -837,6 +848,7 @@ export async function synthesizeContract(
       latencyMs: Date.now() - startedAt,
       attempts: 0,
       findings: [],
+      dropped: [],
     };
   }
 
@@ -878,6 +890,10 @@ export async function synthesizeContract(
   const draftSeedKeys =
     options?.draft !== undefined ? draftSeedPropKeys(options.draft) : [];
   let lastValidContract: DataContract | null = null;
+  /** The paths the draft's own findings name — members under repair are not restored. */
+  const underRepair: ReadonlySet<string> = new Set((options?.draftFindings ?? []).map((f) => f.path));
+  /** The member drops of the attempt that produced `lastValidContract`. */
+  let lastValidDropped: readonly SuggestionFinding[] = [];
 
   for (let attempt = 1; attempt <= MAX_SYNTH_ATTEMPTS; attempt++) {
     const userPrompt =
@@ -916,8 +932,13 @@ export async function synthesizeContract(
     }
 
     // `buildContract` normalizes every emitted schema (invalid `type`
-    // spellings → canonical JSON Schema) before the gate sees it.
-    const contract = buildContract(parsed);
+    // spellings → canonical JSON Schema) before the gate sees it. On a
+    // repair-in-place it authors only `{label, schema}` per action; the
+    // agent's DECLARED members (`oneShot` above all) are put back from
+    // the draft deterministically, and anything the merged tree cannot
+    // carry is named rather than lost (ggui#1421).
+    const restored = restoreDraftActionMembers(options?.draft, buildContract(parsed), underRepair);
+    const contract = restored.contract;
 
     // Defensive gate: re-validate the assembled contract against the
     // canonical schema. Catches LLM outputs that pass the loose tool
@@ -991,6 +1012,7 @@ export async function synthesizeContract(
         // Remember the best VALID candidate so an exhausted budget never
         // returns WORSE than the validity-only gate did (a valid contract).
         lastValidContract = validatedContract;
+        lastValidDropped = restored.dropped;
         lastReason = `synthesize-preservation: candidate dropped agent-owned propsSpec seed surface(s) [${dropped.join(', ')}]`;
         lastFindings = allFindings;
         repairNote = buildPreservationRepairNote(validatedContract, dropped);
@@ -1011,6 +1033,7 @@ export async function synthesizeContract(
       latencyMs: Date.now() - startedAt,
       attempts: attempt,
       findings: allFindings,
+      dropped: droppedFor(restored.dropped, options?.draft, validatedContract, underRepair),
     };
   }
 
@@ -1027,7 +1050,28 @@ export async function synthesizeContract(
     latencyMs: Date.now() - startedAt,
     attempts: MAX_SYNTH_ATTEMPTS,
     findings: lastFindings,
+    dropped: lastValidContract !== null ? droppedFor(lastValidDropped, options?.draft, lastValidContract, underRepair) : [],
   };
+}
+
+/**
+ * What a repair could not keep, against the contract it finally
+ * returns: the member drops of the accepted attempt, minus those on an
+ * entry the loop's own placement pass pruned afterwards (the entry
+ * finding names that loss once, with every member), plus one entry
+ * finding per draft action the final contract no longer carries.
+ */
+function droppedFor(
+  memberDrops: readonly SuggestionFinding[],
+  draft: unknown,
+  finalContract: DataContract,
+  underRepair: ReadonlySet<string>,
+): readonly SuggestionFinding[] {
+  const survivingEntries = Object.keys(finalContract.actionSpec ?? {});
+  return [
+    ...memberDrops.filter((f) => isMemberDropOf(f, survivingEntries)),
+    ...findDroppedActionEntries(draft, finalContract, underRepair),
+  ];
 }
 
 function parseToolInput(raw: unknown): SynthesizeToolInput | null {

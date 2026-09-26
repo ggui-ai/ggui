@@ -77,7 +77,18 @@ export interface EnsureConformingAccepted {
    * warnings on the (valid) draft. On `origin: 'synth'`, the ERROR
    * findings that rejected the agent's draft — so the agent-side model
    * learns what it got wrong, even though we repaired it. On
-   * `salvaged-subset` they include one finding per dropped entry.
+   * `llm-repair` they additionally carry one `REPAIR_MEMBER_DROPPED` per
+   * declared action-entry member the repair could not keep and one
+   * `REPAIR_ENTRY_DROPPED` per draft action it no longer carries
+   * (ggui#1421 — a repair preserves the draft's declarations, `oneShot`
+   * above all, and names any it must drop, each at its own path with the
+   * gate's reason in the message; a member under repair is named by the
+   * gate's own finding at that same path).
+   * The error findings are the union of what the gate refused on the
+   * raw draft and on its normalized form (the gate stops after the
+   * shape phase, so the raw lint alone can hide a semantic finding). On
+   * `salvaged-subset` they include one finding per dropped entry, with
+   * the gate's own code at the cut path.
    */
   readonly findings: readonly SuggestionFinding[];
   /** Operator- + LLM-readable explanation. */
@@ -154,6 +165,23 @@ export async function ensureConformingContract(
   // LLM call). Semantic deficiencies fall through to the repair loop.
   const normalized = normalizeDraft(args.draft);
   const normLint = lintContract(normalized);
+  // The gate stops after the shape phase, so the RAW draft's lint may
+  // name only its mechanical errors while the NORMALIZED draft's lint
+  // reaches the semantic ones (a dangling `nextStep`). Every path the
+  // gate refused on either tree is the agent's to see (ggui#1421): the
+  // union, raw first, one finding per (code, path).
+  const gateFindings: SuggestionFinding[] = [...errorFindings];
+  for (const e of normLint.errors) {
+    if (!gateFindings.some((f) => f.code === e.code && f.path === e.path)) {
+      gateFindings.push({ code: e.code, severity: 'error', path: e.path, message: e.message });
+    }
+  }
+  /** `gateFindings` plus `more`, one finding per (code, path) — a drop the gate already named is not named twice. */
+  const withGateFindings = (more: readonly SuggestionFinding[]): SuggestionFinding[] => {
+    const out = [...gateFindings];
+    for (const f of more) if (!out.some((g) => g.code === f.code && g.path === f.path)) out.push(f);
+    return out;
+  };
   if (normLint.errors.length === 0) {
     return {
       contract: dataContractSchema.parse(normalized),
@@ -182,12 +210,17 @@ export async function ensureConformingContract(
     synth.contract !== null &&
     lintContract(synth.contract).errors.length === 0
   ) {
+    const droppedPaths = synth.dropped.map((d) => d.path);
     return {
       contract: synth.contract,
       origin: 'synth',
       method: 'llm-repair',
-      findings: errorFindings,
-      reasoning: `repaired the agent draft to pass validateContract — ${synth.reason}`,
+      findings: withGateFindings(synth.dropped),
+      reasoning:
+        `repaired the agent draft to pass validateContract — ${synth.reason}` +
+        (droppedPaths.length > 0
+          ? `; dropped ${droppedPaths.length} declared action ${droppedPaths.length === 1 ? 'member/entry' : 'members/entries'} the repair could not keep (${droppedPaths.join(', ')}) — each is a finding`
+          : ''),
     };
   }
 
@@ -203,7 +236,7 @@ export async function ensureConformingContract(
       contract: salvaged.contract,
       origin: 'synth',
       method: 'salvaged-subset',
-      findings: [...errorFindings, ...salvaged.dropped],
+      findings: withGateFindings(salvaged.dropped),
       reasoning:
         `could not repair the agent draft within budget (${synth.reason}); ` +
         `proposing the conforming SUBSET of your draft — dropped ${droppedPaths.length} ` +
@@ -219,7 +252,7 @@ export async function ensureConformingContract(
     contract: null,
     origin: 'agent',
     method: 'declined',
-    findings: errorFindings,
+    findings: gateFindings,
     reasoning:
       `declined: could not repair the agent draft within budget (${synth.reason}) and no entry of it ` +
       `passes the contract gate — nothing to propose. Fix the findings (every one names its path) ` +

@@ -34,6 +34,7 @@ async function seedComponentRender(
     sourceCode?: string | undefined;
     omitSourceCode?: boolean;
     propsSpec?: ComponentGguiSession['propsSpec'];
+    actionSpec?: ComponentGguiSession['actionSpec'];
     props?: ComponentGguiSession['props'];
   } = {},
 ): Promise<{ sessionId: string }> {
@@ -50,6 +51,7 @@ async function seedComponentRender(
     lastActivityAt: NOW_MS,
     expiresAt: NOW_MS + 60_000,
     ...(opts.propsSpec !== undefined ? { propsSpec: opts.propsSpec } : {}),
+    ...(opts.actionSpec !== undefined ? { actionSpec: opts.actionSpec } : {}),
     ...(opts.props !== undefined ? { props: opts.props } : {}),
   };
   const sourceCode = opts.omitSourceCode ? undefined : (opts.sourceCode ?? AUTHORED);
@@ -109,6 +111,28 @@ describe('createGguiGetRenderSourceHandler', () => {
       expect(out.blueprint.contract).toEqual({
         propsSpec: { properties: { city: { schema: { type: 'string' } } } },
       });
+    });
+
+    it('reassembles actionSpec verbatim — every member the render committed, oneShot included (ggui#1421)', async () => {
+      // The read plane answers the SERVED contract: what the runtime's spent
+      // guard, the spend recorder and ui-gen's binding all key on. A member
+      // present at commit must be present here — the one-shot guard is
+      // declared, never inferred.
+      const actionSpec = {
+        confirm: {
+          label: 'Confirm booking',
+          description: 'Places the reservation. Once-only.',
+          schema: { type: 'object', properties: {}, additionalProperties: false },
+          confirm: true,
+          oneShot: true,
+        },
+        edit: { label: 'Change details', schema: { type: 'object', properties: {}, additionalProperties: false } },
+      } as const;
+      const { sessionId } = await seedComponentRender(renderStore, { actionSpec });
+      const handler = createGguiGetRenderSourceHandler({ renderStore });
+      const out = await handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' });
+      expect(out.blueprint.contract?.actionSpec).toEqual(actionSpec);
+      expect(out.blueprint.contract?.actionSpec?.['confirm']?.oneShot).toBe(true);
     });
 
     it('surfaces fixtureProps from the render\'s live props when present', async () => {

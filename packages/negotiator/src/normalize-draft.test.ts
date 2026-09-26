@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lintContract } from '@ggui-ai/protocol';
+import { actionEntrySchema, lintContract, streamChannelEntrySchema } from '@ggui-ai/protocol';
 import { normalizeDraft } from './normalize-draft.js';
 
 describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', () => {
@@ -122,5 +122,59 @@ describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', (
     expect(normalizeDraft(null)).toBeNull();
     expect(normalizeDraft('nope')).toBe('nope');
     expect(normalizeDraft(undefined)).toBeUndefined();
+  });
+});
+
+describe('normalizeDraft — keeps every member the protocol entry schemas name (ggui#1421)', () => {
+  // The allowed-key sets are DERIVED from the protocol's `.strict()` entry
+  // schemas, so this pin cannot drift when a schema grows: it builds one
+  // entry per spec carrying every key its schema names and expects every
+  // key back. `oneShot` is the member that was lost for eleven days.
+  it('an action entry carrying every actionEntrySchema key survives, oneShot included', () => {
+    const memberKeys = Object.keys(actionEntrySchema.shape).sort();
+    expect(memberKeys).toContain('oneShot');
+    // Built FROM the schema's keys, so a member added to actionEntrySchema
+    // tomorrow is exercised here the same day (a hand-listed entry would not be).
+    const sample: Record<string, unknown> = {
+      description: 'Places the reservation',
+      label: 'Confirm booking',
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+      example: {},
+      icon: 'check',
+      confirm: true,
+      oneShot: true,
+      nextStep: 'booking_confirm',
+    };
+    for (const key of memberKeys) expect(sample, `no sample value for actionEntrySchema key '${key}'`).toHaveProperty(key);
+    const draft = {
+      agentCapabilities: { tools: { booking_confirm: { toolInfo: { inputSchema: { type: 'object' } } } } },
+      actionSpec: { confirm: Object.fromEntries(memberKeys.map((k) => [k, sample[k]])) },
+    };
+    const out = normalizeDraft(draft) as { actionSpec: Record<string, Record<string, unknown>> };
+    const confirm = out.actionSpec['confirm'];
+    expect(confirm).toBeDefined();
+    expect(Object.keys(confirm ?? {}).sort()).toEqual(memberKeys);
+    expect(confirm?.['oneShot']).toBe(true);
+    expect(lintContract(out).errors).toEqual([]);
+  });
+
+  it('a stream entry carrying every streamChannelEntrySchema key survives (mode / replay / complete / example)', () => {
+    const memberKeys = Object.keys(streamChannelEntrySchema.shape).sort();
+    const draft = {
+      streamSpec: {
+        ticks: {
+          description: 'live ticks',
+          schema: { type: 'object', properties: {}, additionalProperties: false },
+          example: {},
+          mode: 'append',
+          replay: 'latest',
+          complete: false,
+          source: { tool: 'ticker' },
+        },
+      },
+      agentCapabilities: { tools: { ticker: { toolInfo: { inputSchema: { type: 'object' } } } } },
+    };
+    const out = normalizeDraft(draft) as { streamSpec: Record<string, Record<string, unknown>> };
+    expect(Object.keys(out.streamSpec['ticks'] ?? {}).sort()).toEqual(memberKeys);
   });
 });
