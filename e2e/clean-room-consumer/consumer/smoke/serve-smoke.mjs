@@ -158,12 +158,31 @@ try {
 } finally {
   shuttingDown = true;
   child.kill('SIGTERM');
-  for (let i = 0; i < 20 && child.exitCode === null && child.signalCode === null; i++) {
+  // The contract under test is the CLI's own shutdown bound: on SIGTERM it
+  // lets the event loop drain, then hard-exits after DRAIN_DEADLINE_MS
+  // (5 000 ms, ggui-cli/src/drain-deadline.ts). Draining is deliberate:
+  // a hard exit while the local embedding model is still loading aborts
+  // natively (#855). This smoke boots on a fresh HOME, so the model is
+  // downloading when SIGTERM lands, and the drain waits for it. The budget
+  // is that bound plus slack, never shorter than the promise it checks
+  // (a 2 000 ms budget failed whenever the cold load ran 2-5 s, #1419).
+  const SIGTERM_EXIT_BUDGET_MS = 5_000 + 1_500;
+  const termAt = Date.now();
+  while (
+    Date.now() - termAt < SIGTERM_EXIT_BUDGET_MS &&
+    child.exitCode === null &&
+    child.signalCode === null
+  ) {
     await sleep(100);
   }
   if (child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
-    fail('ggui serve — did not exit on SIGTERM (had to SIGKILL)');
+    fail(`ggui serve — did not exit within ${SIGTERM_EXIT_BUDGET_MS} ms of SIGTERM (had to SIGKILL)`);
+    // Name what held the loop open: the usual cause is the embedding model
+    // still loading (#1419), so say whether its warm line had appeared,
+    // then the server's last lines.
+    console.error(`        embedding warm line seen: ${log.includes('[ggui:embedding] warm')}`);
+    console.error(log.trim().split('\n').slice(-12).map((l) => `        ${l}`).join('\n'));
   } else if (!exitedEarly) {
     console.log('  ok    ggui serve — clean shutdown on SIGTERM');
   }
