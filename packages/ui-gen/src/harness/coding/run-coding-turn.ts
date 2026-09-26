@@ -30,9 +30,10 @@ import {
   APPLY_CHANGES_TOOL_SCOPED,
   GET_COMPONENTS_INFO_TOOL,
   GET_ICONS_TOOL,
+  ICON_LIST_NO_MATCH_GUIDANCE,
   REWRITE_TOOL,
-  WRITE_PLAN_TOOL,
   type LLMToolDef,
+  WRITE_PLAN_TOOL,
 } from "../../tools.js";
 import { LUCIDE_ICON_NAMES } from "@ggui-ai/design";
 import { formatWithHashlines } from "../hashline.js";
@@ -614,7 +615,7 @@ ${closingInstruction}`;
       iconNamesCache = LUCIDE_ICON_NAMES.join(", ");
     }
     console.log(`[simple] turn ${turnsUsed}: get_available_icons`);
-    let iconResult = `Available Lucide icon names (use with <Icon name="...">):\n${iconNamesCache}`;
+    let iconResult = `Available Lucide icon names (use with <Icon name="...">):\n${iconNamesCache}\n\n${ICON_LIST_NO_MATCH_GUIDANCE}`;
     // ggui#404 same-call circuit breaker. The icon list is constant by
     // construction, so every repeat is an identical exchange — record on
     // the BASE text (pre-nudge) so the chain keys stay stable across the

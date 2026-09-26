@@ -1425,6 +1425,57 @@ export const EXPERIMENT_COMMITS: BenchmarkCommit[] = [
       cancellation: 'Free cancellation until 2 hours before',
     },
   },
+  {
+    id: 'kpi-dashboard',
+    name: 'KPI Strip',
+    description: 'A row of KPI tiles whose items carry no id (ggui#1320: the key must come from the label, never the index)',
+    complexity: 'simple',
+    expectedMinScore: 65,
+    shellType: 'fullscreen',
+    screen: 'desktop',
+    prompt: `Build a KPI strip for a store dashboard.
+
+  Show one tile per KPI from props: its label, its value (already formatted for display) and, when present, its
+  change since the previous period (a signed string such as "+4.2%"). Show the period the strip covers from props.
+  Keep the tiles in one responsive row; nothing else on the card.
+
+  Requirements:
+  - Everything shown comes from props; no invented metrics
+  - Use the design system's primitives and tokens for all styling`,
+    contract: {
+      propsSpec: {
+        properties: {
+          period: { schema: { type: 'string' }, required: true, description: 'The period the KPIs cover, e.g. "Last 7 days"' },
+          kpis: {
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string' },
+                  value: { type: 'string' },
+                  delta: { type: 'string' },
+                },
+                required: ['label', 'value'],
+              },
+            },
+            required: true,
+            description: 'The KPI tiles, in display order; each has a label and a formatted value, and may carry a signed delta',
+          },
+        },
+      },
+      actionSpec: {},
+    },
+    props: {
+      period: 'Last 7 days',
+      kpis: [
+        { label: 'Revenue', value: '$48,210', delta: '+4.2%' },
+        { label: 'Orders', value: '1,284', delta: '+1.1%' },
+        { label: 'Conversion', value: '3.4%', delta: '-0.3%' },
+        { label: 'Avg. order', value: '$37.55' },
+      ],
+    },
+  },
 ];
 
 /**

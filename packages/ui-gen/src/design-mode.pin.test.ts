@@ -201,9 +201,15 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // the sunken role — all in the SHARED prompt, so BOTH prompt digests move together; the boilerplate digests
 // are byte-stable. Constrained be40b232… → d685e8df…, free 077a3387… → 987853c0….
 export const CONSTRAINED_PROMPT_SHA256 =
-  'd685e8df60c12000d6d2f192377b2489e5fc61d89de5753e4531f59f686451b8';
+  '9efefd840e863610455938a56df5b12963a3a6d7786f5712921e78d4b09e0aa1';
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '2afbb69a4c07a98058d56148718068bf00be63b172a609397da20d78bc12cb22';
+// Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
+// item's own identity — the field that names it when there is no id, never the map index; the prompt now
+// says what the self-check refuses). A HARD section shared by both arms, so BOTH prompt digests move
+// (constrained d685e8df… → 9efefd84…, free 987853c0… → 6b1c8fd4…); the boilerplate digests are
+// byte-stable. ggui#1183 (the icon tool's no-match guidance) lives on the tool description and result,
+// outside the pinned prompt, and moves nothing here.
 
 // ── Free-mode pins — drift detectors, updated deliberately with the arm ──
 // Re-recorded 2026-09-10 (#987 wave, design half: manifest v2 + surface-layering token
@@ -252,7 +258,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-24 for ggui#1083 cut 2 part B — see the constrained note (the shared FRAME_SIZING bullet).
 // Re-recorded 2026-09-24 for ggui#1083 cut 2's (B) — see the constrained note (the opening hero band).
 export const FREE_PROMPT_SHA256 =
-  '987853c0c323463d36b50d782e27c3b24fa4a635ff304b07b7cefb4d99d05510';
+  '6b1c8fd4d6660244d52e39512d3b32039663120009fc3ba70580ad5ef94c7c21';
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =

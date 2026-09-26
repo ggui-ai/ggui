@@ -256,11 +256,21 @@ export const APPLY_CHANGES_HASHLINE_TOOL_FLAT: LLMToolDef = {
   },
 };
 
+/**
+ * What to do when the name you wanted is not in the icon list (ggui#1183): the
+ * list is complete and constant, so a second call is the same exchange — and
+ * three of those end the run (`SAME_EXCHANGE_BREAK_AT`). Said ONCE, on the
+ * tool's description and appended to every result, because the model that
+ * looped had never been told the list would not change.
+ */
+export const ICON_LIST_NO_MATCH_GUIDANCE =
+  "This list is complete and constant — calling again returns exactly it. If the name you wanted is not here, pick the nearest listed name (or a neutral one such as `circle`) and continue with apply_changes; never call this tool twice.";
 /** Helper icon-lookup tool — not a patch grammar, attached to the same LLM turn. */
 export const GET_ICONS_TOOL: LLMToolDef = {
   name: "get_available_icons",
   description:
-    'List every Lucide icon name the <Icon name="..."> component renders (kebab-case). A name outside this list renders nothing — check before choosing.',
+    'List every Lucide icon name the <Icon name="..."> component renders (kebab-case). A name outside this list renders nothing — check before choosing. ' +
+    ICON_LIST_NO_MATCH_GUIDANCE,
   parameters: { type: "object", properties: {} },
 };
 

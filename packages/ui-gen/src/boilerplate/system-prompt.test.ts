@@ -332,3 +332,13 @@ describe('buildSystemPrompt — clientCapabilities section integration', () => {
     expect(prompt).toContain('`gadget_not_registered`');
   });
 });
+
+describe('DATA_PARAMETERIZATION — keys on a mapped list (ggui#1320)', () => {
+  it('says what to key by when the items carry no id, and that the index is refused — the prompt and the self-check agree', async () => {
+    const { DATA_PARAMETERIZATION } = await import('./hard-sections.js');
+    expect(DATA_PARAMETERIZATION).toContain('6. Keys on a mapped list come from the item\'s own identity');
+    expect(DATA_PARAMETERIZATION).toContain('key={item.label}');
+    expect(DATA_PARAMETERIZATION).toContain('never by the map index');
+    expect(DATA_PARAMETERIZATION).toContain('the self-check refuses an index key');
+  });
+});

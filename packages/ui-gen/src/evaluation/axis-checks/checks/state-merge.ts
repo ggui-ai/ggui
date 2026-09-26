@@ -108,7 +108,7 @@ function runMapKeyIsId(input: AxisCheckInput): EvalIssue[] {
       mkIssue(
         "render.map_key_is_id",
         `Array key uses index variable "${key}" — reorders and stream merges will break React reconciliation.`,
-        `Replace key={${key}} with key={item.id} (or item.symbol / whatever the entity id field is).`,
+        `Replace key={${key}} with key={item.id} — or, when the items carry no id, with the field that names each one (item.label / item.symbol / item.name).`,
       ),
     );
   }
