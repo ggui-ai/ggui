@@ -252,6 +252,7 @@ export {
   type BlueprintMatchMiss,
   type BlueprintMatchResult,
   type MatchBlueprintDeps,
+  RerankPair,
   type MatchBlueprintOptions,
 } from "./blueprint-matcher.js";
 export {

@@ -95,6 +95,7 @@ const DRAFT = { contract: { propsSpec: { properties: {} } } as DataContract };
 function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisionAdapter {
   return {
     resolveLlm: over.resolveLlm ?? (() => ({ async call() { return ''; } })),
+    ...(over.resolveRerank !== undefined ? { resolveRerank: over.resolveRerank } : {}),
     ...(over.pools !== undefined ? { pools: over.pools } : {}),
     ...(over.preMatch !== undefined ? { preMatch: over.preMatch } : {}),
     ...(over.warn !== undefined ? { warn: over.warn } : {}),
@@ -596,6 +597,26 @@ describe('decideHandshake — find-similar across pools', () => {
     const matchDeps = mockMatch.mock.calls[0]?.[0];
     expect(matchDeps?.llm).toBe(llm);
     expect(matchDeps?.installedBlueprints).toBe(bridge);
+  });
+
+  // ggui#1235 — the judge as a PAIR travels from the adapter to the matcher
+  // untouched; absent, the matcher keeps its own default (the LLM at 0.5).
+  it('passes the adapter\'s resolveRerank pair to matchBlueprint as `rerank`, and nothing when the adapter has none', async () => {
+    const llm = { async call() { return ''; } };
+    const pair = { judge: async () => ({ matchId: null, confidence: 0, latencyMs: 0, tokenCost: { input: 0, output: 0 } }), threshold: 0 };
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-ek' }));
+    await decideHandshake(
+      adapter({ resolveLlm: () => llm, resolveRerank: () => pair, pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(mockMatch.mock.calls[0]?.[0]?.rerank).toBe(pair);
+    mockMatch.mockClear();
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-ek' }));
+    await decideHandshake(
+      adapter({ resolveLlm: () => llm, pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(mockMatch.mock.calls[0]?.[0]).not.toHaveProperty('rerank');
   });
 
   it('fails open on an operational pool error — warns and tries the next pool', async () => {

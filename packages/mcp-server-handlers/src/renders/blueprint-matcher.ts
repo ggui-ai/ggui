@@ -130,6 +130,12 @@ export interface BlueprintMatchMiss {
 export type BlueprintMatchResult = BlueprintMatchHit | BlueprintMatchMiss;
 
 /** Compose deps for the matcher. */
+/** A judge with the confidence threshold it was measured on (ggui#1235). */
+export interface RerankPair {
+  readonly judge: RerankJudge;
+  readonly threshold: number;
+}
+
 export interface MatchBlueprintDeps {
   readonly registry: BlueprintRegistryDeps;
   /**
@@ -151,10 +157,7 @@ export interface MatchBlueprintDeps {
    * chain) passes `threshold: 0` and declines only with `matchId: null`.
    * Wins over a bare `llm` when both are given.
    */
-  readonly rerank?: {
-    readonly judge: RerankJudge;
-    readonly threshold: number;
-  };
+  readonly rerank?: RerankPair;
   /**
    * Optional marketplace-install bridge. When set, the matcher STARTS
    * `ensureCached(scope)` and reads the exact key while it runs: a hit

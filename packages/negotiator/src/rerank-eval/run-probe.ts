@@ -190,7 +190,7 @@ export function formatReport(report: ProbeReport): string {
       lines.push(
         `  [${o.pair.kind}] ${o.pair.id}: predicted=${o.predictedMatchId ?? 'null'}, gold=${o.pair.goldMatchId ?? 'null'}, conf=${o.decision.confidence.toFixed(2)}`,
       );
-      lines.push(`    reason: ${o.decision.reason}`);
+      lines.push(`    reason: ${o.decision.reason ?? '(none)'}`);
     }
   }
 

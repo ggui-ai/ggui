@@ -27,7 +27,7 @@
 
 export { hashContract, buildVariant } from './contract-hash.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
-export { llmRerankJudge, rerankCandidates } from './llm-rerank.js';
+export { llmRerankJudge, rerankCandidates, RERANK_SYSTEM_PROMPT } from './llm-rerank.js';
 export type {
   RerankCandidate,
   RerankDecision,

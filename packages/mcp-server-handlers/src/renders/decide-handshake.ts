@@ -67,6 +67,7 @@ import {
   type BlueprintMatchHit,
   type BlueprintMatchResult,
   type MatchBlueprintDeps,
+  type RerankPair,
 } from './blueprint-matcher.js';
 import type { CoverageGap } from './blueprint-coverage.js';
 import { isFulfillable } from './blueprint-fulfillability.js';
@@ -141,6 +142,15 @@ export interface HandshakeDecisionAdapter {
   resolveLlm(
     ctx: HandlerContext,
   ): Promise<LLMCaller | undefined> | LLMCaller | undefined;
+  /**
+   * The rerank judge as a pair with its own threshold (ggui#1235), for a
+   * deployment whose judge is not the LLM caller above — passed to the
+   * matcher as `rerank`. Absent → the matcher's default (the resolved LLM
+   * at its calibrated threshold), unchanged.
+   */
+  resolveRerank?(
+    ctx: HandlerContext,
+  ): Promise<RerankPair | undefined> | RerankPair | undefined;
   /**
    * Ordered list of blueprint pools to search. Empty / absent ⇒ the
    * find-similar probe is skipped entirely (synth-only). Searched in
@@ -579,6 +589,7 @@ export async function decideHandshake(
   // judge needs it at handshake time (parity with the render path), and
   // the synth/repair create path reuses it.
   const llm = await adapter.resolveLlm(ctx);
+  const rerank = adapter.resolveRerank ? await adapter.resolveRerank(ctx) : undefined;
 
   // Tier 1 — find-similar across pools (exact-key free + semantic
   // find+judge). Reuse the cached blueprint ATOMICALLY; a coverage gap is
@@ -616,6 +627,7 @@ export async function decideHandshake(
         const matchDeps: MatchBlueprintDeps = {
           registry: pool.registry,
           ...(llm ? { llm } : {}),
+          ...(rerank ? { rerank } : {}),
           ...(pool.installedBlueprints
             ? { installedBlueprints: pool.installedBlueprints }
             : {}),
