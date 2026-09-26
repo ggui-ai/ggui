@@ -58,6 +58,7 @@ import { registerBlueprint, type BlueprintRegistryDeps } from "../renders/index.
 import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import type { PutCodeHook } from "./generate.js";
+import { DirectionScopeWithoutDigestError } from "./errors.js";
 import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
 
 const opsInputSchema = opsRegisterBlueprintInputSchema.shape;
@@ -227,6 +228,12 @@ export function createGguiOpsRegisterBlueprintHandler(
       const componentCode = parsed.componentCode;
       const codeHash = createHash("sha256").update(componentCode).digest("hex");
 
+      // ggui#1427 — a scope without a digest is a scope for nothing: refused
+      // before anything is persisted (see DirectionScopeWithoutDigestError).
+      if (parsed.directionScope !== undefined && parsed.directionDigest === undefined) {
+        throw new DirectionScopeWithoutDigestError();
+      }
+
       const blueprintId = mintBlueprintId();
       // ONE variance for BOTH stores. The cache row's exact key is
       // `variantKey(variance)`; omitting it on the cache call filed every
@@ -292,6 +299,9 @@ export function createGguiOpsRegisterBlueprintHandler(
             ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
             ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
             ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
+            ...(parsed.directionDigest !== undefined && parsed.directionScope !== undefined
+              ? { directionScope: parsed.directionScope }
+              : {}),
             componentCode,
             // Same user-arm provenance as the MVB row above — one
             // handler call, one provenance claim across both stores.

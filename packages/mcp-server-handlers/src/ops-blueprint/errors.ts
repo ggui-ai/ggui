@@ -52,6 +52,24 @@ export class GeneratorNotFoundError extends Error {
  * `ggui_ops_set_provider_key`, or run the handler in an environment
  * whose `resolveLlm` dep returns a pool credential.
  */
+/**
+ * ggui#1427 — `directionScope` names which direction `directionDigest`
+ * hashes; sent without a digest it is a scope for nothing, and the door
+ * refuses it rather than storing a fact about a value it does not have. A
+ * digest without a scope is accepted (absent = no scope). Enforced here
+ * because the handler mounts the input schema's raw shape, where a
+ * cross-field rule cannot live.
+ */
+export class DirectionScopeWithoutDigestError extends Error {
+  readonly code = "direction_scope_without_digest" as const;
+  constructor() {
+    super(
+      "direction_scope_without_digest: `directionScope` was sent without `directionDigest` — a scope names which direction the digest hashes, so send both or neither."
+    );
+    this.name = "DirectionScopeWithoutDigestError";
+  }
+}
+
 export class MissingCredentialsError extends Error {
   readonly code = "missing_credentials" as const;
   constructor(message?: string) {

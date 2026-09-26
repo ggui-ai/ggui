@@ -445,3 +445,42 @@ describe("ggui_ops_register_blueprint — an empty judgedCanvases is refused at 
     expect(opsRegisterBlueprintInputSchema.safeParse({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE }).success).toBe(true);
   });
 });
+
+describe("ggui_ops_register_blueprint — directionScope (cto on ggui#1427)", () => {
+  it("accepts `app` and `request`, refuses any other spelling, and stores the scope beside the digest", async () => {
+    const base = { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, directionDigest: "a".repeat(64) };
+    expect(opsRegisterBlueprintInputSchema.safeParse({ ...base, directionScope: "app" }).success).toBe(true);
+    expect(opsRegisterBlueprintInputSchema.safeParse({ ...base, directionScope: "request" }).success).toBe(true);
+    expect(opsRegisterBlueprintInputSchema.safeParse({ ...base, directionScope: "item" }).success).toBe(false);
+    const blueprintStore = new InMemoryBlueprintStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      putCode: (codeHash, body) => { blueprintStore.putCode(codeHash, body); },
+      cacheRegistry: { embedding: new MockEmbeddingProvider(), vectorStore, index },
+    });
+    await handler.handler({ ...base, directionScope: "request" }, makeCtx("app-1"));
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", blueprintKey(SAMPLE_CONTRACT));
+    expect(found!.directionDigest).toBe("a".repeat(64));
+    expect(found!.directionScope).toBe("request");
+  });
+  it("a scope sent without a digest is refused at the door (a scope for nothing); a digest without a scope is accepted", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      putCode: (codeHash, body) => { blueprintStore.putCode(codeHash, body); },
+      cacheRegistry: { embedding: new MockEmbeddingProvider(), vectorStore, index },
+    });
+    await expect(
+      handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, directionScope: "app" }, makeCtx("app-1")),
+    ).rejects.toThrow(/directionScope/);
+    expect(await blueprintStore.get("bp_missing")).toBeNull();
+    await handler.handler({ contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, directionDigest: "b".repeat(64) }, makeCtx("app-1"));
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", blueprintKey(SAMPLE_CONTRACT));
+    expect(found!.directionDigest).toBe("b".repeat(64));
+    expect(found).not.toHaveProperty("directionScope");
+  });
+});

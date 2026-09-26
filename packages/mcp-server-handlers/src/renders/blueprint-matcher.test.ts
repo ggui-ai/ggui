@@ -9,6 +9,7 @@ import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
 import { matchBlueprint } from './blueprint-matcher.js';
 import { composeEmbeddingInput, registerBlueprint } from './blueprint-registry.js';
+import { directionDigest } from './fits.js';
 import { decideHandshake } from './decide-handshake.js';
 import { MIN_SIMILARITY_SCORE } from '../blueprints/search-blueprints.js';
 import type { HandlerContext } from '../types.js';
@@ -1633,5 +1634,20 @@ describe('matchBlueprint — one floor per query kind: 0.50 composed, 0.2 intent
       { minCosineForRerank: 0 },
     );
     expect(result.strategy).toBe('semantic');
+  });
+});
+
+describe('matchBlueprint — a direction drop names its scope (cto on ggui#1427)', () => {
+  it('fitDeclined carries directionScope for a direction miss on a candidate that declared one', async () => {
+    const registry = makeRegistry();
+    const scoped = await registerBlueprint(registry, SCOPE, {
+      kind: 'template', contract: NOTEPAD_CONTRACT, intent: 'notepad', componentCode: 'a', source: { kind: 'user' },
+      directionDigest: directionDigest('warm tone'), directionScope: 'request',
+    });
+    const seen: string[][] = [];
+    const judge = { judge: async (_q: unknown, c: ReadonlyArray<{ readonly id: string }>) => { seen.push(c.map((x) => x.id)); return { matchId: null, confidence: 0, reason: '', latencyMs: 0 }; }, threshold: 0.5 };
+    const result = await matchBlueprint({ registry, rerank: judge }, SCOPE, { intent: 'a notepad', fit: { directionDigest: directionDigest('cold tone') } }, { minCosineForRerank: -1 });
+    expect(seen).toEqual([]);
+    expect(result.fitDeclined).toEqual([{ id: scoped.id, miss: 'direction', directionScope: 'request' }]);
   });
 });

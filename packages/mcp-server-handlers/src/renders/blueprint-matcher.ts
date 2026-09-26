@@ -368,6 +368,7 @@ export async function matchBlueprint(
         ...(bp.judgedCanvases !== undefined ? { judgedCanvases: bp.judgedCanvases } : {}),
         ...(bp.aestheticPreset !== undefined ? { aestheticPreset: bp.aestheticPreset } : {}),
         ...(bp.directionDigest !== undefined ? { directionDigest: bp.directionDigest } : {}),
+        ...(bp.directionScope !== undefined ? { directionScope: bp.directionScope } : {}),
       },
       fitRequest,
     );
@@ -587,7 +588,14 @@ export async function matchBlueprint(
   const fitting = eligible.filter((c) => verdicts.get(c.blueprint.id)?.fits === true);
   const fitDeclined: FitDeclined[] = eligible.flatMap((c) => {
     const v = verdicts.get(c.blueprint.id);
-    return v !== undefined && !v.fits && v.miss !== undefined ? [{ id: c.blueprint.id, miss: v.miss }] : [];
+    if (v === undefined || v.fits || v.miss === undefined) return [];
+    return [
+      {
+        id: c.blueprint.id,
+        miss: v.miss,
+        ...(v.miss === 'direction' && v.directionScope !== undefined ? { directionScope: v.directionScope } : {}),
+      },
+    ];
   });
 
   if (eligible.length === 0) {

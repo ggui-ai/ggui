@@ -12,7 +12,10 @@
  * sentence, symmetric with `*_generate_*`'s), `judgedCanvases` (a
  * non-empty list — unknown is omission, never an empty list, which would
  * declare a card judged on no canvas), `aestheticPreset { id, version? }`
- * and `directionDigest` (normalised sha256 hex). None joins the cache
+ * and `directionDigest` (normalised sha256 hex), plus `directionScope`
+ * (`app` — the direction the app's profile carries; `request` — a
+ * direction given with the request itself; only beside a digest, refused
+ * without one; a digest without a scope stays accepted). None joins the cache
  * identity; each rides the cache row for the semantic reuse pre-filter
  * (`fits()`: data-shape, surface, direction), and an omitted fact reads
  * not-evaluated. The schema is strict and its only senders are the

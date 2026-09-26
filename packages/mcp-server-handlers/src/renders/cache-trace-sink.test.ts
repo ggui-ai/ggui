@@ -8,6 +8,7 @@ import {
   setCacheTraceSink,
   newCacheTraceId,
   type CacheTraceEvent,
+  fitLabel,
 } from './cache-trace-sink.js';
 
 /**
@@ -381,5 +382,16 @@ describe('emitCacheTraceEvent — GGUI_CACHE_TRACE=scores (ggui#1275)', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('"msg":"cache_trace"');
     expect(lines[0]).not.toContain('cache_trace_scores');
+  });
+});
+
+describe('fitLabel — one word per verdict, the direction miss carrying its scope (ggui#1427)', () => {
+  it('reads fits / miss:<kind> / would-miss:<kind>, and a direction miss with a declared scope appends it', () => {
+    const checks = { 'data-shape': 'hit', surface: 'not-evaluated', direction: 'miss' } as const;
+    expect(fitLabel({ fits: true, checks: { 'data-shape': 'hit', surface: 'hit', direction: 'hit' } }, 'miss')).toBe('fits');
+    expect(fitLabel({ fits: false, miss: 'data-shape', checks: { ...checks, 'data-shape': 'miss' } }, 'miss')).toBe('miss:data-shape');
+    expect(fitLabel({ fits: false, miss: 'direction', checks }, 'would-miss')).toBe('would-miss:direction');
+    expect(fitLabel({ fits: false, miss: 'direction', directionScope: 'app', checks }, 'would-miss')).toBe('would-miss:direction:app');
+    expect(fitLabel({ fits: false, miss: 'direction', directionScope: 'request', checks }, 'miss')).toBe('miss:direction:request');
   });
 });

@@ -18,6 +18,14 @@ import { createHash } from 'node:crypto';
 import type { DataContract, JsonValue } from '@ggui-ai/protocol';
 
 export type FitKind = 'data-shape' | 'surface' | 'direction';
+/**
+ * Which direction a candidate's `directionDigest` hashes: `app` — the
+ * direction the app's profile carries; `request` — a direction given with
+ * the request itself. A card built for a request-given direction never
+ * matches an app-level request by construction; the scope rides the verdict
+ * so a direction miss can be read by its cause.
+ */
+export type DirectionScope = 'app' | 'request';
 export type FitCheck = 'hit' | 'miss' | 'not-evaluated';
 
 /** An aesthetic preset reference: the id, and the version when one is named. */
@@ -45,6 +53,7 @@ export interface FitCandidate {
   readonly judgedCanvases?: readonly string[];
   readonly aestheticPreset?: AestheticPresetRef;
   readonly directionDigest?: string;
+  readonly directionScope?: DirectionScope;
 }
 
 export interface FitVerdict {
@@ -52,12 +61,16 @@ export interface FitVerdict {
   /** The first miss in check order; absent when the candidate fits. */
   readonly miss?: FitKind;
   readonly checks: Readonly<Record<FitKind, FitCheck>>;
+  /** The candidate's declared direction scope, present whenever the direction check ran. */
+  readonly directionScope?: DirectionScope;
 }
 
 /** A candidate the pre-filter dropped, named with its first miss. */
 export interface FitDeclined {
   readonly id: string;
   readonly miss: FitKind;
+  /** On a direction miss, the candidate's declared scope when it had one. */
+  readonly directionScope?: DirectionScope;
 }
 
 const FIT_ORDER: readonly FitKind[] = ['data-shape', 'surface', 'direction'];
@@ -127,5 +140,9 @@ export function fits(candidate: FitCandidate, request: FitRequest): FitVerdict {
     direction: checkDirection(candidate, request),
   };
   const miss = FIT_ORDER.find((k) => checks[k] === 'miss');
-  return miss === undefined ? { fits: true, checks } : { fits: false, miss, checks };
+  const scope =
+    checks.direction !== 'not-evaluated' && candidate.directionScope !== undefined
+      ? { directionScope: candidate.directionScope }
+      : {};
+  return miss === undefined ? { fits: true, checks, ...scope } : { fits: false, miss, checks, ...scope };
 }

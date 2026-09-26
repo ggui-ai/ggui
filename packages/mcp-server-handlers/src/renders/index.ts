@@ -318,6 +318,7 @@ export {
   fits,
   jsonSchemaTypesCompatible,
   type AestheticPresetRef,
+  type DirectionScope,
   type FitCandidate,
   type FitCheck,
   type FitDeclined,

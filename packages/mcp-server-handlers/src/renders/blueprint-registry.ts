@@ -55,7 +55,7 @@ import type {
 // ops-blueprint) name the index type from one barrel without reaching
 // into `@ggui-ai/mcp-server-core` directly.
 export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
-import type { AestheticPresetRef } from './fits.js';
+import type { AestheticPresetRef, DirectionScope } from './fits.js';
 import {
   blueprintSourceToFlat,
   flatToBlueprintSource,
@@ -135,6 +135,8 @@ export interface Blueprint {
   readonly aestheticPreset?: AestheticPresetRef;
   /** `directionDigest()` of the direction text it was generated under. */
   readonly directionDigest?: string;
+  /** Which direction the digest hashes (see {@link DirectionScope}); only ever present beside a digest. */
+  readonly directionScope?: DirectionScope;
   /** Generated component source. Empty string when generation hasn't happened yet. */
   readonly componentCode: string;
   /**
@@ -291,6 +293,8 @@ export interface RegisterBlueprintInput {
   readonly aestheticPreset?: AestheticPresetRef;
   /** See {@link Blueprint.directionDigest}. Absent writes nothing. */
   readonly directionDigest?: string;
+  /** See {@link Blueprint.directionScope}. Written only beside a digest; otherwise nothing. */
+  readonly directionScope?: DirectionScope;
   readonly componentCode: string;
   /**
    * Authored (pre-compile) source body, when the generator distinguishes
@@ -406,6 +410,7 @@ const METADATA_KEYS = {
   aestheticPresetId: 'aestheticPresetId',
   aestheticPresetVersion: 'aestheticPresetVersion',
   directionDigest: 'directionDigest',
+  directionScope: 'directionScope',
 } as const;
 
 function blueprintToMetadata(
@@ -449,7 +454,14 @@ function blueprintToMetadata(
     ...(bp.directionDigest !== undefined
       ? { [METADATA_KEYS.directionDigest]: bp.directionDigest }
       : {}),
+    ...(bp.directionDigest !== undefined && bp.directionScope !== undefined
+      ? { [METADATA_KEYS.directionScope]: bp.directionScope }
+      : {}),
   };
+}
+
+function readDirectionScope(raw: string | number | boolean | null | undefined): DirectionScope | undefined {
+  return raw === 'app' || raw === 'request' ? raw : undefined;
 }
 
 /**
@@ -623,6 +635,8 @@ function rowToBlueprint(
   const judgedCanvases = readJudgedCanvases(metadata[METADATA_KEYS.judgedCanvases]);
   const aestheticPreset = readAestheticPreset(metadata);
   const directionDigest = readScalarString(metadata[METADATA_KEYS.directionDigest]);
+  const directionScope =
+    directionDigest !== undefined ? readDirectionScope(metadata[METADATA_KEYS.directionScope]) : undefined;
   return {
     id: key,
     kind: kindStr,
@@ -642,6 +656,7 @@ function rowToBlueprint(
     ...(judgedCanvases !== undefined ? { judgedCanvases } : {}),
     ...(aestheticPreset !== undefined ? { aestheticPreset } : {}),
     ...(directionDigest !== undefined ? { directionDigest } : {}),
+    ...(directionScope !== undefined ? { directionScope } : {}),
   };
 }
 
@@ -821,6 +836,10 @@ export async function registerBlueprint(
         }
       : {}),
     ...(input.directionDigest !== undefined ? { directionDigest: input.directionDigest } : {}),
+    // A scope is a fact about a digest; without one it is written nowhere.
+    ...(input.directionDigest !== undefined && input.directionScope !== undefined
+      ? { directionScope: input.directionScope }
+      : {}),
     ...(warnFindings.length > 0
       ? { validationWarnings: warnFindings }
       : {}),

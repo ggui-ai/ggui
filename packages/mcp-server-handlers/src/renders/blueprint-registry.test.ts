@@ -1712,3 +1712,24 @@ describe('registerBlueprint — the fit facts on the row (ggui#1427)', () => {
     expect('directionDigest' in listed[0]!).toBe(false);
   });
 });
+
+describe('registerBlueprint — directionScope beside the digest (cto on ggui#1427)', () => {
+  it('round-trips the scope; absent writes nothing; a scope without a digest writes nothing', async () => {
+    const deps = makeDeps();
+    const scoped = await registerBlueprint(deps, SCOPE, {
+      kind: 'template', contract: FEEDBACK_CONTRACT, intent: 'rate the meal', componentCode: 'x', source: { kind: 'user' },
+      directionDigest: 'a'.repeat(64), directionScope: 'request',
+    });
+    expect(scoped.directionScope).toBe('request');
+    const listed = await listBlueprints({ vectorStore: deps.vectorStore }, SCOPE);
+    expect(listed[0]?.directionScope).toBe('request');
+    const bare = await registerBlueprint(deps, SCOPE, {
+      kind: 'template', contract: NOTEPAD_CONTRACT, intent: 'notepad', componentCode: 'y', source: { kind: 'user' },
+      directionScope: 'app',
+    });
+    expect(bare).not.toHaveProperty('directionScope');
+    const rows = await deps.vectorStore.listByScope(SCOPE);
+    const bareRow = rows.find((r) => r.key === bare.id);
+    expect(Object.keys(bareRow!.metadata)).not.toContain('directionScope');
+  });
+});

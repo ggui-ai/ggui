@@ -691,5 +691,8 @@ export function truncateCacheTraceIntent(intent: string): string {
 
 /** ggui#1427 — one word per verdict for the log line: `fits`, or `<prefix>:<first miss kind>`. */
 export function fitLabel(verdict: FitVerdict, missPrefix: 'miss' | 'would-miss'): string {
-  return verdict.fits ? 'fits' : `${missPrefix}:${verdict.miss ?? 'unknown'}`;
+  if (verdict.fits) return 'fits';
+  const scope =
+    verdict.miss === 'direction' && verdict.directionScope !== undefined ? `:${verdict.directionScope}` : '';
+  return `${missPrefix}:${verdict.miss ?? 'unknown'}${scope}`;
 }

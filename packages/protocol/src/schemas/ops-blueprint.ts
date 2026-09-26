@@ -244,6 +244,12 @@ export const opsRegisterBlueprintInputSchema = z
       .describe(
         'sha256 (hex) of the direction text this interface was generated under, normalised: trimmed, whitespace collapsed, lowercased. A request whose current direction digests differently is not offered this interface for semantic reuse. Omit when unknown.',
       ),
+    directionScope: z
+      .enum(['app', 'request'])
+      .optional()
+      .describe(
+        "Which direction `directionDigest` hashes: `app` — the direction the app's profile carries; `request` — a direction given with the request itself. Only meaningful beside `directionDigest`: a scope sent without a digest is refused; a digest without a scope is accepted.",
+      ),
     setAsOperatorDefault: z
       .boolean()
       .optional()

@@ -128,3 +128,19 @@ describe('fits', () => {
     expect(fits(cand, { contract: props({}), aestheticPreset: { id: 'editorial' }, directionDigest: directionDigest('cold tone') }).checks.direction).toBe('miss');
   });
 });
+
+describe('fits — the direction scope rides the verdict (cto on #1427)', () => {
+  const digest = directionDigest('warm tone');
+  it('a candidate that declares its direction scope carries it on the verdict whenever the direction check ran — hit or miss', () => {
+    const miss = fits({ contract: props({}), directionDigest: digest, directionScope: 'request' }, { contract: props({}), directionDigest: directionDigest('cold tone') });
+    expect(miss.checks.direction).toBe('miss');
+    expect(miss.directionScope).toBe('request');
+    const hit = fits({ contract: props({}), directionDigest: digest, directionScope: 'app' }, { contract: props({}), directionDigest: digest });
+    expect(hit.checks.direction).toBe('hit');
+    expect(hit.directionScope).toBe('app');
+  });
+  it('no scope on the verdict when the candidate declared none, or when the direction check did not run', () => {
+    expect(fits({ contract: props({}), directionDigest: digest }, { contract: props({}), directionDigest: digest })).not.toHaveProperty('directionScope');
+    expect(fits({ contract: props({}), directionDigest: digest, directionScope: 'app' }, { contract: props({}) })).not.toHaveProperty('directionScope');
+  });
+});
