@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { loadPlaywright } from './lib/load-playwright.mjs';
-import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome, readEvalImageEnv } from '../src/exp008/eval-cell.ts';
+import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome, readEvalImageEnv, judgedCssTokens } from '../src/exp008/eval-cell.ts';
 
 function getArg(names, fallback) {
   const i = process.argv.findIndex((a) => names.includes(a));
@@ -124,12 +124,16 @@ async function main() {
   // it (report.meta.visualUnavailableReason) — never a silent pass, never a
   // bare null when a reason exists.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, canvasViewport }) => {
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, themeId, canvasViewport }) => {
         const { runVisualEvaluationDetailed, CANVAS_CLASSES, cssTokensForAppTheme } = await import('@ggui-ai/ui-gen/evaluation');
         try {
           const d = await runVisualEvaluationDetailed(
-            // theme → the ONE theme→CSS composer the iframe runtime uses; absent = the design defaults (no cssTokens key)
-            { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(theme ? { cssTokens: cssTokensForAppTheme(theme) } : {}) },
+            // theme / themeId → the ONE theme→CSS composer the iframe runtime uses, composed as the mint
+            // composes (judgedCssTokens, #1023); neither = the design defaults (no cssTokens key)
+            (() => {
+              const cssTokens = judgedCssTokens({ theme, themeId }, cssTokensForAppTheme);
+              return { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(cssTokens !== undefined ? { cssTokens } : {}) };
+            })(),
             {
               ...JUDGE_CONFIG,
               ...(sampleProps ? { sampleProps } : {}),

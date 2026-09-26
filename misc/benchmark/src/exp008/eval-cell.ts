@@ -102,6 +102,12 @@ export interface BootstrapJudgeInput {
   /** The app's theme overlay, when the app carries one — the judge renders under it (the visitor's paint), not the design defaults. */
   readonly theme?: AppTheme;
   /**
+   * ggui#1023 — the app's registered theme (its preset ladder), when the app names one: the
+   * overlay composes ON it, as the runtime's page and the mint's in-loop round do. Absent = the
+   * default ladder (today's path).
+   */
+  readonly themeId?: string;
+  /**
    * Top-level profile members the read door stripped because this judge does not know them
    * (a newer writer, N−1 #1014) — present only when non-empty. The row names them (#1105):
    * a member the judge should have scored is dropped WITH its name, never silently.
@@ -199,6 +205,8 @@ export interface CellInputs {
   readonly profile?: AppGenerationProfile;
   /** The app's theme from judge-input.json — the judge renders under it; absent on corpus cells and on themeless apps. */
   readonly theme?: AppTheme;
+  /** ggui#1023 — the app's registered theme id from judge-input.json; the overlay composes on its ladder. */
+  readonly themeId?: string;
   /** Profile / theme members the read door stripped (a newer writer) — the row names them (#1105). */
   readonly profileStripped?: readonly string[];
   readonly themeStripped?: readonly string[];
@@ -278,11 +286,17 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     theme = door.theme;
     if (door.stripped.length > 0) themeStripped = door.stripped;
   }
+  // ggui#1023 — loud on a present-but-unusable id, like every other member of this door.
+  if (raw.themeId !== undefined && (typeof raw.themeId !== 'string' || raw.themeId.trim().length === 0)) {
+    throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "themeId" must be a non-empty string when present (in ${dir})`);
+  }
+  const themeId = typeof raw.themeId === 'string' ? raw.themeId : undefined;
   return {
     prompt: raw.prompt,
     ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
     ...(profile !== undefined ? { profile } : {}),
     ...(theme !== undefined ? { theme } : {}),
+    ...(themeId !== undefined ? { themeId } : {}),
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
@@ -347,6 +361,7 @@ export function readCellInputs(dir: string): CellInputs {
   let commit: BenchmarkCommit;
   let profile: AppGenerationProfile | undefined;
   let theme: AppTheme | undefined;
+  let themeId: string | undefined;
   let profileStripped: readonly string[] | undefined;
   let themeStripped: readonly string[] | undefined;
   let canvasViewport: DeclaredCanvasViewport | undefined;
@@ -355,6 +370,7 @@ export function readCellInputs(dir: string): CellInputs {
     commit = bootstrapCommit(judge, contractJson.contract);
     profile = judge.profile;
     theme = judge.theme;
+    themeId = judge.themeId;
     profileStripped = judge.profileStripped;
     themeStripped = judge.themeStripped;
     canvasViewport = judge.canvasViewport;
@@ -385,6 +401,7 @@ export function readCellInputs(dir: string): CellInputs {
     bootstrap,
     ...(profile !== undefined ? { profile } : {}),
     ...(theme !== undefined ? { theme } : {}),
+    ...(themeId !== undefined ? { themeId } : {}),
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
@@ -445,6 +462,21 @@ export function isVisualUnavailable(v: VisualOutcome | VisualUnavailable | null)
   return v !== null && 'unavailableReason' in v;
 }
 
+/**
+ * ggui#1023 — the judged page's CSS tokens, composed exactly as the mint's in-loop round does
+ * (`cloud/ggui-protocol-pod/src/runner/mint-arm.ts`): when the cell carries a theme overlay OR a
+ * registered theme id, `compose(theme, 'light', themeId)`; when it carries neither, `undefined`
+ * (the design defaults, no cssTokens key — today's path, byte-identical). Keeping this one
+ * condition in one place is what stops the mint and the judge from painting different pages.
+ */
+export function judgedCssTokens(
+  ctx: { theme?: AppTheme; themeId?: string },
+  compose: (theme: AppTheme | undefined, mode: 'light', themeId?: string) => string,
+): string | undefined {
+  if (ctx.theme === undefined && ctx.themeId === undefined) return undefined;
+  return compose(ctx.theme, 'light', ctx.themeId);
+}
+
 export type VisualJudge = (ctx: {
   compiledCode: string;
   originalPrompt: string;
@@ -452,6 +484,8 @@ export type VisualJudge = (ctx: {
   profile?: AppGenerationProfile;
   /** The app's theme, when the cell carries one — the judge renders under its overlay (absent = the design defaults, today's path). */
   theme?: AppTheme;
+  /** ggui#1023 — the app's registered theme id; the overlay composes on its ladder (absent = the default ladder). */
+  themeId?: string;
   contract: DataContract;
   /** The commit's fixture props — what the harness passes the judge (`runner.ts:423`). */
   sampleProps?: JsonObject;
@@ -668,6 +702,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       originalPrompt: inputs.prompt,
       ...(inputs.profile !== undefined ? { profile: inputs.profile } : {}),
       ...(inputs.theme !== undefined ? { theme: inputs.theme } : {}),
+      ...(inputs.themeId !== undefined ? { themeId: inputs.themeId } : {}),
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
       ...(inputs.canvasViewport !== undefined ? { canvasViewport: inputs.canvasViewport } : {}),
