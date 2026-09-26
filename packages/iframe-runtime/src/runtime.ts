@@ -2990,6 +2990,12 @@ function emitUserActionDoorbell(args: {
   readonly sessionId: string;
   readonly actionId: string;
   readonly submittedAt: string;
+  /**
+   * Called when the host answers the doorbell with a JSON-RPC `error`,
+   * its in-band way of naming the drop (#1309; ggui#1314). The caller
+   * turns it into the explanation of what the user must do.
+   */
+  readonly onRefused: () => void;
 }): void {
   // THE DIRECTIVE LIVES IN THIS TEXT. Every host (claude.ai,
   // chatgpt.com, ggui-aware SDKs) forwards the `ui/message` text to the
@@ -3068,9 +3074,14 @@ function emitUserActionDoorbell(args: {
   // `ai.ggui/userAction` to match our other protocol extensions
   // (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
   currentTelemetrySink?.record('doorbell.ring', args.sessionId);
+  const doorbellId = Math.floor(Math.random() * 1e9);
+  watchDoorbellReply(doorbellId, (code) => {
+    currentTelemetrySink?.record('doorbell.refused', `${args.sessionId} code=${code}`);
+    args.onRefused();
+  });
   postToParent({
     jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
+    id: doorbellId,
     method: 'ui/message',
     params: {
       role: 'user',
@@ -3085,6 +3096,50 @@ function emitUserActionDoorbell(args: {
       ],
     },
   });
+}
+
+/**
+ * How long the view listens for the host's answer to a doorbell. A host
+ * may ask the user before sending the message, so the answer can take a
+ * while; past this the listener is removed and a late answer is ignored.
+ */
+const DOORBELL_REPLY_WAIT_MS = 5 * 60_000;
+
+/**
+ * Listen for the host's JSON-RPC reply to the doorbell `id` (ggui#1314).
+ * The doorbell is posted raw, outside the `App`'s request table, so no
+ * one else correlates it. Only a frame from `window.parent` carrying this
+ * `id` and a `result` or `error` counts; the first such frame ends the
+ * watch. An `error` is the host refusing the doorbell in-band (#1309:
+ * a host delivers a view's `ui/message` or answers it with an error,
+ * never a success), reported with its numeric code (`unknown` when the
+ * host sent none).
+ */
+function watchDoorbellReply(id: number, onRefused: (code: string) => void): void {
+  if (typeof window === 'undefined') return;
+  const onMessage = (ev: MessageEvent): void => {
+    if (ev.source !== window.parent) return;
+    const frame: unknown = ev.data;
+    if (frame === null || typeof frame !== 'object') return;
+    if (!('jsonrpc' in frame) || frame.jsonrpc !== '2.0') return;
+    if (!('id' in frame) || frame.id !== id) return;
+    const refused = 'error' in frame;
+    if (!refused && !('result' in frame)) return;
+    stop();
+    if (!refused) return;
+    const error = frame.error;
+    const code =
+      error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'number'
+        ? String(error.code)
+        : 'unknown';
+    onRefused(code);
+  };
+  const stop = (): void => {
+    window.removeEventListener('message', onMessage);
+    clearTimeout(timer);
+  };
+  window.addEventListener('message', onMessage);
+  const timer = setTimeout(stop, DOORBELL_REPLY_WAIT_MS);
 }
 
 /**
@@ -3386,6 +3441,15 @@ function resetRelayCueThrottles(): void {
 }
 
 /** @internal — exported for unit tests to reset module state. */
+/**
+ * Test-only: install the telemetry sink the runtime records into (normally
+ * set once at boot), so a test can observe the events a code path posts.
+ * `null` restores the no-sink state.
+ */
+export function __setTelemetrySinkForTest(sink: TelemetrySink | null): void {
+  currentTelemetrySink = sink;
+}
+
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
   runtimeConnectionWriter().set(true);
@@ -3770,6 +3834,16 @@ export function dispatchSubmitAction(args: {
           sessionId,
           actionId,
           submittedAt: firedAt,
+          // The host refused the wake-up in-band (ggui#1314): the "sent
+          // to chat" reassurance above is no longer true, so say what
+          // the user has to do instead. The gesture itself is safe on
+          // the pipe; only the wake-up failed.
+          onRefused: () => {
+            showActionToast(
+              `💬 ${intent}${dataPart} — the chat did not take the message. Send a message to continue.`,
+              'action_required',
+            );
+          },
         });
         return;
       }

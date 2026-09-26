@@ -53,8 +53,10 @@ import {
   resetRelayLatchForBoot,
   routeDispatch,
   setCurrentApp,
+  __setTelemetrySinkForTest,
 } from '../runtime.js';
 import { ensureStatusDom } from '../status-dom.js';
+import { createTelemetrySink, type TelemetrySink } from '../runtime-telemetry.js';
 import {
   __resetHostCapabilitiesForTest,
   setHostCapabilities,
@@ -1647,5 +1649,99 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(notice).not.toBeNull();
     expect(root).not.toBeNull();
     expect(notice!.compareDocumentPosition(root!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+/**
+ * ggui#1314 — a doorbell a host REFUSES in-band is named in the view.
+ * Under #1309's `ui-message-turn` token (AgJSON draft.4 §6 viewMessageTurns)
+ * a host either delivers a view's `ui/message` as a later turn or answers
+ * it with a JSON-RPC `error`, never a success. The runtime correlates the
+ * doorbell's `id` with that reply: on an `error` the "sent to chat"
+ * reassurance is replaced by the explanation of what the user must do,
+ * and a `doorbell.refused` event is recorded. A success reply, a reply to
+ * another id, and a frame from anywhere but the parent change nothing.
+ */
+describe('a refused doorbell is named in the view (ggui#1314)', () => {
+  const recorded: Array<{ kind: string; detail?: string }> = [];
+  let sink: TelemetrySink | null = null;
+
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    recorded.length = 0;
+    const real = createTelemetrySink({ sessionId: 'sess_1', callTool: async () => ({}) });
+    sink = {
+      ...real,
+      record: (kind: string, detail?: string) => {
+        recorded.push(detail === undefined ? { kind } : { kind, detail });
+        real.record(kind, detail);
+      },
+    };
+    __setTelemetrySinkForTest(sink);
+    // A host that advertised message: the doorbell is expected to arrive,
+    // so the toast starts out saying "sent to chat".
+    setHostCapabilities({ message: {} });
+  });
+
+  afterEach(() => {
+    __setTelemetrySinkForTest(null);
+    sink?.dispose();
+    sink = null;
+  });
+
+  async function ringDoorbell(): Promise<number> {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    const doorbell = postMessageSpy.mock.calls
+      .map(([msg]) => msg as { method?: string; id?: number })
+      .filter((msg) => msg.method === 'ui/message')
+      .at(-1);
+    expect(doorbell?.id).toBeTypeOf('number');
+    return doorbell!.id!;
+  }
+
+  function hostReplies(data: unknown, source: MessageEventSource | null = window.parent): void {
+    window.dispatchEvent(new MessageEvent('message', { data, source }));
+  }
+
+  const toastText = (): string => document.getElementById('__ggui-action-toast__')?.textContent ?? '';
+
+  it('an in-band error reply replaces "sent to chat" with what the user must do, and records doorbell.refused', async () => {
+    const id = await ringDoorbell();
+    expect(toastText()).toMatch(/sent to chat/i);
+
+    hostReplies({ jsonrpc: '2.0', id, error: { code: -32000, message: 'user declined to send' } });
+    await tick();
+
+    expect(toastText()).not.toMatch(/sent to chat/i);
+    expect(toastText()).toMatch(/send a message/i);
+    expect(recorded.map((r) => r.kind)).toContain('doorbell.refused');
+    expect(recorded.find((r) => r.kind === 'doorbell.refused')?.detail).toContain('sess_1');
+  });
+
+  it('a success reply changes nothing: the toast still says it was sent to chat', async () => {
+    const id = await ringDoorbell();
+    hostReplies({ jsonrpc: '2.0', id, result: {} });
+    await tick();
+    expect(toastText()).toMatch(/sent to chat/i);
+    expect(recorded.map((r) => r.kind)).not.toContain('doorbell.refused');
+  });
+
+  it('an error for another id, or from outside the parent, is ignored', async () => {
+    const id = await ringDoorbell();
+    hostReplies({ jsonrpc: '2.0', id: id + 1, error: { code: -32000, message: 'not yours' } });
+    hostReplies({ jsonrpc: '2.0', id, error: { code: -32000, message: 'not the parent' } }, null);
+    await tick();
+    expect(toastText()).toMatch(/sent to chat/i);
+    expect(recorded.map((r) => r.kind)).not.toContain('doorbell.refused');
   });
 });
