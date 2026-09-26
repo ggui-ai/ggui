@@ -91,17 +91,37 @@ describe('fits', () => {
     expect(fits({ contract: props({ rating: { type: 'number', required: true } }) }, {}).checks['data-shape']).toBe('not-evaluated');
   });
 
-  it('data-shape: only a prop the candidate REQUIRES that the request does not declare, or declares with an incompatible type, is a miss', () => {
+  it('data-shape: a prop the candidate REQUIRES that the request does not declare, or declares with an incompatible type, is a miss', () => {
     const cand = { contract: props({ rating: { type: 'number', required: true }, note: { type: 'string' } }) };
     expect(fits(cand, { contract: props({}) }).checks['data-shape']).toBe('miss');
     expect(fits(cand, { contract: props({ rating: { type: 'string' } }) }).checks['data-shape']).toBe('miss');
     expect(fits(cand, { contract: props({ rating: { type: 'integer' } }) }).checks['data-shape']).toBe('hit');
     // An optional candidate prop the request omits, or types differently, is a coverage matter — never a fit miss.
     expect(fits(cand, { contract: props({ rating: { type: 'number' }, note: { type: 'boolean' } }) }).checks['data-shape']).toBe('hit');
-    // Extra request props the candidate lacks are a coverage gap (reported elsewhere), not a fit miss.
+    // An OPTIONAL request prop the candidate lacks is a coverage gap (reported elsewhere), not a fit miss.
     expect(fits(cand, { contract: props({ rating: { type: 'number' }, extra: { type: 'string' } }) }).checks['data-shape']).toBe('hit');
     // A required prop with no declared type accepts any declared type.
     expect(fits({ contract: props({ rating: { required: true } }) }, { contract: props({ rating: { type: 'string' } }) }).checks['data-shape']).toBe('hit');
+  });
+
+  it('data-shape: a prop the REQUEST marks required that the candidate does not declare at all is a miss — the render refuses an undeclared key every time, so the candidate cannot serve it', () => {
+    const list = { contract: props({ items: { type: 'array' } }) };
+    expect(fits(list, { contract: props({ contacts: { type: 'array', required: true } }) }).checks['data-shape']).toBe('miss');
+    expect(
+      fits(
+        { contract: props({ quote: { type: 'string' }, author: { type: 'string' } }) },
+        { contract: props({ bookTitle: { type: 'string', required: true }, author: { type: 'string' } }) },
+      ).checks['data-shape'],
+    ).toBe('miss');
+    // A request prop the candidate DOES declare is a coverage matter, whatever its type or required flag — never a fit miss here.
+    expect(fits({ contract: props({ rating: { type: 'string' } }) }, { contract: props({ rating: { type: 'number', required: true } }) }).checks['data-shape']).toBe('hit');
+    // An OPTIONAL request prop the candidate lacks stays a coverage gap (informational), not a miss.
+    expect(fits(list, { contract: props({ contacts: { type: 'array' } }) }).checks['data-shape']).toBe('hit');
+    // The candidate may declare more than the request; an empty request declaration is covered by any candidate.
+    expect(fits({ contract: props({ rating: { type: 'number' }, note: { type: 'string' } }) }, { contract: props({ rating: { type: 'number', required: true } }) }).checks['data-shape']).toBe('hit');
+    expect(fits(list, { contract: props({}) }).checks['data-shape']).toBe('hit');
+    // The candidate-required arm stays beside it.
+    expect(fits({ contract: props({ rating: { type: 'number', required: true } }) }, { contract: props({}) }).checks['data-shape']).toBe('miss');
   });
 
   it('surface: the request canvas must be one the candidate was judged on', () => {

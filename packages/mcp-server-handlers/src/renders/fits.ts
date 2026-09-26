@@ -99,14 +99,27 @@ export function jsonSchemaTypesCompatible(candidateType: JsonValue | undefined, 
   return asked.some((r) => accepted.some((c) => c === r || (r === 'integer' && c === 'number')));
 }
 
+/**
+ * Two arms, one per side's `required`: a prop the CANDIDATE requires must be
+ * declared by the request with a compatible type (the cached interface
+ * cannot render without it); a prop the REQUEST requires must be declared
+ * by the candidate at all (a render carrying a key the served contract does
+ * not declare is refused every time, so such a candidate cannot serve the
+ * request). An optional request prop the candidate lacks stays a coverage
+ * matter, reported on the hit, never a miss here.
+ */
 function checkDataShape(candidate: DataContract | undefined, request: DataContract | undefined): FitCheck {
   if (candidate === undefined || request === undefined) return 'not-evaluated';
+  const offered = candidate.propsSpec?.properties ?? {};
   const declared = request.propsSpec?.properties ?? {};
-  for (const [name, entry] of Object.entries(candidate.propsSpec?.properties ?? {})) {
+  for (const [name, entry] of Object.entries(offered)) {
     if (entry.required !== true) continue;
     const asked = declared[name];
     if (asked === undefined) return 'miss';
     if (!jsonSchemaTypesCompatible(entry.schema.type, asked.schema.type)) return 'miss';
+  }
+  for (const [name, entry] of Object.entries(declared)) {
+    if (entry.required === true && offered[name] === undefined) return 'miss';
   }
   return 'hit';
 }
