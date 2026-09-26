@@ -94,14 +94,26 @@ export function BenchmarksDashboard({ dataSource, rawDataUrl }: Props) {
     };
   }, [dataSource, index, selectedDate]);
 
+  // #1413: the methodology (dimension definitions + the dated changelog) needs no
+  // data, so it renders in EVERY branch — including the first render, which is
+  // what the server HTML carries. A reader that does not run JS still sees
+  // every methodology announcement; the judge-panel line fills in on load.
   if (index.status === 'idle' || index.status === 'loading') {
-    return <p className="text-ink-3 text-sm">Loading benchmarks…</p>;
+    return (
+      <div>
+        <p className="text-ink-3 text-sm">Loading benchmarks…</p>
+        <MethodologySection rawDataUrl={rawDataUrl} />
+      </div>
+    );
   }
   if (index.status === 'error') {
     return (
-      <div className="border border-signal bg-paper-2 px-4 py-3">
-        <p className="eyebrow text-signal mb-1">index unavailable</p>
-        <p className="text-ink text-sm font-mono">{index.error}</p>
+      <div>
+        <div className="border border-signal bg-paper-2 px-4 py-3">
+          <p className="eyebrow text-signal mb-1">index unavailable</p>
+          <p className="text-ink text-sm font-mono">{index.error}</p>
+        </div>
+        <MethodologySection rawDataUrl={rawDataUrl} />
       </div>
     );
   }
