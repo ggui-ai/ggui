@@ -336,6 +336,75 @@ export interface CanvasJudgeRecord {
   readonly notes: string[];
 }
 
+// ─── Visual criteria (ggui#1436) ──────────────────────────────────────────
+// The judge's typed criteria block per canvas — report-only beside the score
+// until a later word flips a gate to it. Every field below is optional on the
+// stamps so yesterday's `eval.json` and an old judge answer still parse (N−1).
+import type { FetchShape, LayoutShape, RenderShape, RiskTier, StateShape, WriteShape } from "../classifier/axes.js";
+
+export type CriteriaLevel = "must" | "should";
+export type CriteriaVerdict = "pass" | "fail" | "n/a";
+/** Who may answer a criterion: the judge off the frame, an instrument the capture runs, or a human reader. */
+export type CriteriaChecker = "instrument" | "judge" | "human";
+/**
+ * How a criterion entered the selection: bank-level (`static`) or by the selector's rules for this
+ * card (`context`). A model PROPOSING a criterion at judge time is RESERVED and not a member until
+ * a consumer exists — it would be `should`-only, recorded verbatim, never a gate.
+ */
+export type CriteriaSource = "static" | "context";
+export type CriteriaChroma = "achromatic" | "chromatic" | "unknown";
+/** The classifier's shape axes, as hashed into the set id. */
+export interface CriteriaAxes {
+  render: RenderShape;
+  state: StateShape;
+  writes: WriteShape;
+  fetch: FetchShape;
+  layout: LayoutShape;
+}
+/** The selector's inputs, stored with the verdict so a reader recomputes `criteriaSetId` from the record alone. */
+export interface CriteriaContext {
+  canvas: CanvasClass;
+  hasActions: boolean;
+  riskTier: RiskTier;
+  axes: CriteriaAxes;
+  chroma: CriteriaChroma;
+  profilePresent: boolean;
+  /** The harness's shell as named; `unknown` when the round carries none. */
+  shell: string;
+  /** The caller's item kind (a bootstrap mint's `hello`); hashed when present. */
+  kind?: string;
+}
+/** What was asked and why — recorded BEFORE the judge runs. Omission is the selector's decision. */
+export interface CriteriaSelection {
+  id: string;
+  source: CriteriaSource;
+  reason: string;
+}
+/** One criterion's verdict; `n/a` is the judge's answer ("cannot read this off the frame"), an unanswered id, a tie, or an instrument not run. */
+export interface CriterionVerdict {
+  id: string;
+  level: CriteriaLevel;
+  checker: CriteriaChecker;
+  source: CriteriaSource;
+  verdict: CriteriaVerdict;
+  evidence: string;
+}
+export interface CriteriaBlock {
+  /** sha256(bank version | selector version | canonical context), 16 hex — the block's own digest. */
+  criteriaSetId: string;
+  bankVersion: string;
+  selectorVersion: string;
+  context: CriteriaContext;
+  selection: CriteriaSelection[];
+  verdicts: CriterionVerdict[];
+}
+/** The roll-up across canvases; a `must` at `n/a` is listed, never counted as a pass. */
+export interface CriteriaRollup {
+  mustFailed: string[];
+  shouldFailed: string[];
+  mustNa: string[];
+}
+
 export interface CanvasVisualSummary {
   canvas: CanvasClass;
   viewport: { width: number; height: number };
@@ -356,6 +425,8 @@ export interface CanvasVisualSummary {
   inkRatio: number | null;
   /** How `score` was reached — always present (ggui#1072). */
   judge: CanvasJudgeRecord;
+  /** ggui#1436 — the typed criteria block, when a bank was configured; report-only. */
+  criteria?: CriteriaBlock;
   /**
    * How the judge composed the mount (ggui#1100): `'fill'` on every
    * fullscreen canvas — the served runtime's fit, the root stretched to
@@ -392,6 +463,8 @@ export interface VisualEvalSummary {
   design?: { readonly src: string; readonly srcSha256: string };
   /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
   themeMode?: 'light' | 'dark';
+  /** ggui#1436 — the criteria roll-up across canvases, when any canvas carries a block; report-only. */
+  criteria?: CriteriaRollup;
 }
 
 // ─── Quality mode ──────────────────────────────────────────────────────────

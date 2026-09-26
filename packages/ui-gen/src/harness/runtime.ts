@@ -33,6 +33,7 @@ import { renderPitfallsBlock } from "./pitfalls.js";
 import type { GadgetDescriptor, DataContract, JsonObject } from "@ggui-ai/protocol";
 import { buildSystemPrompt as buildSystemPromptSkeleton } from "../boilerplate.js";
 import type { AgentConfig } from "./llm-router.js";
+import type { CriteriaBank } from "../evaluation/criteria/bank.js";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // Re-export the boilerplate generator so existing internal importers
@@ -103,6 +104,10 @@ export interface SingleComponentParams {
      * default tokens. Never part of the prompt or the identity.
      */
     cssTokens?: string;
+    /** ggui#1436 — the visual criteria bank (data, parsed by `parseCriteriaBank`); absent = no block, today's judge. */
+    criteriaBank?: CriteriaBank;
+    /** ggui#1436 — the caller's item kind for the selector (a bootstrap mint's `hello`); absent = not gated by kind. */
+    criteriaKind?: string;
   };
   onProgress?: (event: unknown) => void;
   onInitialResult?: (result: {

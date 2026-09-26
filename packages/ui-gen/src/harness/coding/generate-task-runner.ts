@@ -381,6 +381,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
             evaluationAgent: session.agents.evaluation,
             visualEvalAgent: session.agents.visualEval,
             visualEvaluation: params.visualEvaluation,
+            shellType: params.shellType,
             visualThreshold: session.visualThreshold,
             qualityMode: session.qualityMode,
             maxEvalRounds: session.maxEvalRounds,

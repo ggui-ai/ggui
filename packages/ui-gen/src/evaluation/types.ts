@@ -33,6 +33,13 @@ export interface EvaluationIssue {
 /**
  * Result of a single evaluation round.
  */
+/** One judge answer to a criterion (ggui#1436), as parsed — before the K-majority. */
+export interface CriteriaAnswer {
+  id: string;
+  verdict: 'pass' | 'fail' | 'n/a';
+  evidence: string;
+}
+
 export interface EvaluationResult {
   /** Whether the component passed the quality threshold */
   passed: boolean;
@@ -48,6 +55,8 @@ export interface EvaluationResult {
   inputTokens?: number;
   /** Output tokens consumed by the evaluation LLM call */
   outputTokens?: number;
+  /** ggui#1436 — the judge's criteria answers, when the prompt asked for them; never part of the score. */
+  criteriaAnswers?: CriteriaAnswer[];
 }
 
 /**

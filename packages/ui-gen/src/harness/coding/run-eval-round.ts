@@ -20,6 +20,7 @@
 // mechanical extraction, not a redesign.
 
 import type { DataContract, JsonObject } from "@ggui-ai/protocol";
+import { criteriaContextFor } from "../../evaluation/criteria/context.js";
 import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
@@ -74,6 +75,8 @@ export interface EvalRoundContext {
   readonly evaluationAgent: AgentSpec;
   readonly visualEvalAgent: AgentSpec;
   readonly visualEvaluation: SingleComponentParams["visualEvaluation"];
+  /** ggui#1436 — the shell as the caller named it, for the criteria selector's context; absent reads `unknown`. */
+  readonly shellType?: SingleComponentParams["shellType"];
   readonly visualThreshold: number;
   readonly qualityMode: "fast" | "auto-improve" | "high-quality";
   readonly maxEvalRounds: number;
@@ -822,6 +825,22 @@ export async function runEvalRound(
       profile: harness.profile,
       // The caller's theme, when named — the round paints what the app paints.
       ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
+      // ggui#1436 — the criteria bank and the card's context; the judge selects per canvas, report-only.
+      ...(visualEvaluation?.criteriaBank !== undefined
+        ? {
+            criteria: {
+              bank: visualEvaluation.criteriaBank,
+              context: criteriaContextFor({
+                classification,
+                contract,
+                cssTokens: visualEvaluation.cssTokens,
+                profile: harness.profile,
+                shell: ctx.shellType ?? "unknown",
+                ...(visualEvaluation.criteriaKind !== undefined ? { kind: visualEvaluation.criteriaKind } : {}),
+              }),
+            },
+          }
+        : {}),
     };
     const visualFrame: VisualFitConfig = {
       // The in-loop visual round renders the same sample the runtime probe

@@ -152,3 +152,10 @@ export type {
 } from '../design-mode.js';
 export { cssTokensForAppTheme } from './theme-css.js';
 export { designTreeSha256, judgeDesignIdentity, resetJudgeDesignIdentityCache, type JudgeDesignIdentity } from './design-identity.js';
+
+// ggui#1436 — the visual criteria: the bank loader (data), the selector, the resolver.
+export { criteriaBankSchema, parseCriteriaBank, type BankCriterion, type CriteriaAppliesWhen, type CriteriaBank } from './criteria/bank.js';
+export { CRITERIA_SELECTOR_VERSION, canonicalCriteriaContext, criteriaSetIdFor, selectCriteria, type CriteriaSelectionResult } from './criteria/select.js';
+export { chromaOfCssTokens, criteriaContextFor, type CriteriaContextInput, type CriteriaContextSources } from './criteria/context.js';
+export { INSTRUMENT_BY_ID, buildCriteriaJudgeBlock, resolveCriteriaBlock, type CriteriaMeasurements } from './criteria/resolve.js';
+

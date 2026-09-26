@@ -61,6 +61,7 @@ import type { AgentConfig } from "../harness/llm-router.js";
 import { type GadgetDescriptor, type JsonObject } from "@ggui-ai/protocol";
 import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
 import type { VisionProvider } from "../harness/llm-router.js";
+import type { CriteriaBank } from "../evaluation/criteria/bank.js";
 import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 
 /**
@@ -122,6 +123,9 @@ export interface GenerationDispatchParams {
      * the same box. See `VisualEvalConfig.canvasViewports`.
      */
     canvasViewports?: Partial<Readonly<Record<CanvasClass, { width: number; height: number }>>>;
+    /** ggui#1436 — see `SingleComponentParams.visualEvaluation.criteriaBank`. */
+    criteriaBank?: CriteriaBank;
+    criteriaKind?: string;
   };
   /** Quality config controlling eval tiers and improvement behavior */
   qualityConfig?: QualityConfig;

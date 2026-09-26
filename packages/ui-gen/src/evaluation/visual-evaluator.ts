@@ -13,6 +13,12 @@
 
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
+import type { CriteriaAnswer } from './types.js';
+import type { CriteriaBlock, CriteriaContext, CriteriaRollup } from './types-public.js';
+import type { CriteriaBank } from './criteria/bank.js';
+import type { CriteriaContextInput } from './criteria/context.js';
+import { selectCriteria } from './criteria/select.js';
+import { buildCriteriaJudgeBlock, resolveCriteriaBlock } from './criteria/resolve.js';
 import { build } from 'esbuild';
 import { EXPANDED_FRAME, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
 import { readInkExtent, type InkExtent } from './ink-extent.js';
@@ -133,6 +139,8 @@ export interface CanvasVisualResult {
   fit?: 'fill';
   /** ggui#1195 — `true` when the order DECLARED this canvas's box (`config.canvasViewports` carried an entry), whatever its value. */
   declared?: true;
+  /** ggui#1436 — the typed criteria block, when a bank was configured. */
+  criteria?: CriteriaBlock;
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
@@ -310,6 +318,8 @@ export interface VisualEvalContext {
   cssTokens?: string;
   /** The app's generation profile (#991) — judged relative to, never against. */
   profile?: GenerationProfileInput;
+  /** ggui#1436 — a criteria bank and the card's context; the judge selects per canvas and answers report-only. */
+  criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
 }
 
 // ---------------------------------------------------------------------------
@@ -806,10 +816,14 @@ async function callMultimodalLLM(
   screenshot: Buffer,
   originalPrompt: string,
   profileBlock = '',
+  criteriaBlock = '',
 ) {
+  // ggui#1436 — the criteria block rides in the USER turn after the profile block, so the
+  // system prompt (and its digest pin) never moves; the block's digest is the set id.
   const userPrompt =
     `## Original Request\n${originalPrompt}\n\n` +
     (profileBlock.length > 0 ? `${profileBlock}\n\n` : '') +
+    (criteriaBlock.length > 0 ? `${criteriaBlock}\n\n` : '') +
     'Evaluate the screenshot of the generated component.';
   const agent = createVisionAgent({
     provider: config.provider === 'claude' ? 'anthropic' : config.provider,
@@ -955,10 +969,11 @@ async function judgeAndParse(
   originalPrompt: string,
   profileBlock: string,
   canvas?: CanvasClass,
+  criteriaBlock = '',
 ): Promise<JudgedAnswer> {
   let firstReason: string | undefined;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, originalPrompt, profileBlock);
+    const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, originalPrompt, profileBlock, criteriaBlock);
     try {
       const result = parseVisualResponse(response.text, config.passThreshold);
       return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
@@ -1038,8 +1053,17 @@ export async function runVisualEvaluationDetailed(
       // ggui#1072: k vision calls on the SAME frame; the decision value is the median.
       const k = judgeCountFor(config, canvas);
       const profileBlock = buildStylingProfileJudgeBlock(context.profile);
+      // ggui#1436 — the selection is decided BEFORE the judge runs and recorded with the verdict.
+      const criteriaContext: CriteriaContext | undefined =
+        context.criteria !== undefined ? { ...context.criteria.context, canvas } : undefined;
+      const criteriaSelected =
+        context.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(context.criteria.bank, criteriaContext) : undefined;
+      const criteriaBlock =
+        context.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected) : '';
       const answers = await Promise.all(
-        Array.from({ length: k }, () => judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas)),
+        Array.from({ length: k }, () =>
+          judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas, criteriaBlock),
+        ),
       );
       const parsed = answers.filter((a): a is Extract<JudgedAnswer, { kind: 'ok' }> => a.kind === 'ok');
       if (parsed.length === 0) {
@@ -1077,6 +1101,17 @@ export async function runVisualEvaluationDetailed(
         result.passed = false;
       }
       const inkRatio = frame.ink?.ratio ?? null;
+      // ggui#1436 — the block: K-majority on the judge's criteria, the instruments' measurements, report-only.
+      const criteria: CriteriaBlock | undefined =
+        context.criteria !== undefined && criteriaContext !== undefined && criteriaSelected !== undefined
+          ? resolveCriteriaBlock({
+              bank: context.criteria.bank,
+              context: criteriaContext,
+              selected: criteriaSelected,
+              answers: parsed.map((a) => a.result.criteriaAnswers ?? []),
+              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
+            })
+          : undefined;
       perCanvasResults.push(result);
       perCanvas.push({
         canvas,
@@ -1090,6 +1125,7 @@ export async function runVisualEvaluationDetailed(
         judge: judgeRecord,
         ...(fit !== undefined ? { fit } : {}),
         ...(frame.declared ? { declared: true as const } : {}),
+        ...(criteria !== undefined ? { criteria } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
@@ -1201,7 +1237,15 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     inkRatio: c.inkRatio,
     judge: c.judge,
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
+    ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
   }));
+  // ggui#1436 — the roll-up: ids failed / unreadable across canvases, deduped; a must at n/a is listed, never passed.
+  const blocks = result.canvases.map((c) => c.criteria).filter((b): b is CriteriaBlock => b !== undefined);
+  const idsWhere = (level: 'must' | 'should', verdict: 'fail' | 'n/a'): string[] => [
+    ...new Set(blocks.flatMap((b) => b.verdicts.filter((v) => v.level === level && v.verdict === verdict).map((v) => v.id))),
+  ];
+  const rollup: CriteriaRollup | undefined =
+    blocks.length > 0 ? { mustFailed: idsWhere('must', 'fail'), shouldFailed: idsWhere('should', 'fail'), mustNa: idsWhere('must', 'n/a') } : undefined;
   // ggui#1195 — the fit stamp: the first canvas whose policy FAILS an
   // overflow (the inline card), judged with a measurable height.
   const fitCanvas = result.canvases.find((c) => canvasFitPolicy(c.canvas).overflow === 'fail' && c.contentHeight !== null);
@@ -1222,6 +1266,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     ...(fit !== undefined ? { fit } : {}),
     ...(result.design !== undefined ? { design: result.design } : {}),
     ...(result.themeMode !== undefined ? { themeMode: result.themeMode } : {}),
+    ...(rollup !== undefined ? { criteria: rollup } : {}),
   };
 }
 
@@ -1320,13 +1365,31 @@ function parseVisualResponse(text: string, passThreshold: number): EvaluationRes
     fix: i.fix || '',
   }));
 
+  // ggui#1436 — the criteria answers, tolerant: absent block → no field (an old answer stays
+  // valid); an entry without a string id or with a verdict outside the vocabulary is dropped.
+  const criteriaAnswers = parseCriteriaAnswers(raw.criteria);
+
   return {
     passed: finalScore >= passThreshold,
     finalScore,
     dimensions,
     issues,
     critique: raw.critique,
+    ...(criteriaAnswers !== undefined ? { criteriaAnswers } : {}),
   };
+}
+
+function parseCriteriaAnswers(raw: unknown): CriteriaAnswer[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: CriteriaAnswer[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const o = entry as { id?: unknown; verdict?: unknown; evidence?: unknown };
+    if (typeof o.id !== 'string') continue;
+    if (o.verdict !== 'pass' && o.verdict !== 'fail' && o.verdict !== 'n/a') continue;
+    out.push({ id: o.id, verdict: o.verdict, evidence: typeof o.evidence === 'string' ? o.evidence : '' });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
