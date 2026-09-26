@@ -2,8 +2,8 @@
  * Client-side contract validation — symmetry with the server's enforcement
  * path.
  *
- * The server (`cloud/amplify/functions/websocket-handlers/message/handle-event.ts`
- * + `@ggui-ai/mcp-server`'s `/ws`) is the authoritative enforcement point
+ * The server (`@ggui-ai/mcp-server`'s `/ws`, or a hosted deployment's own
+ * live channel) is the authoritative enforcement point
  * for live-channel contract. The client MUST NOT assume the server will
  * reject misbehaving traffic silently — but it SHOULD fail early +
  * symmetrically when the agreed contract is known client-side, for two

@@ -37,9 +37,7 @@ interface InterfaceInfo {
 }
 
 const designRoot = path.resolve(import.meta.dirname, '..');
-// ui-gen is the sole consumer post-2026-05-23 (the second consumer
-// `cloud/generation-runtime/src/tools/get-primitives-ts.ts` was retired
-// alongside the orphan `@ggui-cloud/generation-runtime` package).
+// ui-gen is the sole consumer.
 const uiGenRoot = path.resolve(designRoot, '../ui-gen');
 
 const sourceFiles = [

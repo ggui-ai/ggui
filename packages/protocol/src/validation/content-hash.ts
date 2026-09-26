@@ -11,8 +11,8 @@
 // to compile. Keeping this in a server-only subpath lets the root barrel
 // stay browser-safe.
 //
-// Consumers (all server-side): `core/src/validation/ui-compiler.ts`,
-// `cloud/amplify/functions/rest-api/cli-api/ui-register-handler.ts`.
+// Consumer (server-side): `@ggui-ai/ui-gen`'s UI compiler
+// (`src/validation/ui-compiler.ts`), which re-exports it.
 // Import as `@ggui-ai/protocol/content-hash` — never from the barrel.
 
 import { createHash } from 'node:crypto';

@@ -433,10 +433,10 @@ jobs:
       # Safety gate: the closure check walks each target's workspace-deps
       # and verifies every `workspace:*` edge points at another package
       # ALSO in the publish filter. Catches the class of bugs where a
-      # non-OSS-source dep slips in as `workspace:*` (e.g. @ggui-private/*,
-      # @ggui-cloud/*, @ggui-apps/*, or any @guuey-*/* — @guuey/* itself
-      # is published to public npm but from dist, not from this subtree,
-      # so a `workspace:*` edge into it is still a packaging bug) or
+      # non-OSS-source dep slips in as `workspace:*` (any scope other than
+      # @ggui-ai/* — @guuey/* itself is published to public npm but from
+      # dist, not from this subtree, so a `workspace:*` edge into it is
+      # still a packaging bug) or
       # where an open dep is forgotten (e.g. @ggui-ai/design missing
       # from the list even though @ggui-ai/project-config imports it).
       - name: Verify workspace-dep closure
@@ -460,9 +460,8 @@ jobs:
               const violations = [];
               for (const [k, v] of Object.entries(all)) {
                 if (!String(v).startsWith('workspace:')) continue;
-                // Any non-@ggui-ai/* workspace dep in an @ggui-ai/* package is wrong.
-                // Monorepo-only scopes (@ggui-private/*, @ggui-cloud/*, @ggui-apps/*,
-                // @guuey-*/*) MUST NOT appear as workspace:* edges in a published OSS
+                // Any non-@ggui-ai/* workspace dep in an @ggui-ai/* package is wrong:
+                // no other scope may appear as a workspace:* edge in a published OSS
                 // package. @guuey/* is published to npm but only from dist artifacts,
                 // never as workspace:* source — same rule applies.
                 if (j.name && j.name.startsWith('@ggui-ai/') && !k.startsWith('@ggui-ai/')) {

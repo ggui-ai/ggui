@@ -37,8 +37,6 @@ interface InterfaceInfo {
 
 const designRoot = path.resolve(import.meta.dirname, '..');
 const uiGenRoot = path.resolve(designRoot, '../ui-gen');
-// Legacy alias retained for the get-primitives-ts.ts path which still lives in
-// cloud/generation-runtime/src/tools/ — see generate-primitives-docs-ts.ts.
 
 const sourceFiles = [
   {
