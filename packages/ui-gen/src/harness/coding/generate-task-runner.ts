@@ -260,6 +260,8 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
           originalPrompt: params.userPrompt,
           commitMeta: session.commitMeta,
           originalProps: session.originalProps,
+          // ggui#1285: the fixture the probe and judge render with, for the echo check at auto-commit.
+          ...(params.fixtureProps !== undefined ? { fixtureProps: params.fixtureProps } : {}),
           costTracker: session.costTracker,
           // Thread the dispatch-resolved policy so experimental
           // profiles take effect on both preflight and tier-0 retry

@@ -121,6 +121,8 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
     designMode: harness.designMode,
     // ggui#1117: the canvas the harness was built for, when it has one — never a default.
     ...(harness.canvas !== undefined ? { canvas: harness.canvas } : {}),
+    // ggui#1285: the props the probe and judge rendered with — the fixture-echo check reads them.
+    ...(input.fixtureProps !== undefined ? { fixtureProps: input.fixtureProps } : {}),
   };
   // The one runner `runAxisChecks` shares (ggui#1046 trace prints here, on the served path).
   const axisRun = runGatedAxisChecks(check.axisChecks, axisInput);

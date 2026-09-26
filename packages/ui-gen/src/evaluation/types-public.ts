@@ -417,6 +417,7 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
 // `./axis-checks/`.
 
 import type { DataContract } from "@ggui-ai/protocol";
+import type { JsonObject } from "@ggui-ai/protocol";
 import type { AxisVector, Classification } from "../classifier/axes.js";
 import type { AxisKey } from "../fragments/index.js";
 
@@ -443,6 +444,14 @@ export interface AxisCheckInput {
    * default (a silent `lg` would be the same guess with a nicer face).
    */
   canvas?: CanvasClass;
+  /**
+   * The props the probe and the judge RENDERED the source with (ggui#1285) — a bootstrap order's
+   * `sampleProps`, the bench commit's fixture. They are judging data, not the request: a literal in
+   * the source that equals one of these values, and that the request never stated, is baked copy a
+   * visitor sees whenever the agent leaves the prop out. Populated on the served loop and at
+   * auto-commit; ABSENT where the caller has none — the check stands down, it never guesses.
+   */
+  fixtureProps?: JsonObject;
 }
 
 /**

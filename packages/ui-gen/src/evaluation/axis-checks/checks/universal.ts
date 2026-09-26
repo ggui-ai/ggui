@@ -585,6 +585,63 @@ function runActionLabelDropped(input: AxisCheckInput): EvalIssue[] {
   );
 }
 
+// ── universal.fixture_default_echo (ggui#1285 — the fixture echo) ────────
+// The probe and the judge render the source with fixture props, the judge's
+// critique quotes what it saw, and an eval-fix turn can write that text back
+// into the source as a default, a fallback or a placeholder. The fixture is
+// judging data, not the request; a visitor then sees it whenever the agent
+// leaves the prop out (guuey#1642: a builder's system-prompt line became a
+// hello's baked copy). Rule 3 of Data Parameterization stays true — defaults
+// come from the REQUEST — so a fixture value the request (or the contract's
+// own text) states is allowed; only a fixture-only value is the echo. WARN,
+// never fail: the copy is wrong, the card is not broken. Prose-like values
+// only (≥ MIN_ECHO_CHARS and a space), so a city name or a number is never a
+// hit.
+export const MIN_ECHO_CHARS = 12;
+function collectStrings(value: unknown, out: string[]): void {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectStrings(v, out);
+  } else if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) collectStrings(v, out);
+  }
+}
+/** The fixture's prose-like string values the request never stated, verbatim. */
+export function fixtureOnlyStrings(input: Pick<AxisCheckInput, "fixtureProps" | "originalPrompt" | "contract">): string[] {
+  if (input.fixtureProps === undefined) return [];
+  const values: string[] = [];
+  collectStrings(input.fixtureProps, values);
+  const stated = `${input.originalPrompt}\n${input.contract === undefined ? "" : JSON.stringify(input.contract)}`;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const t = v.trim();
+    if (t.length < MIN_ECHO_CHARS || !t.includes(" ") || seen.has(t)) continue;
+    seen.add(t);
+    if (stated.includes(t)) continue;
+    out.push(t);
+  }
+  return out;
+}
+function runFixtureDefaultEcho(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const src = input.sourceCode;
+  const issues: EvalIssue[] = [];
+  for (const value of fixtureOnlyStrings(input)) {
+    if (!src.includes(value)) continue;
+    issues.push(
+      mkIssue(
+        "universal.fixture_default_echo",
+        `A literal in the source equals a fixture value the request never stated: "${value.length > 60 ? `${value.slice(0, 57)}…` : value}". The fixture is judging data; a visitor sees this copy whenever the agent leaves the prop out.`,
+        "Take that copy from the prop it renders and drop the literal — no default, fallback or placeholder that repeats a fixture value. A default may only carry text the request itself states.",
+        "warn",
+      ),
+    );
+  }
+  return issues;
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -621,6 +678,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runTerminalActionUnguarded,
+  },
+  {
+    id: "universal.fixture_default_echo",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runFixtureDefaultEcho,
   },
   {
     id: "universal.accent_text_ink",

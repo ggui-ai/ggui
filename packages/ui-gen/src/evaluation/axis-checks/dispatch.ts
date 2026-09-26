@@ -2,7 +2,7 @@
 // whose gate matches the classification's axis vector, and accumulates
 // issues.
 
-import type { DataContract } from "@ggui-ai/protocol";
+import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { EvalIssue } from "../types-public.js";
 import { REGISTRY } from "./registry.js";
@@ -20,6 +20,8 @@ export interface RunAxisChecksInput {
   designMode?: DesignMode;
   /** The canvas the source is judged for — see `AxisCheckInput.canvas` (ggui#1117); absent = no rendering context. */
   canvas?: CanvasClass;
+  /** The props the source was rendered with — see `AxisCheckInput.fixtureProps` (ggui#1285); absent = the echo check stands down. */
+  fixtureProps?: JsonObject;
 }
 
 export function runAxisChecks(
@@ -33,6 +35,7 @@ export function runAxisChecks(
     classification,
     ...(input.designMode !== undefined ? { designMode: input.designMode } : {}),
     ...(input.canvas !== undefined ? { canvas: input.canvas } : {}),
+    ...(input.fixtureProps !== undefined ? { fixtureProps: input.fixtureProps } : {}),
   };
   if (input.compiledCode === null) {
     traceAxisChecksSkipped(facts, "compiledCode null — no check ran");

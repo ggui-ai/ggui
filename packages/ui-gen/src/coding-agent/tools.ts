@@ -17,7 +17,7 @@ import type { AxisCheck, AxisCheckInput } from '../evaluation/types-public.js';
 import type { Classification } from '../classifier/axes.js';
 import type { CanvasClass } from '../design-mode.js';
 import { PRIMITIVES_DOCUMENTATION } from '../validation/index.js';
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import type {
   ToolResult,
   CommitMetadata,
@@ -64,6 +64,8 @@ export interface AutoCommitAxisChecks {
   readonly originalPrompt: string;
   /** The canvas the harness was built for (ggui#1117); absent = no rendering context, never a default. */
   readonly canvas?: CanvasClass;
+  /** The props the probe and judge render with (ggui#1285); absent = the fixture-echo check stands down. */
+  readonly fixtureProps?: JsonObject;
 }
 
 async function autoCommit(
@@ -161,6 +163,7 @@ async function autoCommit(
         classification: axis.classification,
         designMode,
         ...(axis.canvas !== undefined ? { canvas: axis.canvas } : {}),
+        ...(axis.fixtureProps !== undefined ? { fixtureProps: axis.fixtureProps } : {}),
       }
     : undefined;
   if (axisFacts !== undefined && !buildSuccess) traceAxisChecksSkipped(axisFacts, 'build failed — no check ran');

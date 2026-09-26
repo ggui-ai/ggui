@@ -14,7 +14,7 @@
 // Behavior MUST match the inlined original byte-for-byte — this is a
 // mechanical extraction, not a redesign.
 
-import type { DataContract } from "@ggui-ai/protocol";
+import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { CommitMetadata } from "../../coding-agent/types.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import { executeTool } from "../../coding-agent/tools.js";
@@ -166,6 +166,8 @@ export interface CodingTurnContext {
   readonly originalPrompt: string;
   readonly commitMeta: Map<string, CommitMetadata>;
   readonly originalProps: string | undefined;
+  /** The props the probe and judge render with (ggui#1285) — handed to auto-commit's axis checks; absent = the echo check stands down. */
+  readonly fixtureProps?: JsonObject;
   readonly costTracker: CostTracker | null;
   /**
    * Runtime-resolved context policy. Defaults to `harness.policy.context`
@@ -691,6 +693,7 @@ ${closingInstruction}`;
       classification: harness.classification,
       originalPrompt: ctx.originalPrompt,
       ...(harness.canvas !== undefined ? { canvas: harness.canvas } : {}),
+      ...(ctx.fixtureProps !== undefined ? { fixtureProps: ctx.fixtureProps } : {}),
     },
   );
   const toolMs = Date.now() - toolStart;
