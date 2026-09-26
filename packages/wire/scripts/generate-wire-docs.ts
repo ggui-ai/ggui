@@ -63,6 +63,9 @@ const uiGenRoot = path.resolve(wireRoot, '../ui-gen');
 
 const hookFiles = [
   { filePath: path.join(wireRoot, 'src/useAction.ts'), hookName: 'useAction' },
+  // ggui#1223 — the spent state of a oneShot action as data, taught beside useAction
+  // under rnd reliability/013's bench (N: the hook shipped; N+1: it is taught).
+  { filePath: path.join(wireRoot, 'src/action-spent.ts'), hookName: 'useActionSpent' },
   { filePath: path.join(wireRoot, 'src/useStream.ts'), hookName: 'useStream' },
   // useWiredTool retired 2026-05-11 alongside the EE+ wire-shape v2.
   // agentCapabilities.tools is a catalog the AGENT invokes, not a component-side
@@ -549,7 +552,7 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
   sections.push('');
   sections.push('These are the wire primitives for component-agent communication. `useWiredTool` retired 2026-05-11 — agentCapabilities.tools is a catalog the AGENT invokes, not a component hook surface; user gestures use `useAction(name)` and the optional `nextStep` field on the action entry names the tool the agent SHOULD invoke next.');
 
-  const commHookNames = ['useAction', 'useStream'];
+  const commHookNames = ['useAction', 'useActionSpent', 'useStream'];
   for (const hookName of commHookNames) {
     const hook = hooks.find(h => h.name === hookName);
     if (!hook) continue;

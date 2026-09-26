@@ -6,7 +6,9 @@
  * `isConnected` mechanism SILENT: no new hook enters the allowlist and
  * the `useRender` teaching text is byte-identical, so the prompt does
  * not move without a bench. Any change here is prompt motion and must
- * ride a pre-registered bench (Phase 2).
+ * ride a pre-registered bench (Phase 2). The first such change: `useActionSpent`
+ * joined the taught surface under ggui#1223 (rnd reliability/013), one release
+ * after the hook shipped, so no taught card can reach a runtime without it.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -16,14 +18,14 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('taught wire surface is frozen for ggui#670 Phase 1', () => {
-  it('the docs generator allowlist is exactly the five taught hooks', () => {
+  it('the docs generator allowlist is exactly the six taught hooks (useActionSpent joined under ggui#1223, reliability/013)', () => {
     const src = readFileSync(resolve(here, '..', 'scripts', 'generate-wire-docs.ts'), 'utf8');
     const start = src.indexOf('const hookFiles');
     const end = src.indexOf('];', start);
     expect(start).toBeGreaterThan(-1);
     const block = src.slice(start, end);
     const names = [...block.matchAll(/hookName:\s*'([A-Za-z]+)'/g)].map((m) => m[1]);
-    expect(names).toEqual(['useAction', 'useStream', 'useAuth', 'useApp', 'useRender']);
+    expect(names).toEqual(['useAction', 'useActionSpent', 'useStream', 'useAuth', 'useApp', 'useRender']);
   });
 
   it('useRender keeps its exact taught docstring and return shape (prompt byte-identical)', () => {

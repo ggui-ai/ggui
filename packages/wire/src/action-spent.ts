@@ -43,6 +43,15 @@ const noSubscription = (): (() => void) => () => undefined;
  * commits. It returns data only: how a spent control looks (disabled,
  * "Submitted", hidden) is the component's choice. Outside a runtime that
  * provides spent state, it is `false` and the dispatch guard still holds.
+ *
+ * @example
+ * const confirm = useAction<ActionConfirmPayload>('confirm');
+ * const spent = useActionSpent('confirm');
+ *
+ * // In JSX — the control paints spent on the first paint after a reload, with no press:
+ * <Button variant="primary" disabled={spent} onClick={() => confirm({ bookingId })}>
+ *   {spent ? 'Confirmed' : 'Confirm booking'}
+ * </Button>
  */
 export function useActionSpent(actionName: string): boolean {
   const source = useContext(ActionSpentContext);
