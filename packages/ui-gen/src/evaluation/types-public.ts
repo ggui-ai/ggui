@@ -143,9 +143,12 @@ export interface RuntimeProbeMetaDetail {
  * The verdict and the repair trigger are two different questions. The
  * verdict is `fail` on any failing check. The one repair turn a probe-only
  * round buys fires on a `render-no-throw` fail the engine recognises
- * (`isRecoverableRenderCrash`) and on nothing else: a `fail` verdict whose
- * checks are `prop-sensitivity`, `action-wiring` or any other kind is
- * recorded here and never fed back.
+ * (`isRecoverableRenderCrash`) and on nothing else: on the PROBE-ONLY round a
+ * `fail` verdict whose checks are `prop-sensitivity`, `action-wiring` or any
+ * other kind is recorded here and never fed back. The same meta is stamped on
+ * the EVALUATION lane, where a `prop-sensitivity` fail buys that lane's own
+ * contract-feedback round (ggui#1261, `FEEDBACK_PROBE_CHECKS`) — a different
+ * turn under a different rule, not the repair turn.
  */
 export type RuntimeProbeMeta = GenerationRuntimeProbeOutcome & RuntimeProbeMetaDetail;
 

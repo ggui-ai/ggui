@@ -288,8 +288,11 @@ export type GenerationRuntimeProbeCheck =
  *
  * Two meanings sit side by side and must not be conflated. The VERDICT is
  * `fail` on any failing check. The REPAIR turn (see
- * {@link GenerationRuntimeProbeRepair}) fires on the `render-no-throw`
- * class only — a card that crashes on first render; every other failing
+ * {@link GenerationRuntimeProbeRepair}) fires on a `render-no-throw` fail
+ * the engine recognises as recoverable — a card that crashes on first
+ * render in one of the crash shapes it knows how to repair — and on nothing
+ * else: a crash it does not recognise is recorded as a `fail` with
+ * `render-no-throw` among its checks and NO repair, and every other failing
  * check is recorded here and never repaired. `failChecks` is ordered as
  * {@link GenerationRuntimeProbeCheck} declares its members — the constant's
  * order (so `render-no-throw` leads whenever present), not a severity

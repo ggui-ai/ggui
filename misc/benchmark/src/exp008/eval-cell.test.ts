@@ -32,6 +32,9 @@ function cellDir(opts: { evalJson?: boolean; commit?: string | null } = {}): str
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: {}, contractKey: 'k1', commitRef: opts.commit === undefined ? 'weather-card' : opts.commit }));
   writeFileSync(join(dir, 'mint.json'), JSON.stringify({ cellId: 'c1', runId: 'r1', arm: 'B', model: 'openai/gpt-6-astra', codeHash: 'abc', latencyMs: 1234, generationTimeMs: 1200, turnsUsed: 2, passesUsed: 1, tokens: { input: 1000, output: 500 }, designMode: 'free', canvas: 'md', requested: { designMode: 'free', canvas: 'md' } }));
   if (opts.evalJson) {
+    // N−1 fixture, deliberately the OLD shape: an eval.json written before
+    // ggui#1380 carries `runtimeProbe.status` and no `verdict`; the reader
+    // inspects `.status` and derives its own verdict from the issues.
     writeFileSync(join(dir, 'eval.json'), JSON.stringify({ issues: [], pass: ['functionality'], runtimeProbe: { status: 'ran' } }));
   }
   return dir;
