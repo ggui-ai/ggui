@@ -45,7 +45,7 @@
  * matcher returns `match-skip-no-llm`.
  */
 import type { LLMCaller } from '@ggui-ai/negotiator';
-import { rerankCandidates } from '@ggui-ai/negotiator';
+import { llmRerankJudge, type RerankJudge } from '@ggui-ai/negotiator';
 import {
   summarizeContract,
   type DataContract,
@@ -140,6 +140,21 @@ export interface MatchBlueprintDeps {
    * pool credential on a hosted deployment).
    */
   readonly llm?: LLMCaller;
+  /**
+   * The rerank judge as a PAIR with the confidence threshold it was
+   * measured on (ggui#1235). Absent → today's default, `llm` bound
+   * through `llmRerankJudge` at `options.judgeThreshold` (0.5). Present
+   * → this judge decides, its `threshold` is the cut, and
+   * `options.judgeThreshold` does not apply to it: a threshold never
+   * travels apart from the judge it was calibrated on. A judge that
+   * resolves its own cut internally (a decision provider with a fallback
+   * chain) passes `threshold: 0` and declines only with `matchId: null`.
+   * Wins over a bare `llm` when both are given.
+   */
+  readonly rerank?: {
+    readonly judge: RerankJudge;
+    readonly threshold: number;
+  };
   /**
    * Optional marketplace-install bridge. When set, the matcher STARTS
    * `ensureCached(scope)` and reads the exact key while it runs: a hit
@@ -236,7 +251,14 @@ export async function matchBlueprint(
   const kind: BlueprintKind = options.kind ?? 'template';
   const topK = options.topK ?? DEFAULT_TOP_K;
   const minCosine = options.minCosineForRerank ?? DEFAULT_MIN_COSINE;
-  const judgeThreshold = options.judgeThreshold ?? DEFAULT_JUDGE_THRESHOLD;
+  // ggui#1235 — the pair: a supplied judge carries its own cut; the default
+  // is today's LLM judge at `options.judgeThreshold` (0.5).
+  const rerank =
+    deps.rerank ??
+    (deps.llm !== undefined
+      ? { judge: llmRerankJudge(deps.llm), threshold: options.judgeThreshold ?? DEFAULT_JUDGE_THRESHOLD }
+      : undefined);
+  const judgeThreshold = rerank?.threshold ?? options.judgeThreshold ?? DEFAULT_JUDGE_THRESHOLD;
   const trimmedIntent = query.intent.trim();
   const startedAt = Date.now();
   const expectedKey =
@@ -451,10 +473,10 @@ export async function matchBlueprint(
     return { strategy: 'no-match', reason, candidates };
   }
 
-  if (!deps.llm) {
+  if (rerank === undefined) {
     const reason =
       'match-skip-no-llm: semantic matching unavailable — a new interface will be generated';
-    const traceReason = `match-skip-no-llm: ${candidates.length} candidates available but no LLMCaller wired — falling through to cold generation`;
+    const traceReason = `match-skip-no-llm: ${candidates.length} candidates available but no judge wired (neither a rerank pair nor an LLMCaller) — falling through to cold generation`;
     emit({
       decision: 'match-skip-no-llm',
       strategy: 'semantic',
@@ -497,8 +519,7 @@ export async function matchBlueprint(
   }
 
   // Run the LLM rerank judge.
-  const decision = await rerankCandidates(
-    { llm: deps.llm },
+  const decision = await rerank.judge(
     {
       intent: trimmedIntent,
       contractSummary: summarizeContract(query.contract),

@@ -27,10 +27,11 @@
 
 export { hashContract, buildVariant } from './contract-hash.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
-export { rerankCandidates } from './llm-rerank.js';
+export { llmRerankJudge, rerankCandidates } from './llm-rerank.js';
 export type {
   RerankCandidate,
   RerankDecision,
+  RerankJudge,
   RerankQuery,
 } from './llm-rerank.js';
 export { synthesizeContract } from './synthesize-contract.js';

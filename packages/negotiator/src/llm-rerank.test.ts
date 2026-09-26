@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  llmRerankJudge,
   rerankCandidates,
   RERANK_SYSTEM_PROMPT,
   type RerankCandidate,
+  type RerankDecision,
+  type RerankJudge,
   type RerankQuery,
 } from './llm-rerank.js';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
@@ -283,5 +286,35 @@ describe('RERANK_SYSTEM_PROMPT — similarity-only judge (no field-coverage gate
       expect(decision.matchId).toBe('bp-weather-cityonly');
       expect(decision.confidence).toBeCloseTo(0.8);
     });
+  });
+});
+
+describe('RerankJudge — the judge seam (ggui#1235)', () => {
+  it('llmRerankJudge(llm) is rerankCandidates({ llm }) bound: the same prompt, the same tool, the same decision', async () => {
+    const seen: Array<{ system: string; user: string; tool: string }> = [];
+    const llm: LLMCaller = {
+      async call() {
+        throw new Error('text-mode not used by rerank');
+      },
+      async callStructured(system: string, user: string, tool: ToolSchema): Promise<unknown> {
+        seen.push({ system, user, tool: tool.name });
+        return { matchId: 'bp-notepad-1', confidence: 0.85, reason: 'paraphrased' };
+      },
+    };
+    const judge: RerankJudge = llmRerankJudge(llm);
+    const viaJudge = await judge(QUERY, CANDIDATES);
+    const direct = await rerankCandidates({ llm }, QUERY, CANDIDATES);
+    expect(viaJudge).toEqual(direct);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toEqual(seen[1]);
+    expect(seen[0]!.system).toBe(RERANK_SYSTEM_PROMPT);
+  });
+
+  it('a judge may return a decision without free text — `reason` is optional on the seam', async () => {
+    // Latency and token cost stay REQUIRED on the seam — every judge has both (cost accounting reads them); only the prose is optional.
+    const silent: RerankJudge = async () => ({ matchId: 'bp-notepad-1', confidence: 1, latencyMs: 3, tokenCost: { input: 0, output: 0 } });
+    const decision: RerankDecision = await silent(QUERY, CANDIDATES);
+    expect(decision.matchId).toBe('bp-notepad-1');
+    expect(decision.reason).toBeUndefined();
   });
 });

@@ -61,11 +61,12 @@ export interface RerankDecision {
    */
   readonly confidence: number;
   /**
-   * Free-text reason from the judge. Surface in trace logs so
+   * Free-text reason from the judge, when it gives one — a judge that
+   * decides without prose sends none (ggui#1235). Surface in trace logs so
    * operators can debug "why didn't this hit." Truncate at the
    * persistence boundary if cardinality is a concern.
    */
-  readonly reason: string;
+  readonly reason?: string;
   /** Wall-clock latency of the LLM call. */
   readonly latencyMs: number;
   /**
@@ -278,4 +279,26 @@ export async function rerankCandidates(
 }
 
 // Re-exports for the eval harness — keep public surface explicit.
+/**
+ * The judge seam (ggui#1235): one function from a query and its candidates
+ * to a {@link RerankDecision}. The matcher takes a judge together with the
+ * confidence threshold it was measured on (the pair), so a judge on
+ * another scale never meets a cut calibrated for a different one.
+ * `matchId: null` is a judge's only decline; `confidence` is the judge's
+ * own, compared by the caller against the pair's threshold.
+ */
+export type RerankJudge = (
+  query: RerankQuery,
+  candidates: readonly RerankCandidate[],
+) => Promise<RerankDecision>;
+
+/**
+ * Today's judge as a {@link RerankJudge}: {@link rerankCandidates} bound to
+ * an {@link LLMCaller} — the same prompt, the same tool, the same decision,
+ * so a caller that injects nothing else behaves exactly as before.
+ */
+export function llmRerankJudge(llm: LLMCaller): RerankJudge {
+  return (query, candidates) => rerankCandidates({ llm }, query, candidates);
+}
+
 export { RERANK_SYSTEM_PROMPT, RERANK_TOOL };

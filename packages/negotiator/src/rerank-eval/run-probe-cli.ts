@@ -79,7 +79,9 @@ async function main(): Promise<void> {
     usage.input * HAIKU_4_5_PRICE_INPUT_PER_TOKEN +
     usage.output * HAIKU_4_5_PRICE_OUTPUT_PER_TOKEN;
   const callsMade = report.outcomes.filter(
-    (o) => !/short-circuited/.test(o.decision.reason),
+    // ggui#1235 — `reason` is optional on the seam; a judge with no prose
+    // still made a call.
+    (o) => !/short-circuited/.test(o.decision.reason ?? ''),
   ).length;
   const costPerCall = callsMade === 0 ? 0 : totalCost / callsMade;
   process.stdout.write(
