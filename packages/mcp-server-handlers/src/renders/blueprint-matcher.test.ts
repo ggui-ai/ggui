@@ -8,7 +8,7 @@ import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
 import { matchBlueprint } from './blueprint-matcher.js';
-import { registerBlueprint } from './blueprint-registry.js';
+import { composeEmbeddingInput, registerBlueprint } from './blueprint-registry.js';
 import { decideHandshake } from './decide-handshake.js';
 import { MIN_SIMILARITY_SCORE } from '../blueprints/search-blueprints.js';
 import type { HandlerContext } from '../types.js';
@@ -1006,8 +1006,10 @@ describe('matchBlueprint — A4 deterministic propose path (stub judge, no LLM)'
         SCOPE,
         { intent: WEATHER_INTENT, contract: WEATHER_REQUEST_SUPERSET },
         // No minCosineForRerank override on purpose: this proves the DEFAULT-gate
-        // path. Relies on MockEmbeddingProvider cosine (~0.44) clearing DEFAULT_MIN_COSINE
-        // (0.2). If DEFAULT_MIN_COSINE is ever raised above ~0.4, add { minCosineForRerank: -1 }.
+        // path. The request carries a contract, so its query is composed like the
+        // stored vector (ggui#606) and MockEmbeddingProvider scores it ≈0.999
+        // (measured; ≈0.44 when the query embedded the intent alone), clearing the
+        // contract-bearing default floor (0.50).
       );
     };
 
@@ -1185,16 +1187,17 @@ describe('matchBlueprint — the cosine floor is per candidate (ggui#1275)', () 
   });
 });
 
-// ── ggui#1275 follow-up (2), revised — the handshake gate is 0.2, not the search tool's 0.3 ──
+// ── ggui#1275 follow-up (2), revised — the INTENT-ONLY gate is 0.2, not the search tool's 0.3 ──
 //
-// The matcher's retrieval query embeds the request's intent ALONE, while
-// stored vectors embed contract summary + intent (ggui#606), so its cosines
-// sit on a depressed scale. Reproduced on a dev deployment with the
-// production embedder: the pair behind ggui#1275 (same contract, near-
+// A request WITHOUT a contract embeds its intent alone, while stored vectors
+// embed contract summary + intent, so its cosines sit on a depressed scale
+// (the queries below carry no contract). Reproduced on a dev deployment with
+// the production embedder: the pair behind ggui#1275 (same contract, near-
 // identical intent) scored 0.29 on this scale and 0.87 with the contract in
 // the query. A 0.3 gate here turned that true match away before the judge
-// saw it, so the gate is back to 0.2 until the query is composed like the
-// stored side (ggui#606). rnd's earlier dev sample (c.5786466220: 8 reuses
+// saw it, so the intent-only gate is 0.2. A request WITH a contract now
+// composes its query like the stored side and has its own 0.50 floor
+// (ggui#606; the suite at the end). rnd's earlier dev sample (c.5786466220: 8 reuses
 // between 0.2 and 0.3, 2 of them wrong) was taken on the same scale; both
 // wrong reuses were on a blueprint with no cached intent, which ggui#1275 (3)
 // now keeps out of the judge (the suite below).
@@ -1236,7 +1239,7 @@ async function floorRegistry(cosines: ReadonlyMap<string, number>) {
   return { registry, ids };
 }
 
-describe('matchBlueprint — the handshake gate is 0.2, not the search tool’s 0.3 (ggui#1275, ggui#606)', () => {
+describe('matchBlueprint — the intent-only handshake gate is 0.2, not the search tool’s 0.3 (ggui#1275, ggui#606)', () => {
   it('the search tool keeps its own 0.3 floor', () => {
     expect(MIN_SIMILARITY_SCORE).toBe(0.3);
   });
@@ -1515,5 +1518,120 @@ describe('matchBlueprint — fits pre-filter (ggui#1427)', () => {
     }
     const ev = events.find((e) => e.decision === 'match-exact');
     expect(ev?.fit?.miss).toBe('surface');
+  });
+});
+
+// ── ggui#606 — the retrieval query is composed like the stored side, and the floor is per query kind ──
+//
+// Stored vectors embed `composeEmbeddingInput(contract, intent)`. A query
+// that embeds the intent alone scores every candidate on a depressed scale
+// (the ggui#1275 pair: 0.29 asymmetric vs 0.87 symmetric under the
+// production embedder). When the request carries a contract, the query is
+// composed the same way; a contract-less request cannot compose one and
+// stays intent-only recall. The two kinds sit on two scales, so they get two
+// floors (#606's gate, c.5849689990): 0.50 for a composed query, 0.2 kept
+// for an intent-only one.
+
+class RecordingEmbeddingProvider extends MockEmbeddingProvider {
+  readonly texts: string[] = [];
+  override async embed(text: string): Promise<number[]> {
+    this.texts.push(text);
+    return super.embed(text);
+  }
+}
+
+const QUERY_CONTRACT_606: DataContract = {
+  contextSpec: { headline: { schema: { type: 'string' }, default: '' } },
+};
+
+async function recordingRegistry() {
+  const embedding = new RecordingEmbeddingProvider();
+  const registry = {
+    embedding,
+    vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
+  };
+  await registerBlueprint(registry, SCOPE, {
+    kind: 'template',
+    contract: NOTEPAD_CONTRACT,
+    intent: 'a notepad for filing bugs',
+    componentCode: 'notepad',
+    source: { kind: 'user' },
+  });
+  embedding.texts.length = 0; // only the query's embeds from here on
+  return { registry, embedding };
+}
+
+describe('matchBlueprint — the retrieval query is composed like the stored side (ggui#606)', () => {
+  it('a contract-bearing request embeds its contract summary with its intent', async () => {
+    const { registry, embedding } = await recordingRegistry();
+    await matchBlueprint(
+      { registry, llm: stubLlm({ matchId: null, confidence: 0, reason: '' }) },
+      SCOPE,
+      { intent: 'a headline card', contract: QUERY_CONTRACT_606 },
+    );
+    expect(embedding.texts[0]).toBe(composeEmbeddingInput(QUERY_CONTRACT_606, 'a headline card'));
+  });
+
+  it('a contract-less request stays intent-only recall', async () => {
+    const { registry, embedding } = await recordingRegistry();
+    await matchBlueprint(
+      { registry, llm: stubLlm({ matchId: null, confidence: 0, reason: '' }) },
+      SCOPE,
+      { intent: 'a headline card' },
+    );
+    expect(embedding.texts[0]).toBe(composeEmbeddingInput(undefined, 'a headline card'));
+  });
+});
+
+describe('matchBlueprint — one floor per query kind: 0.50 composed, 0.2 intent-only (ggui#606)', () => {
+  // The marker embedder scores each stored row at its own cosine; neither the
+  // query's intent nor this contract's summary carries a marker, so the query
+  // vector is the same for both kinds and only the floor differs.
+  const reaches = async (cosine: number, contract?: DataContract) => {
+    const { registry, ids } = await floorRegistry(new Map([['ECHO-INTENT', cosine]]));
+    let judgeCalled = false;
+    const llm = stubLlm(() => {
+      judgeCalled = true;
+      return { matchId: ids.get('ECHO-INTENT') ?? null, confidence: 0.92, reason: 'same task' };
+    });
+    const result = await matchBlueprint({ registry, llm }, SCOPE, {
+      intent: 'a query intent',
+      ...(contract !== undefined ? { contract } : {}),
+    });
+    return { judgeCalled, result };
+  };
+
+  it('a contract-less query still reaches the judge at 0.29 (its cosines stay on the intent-only scale)', async () => {
+    const { judgeCalled, result } = await reaches(0.29);
+    expect(judgeCalled).toBe(true);
+    expect(result.strategy).toBe('semantic');
+  });
+
+  it('a contract-bearing query does not reach the judge below 0.50 (0.49, and the old 0.29)', async () => {
+    for (const cosine of [0.49, 0.29]) {
+      const { judgeCalled, result } = await reaches(cosine, QUERY_CONTRACT_606);
+      expect(judgeCalled, `cosine ${cosine}`).toBe(false);
+      expect(result.strategy).toBe('no-match');
+      expect(result.reason).toMatch(/match-skip-low-cosine/);
+    }
+  });
+
+  it('a contract-bearing query reaches the judge at 0.50 and can be reused', async () => {
+    const { judgeCalled, result } = await reaches(0.5, QUERY_CONTRACT_606);
+    expect(judgeCalled).toBe(true);
+    expect(result.strategy).toBe('semantic');
+  });
+
+  it('an explicit minCosineForRerank still overrides either kind (the gate instrument runs at 0)', async () => {
+    const { registry, ids } = await floorRegistry(new Map([['ECHO-INTENT', 0.3]]));
+    const llm = stubLlm({ matchId: ids.get('ECHO-INTENT') ?? null, confidence: 0.92, reason: 'same task' });
+    const result = await matchBlueprint(
+      { registry, llm },
+      SCOPE,
+      { intent: 'a query intent', contract: QUERY_CONTRACT_606 },
+      { minCosineForRerank: 0 },
+    );
+    expect(result.strategy).toBe('semantic');
   });
 });

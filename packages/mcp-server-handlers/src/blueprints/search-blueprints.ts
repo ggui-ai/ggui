@@ -72,11 +72,11 @@ import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.j
  * `score`.
  *
  * The handshake matcher (`matchBlueprint`) gates its judge with its own
- * number (0.2), not this one, because the two are not on one scale: the
- * matcher's retrieval query embeds a request's intent without its
- * contract while stored vectors embed both, which depresses its cosines
- * (ggui#606, ggui#1275). One shared number returns when the matcher's
- * query is composed like the stored side.
+ * numbers, not this one, because its query comes in two kinds on two
+ * scales (ggui#606): a request that carries a contract composes its query
+ * like the stored vectors (contract summary + intent) and is gated at 0.50;
+ * a request without one embeds its intent alone, on a lower scale, and is
+ * gated at 0.2 (ggui#1275). Neither is this tool's intent-only search.
  */
 export const MIN_SIMILARITY_SCORE = 0.3;
 

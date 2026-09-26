@@ -194,9 +194,11 @@ export interface MatchBlueprintOptions {
   /** RAG top-K. Default 20 — balance between recall and prompt cost. */
   readonly topK?: number;
   /**
-   * Minimum cosine a candidate needs to reach the LLM judge. Default 0.2
-   * (see the DEFAULT_MIN_COSINE note for why it is not
-   * `ggui_search_blueprints`' 0.3). Applied PER CANDIDATE (ggui#1275): a
+   * Minimum cosine a candidate needs to reach the LLM judge. Default: one
+   * floor per query kind — 0.50 when the request carries a contract (its
+   * query is composed like the stored vectors), 0.2 when it does not (its
+   * query embeds the intent alone, on a lower scale); see the
+   * DEFAULT_MIN_COSINE_* note. A value here overrides both. Applied PER CANDIDATE (ggui#1275): a
    * candidate under the floor is never offered to the judge, so it can
    * never become a reuse; when even top-1 is under it, the judge is skipped
    * entirely and the rerank cost is saved.
@@ -218,24 +220,31 @@ export interface MatchBlueprintOptions {
 }
 
 const DEFAULT_TOP_K = 20;
-// The cosine gate before the judge. It is 0.2 and deliberately NOT
-// `ggui_search_blueprints`' 0.3, because the two numbers are not on one
-// scale: the retrieval query below embeds the request's intent ALONE
-// (`ragArg = { intent }`), while every stored vector embeds its contract
-// summary AND its intent (`composeEmbeddingInput(contract, intent)`). That
-// asymmetry (ggui#606) depresses every cosine this matcher sees. Measured
-// on a development deployment with the production embedder (ggui#1275): a
-// request with the same contract and a near-identical intent scored 0.29
-// here and 0.87 when the query carries the contract too. So a 0.3 gate on
-// this scale turns true matches away before the judge sees them.
-// 0.2 is the gate ggui#606's ranking probe ran under, with the judge
-// picking correctly; what the 0.2–0.3 band admits past the judge was
-// sampled once on dev and not calibrated: 8 reuses, 6 right (short
-// intents at 0.27–0.30) and 2 wrong, both on a blueprint with no cached
-// intent, which ggui#1275 (3) now keeps out of the judge entirely. The
-// gate is recalibrated when the query is composed like the stored side
-// (ggui#606, rnd's design and gate).
-const DEFAULT_MIN_COSINE = 0.2;
+// The cosine gate before the judge — ONE FLOOR PER QUERY KIND, because the
+// two kinds of query sit on two scales (ggui#606).
+//
+// Every stored vector embeds its contract summary AND its intent
+// (`composeEmbeddingInput(contract, intent)`). A request that carries a
+// contract composes its query the same way (below), so its cosines are on
+// that SYMMETRIC scale. A request without a contract cannot compose one: its
+// query embeds the intent alone and its cosines sit on the lower,
+// asymmetric scale. Measured on a development deployment with the
+// production embedder (ggui#1275): the same pair scored 0.29 asymmetric and
+// 0.87 symmetric. One number cannot serve both.
+//
+// - Composed (contract-bearing) query: 0.50. ggui#606's pre-registered gate
+//   (the 28-pair replay through the real matcher at gate 0, both embedders;
+//   c.5849689990) picked the highest floor that keeps recall at today's
+//   and wrong accepts no higher than today's: 0.50 holds recall 9/9 on both
+//   embedders; Titan bounds it (0.60 cuts a true match), and the nearest
+//   contract-bearing true match sits at 0.767.
+// - Intent-only (contract-less) query: 0.2, unchanged. Its cosines are the
+//   same asymmetric scale as before this change, so its floor stays too. It
+//   is deliberately NOT `ggui_search_blueprints`' 0.3: on this scale a 0.3
+//   gate turned true matches away (ggui#1275). A candidate with no authored
+//   intent never reaches the judge at all (ggui#1275 (3)).
+const DEFAULT_MIN_COSINE_COMPOSED = 0.5;
+const DEFAULT_MIN_COSINE_INTENT_ONLY = 0.2;
 // Loosened for Path-A: accept a semantic judge's pick more readily, so a
 // paraphrased / similar contract is reused instead of cold-generating.
 // Over-proposal is bounded by the agent decision step plus the COVERAGE_GAP
@@ -271,7 +280,11 @@ export async function matchBlueprint(
 ): Promise<BlueprintMatchResult> {
   const kind: BlueprintKind = options.kind ?? 'template';
   const topK = options.topK ?? DEFAULT_TOP_K;
-  const minCosine = options.minCosineForRerank ?? DEFAULT_MIN_COSINE;
+  // One floor per query kind (see the DEFAULT_MIN_COSINE_* note); an explicit
+  // option overrides either.
+  const minCosine =
+    options.minCosineForRerank ??
+    (query.contract !== undefined ? DEFAULT_MIN_COSINE_COMPOSED : DEFAULT_MIN_COSINE_INTENT_ONLY);
   // ggui#1235 — the pair: a supplied judge carries its own cut; the default
   // is today's LLM judge at `options.judgeThreshold` (0.5).
   const rerank =
@@ -479,7 +492,14 @@ export async function matchBlueprint(
   // low-confidence, defense.
   let candidates: readonly BlueprintCandidate[] = [];
   try {
-    const ragArg: { intent: string } = { intent: trimmedIntent };
+    // ggui#606: compose the query the way stored vectors are composed
+    // (`composeEmbeddingInput(contract, intent)`), so a candidate is scored
+    // on the scale it was stored on. A contract-less request stays
+    // intent-only recall by design (and keeps its own floor above).
+    const ragArg: { intent: string; contract?: DataContract } =
+      query.contract !== undefined
+        ? { intent: trimmedIntent, contract: query.contract }
+        : { intent: trimmedIntent };
     candidates = await findBlueprintsByEmbedding(
       deps.registry,
       scope,
