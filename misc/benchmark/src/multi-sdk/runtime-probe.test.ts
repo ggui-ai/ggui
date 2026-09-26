@@ -61,3 +61,30 @@ describe('deriveRuntimeProbeVerdict (#973 — the console-only verdict becomes a
     }
   });
 });
+
+describe('deriveRuntimeProbeVerdict agrees with the probe metadata\'s own verdict (#1380 C1b — two derivations of one fact)', () => {
+  // Each fixture is a `ran` result whose `verdict` is what ui-gen's exit probe stamps for those
+  // issues: `fail` iff a known check kind failed (failChecks in declaration order), `pass`
+  // otherwise — warnings and non-probe issues never fail it. If the bench's `passed` ever drifts
+  // from the metadata's verdict, this fails instead of one cell showing two different rates.
+  const cases: ReadonlyArray<{ name: string; r: EvalResult }> = [
+    { name: 'no findings', r: evalWith([], { status: 'ran', verdict: 'pass' }) },
+    { name: 'one failing check', r: evalWith([issue('runtime:action-wiring:useAction', 'fail')], { status: 'ran', verdict: 'fail', failChecks: ['action-wiring'] }) },
+    { name: 'warnings only', r: evalWith([issue('runtime:stream-rerender', 'warn')], { status: 'ran', verdict: 'pass' }) },
+    {
+      name: 'a fail beside a warn',
+      r: evalWith(
+        [issue('runtime:stream-rerender', 'warn'), issue('runtime:action-wiring:useAction', 'fail')],
+        { status: 'ran', verdict: 'fail', failChecks: ['action-wiring'] },
+      ),
+    },
+    { name: 'a non-probe fail only', r: evalWith([issue('raw-spacing', 'fail')], { status: 'ran', verdict: 'pass' }) },
+  ];
+  for (const { name, r } of cases) {
+    it(`${name}: passed === (verdict === 'pass')`, () => {
+      const probe = r.runtimeProbe;
+      expect(probe?.status).toBe('ran');
+      expect(deriveRuntimeProbeVerdict(r).passed).toBe(probe?.status === 'ran' && probe.verdict === 'pass');
+    });
+  }
+});
