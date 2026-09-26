@@ -16,6 +16,7 @@
 // check fails with a descriptive reason rather than throwing.
 
 import type { RenderCheckHostOptions } from "./render-check-host.js";
+import type { GenerationRuntimeProbeCheck } from "@ggui-ai/mcp-server-core";
 import type { DataContract, JsonObject, PropsSpec } from "@ggui-ai/protocol";
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { createProbe, createProbeWireConfig, type ActionFiredEvent, type Probe } from "./probe.js";
@@ -65,15 +66,32 @@ type ProbeModuleNamespace = {
  */
 export type CheckOutcome = "verified" | "failed" | "unverified" | "skipped";
 
+/**
+ * The checks this probe runs, by name (ggui#1380). ONE union: the same
+ * values a generation's metadata lists in `failChecks`
+ * (`GenerationRuntimeProbeCheck` in `@ggui-ai/mcp-server-core`), declared
+ * there and named here — the same pattern as `RuntimeProbeStatus`.
+ */
+export type RenderCheckKind = GenerationRuntimeProbeCheck;
+
+/**
+ * Every {@link RenderCheckKind}, once, in the order the union declares them.
+ * The order is the order a probe's `failChecks` lists the checks that failed,
+ * so a render crash always reads first. `satisfies` refuses a kind outside
+ * the union; the pin beside the adapter refuses a member missing here.
+ */
+export const RENDER_CHECK_KINDS = [
+  "render-no-throw",
+  "prop-sensitivity",
+  "action-wiring",
+  "selection-identity",
+  "prop-coverage",
+  "optional-props-omitted",
+  "stream-rerender",
+] as const satisfies readonly RenderCheckKind[];
+
 export interface RenderCheckIssue {
-  readonly check:
-    | "render-no-throw"
-    | "action-wiring"
-    | "selection-identity"
-    | "prop-coverage"
-    | "prop-sensitivity"
-    | "stream-rerender"
-    | "optional-props-omitted";
+  readonly check: RenderCheckKind;
   readonly outcome: CheckOutcome;
   readonly subject?: string;
   readonly reason: string;

@@ -186,7 +186,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(calls()).toBe(1);
     expect(telemetry.evalRoundsUsed).toBe(1);
     expect(telemetry.evalResult?.pass).toEqual(['probe-only']);
-    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 40 });
+    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'pass', elapsedMs: 40 });
     expect(telemetry.cumulativeEvalWallMs).toBeGreaterThan(0);
     expect(telemetry.compiledCode).toBe(PRE_REPAIR);
     expect(telemetry.counters.phases.evalFix).toBe(0);
@@ -213,8 +213,12 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.probeRepairUsed).toBe(true);
     expect(telemetry.compiledCode).toBe(REPAIRED);
     expect(telemetry.evalResult?.pass).toEqual(['probe-only']);
-    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 30 });
-    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'ran', recoverableFailAfter: false });
+    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'pass', elapsedMs: 30 });
+    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'ran', verdict: 'pass', elapsedMs: 30 },
+    });
   });
 
   it('a recoverable FAIL that survives the repair still ends after the second round — no third turn', async () => {
@@ -230,7 +234,11 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(scripted.inputs).toHaveLength(2);
     expect(calls()).toBe(2);
     expect(telemetry.compiledCode).toBe(REPAIRED);
-    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'ran', recoverableFailAfter: true });
+    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45 },
+    });
   });
 
   it('the repair turn failing self-check: two turns, no third, the pre-repair card, runtimeProbeRepair { attempted, compiled: false }', async () => {
@@ -250,7 +258,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.selfCheckPassed).toBe(true);
     expect(source).toBe(telemetry.pairedSource);
     expect(telemetry.evalResult?.pass).toEqual(['probe-only']);
-    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 50 });
+    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 });
     expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, compiled: false });
   });
 
@@ -270,7 +278,11 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.turnsUsed).toBe(2);
     expect(telemetry.evalResult?.pass).toEqual(['probe-only']);
     expect(telemetry.evalResult?.pass).not.toContain('axis.low-risk');
-    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'ran', recoverableFailAfter: false });
+    expect(telemetry.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'ran', verdict: 'pass', elapsedMs: 30 },
+    });
     expect(telemetry.compiledCode).toBe(REPAIRED);
   });
 
@@ -287,7 +299,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(telemetry.turnsUsed).toBe(1);
     expect(telemetry.probeRepairUsed).toBe(true);
     expect(telemetry.compiledCode).toBe(PRE_REPAIR);
-    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 50 });
+    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 });
     expect(telemetry.evalResult).not.toHaveProperty('runtimeProbeRepair');
     expect(log.mock.calls.some(([m]) => typeof m === 'string' && m.startsWith('[simple] probe-only repair turn not taken — turn cap (1) reached'))).toBe(true);
   });
@@ -321,7 +333,7 @@ describe('the runner gate on a probe-only session (ggui#1380)', () => {
     expect(calls()).toBe(1);
     expect(telemetry.evalRoundsUsed).toBe(1);
     expect(telemetry.evalResult?.pass).toEqual(['functionality', 'crash']);
-    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 20 });
+    expect(telemetry.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'pass', elapsedMs: 20 });
     expect(telemetry.evalResult).not.toHaveProperty('runtimeProbeRepair');
   });
 });

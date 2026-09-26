@@ -17,6 +17,14 @@
  *   - `riskTier: 'low'` takes the probe-only branch, never the bypass;
  *   - I4: `probeOnly: false` on the evaluation lane is today's round, byte
  *     for byte (runCheck once, evaluator once).
+ *
+ * C1b (ggui#1380): the meta carries the probe's VERDICT — `pass` on a clean
+ * `ran`, `fail` with `failChecks` (the distinct failing check kinds, crash
+ * first) on any failing check, no verdict key on a probe that produced none —
+ * and the repair record is `{ compiled: true, after: <the re-probe's meta> }`.
+ * The trigger is unchanged: only a recognised `render-no-throw` fail buys the
+ * turn; an `action-wiring` or `prop-sensitivity` fail is verdict `fail`,
+ * recorded, and the round breaks.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentWorkspace } from '../../coding-agent/workspace.js';
@@ -56,6 +64,26 @@ const PROP_SENSITIVITY_FAIL: EvalIssue = {
   severity: 'critical',
   description: 'currentUser is declared but a literal renders in its place',
   fix: 'Derive the display from props.currentUser.',
+};
+
+const ACTION_WIRING_FAIL: EvalIssue = {
+  tier: 0,
+  result: 'fail',
+  category: 'contract',
+  subcategory: 'runtime:action-wiring:submitOrder',
+  severity: 'critical',
+  description: 'submitOrder was never dispatched from any click',
+  fix: 'Wire submitOrder() to a native event prop.',
+};
+
+/** A warn never enters `failChecks` — only `result: 'fail'` issues do. */
+const PROP_COVERAGE_WARN: EvalIssue = {
+  tier: 0,
+  result: 'warn',
+  category: 'contract',
+  subcategory: 'runtime:prop-coverage:subtitle',
+  description: 'subtitle was not found in the DOM',
+  fix: 'Render props.subtitle somewhere in the JSX.',
 };
 
 function stubProbe(outcome: RuntimeRenderOutcome): { probe: RuntimeRenderCheck; run: ReturnType<typeof vi.fn> } {
@@ -147,7 +175,7 @@ describe('the probe-only round (ggui#1380)', () => {
     expect(round.evalResult).toEqual({
       issues: [],
       pass: ['probe-only'],
-      runtimeProbe: { status: 'ran', elapsedMs: 812, renderMs: 640 },
+      runtimeProbe: { status: 'ran', verdict: 'pass', elapsedMs: 812, renderMs: 640 },
       criteriaCoverage: notApplicableCoverage('probe-only round: no evaluator configured'),
       visualCoverage: { status: 'not-applicable', reason: 'probe-only round: no visual evaluator configured' },
     });
@@ -176,6 +204,9 @@ describe('the probe-only round (ggui#1380)', () => {
       ...(reason !== undefined ? { reason } : {}),
       ...(elapsedMs !== undefined ? { elapsedMs } : {}),
     });
+    // No verdict on a probe that produced none — never a pass, never a crash.
+    expect(round.evalResult?.runtimeProbe).not.toHaveProperty('verdict');
+    expect(round.evalResult?.runtimeProbe).not.toHaveProperty('failChecks');
     expect(mockRunCheck).not.toHaveBeenCalled();
   });
 
@@ -194,7 +225,9 @@ describe('the probe-only round (ggui#1380)', () => {
     );
     expect(round.evalResult?.pass).toEqual(['probe-only']);
     expect(round.evalResult?.issues).toEqual([RECOVERABLE_CRASH]);
-    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 900 });
+    // The verdict names the crash class: a reader can count crash-class FAILs
+    // from the metadata alone (ggui#1380 C1b).
+    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 900 });
     expect(round.evalResult).not.toHaveProperty('runtimeProbeRepair');
     expect(round.evalResult).not.toHaveProperty('contractFeedback');
     expect(round.contractFeedback).toBeUndefined();
@@ -213,10 +246,17 @@ describe('the probe-only round (ggui#1380)', () => {
     expect(round.evalRoundsUsed).toBe(2);
     expect(round.evalResult?.pass).toEqual(['probe-only']);
     expect(round.evalResult?.issues).toEqual([RECOVERABLE_CRASH]);
-    expect(round.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'ran', recoverableFailAfter: true });
+    // The repair compiled and the re-probe's whole meta is its `after`: the
+    // crash class is still there, readable as `after.failChecks`.
+    expect(round.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 700 },
+    });
+    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 700 });
   });
 
-  it('the second round on a clean re-probe records the repair as taken', async () => {
+  it('the second round on a clean re-probe records the repair as taken and passing', async () => {
     const { probe } = stubProbe({ status: 'ran', issues: [], elapsedMs: 500 });
     const { ctx, input } = await buildRound({ probe, probeOnly: true, probeRepairUsed: true });
 
@@ -224,17 +264,26 @@ describe('the probe-only round (ggui#1380)', () => {
 
     expect(round.control).toBe('break');
     expect(round.evalDone).toBe(true);
-    expect(round.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'ran', recoverableFailAfter: false });
+    expect(round.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'ran', verdict: 'pass', elapsedMs: 500 },
+    });
   });
 
-  it('the second round on a timed-out re-probe records that status as the after', async () => {
+  it('the second round on a timed-out re-probe records that status as the after — no verdict on it', async () => {
     const { probe } = stubProbe({ status: 'timed-out', issues: [], reason: 'did not finish', elapsedMs: 30_000 });
     const { ctx, input } = await buildRound({ probe, probeOnly: true, probeRepairUsed: true });
 
     const round = await runEvalRound(ctx, { ...input, evalRoundsUsed: 1 });
 
     expect(round.control).toBe('break');
-    expect(round.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: 'timed-out', recoverableFailAfter: false });
+    expect(round.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: 'timed-out', reason: 'did not finish', elapsedMs: 30_000 },
+    });
+    expect(round.evalResult?.runtimeProbeRepair?.after).not.toHaveProperty('verdict');
   });
 
   it('a prop-sensitivity FAIL is recorded in the issues and never fed back (no contract-feedback round)', async () => {
@@ -248,8 +297,49 @@ describe('the probe-only round (ggui#1380)', () => {
     expect(round.evalDone).toBe(true);
     expect(round.isEvalFeedback).toBe(false);
     expect(round.evalResult?.issues).toEqual([PROP_SENSITIVITY_FAIL]);
+    // Verdict fail, the check named, and no repair turn: recorded, never repaired.
+    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['prop-sensitivity'] });
+    expect(round.evalResult).not.toHaveProperty('runtimeProbeRepair');
     expect(round.contractFeedback).toBeUndefined();
     expect(round.evalResult).not.toHaveProperty('contractFeedback');
+  });
+
+  it('an action-wiring FAIL is verdict fail with the check named, and buys NO repair turn (recorded, break)', async () => {
+    const { probe, run } = stubProbe({ status: 'ran', issues: [ACTION_WIRING_FAIL], elapsedMs: 300 });
+    const { ctx, input } = await buildRound({ probe, probeOnly: true, probeRepairUsed: false });
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(round.control).toBe('break');
+    expect(round.evalDone).toBe(true);
+    expect(round.isEvalFeedback).toBe(false);
+    expect(round.lastResultText).toBe('');
+    expect(round.evalResult?.issues).toEqual([ACTION_WIRING_FAIL]);
+    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['action-wiring'], elapsedMs: 300 });
+    expect(round.evalResult).not.toHaveProperty('runtimeProbeRepair');
+  });
+
+  it('a crash and a prop-sensitivity FAIL together: both listed, the crash first, whatever order the probe emitted them', async () => {
+    const { probe } = stubProbe({
+      status: 'ran',
+      // Emitted with the crash LAST and a warn in between: failChecks is the
+      // distinct FAIL kinds in declaration order, never the emission order.
+      issues: [PROP_SENSITIVITY_FAIL, PROP_COVERAGE_WARN, RECOVERABLE_CRASH, PROP_SENSITIVITY_FAIL],
+      elapsedMs: 950,
+    });
+    const { ctx, input } = await buildRound({ probe, probeOnly: true, probeRepairUsed: false });
+
+    const round = await runEvalRound(ctx, input);
+
+    // The crash still buys the repair turn — the verdict does not change the trigger.
+    expect(round.control).toBe('feedback');
+    expect(round.evalResult?.runtimeProbe).toEqual({
+      status: 'ran',
+      verdict: 'fail',
+      failChecks: ['render-no-throw', 'prop-sensitivity'],
+      elapsedMs: 950,
+    });
   });
 
   it("riskTier 'low' takes the probe-only branch: pass is ['probe-only'], never ['axis.low-risk']", async () => {
@@ -287,7 +377,7 @@ describe('the probe-only round (ggui#1380)', () => {
       issues: [],
       pass: ['functionality', 'crash'],
       visualCoverage: { status: 'not-applicable', reason: 'visual leg not configured' },
-      runtimeProbe: { status: 'ran', elapsedMs: 12, renderMs: 9 },
+      runtimeProbe: { status: 'ran', verdict: 'pass', elapsedMs: 12, renderMs: 9 },
     });
   });
 

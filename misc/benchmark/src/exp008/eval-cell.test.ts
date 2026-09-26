@@ -221,7 +221,7 @@ describe('deriveRuntimeProbeVerdictFromExport', () => {
     });
   });
   it('present → the runner verdict (same helper as the published matrix)', () => {
-    const v = deriveRuntimeProbeVerdictFromExport({ issues: [], pass: [], runtimeProbe: { status: 'ran' } });
+    const v = deriveRuntimeProbeVerdictFromExport({ issues: [], pass: [], runtimeProbe: { status: 'ran', verdict: 'pass' } });
     expect(v).toEqual({ status: 'ran', passed: true, failures: 0, warnings: 0 });
   });
 });

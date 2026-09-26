@@ -44,6 +44,8 @@ import type { GadgetCatalogAdapter } from "@ggui-ai/gadgets";
 import type {
   GenerationMetadata,
   GenerationRuntimeProbe,
+  GenerationRuntimeProbeOutcome,
+  GenerationRuntimeProbeRepair,
   GeneratorTier,
   LlmProvider,
   UiGenerateInput,
@@ -76,7 +78,7 @@ import type { RenderingContext } from "./contract-context.js";
 import type { DesignMode } from "./design-mode.js";
 import { DEFAULT_DESIGN_MODE } from "./design-mode.js";
 import { resolveRoute, applyRouteToEnv } from "./adapters/provider-router.js";
-import type { QualityConfig } from "./evaluation/types-public.js";
+import type { QualityConfig, RuntimeProbeMeta, RuntimeProbeRepair } from "./evaluation/types-public.js";
 import type { EvaluationConfig } from "./evaluation/types.js";
 import type { AgentConfig } from "./harness/llm-router.js";
 
@@ -552,29 +554,45 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
 }
 
 /**
+ * ggui#1380 — one probe's meta, projected onto the metadata's outcome ARM BY
+ * ARM: the outcome fields (`status`, `verdict`, `failChecks`, `elapsedMs`)
+ * are copied; the engine's own detail (`reason`, `renderMs`, `hostLoad`)
+ * stays on the harness result. No cast — each arm is rebuilt as a literal of
+ * the target arm, so a field the metadata does not carry cannot ride along
+ * and a field the arm requires cannot be dropped. Absent stays absent.
+ */
+function metadataProbeOutcome(meta: RuntimeProbeMeta): GenerationRuntimeProbeOutcome {
+  const elapsed = meta.elapsedMs !== undefined ? { elapsedMs: meta.elapsedMs } : {};
+  if (meta.status !== "ran") return { status: meta.status, ...elapsed };
+  if (meta.verdict === "pass") return { status: "ran", verdict: "pass", ...elapsed };
+  return { status: "ran", verdict: "fail", failChecks: meta.failChecks, ...elapsed };
+}
+
+/**
+ * ggui#1380 — the repair record, arm by arm: `compiled: false` is carried as
+ * is (no re-probe, so no after); `compiled: true` carries the re-probe's meta
+ * projected with the same function as the record's own outcome.
+ */
+function metadataProbeRepair(repair: RuntimeProbeRepair): GenerationRuntimeProbeRepair {
+  return repair.compiled
+    ? { attempted: true, compiled: true, after: metadataProbeOutcome(repair.after) }
+    : { attempted: true, compiled: false };
+}
+
+/**
  * ggui#1380 — the harness result's probe record, projected onto the metadata
- * a host reads. `status` / `elapsedMs` are the LAST probe's (the re-probe's
- * when the repair compiled, else the pre-repair probe's — exactly what the
- * harness stamps on `evalResult.runtimeProbe`). The repair record's two
- * arms project onto core's one shape: a re-probe record means the repair
- * compiled (that is the only way a re-probe runs); `compiled: false` is
- * carried as is. Absent when no probe ran — never a default status.
+ * a host reads. The outcome fields are the LAST probe's (the re-probe's when
+ * the repair compiled, else the pre-repair probe's — exactly what the harness
+ * stamps on `evalResult.runtimeProbe`), and `repair` is present only when a
+ * repair turn was bought. Absent when no probe ran — never a default status.
  */
 function metadataRuntimeProbe(result: GenerationResult): GenerationRuntimeProbe | undefined {
   const probe = result.evalResult?.runtimeProbe;
   if (probe === undefined) return undefined;
   const repair = result.evalResult?.runtimeProbeRepair;
   return {
-    status: probe.status,
-    ...(probe.elapsedMs !== undefined ? { elapsedMs: probe.elapsedMs } : {}),
-    ...(repair !== undefined
-      ? {
-          repair:
-            "afterStatus" in repair
-              ? { attempted: true, compiled: true, afterStatus: repair.afterStatus }
-              : { attempted: true, compiled: false },
-        }
-      : {}),
+    ...metadataProbeOutcome(probe),
+    ...(repair !== undefined ? { repair: metadataProbeRepair(repair) } : {}),
   };
 }
 

@@ -204,7 +204,7 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     const telemetry = createTelemetry();
     telemetry.codingStartedAtMs = session.startedAtMs + 50;
     telemetry.codingMs = 1_000;
-    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran" } };
+    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran", verdict: "pass" } };
     telemetry.contractFeedback = {
       firedOn: ["runtime:prop-sensitivity:currentUser"],
       sourceBefore: "export default function Chat() { return <p>You</p>; }",
@@ -213,7 +213,7 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     const result = await assembleGenerationResult({ session, telemetry, source: "export default function Chat(props) { return <p>{props.currentUser}</p>; }" });
 
     expect(result.evalResult?.contractFeedback).toEqual(telemetry.contractFeedback);
-    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran" });
+    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", verdict: "pass" });
     expect(result.evalResult?.issues).toEqual([]);
   });
 
@@ -222,7 +222,7 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     const telemetry = createTelemetry();
     telemetry.codingStartedAtMs = session.startedAtMs + 50;
     telemetry.codingMs = 1_000;
-    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran" } };
+    telemetry.evalResult = { issues: [], pass: [], runtimeProbe: { status: "ran", verdict: "pass" } };
 
     const result = await assembleGenerationResult({ session, telemetry, source: "" });
 

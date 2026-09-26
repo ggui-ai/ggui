@@ -12,7 +12,13 @@
 import { installProductionActShim } from "./production-act-shim.js";
 import type { RenderCheckHostBounds } from "./render-check-host.js";
 
-export { runRenderCheck, type RenderCheckResult, type RenderCheckIssue } from "./render-check.js";
+export {
+  RENDER_CHECK_KINDS,
+  runRenderCheck,
+  type RenderCheckKind,
+  type RenderCheckResult,
+  type RenderCheckIssue,
+} from "./render-check.js";
 export { createProbe, createProbeWireConfig, type Probe } from "./probe.js";
 export { prepareMockupProps, type MockupPropsResult } from "./prepare-mockup.js";
 export {
@@ -20,6 +26,7 @@ export {
   classifyRenderCrashFix,
   createRuntimeRenderCheck,
   isRecoverableRenderCrash,
+  parseRuntimeSubcategory,
   type RuntimeRenderProbeConfig,
 } from "./adapter.js";
 export type { RenderCheckHostBounds, RenderCheckHostOptions } from "./render-check-host.js";

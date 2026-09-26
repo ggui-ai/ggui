@@ -20,7 +20,7 @@
 
 export type Priority = "P0" | "P1" | "P2";
 
-import type { GenerationRuntimeProbeStatus } from "@ggui-ai/mcp-server-core";
+import type { GenerationRuntimeProbeOutcome, GenerationRuntimeProbeStatus } from "@ggui-ai/mcp-server-core";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // ─── Issue shape ───────────────────────────────────────────────────────────
@@ -101,21 +101,15 @@ export interface ProbeHostLoad {
 }
 
 /**
- * Probe execution meta stamped onto an `EvalResult` at the exit-decision
- * points that invoke the probe. Absence of this field means the eval
- * path never reached a probe invocation at all — consumers treat that
- * the same as not-run, never as a pass.
+ * The engine's own fields on a probe's meta, beside the outcome a
+ * generation's metadata reports: why a probe did not finish, its render
+ * time, the host's load around it. Present on every arm of
+ * {@link RuntimeProbeMeta}; each is absent when the probe had nothing to
+ * say about it.
  */
-export interface RuntimeProbeMeta {
-  readonly status: RuntimeProbeStatus;
+export interface RuntimeProbeMetaDetail {
   /** Populated for `infra-skipped` / `not-applicable` / `timed-out` — why the probe didn't finish. */
   readonly reason?: string;
-  /**
-   * How long the probe took, wall-clock, as measured around the check by the
-   * side that invoked it — on every status that reached the check (`ran`,
-   * `timed-out`, `infra-skipped`). Absent on `not-applicable`: nothing ran.
-   */
-  readonly elapsedMs?: number;
   /** `ran` only: the check's own render time, inside `elapsedMs`. */
   readonly renderMs?: number;
   /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
@@ -123,19 +117,54 @@ export interface RuntimeProbeMeta {
 }
 
 /**
+ * Probe execution meta stamped onto an `EvalResult` at the exit-decision
+ * points that invoke the probe. Absence of this field means the eval
+ * path never reached a probe invocation at all — consumers treat that
+ * the same as not-run, never as a pass.
+ *
+ * ONE union with the generation metadata's probe outcome
+ * (`GenerationRuntimeProbeOutcome` in `@ggui-ai/mcp-server-core`, declared
+ * there and carried here with {@link RuntimeProbeMetaDetail} on every arm),
+ * so the round's stamp and the metadata's record cannot say different
+ * things (ggui#1380):
+ *
+ *   - `ran` + `verdict: 'pass'` — the probe executed and no check failed;
+ *   - `ran` + `verdict: 'fail'` — ANY check failed; `failChecks` lists the
+ *     distinct check kinds that did (`RenderCheckKind`, the engine's name
+ *     for the same union), never empty, in the order `RENDER_CHECK_KINDS`
+ *     declares them, parsed from the probe's own
+ *     `runtime:<check>[:<subject>]` issues;
+ *   - `timed-out` / `infra-skipped` / `not-applicable` — no verdict, and the
+ *     type carries none. `elapsedMs` (on every status that reached the
+ *     check) and `hostLoad` say how long it ran and how busy the host was.
+ *
+ * The verdict and the repair trigger are two different questions. The
+ * verdict is `fail` on any failing check. The one repair turn a probe-only
+ * round buys fires on a `render-no-throw` fail the engine recognises
+ * (`isRecoverableRenderCrash`) and on nothing else: a `fail` verdict whose
+ * checks are `prop-sensitivity`, `action-wiring` or any other kind is
+ * recorded here and never fed back.
+ */
+export type RuntimeProbeMeta = GenerationRuntimeProbeOutcome & RuntimeProbeMetaDetail;
+
+/**
  * The one repair turn a probe-only round buys (ggui#1380). A serving
  * deployment that wires the runtime probe and configures no evaluator runs
- * the probe once after the coding turns; a recoverable render crash buys
- * exactly one repair turn, then one re-probe. This records what came of it:
+ * the probe once after the coding turns; a render crash the engine
+ * recognises buys exactly one repair turn, then one re-probe. This records
+ * what came of it:
  *   - `compiled: false` — the repair turn's code did not pass self-check, so
- *     no re-probe ran and the pre-repair card is the one served;
- *   - `afterStatus` — the re-probe ran (the repair compiled) and this is its
- *     status; `recoverableFailAfter` says whether the crash class the turn
- *     was bought for is still there.
+ *     no re-probe ran (there is no `after`) and the pre-repair card is the
+ *     one served;
+ *   - `compiled: true` — the re-probe ran and `after` is its whole meta:
+ *     its status, its verdict when it ran, and the checks that still fail.
+ *     Whether the crash class the turn was bought for is still there is
+ *     `after.verdict === 'fail' && after.failChecks.includes('render-no-throw')`.
+ * The two arms are exclusive by type.
  */
 export type RuntimeProbeRepair =
-  | { readonly attempted: true; readonly compiled: false }
-  | { readonly attempted: true; readonly afterStatus: RuntimeProbeStatus; readonly recoverableFailAfter: boolean };
+  | { readonly attempted: true; readonly compiled: false; readonly after?: never }
+  | { readonly attempted: true; readonly compiled: true; readonly after: RuntimeProbeMeta };
 
 /**
  * Per-criterion execution status — three-valued so "the criterion

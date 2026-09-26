@@ -137,7 +137,7 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     expect(on.sourceCode).toBe(off.sourceCode);
     expect(on.compiledCode.length).toBeGreaterThan(0);
     expect(on.evalResult?.pass).toEqual(["probe-only"]);
-    expect(on.evalResult?.runtimeProbe).toEqual({ status: "ran", elapsedMs: 21, renderMs: 9 });
+    expect(on.evalResult?.runtimeProbe).toEqual({ status: "ran", verdict: "pass", elapsedMs: 21, renderMs: 9 });
     expect(on.breakdown?.evalRounds).toBe(1);
     expect(on.breakdown?.phases.evalFix).toBe(0);
     expect(on.selfCheckPassed).toBe(true);
@@ -159,7 +159,7 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     expect(ran).toBe(1);
     expect(probeQueue.calls).toBe(0);
     expect(probeFactory.configs).toEqual([]);
-    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", elapsedMs: 5, renderMs: 2 });
+    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", verdict: "pass", elapsedMs: 5, renderMs: 2 });
   }, 60_000);
 
   it("a recoverable FAIL on the first probe: exactly two callTools (the repair), the re-probe's record on the result", async () => {
@@ -181,8 +181,12 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     expect(result.breakdown?.evalRounds).toBe(2);
     expect(result.breakdown?.phases.evalFix).toBe(1);
     expect(result.evalResult?.pass).toEqual(["probe-only"]);
-    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", elapsedMs: 18 });
-    expect(result.evalResult?.runtimeProbeRepair).toEqual({ attempted: true, afterStatus: "ran", recoverableFailAfter: false });
+    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", verdict: "pass", elapsedMs: 18 });
+    expect(result.evalResult?.runtimeProbeRepair).toEqual({
+      attempted: true,
+      compiled: true,
+      after: { status: "ran", verdict: "pass", elapsedMs: 18 },
+    });
     expect(result.compiledCode.length).toBeGreaterThan(0);
   }, 60_000);
 });

@@ -7,8 +7,10 @@
 import type { EvalIssue } from "../../../evaluation/types-public.js";
 import type { RuntimeRenderCheck } from "../../types-public.js";
 import {
+  RENDER_CHECK_KINDS,
   runRenderCheck,
   type RenderCheckIssue,
+  type RenderCheckKind,
   type RunRenderCheckOptions,
 } from "./render-check.js";
 import { prepareMockupProps } from "./prepare-mockup.js";
@@ -294,7 +296,32 @@ export function classifyRenderCrashFix(reason: string): string {
   );
 }
 
-function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
+/** The prefix every probe issue's subcategory carries: `runtime:<check>[:<subject>]`. */
+const RUNTIME_SUBCATEGORY_PREFIX = "runtime:";
+
+/**
+ * The check a probe issue's subcategory names (ggui#1380) — the inverse of
+ * the `runtime:<check>[:<subject>]` form {@link toEvalIssue} writes, so a
+ * round can list WHICH checks failed from the issues alone. `undefined` for
+ * anything that is not a probe subcategory naming a member of
+ * {@link RENDER_CHECK_KINDS} (an axis check's subcategory, a did-not-run
+ * code such as `runtime:probe-timeout`, a bare check name).
+ */
+export function parseRuntimeSubcategory(subcategory: string): RenderCheckKind | undefined {
+  if (!subcategory.startsWith(RUNTIME_SUBCATEGORY_PREFIX)) return undefined;
+  const rest = subcategory.slice(RUNTIME_SUBCATEGORY_PREFIX.length);
+  const separator = rest.indexOf(":");
+  const check = separator === -1 ? rest : rest.slice(0, separator);
+  return RENDER_CHECK_KINDS.find((kind) => kind === check);
+}
+
+/**
+ * One probe finding → the eval issue the loop feeds back and the metadata
+ * counts. Exported for the pin that every switch case below is a member of
+ * {@link RENDER_CHECK_KINDS} and round-trips through
+ * {@link parseRuntimeSubcategory}.
+ */
+export function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
   // verified → no issue (silent pass)
   if (issue.outcome === "verified" || issue.outcome === "skipped") return null;
 

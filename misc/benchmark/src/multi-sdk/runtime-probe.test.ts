@@ -33,14 +33,14 @@ describe('deriveRuntimeProbeVerdict (#973 — the console-only verdict becomes a
           issue('runtime:stream-rerender', 'warn'),
           issue('raw-spacing', 'fail'), // not a probe finding — must not count
         ],
-        { status: 'ran' },
+        { status: 'ran', verdict: 'fail', failChecks: ['action-wiring'] },
       ),
     );
     expect(v).toEqual({ status: 'ran', passed: false, failures: 1, warnings: 1 });
   });
 
   it('passes with zero runtime failures', () => {
-    const v = deriveRuntimeProbeVerdict(evalWith([], { status: 'ran' }));
+    const v = deriveRuntimeProbeVerdict(evalWith([], { status: 'ran', verdict: 'pass' }));
     expect(v).toEqual({ status: 'ran', passed: true, failures: 0, warnings: 0 });
   });
 });

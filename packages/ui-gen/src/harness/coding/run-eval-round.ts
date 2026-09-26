@@ -24,12 +24,26 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { ContractFeedbackRecord, EvalIssue, EvalResult, RuntimeProbeMeta, RuntimeProbeRepair, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
+import type {
+  ContractFeedbackRecord,
+  EvalIssue,
+  EvalResult,
+  RuntimeProbeMeta,
+  RuntimeProbeMetaDetail,
+  RuntimeProbeRepair,
+  VisualEvalSummary,
+  VisualCoverage,
+} from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator, visionJudgeProvider } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
-import { isRecoverableRenderCrash } from "../check/runtime-render/index.js";
-import type { Harness } from "../types-public.js";
+import {
+  RENDER_CHECK_KINDS,
+  isRecoverableRenderCrash,
+  parseRuntimeSubcategory,
+  type RenderCheckKind,
+} from "../check/runtime-render/index.js";
+import type { Harness, RuntimeRenderOutcome } from "../types-public.js";
 import type { AgentSpec, SingleComponentParams } from "../runtime.js";
 import type {
   CanvasFitReading,
@@ -355,6 +369,61 @@ interface ProbeAtExitResult {
 }
 
 /**
+ * The distinct check kinds among a probe's `result: 'fail'` issues, in the
+ * order {@link RENDER_CHECK_KINDS} declares them (a render crash reads
+ * first). Parsed from the `runtime:<check>[:<subject>]` subcategory the
+ * adapter writes; a warn, an issue with no subcategory, or a subcategory that
+ * names no check contributes nothing.
+ */
+function failedCheckKinds(probeIssues: readonly EvalIssue[]): readonly RenderCheckKind[] {
+  const failed = new Set<RenderCheckKind>();
+  for (const issue of probeIssues) {
+    if (issue.result !== "fail" || issue.subcategory === undefined) continue;
+    const kind = parseRuntimeSubcategory(issue.subcategory);
+    if (kind !== undefined) failed.add(kind);
+  }
+  return RENDER_CHECK_KINDS.filter((kind) => failed.has(kind));
+}
+
+/**
+ * ONE builder for the meta every exit probe stamps (ggui#1380): the
+ * probe-only round and the evaluation lane's exit probe both go through
+ * `runProbeAtExit`, and this is where its outcome becomes a verdict. The
+ * verdict is computed from the PROBE'S OWN issues: `fail` when any check
+ * failed (`failChecks` = the distinct failing kinds), `pass` when none did;
+ * a probe that did not run to a verdict (`timed-out`, `infra-skipped`,
+ * `not-applicable`) carries no verdict key at all.
+ *
+ * The verdict is not the repair trigger. `fail` names ANY failing check;
+ * the one repair turn fires on a `render-no-throw` fail that
+ * `isRecoverableRenderCrash` recognises, and on nothing else — a `fail`
+ * verdict whose checks are `prop-sensitivity`, `action-wiring` or any other
+ * kind is recorded on the meta and never fed back.
+ */
+function probeMetaOf(outcome: RuntimeRenderOutcome, probeIssues: readonly EvalIssue[]): RuntimeProbeMeta {
+  const detail: RuntimeProbeMetaDetail = {
+    ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+    ...(outcome.renderMs !== undefined ? { renderMs: outcome.renderMs } : {}),
+    ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
+  };
+  const elapsed = outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {};
+  if (outcome.status !== "ran") {
+    return { status: outcome.status, ...elapsed, ...detail };
+  }
+  const [first, ...rest] = failedCheckKinds(probeIssues);
+  if (first === undefined) {
+    return { status: "ran", verdict: "pass", ...elapsed, ...detail };
+  }
+  return { status: "ran", verdict: "fail", failChecks: [first, ...rest], ...elapsed, ...detail };
+}
+
+/** The probe's status and, when it ran, its verdict — for the round's log line. */
+function describeProbeMeta(meta: RuntimeProbeMeta): string {
+  if (meta.verdict === undefined) return meta.status;
+  return meta.verdict === "pass" ? "ran, verdict pass" : `ran, verdict fail (${meta.failChecks.join(", ")})`;
+}
+
+/**
  * Run the runtime-render probe ONCE at an exit-decision point. Off the
  * per-turn hot path: `runCheck` is invoked with `skipRuntimeRender: true`
  * every round; the probe (~500ms-2s) only fires here, when the harness
@@ -404,13 +473,7 @@ async function runProbeAtExit(input: {
       meta: { status: "infra-skipped", reason: message },
     };
   }
-  const meta: RuntimeProbeMeta = {
-    status: outcome.status,
-    ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
-    ...(outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {}),
-    ...(outcome.renderMs !== undefined ? { renderMs: outcome.renderMs } : {}),
-    ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
-  };
+  const meta = probeMetaOf(outcome, outcome.issues);
   if (outcome.status !== "ran") {
     return { fired: false, recoverableFail: false, probeIssues: [], meta };
   }
@@ -543,15 +606,14 @@ export async function runEvalRound(
       };
       const recoverableFail = exitProbe.fired && exitProbe.recoverableFail;
       if (probeRepairUsed) {
-        const repair: RuntimeProbeRepair = {
-          attempted: true,
-          afterStatus: exitProbe.meta.status,
-          recoverableFailAfter: recoverableFail,
-        };
+        // This round IS the re-probe (a repair that did not compile never
+        // reaches a round — the runner stamps `compiled: false` itself), so
+        // the repair record carries the re-probe's whole meta as its after.
+        const repair: RuntimeProbeRepair = { attempted: true, compiled: true, after: exitProbe.meta };
         evalResult = { ...probeOnlyResult, runtimeProbeRepair: repair };
         console.log(
           `[simple] eval round ${evalRoundsUsed}: probe-only re-probe after the repair turn — ` +
-            `${exitProbe.meta.status}${recoverableFail ? ", recoverable fail still present" : ""} — serving`,
+            `${describeProbeMeta(exitProbe.meta)}${recoverableFail ? ", recoverable crash still present" : ""} — serving`,
         );
         return {
           control: "break",
@@ -593,7 +655,7 @@ export async function runEvalRound(
         };
       }
       console.log(
-        `[simple] eval round ${evalRoundsUsed}: probe-only round — probe ${exitProbe.meta.status} — serving`,
+        `[simple] eval round ${evalRoundsUsed}: probe-only round — probe ${describeProbeMeta(exitProbe.meta)} — serving`,
       );
       return {
         control: "break",

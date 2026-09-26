@@ -12,8 +12,28 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { UiGenerateInput } from '@ggui-ai/mcp-server-core';
 import type { GenerationResult } from './harness/result-types.js';
-import type { EvalResult } from './evaluation/types-public.js';
+import type { EvalIssue, EvalResult } from './evaluation/types-public.js';
 import { generatorBuild } from './generator-build.js';
+
+const RECOVERABLE_CRASH: EvalIssue = {
+  tier: 0,
+  result: 'fail',
+  category: 'crash',
+  subcategory: 'runtime:render-no-throw',
+  severity: 'critical',
+  description: 'Component crashed at runtime: Render threw: TypeError: function is not iterable',
+  fix: 'Render iterated over a non-array. Default to [] before .map.',
+};
+
+const PROP_SENSITIVITY_FAIL: EvalIssue = {
+  tier: 0,
+  result: 'fail',
+  category: 'contract',
+  subcategory: 'runtime:prop-sensitivity:currentUser',
+  severity: 'critical',
+  description: 'currentUser is declared but a literal renders in its place',
+  fix: 'Derive the display from props.currentUser.',
+};
 
 // Mock the dispatch seam. The factory imports `dispatchGeneration`
 // from this module path; the mock returns a controllable result so we
@@ -167,25 +187,98 @@ describe('createUiGenerator — the runtime probe rides the metadata (ggui#1380)
       },
     });
 
-  it('a probe that ran: status + elapsedMs + evalMs, no repair key when no repair turn was bought', async () => {
+  it('a probe that ran clean: status + verdict pass + elapsedMs + evalMs; no repair key when no repair turn was bought', async () => {
     dispatchMock.mockResolvedValue(
-      probed({ issues: [], pass: ['probe-only'], runtimeProbe: { status: 'ran', elapsedMs: 812, renderMs: 640 } }, 1, 1234),
+      probed({ issues: [], pass: ['probe-only'], runtimeProbe: { status: 'ran', verdict: 'pass', elapsedMs: 812, renderMs: 640 } }, 1, 1234),
     );
     const out = await createUiGenerator().generate(fakeInput());
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 812 });
+    // The engine's own timing detail (`renderMs`) stays on the harness result; the metadata carries the outcome.
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', verdict: 'pass', elapsedMs: 812 });
     expect(out.metadata.evalMs).toBe(1234);
   });
 
-  it('a repair that compiled: repair { attempted, compiled: true, afterStatus } from the re-probe record', async () => {
+  it('the cap case: a crash served at the turn cap is verdict fail with the crash named, and no repair key (nothing was attempted)', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [RECOVERABLE_CRASH],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
+        },
+        1,
+        60,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 });
+    expect(out.metadata.runtimeProbe).not.toHaveProperty('repair');
+  });
+
+  it('a prop-sensitivity fail: verdict fail with that check named, no repair key — recorded, never repaired', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [PROP_SENSITIVITY_FAIL],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', verdict: 'fail', failChecks: ['prop-sensitivity'], elapsedMs: 40 },
+        },
+        1,
+        45,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', verdict: 'fail', failChecks: ['prop-sensitivity'], elapsedMs: 40 });
+    expect(out.metadata.runtimeProbe).not.toHaveProperty('repair');
+  });
+
+  it('a repair whose re-probe still crashes: repair { compiled: true, after: { verdict: fail, failChecks: [render-no-throw] } }', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [RECOVERABLE_CRASH],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45 },
+          runtimeProbeRepair: {
+            attempted: true,
+            compiled: true,
+            after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45, renderMs: 30 },
+          },
+        },
+        2,
+        95,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({
+      status: 'ran',
+      verdict: 'fail',
+      failChecks: ['render-no-throw'],
+      elapsedMs: 45,
+      repair: {
+        attempted: true,
+        compiled: true,
+        after: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 45 },
+      },
+    });
+    expect(out.metadata.evalMs).toBe(95);
+  });
+
+  it('a repair that fixed the crash: repair.after.verdict is pass', async () => {
     dispatchMock.mockResolvedValue(
       probed(
         {
           issues: [],
           pass: ['probe-only'],
-          runtimeProbe: { status: 'ran', elapsedMs: 30 },
-          runtimeProbeRepair: { attempted: true, afterStatus: 'ran', recoverableFailAfter: false },
+          runtimeProbe: { status: 'ran', verdict: 'pass', elapsedMs: 30 },
+          runtimeProbeRepair: { attempted: true, compiled: true, after: { status: 'ran', verdict: 'pass', elapsedMs: 30, renderMs: 20 } },
         },
         2,
         90,
@@ -196,19 +289,45 @@ describe('createUiGenerator — the runtime probe rides the metadata (ggui#1380)
     if (!out.ok) return;
     expect(out.metadata.runtimeProbe).toEqual({
       status: 'ran',
+      verdict: 'pass',
       elapsedMs: 30,
-      repair: { attempted: true, compiled: true, afterStatus: 'ran' },
+      repair: { attempted: true, compiled: true, after: { status: 'ran', verdict: 'pass', elapsedMs: 30 } },
     });
     expect(out.metadata.evalMs).toBe(90);
   });
 
-  it('a repair that did not compile: repair { attempted, compiled: false }, the pre-repair probe as the status', async () => {
+  it('a repair whose re-probe timed out: no verdict on the record and none on repair.after', async () => {
     dispatchMock.mockResolvedValue(
       probed(
         {
           issues: [],
           pass: ['probe-only'],
-          runtimeProbe: { status: 'ran', elapsedMs: 50 },
+          runtimeProbe: { status: 'timed-out', reason: 'did not finish', elapsedMs: 30_000 },
+          runtimeProbeRepair: { attempted: true, compiled: true, after: { status: 'timed-out', reason: 'did not finish', elapsedMs: 30_000 } },
+        },
+        2,
+        31_000,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({
+      status: 'timed-out',
+      elapsedMs: 30_000,
+      repair: { attempted: true, compiled: true, after: { status: 'timed-out', elapsedMs: 30_000 } },
+    });
+    expect(out.metadata.runtimeProbe).not.toHaveProperty('verdict');
+    expect(out.metadata.runtimeProbe?.repair?.after).not.toHaveProperty('verdict');
+  });
+
+  it('a repair that did not compile: repair { attempted, compiled: false }, the pre-repair probe as the record', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [RECOVERABLE_CRASH],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', verdict: 'fail', failChecks: ['render-no-throw'], elapsedMs: 50 },
           runtimeProbeRepair: { attempted: true, compiled: false },
         },
         1,
@@ -218,7 +337,13 @@ describe('createUiGenerator — the runtime probe rides the metadata (ggui#1380)
     const out = await createUiGenerator().generate(fakeInput());
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 50, repair: { attempted: true, compiled: false } });
+    expect(out.metadata.runtimeProbe).toEqual({
+      status: 'ran',
+      verdict: 'fail',
+      failChecks: ['render-no-throw'],
+      elapsedMs: 50,
+      repair: { attempted: true, compiled: false },
+    });
   });
 
   it('a not-applicable probe carries its status and nothing else', async () => {

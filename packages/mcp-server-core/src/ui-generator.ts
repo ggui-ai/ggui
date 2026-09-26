@@ -257,28 +257,96 @@ export interface GeneratorBuild {
 export type GenerationRuntimeProbeStatus = 'ran' | 'infra-skipped' | 'not-applicable' | 'timed-out';
 
 /**
+ * The checks the runtime-render probe runs, by name (ggui#1380). Declared
+ * ONCE, here, for the same reason as {@link GenerationRuntimeProbeStatus}:
+ * the engine depends on this package and not the reverse, so its own
+ * check-kind name (`RenderCheckKind` in `@ggui-ai/ui-gen`) is this union
+ * under another name. A `fail` verdict lists which of these failed, so a
+ * reader can tell a render crash from a contract-wiring finding without a
+ * lossy class that would have to lie about five of the seven.
+ */
+export type GenerationRuntimeProbeCheck =
+  | 'render-no-throw'
+  | 'prop-sensitivity'
+  | 'action-wiring'
+  | 'selection-identity'
+  | 'prop-coverage'
+  | 'optional-props-omitted'
+  | 'stream-rerender';
+
+/**
+ * ONE probe's outcome (ggui#1380): what a single run of the runtime-render
+ * probe produced. Discriminated so the record can only say what happened:
+ *
+ *   - `ran` + `verdict: 'pass'` — the probe executed and no check failed;
+ *   - `ran` + `verdict: 'fail'` — ANY check failed; `failChecks` is the
+ *     distinct kinds that did, never empty, in the order
+ *     {@link GenerationRuntimeProbeCheck} declares them;
+ *   - `timed-out` / `infra-skipped` / `not-applicable` — no verdict, and the
+ *     type carries none: a probe that did not finish is never a pass and
+ *     never a crash.
+ *
+ * Two meanings sit side by side and must not be conflated. The VERDICT is
+ * `fail` on any failing check. The REPAIR turn (see
+ * {@link GenerationRuntimeProbeRepair}) fires on the `render-no-throw`
+ * class only — a card that crashes on first render; every other failing
+ * check is recorded here and never repaired. So on a stream of records the
+ * crash-class FAIL rate is `verdict === 'fail' && failChecks.includes('render-no-throw')`
+ * and the repair-success rate is `repair.compiled && repair.after.verdict === 'pass'`.
+ *
+ * The `?: never` members are what make the refusals hold structurally: a
+ * `ran` record without a verdict, a no-verdict status carrying one, and a
+ * `pass` carrying `failChecks` are not assignable, not merely undocumented.
+ */
+export type GenerationRuntimeProbeOutcome =
+  | {
+      readonly status: 'ran';
+      readonly verdict: 'pass';
+      readonly failChecks?: never;
+      /** Wall-clock of the probe, ms. */
+      readonly elapsedMs?: number;
+    }
+  | {
+      readonly status: 'ran';
+      readonly verdict: 'fail';
+      /** The distinct checks that failed — at least one, in declaration order. */
+      readonly failChecks: readonly [GenerationRuntimeProbeCheck, ...GenerationRuntimeProbeCheck[]];
+      /** Wall-clock of the probe, ms. */
+      readonly elapsedMs?: number;
+    }
+  | {
+      readonly status: 'timed-out' | 'infra-skipped' | 'not-applicable';
+      readonly verdict?: never;
+      readonly failChecks?: never;
+      /** Wall-clock of the probe, ms; absent when nothing ran (`not-applicable`). */
+      readonly elapsedMs?: number;
+    };
+
+/**
+ * What came of the one repair turn a render crash buys (ggui#1380). Present
+ * on a {@link GenerationRuntimeProbe} only when a repair turn was bought:
+ * `compiled: false` means the repair did not pass self-check, so no re-probe
+ * ran (the pre-repair card is served) and there is no `after`;
+ * `compiled: true` always carries `after`, the re-probe's own outcome — its
+ * status, and its verdict when it ran. The two arms are exclusive by type.
+ */
+export type GenerationRuntimeProbeRepair =
+  | { readonly attempted: true; readonly compiled: false; readonly after?: never }
+  | { readonly attempted: true; readonly compiled: true; readonly after: GenerationRuntimeProbeOutcome };
+
+/**
  * What the runtime-render probe did on this generation, when the engine ran
  * one (ggui#1380). A serving deployment that wires the probe without an
- * in-loop evaluator runs it once after the coding turns; a recoverable
- * render crash buys exactly one repair turn and one re-probe. `status` and
- * `elapsedMs` are the LAST probe's — the re-probe's when the repair
- * compiled, else the pre-repair probe's. `repair` is present only when a
- * repair turn was bought: `compiled: false` means the repair did not pass
- * self-check (no re-probe; the pre-repair card is served), and
- * `compiled: true` always carries `afterStatus`, the re-probe's status.
+ * in-loop evaluator runs it once after the coding turns; a render crash the
+ * engine recognises buys exactly one repair turn and one re-probe. The
+ * outcome fields (`status`, `verdict`, `failChecks`, `elapsedMs`) are the
+ * LAST probe's — the re-probe's when the repair compiled, else the
+ * pre-repair probe's — and `repair` says whether a repair turn was bought
+ * and what came of it.
  */
-export interface GenerationRuntimeProbe {
-  readonly status: GenerationRuntimeProbeStatus;
-  /** Wall-clock of the probe, ms; absent when nothing ran (`not-applicable`). */
-  readonly elapsedMs?: number;
-  readonly repair?:
-    | { readonly attempted: true; readonly compiled: false }
-    | {
-        readonly attempted: true;
-        readonly compiled: true;
-        readonly afterStatus: GenerationRuntimeProbeStatus;
-      };
-}
+export type GenerationRuntimeProbe = GenerationRuntimeProbeOutcome & {
+  readonly repair?: GenerationRuntimeProbeRepair;
+};
 
 /**
  * Metadata emitted alongside every result (success or failure) for telemetry.
