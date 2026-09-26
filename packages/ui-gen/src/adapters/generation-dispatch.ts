@@ -60,7 +60,20 @@ import type { QualityConfig } from "../evaluation/types-public.js";
 import type { AgentConfig } from "../harness/llm-router.js";
 import { type GadgetDescriptor, type JsonObject } from "@ggui-ai/protocol";
 import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
+import type { VisionProvider } from "../harness/llm-router.js";
 import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
+
+/**
+ * ggui#1250 — the in-loop VISUAL judge as its own agent: a vision provider (typed so an OpenAI judge cannot
+ * be written), a model, and — when the caller resolves provider keys itself — that provider's key, which
+ * becomes the agent's own `routeOverride`. Never the coding agent's route: where this exists (an OpenAI
+ * coding lane), the coding key is another provider's.
+ */
+export interface VisualEvalAgentSpec {
+  readonly provider: VisionProvider;
+  readonly model: string;
+  readonly apiKey?: string;
+}
 
 export interface GenerationDispatchParams {
   provider: ProviderName;
@@ -191,6 +204,13 @@ export interface GenerationDispatchParams {
    */
   routeOverride?: AgentConfig["routeOverride"];
   /**
+   * ggui#1250 — the in-loop visual judge named as its own agent (see {@link VisualEvalAgentSpec}).
+   * Absent (default, every existing caller): today's chain, `visualEval ← evaluation ← coding`, which on
+   * a lane without a vision path records the score half as skipped (#1248). Off by default; a measurement
+   * knob first, a product knob only by ruling.
+   */
+  visualEvalAgent?: VisualEvalAgentSpec;
+  /**
    * Retry observer (#489) — see `AgentConfig.onRetry`. Threaded onto
    * the coding + evaluation agent specs so a rate-limited retry inside
    * either agent's `apiCall()` reaches the caller. Absent (default) is
@@ -268,8 +288,17 @@ export async function dispatchGeneration(
         onRetry: params.onRetry,
       }
     : undefined;
-  // ModelRoles doesn't currently expose a visualEval slot — falls through
-  // to the documented evaluation → coding chain inside resolveSessionAgents.
+  // ggui#1250 — the in-loop visual judge as its own agent when named: its own provider and its own key
+  // route, never the coding agent's. Absent: today's chain, visualEval ← evaluation ← coding, inside
+  // resolveSessionAgents (ModelRoles has no visualEval slot — a role is a model, and this needs a provider).
+  const visualEvalAgent = params.visualEvalAgent
+    ? {
+        provider: params.visualEvalAgent.provider,
+        model: params.visualEvalAgent.model,
+        ...(params.visualEvalAgent.apiKey !== undefined ? { routeOverride: { apiKey: params.visualEvalAgent.apiKey } } : {}),
+        onRetry: params.onRetry,
+      }
+    : undefined;
 
   // ── Contract enrichment ──────────────────────────────────────────────
   // The contract is used as-is: `clientCapabilities.gadgets`
@@ -426,6 +455,7 @@ export async function dispatchGeneration(
   const agents = resolveSessionAgents({
     codingAgent,
     evaluationAgent,
+    ...(visualEvalAgent !== undefined ? { visualEvalAgent } : {}),
   });
 
   // ── Runtime policy resolution ──

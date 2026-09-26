@@ -88,4 +88,5 @@ export { createAnthropicClient } from './adapters/claude/client.js';
 // login path (`ggui serve --local-cli-login`); never a real key.
 export { CLAUDE_CODE_LOGIN_CREDENTIAL } from './adapters/claude/claude-code-login.js';
 export { AESTHETIC_BRIEF_MAX_CHARS, type GenerationProfileInput } from './boilerplate/styling-profile.js';
+export type { VisualEvalAgentSpec } from './adapters/generation-dispatch.js';
 export { EFFORT_DIALS, EFFORT_TABLE_VERSION, effortDials, type EffortDials } from './effort.js';

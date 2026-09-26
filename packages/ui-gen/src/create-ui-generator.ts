@@ -58,7 +58,7 @@ import {
   parseGeneratorSlug,
 } from "@ggui-ai/mcp-server-core";
 import { createGeneratorTools } from "./adapters/index.js";
-import { dispatchGeneration } from "./adapters/generation-dispatch.js";
+import { dispatchGeneration, type VisualEvalAgentSpec } from "./adapters/generation-dispatch.js";
 import {
   createRuntimeRenderCheck,
   type RuntimeRenderProbeConfig,
@@ -139,6 +139,13 @@ export interface CreateUiGeneratorOptions {
    * prompt or the identity. Default: none — the round runs as today.
    */
   readonly visualEvaluation?: SingleComponentParams["visualEvaluation"];
+  /**
+   * ggui#1250 — the in-loop VISUAL judge as its own agent (a vision provider, a model, and that
+   * provider's key when the caller resolves keys itself). Absent (default): the judge is the
+   * evaluation agent's provider, which on a lane without a vision path records the score half as
+   * skipped (#1248). Forwarded verbatim to the dispatch; never part of the prompt or the identity.
+   */
+  readonly visualEvalAgent?: VisualEvalAgentSpec;
   /** Quality config controlling eval tiers + improvement behavior. */
   readonly qualityConfig?: QualityConfig;
   /**
@@ -259,6 +266,7 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
     maxEvalRounds,
     evaluation,
     visualEvaluation,
+    visualEvalAgent,
     qualityConfig,
     gadgetCatalog,
     disableEnvMutation = false,
@@ -442,6 +450,8 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
           // ggui#1279 — the shell the declared rendering composes for (chat only; see harnessShellForRendering).
           ...(shellType !== undefined ? { shellType } : {}),
           ...(input.profile !== undefined ? { profile: input.profile } : {}),
+          // ggui#1250 — the named in-loop visual judge, when this generator was built with one.
+          ...(visualEvalAgent !== undefined ? { visualEvalAgent } : {}),
           // Fixture props reach the in-loop probe + visual round only (never the prompt, never identity).
           ...(input.fixtureProps !== undefined ? { fixtureProps: input.fixtureProps } : {}),
         });
