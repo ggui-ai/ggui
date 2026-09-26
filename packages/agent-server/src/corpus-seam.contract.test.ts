@@ -149,7 +149,11 @@ describe('synthetic contract tier (AgEvent-validated stimulus)', () => {
         messageId: 'c_syn:result',
       },
       { type: 'turn.error', seq: 5, turnId: 't_syn', message: 'boom' },
-      { type: 'turn.abort', seq: 6, turnId: 't_syn' },
+      // The abort arm rides its OWN turn: one terminal per turn. A second
+      // terminal on a closed turn parks the fold from core 0.8.0 (draft.5
+      // second-terminal rule), which would be an incoherent stimulus.
+      { type: 'turn.start', seq: 6, turnId: 't_abr', threadId: 'th_syn' },
+      { type: 'turn.abort', seq: 7, turnId: 't_abr' },
     ].map((e) => AgEvent.parse(e));
     // Fold-check the stimulus is coherent (stimulus-side only):
     expect(reduce(stream).needsResync).toBe(false);
