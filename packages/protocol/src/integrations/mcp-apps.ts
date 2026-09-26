@@ -1932,12 +1932,27 @@ export interface GguiShellHtmlOptions {
    *   - `'surface'` (default) — paint the theme surface
    *     ({@link GGUI_RENDER_SHELL_SURFACE}). Right for standalone
    *     served documents (`resources/read` shells, public render
-   *     pages): Safari renders a transparent iframe document's
-   *     backdrop as the opaque UA canvas color (white), so an
-   *     unpainted document diverges per-browser.
+   *     pages), because an unpainted iframe document is not reliably
+   *     see-through: when the embedded document's used `color-scheme`
+   *     differs from its embedder's, the browser paints the iframe's
+   *     canvas OPAQUE in the document's own scheme colour (white for
+   *     light, near-black for dark) instead of compositing the host
+   *     behind it — and this shell declares `light dark`, so its used
+   *     scheme follows the viewer's preference, not the host's.
+   *     Receipt (ggui#1125, measured 2026-09-26 with an unpainted
+   *     `srcdoc` iframe): Safari 26.3 (WebKit 21623.2.7.11.6, macOS
+   *     26.3) and Chrome 154.0.8037.58 behave alike — same scheme, the
+   *     host ground shows through in both; scheme mismatch, an opaque
+   *     canvas in both. History: the behaviour first surfaced on
+   *     2026-05-30 (`8b52c42ed`, "cross-browser theme rendering") as
+   *     Chrome-dark-versus-Safari-white on a dark host; what that read
+   *     was the per-scheme rule seen through two viewers' preferences,
+   *     not a Safari trait, and this docstring carried it as one until
+   *     the measurement above.
    *   - `'transparent'` — let the host page composit behind the card.
    *     Right for hosts that draw their own card chrome around the
-   *     iframe and accept the Safari canvas-color trade-off.
+   *     iframe AND whose used `color-scheme` matches the shell's;
+   *     on a mismatch the canvas paints opaque, per the rule above.
    */
   readonly background?: 'surface' | 'transparent';
   /**

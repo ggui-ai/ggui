@@ -490,14 +490,20 @@ startInit();
 // The design scope root (`.ggui-rcr-*`) and the sandbox-proxy outer
 // document stay `background-color: transparent` by design (so a host
 // themeing the chat surface shows through AROUND the rendered content).
-// But nothing painted the rendered-content document's OWN backdrop:
-// Chrome composited the transparent iframe document over the dark host
-// app behind it (looked dark), while Safari renders a transparent
-// iframe document's backdrop as the opaque UA `Canvas` color (white) —
-// the per-browser divergence the bug reported. The component itself
-// themed correctly (its scoped vars resolve); only the page behind it
-// diverged. Painting the served document's own surface here removes the
-// dependency on a browser honoring iframe transparency.
+// But nothing painted the rendered-content document's OWN backdrop,
+// and an unpainted iframe document is only see-through while its used
+// `color-scheme` matches its embedder's: on a mismatch the browser
+// paints the iframe's canvas opaque in the document's own scheme
+// colour (white for light, near-black for dark). This shell declares
+// `light dark`, so its used scheme follows the viewer's preference,
+// not the host's — a dark host under a light-preferring viewer got a
+// white canvas. That is what the 2026-05-30 bug saw as
+// Chrome-dark-versus-Safari-white (`8b52c42ed`); measured 2026-09-26
+// (ggui#1125) Safari 26.3 and Chrome 154 behave alike, per scheme,
+// not per engine. The component itself themed correctly (its scoped
+// vars resolve); only the page behind it diverged. Painting the served
+// document's own surface here removes the dependency on the schemes
+// matching.
 //
 // The paint is inline, so no stylesheet `background` rule can undo
 // it — which is why the constant's `var()` chain opens with the
