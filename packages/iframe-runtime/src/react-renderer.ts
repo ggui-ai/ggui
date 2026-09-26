@@ -33,6 +33,7 @@ import React, {
   Component,
   createElement,
   Fragment,
+  useEffect,
   type ComponentType,
   type ErrorInfo,
   type ReactNode,
@@ -94,6 +95,46 @@ function makeScopeClass(): string {
  * re-sanitize here.
  */
 
+
+// =============================================================================
+// Paint probe (ggui#1104) — the blanks a HELD component can still produce.
+// =============================================================================
+
+/**
+ * How long a render may go without committing before it is named a
+ * `no-commit` blank. A healthy commit lands within a frame or two of
+ * `root.render`; a component that suspends with no Suspense boundary never
+ * commits at all, and until now that blank said nothing on any channel.
+ */
+const NO_COMMIT_DEADLINE_MS = 5_000;
+let noCommitDeadlineMs = NO_COMMIT_DEADLINE_MS;
+
+/** Test hook: shorten the no-commit deadline; `null` restores the default. */
+export function __setNoCommitDeadlineForTest(ms: number | null): void {
+  noCommitDeadlineMs = ms ?? NO_COMMIT_DEADLINE_MS;
+}
+
+/**
+ * Rendered inside the scope; its PASSIVE effect runs once the whole commit is
+ * done, refs included. (A layout effect would not do: layout effects run
+ * child-first, before the parent scope `<div>`'s ref is attached, so the
+ * probe would read no scope and misname a healthy mount `detached`.) Renders
+ * nothing itself.
+ */
+function CommitProbe(props: { readonly onCommit: () => void }): null {
+  useEffect(() => {
+    props.onCommit();
+  });
+  return null;
+}
+
+type HeldBlankReason = 'rendered-nothing' | 'detached' | 'no-commit';
+
+const HELD_BLANK_DETAIL: Readonly<Record<HeldBlankReason, string>> = {
+  'rendered-nothing': 'the component rendered no element',
+  detached: 'the tree committed into a scope that is no longer in the document (another mount took the container)',
+  'no-commit': 'the tree did not commit (a component that suspends with no Suspense boundary never commits)',
+};
 
 // =============================================================================
 // Error boundary — port of RCR's internal ErrorBoundary (L68–203).
@@ -425,6 +466,53 @@ export async function mountReactRoot(
   let currentCode: string | null = null;
   let currentComponent: ComponentType<Record<string, unknown>> | null = null;
 
+  // ggui#1104 — the paint probe's state. `heldAtRender` is whether the render
+  // being committed carried a component (when it did not, ggui#1103's
+  // `reportNoComponent` has already named the blank). A blank is reported
+  // once per episode: `blankReported` resets when a commit shows paint.
+  let scopeEl: HTMLElement | null = null;
+  let committedOnce = false;
+  let heldAtRender = false;
+  let blankReported = false;
+  let commitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function reportHeldBlank(where: 'mount' | 'update', reason: HeldBlankReason): void {
+    if (blankReported) return;
+    blankReported = true;
+    // eslint-disable-next-line no-console -- operator-visible failure signal
+    console.warn(`[ggui] mountReactRoot: the ${where} painted nothing (${reason}) — ${HELD_BLANK_DETAIL[reason]}`);
+    try {
+      postObservabilityToParent({ kind: 'component-empty', where, reason });
+    } catch {
+      // Best-effort seam, as in reportNoComponent: never turn a blank into a throw.
+    }
+  }
+
+  const setScopeEl = (el: HTMLDivElement | null): void => {
+    scopeEl = el;
+  };
+
+  const onCommit = (): void => {
+    if (commitTimer !== null) {
+      clearTimeout(commitTimer);
+      commitTimer = null;
+    }
+    const where = committedOnce ? 'update' : 'mount';
+    committedOnce = true;
+    if (!heldAtRender) return;
+    const scope = scopeEl;
+    if (scope === null || !scope.isConnected) {
+      reportHeldBlank(where, 'detached');
+      return;
+    }
+    const painted = Array.from(scope.children).some((child) => child.tagName !== 'STYLE');
+    if (painted) {
+      blankReported = false;
+      return;
+    }
+    reportHeldBlank(where, 'rendered-nothing');
+  };
+
   async function evaluate(code: string): Promise<ComponentType<Record<string, unknown>>> {
     // 0. If code is a URL (S3 presigned), fetch the bytes first.
     //    Matches RCR's first-step URL-fetch guard verbatim.
@@ -614,7 +702,7 @@ export async function mountReactRoot(
     root.render(
       createElement(
         'div',
-        { className: scopeClass },
+        { className: scopeClass, ref: setScopeEl },
         createElement('style', null, themeCss),
         createElement(
           RcrErrorBoundary,
@@ -624,8 +712,20 @@ export async function mountReactRoot(
           },
           createElement(Fragment, null, wrapped),
         ),
+        createElement(CommitProbe, { onCommit }),
       ),
     );
+
+    // ggui#1104 — a held component must commit. Armed only when this render
+    // carries one; the probe's commit disarms it.
+    heldAtRender = currentComponent !== null;
+    if (commitTimer !== null) clearTimeout(commitTimer);
+    commitTimer = heldAtRender
+      ? setTimeout(() => {
+          commitTimer = null;
+          reportHeldBlank(committedOnce ? 'update' : 'mount', 'no-commit');
+        }, noCommitDeadlineMs)
+      : null;
   }
 
   /**
@@ -731,6 +831,8 @@ export async function mountReactRoot(
       }
     },
     unmount() {
+      if (commitTimer !== null) clearTimeout(commitTimer);
+      commitTimer = null;
       root.unmount();
       container.replaceChildren();
     },

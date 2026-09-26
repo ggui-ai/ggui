@@ -331,14 +331,20 @@ export interface RelayDeadTapEvent {
 }
 
 /**
- * The mount painted NOTHING (ggui#1103): the renderer held no component,
- * so the scope element carries only its stylesheet — a blank card, with no
- * error boundary to catch anything (the boundary wraps a null child). The
- * host is told which mount moment it was and why, because a card that
- * renders nothing is invisible on every other channel: `reason: 'no-code'`
- * is a payload that carried no component code, `'eval-failed'` a module
- * that threw while evaluating. Names the moment only — never the code, the
- * props or the error text, which stay in the operator-visible console line.
+ * The mount painted NOTHING. The host is told which mount moment it was and
+ * why, because a card that renders nothing is invisible on every other
+ * channel. Two reasons are a renderer that held no component (ggui#1103), so
+ * the scope carries only its stylesheet and no error boundary engages:
+ * `'no-code'` is a payload that carried no component code, `'eval-failed'` a
+ * module that threw while evaluating. Three are a component that WAS held
+ * and still painted nothing (ggui#1104): `'rendered-nothing'` — the tree
+ * committed and the scope holds no element; `'detached'` — the tree
+ * committed into a scope no longer in the document (another mount took the
+ * container); `'no-commit'` — the tree never committed within the renderer's
+ * deadline (a component that suspends with no Suspense boundary). Names the
+ * moment only — never the code, the props or the error text, which stay in
+ * the operator-visible console line. A host MUST treat an unknown reason as
+ * a blank of unknown cause.
  *
  * @public
  */
@@ -346,8 +352,8 @@ export interface ComponentEmptyEvent {
   readonly kind: 'component-empty';
   /** Which lifecycle moment painted nothing. */
   readonly where: 'mount' | 'update';
-  /** Why the renderer held no component. */
-  readonly reason: 'no-code' | 'eval-failed';
+  /** Why the moment painted nothing (see above). */
+  readonly reason: 'no-code' | 'eval-failed' | 'rendered-nothing' | 'detached' | 'no-commit';
 }
 
 /**
