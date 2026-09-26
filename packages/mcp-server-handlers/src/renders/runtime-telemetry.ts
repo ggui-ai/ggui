@@ -22,6 +22,15 @@
  *     chars, detail ≤ 512) against log flooding; `ctx.appId` (the
  *     PROVED identity on this carrier) tags every line so abuse is
  *     attributable.
+ *
+ * "Stores nothing" is relied on OUTSIDE this tree (ggui#1382). A host
+ * that relays this tool through its own privacy door admits it on that
+ * clause — guuey#1819's line is "event names and ggui's own ids only;
+ * no free text, no user identity; ggui logs them and stores nothing" —
+ * so adding any persistence here is a behaviour change for every
+ * relaying host, never a local choice. `runtime-telemetry.test.ts`
+ * pins the deps shape (a logger and nothing else) so a store
+ * dependency cannot arrive silently: it fails typecheck naming the row.
  */
 import { z } from 'zod';
 import {

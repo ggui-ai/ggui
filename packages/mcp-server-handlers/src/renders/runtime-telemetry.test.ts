@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import {
   RUNTIME_TELEMETRY_MAX_EVENTS,
   runtimeTelemetryInputShape,
 } from '@ggui-ai/protocol';
-import { createGguiRuntimeTelemetryHandler } from './runtime-telemetry.js';
+import {
+  createGguiRuntimeTelemetryHandler,
+  type GguiRuntimeTelemetryHandlerDeps,
+  type RuntimeTelemetryLogger,
+} from './runtime-telemetry.js';
 
 /**
  * `ggui_runtime_telemetry` — the transport self-report channel. Pins:
@@ -107,5 +111,17 @@ describe('createGguiRuntimeTelemetryHandler', () => {
     await expect(
       h.handler({ sessionId: 's1', events: [] }, ctx),
     ).rejects.toThrow(ZodError);
+  });
+
+  it('pins "stores nothing" at the type level: the deps carry a logger and nothing else (ggui#1382, guuey#1819)', () => {
+    // A host relaying this tool through its own privacy door admits it
+    // on the clause "ggui logs them and stores nothing" (guuey#1819). A
+    // store dependency arriving on this deps shape is that clause
+    // breaking; this pin makes it a typecheck failure that names the
+    // row, not a silent behaviour change on someone else's promise.
+    expectTypeOf<keyof GguiRuntimeTelemetryHandlerDeps>().toEqualTypeOf<'logger'>();
+    expectTypeOf<GguiRuntimeTelemetryHandlerDeps>().toEqualTypeOf<{
+      readonly logger?: RuntimeTelemetryLogger;
+    }>();
   });
 });
