@@ -113,6 +113,8 @@ async function buildCtx(
     llmEvalMod: fakeLlmEvalMod,
     visualMod: null,
     preWarmPromise: undefined,
+    probeOnly: false,
+    probeRepairUsed: false,
   };
   const input: EvalRoundInput = {
     compiledCode,

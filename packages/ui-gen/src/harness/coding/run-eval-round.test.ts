@@ -105,6 +105,8 @@ describe('runEvalRound — routeOverride + onRetry threading (#484, #489)', () =
       llmEvalMod: fakeLlmEvalMod,
       visualMod: null,
       preWarmPromise: undefined,
+      probeOnly: false,
+      probeRepairUsed: false,
     };
     const input: EvalRoundInput = {
       compiledCode,
@@ -166,6 +168,8 @@ describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () =>
       llmEvalMod,
       visualMod,
       preWarmPromise: undefined,
+      probeOnly: false,
+      probeRepairUsed: false,
     };
     const input: EvalRoundInput = {
       compiledCode,
@@ -308,6 +312,8 @@ describe('runEvalRound — per-canvas visual summary → evalResult.visual', () 
       llmEvalMod: fakeLlmEvalMod,
       visualMod,
       preWarmPromise: undefined,
+      probeOnly: false,
+      probeRepairUsed: false,
     };
     const input: EvalRoundInput = {
       compiledCode,
@@ -496,6 +502,8 @@ describe('runEvalRound — the round cap is checked before the feedback turn (gg
       llmEvalMod: fakeLlmEvalMod,
       visualMod: null,
       preWarmPromise: undefined,
+      probeOnly: false,
+      probeRepairUsed: false,
     };
     const input: EvalRoundInput = {
       compiledCode,

@@ -244,6 +244,41 @@ export interface GeneratorBuild {
 }
 
 /**
+ * Execution status of the generation's runtime-render probe, when the engine
+ * ran one after the coding turns: `ran` (its verdict is in), `timed-out`
+ * (the check crossed its wall-clock bound — no verdict, never a pass, never
+ * a crash), `infra-skipped` (the check could not execute in this
+ * environment — no verdict), `not-applicable` (nothing to probe: no
+ * compiled code or no contract surface). The engine's own status type
+ * (`RuntimeProbeStatus` in `@ggui-ai/ui-gen`) is this union under another
+ * name — one declaration, here, because the engine depends on this package
+ * and not the reverse.
+ */
+export type GenerationRuntimeProbeStatus = 'ran' | 'infra-skipped' | 'not-applicable' | 'timed-out';
+
+/**
+ * What the runtime-render probe did on this generation, when the engine ran
+ * one (ggui#1380). A serving deployment that wires the probe without an
+ * in-loop evaluator runs it once after the coding turns; a recoverable
+ * render crash buys exactly one repair turn and one re-probe. `status` and
+ * `elapsedMs` are the LAST probe's — the re-probe's when the repair
+ * compiled, else the pre-repair probe's. `repair` is present only when a
+ * repair turn was bought: `compiled: false` means the repair did not pass
+ * self-check (no re-probe; the pre-repair card is served), otherwise
+ * `afterStatus` is the re-probe's status.
+ */
+export interface GenerationRuntimeProbe {
+  readonly status: GenerationRuntimeProbeStatus;
+  /** Wall-clock of the probe, ms; absent when nothing ran (`not-applicable`). */
+  readonly elapsedMs?: number;
+  readonly repair?: {
+    readonly attempted: true;
+    readonly compiled: boolean;
+    readonly afterStatus?: GenerationRuntimeProbeStatus;
+  };
+}
+
+/**
  * Metadata emitted alongside every result (success or failure) for telemetry.
  */
 export interface GenerationMetadata {
@@ -290,6 +325,17 @@ export interface GenerationMetadata {
    * does not report one.
    */
   readonly build?: GeneratorBuild;
+  /**
+   * The runtime-render probe's record for this generation — see
+   * {@link GenerationRuntimeProbe}. Absent when no probe ran after the
+   * coding turns (the engine reports nothing; never a default status).
+   */
+  readonly runtimeProbe?: GenerationRuntimeProbe;
+  /**
+   * Wall-clock the engine spent in its post-coding evaluation rounds (the
+   * probe round included), ms. Absent when no round ran — never a default 0.
+   */
+  readonly evalMs?: number;
 }
 
 /**

@@ -10,9 +10,11 @@
 // (capped at MAX_FEEDBACK_ISSUES per turn).
 //
 // Does NOT own: the do/while wrapper, the eligibility gate at the call
-// site (`!evalDone && compiledCode && tiersMod && (codeEval || visualEval)`),
-// or the threading of mutable state — caller still owns those for now and
-// the closure migration (step 3) will move them too.
+// site (`!evalDone && compiledCode && ((tiersMod && (codeEval || visualEval))
+// || probeOnlyEnabled)` — the evaluation lane, or the probe-only lane a
+// serving deployment runs when it wires the runtime probe without an
+// evaluator, ggui#1380), or the threading of mutable state — caller still
+// owns those for now and the closure migration (step 3) will move them too.
 //
 // Behavior MUST match the inlined original byte-for-byte — this is a
 // mechanical extraction, not a redesign.
@@ -22,7 +24,7 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { ContractFeedbackRecord, EvalIssue, EvalResult, RuntimeProbeMeta, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
+import type { ContractFeedbackRecord, EvalIssue, EvalResult, RuntimeProbeMeta, RuntimeProbeRepair, VisualEvalSummary, VisualCoverage } from "../../evaluation/types-public.js";
 import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator, visionJudgeProvider } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
@@ -61,12 +63,35 @@ export interface EvalRoundContext {
   readonly visualThreshold: number;
   readonly qualityMode: "fast" | "auto-improve" | "high-quality";
   readonly maxEvalRounds: number;
-  /** Non-null inside a round — the call-site gate guarantees it's been built. */
-  readonly costTracker: CostTracker;
+  /**
+   * The evaluation lane's cost tracker. `null` on the probe-only lane, which
+   * runs no evaluator and records no cost; an evaluation round without one
+   * lands on the round's infra-skipped stamp (ggui#1110) with the reason
+   * {@link COST_TRACKER_ABSENT_REASON} — never a dereference.
+   */
+  readonly costTracker: CostTracker | null;
   readonly llmEvalMod: LlmEvalMod | null;
   readonly visualMod: VisualEvalMod | null;
   readonly preWarmPromise: Promise<PreWarmedEvalContext | null> | undefined;
   readonly onProgress?: (event: unknown) => void;
+  /**
+   * ggui#1380 — the probe-only lane: a serving deployment that wires the
+   * runtime probe and configures NO evaluator. The round runs the probe
+   * once and nothing else (no axis checks — the deterministic checks already
+   * ran in the coding turns' self-check — no evaluator, no visual leg).
+   * REQUIRED and explicit: it is never inferred from null modules, because the
+   * evaluation lane with null modules is a different round (the evaluation
+   * lane's own exit probe) and must stay one.
+   */
+  readonly probeOnly: boolean;
+  /**
+   * ggui#1380 — whether this generation already spent its one repair turn.
+   * `false` on the first probe-only round: a recoverable render crash there
+   * buys the turn. `true` on the second: the round breaks whatever the probe
+   * reads and records the repair's after. Meaningful on the probe-only lane
+   * only.
+   */
+  readonly probeRepairUsed: boolean;
 }
 
 /**
@@ -176,6 +201,29 @@ function formatFitFeedback(issue: EvalIssue): string {
  */
 /** Why an eval result carries no criteria: the round itself threw (ggui#1110). */
 const EVAL_ROUND_THREW_REASON = "eval round threw";
+
+/**
+ * ggui#1380 — the coverage reasons a probe-only round stamps: no evaluator
+ * and no visual leg are configured, BY DESIGN, so every criterion is
+ * `not-applicable` (never `skipped`, which would read as a silent absence).
+ */
+const PROBE_ONLY_CRITERIA_REASON = "probe-only round: no evaluator configured";
+const PROBE_ONLY_VISUAL_REASON = "probe-only round: no visual evaluator configured";
+/** The `pass` entry a probe-only round records — the probe was the only gate. */
+const PROBE_ONLY_PASS = "probe-only";
+
+/**
+ * D3 (ggui#1380) — the evaluation lane's one named guard: a round that
+ * reaches the evaluator without a cost tracker cannot record what it spends,
+ * so it stops HERE, on the ggui#1110 infra-skipped stamp with this reason,
+ * instead of dereferencing `null` somewhere past the evaluator call.
+ */
+export const COST_TRACKER_ABSENT_REASON = "cost tracker absent on an evaluation round";
+
+function requireCostTracker(costTracker: CostTracker | null): CostTracker {
+  if (costTracker === null) throw new Error(COST_TRACKER_ABSENT_REASON);
+  return costTracker;
+}
 
 /**
  * The in-loop visual leg, made total (ggui#1248). The judge runs on a VISION
@@ -360,6 +408,7 @@ async function runProbeAtExit(input: {
     status: outcome.status,
     ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
     ...(outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {}),
+    ...(outcome.renderMs !== undefined ? { renderMs: outcome.renderMs } : {}),
     ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
   };
   if (outcome.status !== "ran") {
@@ -450,11 +499,12 @@ export async function runEvalRound(
     visualThreshold,
     qualityMode,
     maxEvalRounds,
-    costTracker,
     llmEvalMod,
     visualMod,
     preWarmPromise,
     onProgress,
+    probeOnly,
+    probeRepairUsed,
   } = ctx;
   const { compiledCode, prevModeSubcats, prevFailFingerprints } = input;
   let { evalRoundsUsed, preWarmedContext } = input;
@@ -468,6 +518,99 @@ export async function runEvalRound(
   let evalLlmMs = 0;
 
   try {
+    // ── The probe-only round (ggui#1380) ──
+    // A serving deployment that wires the runtime probe and configures no
+    // evaluator: the probe runs ONCE, before anything else, and no axis
+    // check runs (the served card is the coding turns' — its deterministic
+    // checks ran in their self-check). A recoverable render crash on the
+    // first round buys exactly one repair turn; the second round breaks
+    // whatever it reads and records the repair's after. Timed-out,
+    // infra-skipped and not-applicable never block and never repair.
+    if (probeOnly) {
+      const exitProbe = await runProbeAtExit({
+        harness,
+        sourceCode: currentSource,
+        compiledCode,
+        contract,
+        fixtureProps,
+      });
+      const probeOnlyResult: EvalResult = {
+        issues: [...exitProbe.probeIssues],
+        pass: [PROBE_ONLY_PASS],
+        runtimeProbe: exitProbe.meta,
+        criteriaCoverage: notApplicableCoverage(PROBE_ONLY_CRITERIA_REASON),
+        visualCoverage: { status: "not-applicable", reason: PROBE_ONLY_VISUAL_REASON },
+      };
+      const recoverableFail = exitProbe.fired && exitProbe.recoverableFail;
+      if (probeRepairUsed) {
+        const repair: RuntimeProbeRepair = {
+          attempted: true,
+          afterStatus: exitProbe.meta.status,
+          recoverableFailAfter: recoverableFail,
+        };
+        evalResult = { ...probeOnlyResult, runtimeProbeRepair: repair };
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: probe-only re-probe after the repair turn — ` +
+            `${exitProbe.meta.status}${recoverableFail ? ", recoverable fail still present" : ""} — serving`,
+        );
+        return {
+          control: "break",
+          evalDone: true,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats,
+          prevFailFingerprints,
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: "",
+          isEvalFeedback: false,
+          lastDiffFailed: false,
+        };
+      }
+      evalResult = probeOnlyResult;
+      if (recoverableFail) {
+        const runtimeFails = exitProbe.probeIssues.filter(
+          (i) => i.result === "fail" && i.subcategory?.startsWith("runtime:"),
+        );
+        const lines = runtimeFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
+        console.log(
+          `[simple] eval round ${evalRoundsUsed}: probe-only round — runtime probe fail (recoverable) — granting the one repair turn`,
+        );
+        return {
+          control: "feedback",
+          evalDone: false,
+          evalResult,
+          evalRoundsUsed,
+          prevModeSubcats,
+          prevFailFingerprints,
+          preWarmedContext,
+          evalTokens,
+          evalLlmMs,
+          lastResultText: lines.join("\n\n"),
+          isEvalFeedback: true,
+          lastDiffFailed: false,
+        };
+      }
+      console.log(
+        `[simple] eval round ${evalRoundsUsed}: probe-only round — probe ${exitProbe.meta.status} — serving`,
+      );
+      return {
+        control: "break",
+        evalDone: true,
+        evalResult,
+        evalRoundsUsed,
+        prevModeSubcats,
+        prevFailFingerprints,
+        preWarmedContext,
+        evalTokens,
+        evalLlmMs,
+        lastResultText: "",
+        isEvalFeedback: false,
+        lastDiffFailed: false,
+      };
+    }
+
     // Tier 0 already ran in autoCommit — go straight to mode-checks + LLM eval.
 
     // ── Axis-keyed deterministic checks ──────────────
@@ -581,6 +724,10 @@ export async function runEvalRound(
         lastDiffFailed: false,
       };
     }
+
+    // D3 (ggui#1380) — the evaluation lane records what it spends; without a
+    // tracker it stops here, on the thrown-round stamp, with the reason.
+    const costTracker = requireCostTracker(ctx.costTracker);
 
     // Await pre-warmed context (only on first eval round, generated during coding)
     if (evalRoundsUsed === 1 && !preWarmedContext && preWarmPromise) {

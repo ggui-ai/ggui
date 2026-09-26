@@ -119,15 +119,21 @@ export interface GenerationDispatchParams {
   fixtureProps?: JsonObject;
   /**
    * Whether to wire `DEFAULT_RUNTIME_RENDER_CHECK` into the harness's
-   * check leg. When `true` (default), the probe runs every coding turn
-   * and feeds wiring-check failures back to the coding agent — useful
-   * for quality gating but ~3-5s per call adds wall-clock per turn.
+   * check leg. When `true` (default), the runtime-render probe runs ONCE
+   * at the exit decision, after the coding turns, in an isolated
+   * subprocess — never on the per-turn hot path. Without an `evaluation`
+   * config that round is observe + one repair turn (ggui#1380): a
+   * recoverable render crash buys exactly one repair turn and one
+   * re-probe, then the generation serves what it has; a probe that timed
+   * out, could not run, or had nothing to probe never blocks and never
+   * repairs. With an `evaluation` config the probe is the evaluation
+   * round's exit gate. Its status and timing land on
+   * `evalResult.runtimeProbe` (and on the generation's metadata through
+   * `createUiGenerator`).
    *
-   * When `false`, the harness omits runtime-render from the in-loop
-   * check pipeline. Cloud production runs with this off (per the
-   * migration plan — probe was never in the production hot path).
-   * Bench callers can run the probe externally as a final post-gen
-   * check to get pass/fail visibility without slowing the loop.
+   * When `false`, the harness omits runtime-render entirely: no probe
+   * round runs, and a caller can run the probe externally as a final
+   * post-generation check instead.
    *
    * Default: `true`.
    */

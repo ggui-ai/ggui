@@ -6,7 +6,10 @@
 // here, with the render check stubbed at its module seam:
 //   - an `incomplete` check becomes the `timed-out` probe status, carrying its
 //     elapsed ms and the host load, with NO eval issue;
-//   - a check that ran carries its host load too;
+//   - a check that ran carries its host load, its wall-clock (`elapsedMs`,
+//     the adapter's own clock around the check — ggui#1380) and the check's
+//     render time (`renderMs`);
+//   - a `not-applicable` outcome carries neither: nothing ran;
 //   - the blueprint validator names it `runtime:probe-timeout` (a warning),
 //     never `probe-not-applicable` and never an error.
 
@@ -67,13 +70,17 @@ describe("the runtime-render adapter — a check that ran out of time (ggui#1299
 
     expect(outcome.status).toBe("timed-out");
     expect(outcome.issues).toEqual([]);
-    expect(outcome.elapsedMs).toBe(30_412);
+    // ggui#1380 — one clock on every status: the adapter's wall-clock, not the
+    // worker's reading (which stays in `reason`).
+    expect(typeof outcome.elapsedMs).toBe("number");
+    expect(outcome.elapsedMs).toBeGreaterThanOrEqual(0);
     expect(outcome.hostLoad).toEqual(LOAD);
     expect(outcome.reason).toContain("did not finish within 30000 ms");
+    expect(outcome.reason).toContain("stopped at 30412 ms");
     expect(outcome.reason).toContain("host load 312.4 → 298.1 on 12 CPUs");
   });
 
-  it("a check that ran carries its host load beside its issues", async () => {
+  it("a check that ran carries its host load, its wall-clock and its render time beside its issues (ggui#1380)", async () => {
     stubbed.result = {
       ok: true,
       issues: [],
@@ -87,7 +94,36 @@ describe("the runtime-render adapter — a check that ran out of time (ggui#1299
 
     expect(outcome.status).toBe("ran");
     expect(outcome.hostLoad).toEqual(LOAD);
-    expect(outcome.elapsedMs).toBeUndefined();
+    expect(typeof outcome.elapsedMs).toBe("number");
+    expect(outcome.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(outcome.renderMs).toBe(900);
+  });
+
+  it("a not-applicable outcome carries neither elapsedMs nor renderMs — nothing ran", async () => {
+    const outcome = await DEFAULT_RUNTIME_RENDER_CHECK.run({
+      sourceCode: SOURCE,
+      compiledCode: "var C = () => null;",
+      contract: undefined,
+    });
+
+    expect(outcome.status).toBe("not-applicable");
+    expect(outcome).not.toHaveProperty("elapsedMs");
+    expect(outcome).not.toHaveProperty("renderMs");
+  });
+
+  it("an infra failure carries its wall-clock too (ggui#1380)", async () => {
+    vi.mocked(console.warn).mockImplementation(() => {});
+    stubbed.result = undefined;
+    const outcome = await DEFAULT_RUNTIME_RENDER_CHECK.run({
+      sourceCode: SOURCE,
+      compiledCode: "var C = () => null;",
+      contract: CONTRACT,
+    });
+
+    expect(outcome.status).toBe("infra-skipped");
+    expect(outcome.reason).toBe("test did not stub the render check");
+    expect(typeof outcome.elapsedMs).toBe("number");
+    expect(outcome).not.toHaveProperty("renderMs");
   });
 
   it("the blueprint validator names it runtime:probe-timeout — a warning, never an error", async () => {

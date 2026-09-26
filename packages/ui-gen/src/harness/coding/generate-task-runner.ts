@@ -78,6 +78,14 @@ export interface GenerateTelemetry {
   /** Latest evalResult — undefined when eval was disabled or never ran. */
   evalResult: EvalResult | undefined;
   /**
+   * ggui#1380 — whether the probe-only lane's one repair turn has been
+   * spent. Set when the first probe-only round fed a recoverable render
+   * crash back; read by the next round (which then always breaks) and by
+   * the turn after the repair (which never loops on a failed self-check).
+   * Stays `false` on every other lane.
+   */
+  probeRepairUsed: boolean;
+  /**
    * ggui#1261 — the contract-feedback round, once one fired: kept across the
    * rounds after it (each rebuilds `evalResult`) so the assembled result can
    * carry the round's before beside the source the generation ends with.
@@ -126,6 +134,7 @@ export function createTelemetry(): GenerateTelemetry {
     totalIn: 0,
     totalOut: 0,
     evalResult: undefined,
+    probeRepairUsed: false,
     contractFeedback: undefined,
     sameExchangeBreak: undefined,
     compiledCode: "",
@@ -274,6 +283,22 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
       iconNamesCache = turn.iconNamesCache;
       preWarmedContext = turn.preWarmedContext;
 
+      // ggui#1380 — the probe-only lane's repair turn did not produce a
+      // self-check-passing compile (a failed self-check, or no tool call):
+      // the lane grants AT MOST ONE eval-fix turn, so the loop never feeds
+      // the self-check violations back for another. The pre-repair card is
+      // what ships (`compiledCode` / `pairedSource` are untouched since the
+      // turn that compiled it), and the round's result records the repair
+      // as attempted but not compiled.
+      if (turn.control !== "proceed" && session.probeOnlyEnabled && telemetry.probeRepairUsed) {
+        if (telemetry.evalResult !== undefined) {
+          telemetry.evalResult = { ...telemetry.evalResult, runtimeProbeRepair: { attempted: true, compiled: false } };
+        }
+        console.log(
+          `[simple] probe-only repair turn did not compile (${turn.outcome ?? "no tool call"}) — serving the pre-repair card`,
+        );
+        break;
+      }
       if (turn.control === "break") break;
       if (turn.control === "continue") {
         lastResultText = turn.lastResultText;
@@ -326,11 +351,14 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
       }
 
       // ── Eval round ──
+      // Two lanes open the gate: the evaluation lane (its modules loaded, an
+      // evaluator configured) and the probe-only lane (ggui#1380: the probe
+      // wired, no evaluator — the round runs the probe once and nothing else).
       if (
         !evalDone &&
         telemetry.compiledCode &&
-        session.tiersMod &&
-        (session.codeEvalEnabled || session.visualEvalEnabled)
+        ((session.tiersMod && (session.codeEvalEnabled || session.visualEvalEnabled)) ||
+          session.probeOnlyEnabled)
       ) {
         // Measure eval-round wall-clock here (not inside runEvalRound) so the
         // accumulator covers axis-checks + LLM+visual parallel + merge +
@@ -351,11 +379,13 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
             visualThreshold: session.visualThreshold,
             qualityMode: session.qualityMode,
             maxEvalRounds: session.maxEvalRounds,
-            costTracker: session.costTracker!,
+            costTracker: session.costTracker,
             llmEvalMod: session.llmEvalMod,
             visualMod: session.visualMod,
             preWarmPromise: session.preWarmPromise,
             onProgress: params.onProgress,
+            probeOnly: session.probeOnlyEnabled,
+            probeRepairUsed: telemetry.probeRepairUsed,
           },
           {
             compiledCode: telemetry.compiledCode,
@@ -379,6 +409,8 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
 
         if (round.control === "break") break;
         // round.control === "feedback" — set next coding turn input.
+        // On the probe-only lane this is the one repair turn (ggui#1380).
+        if (session.probeOnlyEnabled) telemetry.probeRepairUsed = true;
         lastResultText = round.lastResultText;
         isEvalFeedback = round.isEvalFeedback;
         lastDiffFailed = round.lastDiffFailed;
@@ -387,6 +419,20 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         break;
       }
     } while (telemetry.turnsUsed < maxTurns && !evalDone);
+
+    // ggui#1380 — the probe-only lane's one repair turn was granted by the
+    // round but the turn cap had already been reached, so it was never taken:
+    // the card ships as it was, the probe's record stays, and no repair record
+    // is stamped (nothing was attempted). Say so, so the absence reads as the
+    // cap and not as a repair that vanished.
+    if (
+      session.probeOnlyEnabled &&
+      telemetry.probeRepairUsed &&
+      telemetry.evalResult !== undefined &&
+      telemetry.evalResult.runtimeProbeRepair === undefined
+    ) {
+      console.log(`[simple] probe-only repair turn not taken — turn cap (${maxTurns}) reached before it`);
+    }
 
     telemetry.codingMs = Date.now() - telemetry.codingStartedAtMs;
 

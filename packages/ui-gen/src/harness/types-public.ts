@@ -148,8 +148,14 @@ export interface RuntimeRenderOutcome {
   readonly issues: readonly EvalIssue[];
   /** Populated for `infra-skipped` / `not-applicable` / `timed-out` — why the probe didn't finish. */
   readonly reason?: string;
-  /** `timed-out` only: how long the probe ran before it was stopped. */
+  /**
+   * How long the check took, wall-clock, measured by the adapter around the
+   * check — on every status that reached it (`ran`, `timed-out`,
+   * `infra-skipped`). Absent on `not-applicable`: nothing ran.
+   */
   readonly elapsedMs?: number;
+  /** `ran` only: the check's own render time, inside `elapsedMs`. */
+  readonly renderMs?: number;
   /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
   readonly hostLoad?: ProbeHostLoad;
 }

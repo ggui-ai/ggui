@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { UiGenerateInput } from '@ggui-ai/mcp-server-core';
 import type { GenerationResult } from './harness/result-types.js';
+import type { EvalResult } from './evaluation/types-public.js';
 import { generatorBuild } from './generator-build.js';
 
 // Mock the dispatch seam. The factory imports `dispatchGeneration`
@@ -47,7 +48,7 @@ function fakeInput(): UiGenerateInput {
  */
 function fakeResult(
   overrides: Partial<
-    Pick<GenerationResult, 'cacheReadTokens' | 'cacheCreationTokens'>
+    Pick<GenerationResult, 'cacheReadTokens' | 'cacheCreationTokens' | 'evalResult' | 'breakdown'>
   > = {},
 ): GenerationResult {
   return {
@@ -137,5 +138,130 @@ describe('createUiGenerator — the build identity rides the metadata (ggui#1280
     const out = await createUiGenerator().generate(fakeInput());
     expect(out.ok).toBe(false);
     expect(out.metadata?.build).toEqual(generatorBuild('constrained'));
+  });
+});
+
+// ggui#1380 — the runtime probe's record and the eval rounds' wall-clock ride
+// the metadata a host reads (`runtimeProbe`, `evalMs`): a serving deployment
+// that runs the probe once after the coding turns can see its status, timing
+// and whether the one repair turn was bought and what came of it. Absent on
+// the harness result stays absent here — never a default status, never 0.
+describe('createUiGenerator — the runtime probe rides the metadata (ggui#1380)', () => {
+  beforeEach(() => {
+    dispatchMock.mockReset();
+  });
+
+  const probed = (evalResult: EvalResult, evalRounds: number, evalMs: number): GenerationResult =>
+    fakeResult({
+      evalResult,
+      breakdown: {
+        phases: { impl: 1, patch: 0, evalFix: evalRounds > 1 ? 1 : 0, scaffold: 0, fill: 0 },
+        outcomes: { pass: evalRounds, patchInvalid: 0, selfCheckFail: 0, diffFail: 0 },
+        evalRounds,
+        llmMs: 1,
+        evalLlmMs: 0,
+        toolMs: 0,
+        evalMs,
+        codingMs: 1,
+        setupMs: 0,
+      },
+    });
+
+  it('a probe that ran: status + elapsedMs + evalMs, no repair key when no repair turn was bought', async () => {
+    dispatchMock.mockResolvedValue(
+      probed({ issues: [], pass: ['probe-only'], runtimeProbe: { status: 'ran', elapsedMs: 812, renderMs: 640 } }, 1, 1234),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 812 });
+    expect(out.metadata.evalMs).toBe(1234);
+  });
+
+  it('a repair that compiled: repair { attempted, compiled: true, afterStatus } from the re-probe record', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', elapsedMs: 30 },
+          runtimeProbeRepair: { attempted: true, afterStatus: 'ran', recoverableFailAfter: false },
+        },
+        2,
+        90,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({
+      status: 'ran',
+      elapsedMs: 30,
+      repair: { attempted: true, compiled: true, afterStatus: 'ran' },
+    });
+    expect(out.metadata.evalMs).toBe(90);
+  });
+
+  it('a repair that did not compile: repair { attempted, compiled: false }, the pre-repair probe as the status', async () => {
+    dispatchMock.mockResolvedValue(
+      probed(
+        {
+          issues: [],
+          pass: ['probe-only'],
+          runtimeProbe: { status: 'ran', elapsedMs: 50 },
+          runtimeProbeRepair: { attempted: true, compiled: false },
+        },
+        1,
+        55,
+      ),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'ran', elapsedMs: 50, repair: { attempted: true, compiled: false } });
+  });
+
+  it('a not-applicable probe carries its status and nothing else', async () => {
+    dispatchMock.mockResolvedValue(
+      probed({ issues: [], pass: ['probe-only'], runtimeProbe: { status: 'not-applicable', reason: 'no contract surface' } }, 1, 3),
+    );
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata.runtimeProbe).toEqual({ status: 'not-applicable' });
+    expect(out.metadata.evalMs).toBe(3);
+  });
+
+  it('absent stays absent: no eval round on the harness result → neither field on the metadata', async () => {
+    dispatchMock.mockResolvedValue(fakeResult());
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.metadata).not.toHaveProperty('runtimeProbe');
+    expect(out.metadata).not.toHaveProperty('evalMs');
+  });
+
+  it('the harness-failed arm carries neither field', async () => {
+    dispatchMock.mockRejectedValue(new Error('harness exploded'));
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.ok).toBe(false);
+    expect(out.metadata).toBeDefined();
+    expect(out.metadata).not.toHaveProperty('runtimeProbe');
+    expect(out.metadata).not.toHaveProperty('evalMs');
+  });
+
+  it('the route-resolution-failed arm carries neither field', async () => {
+    const out = await createUiGenerator().generate({
+      ...fakeInput(),
+      llm: { provider: 'openai', model: 'gpt-5.5' },
+      providerKey: { provider: 'openai', key: '' },
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.error.details).toEqual({ kind: 'route-resolution-failed' });
+    expect(out.metadata).toBeDefined();
+    expect(out.metadata).not.toHaveProperty('runtimeProbe');
+    expect(out.metadata).not.toHaveProperty('evalMs');
+    expect(dispatchMock).not.toHaveBeenCalled();
   });
 });

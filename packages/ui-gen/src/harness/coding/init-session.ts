@@ -49,6 +49,16 @@ export interface CodingSession {
   // Eval gate config (computed once from params/qualityConfig).
   readonly codeEvalEnabled: boolean;
   readonly visualEvalEnabled: boolean;
+  /**
+   * ggui#1380 — the probe-only lane: the harness wires the runtime-render
+   * check and NO evaluator is configured (neither code nor visual). A
+   * serving deployment runs the probe once after the coding turns, observes,
+   * and buys one repair turn on a recoverable render crash. `evaluation:
+   * { enabled: false }` beside a wired probe is this lane too: a config
+   * that enables nothing is no evaluator. False whenever an evaluator runs —
+   * that lane's exit probe is a different round — and false without a probe.
+   */
+  readonly probeOnlyEnabled: boolean;
   readonly maxEvalRounds: number;
   readonly visualThreshold: number;
   readonly qualityMode: "fast" | "auto-improve" | "high-quality";
@@ -194,6 +204,8 @@ export async function initSession(input: {
   const qualityMode = qualityConfig?.quality ?? "fast";
   const codeEvalEnabled = !!params.evaluation?.enabled;
   const visualEvalEnabled = !!(params.visualEvaluation?.enabled || qualityConfig?.visualEval);
+  const probeOnlyEnabled =
+    harness.check.runtimeRender !== undefined && !codeEvalEnabled && !visualEvalEnabled;
   const maxEvalRounds =
     qualityMode === "high-quality"
       ? (params.evaluation?.maxRounds ?? 3)
@@ -230,6 +242,7 @@ export async function initSession(input: {
     systemPrompt,
     codeEvalEnabled,
     visualEvalEnabled,
+    probeOnlyEnabled,
     maxEvalRounds,
     visualThreshold,
     qualityMode,

@@ -43,6 +43,7 @@ import { isGeneratorId, modelRefOfRoute } from '@ggui-ai/protocol';
 import type { GadgetCatalogAdapter } from '@ggui-ai/gadgets';
 import type {
   GenerationMetadata,
+  GenerationRuntimeProbe,
   GeneratorTier,
   LlmProvider,
   UiGenerateInput,
@@ -82,13 +83,23 @@ const DEFAULT_MODEL: ModelRef = 'anthropic/claude-haiku-4-5';
 export interface CreateUiGeneratorOptions {
   /**
    * Wire `DEFAULT_RUNTIME_RENDER_CHECK` into the harness's check leg.
-   * When `true`, every coding turn ends with a happy-dom runtime-render
-   * probe that catches contract-wiring bugs (missing `useAction()`,
-   * wrong stream channel name, etc.).
+   * When `true`, the runtime-render probe runs ONCE at the exit decision,
+   * after the coding turns, in an isolated subprocess: it mounts the
+   * compiled component against the contract and catches crash-class and
+   * contract-wiring bugs (a render that throws, a missing `useAction()`,
+   * a wrong stream channel name). It is never on the per-turn hot path.
    *
-   * Default: `false` for OSS — keeps cold-start light. The probe pulls
-   * happy-dom + @testing-library on first use (~700-1500ms cold). Bench
-   * enables it via dispatch's own default for stricter quality gating.
+   * Without an `evaluation` config the round is observe + one repair turn
+   * (ggui#1380): a recoverable render crash buys exactly one repair turn
+   * and one re-probe, then the generation serves what it has; a probe that
+   * timed out, could not run, or had nothing to probe never blocks and
+   * never repairs. The probe's status and timing ride the result's
+   * metadata (`runtimeProbe`, `evalMs`). With an `evaluation` config the
+   * probe is the evaluation round's exit gate instead.
+   *
+   * Default: `false` — keeps cold-start light. The probe pulls happy-dom
+   * + @testing-library on first use (~700-1500ms cold). A serving
+   * deployment that wants the probe's verdict on every card sets it.
    */
   readonly enableRuntimeRender?: boolean;
   /** Maximum coding attempts per generation pass. */
@@ -417,6 +428,8 @@ export function createUiGenerator(
 
         onGenerated?.(result);
 
+        const runtimeProbe = metadataRuntimeProbe(result);
+        const evalMs = metadataEvalMs(result);
         const metadata: GenerationMetadata = {
           provider: input.llm.provider,
           generator: identity.slug,
@@ -437,6 +450,10 @@ export function createUiGenerator(
           ...(result.cacheCreationTokens !== undefined
             ? { cacheCreationTokens: result.cacheCreationTokens }
             : {}),
+          // ggui#1380 — the runtime probe's record and the eval rounds' wall,
+          // when the harness ran a round; absent stays absent.
+          ...(runtimeProbe !== undefined ? { runtimeProbe } : {}),
+          ...(evalMs !== undefined ? { evalMs } : {}),
         };
 
         return {
@@ -516,6 +533,44 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
     );
   }
   return { slug, tier, model };
+}
+
+/**
+ * ggui#1380 — the harness result's probe record, projected onto the metadata
+ * a host reads. `status` / `elapsedMs` are the LAST probe's (the re-probe's
+ * when the repair compiled, else the pre-repair probe's — exactly what the
+ * harness stamps on `evalResult.runtimeProbe`). The repair record's two
+ * arms project onto core's one shape: a re-probe record means the repair
+ * compiled (that is the only way a re-probe runs); `compiled: false` is
+ * carried as is. Absent when no probe ran — never a default status.
+ */
+function metadataRuntimeProbe(result: GenerationResult): GenerationRuntimeProbe | undefined {
+  const probe = result.evalResult?.runtimeProbe;
+  if (probe === undefined) return undefined;
+  const repair = result.evalResult?.runtimeProbeRepair;
+  return {
+    status: probe.status,
+    ...(probe.elapsedMs !== undefined ? { elapsedMs: probe.elapsedMs } : {}),
+    ...(repair !== undefined
+      ? {
+          repair:
+            'afterStatus' in repair
+              ? { attempted: true, compiled: true, afterStatus: repair.afterStatus }
+              : { attempted: true, compiled: false },
+        }
+      : {}),
+  };
+}
+
+/**
+ * ggui#1380 — the eval rounds' wall-clock, present only when a round ran:
+ * a generation with no round has nothing to time, and the field stays
+ * absent rather than reporting a structural 0.
+ */
+function metadataEvalMs(result: GenerationResult): number | undefined {
+  const breakdown = result.breakdown;
+  if (breakdown === undefined || breakdown.evalRounds === 0) return undefined;
+  return breakdown.evalMs;
 }
 
 function mapLlmProviderToDispatchProvider(provider: LlmProvider): ProviderName {

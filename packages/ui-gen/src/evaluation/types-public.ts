@@ -20,6 +20,7 @@
 
 export type Priority = "P0" | "P1" | "P2";
 
+import type { GenerationRuntimeProbeStatus } from "@ggui-ai/mcp-server-core";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // ─── Issue shape ───────────────────────────────────────────────────────────
@@ -63,8 +64,10 @@ export interface EvalIssue {
 }
 
 /**
- * Runtime-render probe execution status — three-valued so "the probe
- * never ran" is never conflated with "the probe ran clean".
+ * Runtime-render probe execution status — four-valued so "the probe
+ * never ran" is never conflated with "the probe ran clean". ONE union: the
+ * same values a generation's metadata reports (`GenerationRuntimeProbeStatus`
+ * in `@ggui-ai/mcp-server-core`), declared there and named here.
  *
  *   - `ran`           — probe executed; its findings (possibly none) are
  *                       in the issue stream under `runtime:*` subcategories.
@@ -83,7 +86,7 @@ export interface EvalIssue {
  *                       `hostLoad` say how long it ran and how busy the
  *                       host was, so a reader can tell the two cases apart.
  */
-export type RuntimeProbeStatus = "ran" | "infra-skipped" | "not-applicable" | "timed-out";
+export type RuntimeProbeStatus = GenerationRuntimeProbeStatus;
 
 /**
  * The host's 1-minute load average at a probe's start and end, beside the
@@ -107,11 +110,32 @@ export interface RuntimeProbeMeta {
   readonly status: RuntimeProbeStatus;
   /** Populated for `infra-skipped` / `not-applicable` / `timed-out` — why the probe didn't finish. */
   readonly reason?: string;
-  /** `timed-out` only: how long the probe ran before it was stopped. */
+  /**
+   * How long the probe took, wall-clock, as measured around the check by the
+   * side that invoked it — on every status that reached the check (`ran`,
+   * `timed-out`, `infra-skipped`). Absent on `not-applicable`: nothing ran.
+   */
   readonly elapsedMs?: number;
+  /** `ran` only: the check's own render time, inside `elapsedMs`. */
+  readonly renderMs?: number;
   /** Host load around the probe, when it ran isolated (absent for an in-process probe). */
   readonly hostLoad?: ProbeHostLoad;
 }
+
+/**
+ * The one repair turn a probe-only round buys (ggui#1380). A serving
+ * deployment that wires the runtime probe and configures no evaluator runs
+ * the probe once after the coding turns; a recoverable render crash buys
+ * exactly one repair turn, then one re-probe. This records what came of it:
+ *   - `compiled: false` — the repair turn's code did not pass self-check, so
+ *     no re-probe ran and the pre-repair card is the one served;
+ *   - `afterStatus` — the re-probe ran (the repair compiled) and this is its
+ *     status; `recoverableFailAfter` says whether the crash class the turn
+ *     was bought for is still there.
+ */
+export type RuntimeProbeRepair =
+  | { readonly attempted: true; readonly compiled: false }
+  | { readonly attempted: true; readonly afterStatus: RuntimeProbeStatus; readonly recoverableFailAfter: boolean };
 
 /**
  * Per-criterion execution status — three-valued so "the criterion
@@ -226,6 +250,13 @@ export interface EvalResult {
    * probe runner; absent on eval paths that never invoke the probe.
    */
   runtimeProbe?: RuntimeProbeMeta;
+  /**
+   * The probe-only round's repair record (ggui#1380) — present only when a
+   * recoverable render crash bought the one repair turn. See
+   * {@link RuntimeProbeRepair}. `runtimeProbe` beside it is the re-probe's
+   * verdict when the repair compiled, else the pre-repair probe's.
+   */
+  runtimeProbeRepair?: RuntimeProbeRepair;
   /**
    * The contract-feedback round, when one fired this generation (ggui#1261):
    * which exit-probe findings bought it and the source as it stood when the

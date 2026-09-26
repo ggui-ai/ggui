@@ -193,6 +193,8 @@ function buildBaseCtx(harness: Harness): EvalRoundContext {
     llmEvalMod: null,
     visualMod: null,
     preWarmPromise: undefined,
+    probeOnly: false,
+    probeRepairUsed: false,
     onProgress: undefined,
   };
 }

@@ -25,6 +25,12 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
 
     const mockup = prepareMockupProps({ contract, fixtureProps });
 
+    // ggui#1380 — the adapter's own clock around the check: every status
+    // that reached the check (`ran`, `timed-out`, `infra-skipped`) reports
+    // how long it took, so a reader of the probe meta can tell a 2 s probe
+    // from a 30 s one on the same status. The two not-applicable returns
+    // above carry nothing: nothing ran.
+    const t0 = Date.now();
     let result;
     try {
       result = await runRenderCheck({
@@ -51,7 +57,7 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
       console.warn(
         `[runtime-render] probe skipped — infra failure: ${message}`,
       );
-      return { status: "infra-skipped", issues: [], reason: message };
+      return { status: "infra-skipped", issues: [], reason: message, elapsedMs: Date.now() - t0 };
     }
 
     const hostLoad = result.stats.hostLoad;
@@ -69,7 +75,10 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
           : "";
       const reason = `render check did not finish within ${boundMs} ms (stopped at ${elapsedMs} ms)${loadNote}`;
       console.warn(`[runtime-render] probe timed out — ${reason}`);
-      return { status: "timed-out", issues: [], reason, elapsedMs, ...load };
+      // One clock for every status that reached the worker: the adapter's
+      // wall-clock around the check. The worker's own reading survives in
+      // `reason` ("stopped at N ms").
+      return { status: "timed-out", issues: [], reason, elapsedMs: Date.now() - t0, ...load };
     }
 
     return {
@@ -77,6 +86,8 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
       issues: result.issues
         .map(toEvalIssue)
         .filter((x): x is EvalIssue => x !== null),
+      elapsedMs: Date.now() - t0,
+      renderMs: result.stats.renderMs,
       ...load,
     };
   },

@@ -44,6 +44,8 @@ async function buildCtx(llmEvalMod: typeof realLlmEvaluator): Promise<{ ctx: Eva
     llmEvalMod,
     visualMod: null,
     preWarmPromise: undefined,
+    probeOnly: false,
+    probeRepairUsed: false,
   };
   const input: EvalRoundInput = {
     compiledCode,
