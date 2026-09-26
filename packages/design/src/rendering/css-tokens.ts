@@ -456,8 +456,13 @@ export function fillFitRule(scopeClass: string): string {
     // The wrapper's own inset goes with its margins, and the surface's own
     // viewport sizing (a cell's inline `min-height: 100vh`) yields to the
     // frame — the flex column fills it (ggui#1096: 884 px in an 836 frame).
+    // The frame owns the surface's WIDTH too (ggui#1139): a cap the surface
+    // carries (`max-width: 640px`, a centring margin) left it a 640 px strip
+    // on a 768 px md frame, left-aligned because the column defeats the
+    // wrapper's centring — the same strip the root drops. A reading measure
+    // belongs on a column INSIDE the surface, as on the root.
     `.${s} > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; padding: 0 !important; }`,
-    `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} min-height: 0 !important; flex: 1 1 auto; }`,
+    `.${s} > :where(:not(style)) > :where(:only-child) { ${strip} margin: 0 !important; max-width: none !important; min-height: 0 !important; flex: 1 1 auto; }`,
     // ggui#1083 — the expanded frame's rhythm, inside the fill surface F (the root, or the one
     // surface a wrapper root hands the fill to): F keeps the frame's inset; a first-level surface
     // is concentric with the panel's corner; a bleeding element takes the inset back and meets

@@ -154,10 +154,12 @@ describe('fillFitRule (ggui#1041 / #1073)', () => {
     expect(rule).toContain('html:has(.ggui-rcr-9), html:has(.ggui-rcr-9) body { margin: 0; }');
     expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)) { border: none !important; border-radius: 0 !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; flex: 1 1 auto; }');
     expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)):has(> :only-child) { display: flex; flex-direction: column; padding: 0 !important; }');
-    expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)) > :where(:only-child) { border: none !important; border-radius: 0 !important; box-shadow: none !important; min-height: 0 !important; flex: 1 1 auto; }');
+    expect(rule).toContain('.ggui-rcr-9 > :where(:not(style)) > :where(:only-child) { border: none !important; border-radius: 0 !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; min-height: 0 !important; flex: 1 1 auto; }');
     // Never a percentage height anywhere in the chain — that was the 414-of-836 bug.
     expect(rule).not.toContain('min-height: 100%');
     // Under fill the frame decides the height: a cell's own `min-height: 100vh` on the surface is overridden (ggui#1096: 884 in an 836 frame).
     expect(rule).toContain('min-height: 0 !important');
+    // ggui#1139 — and the width: the surface a wrapper hands the fill to drops its own cap and margins, as the root does.
+    expect(rule).toContain('> :where(:only-child) { border: none !important; border-radius: 0 !important; box-shadow: none !important; margin: 0 !important; max-width: none !important;');
   });
 });
