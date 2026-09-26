@@ -180,3 +180,53 @@ describe("a turn without the tool call is a NAMED failure", () => {
     expect(decision.reason).toContain("[max_tokens]");
   });
 });
+
+describe("the Anthropic caller meters its structured call (ggui#1418)", () => {
+  const DECISION = { type: "tool_use", id: "toolu_2", name: TOOL.name, input: { matchId: "bp-1", confidence: 0.9, reason: "same card" } };
+
+  it("callStructuredMetered returns the tool input with the response's usage", async () => {
+    reply = anthropicReply([TOOL_USE], "tool_use");
+    const { llm } = caller("claude-haiku-4-5-20251001");
+    if (!llm.callStructuredMetered) throw new Error("the anthropic caller must expose callStructuredMetered");
+    await expect(llm.callStructuredMetered("sys", "user", TOOL, 512)).resolves.toEqual({
+      value: { matchId: "bp-1" },
+      usage: { input: 10, output: 5 },
+    });
+  });
+
+  it("a response without a readable usage block reports no usage, never zeros", async () => {
+    const { llm } = caller("claude-haiku-4-5-20251001");
+    if (!llm.callStructuredMetered) throw new Error("the anthropic caller must expose callStructuredMetered");
+    for (const usage of [undefined, { input_tokens: "10", output_tokens: 5 }, { input_tokens: 10 }]) {
+      const base = anthropicReply([TOOL_USE], "tool_use");
+      const { usage: _drop, ...rest } = base.body as { usage: object };
+      reply = { status: 200, body: usage === undefined ? rest : { ...rest, usage } };
+      const result = await llm.callStructuredMetered("sys", "user", TOOL, 512);
+      expect(result.value).toEqual({ matchId: "bp-1" });
+      expect("usage" in result).toBe(false);
+    }
+  });
+
+  it("callStructured still returns the bare tool input (every existing consumer)", async () => {
+    reply = anthropicReply([TOOL_USE], "tool_use");
+    await expect(caller("claude-haiku-4-5-20251001").callStructured("sys", "user", TOOL, 512)).resolves.toEqual({ matchId: "bp-1" });
+  });
+
+  it("through the real rerank judge, the decision's tokenCost is the response's usage", async () => {
+    reply = anthropicReply([DECISION], "tool_use");
+    const { llm } = caller("claude-haiku-4-5-20251001");
+    const decision = await rerankCandidates(
+      { llm },
+      { intent: "a weather card", contractSummary: "props: city" },
+      [{ id: "bp-1", cachedIntent: "a weather card", cachedContractSummary: "props: city" }]
+    );
+    expect(decision.matchId).toBe("bp-1");
+    expect(decision.tokenCost).toEqual({ input: 10, output: 5 });
+  });
+
+  it("a provider other than Anthropic has no structured method, metered or not", () => {
+    const llm = buildLlmCaller({ provider: "openai", model: "gpt-5.6" }, { provider: "openai", key: "sk-test" });
+    expect(llm.callStructured).toBeUndefined();
+    expect(llm.callStructuredMetered).toBeUndefined();
+  });
+});

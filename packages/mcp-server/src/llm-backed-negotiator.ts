@@ -55,7 +55,7 @@ import {
   type InstalledBlueprintsProvider,
   type ToolIdentityCatalogStore,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import type { LLMCaller } from "@ggui-ai/negotiator";
+import type { LLMCaller, Metered, TokenUsage } from "@ggui-ai/negotiator";
 import type { Blueprint } from "@ggui-ai/protocol";
 import { anthropicRejectsForcedToolChoice, isRecord } from "@ggui-ai/protocol";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
@@ -66,7 +66,9 @@ import { selectAdapter } from "@ggui-ai/ui-gen/providers";
  * (anthropic / openai / google / openrouter / bedrock). `call` runs
  * one `complete()` round-trip on the underlying adapter.
  *
- * `callStructured` is wired for Anthropic only. Anthropic's
+ * `callStructured` (and `callStructuredMetered`, the same call with the
+ * response's token usage beside the tool input — ggui#1418) is wired for
+ * Anthropic only. Anthropic's
  * `/v1/messages` natively supports forced tool use via `tools[] +
  * tool_choice: {type:'tool', name}` — on the models that accept it; the
  * always-thinking models refuse a forced tool (see
@@ -138,13 +140,13 @@ export function buildLlmCaller(
     },
   };
   if (isAnthropic) {
-    caller.callStructured = async (
+    const metered = (
       systemPrompt: string,
       userMessage: string,
       tool: { name: string; description: string; input_schema: Record<string, unknown> },
       maxTokens?: number
-    ): Promise<unknown> => {
-      const result = await anthropicCallStructured({
+    ): Promise<Metered<unknown>> =>
+      anthropicCallStructured({
         apiKey: providerKey.key,
         model: selection.model,
         systemPrompt,
@@ -153,8 +155,9 @@ export function buildLlmCaller(
         maxTokens,
         ...(options.signal !== undefined ? { signal: options.signal } : {}),
       });
-      return result;
-    };
+    caller.callStructuredMetered = metered;
+    caller.callStructured = async (systemPrompt, userMessage, tool, maxTokens) =>
+      (await metered(systemPrompt, userMessage, tool, maxTokens)).value;
   }
   return caller;
 }
@@ -241,7 +244,7 @@ async function anthropicCallStructured(args: {
   };
   maxTokens?: number;
   signal?: AbortSignal;
-}): Promise<unknown> {
+}): Promise<Metered<unknown>> {
   const answerBudget = args.maxTokens ?? 1024;
   const refusesForcedTool = anthropicRejectsForcedToolChoice(args.model);
   const body = {
@@ -297,7 +300,10 @@ async function anthropicCallStructured(args: {
     (block): block is Record<string, unknown> =>
       isRecord(block) && block["type"] === "tool_use" && block["name"] === args.tool.name
   );
-  if (toolUse !== undefined && toolUse["input"] !== undefined) return toolUse["input"];
+  if (toolUse !== undefined && toolUse["input"] !== undefined) {
+    const usage = readMessagesUsage(json["usage"]);
+    return { value: toolUse["input"], ...(usage !== undefined ? { usage } : {}) };
+  }
   if (stopReason === "max_tokens") {
     throw new AnthropicStructuredCallError(
       "max_tokens",
@@ -313,6 +319,19 @@ async function anthropicCallStructured(args: {
     `the turn ended (stop_reason=${stopReason ?? "absent"}) without a "${args.tool.name}" tool_use block`,
     stopReason !== undefined ? { stopReason } : {}
   );
+}
+
+/**
+ * The token usage of a Messages response, as `{ input, output }`: its
+ * `usage.input_tokens` and `usage.output_tokens` when both are numbers,
+ * else absent (unmetered, never zeros — ggui#1418). No `cache_control` is
+ * sent on this call, so the cache token counts are not added.
+ */
+function readMessagesUsage(usage: unknown): TokenUsage | undefined {
+  if (!isRecord(usage)) return undefined;
+  const input = usage["input_tokens"];
+  const output = usage["output_tokens"];
+  return typeof input === "number" && typeof output === "number" ? { input, output } : undefined;
 }
 
 /**
