@@ -281,23 +281,111 @@ function classifyFailurePayload(
 }
 
 /**
- * The session a successful `ggui_runtime_pull` read, for its
- * `tool_invoked` line (ggui#1377). The first and last successful pull per
- * session bound how long a served card stayed mounted: an upper bound on
- * mount time, read from the logs, never true view time.
+ * Per-session fields on the `tool_invoked` line of the three session-keyed
+ * runtime tools (ggui#1377 for pull; ggui#1395 for consume and submit).
  *
- * Only the SUCCESS line carries it, and only for pull: the pull handler
- * throws on an unknown or cross-app session before it returns, so a value
- * that reaches this line is a session the caller's app owns, never raw
- * caller input. Every other tool's line is unchanged.
+ * In a composition that wires no logger into these handlers, this line is
+ * their whole trace. ggui#1376 had to be read per app and minute; these
+ * fields make it per session, from the wire shapes the handlers already
+ * return — ids, counts and flags, never gesture content. The return type is
+ * the closed key set that posture promises: a new key is a type change here,
+ * never a spread.
+ *
+ * What a `sessionId` on a SUCCESS line proves, per tool — never raw caller
+ * input in any of the three:
+ *   - pull and consume: a session the caller's app owns. Both throw on an
+ *     unknown or cross-app session before they return (the visibility gate),
+ *     so every success line of theirs qualifies.
+ *   - submit: a pipe this server holds. Only a `kind: 'dispatch'` that
+ *     committed (`ok: true`) carries it — the append fails on an absent pipe
+ *     and the handler answers `{ok: false, code}` (logged as `ok: false` +
+ *     `code`, no session). The append checks existence, not app ownership,
+ *     so the claim stops there. An audit kind (`openLink`,
+ *     `requestDisplayMode`, an extension kind) touches no pipe and carries no
+ *     session at all: its `sessionId` was never read by anything.
+ *
+ * Consume adds `eventCount`, `status`, `timeoutS` (the requested timeout; 0
+ * when omitted, the handler's own default) and `aborted: true` when the
+ * request's signal is aborted by the time the line is written — a superset
+ * of "cancelled mid-poll", read at log time, never a false negative. A
+ * committed dispatch adds `consumerPresent`, the doorbell's gate.
  */
-function pulledSessionField(
+const SESSION_TOOLS: ReadonlySet<string> = new Set([
+  'ggui_runtime_pull',
+  'ggui_consume',
+  'ggui_runtime_submit_action',
+]);
+
+interface SessionLogFields {
+  readonly sessionId?: string;
+  readonly eventCount?: number;
+  readonly status?: string;
+  readonly timeoutS?: number;
+  readonly aborted?: true;
+  readonly consumerPresent?: boolean;
+  readonly ok?: false;
+  readonly code?: string;
+}
+
+function sessionFields(
   tool: string,
   input: Record<string, unknown>,
-): { readonly sessionId?: string } {
-  if (tool !== 'ggui_runtime_pull') return {};
+  output: Record<string, unknown>,
+  ctx: HandlerContext,
+): SessionLogFields {
+  if (!SESSION_TOOLS.has(tool)) return {};
   const sessionId = input['sessionId'];
-  return typeof sessionId === 'string' ? { sessionId } : {};
+  if (typeof sessionId !== 'string') return {};
+  if (tool === 'ggui_runtime_submit_action') {
+    if (input['kind'] !== 'dispatch') return {};
+    if (output['ok'] !== true) {
+      return typeof output['code'] === 'string' ? { ok: false, code: output['code'] } : { ok: false };
+    }
+    return {
+      sessionId,
+      ...(typeof output['consumerPresent'] === 'boolean'
+        ? { consumerPresent: output['consumerPresent'] }
+        : {}),
+    };
+  }
+  if (tool === 'ggui_consume') {
+    const events = output['events'];
+    return {
+      sessionId,
+      ...(Array.isArray(events) ? { eventCount: events.length } : {}),
+      ...(typeof output['status'] === 'string' ? { status: output['status'] } : {}),
+      timeoutS: typeof input['timeout'] === 'number' ? input['timeout'] : 0,
+      ...(ctx.signal?.aborted === true ? { aborted: true } : {}),
+    };
+  }
+  return { sessionId };
+}
+
+/** Bound on `claimedSessionId`: a real id is a UUID; anything longer is not one. */
+const CLAIMED_SESSION_ID_MAX_CHARS = 128;
+
+/**
+ * The caller's CLAIMED session on an `outcome: 'error'` line of the same
+ * three tools (ggui#1395). A refused consume — unknown or cross-app
+ * session, the visibility gate — is the one failure of the tap → consume
+ * chain that is otherwise invisible per session. It is raw caller input,
+ * the first on this line: named as a claim so it never reads as an owned
+ * session, and cut to {@link CLAIMED_SESSION_ID_MAX_CHARS} with a flag so a
+ * caller cannot put arbitrary text in a log under a field that promises an
+ * id.
+ */
+function claimedSessionField(
+  tool: string,
+  input: Record<string, unknown>,
+): { readonly claimedSessionId?: string; readonly claimedSessionIdTruncated?: true } {
+  if (!SESSION_TOOLS.has(tool)) return {};
+  const sessionId = input['sessionId'];
+  if (typeof sessionId !== 'string') return {};
+  if (sessionId.length <= CLAIMED_SESSION_ID_MAX_CHARS) return { claimedSessionId: sessionId };
+  return {
+    claimedSessionId: sessionId.slice(0, CLAIMED_SESSION_ID_MAX_CHARS),
+    claimedSessionIdTruncated: true,
+  };
 }
 
 export function buildMcpServer(
@@ -413,6 +501,10 @@ export function buildMcpServer(
             tool: handler.name,
             appId: ctx.appId,
             ...classifyFailurePayload(data.data),
+            // A HandlerFailure sits past the handler's own gates (consume's
+            // malformed-row refusal, ggui#839), so its session is owned and
+            // the per-session fields apply (ggui#1395).
+            ...sessionFields(handler.name, input, validated, ctx),
             elapsedMs: Date.now() - start,
           });
           return {
@@ -435,7 +527,7 @@ export function buildMcpServer(
           tool: handler.name,
           appId: ctx.appId,
           outcome: 'success',
-          ...pulledSessionField(handler.name, input),
+          ...sessionFields(handler.name, input, validated, ctx),
           elapsedMs: Date.now() - start,
         });
         // When the handler's output carries a `nextStep`, lead the
@@ -496,6 +588,7 @@ export function buildMcpServer(
           appId: ctx.appId,
           outcome: 'error',
           errorClass: errorClassName(err),
+          ...claimedSessionField(handler.name, input),
           elapsedMs: Date.now() - start,
         });
         throw err;

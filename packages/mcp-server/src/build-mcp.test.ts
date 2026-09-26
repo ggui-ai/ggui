@@ -16,7 +16,16 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { z, type ZodRawShape } from 'zod';
 import { renderOutputSchema, type ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { createGguiRuntimePullHandler } from '@ggui-ai/mcp-server-handlers/renders';
+import {
+  createGguiConsumeHandler,
+  createGguiRuntimePullHandler,
+  createGguiSubmitActionHandler,
+} from '@ggui-ai/mcp-server-handlers/renders';
+import {
+  InMemoryActiveConsumerRegistry,
+  InMemoryPendingEventConsumer,
+} from '@ggui-ai/mcp-server-core/in-memory';
+import { PendingEventMalformedError, type PendingEventConsumer } from '@ggui-ai/mcp-server-core';
 import {
   handlerFailure,
   type HandlerContext,
@@ -643,11 +652,13 @@ describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
  * are the shipping ones:
  *
  *   1. a successful pull's `tool_invoked` line carries `sessionId`;
- *   2. a pull that throws (unknown or cross-app session) carries none — the
- *      value on the line is only ever a session the caller's app owns,
- *      never raw caller input;
+ *   2. a pull that throws (unknown or cross-app session) carries no
+ *      `sessionId` — that field is only ever a session the caller's app
+ *      owns; the caller's input rides the error line as `claimedSessionId`
+ *      (#1395), a claim by name;
  *   3. another tool whose input also names a session carries none — the
- *      field is pull's, not a transport-wide change.
+ *      field belongs to the three session-keyed runtime tools (#1395), not
+ *      to the transport at large.
  */
 describe('buildMcpServer — ggui_runtime_pull logs its sessionId (#1377)', () => {
   const info = { name: 'test', version: '0.0.1' };
@@ -725,7 +736,11 @@ describe('buildMcpServer — ggui_runtime_pull logs its sessionId (#1377)', () =
       { name: 'ggui_runtime_pull', arguments: { sessionId: 'not-a-session' } },
     );
     expect(invoked.length).toBe(1);
-    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_runtime_pull', outcome: 'error' });
+    expect(invoked[0]?.fields).toMatchObject({
+      tool: 'ggui_runtime_pull',
+      outcome: 'error',
+      claimedSessionId: 'not-a-session',
+    });
     expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
   });
 
@@ -746,5 +761,279 @@ describe('buildMcpServer — ggui_runtime_pull logs its sessionId (#1377)', () =
     expect(invoked.length).toBe(1);
     expect(invoked[0]?.fields).toMatchObject({ tool: 'synth_session_tool', outcome: 'success' });
     expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
+  });
+});
+
+/**
+ * `ggui_consume` and `ggui_runtime_submit_action` log their session
+ * (ggui#1395, the #1377 class extended to the two tools of the tap →
+ * consume chain).
+ *
+ * In a composition that wires no logger into these handlers, this line is
+ * their whole trace. ggui#1376 had to be read per app and minute; these
+ * fields make it per session:
+ *
+ *   1. a consume's success line carries `sessionId`, `eventCount`, `status`
+ *      and `timeoutS` (the requested timeout; 0 when omitted, the handler's
+ *      own default);
+ *   2. a dispatch that committed (`ok: true`) carries `sessionId` — a pipe
+ *      this server holds, never an unverified id — and `consumerPresent`;
+ *      one that did not commit (`ok: false`) carries `ok: false` + `code`
+ *      and NO `sessionId`; an audit kind (`openLink`, `requestDisplayMode`,
+ *      an extension kind) touches no pipe and carries no session at all;
+ *   3. a consume refused before any drain (unknown or cross-app session)
+ *      logs `outcome: 'error'` with `errorClass` and `claimedSessionId` — a
+ *      tag, named as the caller's claim, bounded to 128 chars;
+ *   4. a consume whose request was aborted by the time the line is written
+ *      carries `aborted: true`;
+ *   5. a consume refused past the gate (a malformed pipe row, the
+ *      HandlerFailure arm) still names its session;
+ *   6. the lines carry ids, counts and flags only — never gesture content.
+ */
+describe('buildMcpServer — consume and submit_action log their session (#1395)', () => {
+  const info = { name: 'test', version: '0.0.1' };
+  const sessionId = 'render-log-1395';
+
+  interface LogCall {
+    readonly event: string;
+    readonly fields: Record<string, unknown>;
+  }
+
+  function capturingLogger(calls: LogCall[]): Logger {
+    const logger: Logger = {
+      info: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      warn: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      error: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      debug: () => undefined,
+      child: () => logger,
+    };
+    return logger;
+  }
+
+  async function rig(consumerOverride?: PendingEventConsumer) {
+    const store = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    const render: ComponentGguiSession = {
+      id: sessionId,
+      appId: baseCtx.appId,
+      type: 'component',
+      componentCode: 'export default () => null;',
+      eventSequence: 0,
+      createdAt: now,
+      lastActivityAt: now,
+      expiresAt: now + 60_000,
+    };
+    await store.commit({ render, appId: baseCtx.appId });
+    const inMemory = new InMemoryPendingEventConsumer();
+    inMemory.markCreated(sessionId);
+    const consumer = consumerOverride ?? inMemory;
+    const registry = new InMemoryActiveConsumerRegistry();
+    const handlers = [
+      createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore: store,
+        activeConsumerRegistry: registry,
+      }),
+      createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        renderStore: store,
+        activeConsumerRegistry: registry,
+        consumerGraceMs: 0,
+      }),
+    ];
+    const calls: LogCall[] = [];
+    const server = buildMcpServer(info, handlers, () => baseCtx, capturingLogger(calls));
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'session-log-test', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const invoked = () => calls.filter((c) => c.event === 'tool_invoked').map((c) => c.fields);
+    const close = async () => {
+      await client.close();
+      await server.close();
+    };
+    return { client, invoked, close };
+  }
+
+  function dispatch(actionId: string) {
+    return {
+      name: 'ggui_runtime_submit_action',
+      arguments: {
+        kind: 'dispatch',
+        payload: { intent: 'confirm', actionData: { id: 'x' }, uiContext: {} },
+        sessionId,
+        appId: baseCtx.appId,
+        actionId,
+        firedAt: '2026-09-26T00:00:00.000Z',
+      },
+    };
+  }
+
+  it('a consume on an empty pipe carries sessionId, eventCount 0, status and timeoutS', async () => {
+    const r = await rig();
+    try {
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId, timeout: 0 } });
+      const lines = r.invoked();
+      expect(lines.length).toBe(1);
+      expect(lines[0]).toMatchObject({
+        tool: 'ggui_consume',
+        outcome: 'success',
+        sessionId,
+        eventCount: 0,
+        status: 'active',
+        timeoutS: 0,
+      });
+      expect(lines[0]).not.toHaveProperty('aborted');
+      expect(Object.keys(lines[0] ?? {}).sort()).toEqual(
+        ['appId', 'elapsedMs', 'eventCount', 'outcome', 'sessionId', 'status', 'timeoutS', 'tool'],
+      );
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a consume that omits timeout carries timeoutS 0, the handler’s own default', async () => {
+    const r = await rig();
+    try {
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId } });
+      expect(r.invoked()[0]).toMatchObject({ tool: 'ggui_consume', sessionId, timeoutS: 0 });
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a committed submit carries sessionId + consumerPresent; the consume that drains it carries eventCount 1', async () => {
+    const r = await rig();
+    try {
+      await r.client.callTool(dispatch('a1'));
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId, timeout: 0 } });
+      const [submit, consume] = r.invoked();
+      expect(submit).toMatchObject({
+        tool: 'ggui_runtime_submit_action',
+        outcome: 'success',
+        sessionId,
+        consumerPresent: false,
+      });
+      expect(consume).toMatchObject({ tool: 'ggui_consume', sessionId, eventCount: 1 });
+      // ids, counts and flags only — the gesture the dispatch carried and
+      // the consume drained never reaches the line.
+      expect(Object.keys(submit ?? {}).sort()).toEqual(
+        ['appId', 'consumerPresent', 'elapsedMs', 'outcome', 'sessionId', 'tool'],
+      );
+      for (const key of ['payload', 'intent', 'actionData', 'uiContext', 'events']) {
+        expect(submit).not.toHaveProperty(key);
+        expect(consume).not.toHaveProperty(key);
+      }
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('an audit-kind submit (openLink) touches no pipe and carries no session at all', async () => {
+    const r = await rig();
+    try {
+      await r.client.callTool({
+        name: 'ggui_runtime_submit_action',
+        arguments: {
+          kind: 'openLink',
+          payload: { url: 'https://example.com/' },
+          sessionId: 'never-verified',
+          appId: baseCtx.appId,
+          actionId: 'a-link',
+          firedAt: '2026-09-26T00:00:00.000Z',
+        },
+      });
+      const [line] = r.invoked();
+      expect(line).toMatchObject({ tool: 'ggui_runtime_submit_action', outcome: 'success' });
+      expect(line).not.toHaveProperty('sessionId');
+      expect(line).not.toHaveProperty('claimedSessionId');
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a submit that did not commit (no pipe) carries the code and no sessionId', async () => {
+    const r = await rig();
+    try {
+      const call = dispatch('a2');
+      await r.client.callTool({ ...call, arguments: { ...call.arguments, sessionId: 'no-such-pipe' } });
+      const [line] = r.invoked();
+      expect(line).toMatchObject({
+        tool: 'ggui_runtime_submit_action',
+        outcome: 'success',
+        ok: false,
+        code: 'PIPE_NOT_FOUND',
+      });
+      expect(line).not.toHaveProperty('sessionId');
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a consume refused before any drain logs outcome error with claimedSessionId, never sessionId', async () => {
+    const r = await rig();
+    try {
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId: 'not-mine', timeout: 0 } }).catch(() => undefined);
+      const [line] = r.invoked();
+      expect(line).toMatchObject({
+        tool: 'ggui_consume',
+        outcome: 'error',
+        errorClass: 'GguiSessionNotFoundError',
+        claimedSessionId: 'not-mine',
+      });
+      expect(line).not.toHaveProperty('sessionId');
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('claimedSessionId is bounded: a 300-char claim is cut to 128 and flagged', async () => {
+    const r = await rig();
+    const long = 'x'.repeat(300);
+    try {
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId: long, timeout: 0 } }).catch(() => undefined);
+      const [line] = r.invoked();
+      expect(line).toMatchObject({ outcome: 'error', claimedSessionId: 'x'.repeat(128), claimedSessionIdTruncated: true });
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a consume refused past the gate (malformed pipe row) still names its session on the failure line', async () => {
+    const refusing: PendingEventConsumer = {
+      consumeAndClear: async (id) => {
+        throw new PendingEventMalformedError(id, [{ path: ['envelope', 'intent'], message: 'expected string' }], 'row-9');
+      },
+      append: async () => undefined,
+    };
+    const r = await rig(refusing);
+    try {
+      await r.client.callTool({ name: 'ggui_consume', arguments: { sessionId, timeout: 0 } }).catch(() => undefined);
+      const [line] = r.invoked();
+      expect(line).toMatchObject({ tool: 'ggui_consume', sessionId, eventCount: 0, status: 'active' });
+      expect(line?.['outcome']).not.toBe('success');
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a consume cancelled mid-poll carries aborted: true', async () => {
+    const r = await rig();
+    try {
+      const ac = new AbortController();
+      const pending = r.client
+        .callTool({ name: 'ggui_consume', arguments: { sessionId, timeout: 5 } }, undefined, { signal: ac.signal })
+        .catch(() => undefined);
+      await new Promise((res) => setTimeout(res, 50));
+      ac.abort();
+      await pending;
+      const deadline = Date.now() + 5_000;
+      while (r.invoked().length === 0 && Date.now() < deadline) {
+        await new Promise((res) => setTimeout(res, 20));
+      }
+      const [line] = r.invoked();
+      expect(line).toMatchObject({ tool: 'ggui_consume', sessionId, aborted: true, eventCount: 0 });
+    } finally {
+      await r.close();
+    }
   });
 });
