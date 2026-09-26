@@ -264,18 +264,20 @@ export type GenerationRuntimeProbeStatus = 'ran' | 'infra-skipped' | 'not-applic
  * `elapsedMs` are the LAST probe's — the re-probe's when the repair
  * compiled, else the pre-repair probe's. `repair` is present only when a
  * repair turn was bought: `compiled: false` means the repair did not pass
- * self-check (no re-probe; the pre-repair card is served), otherwise
- * `afterStatus` is the re-probe's status.
+ * self-check (no re-probe; the pre-repair card is served), and
+ * `compiled: true` always carries `afterStatus`, the re-probe's status.
  */
 export interface GenerationRuntimeProbe {
   readonly status: GenerationRuntimeProbeStatus;
   /** Wall-clock of the probe, ms; absent when nothing ran (`not-applicable`). */
   readonly elapsedMs?: number;
-  readonly repair?: {
-    readonly attempted: true;
-    readonly compiled: boolean;
-    readonly afterStatus?: GenerationRuntimeProbeStatus;
-  };
+  readonly repair?:
+    | { readonly attempted: true; readonly compiled: false }
+    | {
+        readonly attempted: true;
+        readonly compiled: true;
+        readonly afterStatus: GenerationRuntimeProbeStatus;
+      };
 }
 
 /**
