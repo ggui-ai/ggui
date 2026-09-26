@@ -463,9 +463,9 @@ export function isVisualUnavailable(v: VisualOutcome | VisualUnavailable | null)
 }
 
 /**
- * ggui#1023 — the judged page's CSS tokens, composed exactly as the mint's in-loop round does
- * (`cloud/ggui-protocol-pod/src/runner/mint-arm.ts`): when the cell carries a theme overlay OR a
- * registered theme id, `compose(theme, 'light', themeId)`; when it carries neither, `undefined`
+ * ggui#1023 — the judged page's CSS tokens, composed exactly as the minting side's in-loop visual
+ * round composes them: when the cell carries a theme overlay OR a registered theme id,
+ * `compose(theme, 'light', themeId)`; when it carries neither, `undefined`
  * (the design defaults, no cssTokens key — today's path, byte-identical). Keeping this one
  * condition in one place is what stops the mint and the judge from painting different pages.
  */
