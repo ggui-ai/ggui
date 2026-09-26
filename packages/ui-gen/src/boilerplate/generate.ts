@@ -230,6 +230,7 @@ export function generateBoilerplate(
   const actionTypeAliases: string[] = [];
   const actionHookCalls: string[] = [];
   const actionReturnFields: string[] = [];
+  let hasOneShotAction = false;
   const actionsMap: ActionSpec = contract?.actionSpec ?? {};
   for (const [key, entry] of Object.entries(actionsMap)) {
     const label = entry.label ?? key;
@@ -274,7 +275,23 @@ export function generateBoilerplate(
     // instruction for every action. So it stays, ALONE on the hook line — what
     // sits next to it is part of what it says.
     const onceHint = " — if this is meant ONCE, disable its control after it fires";
-    actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
+    // ggui#1223 (rnd reliability/013, arm C): an action the contract DECLARES
+    // `oneShot` gets its spent state as data, pre-bound beside the dispatcher —
+    // WHAT to code, beside HOW — and the generic once-hint leaves ITS line only:
+    // left there, the hint steered the model to a local `useState(false)` guard
+    // against the prompt's block (arm B: 0 of 6 declared cells used the hook).
+    // The generic hint stays verbatim on every undeclared action.
+    if (entry.oneShot === true) {
+      hasOneShotAction = true;
+      actionHookCalls.push(
+        `  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint} — declared oneShot: the runtime drops a second dispatch`,
+      );
+      actionHookCalls.push(
+        `  const ${key}Spent = useActionSpent('${key}'); // true once fired, also after a reload — render the control from THIS: disabled={${key}Spent} and a spent label`,
+      );
+    } else {
+      actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
+    }
     actionReturnFields.push(key);
   }
 
@@ -507,6 +524,7 @@ export function generateBoilerplate(
 
   const wireHooks: string[] = [];
   if (hasActions) wireHooks.push("useAction");
+  if (hasOneShotAction) wireHooks.push("useActionSpent");
   if (hasStream) wireHooks.push("useStream");
   if (hasContext) wireHooks.push("useGguiContext");
   const wireImport = hasAnyWireFromWire
