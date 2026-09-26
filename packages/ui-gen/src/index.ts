@@ -20,6 +20,7 @@ export {
   extractComponentCode,
 } from './create-ui-generator.js';
 export type { CreateUiGeneratorOptions } from './create-ui-generator.js';
+export type { RuntimeRenderProbeConfig } from './harness/check/runtime-render/adapter.js';
 export type { ProviderRetryInfo } from './harness/llm-router.js';
 export type { GenerationResult, SameExchangeBreak } from './harness/result-types.js';
 export type { UiGenBuild } from './generator-build.js';

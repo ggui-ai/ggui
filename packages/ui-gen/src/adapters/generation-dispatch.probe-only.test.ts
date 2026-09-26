@@ -12,17 +12,23 @@
  *
  * Only two seams are stubbed: the coding agent (`createAgent`, answering
  * every turn with a `write` of a self-check-passing component) and the
- * runtime-render adapter (`DEFAULT_RUNTIME_RENDER_CHECK`, answering from a
- * queue). Session init, the coding turn, tool execution (real esbuild
- * compile + self-check), the eval round and result assembly all run.
+ * runtime-render adapter (`createRuntimeRenderCheck`, spied, returning a
+ * check that answers from a queue). Session init, the coding turn, tool
+ * execution (real esbuild compile + self-check), the eval round and result
+ * assembly all run.
+ *
+ * C2 (ggui#1380): `runtimeRenderProbe` reaches the check's factory verbatim;
+ * absent, the factory is called with no config — the default instance.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { RuntimeRenderCheck, RuntimeRenderOutcome } from "../harness/types-public.js";
+import type { RuntimeRenderProbeConfig } from "../harness/check/runtime-render/adapter.js";
 import type { EvalIssue } from "../evaluation/types-public.js";
 import type { LLMResponse, LLMToolCallResponse, LLMWithToolsResponse } from "../harness/llm-router.js";
 
 const agent = vi.hoisted(() => ({ callTools: 0 }));
 const probeQueue = vi.hoisted(() => ({ outcomes: [] as RuntimeRenderOutcome[], calls: 0 }));
+const probeFactory = vi.hoisted(() => ({ configs: [] as (RuntimeRenderProbeConfig | undefined)[] }));
 
 const COMPONENT = `interface Props { name: string; }
 export default function Hello(props: Props) {
@@ -69,7 +75,16 @@ vi.mock("../harness/check/runtime-render/adapter.js", async (importOriginal) => 
       return next;
     },
   };
-  return { ...actual, DEFAULT_RUNTIME_RENDER_CHECK: stub };
+  return {
+    ...actual,
+    DEFAULT_RUNTIME_RENDER_CHECK: stub,
+    // C2: the dispatch never builds a check itself — the instance is the
+    // caller's (its lifetime is the concurrency cap's); this spy proves it.
+    createRuntimeRenderCheck: (config?: RuntimeRenderProbeConfig): RuntimeRenderCheck => {
+      probeFactory.configs.push(config);
+      return stub;
+    },
+  };
 });
 
 const { dispatchGeneration } = await import("./generation-dispatch.js");
@@ -84,7 +99,7 @@ const RECOVERABLE_CRASH: EvalIssue = {
   fix: "Render iterated over a non-array. Default to [] before .map.",
 };
 
-function dispatch(enableRuntimeRender: boolean) {
+function dispatch(enableRuntimeRender: boolean, runtimeRender?: RuntimeRenderCheck) {
   return dispatchGeneration({
     provider: "claude",
     model: "claude-haiku-4-5",
@@ -93,6 +108,7 @@ function dispatch(enableRuntimeRender: boolean) {
     tools: [],
     enableRuntimeRender,
     maxAttempts: 4,
+    ...(runtimeRender !== undefined ? { runtimeRender } : {}),
   });
 }
 
@@ -101,6 +117,7 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     agent.callTools = 0;
     probeQueue.outcomes.length = 0;
     probeQueue.calls = 0;
+    probeFactory.configs.length = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
@@ -124,6 +141,25 @@ describe("the serve lane through dispatch (ggui#1380)", () => {
     expect(on.breakdown?.evalRounds).toBe(1);
     expect(on.breakdown?.phases.evalFix).toBe(0);
     expect(on.selfCheckPassed).toBe(true);
+    // C2: no instance passed ⇒ the harness carries DEFAULT_RUNTIME_RENDER_CHECK;
+    // the dispatch never builds one (the factory is the generator's, once).
+    expect(probeFactory.configs).toEqual([]);
+  }, 60_000);
+
+  it("a passed runtimeRender instance is the check the harness runs — verbatim, never rebuilt (ggui#1380 C2)", async () => {
+    let ran = 0;
+    const own: RuntimeRenderCheck = {
+      id: "callers-own-check",
+      run: async () => {
+        ran += 1;
+        return { status: "ran", issues: [], elapsedMs: 5, renderMs: 2 };
+      },
+    };
+    const result = await dispatch(true, own);
+    expect(ran).toBe(1);
+    expect(probeQueue.calls).toBe(0);
+    expect(probeFactory.configs).toEqual([]);
+    expect(result.evalResult?.runtimeProbe).toEqual({ status: "ran", elapsedMs: 5, renderMs: 2 });
   }, 60_000);
 
   it("a recoverable FAIL on the first probe: exactly two callTools (the repair), the re-probe's record on the result", async () => {

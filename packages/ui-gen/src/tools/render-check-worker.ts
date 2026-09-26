@@ -27,8 +27,19 @@
  * mechanical compile+vm pipeline is the shared
  * `evaluateComponentSource` helper (also used by the in-loop probe's
  * `loadComponent`); only the resolution policy lives here.
+ *
+ * Shutdown (ggui#1380): the compile runs on esbuild's service, a child
+ * process esbuild keeps alive for the life of this worker. After the
+ * verdict is written the worker calls `esbuild.stop()` so that child is
+ * gone before the worker is. `workerMain` is exported for the
+ * process-shape pins; `main()` runs only when this file is the process
+ * entry, so importing it never reads stdin.
  */
 import { createRequire } from 'node:module';
+import { realpathSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
 import type { JsonObject } from '@ggui-ai/protocol';
 import { evaluateComponentSource } from '../internal/evaluate-component-source.js';
 import { hostGlobals } from '../internal/open-record.js';
@@ -42,28 +53,49 @@ type WorkerOutput =
   | { readonly ok: true }
   | { readonly ok: false; readonly error: string };
 
-async function main(): Promise<void> {
-  const raw = await readAllStdin();
-  let input: WorkerInput;
+/**
+ * Parse one input document, render once, write the verdict. Whatever
+ * happens, esbuild's service is stopped before this returns (or
+ * rejects). If the service was never started, `stop()` is a no-op.
+ */
+export async function workerMain(raw: string): Promise<void> {
   try {
-    input = JSON.parse(raw) as WorkerInput;
-  } catch (err) {
-    emit({
-      ok: false,
-      error: `worker: malformed input JSON — ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    });
-    return;
-  }
+    let input: WorkerInput;
+    try {
+      input = JSON.parse(raw) as WorkerInput;
+    } catch (err) {
+      emit({
+        ok: false,
+        error: `worker: malformed input JSON — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+      return;
+    }
 
-  if (typeof input.sourceCode !== 'string' || input.sourceCode.length === 0) {
-    emit({ ok: false, error: 'worker: sourceCode is required' });
-    return;
-  }
+    if (typeof input.sourceCode !== 'string' || input.sourceCode.length === 0) {
+      emit({ ok: false, error: 'worker: sourceCode is required' });
+      return;
+    }
 
-  const result = await renderOnce(input);
-  emit(result);
+    const result = await renderOnce(input);
+    emit(result);
+  } finally {
+    // Post-verdict work must never turn a written verdict into a failure:
+    // a rejecting `stop()` would otherwise become an unhandled rejection,
+    // exit code 1, and the host discarding the verdict on stdout.
+    try {
+      await esbuild.stop();
+    } catch (err) {
+      process.stderr.write(
+        `render-check worker: esbuild.stop() failed — ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+  }
+}
+
+async function main(): Promise<void> {
+  await workerMain(await readAllStdin());
 }
 
 async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
@@ -192,9 +224,28 @@ async function readAllStdin(): Promise<string> {
   return buffer;
 }
 
-void main().catch((err: unknown) => {
-  emit({
-    ok: false,
-    error: `worker crashed: ${err instanceof Error ? err.message : String(err)}`,
+/** True when this file is the process entry (`node <this file>`), not an import. */
+function isProcessEntry(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  // Resolve BOTH sides through the filesystem: `import.meta.url` is this
+  // file's realpath while argv[1] is whatever the spawner passed — a
+  // symlinked spawn path must still read as the entry, or the worker would
+  // exit with no verdict and the host would read a silent `unverified`.
+  let entryReal: string;
+  try {
+    entryReal = realpathSync(resolvePath(entry));
+  } catch {
+    return false;
+  }
+  return entryReal === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isProcessEntry()) {
+  void main().catch((err: unknown) => {
+    emit({
+      ok: false,
+      error: `worker crashed: ${err instanceof Error ? err.message : String(err)}`,
+    });
   });
-});
+}

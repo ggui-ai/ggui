@@ -15,18 +15,10 @@
 // All checks are best-effort: if a heuristic can't find an element, the
 // check fails with a descriptive reason rather than throwing.
 
-import type {
-  DataContract,
-  JsonObject,
-  PropsSpec,
-} from "@ggui-ai/protocol";
+import type { RenderCheckHostOptions } from "./render-check-host.js";
+import type { DataContract, JsonObject, PropsSpec } from "@ggui-ai/protocol";
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
-import {
-  createProbe,
-  createProbeWireConfig,
-  type ActionFiredEvent,
-  type Probe,
-} from "./probe.js";
+import { createProbe, createProbeWireConfig, type ActionFiredEvent, type Probe } from "./probe.js";
 import { loadComponent } from "./load-component.js";
 import { findWiring, type WiringDetection } from "./find-wiring.js";
 import { installProductionActShim } from "./production-act-shim.js";
@@ -115,9 +107,7 @@ export interface RenderCheckIssue {
  * priming failure never aborts the check — it is recorded here, on every
  * action-wiring issue, so it is visible in the feedback instead of vanishing.
  */
-export type InputPrimingDiagnostic =
-  | { readonly primed: number }
-  | { readonly error: string };
+export type InputPrimingDiagnostic = { readonly primed: number } | { readonly error: string };
 
 /**
  * The check started but did not finish (ggui#1299). The only kind is a
@@ -153,6 +143,14 @@ export interface RunRenderCheckInput {
   readonly contract?: DataContract;
 }
 
+/**
+ * Options of {@link runRenderCheck} (ggui#1380): the host's options —
+ * `bounds` are the isolated subprocess's wall-clock, heap and grace (see
+ * `RenderCheckHostBounds`); they apply to the worker path only and are
+ * ignored in-process. One shape, declared once on the host.
+ */
+export type RunRenderCheckOptions = RenderCheckHostOptions;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,13 +177,15 @@ export interface RunRenderCheckInput {
  */
 export async function runRenderCheck(
   input: RunRenderCheckInput,
+  options: RunRenderCheckOptions = {}
 ): Promise<RenderCheckResult> {
   const g = hostGlobals();
   if ("window" in g && "document" in g) {
+    // In-process: nothing to bound — the check shares the caller's process.
     return runRenderCheckInProcess(input);
   }
   const { runRenderCheckViaWorker } = await import("./render-check-host.js");
-  return runRenderCheckViaWorker(input);
+  return runRenderCheckViaWorker(input, options);
 }
 
 /**
@@ -198,7 +198,7 @@ export async function runRenderCheck(
  * dispatcher explicitly.
  */
 export async function runRenderCheckInProcess(
-  input: RunRenderCheckInput,
+  input: RunRenderCheckInput
 ): Promise<RenderCheckResult> {
   const t0 = Date.now();
   const issues: RenderCheckIssue[] = [];
@@ -226,7 +226,7 @@ export async function runRenderCheckInProcess(
     const { GguiWireProvider } = Wire;
 
     const moduleResolutions: Record<string, unknown> = {
-      "react": React,
+      react: React,
       "react/jsx-runtime": ReactJsxRuntime,
       "@ggui-ai/wire": Wire,
     };
@@ -262,9 +262,7 @@ export async function runRenderCheckInProcess(
     // a direct dep. Swallow on miss —
     // same posture as design subpaths above.
     try {
-      moduleResolutions["@ggui-ai/gadgets"] = await import(
-        "@ggui-ai/gadgets"
-      );
+      moduleResolutions["@ggui-ai/gadgets"] = await import("@ggui-ai/gadgets");
     } catch {
       /* skip — sandbox will report a clear error if the component imports it */
     }
@@ -366,11 +364,7 @@ export async function runRenderCheckInProcess(
       if (!capturedComponentStack) {
         // Try to find any arg that looks like a "    at X (...)" stack.
         for (const arg of args) {
-          if (
-            typeof arg === "string" &&
-            /^\s*at\s+\S/m.test(arg) &&
-            arg.length > 20
-          ) {
+          if (typeof arg === "string" && /^\s*at\s+\S/m.test(arg) && arg.length > 20) {
             capturedComponentStack = arg;
             break;
           }
@@ -445,11 +439,19 @@ export async function runRenderCheckInProcess(
             children: React.createElement(ProbeErrorBoundary, {
               children: React.createElement(Component, input.mockupProps),
             }),
-          }),
-        ),
+          })
+        )
       );
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`[runtime-render] render exceeded ${RENDER_TIMEOUT_MS}ms — classified as runtime-hang`)), RENDER_TIMEOUT_MS).unref?.();
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `[runtime-render] render exceeded ${RENDER_TIMEOUT_MS}ms — classified as runtime-hang`
+              )
+            ),
+          RENDER_TIMEOUT_MS
+        ).unref?.();
       });
       renderResult = await Promise.race([renderPromise, timeoutPromise]);
     } catch (e) {
@@ -476,7 +478,10 @@ export async function runRenderCheckInProcess(
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.startsWith("at "))
-        .filter((l) => !/(node_modules|happy-dom|@testing-library|react-dom|node:internal|node:async)/.test(l))
+        .filter(
+          (l) =>
+            !/(node_modules|happy-dom|@testing-library|react-dom|node:internal|node:async)/.test(l)
+        )
         .slice(0, 5);
       // Prefer the ErrorBoundary-captured stack (richer + names component
       // wrappers like memo/forwardRef), fall back to the spy-captured one.
@@ -516,9 +521,7 @@ export async function runRenderCheckInProcess(
       const compBlock = componentFrames.length
         ? `\n  Component stack: ${componentFrames.join(" > ")}`
         : "";
-      const errMsg = boundaryRef.error
-        ? boundaryRef.error.message
-        : "(no error message)";
+      const errMsg = boundaryRef.error ? boundaryRef.error.message : "(no error message)";
       issues.push({
         check: "render-no-throw",
         outcome: "failed",
@@ -596,7 +599,7 @@ export async function runRenderCheckInProcess(
       if (input.contract?.actionSpec) {
         for (const [name, entry] of Object.entries(input.contract.actionSpec)) {
           const idField = idLikeRequiredStringField(
-            entry.schema as Record<string, unknown> | undefined,
+            entry.schema as Record<string, unknown> | undefined
           );
           if (idField === null) continue;
           const issue = await checkSelectionIdentity({
@@ -653,8 +656,7 @@ export async function runRenderCheckInProcess(
       // prop — not dead), and non-scalar props are all skipped.
       if (input.contract?.propsSpec) {
         const propsSpec5c = input.contract.propsSpec as PropsSpec;
-        const normalize = (s: string | null): string =>
-          (s ?? "").replace(/\s+/g, " ").trim();
+        const normalize = (s: string | null): string => (s ?? "").replace(/\s+/g, " ").trim();
         const baseText = normalize(container.textContent);
         for (const [propName, entry] of Object.entries(propsSpec5c.properties)) {
           if (!entry.required) continue;
@@ -682,7 +684,7 @@ export async function runRenderCheckInProcess(
                     [propName]: varied,
                   }),
                 }),
-              }),
+              })
             );
           } catch {
             continue; // crash on varied value ⇒ the prop is read, not dead
@@ -695,8 +697,7 @@ export async function runRenderCheckInProcess(
               check: "prop-sensitivity",
               outcome: "failed",
               subject: propName,
-              reason:
-                `props.${propName} is displayed ('${marker}' appears in the DOM) but changing its value to '${String(varied)}' left the rendered output BYTE-IDENTICAL — the value is baked into the component instead of derived from the prop. A cached reuse of this blueprint under a different ${propName} would show the original value.`,
+              reason: `props.${propName} is displayed ('${marker}' appears in the DOM) but changing its value to '${String(varied)}' left the rendered output BYTE-IDENTICAL — the value is baked into the component instead of derived from the prop. A cached reuse of this blueprint under a different ${propName} would show the original value.`,
             });
           }
         }
@@ -730,9 +731,10 @@ export async function runRenderCheckInProcess(
       const declaredProps = input.contract?.propsSpec?.properties;
       if (declaredProps) {
         const optionalFilled = Object.entries(declaredProps)
-          .filter(([name, entry]) =>
-            (entry as { required?: boolean }).required !== true &&
-            input.mockupProps[name] !== undefined,
+          .filter(
+            ([name, entry]) =>
+              (entry as { required?: boolean }).required !== true &&
+              input.mockupProps[name] !== undefined
           )
           .map(([name]) => name);
         if (optionalFilled.length > 0) {
@@ -762,11 +764,10 @@ export async function runRenderCheckInProcess(
                 children: React.createElement(OmitErrorBoundary, {
                   children: React.createElement(Component, requiredOnlyProps),
                 }),
-              }),
+              })
             );
           } catch (e) {
-            omitBoundaryRef.error ??=
-              e instanceof Error ? e : new Error(String(e));
+            omitBoundaryRef.error ??= e instanceof Error ? e : new Error(String(e));
           }
           if (omitBoundaryRef.error) {
             issues.push({
@@ -788,8 +789,16 @@ export async function runRenderCheckInProcess(
 
     return finalize(issues, t0, actionsChecked, streamsChecked);
   } finally {
-    try { uninstallSpy?.(); } catch { /* ignore */ }
-    try { uninstallGadgetRegistry?.(); } catch { /* ignore */ }
+    try {
+      uninstallSpy?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      uninstallGadgetRegistry?.();
+    } catch {
+      /* ignore */
+    }
     teardown();
   }
 }
@@ -833,9 +842,7 @@ export async function runRenderCheckInProcess(
  * Returns an uninstaller; the caller MUST invoke it — `globalThis` is
  * a process global and a leaked slot taints the next check.
  */
-export function installGadgetStubRegistry(
-  contract: DataContract | undefined,
-): () => void {
+export function installGadgetStubRegistry(contract: DataContract | undefined): () => void {
   const declared = contract?.clientCapabilities?.gadgets;
   if (!declared || Object.keys(declared).length === 0) {
     return () => {};
@@ -848,9 +855,8 @@ export function installGadgetStubRegistry(
   const valueStub = new Proxy(
     {},
     {
-      get: (_t, key) =>
-        key === "then" || typeof key === "symbol" ? undefined : noop,
-    },
+      get: (_t, key) => (key === "then" || typeof key === "symbol" ? undefined : noop),
+    }
   );
   const result = { status: "idle", value: valueStub, start: noop };
   // Unknown top-level keys resolve to a no-op (covers `map.foo()`);
@@ -905,9 +911,7 @@ export function installGadgetStubRegistry(
  * `__ggui__.gadgets` registry). Only operator-registered wrapper
  * packages need a sandbox shim.
  */
-function collectThirdPartyGadgetPackages(
-  contract: DataContract | undefined,
-): string[] {
+function collectThirdPartyGadgetPackages(contract: DataContract | undefined): string[] {
   if (!contract) return [];
   const packages = new Set<string>();
   for (const use of listContractGadgets(contract)) {
@@ -953,7 +957,7 @@ function buildGadgetPackageProbeShim(packageName: string): ProbeModuleNamespace 
       const impl = resolveExport(name);
       if (typeof impl !== "function") {
         throw new Error(
-          `[gadget] export '${name}' from '${packageName}' is not loaded in the render-check probe — the component imports it but the contract's clientCapabilities.gadgets never declared it, so installGadgetStubRegistry planted no stub.`,
+          `[gadget] export '${name}' from '${packageName}' is not loaded in the render-check probe — the component imports it but the contract's clientCapabilities.gadgets never declared it, so installGadgetStubRegistry planted no stub.`
         );
       }
       return (impl as (...a: unknown[]) => unknown)(...args);
@@ -969,9 +973,8 @@ function buildGadgetPackageProbeShim(packageName: string): ProbeModuleNamespace 
       },
       // `key in ns` checks (esbuild interop may probe) report true so
       // the named import binds to the thunk rather than `undefined`.
-      has: (_t, key) =>
-        typeof key !== "symbol" && key !== "then" && key !== "default",
-    },
+      has: (_t, key) => typeof key !== "symbol" && key !== "then" && key !== "default",
+    }
   ) as ProbeModuleNamespace;
 }
 
@@ -1039,12 +1042,16 @@ async function setupHappyDom(): Promise<() => void> {
       return;
     }
     // Not ours — re-throw on next tick so the default handler runs.
-    process.nextTick(() => { throw err; });
+    process.nextTick(() => {
+      throw err;
+    });
   };
   const unhandledHandler = (reason: unknown): void => {
     if (isTeardownArtifact(reason)) return;
     const err = reason instanceof Error ? reason : new Error(String(reason));
-    process.nextTick(() => { throw err; });
+    process.nextTick(() => {
+      throw err;
+    });
   };
   process.on("uncaughtException", uncaughtHandler);
   process.on("unhandledRejection", unhandledHandler);
@@ -1144,9 +1151,9 @@ function finalize(
   issues: RenderCheckIssue[],
   t0: number,
   actionsChecked: number,
-  streamsChecked: number,
+  streamsChecked: number
 ): RenderCheckResult {
-  const ok = !issues.some(i => i.outcome === "failed");
+  const ok = !issues.some((i) => i.outcome === "failed");
   return {
     ok,
     issues,
@@ -1186,7 +1193,9 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
       check: "action-wiring",
       outcome: "failed",
       subject: actionName,
-      reason: wiring.reason ?? `Action '${actionName}' is declared in contract but useAction('${actionName}') is not wired to any UI element`,
+      reason:
+        wiring.reason ??
+        `Action '${actionName}' is declared in contract but useAction('${actionName}') is not wired to any UI element`,
       diagnostics: baseDiagnostics,
     };
   }
@@ -1197,7 +1206,9 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
       check: "action-wiring",
       outcome: "unverified",
       subject: actionName,
-      reason: wiring.reason ?? "Source indicates non-click or non-native wiring; static probe did not verify execution deterministically.",
+      reason:
+        wiring.reason ??
+        "Source indicates non-click or non-native wiring; static probe did not verify execution deterministically.",
       diagnostics: baseDiagnostics,
     };
   }
@@ -1248,24 +1259,20 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
  * `id`/`Id`/`ID` and whose declared type is string — the shape the
  * matcher's booking/selection contracts carry (`bookSlot { slotId }`).
  */
-function idLikeRequiredStringField(
-  schema: Record<string, unknown> | undefined,
-): string | null {
+function idLikeRequiredStringField(schema: Record<string, unknown> | undefined): string | null {
   if (schema === undefined) return null;
-  const properties = schema['properties'];
-  const required = schema['required'];
-  if (properties === null || typeof properties !== 'object') return null;
+  const properties = schema["properties"];
+  const required = schema["required"];
+  if (properties === null || typeof properties !== "object") return null;
   if (!Array.isArray(required)) return null;
-  for (const [propName, propSchema] of Object.entries(
-    properties as Record<string, unknown>,
-  )) {
+  for (const [propName, propSchema] of Object.entries(properties as Record<string, unknown>)) {
     if (!/id$/i.test(propName)) continue;
     if (!required.includes(propName)) continue;
     const t =
-      propSchema !== null && typeof propSchema === 'object'
-        ? (propSchema as Record<string, unknown>)['type']
+      propSchema !== null && typeof propSchema === "object"
+        ? (propSchema as Record<string, unknown>)["type"]
         : undefined;
-    if (t === 'string') return propName;
+    if (t === "string") return propName;
   }
   return null;
 }
@@ -1288,16 +1295,16 @@ interface CheckSelectionIdentityInput {
  * null (covered by other checks or genuinely unjudgeable here).
  */
 async function checkSelectionIdentity(
-  input: CheckSelectionIdentityInput,
+  input: CheckSelectionIdentityInput
 ): Promise<RenderCheckIssue | null> {
   const { container, probe, user, actionName, idField } = input;
 
   const clickables = Array.from(
-    container.querySelectorAll<MinimalElement>('button, [role="button"]'),
+    container.querySelectorAll<MinimalElement>('button, [role="button"]')
   );
   const byLabel = new Map<string, MinimalElement[]>();
   for (const el of clickables) {
-    const label = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const label = (el.textContent ?? "").replace(/\s+/g, " ").trim();
     if (label.length === 0) continue;
     const group = byLabel.get(label);
     if (group) group.push(el);
@@ -1307,9 +1314,7 @@ async function checkSelectionIdentity(
   for (const [label, group] of byLabel) {
     if (group.length < 2) continue;
 
-    const payloadFor = async (
-      el: MinimalElement,
-    ): Promise<unknown | undefined> => {
+    const payloadFor = async (el: MinimalElement): Promise<unknown | undefined> => {
       const before = probe.getFireLog().length;
       try {
         await user.click(el);
@@ -1320,10 +1325,7 @@ async function checkSelectionIdentity(
       const events = probe
         .getFireLog()
         .slice(before)
-        .filter(
-          (e): e is ActionFiredEvent =>
-            e.kind === 'action.fired' && e.name === actionName,
-        );
+        .filter((e): e is ActionFiredEvent => e.kind === "action.fired" && e.name === actionName);
       return events.length > 0 ? events[events.length - 1]!.payload : undefined;
     };
 
@@ -1334,9 +1336,9 @@ async function checkSelectionIdentity(
     if (first === undefined || second === undefined) continue;
 
     const idOf = (payload: unknown): string | undefined => {
-      if (payload === null || typeof payload !== 'object') return undefined;
+      if (payload === null || typeof payload !== "object") return undefined;
       const v = (payload as Record<string, unknown>)[idField];
-      return typeof v === 'string' ? v : undefined;
+      return typeof v === "string" ? v : undefined;
     };
     const firstId = idOf(first);
     const secondId = idOf(second);
@@ -1345,11 +1347,10 @@ async function checkSelectionIdentity(
 
     if (firstId === secondId) {
       return {
-        check: 'selection-identity',
-        outcome: 'failed',
+        check: "selection-identity",
+        outcome: "failed",
         subject: actionName,
-        reason:
-          `Two clickable elements share the visible label '${label}', and clicking EACH fired '${actionName}' with the same ${idField} ('${firstId}') — the action payload is keyed on the display value, not the element's identity. Distinct cells must send their own ${idField} (the contract requires it), or selecting one "${label}" acts on every "${label}".`,
+        reason: `Two clickable elements share the visible label '${label}', and clicking EACH fired '${actionName}' with the same ${idField} ('${firstId}') — the action payload is keyed on the display value, not the element's identity. Distinct cells must send their own ${idField} (the contract requires it), or selecting one "${label}" acts on every "${label}".`,
         elementHint: describeElement(group[0]!),
       };
     }
@@ -1396,16 +1397,16 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
     }
     await flushPromises();
     const newEvents = probe.getFireLog().slice(before);
-    const matched = newEvents.some(e => e.kind === eventKind && e.name === actionName);
+    const matched = newEvents.some((e) => e.kind === eventKind && e.name === actionName);
     if (matched) return { fired: true };
   }
 
   // Capture what DID fire — useful diagnostic.
   const allFired = probe
     .getFireLog()
-    .filter(e => e.kind === "action.fired")
-    .map(e => e.name);
-  const otherActionsFired = Array.from(new Set(allFired)).filter(n => n !== actionName);
+    .filter((e) => e.kind === "action.fired")
+    .map((e) => e.name);
+  const otherActionsFired = Array.from(new Set(allFired)).filter((n) => n !== actionName);
 
   return {
     fired: false,
@@ -1417,7 +1418,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
 async function dispatchTrigger(
   el: MinimalElement,
   kind: "click" | "submit" | "change" | "keyboard-enter",
-  user: { click: (el: MinimalElement) => Promise<void> },
+  user: { click: (el: MinimalElement) => Promise<void> }
 ): Promise<void> {
   switch (kind) {
     case "click":
@@ -1428,7 +1429,10 @@ async function dispatchTrigger(
       // dispatch a 'submit' event on it. happy-dom respects this.
       const form = closestForm(el);
       if (!form) return;
-      const ev = new (globalThis as { Event: typeof Event }).Event("submit", { bubbles: true, cancelable: true });
+      const ev = new (globalThis as { Event: typeof Event }).Event("submit", {
+        bubbles: true,
+        cancelable: true,
+      });
       toEventDispatcher(form).dispatchEvent(ev);
       return;
     }
@@ -1444,8 +1448,14 @@ async function dispatchTrigger(
     }
     case "keyboard-enter": {
       // Click first to focus, then dispatch an Enter keydown.
-      try { await user.click(el); } catch { /* ignore */ }
-      const KeyboardEventCtor = (globalThis as { KeyboardEvent?: new (type: string, init: object) => Event }).KeyboardEvent;
+      try {
+        await user.click(el);
+      } catch {
+        /* ignore */
+      }
+      const KeyboardEventCtor = (
+        globalThis as { KeyboardEvent?: new (type: string, init: object) => Event }
+      ).KeyboardEvent;
       if (KeyboardEventCtor) {
         const ev = new KeyboardEventCtor("keydown", { key: "Enter", bubbles: true });
         toEventDispatcher(el).dispatchEvent(ev);
@@ -1482,7 +1492,10 @@ function setSyntheticValue(el: MinimalElement): void {
         const current = node.value ?? "";
         let pick = opts[0]!.value;
         for (let i = 0; i < opts.length; i++) {
-          if (opts[i]!.value !== current) { pick = opts[i]!.value; break; }
+          if (opts[i]!.value !== current) {
+            pick = opts[i]!.value;
+            break;
+          }
         }
         node.value = pick;
       }
@@ -1533,7 +1546,7 @@ function findCandidateElements(
   container: MinimalElement,
   kind: "click" | "submit" | "change" | "keyboard-enter",
   name: string,
-  label: string,
+  label: string
 ): MinimalElement[] {
   switch (kind) {
     case "click":
@@ -1541,7 +1554,7 @@ function findCandidateElements(
     case "submit": {
       // submit-eligible: <form>, button[type=submit], input[type=submit]
       const all = container.querySelectorAll<MinimalElement>(
-        'form, button[type="submit"], input[type="submit"]',
+        'form, button[type="submit"], input[type="submit"]'
       );
       return Array.from(all);
     }
@@ -1594,7 +1607,9 @@ interface CheckStreamRerenderInput {
   React: typeof import("react");
 }
 
-async function checkStreamRerender(input: CheckStreamRerenderInput): Promise<RenderCheckIssue | null> {
+async function checkStreamRerender(
+  input: CheckStreamRerenderInput
+): Promise<RenderCheckIssue | null> {
   const { container, eventName, probe } = input;
 
   if (!probe.getRegistered().streams.includes(eventName)) {
@@ -1613,7 +1628,7 @@ async function checkStreamRerender(input: CheckStreamRerenderInput): Promise<Ren
   // in multiple common field names so downstream consumers find it.
   const payload = { id: marker, text: marker, value: marker, message: marker, name: marker };
 
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     setTimeout(() => {
       probe.emitStream(eventName, payload);
       resolve();
@@ -1643,7 +1658,11 @@ async function checkStreamRerender(input: CheckStreamRerenderInput): Promise<Ren
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function findActionElements(container: MinimalElement, name: string, label: string): MinimalElement[] {
+function findActionElements(
+  container: MinimalElement,
+  name: string,
+  label: string
+): MinimalElement[] {
   const candidates: MinimalElement[] = [];
   const seen = new Set<MinimalElement>();
 
@@ -1652,7 +1671,7 @@ function findActionElements(container: MinimalElement, name: string, label: stri
   const labelKey = norm(label);
 
   const allClickable = container.querySelectorAll<MinimalElement>(
-    'button, [role="button"], input[type="submit"], input[type="button"], a[href]',
+    'button, [role="button"], input[type="submit"], input[type="button"], a[href]'
   );
 
   // Pass 1: text/aria-label/data-action match
@@ -1715,5 +1734,5 @@ function pickScalarMarker(value: unknown): string | null {
 }
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

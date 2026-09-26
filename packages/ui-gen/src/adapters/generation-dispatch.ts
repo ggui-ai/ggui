@@ -33,11 +33,15 @@ import { buildSystemPrompt as buildSystemPromptWithFunnel } from "../harness/run
 // predicate against the full registry and passes the filtered result.
 import { REGISTRY as AXIS_CHECK_REGISTRY } from "../evaluation/axis-checks/registry.js";
 import { matches as axisCheckMatches } from "../evaluation/types-public.js";
-// Runtime-render default. The `createHarness` constructor accepts an
-// optional runtimeRender; this callsite injects
-// `DEFAULT_RUNTIME_RENDER_CHECK` so production keeps the happy-dom-
-// backed contract-wiring verification step.
+// Runtime-render check. The `createHarness` constructor accepts an
+// optional runtimeRender; this callsite wires the caller's instance
+// (`params.runtimeRender`) or, absent one, `DEFAULT_RUNTIME_RENDER_CHECK`,
+// so production keeps the happy-dom-backed contract-wiring verification
+// step. The dispatch never BUILDS a check: the instance carries the
+// concurrency cap, so its lifetime must be the caller's (one per
+// generator), never one per generation.
 import { DEFAULT_RUNTIME_RENDER_CHECK } from "../harness/check/runtime-render/adapter.js";
+import type { RuntimeRenderCheck } from "../harness/types-public.js";
 import { warmupRuntimeRenderProbe } from "../harness/check/runtime-render/index.js";
 import { assembleGenerationResult } from "../harness/coding/assemble-result.js";
 import {
@@ -54,10 +58,7 @@ import type {
 import type { ProviderName, ToolDefinition } from "./types.js";
 import type { QualityConfig } from "../evaluation/types-public.js";
 import type { AgentConfig } from "../harness/llm-router.js";
-import {
-  type GadgetDescriptor,
-  type JsonObject,
-} from "@ggui-ai/protocol";
+import { type GadgetDescriptor, type JsonObject } from "@ggui-ai/protocol";
 import { canvasForRendering, type CanvasClass, type DesignMode } from "../design-mode.js";
 import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 
@@ -118,8 +119,9 @@ export interface GenerationDispatchParams {
    */
   fixtureProps?: JsonObject;
   /**
-   * Whether to wire `DEFAULT_RUNTIME_RENDER_CHECK` into the harness's
-   * check leg. When `true` (default), the runtime-render probe runs ONCE
+   * Whether to wire the runtime-render check (`runtimeRender` when given,
+   * else `DEFAULT_RUNTIME_RENDER_CHECK`) into the harness's check leg.
+   * When `true` (default), the runtime-render probe runs ONCE
    * at the exit decision, after the coding turns, in an isolated
    * subprocess — never on the per-turn hot path. Without an `evaluation`
    * config that round is observe + one repair turn (ggui#1380): a
@@ -138,6 +140,17 @@ export interface GenerationDispatchParams {
    * Default: `true`.
    */
   enableRuntimeRender?: boolean;
+  /**
+   * The runtime-render check to wire (ggui#1380) — built by the CALLER with
+   * `createRuntimeRenderCheck(config)` and kept for the caller's lifetime,
+   * because the check instance owns the probe's concurrency cap: one
+   * instance per generator bounds the workers a serving deployment has
+   * live at once; one per dispatch would give every generation its own
+   * free slots and bound nothing. Absent ⇒ `DEFAULT_RUNTIME_RENDER_CHECK`
+   * (the evaluation lane's bounds, no concurrency cap). Only read when
+   * `enableRuntimeRender` is on.
+   */
+  runtimeRender?: RuntimeRenderCheck;
   /**
    * Operator-registered gadget catalog forwarded to the
    * code-gen system prompt's `clientCapabilities — registered
@@ -206,7 +219,9 @@ export interface GenerationDispatchParams {
  * Map ProviderName ('claude' | 'openai' | 'google') to AgentConfig provider ('anthropic' | 'openai' | 'google').
  * The LLM router uses 'anthropic' while the rest of the codebase uses 'claude'.
  */
-function mapProviderForLLMRouter(provider: ProviderName): "anthropic" | "openai" | "google" | "openrouter" {
+function mapProviderForLLMRouter(
+  provider: ProviderName
+): "anthropic" | "openai" | "google" | "openrouter" {
   return provider === "claude" ? "anthropic" : provider;
 }
 
@@ -215,7 +230,7 @@ function mapProviderForLLMRouter(provider: ProviderName): "anthropic" | "openai"
  * provider-agnostic.
  */
 export async function dispatchGeneration(
-  params: GenerationDispatchParams,
+  params: GenerationDispatchParams
 ): Promise<GenerationResult> {
   // NOTE: userPrompt arrives already enriched with rendering context + contract
   // (including examples) from the caller (runner.ts / generator.ts).
@@ -300,17 +315,13 @@ export async function dispatchGeneration(
     // from '<package>'` lines for thin contract refs. The closure
     // capture below (systemPromptBuilder) wires the SAME catalog
     // into the HOW leg.
-    ...(params.appGadgets !== undefined
-      ? { appGadgets: params.appGadgets }
-      : {}),
+    ...(params.appGadgets !== undefined ? { appGadgets: params.appGadgets } : {}),
     // Forward the third-party wrapper `.d.ts` map so
     // `WhatLeg.gadgetTypes` reaches the coding-agent's typecheck
     // overlay (autoCommit → runTier0Checks → typecheck). The
     // systemPromptBuilder closure below also captures `gadgetTypes`
     // from `params` directly for the prompt `Type:` lines.
-    ...(params.gadgetTypes !== undefined
-      ? { gadgetTypes: params.gadgetTypes }
-      : {}),
+    ...(params.gadgetTypes !== undefined ? { gadgetTypes: params.gadgetTypes } : {}),
     // Design mode + canvas — the harness carries them to every leg.
     ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),
     // ggui#1117 — the canvas is ALWAYS carried: a stated one, else the class
@@ -340,7 +351,15 @@ export async function dispatchGeneration(
     // prompt's gadget catalog renders a `Type:` line per third-party
     // gadget (the LLM sees a wrapper's real call shape it otherwise
     // can't know).
-    systemPromptBuilder: ({ userRequest, shellType, screen, axisDelta, designMode, canvas, profile }) =>
+    systemPromptBuilder: ({
+      userRequest,
+      shellType,
+      screen,
+      axisDelta,
+      designMode,
+      canvas,
+      profile,
+    }) =>
       buildSystemPromptWithFunnel(
         userRequest,
         shellType,
@@ -350,29 +369,30 @@ export async function dispatchGeneration(
         params.gadgetTypes,
         designMode,
         canvas,
-        profile,
+        profile
       ),
     // Pre-filtered axis-check registry. The `matches()` predicate
     // selects the checks relevant to this generation's axis vector.
     axisChecks: AXIS_CHECK_REGISTRY.filter((check) =>
-      axisCheckMatches(classification.vector, check),
+      axisCheckMatches(classification.vector, check)
     ),
-    // The default runtime-render check. Heavy deps (happy-dom + wire +
-    // design) stay on the dispatch side of the boundary; the skeleton
-    // createHarness defaults this to undefined.
+    // The runtime-render check, built under the caller's probe config.
+    // Heavy deps (happy-dom + wire + design) stay on the dispatch side of
+    // the boundary; the skeleton createHarness defaults this to undefined.
     //
     // Gated behind `enableRuntimeRender` (default true) so
     // benchmark/dev callers can opt out of in-loop probe execution and
     // run the probe externally as a final post-generation check.
-    runtimeRender: (params.enableRuntimeRender ?? true)
-      ? DEFAULT_RUNTIME_RENDER_CHECK
-      : undefined,
+    runtimeRender:
+      (params.enableRuntimeRender ?? true)
+        ? (params.runtimeRender ?? DEFAULT_RUNTIME_RENDER_CHECK)
+        : undefined,
   });
   console.log(
-    `[harness] id=${harness.id} name=${harness.name} workflow=${harness.process.workflow.name} overrides=${harness.meta.overrides.join(",") || "none"}`,
+    `[harness] id=${harness.id} name=${harness.name} workflow=${harness.process.workflow.name} overrides=${harness.meta.overrides.join(",") || "none"}`
   );
   console.log(
-    `[simple] axis-vector: ${JSON.stringify(classification.vector)} risk=${classification.riskTier}`,
+    `[simple] axis-vector: ${JSON.stringify(classification.vector)} risk=${classification.riskTier}`
   );
 
   // ── Guard: staged workflow is not wired on the dispatch path. ──
@@ -398,7 +418,7 @@ export async function dispatchGeneration(
         `This is a misconfiguration (probably pickProcessMode returning WORKFLOWS.staged). ` +
         `For staged-like behaviour, set process.mode="staged" + workflow.name="single_pass" instead — the A1 ` +
         `scaffold→fill phase machine lives inside the generate runner and fires without the workflow topology. ` +
-        `See ralph #3 report (2026-04-14) for the full rationale.`,
+        `See ralph #3 report (2026-04-14) for the full rationale.`
     );
   }
 
@@ -415,11 +435,10 @@ export async function dispatchGeneration(
   // resolveRunPolicyForProfile falls through to the identity
   // resolveRunPolicy — byte-identical to the default behavior.
   const { resolveRunPolicyForProfile } = await import("../harness/policy.js");
-  const resolvedPolicy = resolveRunPolicyForProfile(
-    process.env.GGUI_POLICY_PROFILE,
-    harness,
-    { provider: routerProvider, modelId: resolvedModel },
-  );
+  const resolvedPolicy = resolveRunPolicyForProfile(process.env.GGUI_POLICY_PROFILE, harness, {
+    provider: routerProvider,
+    modelId: resolvedModel,
+  });
 
   // ── The primitives reference the first-turn prompt carries ──
   // The system prompt embeds PRIMITIVES_DOCUMENTATION (markdown) verbatim.
@@ -451,7 +470,7 @@ export async function dispatchGeneration(
       doc = PRIMITIVES_DOCUMENTATION_TS;
       const tsBytes = Buffer.byteLength(doc, "utf8");
       console.log(
-        `[simple] primitive-doc-ts-bytes=${tsBytes} baseline=${fullBytes} drop=${((1 - tsBytes / fullBytes) * 100).toFixed(1)}%`,
+        `[simple] primitive-doc-ts-bytes=${tsBytes} baseline=${fullBytes} drop=${((1 - tsBytes / fullBytes) * 100).toFixed(1)}%`
       );
     }
     const formatBytes = Buffer.byteLength(doc, "utf8");
@@ -482,11 +501,11 @@ export async function dispatchGeneration(
       const slicedBytes = Buffer.byteLength(doc, "utf8");
       const excludeTag = excludes.length ? ` excludes=${excludes.join(",")}` : "";
       console.log(
-        `[simple] primitive-doc-bytes=${slicedBytes} mode=${mode} baseline=${formatBytes} drop=${((1 - slicedBytes / formatBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`,
+        `[simple] primitive-doc-bytes=${slicedBytes} mode=${mode} baseline=${formatBytes} drop=${((1 - slicedBytes / formatBytes) * 100).toFixed(1)}% allowlist=${allowlist.length}/${allowlist.join(",")}${excludeTag}`
       );
     } else {
       console.log(
-        `[simple] primitive-doc-bytes=${formatBytes} mode=full baseline=${formatBytes} drop=0.0%`,
+        `[simple] primitive-doc-bytes=${formatBytes} mode=full baseline=${formatBytes} drop=0.0%`
       );
     }
 
@@ -499,7 +518,7 @@ export async function dispatchGeneration(
       doc = buildPrimitiveIndex(PRIMITIVES_DOCUMENTATION, indexMode);
       const indexBytes = Buffer.byteLength(doc, "utf8");
       console.log(
-        `[simple] primitive-index-bytes=${indexBytes} mode=${indexMode} baseline=${fullBytes} drop=${((1 - indexBytes / fullBytes) * 100).toFixed(1)}%`,
+        `[simple] primitive-index-bytes=${indexBytes} mode=${indexMode} baseline=${fullBytes} drop=${((1 - indexBytes / fullBytes) * 100).toFixed(1)}%`
       );
     }
 
@@ -508,7 +527,7 @@ export async function dispatchGeneration(
     }
     const sentPrompt = systemPromptOverride ?? harness.how.systemPrompt;
     console.log(
-      `[simple] system-prompt-bytes=${Buffer.byteLength(sentPrompt, "utf8")} doc-format=${docFormat === "ts" && indexMode === "off" ? "ts" : docFormat} doc-bytes=${Buffer.byteLength(doc, "utf8")} mode=${indexMode !== "off" ? `index:${indexMode}` : mode}`,
+      `[simple] system-prompt-bytes=${Buffer.byteLength(sentPrompt, "utf8")} doc-format=${docFormat === "ts" && indexMode === "off" ? "ts" : docFormat} doc-bytes=${Buffer.byteLength(doc, "utf8")} mode=${indexMode !== "off" ? `index:${indexMode}` : mode}`
     );
 
     // ── plan→impl pipeline augmentation ──
@@ -564,7 +583,7 @@ export async function dispatchGeneration(
     console.error(
       `[dispatch] runHarness terminated: ${runResult.reason} ` +
         `(source=${runResult.finalSource ? runResult.finalSource.length + "B" : "null"}, ` +
-        `compiled=${runResult.finalCompiled ? runResult.finalCompiled.length + "B" : "null"})`,
+        `compiled=${runResult.finalCompiled ? runResult.finalCompiled.length + "B" : "null"})`
     );
   }
 
@@ -576,7 +595,11 @@ export async function dispatchGeneration(
   // `assembleGenerationResult` is async — the spread below must see the
   // RESOLVED result, never the promise (a spread promise is `{}`: every
   // consumer downstream lost `compiledCode` / `tokens` on 2026-09-09).
-  const result: GenerationResult = await assembleGenerationResult({ session, telemetry, source: finalSource });
+  const result: GenerationResult = await assembleGenerationResult({
+    session,
+    telemetry,
+    source: finalSource,
+  });
   // Record the arm this generation ran under (bench reports read it per
   // cell). The canvas is the one the free prompt stated: explicit when
   // passed, else the same shell × screen derivation the prompt used.
@@ -595,11 +618,13 @@ export async function dispatchGeneration(
  */
 function withArmRecord(
   result: GenerationResult,
-  params: Pick<GenerationDispatchParams, "designMode" | "canvas" | "shellType" | "screen">,
+  params: Pick<GenerationDispatchParams, "designMode" | "canvas" | "shellType" | "screen">
 ): GenerationResult {
   const recordedCanvas: CanvasClass | undefined =
     params.canvas ??
-    (params.designMode === "free" ? canvasForRendering(params.shellType, params.screen) : undefined);
+    (params.designMode === "free"
+      ? canvasForRendering(params.shellType, params.screen)
+      : undefined);
   return {
     ...result,
     ...(params.designMode !== undefined ? { designMode: params.designMode } : {}),

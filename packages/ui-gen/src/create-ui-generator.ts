@@ -31,16 +31,16 @@
  * Callers who want a lightweight single-shot path can build it
  * themselves.
  */
-import type { SingleComponentParams } from './harness/runtime.js';
+import type { SingleComponentParams } from "./harness/runtime.js";
 import type {
   GadgetDescriptor,
   GenerationError,
   JsonObject,
   GeneratorId,
   ModelRef,
-} from '@ggui-ai/protocol';
-import { isGeneratorId, modelRefOfRoute } from '@ggui-ai/protocol';
-import type { GadgetCatalogAdapter } from '@ggui-ai/gadgets';
+} from "@ggui-ai/protocol";
+import { isGeneratorId, modelRefOfRoute } from "@ggui-ai/protocol";
+import type { GadgetCatalogAdapter } from "@ggui-ai/gadgets";
 import type {
   GenerationMetadata,
   GenerationRuntimeProbe,
@@ -49,41 +49,47 @@ import type {
   UiGenerateInput,
   UiGenerateResult,
   UiGenerator,
-} from '@ggui-ai/mcp-server-core';
+} from "@ggui-ai/mcp-server-core";
 import {
   formatGeneratorSlug,
   isValidGeneratorSlug,
   parseGeneratorSlug,
-} from '@ggui-ai/mcp-server-core';
-import { createGeneratorTools } from './adapters/index.js';
-import { dispatchGeneration } from './adapters/generation-dispatch.js';
-import { generatorBuild } from './generator-build.js';
-import { hasProfile } from './boilerplate/styling-profile.js';
-import { effortDials } from './effort.js';
-import type { ProviderName } from './adapters/types.js';
-import type { GenerationResult } from './harness/result-types.js';
+} from "@ggui-ai/mcp-server-core";
+import { createGeneratorTools } from "./adapters/index.js";
+import { dispatchGeneration } from "./adapters/generation-dispatch.js";
+import {
+  createRuntimeRenderCheck,
+  type RuntimeRenderProbeConfig,
+} from "./harness/check/runtime-render/adapter.js";
+import { generatorBuild } from "./generator-build.js";
+import { hasProfile } from "./boilerplate/styling-profile.js";
+import { effortDials } from "./effort.js";
+import type { ProviderName } from "./adapters/types.js";
+import type { GenerationResult } from "./harness/result-types.js";
 import {
   canvasForRenderingContext,
   injectContracts,
   injectRenderingContext,
   injectVariance,
-} from './contract-context.js';
-import type { RenderingContext } from './contract-context.js';
-import type { DesignMode } from './design-mode.js';
-import { DEFAULT_DESIGN_MODE } from './design-mode.js';
-import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
-import type { QualityConfig } from './evaluation/types-public.js';
-import type { EvaluationConfig } from './evaluation/types.js';
-import type { AgentConfig } from './harness/llm-router.js';
+} from "./contract-context.js";
+import type { RenderingContext } from "./contract-context.js";
+import type { DesignMode } from "./design-mode.js";
+import { DEFAULT_DESIGN_MODE } from "./design-mode.js";
+import { resolveRoute, applyRouteToEnv } from "./adapters/provider-router.js";
+import type { QualityConfig } from "./evaluation/types-public.js";
+import type { EvaluationConfig } from "./evaluation/types.js";
+import type { AgentConfig } from "./harness/llm-router.js";
 
 /** The slug for the OSS default seed generator. */
-const DEFAULT_TIER: GeneratorTier = 'default';
-const DEFAULT_MODEL: ModelRef = 'anthropic/claude-haiku-4-5';
+const DEFAULT_TIER: GeneratorTier = "default";
+const DEFAULT_MODEL: ModelRef = "anthropic/claude-haiku-4-5";
 
 export interface CreateUiGeneratorOptions {
   /**
-   * Wire `DEFAULT_RUNTIME_RENDER_CHECK` into the harness's check leg.
-   * When `true`, the runtime-render probe runs ONCE at the exit decision,
+   * Wire the runtime-render check into the harness's check leg — one
+   * instance per generator, built from `runtimeRenderProbe` (the default
+   * bounds when it is absent). When `true`, the runtime-render probe runs
+   * ONCE at the exit decision,
    * after the coding turns, in an isolated subprocess: it mounts the
    * compiled component against the contract and catches crash-class and
    * contract-wiring bugs (a render that throws, a missing `useAction()`,
@@ -102,6 +108,17 @@ export interface CreateUiGeneratorOptions {
    * deployment that wants the probe's verdict on every card sets it.
    */
   readonly enableRuntimeRender?: boolean;
+  /**
+   * How the runtime-render probe runs its isolated worker (ggui#1380). A
+   * serving deployment sets the probe's wall-clock bound, worker heap and
+   * concurrency here; the defaults are the evaluation lane's (30 s, 512 MB,
+   * no concurrency cap). The generator builds ONE check from it and hands
+   * that instance to every generation it dispatches — the concurrency cap
+   * lives on the instance, so it bounds the workers this generator has
+   * live at once. Only read when `enableRuntimeRender` is on. Never part
+   * of the prompt or the identity.
+   */
+  readonly runtimeRenderProbe?: RuntimeRenderProbeConfig;
   /** Maximum coding attempts per generation pass. */
   readonly maxAttempts?: number;
   /** Maximum evaluation rounds. */
@@ -119,7 +136,7 @@ export interface CreateUiGeneratorOptions {
    * stylesheet to render under). Forwarded verbatim; never part of the
    * prompt or the identity. Default: none — the round runs as today.
    */
-  readonly visualEvaluation?: SingleComponentParams['visualEvaluation'];
+  readonly visualEvaluation?: SingleComponentParams["visualEvaluation"];
   /** Quality config controlling eval tiers + improvement behavior. */
   readonly qualityConfig?: QualityConfig;
   /**
@@ -200,7 +217,7 @@ export interface CreateUiGeneratorOptions {
    * request. Absent (default) is a no-op — retries still happen and
    * still log via `console.warn`, just without a caller-side hook.
    */
-  readonly onRetry?: AgentConfig['onRetry'];
+  readonly onRetry?: AgentConfig["onRetry"];
   /**
    * Generation observer. Invoked once per successful `generate()` with
    * the FULL harness result — source, compiled code, token counters,
@@ -232,11 +249,10 @@ export interface CreateUiGeneratorOptions {
   readonly designMode?: DesignMode;
 }
 
-export function createUiGenerator(
-  options: CreateUiGeneratorOptions = {},
-): UiGenerator {
+export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGenerator {
   const {
     enableRuntimeRender = false,
+    runtimeRenderProbe,
     maxAttempts,
     maxEvalRounds,
     evaluation,
@@ -248,6 +264,11 @@ export function createUiGenerator(
     onGenerated,
     designMode,
   } = options;
+  // ggui#1380 — ONE runtime-render check per generator: the instance owns
+  // the probe's concurrency cap, so it must outlive a single generation.
+  const runtimeRender = enableRuntimeRender
+    ? createRuntimeRenderCheck(runtimeRenderProbe)
+    : undefined;
 
   const identity = resolveIdentity(options);
 
@@ -284,9 +305,9 @@ export function createUiGenerator(
         });
       } catch (err) {
         return failWithoutMetadata(input, identity.slug, startedAt, {
-          code: 'PRODUCTION_FAILED',
+          code: "PRODUCTION_FAILED",
           message: err instanceof Error ? err.message : String(err),
-          details: { kind: 'route-resolution-failed' },
+          details: { kind: "route-resolution-failed" },
         });
       }
 
@@ -318,16 +339,16 @@ export function createUiGenerator(
       // flag is the only way the decision reaches `createAgent` /
       // `createVisionAgent` (which select the login client on it).
       const routeOverride =
-        route.auth === 'claude-code-login'
+        route.auth === "claude-code-login"
           ? { claudeCodeLogin: true }
           : disableEnvMutation
             ? {
                 apiKey:
-                  route.env['ANTHROPIC_API_KEY'] ??
-                  route.env['OPENAI_API_KEY'] ??
-                  route.env['GEMINI_API_KEY'] ??
-                  route.env['OPENROUTER_API_KEY'],
-                useBedrock: route.env['CLAUDE_CODE_USE_BEDROCK'] === '1',
+                  route.env["ANTHROPIC_API_KEY"] ??
+                  route.env["OPENAI_API_KEY"] ??
+                  route.env["GEMINI_API_KEY"] ??
+                  route.env["OPENROUTER_API_KEY"],
+                useBedrock: route.env["CLAUDE_CODE_USE_BEDROCK"] === "1",
               }
             : undefined;
 
@@ -353,11 +374,9 @@ export function createUiGenerator(
         // descriptors stay byte-identical).
         const canvas = rendering ? canvasForRenderingContext(rendering) : undefined;
         const shellType = harnessShellForRendering(rendering);
-        const promptWithVariance = injectVariance(
-          promptWithRendering,
-          input.variance,
-          { profileDeclared: hasProfile(input.profile) },
-        );
+        const promptWithVariance = injectVariance(promptWithRendering, input.variance, {
+          profileDeclared: hasProfile(input.profile),
+        });
 
         // Resolve appGadgets by precedence:
         //   1. input.appGadgets (caller pre-fetched, handler path)
@@ -370,14 +389,10 @@ export function createUiGenerator(
           input.appGadgets !== undefined
             ? input.appGadgets
             : gadgetCatalog !== undefined && input.appId !== undefined
-            ? await gadgetCatalog.list(input.appId)
-            : undefined;
+              ? await gadgetCatalog.list(input.appId)
+              : undefined;
 
-        const userPrompt = injectContracts(
-          promptWithVariance,
-          input.contract,
-          resolvedAppGadgets,
-        );
+        const userPrompt = injectContracts(promptWithVariance, input.contract, resolvedAppGadgets);
 
         // `effort` (ggui#1059): a named level's dials override the
         // deployment's options for THIS generation; absent ⇒ untouched.
@@ -386,7 +401,9 @@ export function createUiGenerator(
         const effectiveMaxAttempts = dials?.maxAttempts ?? maxAttempts;
         const effectiveMaxEvalRounds = dials?.maxEvalRounds ?? maxEvalRounds;
         const effectiveEvaluation =
-          dials !== undefined && evaluation !== undefined ? { ...evaluation, maxRounds: dials.maxEvalRounds } : evaluation;
+          dials !== undefined && evaluation !== undefined
+            ? { ...evaluation, maxRounds: dials.maxEvalRounds }
+            : evaluation;
         const effectiveVisualEvaluation =
           dials !== undefined && visualEvaluation !== undefined
             ? { ...visualEvaluation, passThreshold: dials.selfEvalPassThreshold }
@@ -400,21 +417,22 @@ export function createUiGenerator(
           ...(input.contract ? { contract: input.contract } : {}),
           originalPrompt: input.request.prompt,
           ...(effectiveMaxAttempts !== undefined ? { maxAttempts: effectiveMaxAttempts } : {}),
-          ...(effectiveMaxEvalRounds !== undefined ? { maxEvalRounds: effectiveMaxEvalRounds } : {}),
-          ...(effectiveEvaluation !== undefined ? { evaluation: effectiveEvaluation } : {}),
-          ...(effectiveVisualEvaluation !== undefined ? { visualEvaluation: effectiveVisualEvaluation } : {}),
-          ...(qualityConfig !== undefined ? { qualityConfig } : {}),
-          ...(resolvedAppGadgets !== undefined
-            ? { appGadgets: resolvedAppGadgets }
+          ...(effectiveMaxEvalRounds !== undefined
+            ? { maxEvalRounds: effectiveMaxEvalRounds }
             : {}),
+          ...(effectiveEvaluation !== undefined ? { evaluation: effectiveEvaluation } : {}),
+          ...(effectiveVisualEvaluation !== undefined
+            ? { visualEvaluation: effectiveVisualEvaluation }
+            : {}),
+          ...(qualityConfig !== undefined ? { qualityConfig } : {}),
+          ...(resolvedAppGadgets !== undefined ? { appGadgets: resolvedAppGadgets } : {}),
           // Forward the third-party wrapper `.d.ts` map the render
           // handler pre-fetched. Reaches both the code-gen prompt's
           // `Type:` lines and the coding-agent typecheck overlay via
           // `dispatchGeneration`.
-          ...(input.gadgetTypes !== undefined
-            ? { gadgetTypes: input.gadgetTypes }
-            : {}),
+          ...(input.gadgetTypes !== undefined ? { gadgetTypes: input.gadgetTypes } : {}),
           enableRuntimeRender,
+          ...(runtimeRender !== undefined ? { runtimeRender } : {}),
           ...(routeOverride !== undefined ? { routeOverride } : {}),
           ...(onRetry !== undefined ? { onRetry } : {}),
           ...(designMode !== undefined ? { designMode } : {}),
@@ -468,12 +486,12 @@ export function createUiGenerator(
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const details: JsonObject = { kind: 'harness-failed' };
-        if (err instanceof Error && err.stack) details['stack'] = err.stack;
+        const details: JsonObject = { kind: "harness-failed" };
+        if (err instanceof Error && err.stack) details["stack"] = err.stack;
         return {
           ok: false,
           error: {
-            code: 'PRODUCTION_FAILED',
+            code: "PRODUCTION_FAILED",
             message,
             details,
           },
@@ -505,11 +523,9 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
   tier: GeneratorTier;
   model: ModelRef;
 } {
-  const hasSlug = typeof opts.slug === 'string' && opts.slug.length > 0;
+  const hasSlug = typeof opts.slug === "string" && opts.slug.length > 0;
   if (hasSlug && opts.tier !== undefined) {
-    throw new Error(
-      'createUiGenerator: pass either { slug } or { tier } — not both.',
-    );
+    throw new Error("createUiGenerator: pass either { slug } or { tier } — not both.");
   }
   const model = opts.model ?? DEFAULT_MODEL;
   if (hasSlug) {
@@ -517,7 +533,7 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
     const parsed = parseGeneratorSlug(slug);
     if (!parsed || !isGeneratorId(slug)) {
       throw new Error(
-        `createUiGenerator: slug ${JSON.stringify(slug)} is not a valid ui-gen-<tier> identifier.`,
+        `createUiGenerator: slug ${JSON.stringify(slug)} is not a valid ui-gen-<tier> identifier.`
       );
     }
     return { slug, tier: parsed.tier, model };
@@ -529,7 +545,7 @@ function resolveIdentity(opts: CreateUiGeneratorOptions): {
     // so a slug it returns must parse. Defensive check kept to surface
     // any future drift between the two helpers.
     throw new Error(
-      `createUiGenerator: formatted slug ${JSON.stringify(slug)} round-trips as invalid — formatGeneratorSlug/isValidGeneratorSlug drift.`,
+      `createUiGenerator: formatted slug ${JSON.stringify(slug)} round-trips as invalid — formatGeneratorSlug/isValidGeneratorSlug drift.`
     );
   }
   return { slug, tier, model };
@@ -554,7 +570,7 @@ function metadataRuntimeProbe(result: GenerationResult): GenerationRuntimeProbe 
     ...(repair !== undefined
       ? {
           repair:
-            'afterStatus' in repair
+            "afterStatus" in repair
               ? { attempted: true, compiled: true, afterStatus: repair.afterStatus }
               : { attempted: true, compiled: false },
         }
@@ -575,15 +591,15 @@ function metadataEvalMs(result: GenerationResult): number | undefined {
 
 function mapLlmProviderToDispatchProvider(provider: LlmProvider): ProviderName {
   switch (provider) {
-    case 'anthropic':
-    case 'bedrock':
-      return 'claude';
-    case 'openai':
-      return 'openai';
-    case 'google':
-      return 'google';
-    case 'openrouter':
-      return 'openrouter';
+    case "anthropic":
+    case "bedrock":
+      return "claude";
+    case "openai":
+      return "openai";
+    case "google":
+      return "google";
+    case "openrouter":
+      return "openrouter";
   }
 }
 
@@ -597,20 +613,18 @@ function mapLlmProviderToDispatchProvider(provider: LlmProvider): ProviderName {
  * yet, so both pass no shell and those generations stay byte-identical — named
  * here rather than guessed.
  */
-function harnessShellForRendering(rendering: RenderingContext | undefined): 'chat' | undefined {
+function harnessShellForRendering(rendering: RenderingContext | undefined): "chat" | undefined {
   if (rendering === undefined) return undefined;
   switch (rendering.shell) {
-    case 'chat':
-      return 'chat';
-    case 'fullscreen':
-    case 'partial':
+    case "chat":
+      return "chat";
+    case "fullscreen":
+    case "partial":
       return undefined;
   }
 }
 
-function mapRendering(
-  rendering: UiGenerateInput['rendering'],
-): RenderingContext | undefined {
+function mapRendering(rendering: UiGenerateInput["rendering"]): RenderingContext | undefined {
   if (!rendering) return undefined;
   return {
     device: rendering.device,
@@ -623,7 +637,7 @@ function failWithoutMetadata(
   input: UiGenerateInput,
   generatorSlug: GeneratorId,
   startedAt: number,
-  error: GenerationError,
+  error: GenerationError
 ): UiGenerateResult {
   return {
     ok: false,
@@ -655,18 +669,18 @@ export function extractComponentCode(raw: string): string {
   const fences: Array<{ lang: string; body: string }> = [];
   let match: RegExpExecArray | null;
   while ((match = fencePattern.exec(raw)) !== null) {
-    const lang = (match[1] ?? '').toLowerCase();
-    const body = match[2] ?? '';
+    const lang = (match[1] ?? "").toLowerCase();
+    const body = match[2] ?? "";
     fences.push({ lang, body });
   }
 
   if (fences.length > 0) {
-    const priority = ['tsx', 'jsx', 'typescript', 'ts', 'javascript', 'js', ''];
+    const priority = ["tsx", "jsx", "typescript", "ts", "javascript", "js", ""];
     for (const preferred of priority) {
       const hit = fences.find((f) => f.lang === preferred);
       if (hit) return hit.body.trim();
     }
-    const firstBody = fences[0]?.body ?? '';
+    const firstBody = fences[0]?.body ?? "";
     return firstBody.trim();
   }
 

@@ -48,12 +48,61 @@ import type { ProbeHostLoad } from '../../../evaluation/types-public.js';
 import type { RenderCheckResult, RunRenderCheckInput } from './render-check.js';
 
 /**
- * Wall-clock bound for one isolated check. The rich probe renders,
- * clicks every declared action, and re-renders streams — slower than
- * the smoke worker's 12s budget; 30s bounds runaway components while
- * staying far under any generation-turn budget.
+ * The subprocess bounds of one isolated check (ggui#1380). They are
+ * INPUTS of the host, not constants: a serving deployment runs the probe
+ * under its own memory and latency budget and sets them per check
+ * instance (`createRuntimeRenderCheck`); the evaluation lane runs on the
+ * defaults below, which are the values the host always used.
  */
-const CHECK_TIMEOUT_MS = 30_000;
+export interface RenderCheckHostBounds {
+  /**
+   * Wall-clock bound for one isolated check. The rich probe renders,
+   * clicks every declared action, and re-renders streams — slower than
+   * the smoke worker's 12s budget; 30s bounds runaway components while
+   * staying far under any generation-turn budget.
+   */
+  readonly timeoutMs: number;
+  /**
+   * V8 heap cap. The worker realm loads react-dom, happy-dom and
+   * testing-library on top of the component itself; 512 MB leaves
+   * headroom while still bounding pathological allocation.
+   */
+  readonly heapMb: number;
+  /**
+   * Grace between SIGTERM and SIGKILL once the bound is crossed. The
+   * effective value is `min(gracePeriodMs, floor(timeoutMs / 2))` —
+   * `runSandboxed` requires the grace to be strictly below the bound, so
+   * a short bound never trips its RangeError.
+   */
+  readonly gracePeriodMs: number;
+}
+
+export const DEFAULT_RENDER_CHECK_HOST_BOUNDS: RenderCheckHostBounds = {
+  timeoutMs: 30_000,
+  heapMb: 512,
+  gracePeriodMs: 2_000,
+};
+
+/**
+ * Fill the caller's partial bounds from the defaults and clamp the grace
+ * below the bound. Exported so the kill-path pin can run a fixture under
+ * exactly the numbers the host would pass for the same input.
+ */
+export function resolveRenderCheckHostBounds(
+  bounds: Partial<RenderCheckHostBounds> = {},
+): RenderCheckHostBounds {
+  const timeoutMs = bounds.timeoutMs ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.timeoutMs;
+  const heapMb = bounds.heapMb ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.heapMb;
+  const requestedGrace = bounds.gracePeriodMs ?? DEFAULT_RENDER_CHECK_HOST_BOUNDS.gracePeriodMs;
+  const gracePeriodMs = Math.min(requestedGrace, Math.floor(timeoutMs / 2));
+  return { timeoutMs, heapMb, gracePeriodMs };
+}
+
+/** Options of {@link runRenderCheckViaWorker}. */
+export interface RenderCheckHostOptions {
+  /** Subprocess bounds; every field omitted falls to {@link DEFAULT_RENDER_CHECK_HOST_BOUNDS}. */
+  readonly bounds?: Partial<RenderCheckHostBounds>;
+}
 
 /**
  * stdout cap. The verdict JSON carries issue lists with diagnostics
@@ -61,13 +110,6 @@ const CHECK_TIMEOUT_MS = 30_000;
  * absolute terms. 2 MiB is far above any legitimate verdict.
  */
 const CHECK_STDOUT_CAP = 2 * 1024 * 1024;
-
-/**
- * V8 heap cap. The worker realm loads react-dom, happy-dom and
- * testing-library on top of the component itself; 512 MB leaves
- * headroom while still bounding pathological allocation.
- */
-const CHECK_NODE_HEAP_MB = 512;
 
 const WORKER_BASENAME = 'render-check-worker';
 
@@ -126,18 +168,20 @@ function unverified(reason: string, t0: number): RenderCheckResult {
 }
 
 /**
- * Map one sandbox result onto a `RenderCheckResult`. Exported for the
- * unit pins — the spawn itself is exercised by the integration test.
+ * Map one sandbox result onto a `RenderCheckResult`. `boundMs` is the
+ * wall-clock bound the run was given, reported on a timeout. Exported for
+ * the unit pins — the spawn itself is exercised by the integration test.
  */
 export function mapSandboxResultToCheckResult(
   result: SandboxResult,
   t0: number,
+  boundMs: number = DEFAULT_RENDER_CHECK_HOST_BOUNDS.timeoutMs,
 ): RenderCheckResult {
   if (result.outcome === 'timeout') {
     return {
       ok: false,
       issues: [],
-      incomplete: { kind: 'timeout', elapsedMs: result.durationMs, boundMs: CHECK_TIMEOUT_MS },
+      incomplete: { kind: 'timeout', elapsedMs: result.durationMs, boundMs },
       stats: { actionsChecked: 0, streamsChecked: 0, renderMs: Date.now() - t0 },
     };
   }
@@ -187,11 +231,15 @@ export function mapSandboxResultToCheckResult(
 
 /**
  * Run the render check in an isolated subprocess. See module doc.
+ * `options.bounds` sets the subprocess bounds for this run; omitted
+ * fields are the evaluation lane's defaults.
  */
 export async function runRenderCheckViaWorker(
   input: RunRenderCheckInput,
+  options: RenderCheckHostOptions = {},
 ): Promise<RenderCheckResult> {
   const t0 = Date.now();
+  const bounds = resolveRenderCheckHostBounds(options.bounds);
   let spawn: { command: string; args: string[] };
   try {
     spawn = resolveWorkerSpawn();
@@ -203,9 +251,10 @@ export async function runRenderCheckViaWorker(
   const result = await runSandboxed({
     command: spawn.command,
     args: spawn.args,
-    timeoutMs: CHECK_TIMEOUT_MS,
+    timeoutMs: bounds.timeoutMs,
+    gracePeriodMs: bounds.gracePeriodMs,
     maxStdoutBytes: CHECK_STDOUT_CAP,
-    nodeHeapMb: CHECK_NODE_HEAP_MB,
+    nodeHeapMb: bounds.heapMb,
     stdin: JSON.stringify(input),
     // NODE_ENV steers React's production vs development build — keep
     // parity with the caller; everything else stays on the sandbox's
@@ -218,6 +267,6 @@ export async function runRenderCheckViaWorker(
     end: loadavg()[0] ?? 0,
     cores: availableParallelism(),
   };
-  const mapped = mapSandboxResultToCheckResult(result, t0);
+  const mapped = mapSandboxResultToCheckResult(result, t0, bounds.timeoutMs);
   return { ...mapped, stats: { ...mapped.stats, hostLoad } };
 }
