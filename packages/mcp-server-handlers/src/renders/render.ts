@@ -128,12 +128,13 @@ import {
   readBlueprintById,
   registerBlueprint,
 } from './blueprint-registry.js';
-import {
-  assertGadgetsRegistered,
-  filterDescriptorsToContract,
-} from './assert-gadgets.js';
 import { fetchGadgetTypes } from './fetch-gadget-types.js';
-import { assertPublicEnvSatisfied } from './assert-public-env.js';
+import {
+  appGadgetsForContract,
+  generatorInputForStory,
+  storyForHandshake,
+  type HandshakeGenerationStory,
+} from './handshake-generation-inputs.js';
 import type { LLMCaller } from '@ggui-ai/negotiator';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
@@ -143,7 +144,6 @@ import {
   ContractViolationError,
   validateContract,
   renderInputShape,
-  resolveAppGadgets,
   renderOutputSchema,
   type GenerationError,
   type GguiRenderOutput,
@@ -1398,14 +1398,19 @@ export function createGguiRenderHandler(
     // accept-vs-override on the cache trace; the STRICT override-
     // contract gate keys on it too (an unchanged agreed contract never
     // fails that gate).
-    const effectiveContract: DataContract =
-      override?.contract ?? handshakeRecord.effectiveContract;
+    //
     // Accept path — the negotiator's projected variance on the
     // suggestion is canonical (carries agent draft for origin=agent,
     // cached blueprint's tags for origin=cache, synth-amended tags for
     // origin=synth). Override re-aims it.
-    const effectiveVariance: BlueprintVariance | undefined =
-      override?.variance ?? handshakeRecord.suggestion.blueprintMeta.variance;
+    //
+    // The effective story is `storyForHandshake` — the same pure
+    // derivation a caller uses to start this render's generation early
+    // (ggui#1321), so the two cannot disagree on intent / contract /
+    // variance.
+    const story: HandshakeGenerationStory = storyForHandshake(handshakeRecord, override);
+    const effectiveContract: DataContract = story.contract;
+    const effectiveVariance: BlueprintVariance | undefined = story.variance;
     const acceptanceClassification: 'accept' | 'override' =
       override === undefined ? 'accept' : 'override';
 
@@ -1445,19 +1450,6 @@ export function createGguiRenderHandler(
             })`
           : `render-classify: agent overrode handshake suggestion with a fresh draft`,
     });
-
-    // Effective story for the rest of the handler.
-    const story: {
-      readonly intent: string;
-      readonly contract: DataContract;
-      readonly variance?: BlueprintVariance;
-    } = {
-      intent: storedInput.intent,
-      contract: effectiveContract,
-      ...(effectiveVariance !== undefined
-        ? { variance: effectiveVariance }
-        : {}),
-    };
 
     // Effective variant axis of the reuse key — computed once from the
     // EFFECTIVE variance (proposed on accept, re-aimed on
@@ -1564,17 +1556,9 @@ export function createGguiRenderHandler(
     // connect[]. No-op when `appMetadataStore` is unset.
     if (deps.appMetadataStore) {
       const appRecord = await deps.appMetadataStore.get(ctx.appId);
-      const appGadgets = resolveAppGadgets(appRecord?.gadgets);
-      assertGadgetsRegistered(story.contract, appGadgets);
-      assertPublicEnvSatisfied(
-        story.contract,
-        appGadgets,
-        appRecord?.publicEnv,
-      );
-      resolvedAppLibraries = filterDescriptorsToContract(
-        story.contract,
-        appGadgets,
-      );
+      // The same step a caller runs to start this render's generation
+      // early (ggui#1321): resolve, check (refusals throw), filter.
+      resolvedAppLibraries = appGadgetsForContract(story.contract, appRecord);
       appTheme = appRecord?.theme;
     }
 
@@ -3396,25 +3380,19 @@ async function runGenerationIntoGguiSession(
   const nowEpochMs = Date.now();
 
   // Credential-free input shape — both the override path and the
-  // OSS path build their generator input on top of this.
-  const generateInputBase: Omit<UiGenerateInput, 'llm' | 'providerKey'> = {
-    request: {
-      sessionId,
-      prompt: story.intent,
-      ...(isJsonObject(story.context) ? { context: story.context } : {}),
-    },
+  // OSS path build their generator input on top of this. It is
+  // `generatorInputForStory` plus this render's `sessionId`: the same
+  // pure builder a caller uses to start the generation early
+  // (ggui#1321), so nothing but the session id can differ.
+  const storyInput = generatorInputForStory(story, {
     blueprints: generation.blueprints,
-    ...(story.contract !== undefined
-      ? { contract: story.contract }
-      : {}),
-    ...(story.variance !== undefined ? { variance: story.variance } : {}),
-    ...(args.appGadgets !== undefined
-      ? { appGadgets: args.appGadgets }
-      : {}),
-    ...(args.gadgetTypes !== undefined
-      ? { gadgetTypes: args.gadgetTypes }
-      : {}),
+    ...(args.appGadgets !== undefined ? { appGadgets: args.appGadgets } : {}),
+    ...(args.gadgetTypes !== undefined ? { gadgetTypes: args.gadgetTypes } : {}),
     ...(args.infra !== undefined ? { infra: args.infra } : {}),
+  });
+  const generateInputBase: Omit<UiGenerateInput, 'llm' | 'providerKey'> = {
+    ...storyInput,
+    request: { sessionId, ...storyInput.request },
   };
 
   let result: Awaited<ReturnType<UiGenerator['generate']>>;
@@ -3881,17 +3859,6 @@ async function safelyFinalizePreview(
     // Swallow. The runner's own terminal outcome already fired; a
     // second-order cancel rejection isn't worth propagating.
   }
-}
-
-/**
- * Narrow-only passthrough guard so we can forward `story.context`
- * into `UIGenerationRequest` without losing type safety. The zod
- * schema on `story` is `.passthrough()` so the field arrives as
- * `unknown`; we accept the minimum structural shape the generator
- * contract requires.
- */
-function isJsonObject(v: unknown): v is JsonObject {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /**

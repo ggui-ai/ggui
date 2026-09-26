@@ -180,6 +180,17 @@ export {
   type WsTokenRefreshSeam,
 } from "./refresh-ws-token.js";
 export {
+  appGadgetsForContract,
+  generationInputsForHandshake,
+  generatorInputForStory,
+  storyForHandshake,
+  type HandshakeGenerationInput,
+  type HandshakeGenerationResolved,
+  type HandshakeGenerationStory,
+  type HandshakeRenderOverride,
+} from "./handshake-generation-inputs.js";
+export { fetchGadgetTypes } from "./fetch-gadget-types.js";
+export {
   createGguiRenderHandler,
   type ChannelNotifier,
   type GenerationCredentials,
