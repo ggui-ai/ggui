@@ -1836,8 +1836,9 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).toContain(
       'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST.',
     );
+    // ggui#1417 / #1399: amend is the in-place default, update a new card.
     expect(d).toContain(
-      'MUTATION: ggui_update mutates props on a delivered UI. NEVER re-render to mutate',
+      'MUTATION: change a delivered UI with ggui_amend (repaints the SAME card in place — the default) or ggui_update (a NEW card for a milestone); NEVER re-render to mutate',
     );
     expect(d).toContain('WIRE SURFACE (DataContract). PLACEMENT RULE for the two inbound specs:');
     expect(d).toContain(
