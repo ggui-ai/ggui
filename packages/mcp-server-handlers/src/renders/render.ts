@@ -489,11 +489,13 @@ export interface BlueprintResolutionEvent {
    * `existing` = an already-bound row's id; `minted` = this render's
    * registration created the row; `unregistered` = the best-effort
    * registration failed and no id was minted; `ephemeral` = fresh code served
-   * under an id this render minted WITHOUT registering, because a
-   * `forceCreate` render found the key occupied (ggui#1405: first-write-wins
-   * keeps the incumbent, and the incumbent's id is never recorded for code
-   * it did not produce). `existing` is never emitted beside `served: 'fresh'`
-   * for a force-create.
+   * under an id this render minted WITHOUT registering, because its
+   * registration found the key bound to DIFFERENT code — a `forceCreate`, a
+   * render that took no index read, or one that lost a race (ggui#1405:
+   * first-write-wins keeps the incumbent, and the incumbent's id is never
+   * recorded for code it did not produce). `existing` beside `served:
+   * 'fresh'` means the regenerated code is byte-identical to the bound row's,
+   * so that row IS the served card.
    */
   readonly identity: 'existing' | 'minted' | 'unregistered' | 'ephemeral';
   /**
@@ -911,12 +913,15 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * package ships no default; a host wires it to its own sink.
    *
    * `identity` derives from the registry's `deduped` flag — never inferred.
-   * A forced regeneration at an occupied key serves fresh code under an
+   * A fresh generation whose registration finds its key bound to DIFFERENT
+   * code — a forced regeneration, a render that took no index read (a
+   * deployment with no reuse negotiator; a repaired contract whose key is
+   * already bound), or one that lost a race — serves its code under an
    * EPHEMERAL, content-addressed id of its own (`identity: 'ephemeral'`,
    * ggui#1405): the incumbent keeps the row and is never credited for code
-   * it did not produce. `served: 'fresh'` with `identity: 'existing'` remains
-   * only for a NON-forced cold-gen whose registration deduped (two renders
-   * racing at one fresh key) — named as itself, never laundered as a reuse.
+   * it did not produce. When the regenerated code is byte-identical to the
+   * bound row's, the row IS the served card: `served: 'fresh'` with
+   * `identity: 'existing'`.
    * Not emitted in placeholder mode (no blueprint resolution occurs) nor
    * when generation fails (nothing was served).
    */
@@ -2406,16 +2411,18 @@ export function createGguiRenderHandler(
                       },
                     );
                     // ggui#1131 (d) — the identity is what the registry SAID, never inferred.
-                    // ggui#1405 — a force-create that dedupes found its key occupied: the
-                    // incumbent keeps the row (first-write-wins) and this render serves its
-                    // fresh code under an EPHEMERAL, content-addressed id of its own, so the
-                    // identity row and the wire never credit the incumbent for code it did
-                    // not produce. A non-forced dedupe keeps naming the row's id as `existing`.
+                    // ggui#1405 — a registration that dedupes found its key already bound.
+                    // If the bound row's code IS the code just generated (byte for byte),
+                    // the row is the served card and its id is true: `existing`. Otherwise
+                    // the incumbent keeps the row (first-write-wins) and this render serves
+                    // its fresh code under an EPHEMERAL, content-addressed id of its own, so
+                    // the identity row and the wire never credit the incumbent for code it
+                    // did not produce.
                     if (reg === undefined) {
                       registrationIdentity = 'unregistered';
                       return undefined;
                     }
-                    if (reg.deduped && forceCreate) {
+                    if (reg.deduped && !reg.sameCode) {
                       registrationIdentity = 'ephemeral';
                       return ephemeralBlueprintId(produced.componentCode);
                     }
@@ -4054,10 +4061,22 @@ async function safelyRegisterBlueprint(
     : Parameters<typeof registerBlueprint>[0],
   scope: string,
   input: Parameters<typeof registerBlueprint>[2],
-): Promise<{ readonly id: string; readonly deduped: boolean } | undefined> {
+): Promise<
+  | {
+      readonly id: string;
+      readonly deduped: boolean;
+      /** On a dedupe: whether the bound row's code is byte-identical to the code registered now (ggui#1405). */
+      readonly sameCode: boolean;
+    }
+  | undefined
+> {
   try {
     const registered = await registerBlueprint(deps, scope, input);
-    return { id: registered.id, deduped: registered.deduped };
+    return {
+      id: registered.id,
+      deduped: registered.deduped,
+      sameCode: registered.deduped && registered.componentCode === input.componentCode,
+    };
   } catch (err) {
     // Best-effort registration — the live render already produced
     // valid code + the row was committed; only the future cache-hit

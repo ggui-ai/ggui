@@ -2960,6 +2960,54 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     expect(await h.index.getId(APP_ID, composeExactKey('template', blueprintKey(OVERRIDE_CONTRACT), variantKey(undefined)))).toBe(reaimedUuid); // first-write-wins kept the incumbent
   });
 
+  it('(j) a NON-forced cold-gen whose registration dedupes — another render won the key after the handshake — serves an EPHEMERAL id too, never the incumbent (#1405)', async () => {
+    const events: ResolutionEvent[] = [];
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    // A row already bound at CONTRACT's key with OTHER code (a racer's, or a
+    // deployment with no reuse negotiator): the `agent`-origin handshake takes
+    // no index read, so the render cold-gens and its registration dedupes.
+    const racerUuid = 'bp_88888888-8888-4888-8888-888888888888';
+    await registerAt({ vectorStore, index }, CONTRACT, racerUuid);
+    const handshakeId = 'hs-race-1';
+    await seedHandshake(handshakeStore, handshakeId, buildRecord({ handshakeId, origin: 'agent' }));
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE, renderIdentityStore, onBlueprintResolution: (e) => events.push(e) });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ strategy: 'proposed', indexRead: 'skipped', served: 'fresh', identity: 'ephemeral' });
+    expect((await renderIdentityStore.get(out.sessionId))?.blueprintId).toBe(ephemeralBlueprintId(COLD_CODE)); // the identity row, not only the wire
+    const ephemeral = ephemeralBlueprintId(COLD_CODE);
+    expect(events[0]?.blueprintId).toBe(ephemeral);
+    expect(out.blueprintId).toBe(ephemeral);
+    expect(await index.getId(APP_ID, composeExactKey('template', blueprintKey(CONTRACT), variantKey(undefined)))).toBe(racerUuid); // the racer keeps the key
+  });
+
+  it('(j) a dedupe whose bound row holds the SAME code keeps that row\'s id as EXISTING — the row IS the served card (#1405)', async () => {
+    const events: ResolutionEvent[] = [];
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const boundUuid = 'bp_99999999-9999-4999-8999-999999999999';
+    await registerBlueprint(
+      { embedding: fakeEmbedding, vectorStore, index },
+      APP_ID,
+      { kind: 'template', contract: CONTRACT, intent: 'a test card', componentCode: COLD_CODE, source: { kind: 'llm', generator: 'ui-gen-fake', model: 'anthropic/claude-haiku-4-5' } },
+      { mintId: () => boundUuid },
+    );
+    const handshakeId = 'hs-same-code-1';
+    await seedHandshake(handshakeStore, handshakeId, buildRecord({ handshakeId, origin: 'agent' }));
+    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE, onBlueprintResolution: (e) => events.push(e) });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events[0]).toMatchObject({ served: 'fresh', identity: 'existing', blueprintId: boundUuid });
+    expect(out.blueprintId).toBe(boundUuid);
+  });
+
   it('(j) a non-forced re-aim with no row at the key still MINTS — the ephemeral id is never produced off the force-create path (#1405)', async () => {
     const events: ResolutionEvent[] = [];
     const h = await buildWithHook((e) => events.push(e));
