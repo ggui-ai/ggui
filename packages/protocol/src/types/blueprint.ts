@@ -257,12 +257,16 @@ export interface Blueprint {
    * Absent on rows minted before the stamp existed and on engines that
    * report no build; absence means the minting build is unknown, and a
    * reader reports it as such rather than failing the row (the first such
-   * reader is the serve trace's `mintedBy`, ggui#1280 read side). Declared
-   * on one release and emitted from the next — the previous release's
-   * `ggui_ops_list_blueprints` output validation parses rows with the
-   * strict `blueprintSchema` and would refuse a stamped one — so a store
-   * MUST persist what it is given here even while no writer produces it
-   * (graded by the `BlueprintStore` conformance kit).
+   * reader is the serve trace's `mintedBy`, ggui#1280 read side). Written
+   * by a generation mint only — a cold-generated render's registration and
+   * an operator-invoked generation; an operator-registered, installed or
+   * seed-imported row never carries it, and a stamp that fails
+   * {@link generatorBuildSchema} is dropped at registration rather than
+   * stored. Declared one release before any writer emitted it, because the
+   * previous release's `ggui_ops_list_blueprints` output validation parses
+   * rows with the strict `blueprintSchema` and would refuse a stamped one.
+   * A store MUST persist what it is given here (graded by the
+   * `BlueprintStore` conformance kit).
    */
   readonly build?: GeneratorBuild;
 }

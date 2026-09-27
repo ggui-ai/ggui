@@ -14,7 +14,7 @@
  * Pure-function catalog: no transport, no adopter input — graded on every
  * `runConformance()` and by the kit's own unit lane.
  */
-import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, handshakeSuggestionSchema, opsGenerateBlueprintInputSchema, parseAppThemeAtReadDoor, renderOutputSchema } from '@ggui-ai/protocol';
+import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, handshakeSuggestionSchema, opsGenerateBlueprintInputSchema, opsListBlueprintsOutputSchema, parseAppThemeAtReadDoor, renderOutputSchema } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
@@ -26,12 +26,14 @@ import release2GenerationProfile from './cases/release-2-generation-profile.json
 import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-blueprint.json' with { type: 'json' };
 import release91HandshakeSuggestion from './cases/release-9-1-handshake-suggestion.json' with { type: 'json' };
 import release13RenderResult from './cases/release-13-render-result.json' with { type: 'json' };
+import release14OpsListBlueprints from './cases/release-14-ops-list-blueprints.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
+import forwardOpsListBlueprintsStamped from './cases/forward-ops-list-blueprints-stamped.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint', 'handshake-suggestion', 'render-result'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint', 'handshake-suggestion', 'render-result', 'ops-list-blueprints'] as const;
 
 /** `backward`: the previous release's payload against today's parser. `forward`: a later release's payload against today's READ door. */
 export const N1_COMPAT_DIRECTIONS = ['backward', 'forward'] as const;
@@ -120,9 +122,11 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release2OpsGenerateBlueprint,
   release91HandshakeSuggestion,
   release13RenderResult,
+  release14OpsListBlueprints,
   forwardAppThemeUnknownMember,
   forwardAppThemeCarryUnknownMember,
   forwardRenderMetaUnknownMember,
+  forwardOpsListBlueprintsStamped,
 ].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
@@ -232,25 +236,61 @@ function gradeRenderResult(payload: unknown): { pass: boolean; detail: string } 
     : { pass: false, detail: `renderOutputSchema refused the previous release's render result: ${r.error.issues.map((i) => i.message).join('; ')}` };
 }
 
+// ggui#1280 — the blueprint rows the served release lists must keep parsing once
+// rows carry the minting build, and a row that carries none must not gain one:
+// absence is the unknown-build category, never a value a reader fills in.
+function gradeOpsListBlueprints(payload: unknown): { pass: boolean; detail: string } {
+  const r = opsListBlueprintsOutputSchema.safeParse(payload);
+  if (!r.success) {
+    return { pass: false, detail: `opsListBlueprintsOutputSchema refused the previous release's list: ${r.error.issues.map((i) => i.message).join('; ')}` };
+  }
+  const sent = isRecord(payload) && Array.isArray(payload['blueprints']) ? payload['blueprints'] : [];
+  for (const [i, row] of r.data.blueprints.entries()) {
+    const sentRow: unknown = sent[i];
+    const sentBuild = isRecord(sentRow) ? sentRow['build'] : undefined;
+    if (canonicalJson(row.build) !== canonicalJson(sentBuild)) {
+      return { pass: false, detail: `row ${i}'s build changed across the parse (sent ${canonicalJson(sentBuild)}, parsed ${canonicalJson(row.build)})` };
+    }
+  }
+  return { pass: true, detail: `opsListBlueprintsOutputSchema: accepted, ${r.data.blueprints.length} row(s), build kept as sent` };
+}
+
+/**
+ * One grader per wire, exhaustively: a wire added to {@link N1_COMPAT_WIRES}
+ * without an arm here does not compile, rather than falling through to
+ * another wire's grader.
+ */
+function gradeWire(wire: N1CompatWire, payload: unknown): { pass: boolean; detail: string } {
+  switch (wire) {
+    case 'app-theme':
+      return gradeAppTheme(payload);
+    case 'app-theme-read':
+      return gradeAppThemeRead(payload);
+    case 'app-theme-carry':
+      return gradeAppThemeCarry(payload);
+    case 'render-meta':
+      return gradeRenderMeta(payload);
+    case 'generation-profile':
+      return gradeGenerationProfile(payload);
+    case 'ops-generate-blueprint':
+      return gradeOpsGenerateBlueprint(payload);
+    case 'handshake-suggestion':
+      return gradeHandshakeSuggestion(payload);
+    case 'render-result':
+      return gradeRenderResult(payload);
+    case 'ops-list-blueprints':
+      return gradeOpsListBlueprints(payload);
+    default: {
+      const unhandled: never = wire;
+      return { pass: false, detail: `no grader for wire ${String(unhandled)}` };
+    }
+  }
+}
+
 /** Grade every N−1 case against the protocol as shipped. */
 export function runN1CompatConformance(): readonly N1CompatResult[] {
   return N1_COMPAT_CASES.map((c) => {
-    const graded =
-      c.wire === 'app-theme'
-        ? gradeAppTheme(c.payload)
-        : c.wire === 'app-theme-read'
-          ? gradeAppThemeRead(c.payload)
-        : c.wire === 'app-theme-carry'
-          ? gradeAppThemeCarry(c.payload)
-        : c.wire === 'render-meta'
-          ? gradeRenderMeta(c.payload)
-          : c.wire === 'generation-profile'
-            ? gradeGenerationProfile(c.payload)
-          : c.wire === 'handshake-suggestion'
-            ? gradeHandshakeSuggestion(c.payload)
-            : c.wire === 'render-result'
-              ? gradeRenderResult(c.payload)
-            : gradeOpsGenerateBlueprint(c.payload);
+    const graded = gradeWire(c.wire, c.payload);
     return { name: c.name, direction: c.direction, pass: graded.pass, detail: `${c.release.label} (${c.release.sha}) → ${graded.detail}` };
   });
 }

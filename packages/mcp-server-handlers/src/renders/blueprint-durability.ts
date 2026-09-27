@@ -155,6 +155,10 @@ export function projectDurableBlueprint(
     ...(blueprint.sourceCodeHash !== undefined
       ? { sourceCodeHash: blueprint.sourceCodeHash }
       : {}),
+    // ggui#1280 — the minting engine's build, admitted at registration.
+    // Written once here at mint (a dedup never reaches this projection) and
+    // never rewritten; the durable record is the stamp's only home.
+    ...(blueprint.build !== undefined ? { build: blueprint.build } : {}),
   };
 }
 

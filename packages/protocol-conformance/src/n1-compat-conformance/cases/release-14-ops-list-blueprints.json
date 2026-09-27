@@ -1,0 +1,41 @@
+{
+  "name": "release-14-ops-list-blueprints",
+  "description": "A ggui_ops_list_blueprints result as ggui tag 14 (b68b964a7, serving prod and staging) emitted it for one generation-minted row, captured from staging serving that tag (`ggui-protocol-b68b964a7737`, 2026-09-27T16:40Z) on a fixture app after one cold render. Every byte is verbatim except `codeS3Url`: its bucket names the hosted deployment's store, so the value keeps the served shape (`s3://<bucket>/code/<codeHash>.js`) over a neutral bucket. The row carries NO `build`: tag 14 declares the stamp and no writer emits it. Today's opsListBlueprintsOutputSchema MUST accept the result, and the parsed row MUST still carry no `build` — an unstamped row reads as an unknown minting build, never an error, and a reader never invents one (ggui#1280, VERSION-POLICY §3.6).",
+  "release": {
+    "label": "ggui tag 14",
+    "sha": "b68b964a7"
+  },
+  "wire": "ops-list-blueprints",
+  "payload": {
+    "blueprints": [
+      {
+        "blueprintId": "bp_35eb73be-51be-479f-a0e3-dad47ea57739",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "openai/gpt-6-luna"
+        },
+        "variance": {},
+        "createdAt": "2026-09-27T16:40:27.386Z",
+        "createdBy": "agent",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": "accepted"
+}

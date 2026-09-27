@@ -279,6 +279,7 @@ export {
   listBlueprints,
   recordBlueprintHit,
   registerBlueprint,
+  admitGeneratorBuild,
   type Blueprint,
   type BlueprintCandidate,
   type BlueprintIndex,

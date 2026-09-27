@@ -66,6 +66,7 @@ import {
   type BlueprintVariance,
   type DataContract,
   type ComponentGguiSession,
+  type GeneratorBuild,
 } from '@ggui-ai/protocol';
 import {
   asGguiRenderBootstrap,
@@ -168,7 +169,12 @@ const fakeEmbedding: EmbeddingProvider = {
 
 /** Pre-resolved generator escape hatch — returns fixed componentCode,
  *  no LLM. */
-function fakeGenerator(componentCode: string, sourceCode?: string, effort?: AppGenerationProfileEffort) {
+function fakeGenerator(
+  componentCode: string,
+  sourceCode?: string,
+  effort?: AppGenerationProfileEffort,
+  build?: GeneratorBuild,
+) {
   return async (
     input: { request: { sessionId: string } },
   ): Promise<UiGenerateResult> => ({
@@ -187,6 +193,7 @@ function fakeGenerator(componentCode: string, sourceCode?: string, effort?: AppG
       latencyMs: 0,
       cacheHit: false,
       ...(effort !== undefined ? { effort } : {}),
+      ...(build !== undefined ? { build } : {}),
     },
   });
 }
@@ -231,6 +238,8 @@ function buildHandler(opts: {
   readonly coldCode: string;
   /** ggui#1459 — the level the fake generator reports it applied (`metadata.effort`). */
   readonly coldEffort?: AppGenerationProfileEffort;
+  /** ggui#1280 — the build the fake generator reports (`metadata.build`). */
+  readonly coldBuild?: GeneratorBuild;
   /**
    * Optional authored source the fake generator's response carries
    * alongside `coldCode` — threads through to
@@ -325,7 +334,7 @@ function buildHandler(opts: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
         model: 'anthropic/claude-haiku-4-5',
-        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort),
+        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild),
       },
       resolveLlm: () => null,
       blueprints: { get: async () => null, list: async () => [] },
@@ -336,7 +345,7 @@ function buildHandler(opts: {
         ...(opts.cacheDurability ? { durability: opts.cacheDurability } : {}),
       },
     },
-    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort),
+    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild),
   });
 }
 
@@ -543,6 +552,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   /** ggui#1459 — see {@link buildHandler}'s `coldEffort`. */
   readonly coldEffort?: AppGenerationProfileEffort;
+  /** ggui#1280 — see {@link buildHandler}'s `coldBuild`. */
+  readonly coldBuild?: GeneratorBuild;
   readonly renderTtlMs?: number;
   readonly renderIdentityStore?: RenderIdentityStore;
   /** #460 — injectable so a test can make registration fail. */
@@ -591,6 +602,7 @@ async function buildColdGenHarness(extraOpts: {
     index,
     coldCode: COLD_CODE,
     ...(extraOpts.coldEffort !== undefined ? { coldEffort: extraOpts.coldEffort } : {}),
+    ...(extraOpts.coldBuild !== undefined ? { coldBuild: extraOpts.coldBuild } : {}),
     ...(extraOpts.postSuccessHook
       ? { postSuccessHook: extraOpts.postSuccessHook }
       : {}),
@@ -1274,6 +1286,34 @@ describe('createGguiRenderHandler — authored source rides cache-reuse', () => 
     const hash = entries[0].metadata['sourceCodeHash'];
     expect(typeof hash).toBe('string');
     expect(await codeStore.get(hash as string)).toBe(STORED_SOURCE);
+  });
+
+  // ggui#1280 emit — the cold-gen mint stamps the build the engine reported.
+  it('cold-gen registration stamps the durable row with the build the generation reported (ggui#1280)', async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const build: GeneratorBuild = {
+      version: '0.24.0',
+      mode: 'constrained',
+      digests: { promptTemplateSha256: 'a'.repeat(64), boilerplateTemplateSha256: 'b'.repeat(64) },
+    };
+    const { harness, handshakeId } = await buildColdGenHarness({
+      coldBuild: build,
+      cacheDurability: { blueprintStore },
+    });
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(false);
+    expect((await blueprintStore.get(out.blueprintId))?.build).toEqual(build);
+  });
+
+  it('cold-gen registration writes no build when the generation reported none (ggui#1280)', async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const { harness, handshakeId } = await buildColdGenHarness({ cacheDurability: { blueprintStore } });
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    const row = await blueprintStore.get(out.blueprintId);
+    expect(row).not.toBeNull();
+    expect(row).not.toHaveProperty('build');
   });
 
   it('cold-gen registration carries no sourceCodeHash when the generation result has none (unchanged behavior)', async () => {

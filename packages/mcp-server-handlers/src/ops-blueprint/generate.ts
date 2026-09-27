@@ -71,6 +71,7 @@ import { z } from "zod";
 import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import {
+  admitGeneratorBuild,
   registerBlueprint,
   type BlueprintRegistryDeps,
   type GenerationCredentials,
@@ -433,6 +434,12 @@ export function createGguiOpsGenerateBlueprintHandler(
         generator: result.metadata.generator,
         model: result.metadata.model,
       } as const;
+      // ggui#1280 — the minting engine's build, through the registry's one
+      // admission rule. The durable row below carries it; the cache mirror's
+      // registration receives the same value, which lands only on that
+      // registry's durable write-through when one is bound — never on its
+      // vector-store row.
+      const build = admitGeneratorBuild(source, result.metadata.build);
 
       const blueprintId = mintBlueprintId();
       const blueprint: Blueprint = {
@@ -451,6 +458,7 @@ export function createGguiOpsGenerateBlueprintHandler(
         createdBy: "operator",
         contract,
         ...(validatorScore !== undefined ? { validatorScore } : {}),
+        ...(build !== undefined ? { build } : {}),
       };
 
       await deps.blueprintStore.put(blueprint);
@@ -497,6 +505,7 @@ export function createGguiOpsGenerateBlueprintHandler(
             // The two axes disagree here on purpose, which is exactly
             // why `createdBy` cannot be derived from `source`.
             source,
+            ...(build !== undefined ? { build } : {}),
             createdBy: "operator",
           });
         } catch (err) {

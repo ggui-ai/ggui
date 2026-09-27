@@ -226,6 +226,23 @@ describe('projectDurableBlueprint', () => {
     expect(record.sourceCodeHash).toBe('source-hash-abc');
   });
 
+  // ggui#1280 emit — the minting engine's build rides the durable record,
+  // written once at mint; `ggui_ops_list_blueprints` reads it from there.
+  it('carries the minting build onto the durable row when the registry blueprint has one (ggui#1280)', () => {
+    const build = {
+      version: '0.24.0',
+      mode: 'constrained',
+      digests: { promptTemplateSha256: 'a'.repeat(64), boilerplateTemplateSha256: 'b'.repeat(64) },
+    };
+    const record = projectDurableBlueprint(makeRegistryBlueprint({ build }), 'app-1', undefined);
+    expect(record.build).toEqual(build);
+  });
+
+  it('omits build when the registry blueprint has none (ggui#1280)', () => {
+    const record = projectDurableBlueprint(makeRegistryBlueprint(), 'app-1', undefined);
+    expect(record).not.toHaveProperty('build');
+  });
+
   it('omits sourceCodeHash when the registry blueprint has none', () => {
     const record = projectDurableBlueprint(
       makeRegistryBlueprint(),

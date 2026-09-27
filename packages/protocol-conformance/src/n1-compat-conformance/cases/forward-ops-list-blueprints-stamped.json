@@ -1,0 +1,77 @@
+{
+  "name": "forward-ops-list-blueprints-stamped",
+  "description": "FORWARD (ggui#1280 emit, VERSION-POLICY §3.6): the ggui_ops_list_blueprints result the NEXT release writes once generation mints are stamped — synthetic by construction, so it carries no landed sha. Two rows built on tag 14's served row (release-14-ops-list-blueprints): the first carries a valid `build` (the minting engine's version, mode and template digests), the second carries none (registered, installed and older rows). The reader MUST accept the result, keep the stamp VERBATIM on the first row and leave the second row unstamped. It is the half the backward case cannot test: a reader that dropped or rewrote the stamp — tag 14's reader declares it (`d9132ae6f`), and a later change to `opsListBlueprintsOutputSchema` must not lose it — fails here.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): tag 14's served row, once stamped and once not",
+    "sha": "synthetic"
+  },
+  "wire": "ops-list-blueprints",
+  "payload": {
+    "blueprints": [
+      {
+        "blueprintId": "bp_00000000-0000-4000-8000-000000001280",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "openai/gpt-6-luna"
+        },
+        "variance": {},
+        "createdAt": "2026-09-27T16:40:27.386Z",
+        "createdBy": "agent",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        },
+        "build": {
+          "version": "0.25.0",
+          "mode": "constrained",
+          "digests": {
+            "promptTemplateSha256": "fdf5de0bdc977b698772e337d552dbe27cbc984382e6c0f68b0f5a7d8a953f00",
+            "boilerplateTemplateSha256": "9b4393cd686244d9e06d480f477dc85aa5b4469d45dfb103b76b873e22e65c24"
+          }
+        }
+      },
+      {
+        "blueprintId": "bp_00000000-0000-4000-8000-000000001281",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "openai/gpt-6-luna"
+        },
+        "variance": {},
+        "createdAt": "2026-09-27T16:40:27.386Z",
+        "createdBy": "agent",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": "accepted"
+}

@@ -173,6 +173,7 @@ const EXPECTED_PASSING = [
   // against today's read door.
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
+  'n1-compat/forward-ops-list-blueprints-stamped',
   'n1-compat/forward-render-meta-unknown-member',
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
@@ -180,6 +181,7 @@ const EXPECTED_PASSING = [
   'n1-compat/release-2-render-meta',
   'n1-compat/release-9-1-handshake-suggestion',
   'n1-compat/release-13-render-result',
+  'n1-compat/release-14-ops-list-blueprints',
   // theme-binding — the kit's theme catalog folded into runConformance()
   // (ggui#987): 13 rows, graded on this server's own read door.
   'theme-binding/app-theme-v1-base',

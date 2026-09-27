@@ -345,7 +345,7 @@ describe('n1-compat catalog fold (ggui#1014 §3.6)', () => {
   });
 
   it('grades every backward (previous-release) and forward (later-release) payload on every run — no input to supply, never skipped', async () => {
-    expect(N1_ROWS).toHaveLength(9); // 6 backward (4 Release 2 + tag 9.1's handshake suggestion, ggui#1336 + tag 13's render result, ggui#1459) + 3 FORWARD (ggui#1093 read door, ggui#1155 carry read, ggui#1178 render-slice actionSpec)
+    expect(N1_ROWS).toHaveLength(11); // 7 backward (4 Release 2 + tag 9.1's handshake suggestion, ggui#1336 + tag 13's render result, ggui#1459 + tag 14's blueprint list, ggui#1280) + 4 FORWARD (ggui#1093 read door, ggui#1155 carry read, ggui#1178 render-slice actionSpec, ggui#1280 stamped blueprint list)
     const result = await run({ only: N1_ROWS });
     expect(result.failed).toEqual([]);
     expect(result.skipped).toEqual([]);

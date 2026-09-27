@@ -1138,6 +1138,80 @@ describe('registerBlueprint — durable write-through', () => {
     expect(second.rows[0]!.createdBy).toBe('operator');
   });
 
+  // ggui#1280 emit — a generation mint carries the minting engine's build.
+  const BUILD = {
+    version: '0.24.0',
+    mode: 'constrained',
+    digests: { promptTemplateSha256: 'a'.repeat(64), boilerplateTemplateSha256: 'b'.repeat(64) },
+  };
+  const LLM: BlueprintSource = { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' };
+
+  it('stamps a generation mint with the build it was given, on the returned blueprint and the durable row (ggui#1280)', async () => {
+    const { blueprintStore, rows } = fakeDurableStore();
+    const bp = await registerBlueprint({ ...makeDeps(), durability: { blueprintStore } }, SCOPE, {
+      ...INPUT,
+      source: LLM,
+      build: BUILD,
+    });
+    expect(bp.build).toEqual(BUILD);
+    expect(rows[0]!.build).toEqual(BUILD);
+  });
+
+  it('writes no build when none was given (ggui#1280)', async () => {
+    const { blueprintStore, rows } = fakeDurableStore();
+    const bp = await registerBlueprint({ ...makeDeps(), durability: { blueprintStore } }, SCOPE, {
+      ...INPUT,
+      source: LLM,
+    });
+    expect(bp).not.toHaveProperty('build');
+    expect(rows[0]).not.toHaveProperty('build');
+  });
+
+  it('drops a build on code no generation produced — registered, never stamped (ggui#1280)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { blueprintStore, rows } = fakeDurableStore();
+    const bp = await registerBlueprint({ ...makeDeps(), durability: { blueprintStore } }, SCOPE, {
+      ...INPUT,
+      source: { kind: 'user' },
+      build: BUILD,
+    });
+    expect(bp.id).toMatch(/^bp_/);
+    expect(bp).not.toHaveProperty('build');
+    expect(rows[0]).not.toHaveProperty('build');
+    warn.mockRestore();
+  });
+
+  it('drops a stamp the protocol schema refuses and still registers the row, with a line (ggui#1280)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { blueprintStore, rows } = fakeDurableStore();
+    const bp = await registerBlueprint({ ...makeDeps(), durability: { blueprintStore } }, SCOPE, {
+      ...INPUT,
+      source: LLM,
+      build: { mode: 'constrained', digests: { promptTemplateSha256: 'not-hex' } },
+    });
+    expect(bp.id).toMatch(/^bp_/);
+    expect(bp).not.toHaveProperty('build');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).not.toHaveProperty('build');
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('blueprint_build_stamp_dropped'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('keeps the MINTING build on a dedup — a later generation at the key never re-stamps the durable row (ggui#1280)', async () => {
+    const { blueprintStore, rows } = fakeDurableStore();
+    const deps = { ...makeDeps(), durability: { blueprintStore } };
+    await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: BUILD });
+    const later = { ...BUILD, version: '0.25.0' };
+    const second = await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: later });
+    expect(second.deduped).toBe(true);
+    // The stamp lives on the durable record only: the vector-store row a
+    // dedup returns does not carry it, so a reader resolves it from the
+    // BlueprintStore.
+    expect(second).not.toHaveProperty('build');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.build).toEqual(BUILD);
+  });
+
   it('does NOT re-persist on a dedup return', async () => {
     const { blueprintStore, rows } = fakeDurableStore();
     const deps = { ...makeDeps(), durability: { blueprintStore } };

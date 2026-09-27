@@ -11,7 +11,7 @@ import {
   InMemoryBlueprintStore,
   createInMemoryGeneratorRegistry,
 } from "@ggui-ai/mcp-server-core/in-memory";
-import type { Blueprint, DataContract, UIGenerationResponse } from "@ggui-ai/protocol";
+import type { Blueprint, DataContract, GeneratorBuild, UIGenerationResponse } from "@ggui-ai/protocol";
 import type { GeneratorId } from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
@@ -44,6 +44,8 @@ function makeMockGenerator(
     slug?: GeneratorId;
     componentCode?: string;
     validatorScore?: number;
+    /** ggui#1280 — the build the engine reports (`metadata.build`). */
+    build?: GeneratorBuild;
     fail?: boolean;
     throws?: boolean;
   } = {}
@@ -79,6 +81,7 @@ function makeMockGenerator(
         latencyMs: 50,
         cacheHit: false,
         ...(opts.validatorScore !== undefined ? { validatorScore: opts.validatorScore } : {}),
+        ...(opts.build !== undefined ? { build: opts.build } : {}),
       };
       return { ok: true, response, metadata };
     },
@@ -249,6 +252,56 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const persisted = await deps.blueprintStore.get(result.blueprintId);
     expect(persisted?.variance.seedPrompt).toBe("make it red");
     expect(persisted?.variance.context).toEqual({ palette: "warm" });
+  });
+
+  // ggui#1280 emit — an operator-invoked generation is a generation mint.
+  const BUILD: GeneratorBuild = {
+    version: "0.24.0",
+    mode: "constrained",
+    digests: { promptTemplateSha256: "a".repeat(64), boilerplateTemplateSha256: "b".repeat(64) },
+  };
+
+  it("stamps the persisted row and the cache mirror with the build the engine reported (ggui#1280)", async () => {
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const durableMirror = new InMemoryBlueprintStore();
+    const deps = {
+      ...defaultDeps({ generator: makeMockGenerator({ build: BUILD }) }),
+      cacheRegistry: { ...cacheRegistry, durability: { blueprintStore: durableMirror } },
+    };
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+    expect((await deps.blueprintStore.get(result.blueprintId))?.build).toEqual(BUILD);
+    const mirrored = await durableMirror.list("app-1", blueprintKey(emptyContract()));
+    expect(mirrored).toHaveLength(1);
+    expect(mirrored[0]?.build).toEqual(BUILD);
+  });
+
+  it("on a cache mirror with no durable store, stamps only the persisted row: the mirror's vector row carries none (ggui#1280)", async () => {
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const deps = { ...defaultDeps({ generator: makeMockGenerator({ build: BUILD }) }), cacheRegistry };
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+    expect((await deps.blueprintStore.get(result.blueprintId))?.build).toEqual(BUILD);
+    const mirror = await findBlueprintExact(cacheRegistry, "app-1", "template", blueprintKey(emptyContract()), variantKey({}));
+    expect(mirror).not.toBeNull();
+    expect(mirror).not.toHaveProperty("build");
+  });
+
+  it("writes no build when the engine reported none (ggui#1280)", async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+    const persisted = await deps.blueprintStore.get(result.blueprintId);
+    expect(persisted).not.toBeNull();
+    expect(persisted).not.toHaveProperty("build");
   });
 
   it("mirrors the cache row under the REQUESTED variance, never the default sentinel (#697)", async () => {

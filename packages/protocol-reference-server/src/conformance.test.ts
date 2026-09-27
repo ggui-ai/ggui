@@ -8,14 +8,14 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 37 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *   - 43 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
  *     fixtures, the 4 `registry-completeness` catalog rows, which
  *     grade the closed refusal-code registry this server embeds from
  *     `@ggui-ai/protocol` (ggui#786), the 6 `refusal-envelope`
  *     rows, graded through the protocol's own `projectRenderRefusal`
  *     (ggui#803 leg 9) — no tool plane needed for a pure projection —
- *     the 13 `theme-binding` rows (ggui#987) and the 5 `n1-compat` rows
- *     (4 backward + 1 forward; ggui#1014 §3.6, ggui#1093): pure-function
+ *     the 13 `theme-binding` rows (ggui#987) and the 11 `n1-compat` rows
+ *     (7 backward + 4 forward; ggui#1014 §3.6, ggui#1093, ggui#1280): pure-function
  *     catalogs a vendor-neutral server passes by construction.
  *   - 11 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
@@ -163,9 +163,11 @@ const EXPECTED_PASSING = [
   // the read door's tolerance of a later release's top-level member.
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
+  'n1-compat/forward-ops-list-blueprints-stamped',
   'n1-compat/forward-render-meta-unknown-member',
   // Sorted order: 'release-13…' sorts before 'release-2…'.
   'n1-compat/release-13-render-result',
+  'n1-compat/release-14-ops-list-blueprints',
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',

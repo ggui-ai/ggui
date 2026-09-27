@@ -6,6 +6,23 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The durable blueprint's build stamp is now EMITTED (2026-09-27, ggui#1280
+ * emit step: no schema change, same draft stamp). A generation mint writes
+ * `Blueprint.build` from the generation's `GenerationMetadata.build`: the
+ * `ggui_render` cold-generation registration and `ggui_ops_generate_blueprint`
+ * (its durable row, and its cache mirror's durable write-through where one is
+ * bound). Operator-registered, installed and seed-imported rows
+ * carry none, and a dedup keeps the row's MINTING build. One admission rule
+ * (`admitGeneratorBuild`, mcp-server-handlers) keeps a stamp only on
+ * `llm`-sourced code and only when it passes `generatorBuildSchema`;
+ * otherwise the stamp is dropped with a line and the row registers
+ * unstamped. The stamp lives on the durable record; the reference
+ * registry's vector-store row does not carry it. Release order, per channel:
+ * the hosted declare step (`d9132ae6f`) serves everywhere since tag 14
+ * (`b68b964a7`), and on npm the declare ships in 0.25.0 and the emit from the
+ * release after — so every rolling reader's `blueprintSchema` accepts a
+ * stamped row before any writer produces one.
+ * --------------------------------------------------------------------
  * `GET /api/sessions/:id/state` renewals are bounded (2026-09-28, ggui#1496
  * part B, slice 2: MINOR, same draft stamp). The ws token gains an optional
  * `rootIat` claim. A Path C renewal carries its chain's root forward (the

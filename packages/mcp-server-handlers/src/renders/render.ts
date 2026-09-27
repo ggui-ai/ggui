@@ -52,6 +52,7 @@ import {
   type AppGenerationProfileEffort,
   type AppTheme,
   type BlueprintVariance,
+  type GeneratorBuild,
   type GadgetDescriptor,
   type DataContract,
   type JsonObject,
@@ -2387,11 +2388,7 @@ export function createGguiRenderHandler(
             // the async closure keeps the narrowing.
             ...(generationCache
               ? {
-                  resolveBlueprintId: async (produced: {
-                    readonly componentCode: string;
-                    readonly source: LlmBlueprintSource;
-                    readonly sourceCode?: string;
-                  }) => {
+                  resolveBlueprintId: async (produced: ProducedGeneration) => {
                     const reg = await safelyRegisterBlueprint(
                       {
                         embedding: generationCache.embedding,
@@ -2415,6 +2412,10 @@ export function createGguiRenderHandler(
                         // metadata stamp — a fresh generation mints
                         // an `llm`-sourced row.
                         source: produced.source,
+                        // ggui#1280 — the minting engine's build; the
+                        // registry admits it and a dedup keeps the
+                        // incumbent's.
+                        ...(produced.build !== undefined ? { build: produced.build } : {}),
                         // Authored source — threaded to the registry
                         // so cache-reuse renders of this blueprint
                         // can serve it too.
@@ -3353,6 +3354,33 @@ type GenerationRunOutcome =
       readonly failure: RenderError;
     };
 
+/**
+ * What a successful generation hands its registration (#460, ggui#1280):
+ * the code, its engine provenance, the authored source when the generator
+ * distinguishes one, and the minting engine's build when it reports one.
+ * One named shape for the hook's declaration and its implementation, so a
+ * member added here reaches both — an implementation annotated with a
+ * narrower inline shape would still typecheck and drop the member.
+ */
+interface ProducedGeneration {
+  readonly componentCode: string;
+  readonly source: LlmBlueprintSource;
+  /**
+   * Authored (pre-compile) source, when the generator distinguishes
+   * one from `componentCode` — see
+   * `RegisterBlueprintInput.sourceCode`'s docstring. Threaded to
+   * `registerBlueprint` so cache-reuse renders of this blueprint
+   * can serve authored source too.
+   */
+  readonly sourceCode?: string;
+  /**
+   * ggui#1280 — the build of the engine that produced the code (the
+   * generation's `metadata.build`), stamped on the minted blueprint's
+   * durable record. Absent when the engine reports none.
+   */
+  readonly build?: GeneratorBuild;
+}
+
 async function runGenerationIntoGguiSession(
   generation: GenerationDeps,
   renderStore: GguiSessionStore,
@@ -3399,18 +3427,7 @@ async function runGenerationIntoGguiSession(
      * fail-closed rejected — #445: null is structurally
      * non-remintable, by design). Absent when no cache is bound.
      */
-    readonly resolveBlueprintId?: (produced: {
-      readonly componentCode: string;
-      readonly source: LlmBlueprintSource;
-      /**
-       * Authored (pre-compile) source, when the generator distinguishes
-       * one from `componentCode` — see
-       * `RegisterBlueprintInput.sourceCode`'s docstring. Threaded to
-       * `registerBlueprint` so cache-reuse renders of this blueprint
-       * can serve authored source too.
-       */
-      readonly sourceCode?: string;
-    }) => Promise<string | undefined>;
+    readonly resolveBlueprintId?: (produced: ProducedGeneration) => Promise<string | undefined>;
     /** Runtime prop values for THIS render. Validated against
      *  `story.contract.props` (propsSpec) by the upstream caller
      *  before this function runs. */
@@ -3678,6 +3695,7 @@ async function runGenerationIntoGguiSession(
       ...(result.response.sourceCode !== undefined
         ? { sourceCode: result.response.sourceCode }
         : {}),
+      ...(result.metadata.build !== undefined ? { build: result.metadata.build } : {}),
     });
   }
   try {

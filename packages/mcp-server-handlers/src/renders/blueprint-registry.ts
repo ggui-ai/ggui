@@ -60,10 +60,12 @@ import type { AestheticPresetRef, DirectionScope } from './fits.js';
 import {
   blueprintSourceToFlat,
   flatToBlueprintSource,
+  generatorBuildSchema,
   summarizeContract,
   type BlueprintSource,
   type BlueprintVariance,
   type DataContract,
+  type GeneratorBuild,
 } from '@ggui-ai/protocol';
 // `blueprintKey` + `variantKey` are server-only — pulled in from a
 // dedicated subpath because they import `node:crypto`, which browsers
@@ -177,6 +179,16 @@ export interface Blueprint {
    * A blueprint cache invalidates by regeneration; it never coerces.
    */
   readonly source: BlueprintSource;
+  /**
+   * The build of the engine that minted this blueprint (ggui#1280), set
+   * only on a generation mint (`source.kind === 'llm'`) whose stamp
+   * passed {@link admitGeneratorBuild}. It is written to the DURABLE
+   * record (`projectDurableBlueprint`) and returned on the fresh mint;
+   * it does not ride the vector-store row, so a row read back via
+   * {@link rowToBlueprint} (a dedup return included) always has this
+   * `undefined` — a reader resolves the stamp from the `BlueprintStore`.
+   */
+  readonly build?: GeneratorBuild;
   /**
    * Lifecycle-owner marker for rows materialized by the marketplace
    * install bridge (`installToCache`). Orthogonal to {@link source}
@@ -348,6 +360,13 @@ export interface RegisterBlueprintInput {
    * empty variance as one stable sentinel.
    */
   readonly variance?: BlueprintVariance;
+  /**
+   * The minting engine's build (ggui#1280), from the generation's
+   * `metadata.build`. Pass it only for code a generation produced; the
+   * registry keeps it only when {@link admitGeneratorBuild} does, and a
+   * dedup keeps the row's MINTING build (first write wins).
+   */
+  readonly build?: GeneratorBuild;
   /**
    * WHO initiated this mint, for the durable record. `'agent'` is the
    * standard handshake → render flow; the operator tools
@@ -544,6 +563,47 @@ function warnEvictionFallback(
       err instanceof Error ? err.message : String(err)
     } (logged once per process)`,
   );
+}
+
+/**
+ * Stamp-drop reasons already warned this process — one line per process per
+ * reason, the {@link warnEvictionFallback} posture: visible without a line
+ * per generation when an engine keeps reporting the same bad stamp.
+ */
+const warnedBuildStampDrops = new Set<string>();
+
+/**
+ * The one admission rule for a blueprint's build stamp (ggui#1280): keep
+ * `build` only for code a generation produced (`source.kind === 'llm'`) and
+ * only when it passes the protocol's strict `generatorBuildSchema`.
+ * Otherwise the STAMP is dropped, with a line, and the registration goes
+ * ahead unstamped: a row whose minting build is unknown is a reported
+ * category, never an error, while a malformed stamp on a durable row would
+ * make every strict reader of that row refuse it (`ggui_ops_list_blueprints`
+ * validates its rows with `blueprintSchema`). Every writer of a stamp calls
+ * this, so the rule has one home.
+ */
+export function admitGeneratorBuild(
+  source: BlueprintSource,
+  build: GeneratorBuild | undefined,
+): GeneratorBuild | undefined {
+  if (build === undefined) return undefined;
+  const reason =
+    source.kind !== 'llm'
+      ? 'code no generation produced carries no build'
+      : generatorBuildSchema.safeParse(build).success
+        ? undefined
+        : 'the stamp fails generatorBuildSchema';
+  if (reason === undefined) return build;
+  if (!warnedBuildStampDrops.has(reason)) {
+    warnedBuildStampDrops.add(reason);
+    // eslint-disable-next-line no-console -- operator-visible degradation notice
+    console.warn(
+      `[ggui] blueprint registry: blueprint_build_stamp_dropped — ${reason}; ` +
+        'the row registers unstamped (its minting build reads as unknown) (logged once per process per reason)',
+    );
+  }
+  return undefined;
 }
 
 function readScalarString(
@@ -830,6 +890,9 @@ export async function registerBlueprint(
       ? codeStore.hashOf(input.sourceCode)
       : undefined;
 
+  // ggui#1280 — the minting engine's build, admitted once: the returned
+  // blueprint and the durable record carry it; the vector-store row does not.
+  const build = admitGeneratorBuild(input.source, input.build);
   const blueprint: Blueprint = {
     id,
     kind: input.kind,
@@ -842,6 +905,7 @@ export async function registerBlueprint(
     createdAt,
     hitCount: 0,
     source: input.source,
+    ...(build !== undefined ? { build } : {}),
     ...(input.installed === true ? { installed: true } : {}),
     ...(input.intentSource === 'fallback' ? { intentSource: 'fallback' } : {}),
     ...(input.judgedCanvases !== undefined ? { judgedCanvases: [...input.judgedCanvases] } : {}),
