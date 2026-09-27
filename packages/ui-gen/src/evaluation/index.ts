@@ -158,4 +158,5 @@ export { bankRows, criteriaBankSchema, parseCriteriaBank, type BankRow, type Cri
 export { CRITERIA_SELECTOR_VERSION, canonicalCriteriaContext, criteriaSetIdFor, selectCriteria, type CriteriaSelectionResult } from './criteria/select.js';
 export { chromaOfCssTokens, criteriaContextFor, type CriteriaContextInput, type CriteriaContextSources } from './criteria/context.js';
 export { INSTRUMENT_BY_ID, buildCriteriaJudgeBlock, resolveCriteriaBlock, type CriteriaMeasurements } from './criteria/resolve.js';
+export { judgeStoredCapture, type StoredCaptureInput, type StoredCaptureOutcome, type StoredCaptureVerdict } from './visual-evaluator.js';
 

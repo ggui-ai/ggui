@@ -1270,6 +1270,122 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
   };
 }
 
+// ---------------------------------------------------------------------------
+// A stored capture, judged (ggui#1438)
+// ---------------------------------------------------------------------------
+
+/** One stored capture to judge: the frame the judge saw at capture time, plus what the capture measured. */
+export interface StoredCaptureInput {
+  readonly canvas: CanvasClass;
+  /** The capture as saved (`canvas-<class>.png`). */
+  readonly png: Buffer;
+  /** The box the capture was taken at — the class box, or the declared one. */
+  readonly viewport: CanvasViewport;
+  /** The document's scroll height the capture recorded; `null` when it did not. */
+  readonly contentHeight: number | null;
+  readonly originalPrompt: string;
+  readonly profile?: GenerationProfileInput;
+  /** ggui#1436 — the bank and the card's context; absent = today's judge, no block. */
+  readonly criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
+}
+
+export interface StoredCaptureVerdict {
+  readonly canvas: CanvasClass;
+  readonly viewport: CanvasViewport;
+  readonly score: number;
+  readonly passed: boolean;
+  readonly issues: EvaluationIssue[];
+  readonly judge: CanvasJudgeRecord;
+  readonly contentHeight: number | null;
+  readonly overflow: boolean;
+  readonly inkRatio: number | null;
+  readonly criteria?: CriteriaBlock;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
+export type StoredCaptureOutcome =
+  | { readonly kind: 'ok'; readonly verdict: StoredCaptureVerdict }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
+/**
+ * Judge a STORED capture exactly as the per-canvas leg judges a fresh one — the same K calls on the same
+ * frame, the same median, the same fit and blank verdicts, the same criteria block — without rendering.
+ * This is the calibration's path (ggui#1438): the frame his eye marks is the frame the judge saw, and a
+ * re-judge costs judge tokens only. Fit reads the capture's recorded `contentHeight`; ink is read off the
+ * PNG inside the canvas's chrome, as at capture.
+ */
+export async function judgeStoredCapture(
+  input: StoredCaptureInput,
+  config: VisualEvalConfig,
+  deps: Pick<VisualEvalDeps, 'judge'> = {},
+): Promise<StoredCaptureOutcome> {
+  const judge = deps.judge ?? callMultimodalLLM;
+  const model = config.model ?? getDefaultVisualModel(config.provider);
+  const { canvas, viewport, png } = input;
+  const chrome = canvasChrome(canvas);
+  const ink = readInk(png, chrome, canvas);
+  const inkRatio = ink?.ratio ?? null;
+  const k = judgeCountFor(config, canvas);
+  const profileBlock = buildStylingProfileJudgeBlock(input.profile);
+  const criteriaContext: CriteriaContext | undefined = input.criteria !== undefined ? { ...input.criteria.context, canvas } : undefined;
+  const criteriaSelected =
+    input.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(input.criteria.bank, criteriaContext) : undefined;
+  const criteriaBlock =
+    input.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected) : '';
+  const answers = await Promise.all(
+    Array.from({ length: k }, () => judgeAndParse(judge, config, model, png, input.originalPrompt, profileBlock, canvas, criteriaBlock)),
+  );
+  const parsed = answers.filter((a): a is Extract<JudgedAnswer, { kind: 'ok' }> => a.kind === 'ok');
+  if (parsed.length === 0) {
+    const first = answers.find((a): a is Extract<JudgedAnswer, { kind: 'unparsable' }> => a.kind === 'unparsable');
+    return { kind: 'unavailable', reason: first?.reason ?? 'judge answer unparsable' };
+  }
+  const samples = parsed.map((a) => a.result.finalScore);
+  const median = medianOf(samples);
+  const result = parsed[samples.indexOf(median)]!.result;
+  const issues = [...result.issues];
+  let passed = median >= config.passThreshold;
+  const contentHeight = input.contentHeight;
+  const overflow = contentHeight !== null && contentHeight > viewport.height;
+  const policy = canvasFitPolicy(canvas);
+  if (overflow && contentHeight !== null && policy.overflow !== 'none') {
+    issues.push(canvasOverflowIssue(canvas, viewport, contentHeight, policy.overflow));
+    if (policy.overflow === 'fail') passed = false;
+  }
+  if (ink !== null && ink.lastInkRow === null) {
+    issues.push(canvasBlankIssue(canvas, viewport));
+    passed = false;
+  }
+  const criteria: CriteriaBlock | undefined =
+    input.criteria !== undefined && criteriaContext !== undefined && criteriaSelected !== undefined
+      ? resolveCriteriaBlock({
+          bank: input.criteria.bank,
+          context: criteriaContext,
+          selected: criteriaSelected,
+          answers: parsed.map((a) => a.result.criteriaAnswers ?? []),
+          measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
+        })
+      : undefined;
+  return {
+    kind: 'ok',
+    verdict: {
+      canvas,
+      viewport,
+      score: median,
+      passed,
+      issues,
+      judge: { k, rule: 'median', samples, sigma: populationSigma(samples), notes: parsed.map((a) => a.result.critique ?? '') },
+      contentHeight,
+      overflow,
+      inkRatio,
+      ...(criteria !== undefined ? { criteria } : {}),
+      inputTokens: parsed.reduce((sum, a) => sum + a.inputTokens, 0),
+      outputTokens: parsed.reduce((sum, a) => sum + a.outputTokens, 0),
+    },
+  };
+}
+
 /**
  * Exported for testing — bundles and builds the HTML for rendering;
  * `callMultimodalLLM` so the #504 routing contract (config →
