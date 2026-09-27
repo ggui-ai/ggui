@@ -16,7 +16,7 @@ import { hasProfile } from "./boilerplate/styling-profile.js";
 import type { CacheTier } from "./fragments/index.js";
 import { compose } from "./compose.js";
 import { buildSystemPrompt, generateBoilerplate } from "./boilerplate.js";
-import { APPLY_CHANGES_TOOL, APPLY_CHANGES_TOOL_SCOPED } from "./tools.js";
+import { HARNESS_CODING_TOOLS, HARNESS_SCOPED_TOOLS } from "./harness-tool-names.js";
 import { defaultApplyPatch } from "./patch.js";
 import { computeHarnessId, computeHarnessName, hashClassification } from "./hash.js";
 import { pickWorkflow } from "./workflows.js";
@@ -128,8 +128,8 @@ export function createHarness(input: CreateHarnessInput): Harness {
   const baseWhat: WhatLeg = {
     boilerplate,
     fragments: whatFragments,
-    codingTools: [APPLY_CHANGES_TOOL],
-    scopedTools: [APPLY_CHANGES_TOOL_SCOPED],
+    codingTools: [...HARNESS_CODING_TOOLS],
+    scopedTools: [...HARNESS_SCOPED_TOOLS],
     applyPatch: defaultPatchFn,
     // Registered gadget catalog — drives the system prompt's gadget
     // table + the boilerplate's direct-import emission. Omitted when no

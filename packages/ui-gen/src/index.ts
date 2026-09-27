@@ -54,6 +54,12 @@ export {
 export type { RenderingContext } from './contract-context.js';
 export { canvasForRenderingContext } from './contract-context.js';
 
+// ── The coding loop's tool set ───────────────────────────────────────
+//
+// The tools the harness declares, by name — the one list `createHarness`
+// builds from, so a build stamp names the same set that runs.
+export { harnessToolEntry, harnessToolNames, HARNESS_CODING_TOOLS, HARNESS_SCOPED_TOOLS } from './harness-tool-names.js';
+
 // ── Design mode ──────────────────────────────────────────────────────
 //
 // `createUiGenerator({ designMode })` — `constrained` (default) or
