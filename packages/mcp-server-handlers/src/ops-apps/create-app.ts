@@ -1,16 +1,15 @@
 /**
- * `ggui_ops_create_app` — provision a fresh `GguiApp` owned by the
- * calling user. Sibling of the `provisionGguiApp` AppSync mutation
- * (`backend/amplify/data/create-app/handler.ts`); same identity gate
- * (caller's sub, NEVER an argument-supplied userId), same default
- * displayName, same server-side appId allocation — exposed through
- * the `ops` MCP surface so an LLM agent in the console can create an
- * app without a custom GraphQL call.
+ * `ggui_ops_create_app` — create a new app owned by the calling user.
  *
- * Pure over the {@link AppsSource} seam. AppId minting + collision
- * retry is the adapter's responsibility — the in-memory test fake
- * picks any unique string; the cloud adapter calls the existing
- * `provisionGguiApp` Lambda which already enforces base62 + retry.
+ * The owner is always the caller's own identity (`resolveOwnerSub`),
+ * never a userId passed as an argument, so an operator agent can only
+ * create apps for the account it acts for. The appId is minted by the
+ * deployment's {@link AppsSource}: the handler never takes one from the
+ * caller, and uniqueness (including any retry on a collision) is the
+ * store's job. An in-memory store can use any unique string; a store
+ * over a database mints ids in whatever format that database keys on.
+ *
+ * Pure over the {@link AppsSource} seam.
  */
 import { z } from 'zod';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
@@ -24,7 +23,7 @@ const inputSchema = {
     .max(120)
     .optional()
     .describe(
-      "Human-friendly label for the new app. Defaults to 'My ggui app' when absent — the same label the deployment's first-load auto-create uses.",
+      "Human-friendly label for the new app. Defaults to 'My ggui app' when absent.",
     ),
 } as const;
 
@@ -57,7 +56,7 @@ export function createCreateAppHandler(
     title: 'Create app',
     audience: ['ops'],
     description:
-      "Provision a fresh `GguiApp` owned by the calling user: an opaque base62 appId is minted server-side, the row is owned by the caller's identity, displayName defaults to 'My ggui app' when absent (cap 120 chars). Returns the persisted shape — call `ggui_ops_set_default_app({appId})` afterwards to promote the new app to the user's default.",
+      "Create a new app owned by the calling user. The server mints the appId (it is never an argument), displayName defaults to 'My ggui app' when absent (max 120 chars). Returns the stored app — call `ggui_ops_set_default_app({appId})` afterwards to make it the caller's default.",
     inputSchema,
     outputSchema,
     async handler(

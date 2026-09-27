@@ -52,12 +52,8 @@ export * from "./app-discovery/index.js";
 // served on the `/control` plane. Available under
 // `@ggui-ai/mcp-server-handlers/ops-blueprint` subpath too.
 export * from "./ops-blueprint/index.js";
-// Operator-class apps, orgs, connector-keys, and coupon handler
-// families — `ggui_ops_*` tools backing the console's management
-// surfaces, each pure over a deps seam. Subpaths:
-// `@ggui-ai/mcp-server-handlers/ops-apps`, `…/ops-orgs`,
-// `…/ops-connector-keys`, `…/ops-coupon`.
+// Operator-class apps handler family — `ggui_ops_*` tools that
+// manage a deployment's apps, pure over the `AppsSource` seam the
+// deployment binds. Available under
+// `@ggui-ai/mcp-server-handlers/ops-apps` subpath too.
 export * from "./ops-apps/index.js";
-export * from "./ops-connector-keys/index.js";
-export * from "./ops-coupon/index.js";
-export * from "./ops-orgs/index.js";

@@ -165,11 +165,10 @@ import { buildInlineRenderShellHtml,
   type LoadingIndicatorOption,
 } from "./mcp-apps-outbound.js";
 import { BoundedValidatorTraceSink, mountConsoleValidatorRoutes } from "./console-validator.js";
-// Operator-class MCP handlers — twelve `ggui_ops_*` handlers across
-// four domains (apps / orgs / connector-keys / coupon). Every factory
-// binds a deps seam; deployments that don't wire the seam simply
-// don't register the tool (matching `ggui_ops_get_credit_balance`'s
-// pattern).
+// Operator-class MCP handlers — the six `ggui_ops_*` apps handlers.
+// Every factory binds a deps seam; deployments that don't wire the
+// seam simply don't register the tool (matching
+// `ggui_ops_get_credit_balance`'s pattern).
 import {
   createCreateAppHandler,
   createDeleteAppHandler,
@@ -181,27 +180,6 @@ import {
   type UserDefaultAppSource,
 } from "@ggui-ai/mcp-server-handlers/ops-apps";
 import { fontFaceRules, validateOverlayCoverage, type FontFaceDeclaration } from "@ggui-ai/design/themes";
-import {
-  createIssueConnectorKeyHandler,
-  createListConnectorKeysHandler,
-  createRevokeConnectorKeyHandler,
-  type ConnectorKeysSource,
-} from "@ggui-ai/mcp-server-handlers/ops-connector-keys";
-import {
-  createRedeemCouponHandler,
-  type CouponRedeemSource,
-} from "@ggui-ai/mcp-server-handlers/ops-coupon";
-import {
-  createCreateOrgHandler,
-  createGetOrgBalanceHandler,
-  createInviteToOrgHandler,
-  createListOrgsHandler,
-  createRemoveOrgMemberHandler,
-  createRenameOrgHandler,
-  createRevokeInviteHandler,
-  type OrgInvitesSource,
-  type OrgsSource,
-} from "@ggui-ai/mcp-server-handlers/ops-orgs";
 import {
   createGguiConsumeHandler,
   createGguiDeclareToolCatalogHandler,
@@ -1661,22 +1639,12 @@ export function defaultHandlers(deps: {
 
 /**
  * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
- * covering apps + orgs + connector-keys + coupons + blueprints.
+ * covering apps + blueprints.
  */
 export interface OpsBundleDeps {
   readonly opsApps?: {
     readonly apps: AppsSource;
     readonly userDefaultApp: UserDefaultAppSource;
-  };
-  readonly opsOrgs?: {
-    readonly orgs: OrgsSource;
-    readonly invites: OrgInvitesSource;
-  };
-  readonly opsConnectorKeys?: {
-    readonly connectorKeys: ConnectorKeysSource;
-  };
-  readonly opsCoupon?: {
-    readonly coupons: CouponRedeemSource;
   };
   /**
    * Operator-class blueprint bundle. Same option
@@ -1694,8 +1662,8 @@ export interface OpsBundleDeps {
 }
 
 /**
- * Build the operator-class handlers for the apps / orgs /
- * connector-keys / coupon / blueprint domains. Each domain materializes
+ * Build the operator-class handlers for the apps and blueprint
+ * domains. Each domain materializes
  * independently when its deps seam is bound; deployments that wired
  * none get an empty list.
  *
@@ -1723,33 +1691,6 @@ export function buildOpsBundleHandlers(
       createSetAppThemeHandler({ apps, overlayCoverage: (overlay) => validateOverlayCoverage(overlay) }),
       createDeleteAppHandler({ apps, userDefaultApp }),
       createSetDefaultAppHandler({ apps, userDefaultApp })
-    );
-  }
-  if (deps.opsOrgs) {
-    const { orgs, invites } = deps.opsOrgs;
-    handlers.push(
-      createListOrgsHandler({ orgs }),
-      createCreateOrgHandler({ orgs }),
-      createRenameOrgHandler({ orgs }),
-      createRemoveOrgMemberHandler({ orgs }),
-      createGetOrgBalanceHandler({ orgs }),
-      createInviteToOrgHandler({ invites }),
-      createRevokeInviteHandler({ invites })
-    );
-  }
-  if (deps.opsConnectorKeys) {
-    const { connectorKeys } = deps.opsConnectorKeys;
-    handlers.push(
-      createListConnectorKeysHandler({ connectorKeys }),
-      createIssueConnectorKeyHandler({ connectorKeys }),
-      createRevokeConnectorKeyHandler({ connectorKeys })
-    );
-  }
-  if (deps.opsCoupon) {
-    handlers.push(
-      createRedeemCouponHandler({
-        coupons: deps.opsCoupon.coupons,
-      })
     );
   }
   if (deps.opsBlueprint) {
@@ -3437,27 +3378,23 @@ export interface CreateGguiServerOptions {
   readonly withholdResultMeta?: boolean;
 
   /**
-   * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
-   * covering the console's apps + orgs + connector-keys + coupon
-   * surfaces. Each domain is independently optional —
-   * `buildOpsBundleHandlers` registers a domain's tools only when its
-   * seam is bound here. OSS deployments leave these undefined (the
-   * smaller surface); hosted deployments bind their own adapters.
+   * Dep seam for the operator-class `ggui_ops_*` apps handlers. Like
+   * every ops domain it is optional — `buildOpsBundleHandlers`
+   * registers the apps tools only when this seam is bound. A deployment
+   * that leaves it undefined serves the smaller surface; one that keeps
+   * its apps in its own store binds an `AppsSource` over that store.
    *
    * Mirrors `creditBalance` + `creditTransactions`'s pattern — the
    * shared-handler layer is the same code path everywhere, and the
    * deps interface is the boundary between the open handler and the
    * deployment-specific implementation.
    *
-   * These are honored even when {@link handlers} is set: they are
-   * explicit per-domain bindings, not part of the default handler set a
-   * custom list replaces. A tool the custom list already registers
-   * under the same name wins.
+   * Honored even when {@link handlers} is set: it is an explicit
+   * per-domain binding, not part of the default handler set a custom
+   * list replaces. A tool the custom list already registers under the
+   * same name wins.
    */
   readonly opsApps?: OpsBundleDeps["opsApps"];
-  readonly opsOrgs?: OpsBundleDeps["opsOrgs"];
-  readonly opsConnectorKeys?: OpsBundleDeps["opsConnectorKeys"];
-  readonly opsCoupon?: OpsBundleDeps["opsCoupon"];
 
   /**
    * Explicit ops-blueprint dep bundle. When supplied, it is passed to
@@ -4727,12 +4664,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       logger,
     });
 
-  // Operator-class domain handlers (apps / orgs / connector-keys /
-  // coupon / blueprints). Built on EVERY path — they hang off their own
-  // explicit options, so a deployment that supplies a custom base
-  // handler list still gets the domains it wired. A name already claimed
-  // by the base list wins: that's how a hosted deployment ships its own
-  // `ggui_ops_create_app` while still picking up the rest of the family,
+  // Operator-class domain handlers (apps / blueprints). Built on EVERY
+  // path — they hang off their own explicit options, so a deployment
+  // that supplies a custom base handler list still gets the domains it
+  // wired. A name already claimed by the base list wins: that's how a
+  // deployment ships its own `ggui_ops_create_app` while still picking
+  // up the rest of the family,
   // and it is what keeps the blueprint family single-registered when the
   // default handler set already built it from the same bundle.
   const baseHandlerNames = new Set(baseHandlers.map((h) => h.name));

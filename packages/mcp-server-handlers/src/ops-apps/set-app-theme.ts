@@ -23,7 +23,7 @@
  * 'invalid_app_config', refusal }` RESULT (not a thrown error): the
  * body is one of the four the protocol names
  * (`appThemeRefusalBodySchema`), so a client reads the same refusal
- * from REST, AppSync and this door.
+ * from every write door a deployment offers, this one included.
  *
  * Ownership: `AppsSource.get` first (scoped by `ownerSub`); cross-user
  * probes return the uniform "not found" shape. The store scopes the

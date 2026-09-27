@@ -3,8 +3,8 @@
  *
  * Six MCP tools, all `audience: ['ops']`, all served on `/control`. Pure
  * over the {@link AppsSource} + {@link UserDefaultAppSource} seams —
- * NO AWS imports. Cloud deployments bind AWS-backed adapters; tests
- * use in-memory fakes.
+ * no storage imports. A deployment binds adapters over its own store;
+ * tests use in-memory fakes.
  *
  *   - `createListAppsHandler` → `ggui_ops_list_apps`
  *   - `createCreateAppHandler` → `ggui_ops_create_app`

@@ -240,10 +240,7 @@ describe('SINGLE_CALL_OPS', () => {
   it('lists the read/list ops that must stay single-call', () => {
     for (const n of [
       'ggui_ops_list_apps',
-      'ggui_ops_list_orgs',
-      'ggui_ops_list_connector_keys',
       'ggui_ops_get_credit_balance',
-      'ggui_ops_get_org_balance',
       'ggui_ops_get_my_blueprint_source',
       'ggui_ops_list_blueprints',
       // setup_byok opens/lists the BYOK card (a read); set/remove are
@@ -265,13 +262,8 @@ describe('SINGLE_CALL_OPS', () => {
       'ggui_ops_update_app',
       'ggui_ops_set_app_theme',
       'ggui_ops_delete_app',
-      'ggui_ops_issue_connector_key',
-      'ggui_ops_redeem_coupon',
       'ggui_ops_set_provider_key',
       'ggui_ops_remove_provider_key',
-      'ggui_ops_invite_to_org',
-      'ggui_ops_rename_org',
-      'ggui_ops_remove_org_member',
       'ggui_ops_register_blueprint',
       'ggui_ops_delete_blueprint',
       'ggui_ops_update_my_blueprint',

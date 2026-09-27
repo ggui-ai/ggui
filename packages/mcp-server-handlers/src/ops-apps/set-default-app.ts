@@ -2,8 +2,7 @@
  * `ggui_ops_set_default_app` — write the calling user's
  * `GguiUser.defaultAppId` column.
  *
- * Sibling of the `useGguiUser` first-load hook (`apps/console/.../use-ggui-user`).
- * Same column, MCP surface. The handler chains `AppsSource.get` first
+ * The MCP door onto the user's default-app setting. The handler chains `AppsSource.get` first
  * (verify the user owns the target appId) before writing
  * `UserDefaultAppSource.setDefault` — invariant: `defaultAppId` MUST
  * point at an app the user owns.

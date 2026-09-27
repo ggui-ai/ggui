@@ -1,13 +1,12 @@
 /**
  * `ggui_ops_list_apps` — enumerate the calling user's `GguiApp` rows.
  *
- * Sibling of the console's Apps section (`apps/console/src/.../apps/`)
- * — same data, MCP surface. Pure over the {@link AppsSource} seam; a
- * production deployment binds its own implementation, tests bind an
- * in-memory Map.
+ * The MCP door onto the same data an app-management UI lists. Pure over
+ * the {@link AppsSource} seam; a production deployment binds its own
+ * implementation, tests bind an in-memory Map.
  *
- * Identity scope: caller's Cognito sub from `ctx.userId` (or
- * `ctx.appId` in OSS single-app mode). Cross-user list is impossible
+ * Identity scope: the caller's owner id from `ctx.userId` (or
+ * `ctx.appId` in single-app mode). Cross-user list is impossible
  * by construction — `AppsSource.list` only returns rows whose
  * `ownerSub` matches.
  */
@@ -43,7 +42,7 @@ export function createListAppsHandler(deps: ListAppsDeps) {
     title: 'List apps',
     audience: ['ops'],
     description:
-      "Enumerate every `GguiApp` row owned by the calling user. Returns metadata only (appId, displayName, optional systemPrompt, createdAt, updatedAt). Same data the console's Apps section renders. Use to discover ids before calling `ggui_ops_update_app` / `ggui_ops_set_default_app` / `ggui_ops_delete_app`.",
+      "Enumerate every `GguiApp` row owned by the calling user. Returns metadata only (appId, displayName, optional systemPrompt, createdAt, updatedAt). Use to discover ids before calling `ggui_ops_update_app` / `ggui_ops_set_default_app` / `ggui_ops_delete_app`.",
     inputSchema,
     outputSchema,
     async handler(

@@ -53,18 +53,6 @@
     "./ops-apps": {
       "types": "./dist/ops-apps/index.d.ts",
       "import": "./dist/ops-apps/index.js"
-    },
-    "./ops-orgs": {
-      "types": "./dist/ops-orgs/index.d.ts",
-      "import": "./dist/ops-orgs/index.js"
-    },
-    "./ops-connector-keys": {
-      "types": "./dist/ops-connector-keys/index.d.ts",
-      "import": "./dist/ops-connector-keys/index.js"
-    },
-    "./ops-coupon": {
-      "types": "./dist/ops-coupon/index.d.ts",
-      "import": "./dist/ops-coupon/index.js"
     }
   },
   "scripts": {

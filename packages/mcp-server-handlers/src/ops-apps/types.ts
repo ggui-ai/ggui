@@ -1,27 +1,26 @@
 /**
- * Seam types for the `ops-apps` MCP tool family. Mirrors the
- * data-model rows that back the console's Apps + Account surfaces
- * (the `GguiApp` and `GguiUser` records). Pure over
- * `@ggui-ai/protocol` shapes — NO AWS / database imports. Cloud
- * deployments bind an AWS-backed implementation; tests bind
+ * Seam types for the `ops-apps` MCP tool family: an app record
+ * (`GguiApp`) and the user's default-app setting (`GguiUser`). Pure over
+ * `@ggui-ai/protocol` shapes — no storage or database imports. A
+ * deployment binds an implementation over its own store; tests bind
  * in-memory fakes.
  *
  * Why an explicit seam vs threading a database client directly: the
- * shared-handler layer must be the same code path with or without a
- * cloud backend. The `AppsSource` interface IS the boundary — wired
- * to a real datastore in production, wired to a Map in tests.
+ * shared-handler layer must be the same code path whatever store sits
+ * behind it. The `AppsSource` interface IS the boundary — wired to a
+ * real datastore in production, wired to a Map in tests.
  */
 import type { AppTheme } from '@ggui-ai/protocol';
 
 /**
  * One app record, projected for MCP-tool readers. Pure data — no
- * relations, no backend-internal fields. Cloud adapters map the
- * stored model row onto this shape; tests construct it directly.
+ * relations, no store-internal fields. An adapter maps its stored row
+ * onto this shape; tests construct it directly.
  */
 export interface AppRecord {
-  /** Opaque base62 `<8 chars>` — server-minted when the app is provisioned. */
+  /** Opaque id, minted by the store when the app is created; never caller-supplied. */
   readonly appId: string;
-  /** FK to the owning user's Cognito sub. Used for ownership gates. */
+  /** The owning user's id (`resolveOwnerSub`). Used for ownership gates. */
   readonly ownerSub: string;
   /** User-editable label. */
   readonly displayName: string;
@@ -61,7 +60,7 @@ export interface AppUpdatePatch {
 }
 
 /**
- * Read+write seam for `GguiApp` rows. Cloud deployments bind a
+ * Read+write seam for `GguiApp` rows. A deployment binds a
  * datastore-backed implementation; tests implement it against
  * in-memory state.
  *
@@ -69,8 +68,8 @@ export interface AppUpdatePatch {
  *   - `list(ownerSub)` returns only the rows the caller owns. The
  *     implementation does NOT leak rows from other users.
  *   - `create({ ownerSub, displayName })` mints a fresh `appId`
- *     server-side (cloud: base62 + collision retry; in-memory: any
- *     unique string). Argument-supplied appIds are NOT honored — that
+ *     server-side (a database store: its own id format, with a retry
+ *     on collision; in-memory: any unique string). Argument-supplied appIds are NOT honored — that
  *     would be an app-takeover vector.
  *   - `update`, `delete`, `setTheme` reject when the row's
  *     `ownerSub` doesn't match the caller's. Implementations either
@@ -130,8 +129,8 @@ export interface AppsSource {
 /**
  * Read+write seam for the `defaultAppId` column on `GguiUser`. Separate
  * interface from `AppsSource` because the column lives on a different
- * table — keeping the seams disjoint lets the cloud adapter bind two
- * unrelated mutations without one interface dragging in the other.
+ * record — keeping the seams disjoint lets an adapter bind two
+ * unrelated writes without one interface dragging in the other.
  *
  * The handler chains `AppsSource.get` (verify the user owns the target)
  * before calling `setDefault` so writes never point at a foreign app.
@@ -160,9 +159,8 @@ export class AppNotFoundError extends Error {
  *
  * `defaultAppId` is what the universal route resolves on every
  * request; deleting the app it names would leave that route pointing
- * at a row that no longer exists. Same lock the console's Delete
- * enforces — the operator picks a different default first, then
- * deletes.
+ * at a row that no longer exists. A UI's delete should enforce the same
+ * lock — the operator picks a different default first, then deletes.
  */
 export class DefaultAppDeleteBlockedError extends Error {
   readonly code = 'default_app_delete_blocked' as const;
@@ -177,9 +175,8 @@ export class DefaultAppDeleteBlockedError extends Error {
 /**
  * Thrown by adapters that prefer surfacing access denial over the
  * "treat as not-found" privacy posture. Handlers translate to the
- * uniform "not found" shape — the error class exists so cloud
- * adapters can be specific in their logs without callers parsing
- * strings.
+ * uniform "not found" shape — the error class exists so adapters can
+ * be specific in their logs without callers parsing strings.
  */
 export class OpsAppsAccessDeniedError extends Error {
   readonly code = 'ops_apps_access_denied' as const;
