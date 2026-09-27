@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_consume`'s `nextStep` is now SENT (2026-09-27, ggui#1399 step 2:
+ * no schema change, same draft stamp). Declared in 0.24.0 (step 1), the
+ * member rides every non-empty drain as `{ tool: 'ggui_amend',
+ * description, example, args: { sessionId } }` — the input's session id
+ * verbatim, the example in copy-paste form — and is absent on an empty
+ * drain and on a late drain from an expired render. A host that cached the 0.24.0 output schema accepts it; the
+ * model-visible content leads with the example in plain text, as the
+ * render → consume hint does. No PROTOCOL_VERSION move.
+ * --------------------------------------------------------------------
  * `MODELS.openrouter` gains `openai/gpt-6-sol`, `openai/gpt-6-luna` and
  * `anthropic/claude-opus-5.5` (2026-09-27, additive, ggui#1267: MINOR,
  * same draft stamp). Autocomplete only — every `<author>/<model>` string

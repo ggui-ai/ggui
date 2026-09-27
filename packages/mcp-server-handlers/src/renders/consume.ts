@@ -199,7 +199,7 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
     title: 'Consume',
     audience: ['agent'],
     description:
-      "Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === \"ggui_consume\"` \u2014 that hint is your cue to start listening for the user's gesture. DO NOT skip the consume \u2014 silent gesture drops are the worst protocol failure. `timeout` is an integer in [0, 25] seconds (default 0 \u2014 an instant non-blocking drain; values outside reject INVALID_PARAMS \u2014 hosts abort longer tool calls; pick 5-15s, 25 max). Returns `{events, status}`; each event is `{type: \"action\", sessionId, intent, actionData, uiContext, actionId, firedAt}` \u2014 `actionData` is WHAT the user did, `uiContext` the iframe-local snapshot of the contract's contextSpec slots AT THE MOMENT they did it. Returns immediately when an action event arrives OR the render completes OR the timeout elapses; status:\"expired\" means the render is gone. THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` for the next gesture; when `events` is empty, end your turn (on a timeout with no event you may re-call once first) \u2014 a later gesture arrives as a new user message carrying its own consume directive. IMPORTANT \u2014 the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_amend`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_amend` before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don't change displayed state can skip it. `ggui_amend` repaints the SAME card in place (the default move in this loop); `ggui_update` renders the state as a NEW card and advances the history number \u2014 reserve it for milestones worth a card in the transcript. IDEMPOTENCY: treat each entry's `actionId` as an idempotency key \u2014 apply a side-effecting action AT MOST ONCE per `actionId`; the same id delivered twice is one gesture replayed, never two; two DISTINCT ids are two real gestures. This holds for EVERY action, not only those a contract marks `oneShot`: a card served mid-rollout may be running a runtime that suppresses nothing, and keying on the marker would leave a hole exactly there. Both `actionData` and `uiContext` inform your reaction without a second round trip. Keyed by sessionId (global UUID); app-scoped via ctx.appId. HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with \"tool not loaded yet\" or \"wrong parameter names,\" call `tool_search({query:\"ggui_consume\"})` once to warm the tool, then retry with the same args.",
+      "Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === \"ggui_consume\"` \u2014 that hint is your cue to start listening for the user's gesture. DO NOT skip the consume \u2014 silent gesture drops are the worst protocol failure. `timeout` is an integer in [0, 25] seconds (default 0 \u2014 an instant non-blocking drain; values outside reject INVALID_PARAMS \u2014 hosts abort longer tool calls; pick 5-15s, 25 max). Returns `{events, status}`; each event is `{type: \"action\", sessionId, intent, actionData, uiContext, actionId, firedAt}` \u2014 `actionData` is WHAT the user did, `uiContext` the iframe-local snapshot of the contract's contextSpec slots AT THE MOMENT they did it. Returns immediately when an action event arrives OR the render completes OR the timeout elapses; status:\"expired\" means the render is gone. THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` for the next gesture; when `events` is empty, end your turn (on a timeout with no event you may re-call once first) \u2014 a later gesture arrives as a new user message carrying its own consume directive. IMPORTANT \u2014 the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_amend`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_amend` before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don't change displayed state can skip it. `ggui_amend` repaints the SAME card in place (the default move in this loop); `ggui_update` renders the state as a NEW card and advances the history number \u2014 reserve it for milestones worth a card in the transcript. IDEMPOTENCY: treat each entry's `actionId` as an idempotency key \u2014 apply a side-effecting action AT MOST ONCE per `actionId`; the same id delivered twice is one gesture replayed, never two; two DISTINCT ids are two real gestures. This holds for EVERY action, not only those a contract marks `oneShot`: a card served mid-rollout may be running a runtime that suppresses nothing, and keying on the marker would leave a hole exactly there. Both `actionData` and `uiContext` inform your reaction without a second round trip. Keyed by sessionId (global UUID); app-scoped via ctx.appId. HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with \"tool not loaded yet\" or \"wrong parameter names,\" call `tool_search({query:\"ggui_consume\"})` once to warm the tool, then retry with the same args. THE RESULT'S `nextStep`: when `events` is non-empty and status is active the result carries `nextStep` = ggui_amend({ sessionId, kind: 'replace', props }) with THIS sessionId filled in \u2014 the same-card repaint is the default move; absent when `events` is empty or the render has expired.",
     inputSchema,
     outputSchema,
     async handler(
@@ -404,6 +404,14 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
           ...(stored.hostContext !== undefined
             ? { client: { hostContext: projectHostContext(stored.hostContext) } }
             : {}),
+          // The consume → amend hint (ggui#1399, step 2 — the emit; step 1
+          // declared it one release earlier so every host's cached schema
+          // names it). Present iff there is something to react to AND the
+          // render is still live: an amend on an expired render cannot
+          // succeed, so a late drain from one carries no hint.
+          ...(events.length > 0 && result.status === 'active'
+            ? { nextStep: buildConsumeNextStep(sessionId) }
+            : {}),
         };
       } finally {
         deps.activeConsumerRegistry?.exit(sessionId);
@@ -417,6 +425,26 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
  * immutable seam state (the protocol types it `DeepReadonly`); the wire is
  * mutable JSON, so the one array is copied and every present field carried.
  */
+/**
+ * The consume → amend hint (ggui#1399): the render → consume chain the
+ * agent follows is a hint on the result it just read, and this closes the
+ * loop from the drained gesture back to the card. `args.sessionId` is the
+ * input's session id verbatim — the literal the agent passes — and
+ * `example` carries it in copy-paste form, the same shape as the render
+ * hint. The server cannot know whether a gesture changed what the user
+ * sees, so the description carries that clause; the decision stays the
+ * agent's. Mirrors `gguiConsumeOutputSchema.nextStep` (declared in step 1).
+ */
+function buildConsumeNextStep(sessionId: string): NonNullable<ConsumeOutput['nextStep']> {
+  return {
+    tool: 'ggui_amend',
+    description:
+      "Repaint THIS card in place with whatever the gestures changed — kind: 'replace' with the full props, or kind: 'merge' with a patch; the user keeps looking at the same card. A new render is the exception, for a milestone worth a card in the transcript. Then re-call ggui_consume for the next gesture.",
+    example: `ggui_amend({ sessionId: '${sessionId}', kind: 'replace', props: { /* the card's props with the change applied */ } })`,
+    args: { sessionId },
+  };
+}
+
 function projectHostContext(h: HostContextProjection): NonNullable<NonNullable<ConsumeOutput['client']>['hostContext']> {
   return {
     ...(h.availableDisplayModes !== undefined ? { availableDisplayModes: [...h.availableDisplayModes] } : {}),

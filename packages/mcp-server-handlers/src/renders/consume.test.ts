@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z, ZodError } from 'zod';
 import type { ComponentGguiSession, ConsumeEventEntry, JsonValue } from '@ggui-ai/protocol';
+import { gguiConsumeOutputSchema } from '@ggui-ai/protocol';
 import {
   InMemoryActiveConsumerRegistry,
   InMemoryPendingEventConsumer,
@@ -769,7 +770,7 @@ describe('a malformed stored row is a HandlerFailure, never a thrown error (ggui
   });
 });
 
-describe('declares nextStep → ggui_amend on the advertised output (ggui#1399 step 1 — declared, not yet emitted)', () => {
+describe('nextStep → ggui_amend on the advertised output (ggui#1399: declared in step 1, sent since step 2)', () => {
   it('the closed output schema names the hint, so a host that caches it accepts the emit next release', () => {
     const h = createGguiConsumeHandler({
       pendingEventConsumer: new InMemoryPendingEventConsumer(),
@@ -794,7 +795,7 @@ describe('declares nextStep → ggui_amend on the advertised output (ggui#1399 s
     }).parse(projected);
   });
 
-  it('a non-empty drain carries NO nextStep yet — the emit is the next release (the step-2 tripwire)', async () => {
+  it('a non-empty drain carries the amend hint: tool ggui_amend, args.sessionId = the input, example in copy-paste form (ggui#1399 step 2)', async () => {
     const consumer = new InMemoryPendingEventConsumer();
     consumer.markCreated('render-1');
     const renderStore = new InMemoryGguiSessionStore();
@@ -830,6 +831,77 @@ describe('declares nextStep → ggui_amend on the advertised output (ggui#1399 s
     expect(isHandlerFailure(out)).toBe(false);
     if (isHandlerFailure(out)) return;
     expect(out.events).toHaveLength(1);
+    expect(out.nextStep).toMatchObject({ tool: 'ggui_amend', args: { sessionId: 'render-1' } });
+    expect(out.nextStep?.example).toContain("ggui_amend({ sessionId: 'render-1', kind: 'replace'");
+    expect(out.nextStep?.description).toMatch(/THIS card in place/);
+    // the emit still parses against the closed output the host cached in step 1
+    expect(gguiConsumeOutputSchema.safeParse(out).success).toBe(true);
+  });
+
+  it('events drained from an EXPIRED render carry no nextStep — the amend it would point at cannot succeed (ggui#1399 step 2)', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated('render-1');
+    const renderStore = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    await renderStore.commit({
+      appId: 'app-1',
+      render: {
+        id: 'render-1',
+        appId: 'app-1',
+        type: 'component',
+        componentCode: 'x',
+        eventSequence: 0,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60_000,
+      },
+    });
+    await consumer.append('render-1', {
+      id: 'evt-late',
+      envelope: {
+        type: 'action',
+        sessionId: 'render-1',
+        intent: 'confirm',
+        actionData: null,
+        uiContext: {},
+        actionId: 'a-late',
+        firedAt: new Date(now).toISOString(),
+      },
+      createdAt: new Date(now).toISOString(),
+    });
+    consumer.markStatus('render-1', 'expired');
+    const h = createGguiConsumeHandler({ pendingEventConsumer: consumer, renderStore });
+    const out = await h.handler({ sessionId: 'render-1', timeout: 0 }, { appId: 'app-1', requestId: 'r-1399x' });
+    expect(isHandlerFailure(out)).toBe(false);
+    if (isHandlerFailure(out)) return;
+    expect(out.events).toHaveLength(1);
+    expect(out.status).toBe('expired');
+    expect(out).not.toHaveProperty('nextStep');
+  });
+
+  it('an empty drain carries no nextStep — nothing to react to (ggui#1399 step 2)', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated('render-1');
+    const renderStore = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    await renderStore.commit({
+      appId: 'app-1',
+      render: {
+        id: 'render-1',
+        appId: 'app-1',
+        type: 'component',
+        componentCode: 'x',
+        eventSequence: 0,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60_000,
+      },
+    });
+    const h = createGguiConsumeHandler({ pendingEventConsumer: consumer, renderStore });
+    const out = await h.handler({ sessionId: 'render-1', timeout: 0 }, { appId: 'app-1', requestId: 'r-1399e' });
+    expect(isHandlerFailure(out)).toBe(false);
+    if (isHandlerFailure(out)) return;
+    expect(out.events).toHaveLength(0);
     expect(out).not.toHaveProperty('nextStep');
   });
 });
