@@ -23,6 +23,11 @@ export type { CreateUiGeneratorOptions } from './create-ui-generator.js';
 export type { RuntimeRenderProbeConfig } from './harness/check/runtime-render/adapter.js';
 export type { ProviderRetryInfo } from './harness/llm-router.js';
 export type { GenerationResult, SameExchangeBreak } from './harness/result-types.js';
+// The build identity a stamp outside this package can name: the same
+// digests `createUiGenerator` puts on every result's `metadata.build`, for
+// either design mode — so a harness definition can carry both modes' digests
+// while a run's metadata carries only the mode that ran.
+export { generatorBuild } from './generator-build.js';
 export type { UiGenBuild } from './generator-build.js';
 
 // Generator registry seam re-export. The interface + slug helpers live
