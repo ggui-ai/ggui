@@ -292,6 +292,12 @@ export function generateBoilerplate(
     } else {
       actionHookCalls.push(`  const ${key} = useAction<${typeName}>('${key}'); // ${callSig}${toolHint}${onceHint}`);
     }
+    // ggui#1398 — the dispatch's in-flight state, bound at the site the model
+    // writes the control (reliability/013: a rule alone reached 1/6, the
+    // binding 6/6).
+    actionHookCalls.push(
+      `  const ${key}Pending = useActionPending('${key}'); // true from the tap until the agent's answer repaints the card — render EVERY control that dispatches '${key}' (a Button, a Select's onChange, an Input's Enter) from THIS: disabled={${key}Pending} aria-busy={${key}Pending}, and a working label on a button; no other control carries its aria-busy`,
+    );
     actionReturnFields.push(key);
   }
 
@@ -525,6 +531,7 @@ export function generateBoilerplate(
   const wireHooks: string[] = [];
   if (hasActions) wireHooks.push("useAction");
   if (hasOneShotAction) wireHooks.push("useActionSpent");
+  if (hasActions) wireHooks.push("useActionPending");
   if (hasStream) wireHooks.push("useStream");
   if (hasContext) wireHooks.push("useGguiContext");
   const wireImport = hasAnyWireFromWire

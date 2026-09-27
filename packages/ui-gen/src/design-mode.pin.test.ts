@@ -201,9 +201,9 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // the sunken role — all in the SHARED prompt, so BOTH prompt digests move together; the boilerplate digests
 // are byte-stable. Constrained be40b232… → d685e8df…, free 077a3387… → 987853c0….
 export const CONSTRAINED_PROMPT_SHA256 =
-  "a44d76ad5a845e3f4869b8e5e56a46f12e6bedea9e483659e0bfe0587b2f6ea5";
+  "e1652d73408f32d82df96cc0e4ce5a0ec9828f6cb2b45cbc1aa98a25f9324093";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  '2afbb69a4c07a98058d56148718068bf00be63b172a609397da20d78bc12cb22';
+  '63fe2f8140cb95c254231ceff79296d187060bc5c0093c2d127ce0d1957db10c';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
 // item's own identity — the field that names it when there is no id, never the map index; the prompt now
 // says what the self-check refuses). A HARD section shared by both arms, so BOTH prompt digests move
@@ -258,11 +258,11 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-24 for ggui#1083 cut 2 part B — see the constrained note (the shared FRAME_SIZING bullet).
 // Re-recorded 2026-09-24 for ggui#1083 cut 2's (B) — see the constrained note (the opening hero band).
 export const FREE_PROMPT_SHA256 =
-  "4440d9810cb17fd736ad70210464c857b21671f22a9af7421921ec643a5cf0d3";
+  "18835f57734acecfc1ba9318440cc13340c08ec9978ccfa6c1d2698ba54c9358";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
-  'a33e33a71580fd493e12e1e3c87b4af943a588e2800eb2da8f7049af6fca61cb';
+  '6b2674094b26b6fc7737a55f82118d3d5169efd54552e4e3759b603e3311b912';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [

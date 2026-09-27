@@ -212,7 +212,7 @@ With raw elements YOU own the semantics — nothing is accessible by constructio
 3. **Images have \`alt\`** (\`alt=""\` for decorative). Icon-only buttons need \`aria-label\`; decorative icons and emoji are \`aria-hidden="true"\`.
 4. **Live & streaming data** (a \`useStream\` \`.latest\` value, counters, clocks, flashing prices) sits in an \`aria-live="polite"\` (or \`role="status"\`) region so screen readers announce the change.
 5. **Headings nest**: one \`<h1>\` per screen, \`<h2>\` for sections, \`<h3>\` below — never skipped or inverted.
-6. **Busy state is announced**: \`<button disabled={isLoading} aria-busy={isLoading}>{isLoading ? 'Submitting…' : 'Submit'}</button>\`.
+6. **Busy state is announced**: every control that dispatches an action (a button, a select whose change dispatches, an input that sends on Enter) stays pending from \`useActionPending('<action>')\` until the agent's answer repaints the card — \`<button disabled={sendPending} aria-busy={sendPending}>{sendPending ? 'Sending…' : 'Send'}</button>\`. Only a control that dispatches the action carries its busy look; while it is pending, other controls of the same record may be disabled — nothing more (controls of other records, creation controls and the action's own cancel stay enabled); busy state the card owns (\`isLoading\`) the same way.
 7. **Stateful controls announce state**: \`role="checkbox"\` + \`aria-checked\` on a toggleable row, \`aria-pressed\` on a toggle button, \`aria-selected\` on the chosen item, \`aria-expanded\` on an open/close affordance. Styling (strikethrough, color, a check mark) is never the only carrier of state.
 8. **Focus is visible** — style \`:focus-visible\` with a token color; never \`outline: none\` without a replacement.`;
 

@@ -18,14 +18,14 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('taught wire surface is frozen for ggui#670 Phase 1', () => {
-  it('the docs generator allowlist is exactly the six taught hooks (useActionSpent joined under ggui#1223, reliability/013)', () => {
+  it('the docs generator allowlist is exactly the seven taught hooks (useActionSpent joined under ggui#1223, reliability/013; useActionPending under ggui#1398)', () => {
     const src = readFileSync(resolve(here, '..', 'scripts', 'generate-wire-docs.ts'), 'utf8');
     const start = src.indexOf('const hookFiles');
     const end = src.indexOf('];', start);
     expect(start).toBeGreaterThan(-1);
     const block = src.slice(start, end);
     const names = [...block.matchAll(/hookName:\s*'([A-Za-z]+)'/g)].map((m) => m[1]);
-    expect(names).toEqual(['useAction', 'useActionSpent', 'useStream', 'useAuth', 'useApp', 'useRender']);
+    expect(names).toEqual(['useAction', 'useActionSpent', 'useActionPending', 'useStream', 'useAuth', 'useApp', 'useRender']);
   });
 
   it('useRender keeps its exact taught docstring and return shape (prompt byte-identical)', () => {
