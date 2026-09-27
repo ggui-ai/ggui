@@ -17,6 +17,8 @@ import {
   CONTENT_HEIGHT_EXPRESSION,
   JUDGE_GROUND_CLASS,
   JUDGE_GROUND_MARGIN_PX,
+  JUDGE_INLINE_FRAME_CLASS,
+  JUDGE_INLINE_PAD_PX,
   JUDGE_PANEL_CLASS,
   canvasChrome,
   canvasFitPolicy,
@@ -77,7 +79,8 @@ function fitDeps(contentHeight: number | (() => Promise<number>), score = 85): V
   };
 }
 
-const M = JUDGE_GROUND_MARGIN_PX;
+/** What the inline card's page adds on each side: the ground margin plus the host frame's 1 px ring. */
+const M = JUDGE_INLINE_PAD_PX;
 
 describe('canvasFitPolicy', () => {
   it('inline card: natural capture + fail; phone: full page + warn; pages: full page, measured only', () => {
@@ -98,7 +101,8 @@ describe('canvasFitPolicy', () => {
 
 describe('ggui#1475 — the inline card is captured as a size-honouring host shows it: its natural height, on the host ground', () => {
   it('xs carries the ground chrome (the design gap on every side); every other canvas keeps its own', () => {
-    expect(M).toBe(EXPANDED_FRAME.insetPx);
+    expect(JUDGE_GROUND_MARGIN_PX).toBe(EXPANDED_FRAME.insetPx);
+    expect(M).toBe(JUDGE_GROUND_MARGIN_PX + 1);
     expect(canvasChrome('xs-chat-card')).toBe('ground');
     expect(canvasChrome('mobile-fullscreen-small')).toBeUndefined();
     for (const c of ['md', 'lg', 'xl'] as const) expect(canvasChrome(c)).toBe('panel');
@@ -130,6 +134,10 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION]);
     expect(deps.captures).toEqual([{ width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 280 + 2 * M } }]);
     expect(deps.pages[0]).toContain(`class="${JUDGE_GROUND_CLASS}"`);
+    // The generic stand-in for the host's frame: the card's container surface, a 1 px ring, a 16 px radius.
+    expect(deps.pages[0]).toContain(`class="${JUDGE_INLINE_FRAME_CLASS}"`);
+    expect(deps.pages[0]).toContain('background: var(--ggui-color-container)');
+    expect(deps.pages[0]).toContain('border-radius: 16px');
     expect(result!.canvases![0]).toMatchObject({ canvas: 'xs-chat-card', contentHeight: 280, overflow: false, passed: true, viewport: { width: 400, height: 640 } });
   });
   it('a declared box (#1195) mounts the card at the declared width, on the ground', async () => {

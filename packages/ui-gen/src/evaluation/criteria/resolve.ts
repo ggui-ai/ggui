@@ -114,7 +114,7 @@ export const CRITERIA_PROPS_MAX_CHARS = 2000;
 export function criteriaFrameLine(frame: CriteriaJudgeFrame): string {
   const box = `${frame.width}×${frame.height}`;
   return frame.canvas === 'xs-chat-card'
-    ? `This frame is an inline chat card captured at its natural height (at most ${box}, the host's ceiling) on the host's surface, which shows as a thin margin round it: the host sizes the card to its content, so judge composition and space within the card's own extent, and read the margin as the host's, not the card's.`
+    ? `This frame is an inline chat card captured at its natural height (at most ${box}, the host's ceiling), inside a generic stand-in for the host's frame — the card's surface with a thin ring and rounded corners, on the page ground: the host sizes the card to its content and draws that frame, so judge composition and space within the card's own extent, and read the frame and the ground round it as the host's, not the card's.`
     : `This frame is ${box}, a fixed full-screen box the card fills: judge composition and space against the whole box, edge to edge.`;
 }
 

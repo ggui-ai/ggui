@@ -12,6 +12,8 @@ import { encodePng, flatPng } from './__fixtures__/png.js';
 import {
   CARD_HEIGHT_EXPRESSION,
   JUDGE_GROUND_MARGIN_PX,
+  JUDGE_INLINE_INK_INSET_PX,
+  JUDGE_INLINE_PAD_PX,
   JUDGE_INK_INSET_PX,
   JUDGE_PANEL_CLASS,
   runVisualEvaluationDetailed,
@@ -27,7 +29,7 @@ const INK = [20, 30, 40] as const;
 type Box = { readonly width: number; readonly height: number };
 
 /** A fake browser whose screenshot is a PNG painted per page by `paint`, at the window the judge asked for. */
-function inkDeps(paint: (window: Box, panelled: boolean) => Uint8Array, score = 85): VisualEvalDeps & { pages: string[] } {
+function inkDeps(paint: (window: Box, panelled: boolean) => Uint8Array, score = 85, cardHeight?: number): VisualEvalDeps & { pages: string[] } {
   const pages: string[] = [];
   const launch = async (o: LaunchOptions): Promise<ScreenshotBrowser> => {
     const window = { width: o.defaultViewport?.width ?? 0, height: o.defaultViewport?.height ?? 0 };
@@ -43,7 +45,7 @@ function inkDeps(paint: (window: Box, panelled: boolean) => Uint8Array, score = 
         // The inline card is measured from its mount (ggui#1475): a card exactly its box tall; any other
         // canvas from the document, which carries the panel's gap when one was drawn.
         evaluate: async (expression: string) =>
-          expression === CARD_HEIGHT_EXPRESSION ? window.height - 2 * JUDGE_GROUND_MARGIN_PX : window.height + (panelled ? 32 : 0),
+          expression === CARD_HEIGHT_EXPRESSION ? (cardHeight ?? window.height - 2 * JUDGE_INLINE_PAD_PX) : window.height + (panelled ? 32 : 0),
         screenshot: async () => paint(window, panelled),
       }),
       close: async () => {},
@@ -122,6 +124,39 @@ describe('the blank (ggui#1120): a flat capture fails the canvas, on every class
     expect(xs.passed).toBe(false);
     expect(result!.issues.map((i) => i.dimension)).toContain('canvas-blank');
     expect(JUDGE_GROUND_MARGIN_PX).toBe(16);
+  });
+
+  it("ggui#1475 — the host frame's ring and rounded corner never count as paint: a frame with nothing inside is still the blank", async () => {
+    // The stand-in frame's 1 px ring sits 16 px in (past the ground margin) and its 16 px corner exposes the ground:
+    // paint both, nothing else. The ink is read past the margin, the ring and the corner radius (33 px), literal here.
+    const frameOnly = (w: Box): Uint8Array =>
+      encodePng({ width: w.width, height: w.height, channels: 3, pixel: (x, y) => {
+        const edge = Math.min(x, y, w.width - 1 - x, w.height - 1 - y);
+        const inCorner = (x < 32 || x > w.width - 33) && (y < 32 || y > w.height - 33) && edge < 32;
+        return edge === 16 || inCorner ? INK : GROUND;
+      } });
+    const d = inkDeps(frameOnly);
+    const { result } = await runVisualEvaluationDetailed(
+      { compiledCode: COMPONENT, originalPrompt: 'a welcome card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
+      d,
+    );
+    const [xs] = result!.canvases!;
+    expect(xs.inkRatio).toBe(0);
+    expect(xs.passed).toBe(false);
+    expect(JUDGE_INLINE_INK_INSET_PX).toBe(33);
+  });
+
+  it('ggui#1475 — a card that measured no height is the blank, read from the measurement even when its ink is unreadable', async () => {
+    const d = inkDeps(() => new Uint8Array([1, 2, 3]), 85, 0);
+    const { result } = await runVisualEvaluationDetailed(
+      { compiledCode: COMPONENT, originalPrompt: 'a welcome card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
+      d,
+    );
+    const [xs] = result!.canvases!;
+    expect([xs.inkRatio, xs.contentHeight, xs.passed]).toEqual([null, 0, false]);
+    expect(result!.issues.map((i) => i.dimension)).toContain('canvas-blank');
   });
 
   it('ink inside the panel is measured over the region and reported, never scored: no issue, the canvas passes', async () => {

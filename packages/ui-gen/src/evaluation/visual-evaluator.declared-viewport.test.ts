@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
-  JUDGE_GROUND_MARGIN_PX,
+  JUDGE_INLINE_PAD_PX,
   canvasOverflowIssue,
   runVisualEvaluationDetailed,
   summarizeVisualResult,
@@ -28,7 +28,7 @@ const DECLARED = { width: 384, height: 516 } as const;
 
 interface Clip { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 interface Capture { readonly width: number; readonly height: number; readonly fullPage: boolean; readonly clip?: Clip }
-const M = JUDGE_GROUND_MARGIN_PX;
+const M = JUDGE_INLINE_PAD_PX;
 /** The inline card's capture (ggui#1475): the window is the box plus the ground margin, clipped to the card capped at the box. */
 const natural = (box: { width: number; height: number }, card: number): Capture => ({
   width: box.width + 2 * M,

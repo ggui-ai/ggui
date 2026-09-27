@@ -13,6 +13,7 @@ import type { LaunchOptions } from 'puppeteer-core';
 import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
 import { CANVAS_CLASSES, CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
+  CARD_HEIGHT_EXPRESSION,
   JUDGE_PANEL_CLASS,
   canvasChrome,
   judgeWindow,
@@ -42,7 +43,8 @@ function recordingDeps(scores: readonly number[]): VisualEvalDeps & { launched: 
         },
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
-        evaluate: async () => (panelled ? 2 * EXPANDED_FRAME.insetPx : 0),
+        // ggui#1475 — the inline card is measured as the host measures it (a real card has a height; 0 would be the blank).
+        evaluate: async (expression: string) => (expression === CARD_HEIGHT_EXPRESSION ? 300 : panelled ? 2 * EXPANDED_FRAME.insetPx : 0),
         screenshot: async () => new Uint8Array([width >> 8, width & 0xff]),
       }),
       close: async () => {},
@@ -116,7 +118,7 @@ describe('runVisualEvaluation — per-canvas mode', () => {
       // overflow, judged with a measurable height); judged at the class viewport here, so `declared: false`.
       fit: { canvas: 'xs-chat-card', ceiling: { width: 400, height: 640 }, declared: false, overflowPx: 0 },
       canvases: [
-        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 0, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
+        { canvas: 'xs-chat-card', viewport: { width: 400, height: 640 }, score: 80, passed: true, contentHeight: 300, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median', samples: [80], sigma: 0, notes: [expect.any(String)] } },
         // ggui#1100: a fullscreen canvas is composed with the runtime's fit and says so; the inline card carries no `fit`.
         { canvas: 'xl', viewport: { width: 1440, height: 900 }, score: 90, passed: true, contentHeight: 0, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median', samples: [90], sigma: 0, notes: [expect.any(String)] }, fit: 'fill' },
       ],

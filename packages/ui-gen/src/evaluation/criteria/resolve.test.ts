@@ -75,6 +75,7 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     const phone = { canvas: 'mobile-fullscreen-small' as const, width: 390, height: 844 };
     // ggui#1475 — the capture IS the card at its natural height (the box is its ceiling), so the line names no void under it.
     expect(criteriaFrameLine(xs)).toContain("an inline chat card captured at its natural height (at most 400×640, the host's ceiling)");
+    expect(criteriaFrameLine(xs)).toContain("a generic stand-in for the host's frame");
     expect(criteriaFrameLine(xs)).not.toContain('empty region');
     expect(criteriaFrameLine(phone)).toContain('390×844, a fixed full-screen box the card fills');
     expect(buildCriteriaJudgeBlock(bank, selected, { frame: xs })).toContain(criteriaFrameLine(xs));

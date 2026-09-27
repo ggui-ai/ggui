@@ -222,6 +222,20 @@ export const JUDGE_GROUND_MARGIN_PX = EXPANDED_FRAME.insetPx;
 /** The class the judge page wraps a naturally-captured card's mount in — its padding is the ground margin. */
 export const JUDGE_GROUND_CLASS = 'ggui-judge-ground';
 /**
+ * The host's frame round the inline card (ggui#1475). An inline card draws no chrome of its own (the
+ * chat layout tells it the host draws it), so without a frame it sits transparent on the page ground
+ * and has no edge to read. The judge draws a GENERIC stand-in for the host's frame, built from the
+ * card's own theme: its container surface, a 1 px ring of its ink at 8 %, a 16 px radius, and
+ * overflow hidden. It is a stand-in, and the frame line says so: a host's exact frame arrives as data.
+ */
+export const JUDGE_INLINE_FRAME_CLASS = 'ggui-judge-inline-frame';
+export const JUDGE_INLINE_FRAME_BORDER_PX = 1;
+export const JUDGE_INLINE_FRAME_RADIUS_PX = 16;
+/** What the inline card's page adds on each side of the card: the ground margin plus the frame's border. */
+export const JUDGE_INLINE_PAD_PX = JUDGE_GROUND_MARGIN_PX + JUDGE_INLINE_FRAME_BORDER_PX;
+/** How far in the inline card's ink is read: past the margin, the frame's ring and its rounded corner, so the host's frame never counts as paint. */
+export const JUDGE_INLINE_INK_INSET_PX = JUDGE_INLINE_PAD_PX + JUDGE_INLINE_FRAME_RADIUS_PX;
+/**
  * The host stand-in round a fill canvas (ggui#1083 cut 3, ggui#1067 §5): the embedding shell floats
  * the card in a panel on its scrim — a hairline, the theme's `xl` radius, `shadow-sm`, a 16 px gap —
  * only when expanded at ≥ 601 px; below that the card owns the phone edge to edge. So the panel
@@ -238,7 +252,7 @@ export function canvasChrome(canvas: CanvasClass): CanvasChrome {
 /** The browser window for a canvas: the canvas box, plus the chrome's gap on every side when the judge draws one (the panel's, or the host ground's). */
 export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome): CanvasViewport {
   if (chrome === undefined) return viewport;
-  const gap = 2 * (chrome === 'ground' ? JUDGE_GROUND_MARGIN_PX : EXPANDED_FRAME.insetPx);
+  const gap = 2 * (chrome === 'ground' ? JUDGE_INLINE_PAD_PX : EXPANDED_FRAME.insetPx);
   return { width: viewport.width + gap, height: viewport.height + gap };
 }
 /**
@@ -578,11 +592,11 @@ function buildRenderHTML(
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
     ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
-    ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; }` : ''}
+    ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { background: var(--ggui-color-container); border: ${JUDGE_INLINE_FRAME_BORDER_PX}px solid color-mix(in srgb, var(--ggui-color-onContainer) 8%, transparent); border-radius: ${JUDGE_INLINE_FRAME_RADIUS_PX}px; overflow: hidden; }` : ''}
   </style>
 </head>
 <body>
-  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : chrome === 'ground' ? `<div class="${JUDGE_GROUND_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' || chrome === 'ground' ? '</div>' : ''}
+  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : chrome === 'ground' ? `<div class="${JUDGE_GROUND_CLASS}"><div class="${JUDGE_INLINE_FRAME_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' ? '</div>' : chrome === 'ground' ? '</div></div>' : ''}
   <script type="importmap">
   {
     "imports": {
@@ -722,14 +736,14 @@ export const CONTENT_HEIGHT_EXPRESSION =
  * ggui#1475 — the natural capture's measurement: the card's height as the host is told it. The MCP
  * Apps SDK's size-changed notification (the report an auto-resizing host sizes the inline frame by)
  * reads the document at `height: max-content` and restores the style; the judge reads the same
- * quantity, minus the ground margin its page adds on both sides, so content outside the mount (a
+ * quantity, minus what its page adds on both sides (the ground margin and the host frame's border), so content outside the mount (a
  * portal into body) counts here exactly as it counts for the host. The document's scroll height
  * could not be used: it is floored at the viewport by definition, so it sees an overflow but never
  * a card shorter than its box.
  */
 export const CARD_HEIGHT_EXPRESSION =
   "(() => { const el = document.documentElement; const prev = el.style.height; el.style.height = 'max-content'; " +
-  `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * JUDGE_GROUND_MARGIN_PX}; })()`;
+  `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * JUDGE_INLINE_PAD_PX}; })()`;
 
 /**
  * The natural capture's region: the card on the host ground, the ground margin on every side, the
@@ -738,7 +752,7 @@ export const CARD_HEIGHT_EXPRESSION =
  * unreadable capture.
  */
 export function naturalClip(window: { width: number; height: number }, cardHeightPx: number): ScreenshotClip {
-  const m = JUDGE_GROUND_MARGIN_PX;
+  const m = JUDGE_INLINE_PAD_PX;
   const box = window.height - 2 * m;
   return { x: 0, y: 0, width: window.width, height: Math.max(1, Math.min(Math.ceil(cardHeightPx), box)) + 2 * m };
 }
@@ -776,7 +790,7 @@ export async function captureScreenshotDetailed(
       if (capture === 'natural') {
         // ggui#1475 — the inline card at its natural height: the capture is the card's extent on the host ground.
         const cardHeightPx = await measureContentHeight(page, CARD_HEIGHT_EXPRESSION);
-        const clip = naturalClip(viewport, cardHeightPx ?? viewport.height - 2 * JUDGE_GROUND_MARGIN_PX);
+        const clip = naturalClip(viewport, cardHeightPx ?? viewport.height - 2 * JUDGE_INLINE_PAD_PX);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
         return { png: Buffer.from(screenshot), contentHeight: cardHeightPx };
       }
@@ -958,7 +972,7 @@ interface CanvasFrame {
 /** The capture's ink extent (ggui#1120), read inside a drawn panel's chrome; an unreadable capture is reported, never blank. */
 function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass): InkExtent | null {
   if (png === null) return null;
-  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : chrome === 'ground' ? JUDGE_GROUND_MARGIN_PX : 0);
+  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : chrome === 'ground' ? JUDGE_INLINE_INK_INSET_PX : 0);
   if ('reason' in ink) {
     console.warn(`[visual-eval] ink extent unreadable at canvas ${canvas}: ${ink.reason}`);
     return null;
@@ -967,6 +981,11 @@ function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass):
 }
 /** The deterministic blank verdict (ggui#1120): an issue when the frame read no ink at all; `null` otherwise, an unreadable capture included. */
 function blankVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+  // ggui#1475 — a naturally-captured card that measured no height painted nothing: its capture is only the host's frame,
+  // which the ink reading skips by design, so the blank is read from the measurement, never mistaken for unreadable.
+  if (frame.chrome === 'ground' && frame.attempt.contentHeight !== null && frame.attempt.contentHeight <= 0) {
+    return canvasBlankIssue(canvas, frame.viewport);
+  }
   return frame.ink !== null && frame.ink.lastInkRow === null ? canvasBlankIssue(canvas, frame.viewport) : null;
 }
 
