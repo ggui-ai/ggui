@@ -85,15 +85,54 @@ export function resolveCriteriaBlock(args: {
 }
 
 /** The judge's prompt block for the selected `judge` rows; empty when none is selected. */
+/** The capture the judge is handed: its canvas class and the box it was taken at (the class box, or a declared one). */
+export interface CriteriaJudgeFrame {
+  readonly canvas: CriteriaContext['canvas'];
+  readonly width: number;
+  readonly height: number;
+}
+
+/** What the block carries besides the selected rows: the frame's box, and the props the card was rendered with. */
+export interface CriteriaJudgeInputs {
+  readonly frame?: CriteriaJudgeFrame;
+  /** JSON text of the props the card was rendered with; bounded by {@link CRITERIA_PROPS_MAX_CHARS}. */
+  readonly propsJson?: string;
+}
+
+/** Bound on the props text handed to the judge beside the frame, in characters. */
+export const CRITERIA_PROPS_MAX_CHARS = 2000;
+
 /**
- * The inline chat card is sized to its content by the host (its box grows and shrinks with the card; a
- * `maxHeight` caps and scrolls), so the `xs-chat-card` frame's empty region under the card belongs to
- * the host, never to the card. Composition and space criteria are judged INSIDE the card's content
- * extent on that canvas; every other canvas is a fixed box the card must inhabit.
+ * The frame's box and how the card occupies it, named so the judge reads the capture it was handed and
+ * never guesses it: without it, phone rows described a 390×844 frame as a 768×1024 tablet, and the
+ * inline card's verdicts flipped between near-identical frames (the evidence audit on ggui#1438).
+ * The inline chat card is sized to its content by the host (the box grows and shrinks with the card; a
+ * `maxHeight` caps and scrolls), so the empty region under it belongs to the host and composition is
+ * judged INSIDE the card's extent; every other canvas is a fixed box the card fills.
  */
-export const CHAT_CARD_EXTENT_LINE =
-  "This frame is an inline chat card the host sizes to its content: judge composition and space INSIDE the card's own extent, never the empty region beneath it in the viewport — that region belongs to the host, not the card.";
-export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSelectionResult, canvas?: CriteriaContext['canvas']): string {
+export function criteriaFrameLine(frame: CriteriaJudgeFrame): string {
+  const box = `${frame.width}×${frame.height}`;
+  return frame.canvas === 'xs-chat-card'
+    ? `This frame is ${box}, an inline chat card the host sizes to its content: judge composition and space INSIDE the card's own extent, never the empty region beneath it in the viewport — that region belongs to the host, not the card.`
+    : `This frame is ${box}, a fixed full-screen box the card fills: judge composition and space against the whole box, edge to edge.`;
+}
+
+/**
+ * The one declared input besides the frame. Rows whose evidence names props (whether a rendered string
+ * came from content or props, whether the primary action is the one the props and contract name) cannot
+ * be answered from pixels alone; every other row stays frame-only.
+ */
+function criteriaPropsSection(propsJson: string): string {
+  const text = propsJson.length > CRITERIA_PROPS_MAX_CHARS ? `${propsJson.slice(0, CRITERIA_PROPS_MAX_CHARS)}… (truncated)` : propsJson;
+  return (
+    'The one input besides the frame — the props this card was rendered with. Read them ONLY for rows whose evidence names props ' +
+    '(for example, whether a rendered string came from them); every other row is read off the frame alone:\n' +
+    `${text}\n`
+  );
+}
+
+/** The judge's prompt block for the selected `judge` rows; empty when none is selected. */
+export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSelectionResult, inputs: CriteriaJudgeInputs = {}): string {
   const byId = new Map<string, BankRow>(bankRows(bank).map((r) => [r.id, r]));
   const asked = selected.selection.map((s) => byId.get(s.id)).filter((r): r is BankRow => r !== undefined && r.evaluation === 'judge');
   if (asked.length === 0) return '';
@@ -101,10 +140,12 @@ export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSe
   return (
     '## Criteria — answer each one from the FRAME only\n' +
     'Read these off the screenshot. Never infer them from the request, the styling profile or any direction text above.\n' +
-    (canvas === 'xs-chat-card' ? `${CHAT_CARD_EXTENT_LINE}\n` : '') +
+    (inputs.frame !== undefined ? `${criteriaFrameLine(inputs.frame)}\n` : '') +
+    (inputs.propsJson !== undefined ? criteriaPropsSection(inputs.propsJson) : '') +
     `${lines.join('\n')}\n` +
     'Add to your JSON a top-level "criteria" array with exactly these ids: ' +
     '[{ "id": "<id>", "verdict": "pass" | "fail" | "n/a", "evidence": "<one sentence naming the region or element you read it from>" }]. ' +
-    'Use "n/a" when the frame cannot show it.'
+    'Every row here was selected as applicable to this card, so "n/a" never means "does not apply": ' +
+    'use it ONLY when this frame cannot show the criterion — it is then recorded as not evaluated.'
   );
 }

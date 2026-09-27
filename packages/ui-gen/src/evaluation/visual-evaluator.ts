@@ -16,6 +16,7 @@ import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import type { CriteriaAnswer } from './types.js';
 import type { CriteriaBlock, CriteriaContext, CriteriaRollup } from './types-public.js';
 import type { CriteriaBank } from './criteria/bank.js';
+import type { JsonObject } from '@ggui-ai/protocol';
 import type { CriteriaContextInput } from './criteria/context.js';
 import { selectCriteria } from './criteria/select.js';
 import { buildCriteriaJudgeBlock, resolveCriteriaBlock } from './criteria/resolve.js';
@@ -1059,7 +1060,12 @@ export async function runVisualEvaluationDetailed(
       const criteriaSelected =
         context.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(context.criteria.bank, criteriaContext) : undefined;
       const criteriaBlock =
-        context.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, canvas) : '';
+        context.criteria !== undefined && criteriaSelected !== undefined
+          ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, {
+              frame: { canvas, width: viewport.width, height: viewport.height },
+              ...(config.sampleProps !== undefined ? { propsJson: JSON.stringify(config.sampleProps) } : {}),
+            })
+          : '';
       const answers = await Promise.all(
         Array.from({ length: k }, () =>
           judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas, criteriaBlock),
@@ -1287,6 +1293,8 @@ export interface StoredCaptureInput {
   readonly profile?: GenerationProfileInput;
   /** ggui#1436 — the bank and the card's context; absent = today's judge, no block. */
   readonly criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
+  /** The props the capture was rendered with — handed to the criteria block for the rows whose evidence names props. */
+  readonly sampleProps?: JsonObject;
 }
 
 export interface StoredCaptureVerdict {
@@ -1332,7 +1340,12 @@ export async function judgeStoredCapture(
   const criteriaSelected =
     input.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(input.criteria.bank, criteriaContext) : undefined;
   const criteriaBlock =
-    input.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected, canvas) : '';
+    input.criteria !== undefined && criteriaSelected !== undefined
+      ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected, {
+          frame: { canvas, width: viewport.width, height: viewport.height },
+          ...(input.sampleProps !== undefined ? { propsJson: JSON.stringify(input.sampleProps) } : {}),
+        })
+      : '';
   const answers = await Promise.all(
     Array.from({ length: k }, () => judgeAndParse(judge, config, model, png, input.originalPrompt, profileBlock, canvas, criteriaBlock)),
   );

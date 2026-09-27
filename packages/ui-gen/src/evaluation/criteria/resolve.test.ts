@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CriteriaContext } from '../types-public.js';
 import { parseCriteriaBank } from './bank.js';
-import { CHAT_CARD_EXTENT_LINE, buildCriteriaJudgeBlock, resolveCriteriaBlock } from './resolve.js';
+import { CRITERIA_PROPS_MAX_CHARS, buildCriteriaJudgeBlock, criteriaFrameLine, resolveCriteriaBlock } from './resolve.js';
 import { selectCriteria } from './select.js';
 
 const bank = parseCriteriaBank({
@@ -70,9 +70,25 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     expect(block).not.toContain('comp.void');
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [] })).toBe('');
     // the inline chat card is host-sized: the block says to judge inside the card's extent on that canvas only
-    expect(buildCriteriaJudgeBlock(bank, selected, 'xs-chat-card')).toContain(CHAT_CARD_EXTENT_LINE);
-    expect(buildCriteriaJudgeBlock(bank, selected, 'md')).not.toContain(CHAT_CARD_EXTENT_LINE);
-    expect(block).not.toContain(CHAT_CARD_EXTENT_LINE);
+    // every canvas names its box and how the card occupies it (the evidence audit on #1438: phone rows guessed a tablet box)
+    const xs = { canvas: 'xs-chat-card' as const, width: 400, height: 640 };
+    const phone = { canvas: 'mobile-fullscreen-small' as const, width: 390, height: 844 };
+    expect(criteriaFrameLine(xs)).toContain('400×640, an inline chat card the host sizes to its content');
+    expect(criteriaFrameLine(phone)).toContain('390×844, a fixed full-screen box the card fills');
+    expect(buildCriteriaJudgeBlock(bank, selected, { frame: xs })).toContain(criteriaFrameLine(xs));
+    expect(buildCriteriaJudgeBlock(bank, selected, { frame: phone })).toContain(criteriaFrameLine(phone));
+    expect(buildCriteriaJudgeBlock(bank, selected, { frame: { canvas: 'md', width: 384, height: 516 } })).toContain('This frame is 384×516, a fixed');
+    expect(block).not.toContain('This frame is');
+    // the rendered props are the one declared non-frame input, bounded and labelled
+    const withProps = buildCriteriaJudgeBlock(bank, selected, { propsJson: '{"title":"Harbor"}' });
+    expect(withProps).toContain('The one input besides the frame — the props this card was rendered with');
+    expect(withProps).toContain('{"title":"Harbor"}');
+    expect(block).not.toContain('The one input besides the frame');
+    const long = buildCriteriaJudgeBlock(bank, selected, { propsJson: `"${'x'.repeat(CRITERIA_PROPS_MAX_CHARS + 50)}"` });
+    expect(long).toContain('… (truncated)');
+    // the judge's n/a means not evaluated, never "does not apply" (applicability is the selector's)
+    expect(block).toContain('"n/a" never means "does not apply"');
+    expect(block).toContain('recorded as not evaluated');
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [{ id: 'comp.fit', source: 'static', reason: 'static' }] })).toBe('');
   });
 });
