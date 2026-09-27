@@ -127,6 +127,7 @@ import {
   findBlueprintExact,
   readBlueprintById,
   registerBlueprint,
+  ephemeralBlueprintId,
 } from './blueprint-registry.js';
 import { fetchGadgetTypes } from './fetch-gadget-types.js';
 import {
@@ -484,8 +485,17 @@ export interface BlueprintResolutionEvent {
   /** `stored` = a stored component served; `fresh` = this render generated the code it served. */
   readonly served: 'stored' | 'fresh';
   readonly blueprintId?: string;
-  /** `existing` = an already-bound row's id; `minted` = this render's registration created the row; `unregistered` = the best-effort registration failed and no id was minted. */
-  readonly identity: 'existing' | 'minted' | 'unregistered';
+  /**
+   * `existing` = an already-bound row's id; `minted` = this render's
+   * registration created the row; `unregistered` = the best-effort
+   * registration failed and no id was minted; `ephemeral` = fresh code served
+   * under an id this render minted WITHOUT registering, because a
+   * `forceCreate` render found the key occupied (ggui#1405: first-write-wins
+   * keeps the incumbent, and the incumbent's id is never recorded for code
+   * it did not produce). `existing` is never emitted beside `served: 'fresh'`
+   * for a force-create.
+   */
+  readonly identity: 'existing' | 'minted' | 'unregistered' | 'ephemeral';
   /**
    * The app this render belongs to. Request context on the event;
    * neutral observability field, same posture as
@@ -901,9 +911,12 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * package ships no default; a host wires it to its own sink.
    *
    * `identity` derives from the registry's `deduped` flag — never inferred.
-   * `served: 'fresh'` with `identity: 'existing'` is the false-identity
-   * case (a forced regeneration at an occupied key: fresh code served, the
-   * old row's id reported) named as itself, never laundered as a reuse.
+   * A forced regeneration at an occupied key serves fresh code under an
+   * EPHEMERAL, content-addressed id of its own (`identity: 'ephemeral'`,
+   * ggui#1405): the incumbent keeps the row and is never credited for code
+   * it did not produce. `served: 'fresh'` with `identity: 'existing'` remains
+   * only for a NON-forced cold-gen whose registration deduped (two renders
+   * racing at one fresh key) — named as itself, never laundered as a reuse.
    * Not emitted in placeholder mode (no blueprint resolution occurs) nor
    * when generation fails (nothing was served).
    */
@@ -2392,11 +2405,22 @@ export function createGguiRenderHandler(
                           : {}),
                       },
                     );
-                    // ggui#1131 (d) — the identity is what the registry SAID, never inferred:
-                    // a dedup hit means fresh code is about to be served under an id this
-                    // render did not mint, and the observer names that as itself.
-                    registrationIdentity = reg === undefined ? 'unregistered' : reg.deduped ? 'existing' : 'minted';
-                    return reg?.id;
+                    // ggui#1131 (d) — the identity is what the registry SAID, never inferred.
+                    // ggui#1405 — a force-create that dedupes found its key occupied: the
+                    // incumbent keeps the row (first-write-wins) and this render serves its
+                    // fresh code under an EPHEMERAL, content-addressed id of its own, so the
+                    // identity row and the wire never credit the incumbent for code it did
+                    // not produce. A non-forced dedupe keeps naming the row's id as `existing`.
+                    if (reg === undefined) {
+                      registrationIdentity = 'unregistered';
+                      return undefined;
+                    }
+                    if (reg.deduped && forceCreate) {
+                      registrationIdentity = 'ephemeral';
+                      return ephemeralBlueprintId(produced.componentCode);
+                    }
+                    registrationIdentity = reg.deduped ? 'existing' : 'minted';
+                    return reg.id;
                   },
                 }
               : {}),

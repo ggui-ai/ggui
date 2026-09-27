@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * Blueprint registry.
  *
@@ -276,6 +277,21 @@ export interface BlueprintRegistryDeps {
 export type BlueprintIntentSource = 'authored' | 'fallback';
 
 /** Input for {@link registerBlueprint}. */
+/**
+ * The identity a `forceCreate` render serves when its registration dedupes
+ * at an occupied key (ggui#1405). Content-addressed from the served code —
+ * `bp_` + the first 32 hex of sha256(componentCode) in UUID shape — so two
+ * force-creates of byte-identical code agree, and never a registered row's
+ * id: first-write-wins keeps the incumbent, the agent opted out of reuse,
+ * and the fresh code is not offered for reuse. Readers tell it from a
+ * registered id by the resolution event's `identity: 'ephemeral'` and by
+ * the absence of a registry row under it.
+ */
+export function ephemeralBlueprintId(componentCode: string): string {
+  const hex = createHash('sha256').update(componentCode, 'utf8').digest('hex');
+  return `bp_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export interface RegisterBlueprintInput {
   readonly kind: BlueprintKind;
   readonly contract: DataContract;

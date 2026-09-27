@@ -72,7 +72,7 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
-import { registerBlueprint } from './blueprint-registry.js';
+import { composeExactKey, ephemeralBlueprintId, registerBlueprint } from './blueprint-registry.js';
 import { CODE_DELIVERY_EVENTS } from './code-delivery-events.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import {
@@ -2934,7 +2934,7 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     expect(events[0]?.blueprintId).toMatch(/^bp_/);
   });
 
-  it('(j) forceCreate with a row at the re-aimed key: force-create, indexRead SKIPPED, served fresh, identity EXISTING — the false identity, named', async () => {
+  it('(j) forceCreate with a row at the re-aimed key: force-create, indexRead SKIPPED, served fresh, identity EPHEMERAL — an id of its own, never the incumbent (#1405)', async () => {
     const events: ResolutionEvent[] = [];
     const h = await buildWithHook((e) => events.push(e), { forceCreate: true });
     const reaimedUuid = 'bp_77777777-7777-4777-8777-777777777777';
@@ -2948,9 +2948,26 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
       contractKey: blueprintKey(OVERRIDE_CONTRACT),
       indexRead: 'skipped',
       served: 'fresh',
-      identity: 'existing',
-      blueprintId: reaimedUuid,
+      identity: 'ephemeral',
     });
+    // The served identity is the render's own, content-addressed from the code it served:
+    // never the incumbent's, on the event and on the wire alike, and no registry row holds it.
+    const ephemeral = ephemeralBlueprintId(COLD_CODE);
+    expect(events[0]?.blueprintId).toBe(ephemeral);
+    expect(out.blueprintId).toBe(ephemeral);
+    expect(ephemeral).not.toBe(reaimedUuid);
+    expect(ephemeral).toMatch(/^bp_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(await h.index.getId(APP_ID, composeExactKey('template', blueprintKey(OVERRIDE_CONTRACT), variantKey(undefined)))).toBe(reaimedUuid); // first-write-wins kept the incumbent
+  });
+
+  it('(j) a non-forced re-aim with no row at the key still MINTS — the ephemeral id is never produced off the force-create path (#1405)', async () => {
+    const events: ResolutionEvent[] = [];
+    const h = await buildWithHook((e) => events.push(e));
+    const out = await h.handler.handler({ handshakeId: h.handshakeId, override: { contract: OVERRIDE_CONTRACT }, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(events[0]).toMatchObject({ strategy: 'override-reaim', served: 'fresh', identity: 'minted' });
+    expect(events[0]?.blueprintId).toMatch(/^bp_/);
+    expect(events[0]?.blueprintId).not.toBe(ephemeralBlueprintId(COLD_CODE));
   });
 
   it('(j) a handshake that proposed nothing: the request context rides the event and proposedBlueprintId is ABSENT, not undefined (#1328)', async () => {
