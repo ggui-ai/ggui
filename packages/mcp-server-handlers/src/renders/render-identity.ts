@@ -48,6 +48,8 @@ export interface RenderIdentityFields {
   readonly contractKey: string;
   /** MUST be `variantKey(variance)` for the same render. */
   readonly variantKey: string;
+  /** `'ephemeral'` when `blueprintId` names no registry row (ggui#1405); absent otherwise. */
+  readonly blueprintIdentity?: 'ephemeral';
 }
 
 /**
@@ -187,6 +189,7 @@ function projectRenderIdentityRecord(
     // record, answering a question `userId` already answers.
     ...(session.userId !== undefined ? { userId: session.userId } : {}),
     blueprintId: identity.blueprintId,
+    ...(identity.blueprintIdentity !== undefined ? { blueprintIdentity: identity.blueprintIdentity } : {}),
     contractKey: identity.contractKey,
     variantKey: identity.variantKey,
     props: session.render.props,
@@ -280,6 +283,8 @@ export async function refreshRenderIdentity(
       blueprintId: existing.blueprintId,
       contractKey: existing.contractKey,
       variantKey: existing.variantKey,
+      // Carried forward verbatim with the id it describes (ggui#1405).
+      ...(existing.blueprintIdentity !== undefined ? { blueprintIdentity: existing.blueprintIdentity } : {}),
     },
     REFRESH_FAILED_EVENT,
   );

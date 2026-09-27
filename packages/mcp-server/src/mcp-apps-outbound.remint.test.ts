@@ -685,6 +685,25 @@ describe("resource read — re-mint refusals leave no trace", () => {
     }
   });
 
+  it("does not re-mint an ephemeral identity — and says so, instead of calling a row that never existed 'gone' (#1405)", async () => {
+    const f = await boot();
+    try {
+      const sessionId = randomUUID();
+      await seedRecord(f.identityStore, sessionId, { blueprintIdentity: "ephemeral" });
+      await seedBody(f);
+
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the render served code no blueprint stores (an ephemeral identity)",
+      });
+      expect(await f.renderStore.get(sessionId)).toBeNull();
+    } finally {
+      await f.close();
+    }
+  });
+
   it("does not re-mint when the blueprint row is gone", async () => {
     const f = await boot();
     try {
@@ -833,6 +852,66 @@ describe("resource read — the re-mint path is gated before it resolves anythin
         normalize(missing, neverExistedSessionId),
       );
       expect(refused.data).toEqual({ code: "NOT_FOUND" });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("an ephemeral record is refused even where the registry fallback would answer — it never mounts the key's other card (#1405)", async () => {
+    // The key IS bound in the registry — to the incumbent's code, which by
+    // #1405's premise is NOT what this render served. Mounting that shell under
+    // this render's locator is the wrong card, so an entitled read refuses.
+    const f = await boot({ withRegistryFallback: true });
+    try {
+      const registered = await registerBlueprint(
+        { embedding: new MockEmbeddingProvider(), vectorStore: f.vectorStore, index: f.index },
+        BUILDER_APP_ID,
+        {
+          kind: "template",
+          contract: {},
+          intent: "the incumbent at this key",
+          componentCode: "export default function Incumbent(){return null;}",
+          source: { kind: "user" },
+        },
+      );
+      const sessionId = randomUUID();
+      await seedRecord(f.identityStore, sessionId, { contractKey: registered.contractKey, blueprintIdentity: "ephemeral" });
+
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${registered.contractKey}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the render served code no blueprint stores (an ephemeral identity)",
+      });
+      expect(await f.renderStore.get(sessionId)).toBeNull();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("a caller NOT entitled to an ephemeral render still gets exactly what a miss of the same key gets — the refusal adds no oracle (#1405)", async () => {
+    const f = await boot({ getContext: () => intruderCtx, withRegistryFallback: true });
+    try {
+      const registered = await registerBlueprint(
+        { embedding: new MockEmbeddingProvider(), vectorStore: f.vectorStore, index: f.index },
+        BUILDER_APP_ID,
+        {
+          kind: "template",
+          contract: {},
+          intent: "the incumbent at this key",
+          componentCode: "export default function Incumbent(){return null;}",
+          source: { kind: "user" },
+        },
+      );
+      const ephemeralSessionId = randomUUID();
+      await seedRecord(f.identityStore, ephemeralSessionId, { contractKey: registered.contractKey, blueprintIdentity: "ephemeral" });
+      const neverExistedSessionId = randomUUID();
+      const refused = await f.client.readResource({ uri: `${RESOURCE_URI}/${ephemeralSessionId}/${registered.contractKey}` });
+      const missing = await f.client.readResource({ uri: `${RESOURCE_URI}/${neverExistedSessionId}/${registered.contractKey}` });
+      expectMountable(shellText(refused.contents));
+      expect(shellText(refused.contents).replaceAll(ephemeralSessionId, "<sid>")).toBe(
+        shellText(missing.contents).replaceAll(neverExistedSessionId, "<sid>"),
+      );
     } finally {
       await f.close();
     }

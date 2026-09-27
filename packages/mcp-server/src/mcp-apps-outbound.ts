@@ -1545,7 +1545,18 @@ const blueprintUnresolvable = (detail: string): ResourceReadError => ({
 /** What a re-mint attempt produced: the committed row, or why not. */
 type RemintOutcome =
   | { readonly ok: true; readonly row: StoredGguiSession }
-  | { readonly ok: false; readonly failure: ResourceReadError };
+  | {
+      readonly ok: false;
+      readonly failure: ResourceReadError;
+      /**
+       * ggui#1405 — the record the caller is entitled to names an ephemeral
+       * id: the key's registry blueprint is OTHER code, so the registry-only
+       * fallback must not mount it under this render's locator. Set only past
+       * the access check, so skipping the fallback tells an entitled caller
+       * nothing a refused or missing read could learn.
+       */
+      readonly terminal?: true;
+    };
 
 /**
  * The single value returned for BOTH "no record was ever written" and
@@ -2299,6 +2310,16 @@ export function registerGguiRenderResourceTemplate(
     if (record.blueprintId === null) {
       return { ok: false, failure: blueprintUnresolvable("the record names no blueprint") };
     }
+    // ggui#1405 — an ephemeral id was never registered: the render served
+    // fresh code at a key bound to other code. Say that, rather than
+    // calling a row that never existed "gone".
+    if (record.blueprintIdentity === "ephemeral") {
+      return {
+        ok: false,
+        failure: blueprintUnresolvable("the render served code no blueprint stores (an ephemeral identity)"),
+        terminal: true,
+      };
+    }
     const blueprint = await blueprintStore.get(record.blueprintId);
     if (blueprint === null) {
       return {
@@ -2947,6 +2968,10 @@ export function registerGguiRenderResourceTemplate(
         if (served !== null) return served;
       } else {
         failure = reminted.failure;
+        // An entitled read of an ephemeral render stops here: the registry
+        // holds OTHER code at this key (ggui#1405), so the fallback below
+        // would mount the wrong card under this render's locator.
+        if (reminted.terminal === true) throw new ResourceReadFailure(failure);
       }
     }
 

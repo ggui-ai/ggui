@@ -2979,7 +2979,9 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     assertRenderSuccess(out);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ strategy: 'proposed', indexRead: 'skipped', served: 'fresh', identity: 'ephemeral' });
-    expect((await renderIdentityStore.get(out.sessionId))?.blueprintId).toBe(ephemeralBlueprintId(COLD_CODE)); // the identity row, not only the wire
+    const row = await renderIdentityStore.get(out.sessionId);
+    expect(row?.blueprintId).toBe(ephemeralBlueprintId(COLD_CODE)); // the identity row, not only the wire
+    expect(row?.blueprintIdentity).toBe('ephemeral'); // …and the row says no registry row holds that id (slice 2)
     const ephemeral = ephemeralBlueprintId(COLD_CODE);
     expect(events[0]?.blueprintId).toBe(ephemeral);
     expect(out.blueprintId).toBe(ephemeral);
@@ -3001,11 +3003,15 @@ describe('(j) onBlueprintResolution — the render names how it resolved (ggui#1
     );
     const handshakeId = 'hs-same-code-1';
     await seedHandshake(handshakeStore, handshakeId, buildRecord({ handshakeId, origin: 'agent' }));
-    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE, onBlueprintResolution: (e) => events.push(e) });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const handler = buildHandler({ handshakeStore, renderStore, vectorStore, index, coldCode: COLD_CODE, renderIdentityStore, onBlueprintResolution: (e) => events.push(e) });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
     assertRenderSuccess(out);
     expect(events[0]).toMatchObject({ served: 'fresh', identity: 'existing', blueprintId: boundUuid });
     expect(out.blueprintId).toBe(boundUuid);
+    const row = await renderIdentityStore.get(out.sessionId);
+    expect(row?.blueprintId).toBe(boundUuid);
+    expect(row !== null && row !== undefined && 'blueprintIdentity' in row).toBe(false); // a registry-backed id carries no marker
   });
 
   it('(j) a non-forced re-aim with no row at the key still MINTS — the ephemeral id is never produced off the force-create path (#1405)', async () => {

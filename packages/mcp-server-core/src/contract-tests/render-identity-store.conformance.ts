@@ -13,6 +13,8 @@
  *   - put / get round-trip preserves every field verbatim, including a
  *     `blueprintId` of `null` (a terminal state since #460 — distinct
  *     from a miss).
+ *   - a `blueprintIdentity` marker is persisted when given and reads
+ *     back undefined when not (ggui#1405).
  *   - put is a whole-record upsert — later writes win, no field merge.
  *   - put rejects an empty `sessionId` (the promise rejects; an
  *     unkeyed record can never be read back).
@@ -86,6 +88,17 @@ export function runRenderIdentityStoreConformance(
         const r = record();
         await store.put(r);
         expect(await store.get(r.sessionId)).toEqual(r);
+      });
+    });
+
+    it("preserves the blueprint-identity marker when given, and leaves it absent when not (ggui#1405)", async () => {
+      await withStore(async (store) => {
+        await store.put(record({ sessionId: 'render-eph', blueprintIdentity: 'ephemeral' }));
+        await store.put(record({ sessionId: 'render-reg' }));
+        expect((await store.get('render-eph'))?.blueprintIdentity).toBe('ephemeral');
+        // Absent reads back undefined — the suite's convention for optionals
+        // (a codec returning `key: undefined` serves every reader the same).
+        expect((await store.get('render-reg'))?.blueprintIdentity).toBeUndefined();
       });
     });
 

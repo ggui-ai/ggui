@@ -41,6 +41,16 @@ export interface RenderIdentityRecord {
   /** Null until cold-gen registration backfills it. */
   readonly blueprintId: string | null;
   /**
+   * `'ephemeral'` when {@link blueprintId} names no registry row: the render
+   * served fresh code at a key already bound to other code, so it carries a
+   * content-addressed id of its own (ggui#1405, the render-resolution event's
+   * `identity: 'ephemeral'`). A reader resolving the id through the registry
+   * — a re-mint, an outcome summary — knows from this that nothing stores it.
+   * Absent on a registry-backed id and on records written before the field
+   * existed. Unrelated to a store's `durability` declaration.
+   */
+  readonly blueprintIdentity?: 'ephemeral';
+  /**
    * Blueprint-key domain — the same 16-char key the blueprint registry
    * addresses a contract by, NOT the validators-bundle contract hash.
    * The two are different lengths and different domains; a record

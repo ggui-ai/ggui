@@ -1495,12 +1495,14 @@ export function createGguiRenderHandler(
     // are captured.
     const identityWriterFor = (
       blueprintId: string | null,
+      blueprintIdentity?: 'ephemeral',
     ): ((committed: StoredGguiSession) => Promise<void>) =>
       (committed) =>
         writeRenderIdentity(deps.renderIdentityStore, committed, {
           blueprintId,
           contractKey: effectiveContractKey,
           variantKey: effectiveVariantKey,
+          ...(blueprintIdentity !== undefined ? { blueprintIdentity } : {}),
         });
 
     // Resolved gadget catalog, lifted to handler scope. When
@@ -1943,6 +1945,9 @@ export function createGguiRenderHandler(
     // which surface `blueprintId: ''` per spec §9.1 present-on-
     // materialisation.
     let resolvedBlueprintId: string | undefined;
+    // ggui#1405 — set by the registration hook when this render serves an
+    // ephemeral id, so every identity write for that id says no row holds it.
+    let resolvedBlueprintIdentity: 'ephemeral' | undefined;
     // ggui#884 — the model a generation ran, for the post-success hook; null
     // until a generation produces an interface (reuse and failure leave it).
     let generationRan: { readonly model: string } | null = null;
@@ -2355,7 +2360,10 @@ export function createGguiRenderHandler(
             // failure commits bind null; the success commit binds
             // whatever `resolveBlueprintId` returned, resolved
             // BEFORE that commit (no backfill exists anymore).
-            writeIdentityFor: identityWriterFor,
+            // The marker is read when the success commit writes, after the
+            // registration hook above has resolved the id (ggui#1405).
+            writeIdentityFor: (blueprintId) =>
+              identityWriterFor(blueprintId, blueprintId !== null ? resolvedBlueprintIdentity : undefined),
             // Registration is the resolve hook, passed only when a
             // cache is bound (unbound deployments keep null ids —
             // #445). Failures swallow to undefined inside
@@ -2424,6 +2432,7 @@ export function createGguiRenderHandler(
                     }
                     if (reg.deduped && !reg.sameCode) {
                       registrationIdentity = 'ephemeral';
+                      resolvedBlueprintIdentity = 'ephemeral';
                       return ephemeralBlueprintId(produced.componentCode);
                     }
                     registrationIdentity = reg.deduped ? 'existing' : 'minted';
@@ -2645,7 +2654,7 @@ export function createGguiRenderHandler(
           // play, and every reuse / cold-gen path has settled by
           // here — so this write carries the final blueprint id
           // (already resolved before the success commit, #460).
-          await identityWriterFor(resolvedBlueprintId ?? null)(committed);
+          await identityWriterFor(resolvedBlueprintId ?? null, resolvedBlueprintId !== undefined ? resolvedBlueprintIdentity : undefined)(committed);
         }
       } catch (err) {
         // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
