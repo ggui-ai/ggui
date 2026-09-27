@@ -719,12 +719,17 @@ export const CONTENT_HEIGHT_EXPRESSION =
   'Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)';
 
 /**
- * ggui#1475 — the natural capture's measurement: the mounted card's OWN rendered height. The
- * document's scroll height is floored at the viewport by definition, so it can see an overflow but
- * never a card shorter than its box; the mount's extent sees both.
+ * ggui#1475 — the natural capture's measurement: the card's height as the host is told it. The MCP
+ * Apps SDK's size-changed notification (the report an auto-resizing host sizes the inline frame by)
+ * reads the document at `height: max-content` and restores the style; the judge reads the same
+ * quantity, minus the ground margin its page adds on both sides, so content outside the mount (a
+ * portal into body) counts here exactly as it counts for the host. The document's scroll height
+ * could not be used: it is floored at the viewport by definition, so it sees an overflow but never
+ * a card shorter than its box.
  */
 export const CARD_HEIGHT_EXPRESSION =
-  "(() => { const r = document.getElementById('root'); return r ? r.getBoundingClientRect().height : null; })()";
+  "(() => { const el = document.documentElement; const prev = el.style.height; el.style.height = 'max-content'; " +
+  `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * JUDGE_GROUND_MARGIN_PX}; })()`;
 
 /**
  * The natural capture's region: the card on the host ground, the ground margin on every side, the

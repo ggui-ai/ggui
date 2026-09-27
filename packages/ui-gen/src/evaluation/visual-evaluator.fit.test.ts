@@ -104,6 +104,15 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     for (const c of ['md', 'lg', 'xl'] as const) expect(canvasChrome(c)).toBe('panel');
     expect(judgeWindow({ width: 384, height: 516 }, 'ground')).toEqual({ width: 384 + 2 * M, height: 516 + 2 * M });
   });
+  it("the card is measured as the MCP Apps SDK measures it for the host's size report: the document at max-content, the ground margin removed, the style restored", () => {
+    // The SDK's size-changed notification reads `documentElement` at `height: max-content` (so content outside the
+    // mount — a portal into body — counts for the host), not the mount's rect.
+    expect(CARD_HEIGHT_EXPRESSION).toContain("style.height = 'max-content'");
+    expect(CARD_HEIGHT_EXPRESSION).toContain('Math.ceil(el.getBoundingClientRect().height)');
+    expect(CARD_HEIGHT_EXPRESSION).toContain(`- ${2 * M}`);
+    expect(CARD_HEIGHT_EXPRESSION).toContain('el.style.height = prev');
+    expect(CARD_HEIGHT_EXPRESSION).not.toContain("getElementById('root')");
+  });
   it('the clip is the card plus the ground margin, capped at the box; a card that painted nothing keeps one row (read as a blank, never unreadable)', () => {
     const window = { width: 400 + 2 * M, height: 640 + 2 * M };
     expect(naturalClip(window, 280)).toEqual({ x: 0, y: 0, width: 400 + 2 * M, height: 280 + 2 * M });
