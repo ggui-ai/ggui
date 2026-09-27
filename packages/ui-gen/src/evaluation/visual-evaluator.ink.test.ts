@@ -2,13 +2,16 @@
  * ggui#1120 — the judge reads the ink of the capture it already takes. A flat capture is the blank:
  * a deterministic `canvas-blank` (critical) that fails the canvas on every class, the one instrument
  * that can see a mount-path blank (#1104). On a panelled page (ggui#1083 cut 3) the ink is read inside
- * the host's chrome, so a hairline never counts as paint. Every other reading is reported, never scored.
+ * the host's chrome, so a hairline never counts as paint; on the inline card's host ground (ggui#1475)
+ * it is read inside the ground margin. Every other reading is reported, never scored.
  * Browser + judge are injected; the fake browser's screenshots are real PNGs.
  */
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { encodePng, flatPng } from './__fixtures__/png.js';
 import {
+  CARD_HEIGHT_EXPRESSION,
+  JUDGE_GROUND_MARGIN_PX,
   JUDGE_INK_INSET_PX,
   JUDGE_PANEL_CLASS,
   runVisualEvaluationDetailed,
@@ -37,7 +40,10 @@ function inkDeps(paint: (window: Box, panelled: boolean) => Uint8Array, score = 
         },
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
-        evaluate: async () => window.height + (panelled ? 32 : 0),
+        // The inline card is measured from its mount (ggui#1475): a card exactly its box tall; any other
+        // canvas from the document, which carries the panel's gap when one was drawn.
+        evaluate: async (expression: string) =>
+          expression === CARD_HEIGHT_EXPRESSION ? window.height - 2 * JUDGE_GROUND_MARGIN_PX : window.height + (panelled ? 32 : 0),
         screenshot: async () => paint(window, panelled),
       }),
       close: async () => {},
@@ -98,6 +104,24 @@ describe('the blank (ggui#1120): a flat capture fails the canvas, on every class
     expect(md.inkRatio).toBe(0);
     expect(md.passed).toBe(false);
     expect(JUDGE_INK_INSET_PX).toBe(41);
+  });
+
+  it("ggui#1475 — on the inline card's host ground the margin never counts: ink only in the ground ring is still the blank", async () => {
+    // A 1 px ring 8 px in from every edge — half-way into the 16 px ground margin: host surface, not the card.
+    // A literal, so the case paints the same ring whatever the constant says; the constant is pinned below.
+    const groundRing = (w: Box): Uint8Array =>
+      encodePng({ width: w.width, height: w.height, channels: 3, pixel: (x, y) => (Math.min(x, y, w.width - 1 - x, w.height - 1 - y) === 8 ? INK : GROUND) });
+    const d = inkDeps(groundRing);
+    const { result } = await runVisualEvaluationDetailed(
+      { compiledCode: COMPONENT, originalPrompt: 'a welcome card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
+      d,
+    );
+    const [xs] = result!.canvases!;
+    expect(xs.inkRatio).toBe(0);
+    expect(xs.passed).toBe(false);
+    expect(result!.issues.map((i) => i.dimension)).toContain('canvas-blank');
+    expect(JUDGE_GROUND_MARGIN_PX).toBe(16);
   });
 
   it('ink inside the panel is measured over the region and reported, never scored: no issue, the canvas passes', async () => {

@@ -1,7 +1,8 @@
 // ggui#1195 — the chat card at the DECLARED viewport. An order that says
 // `shell: 'chat'` and declares a viewport composes at that box (the seam,
-// `876d34007`) and must be JUDGED at it: the judge captures the inline card
-// at the declared viewport, measures overflow against ITS ceiling, and the
+// `876d34007`) and must be JUDGED at it: the judge mounts the inline card at
+// the declared width and captures it at its natural height capped at the
+// declared ceiling (ggui#1475), measures overflow against THAT ceiling, and the
 // deterministic fit issue names both boxes so a refusal reads as "cut off at
 // the order's 384×516, not at the class's 400×640". Absent a declared box,
 // nothing changes — the class viewport stays the target (N−1).
@@ -12,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
+  JUDGE_GROUND_MARGIN_PX,
   canvasOverflowIssue,
   runVisualEvaluationDetailed,
   summarizeVisualResult,
@@ -24,7 +26,16 @@ const CONTEXT = { compiledCode: COMPONENT, originalPrompt: 'a welcome card' };
 /** The live-pixel chat column pinned on #1195 (2026-09-18): narrower AND shorter than the class box. */
 const DECLARED = { width: 384, height: 516 } as const;
 
-interface Capture { readonly width: number; readonly height: number; readonly fullPage: boolean }
+interface Clip { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+interface Capture { readonly width: number; readonly height: number; readonly fullPage: boolean; readonly clip?: Clip }
+const M = JUDGE_GROUND_MARGIN_PX;
+/** The inline card's capture (ggui#1475): the window is the box plus the ground margin, clipped to the card capped at the box. */
+const natural = (box: { width: number; height: number }, card: number): Capture => ({
+  width: box.width + 2 * M,
+  height: box.height + 2 * M,
+  fullPage: false,
+  clip: { x: 0, y: 0, width: box.width + 2 * M, height: Math.min(card, box.height) + 2 * M },
+});
 
 function fitDeps(contentHeight: number, score = 85): VisualEvalDeps & { captures: Capture[] } {
   const captures: Capture[] = [];
@@ -37,8 +48,8 @@ function fitDeps(contentHeight: number, score = 85): VisualEvalDeps & { captures
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
         evaluate: async () => contentHeight,
-        screenshot: async (opts: { fullPage: boolean }) => {
-          captures.push({ width, height, fullPage: opts.fullPage });
+        screenshot: async (opts: { fullPage: boolean; clip?: Clip }) => {
+          captures.push({ width, height, fullPage: opts.fullPage, ...(opts.clip !== undefined ? { clip: opts.clip } : {}) });
           return new Uint8Array([1, 2, 3]);
         },
       }),
@@ -67,7 +78,7 @@ describe('ggui#1195 — the inline card is captured and judged at the DECLARED v
       deps,
     );
     expect(result).not.toBeNull();
-    expect(deps.captures).toEqual([{ width: 384, height: 516, fullPage: false }]);
+    expect(deps.captures).toEqual([natural(DECLARED, 600)]);
     const card = result!.canvases![0]!;
     expect(card.viewport).toEqual(DECLARED);
     expect(card.contentHeight).toBe(600);
@@ -83,7 +94,7 @@ describe('ggui#1195 — the inline card is captured and judged at the DECLARED v
   it('control — the same 600px content FITS the class box when no viewport is declared (N−1: today’s target)', async () => {
     const deps = fitDeps(600);
     const { result } = await runVisualEvaluationDetailed(CONTEXT, { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] }, deps);
-    expect(deps.captures).toEqual([{ width: 400, height: 640, fullPage: false }]);
+    expect(deps.captures).toEqual([natural(CANVAS_VIEWPORTS['xs-chat-card'], 600)]);
     const card = result!.canvases![0]!;
     expect(card.viewport).toEqual(CANVAS_VIEWPORTS['xs-chat-card']);
     expect(card.overflow).toBe(false);
@@ -118,7 +129,7 @@ describe('ggui#1195 — the inline card is captured and judged at the DECLARED v
       { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': { width: 383.5, height: 515.5 } } },
       deps,
     );
-    expect(deps.captures).toEqual([{ width: 384, height: 516, fullPage: false }]);
+    expect(deps.captures).toEqual([natural({ width: 384, height: 516 }, 600)]);
     const card = result!.canvases![0]!;
     expect(card.viewport).toEqual({ width: 384, height: 516 });
     expect(card.overflow).toBe(true);

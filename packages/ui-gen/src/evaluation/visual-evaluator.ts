@@ -145,27 +145,36 @@ export interface CanvasVisualResult {
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
-export type CaptureMode = 'viewport' | 'full-page';
+export type CaptureMode = 'viewport' | 'full-page' | 'natural';
 export interface CanvasFitPolicy {
-  /** `viewport` = the judge sees the box the user sees; `full-page` = the whole scrolled document. */
+  /**
+   * `viewport` = the whole box; `full-page` = the whole scrolled document; `natural` (ggui#1475) = the
+   * card at its OWN height, clipped to its extent and capped at the box — the inline card a host sizes
+   * to its content, on the host's ground ({@link JUDGE_GROUND_MARGIN_PX}).
+   */
   readonly capture: CaptureMode;
   /** The verdict an overflow earns on this canvas. */
   readonly overflow: 'fail' | 'warn' | 'none';
 }
 
 /**
- * The inline chat card is a BOX — the bubble bounds the component and it
- * does not scroll — so the judge captures the viewport (a 1289 px hello on
- * a 640 px card was scored 86 from a full-page capture that showed the
- * judge what no user sees) and an overflow is a critical layout issue that
- * fails the canvas. A phone's first screen may scroll, so the overflow is
- * reported as a major issue and the score stands. Pages (`md`/`lg`/`xl`)
- * scroll by design: measured, never judged.
+ * The inline chat card takes its NATURAL height under a ceiling (ggui#1475):
+ * an MCP Apps host sizes the inline frame to the card's content
+ * (`ui/notifications/size-changed`, auto-resize) up to its maximum, so the
+ * visitor sees the card and nothing under it. The judge captures exactly
+ * that — the card's own extent on the host's ground, capped at the box — and
+ * never the box's remainder (a fixed 640 px capture scored every hello
+ * against a void no visitor sees). The box stays the ceiling: content taller
+ * than it is a critical layout issue that fails the canvas (a 1289 px hello
+ * on a 640 px card was scored 86 from a full-page capture that showed the
+ * judge what no user sees). A phone's first screen may scroll, so the
+ * overflow is reported as a major issue and the score stands. Pages
+ * (`md`/`lg`/`xl`) scroll by design: measured, never judged.
  */
 export function canvasFitPolicy(canvas: CanvasClass): CanvasFitPolicy {
   switch (canvas) {
     case 'xs-chat-card':
-      return { capture: 'viewport', overflow: 'fail' };
+      return { capture: 'natural', overflow: 'fail' };
     case 'mobile-fullscreen-small':
       return { capture: 'full-page', overflow: 'warn' };
     default:
@@ -198,8 +207,20 @@ export const JUDGE_INK_INSET_PX = EXPANDED_FRAME.insetPx + 24 + 1;
 export function canvasFit(canvas: CanvasClass): 'fill' | undefined {
   return displayModeForCanvas(canvas) === 'fullscreen' ? 'fill' : undefined;
 }
-/** What the judge's stand-in host draws round a fill canvas: the embedding shell's floating panel on its scrim, or nothing. */
-export type CanvasChrome = 'panel' | undefined;
+/**
+ * What the judge's stand-in host draws round a canvas: the embedding shell's floating panel on its
+ * scrim (a fill canvas, md and up), the host's ground round the inline card (`ground`, ggui#1475), or
+ * nothing (the phone, edge to edge).
+ */
+export type CanvasChrome = 'panel' | 'ground' | undefined;
+/**
+ * The host ground round a naturally-captured inline card (ggui#1475): the card is mounted this far in
+ * from the page's edges and captured with this margin, so its edge and radius are read against the
+ * host surface — the page's scrim ground, never the card's own. The design's one gap (the panel's).
+ */
+export const JUDGE_GROUND_MARGIN_PX = EXPANDED_FRAME.insetPx;
+/** The class the judge page wraps a naturally-captured card's mount in — its padding is the ground margin. */
+export const JUDGE_GROUND_CLASS = 'ggui-judge-ground';
 /**
  * The host stand-in round a fill canvas (ggui#1083 cut 3, ggui#1067 §5): the embedding shell floats
  * the card in a panel on its scrim — a hairline, the theme's `xl` radius, `shadow-sm`, a 16 px gap —
@@ -211,12 +232,13 @@ export type CanvasChrome = 'panel' | undefined;
  * carries the chrome the visitor sees, and the card is measured where it was before.
  */
 export function canvasChrome(canvas: CanvasClass): CanvasChrome {
+  if (canvasFitPolicy(canvas).capture === 'natural') return 'ground';
   return canvasFit(canvas) === 'fill' && canvas !== 'mobile-fullscreen-small' ? 'panel' : undefined;
 }
-/** The browser window for a canvas: the canvas box, plus the panel's gap on every side when the judge draws the panel. */
+/** The browser window for a canvas: the canvas box, plus the chrome's gap on every side when the judge draws one (the panel's, or the host ground's). */
 export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome): CanvasViewport {
   if (chrome === undefined) return viewport;
-  const gap = 2 * EXPANDED_FRAME.insetPx;
+  const gap = 2 * (chrome === 'ground' ? JUDGE_GROUND_MARGIN_PX : EXPANDED_FRAME.insetPx);
   return { width: viewport.width + gap, height: viewport.height + gap };
 }
 /**
@@ -225,7 +247,8 @@ export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome): Can
  * there is no reading — `null`, never a negative height.
  */
 function cardHeight(documentHeight: number | null, chrome: CanvasChrome): number | null {
-  if (documentHeight === null || chrome === undefined) return documentHeight;
+  // A natural capture measures the card itself (the mount's extent), never the document.
+  if (documentHeight === null || chrome === undefined || chrome === 'ground') return documentHeight;
   const gap = 2 * EXPANDED_FRAME.insetPx;
   return documentHeight < gap ? null : documentHeight - gap;
 }
@@ -528,6 +551,7 @@ function buildRenderHTML(
   chrome?: CanvasChrome,
 ): string {
   if (chrome === 'panel' && fit !== 'fill') throw new Error("the judge's panel frames a fill canvas only (ggui#1083 cut 3)");
+  if (chrome === 'ground' && fit === 'fill') throw new Error("the host ground frames an inline card only — a fill canvas has no natural height (ggui#1475)");
   // Default to the design tokens production's no-theme branch injects
   // (getCssTokens → default theme, light) — ggui#613: under the s4
   // fallback ban the generated component's `var(--ggui-*)` references
@@ -554,10 +578,11 @@ function buildRenderHTML(
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
     ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
+    ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; }` : ''}
   </style>
 </head>
 <body>
-  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' ? '</div>' : ''}
+  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : chrome === 'ground' ? `<div class="${JUDGE_GROUND_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' || chrome === 'ground' ? '</div>' : ''}
   <script type="importmap">
   {
     "imports": {
@@ -579,6 +604,14 @@ ${bundledCode}
 // Screenshot capture (optional puppeteer dependency)
 // ---------------------------------------------------------------------------
 
+/** A screenshot's region in page px (puppeteer's `clip`). */
+export interface ScreenshotClip {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 /** The page surface the capture uses — a structural subset of puppeteer's `Page`. */
 export interface ScreenshotPage {
   setContent(html: string, options: { waitUntil: 'load'; timeout: number }): Promise<void>;
@@ -586,7 +619,7 @@ export interface ScreenshotPage {
   waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
   /** Evaluates a JS expression in the page and returns its serialised value — the fit measurement (ggui#1027). */
   evaluate(expression: string): Promise<unknown>;
-  screenshot(options: { type: 'png'; fullPage: boolean }): Promise<Uint8Array>;
+  screenshot(options: { type: 'png'; fullPage: boolean; clip?: ScreenshotClip }): Promise<Uint8Array>;
 }
 
 /** The browser surface the capture uses — a structural subset of puppeteer's `Browser`. */
@@ -685,10 +718,30 @@ export interface ScreenshotAttempt {
 export const CONTENT_HEIGHT_EXPRESSION =
   'Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)';
 
-/** Measure the rendered document's height; a failed measurement is reported, never a failed capture. */
-async function measureContentHeight(page: ScreenshotPage): Promise<number | null> {
+/**
+ * ggui#1475 — the natural capture's measurement: the mounted card's OWN rendered height. The
+ * document's scroll height is floored at the viewport by definition, so it can see an overflow but
+ * never a card shorter than its box; the mount's extent sees both.
+ */
+export const CARD_HEIGHT_EXPRESSION =
+  "(() => { const r = document.getElementById('root'); return r ? r.getBoundingClientRect().height : null; })()";
+
+/**
+ * The natural capture's region: the card on the host ground, the ground margin on every side, the
+ * card's height capped at the box (content past it is the overflow the fit verdict reads). At least
+ * one row of card is kept, so a card that painted nothing is still read — as a blank, never as an
+ * unreadable capture.
+ */
+export function naturalClip(window: { width: number; height: number }, cardHeightPx: number): ScreenshotClip {
+  const m = JUDGE_GROUND_MARGIN_PX;
+  const box = window.height - 2 * m;
+  return { x: 0, y: 0, width: window.width, height: Math.max(1, Math.min(Math.ceil(cardHeightPx), box)) + 2 * m };
+}
+
+/** Measure the rendered document's height (or the card's, for a natural capture); a failed measurement is reported, never a failed capture. */
+async function measureContentHeight(page: ScreenshotPage, expression: string = CONTENT_HEIGHT_EXPRESSION): Promise<number | null> {
   try {
-    const h = await page.evaluate(CONTENT_HEIGHT_EXPRESSION);
+    const h = await page.evaluate(expression);
     return typeof h === 'number' && Number.isFinite(h) ? Math.round(h) : null;
   } catch (e) {
     console.warn(`[visual-eval] content height unavailable: ${e instanceof Error ? e.message : String(e)}`);
@@ -715,6 +768,13 @@ export async function captureScreenshotDetailed(
       await page.waitForSelector('#root > *', { timeout: 10000 }).catch(() => {});
       // Wait a bit for CSS/fonts to settle
       await new Promise((r) => setTimeout(r, deps.settleMs ?? 1000));
+      if (capture === 'natural') {
+        // ggui#1475 — the inline card at its natural height: the capture is the card's extent on the host ground.
+        const cardHeightPx = await measureContentHeight(page, CARD_HEIGHT_EXPRESSION);
+        const clip = naturalClip(viewport, cardHeightPx ?? viewport.height - 2 * JUDGE_GROUND_MARGIN_PX);
+        const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
+        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx };
+      }
       const contentHeight = await measureContentHeight(page);
       const screenshot = await page.screenshot({ type: 'png', fullPage: capture === 'full-page' });
       return { png: Buffer.from(screenshot), contentHeight };
@@ -893,7 +953,7 @@ interface CanvasFrame {
 /** The capture's ink extent (ggui#1120), read inside a drawn panel's chrome; an unreadable capture is reported, never blank. */
 function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass): InkExtent | null {
   if (png === null) return null;
-  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : 0);
+  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : chrome === 'ground' ? JUDGE_GROUND_MARGIN_PX : 0);
   if ('reason' in ink) {
     console.warn(`[visual-eval] ink extent unreadable at canvas ${canvas}: ${ink.reason}`);
     return null;
@@ -918,7 +978,7 @@ async function frameCanvas(
   const policy = canvasFitPolicy(canvas);
   const fit = canvasFit(canvas);
   const chrome = canvasChrome(canvas);
-  const canvasHtml = fit !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome) : html;
+  const canvasHtml = fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome) : html;
   const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome), deps, policy.capture);
   // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
   const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };

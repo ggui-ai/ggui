@@ -10,13 +10,15 @@
 
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { runVisualEvaluationDetailed, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
+import { JUDGE_GROUND_MARGIN_PX, runVisualEvaluationDetailed, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
 
 const COMPONENT = 'export default function C(){ return null; }';
 const CONTEXT = { compiledCode: COMPONENT, originalPrompt: 'a welcome card' };
 const DECLARED = { width: 384, height: 516 } as const;
 
-interface Capture { readonly width: number; readonly height: number; readonly fullPage: boolean }
+interface Clip { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+interface Capture { readonly width: number; readonly height: number; readonly fullPage: boolean; readonly clip?: Clip }
+const M = JUDGE_GROUND_MARGIN_PX;
 
 function frameDeps(contentHeight: number): VisualEvalDeps & { captures: Capture[]; judged: () => number } {
   const captures: Capture[] = [];
@@ -30,8 +32,8 @@ function frameDeps(contentHeight: number): VisualEvalDeps & { captures: Capture[
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
         evaluate: async () => contentHeight,
-        screenshot: async (opts: { fullPage: boolean }) => {
-          captures.push({ width, height, fullPage: opts.fullPage });
+        screenshot: async (opts: { fullPage: boolean; clip?: Clip }) => {
+          captures.push({ width, height, fullPage: opts.fullPage, ...(opts.clip !== undefined ? { clip: opts.clip } : {}) });
           return new Uint8Array([1, 2, 3]);
         },
       }),
@@ -57,7 +59,8 @@ describe('runVisualFit — the fit verdict without the vision judge', () => {
     const outcome = await runVisualFit(CONTEXT, { canvases: ['xs-chat-card'], canvasViewports: { 'xs-chat-card': DECLARED } }, deps);
 
     expect(deps.judged(), 'the fit half never calls the judge').toBe(0);
-    expect(deps.captures).toEqual([{ width: 384, height: 516, fullPage: false }]);
+    // ggui#1475 — the inline card on the host ground at the declared width, clipped to the card capped at the ceiling.
+    expect(deps.captures).toEqual([{ width: 384 + 2 * M, height: 516 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 384 + 2 * M, height: 516 + 2 * M } }]);
     expect(outcome.status).toBe('measured');
     if (outcome.status !== 'measured') return;
     expect(outcome.readings).toEqual([{ canvas: 'xs-chat-card', viewport: DECLARED, contentHeight: 535, overflow: true, inkRatio: null, declared: true }]);

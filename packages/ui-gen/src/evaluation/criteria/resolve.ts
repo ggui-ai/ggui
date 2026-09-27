@@ -107,13 +107,14 @@ export const CRITERIA_PROPS_MAX_CHARS = 2000;
  * never guesses it: without it, phone rows described a 390×844 frame as a 768×1024 tablet, and the
  * inline card's verdicts flipped between near-identical frames (the evidence audit on ggui#1438).
  * The inline chat card is sized to its content by the host (the box grows and shrinks with the card; a
- * `maxHeight` caps and scrolls), so the empty region under it belongs to the host and composition is
- * judged INSIDE the card's extent; every other canvas is a fixed box the card fills.
+ * `maxHeight` caps and scrolls), so the judge captures it at its natural height on the host's ground
+ * (ggui#1475) and composition is judged within the card's extent; every other canvas is a fixed box the
+ * card fills.
  */
 export function criteriaFrameLine(frame: CriteriaJudgeFrame): string {
   const box = `${frame.width}×${frame.height}`;
   return frame.canvas === 'xs-chat-card'
-    ? `This frame is ${box}, an inline chat card the host sizes to its content: judge composition and space INSIDE the card's own extent, never the empty region beneath it in the viewport — that region belongs to the host, not the card.`
+    ? `This frame is an inline chat card captured at its natural height (at most ${box}, the host's ceiling) on the host's surface, which shows as a thin margin round it: the host sizes the card to its content, so judge composition and space within the card's own extent, and read the margin as the host's, not the card's.`
     : `This frame is ${box}, a fixed full-screen box the card fills: judge composition and space against the whole box, edge to edge.`;
 }
 

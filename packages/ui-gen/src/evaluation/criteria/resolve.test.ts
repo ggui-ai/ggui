@@ -73,7 +73,9 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     // every canvas names its box and how the card occupies it (the evidence audit on #1438: phone rows guessed a tablet box)
     const xs = { canvas: 'xs-chat-card' as const, width: 400, height: 640 };
     const phone = { canvas: 'mobile-fullscreen-small' as const, width: 390, height: 844 };
-    expect(criteriaFrameLine(xs)).toContain('400×640, an inline chat card the host sizes to its content');
+    // ggui#1475 — the capture IS the card at its natural height (the box is its ceiling), so the line names no void under it.
+    expect(criteriaFrameLine(xs)).toContain("an inline chat card captured at its natural height (at most 400×640, the host's ceiling)");
+    expect(criteriaFrameLine(xs)).not.toContain('empty region');
     expect(criteriaFrameLine(phone)).toContain('390×844, a fixed full-screen box the card fills');
     expect(buildCriteriaJudgeBlock(bank, selected, { frame: xs })).toContain(criteriaFrameLine(xs));
     expect(buildCriteriaJudgeBlock(bank, selected, { frame: phone })).toContain(criteriaFrameLine(phone));

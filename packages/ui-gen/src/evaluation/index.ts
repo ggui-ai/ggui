@@ -105,7 +105,9 @@ export {
   canvasOverflowIssue,
   canvasBlankIssue,
   JUDGE_INK_INSET_PX,
+  JUDGE_GROUND_MARGIN_PX,
   CONTENT_HEIGHT_EXPRESSION,
+  CARD_HEIGHT_EXPRESSION,
   runVisualEval,
   summarizeVisualResult,
 } from './visual-evaluator.js';
@@ -126,6 +128,7 @@ export type {
   ScreenshotLauncher,
   ScreenshotBrowser,
   ScreenshotPage,
+  ScreenshotClip,
   ChromiumProvider,
 } from './visual-evaluator.js';
 

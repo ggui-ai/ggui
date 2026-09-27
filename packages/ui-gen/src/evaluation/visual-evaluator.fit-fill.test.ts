@@ -136,9 +136,9 @@ function chromeDeps(documentHeight: number): VisualEvalDeps & { pages: string[];
 }
 
 describe("the judge draws the host stand-in's panel round a fill canvas (ggui#1083 cut 3)", () => {
-  it('the panel canvases are the fill canvases from md up; the phone canvas and the inline card carry no chrome', () => {
+  it('the panel canvases are the fill canvases from md up; the phone canvas carries no chrome; the inline card sits on the host ground (ggui#1475)', () => {
     expect(CANVAS_CLASSES.map((c) => [c, canvasChrome(c)])).toEqual([
-      ['xs-chat-card', undefined],
+      ['xs-chat-card', 'ground'],
       ['mobile-fullscreen-small', undefined],
       ['md', 'panel'],
       ['lg', 'panel'],
