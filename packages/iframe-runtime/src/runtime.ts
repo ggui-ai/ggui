@@ -2802,10 +2802,12 @@ export function declaredActionLabel(
  * the same thing unnamed. Diagnostics keep the name and data (the
  * `gesture.*` telemetry records); the screen and the live regions do not.
  *
- * `sending` is spoken, never drawn: a tap the relay accepted needs no
- * chrome over the card, because the pending look belongs to the card's own
- * control (`useActionPending`). The rest are drawn because each one tells
- * the visitor something they have to know or do.
+ * `sending` and `sentToChat` are spoken, never drawn: a tap the relay
+ * accepted, or a wake-up the host took, needs no chrome over the card — the
+ * pending look belongs to the card's own control (`useActionPending`), and a
+ * host that takes a wake-up shows the conversation continuing in its own UI.
+ * The rest are drawn because each one tells the visitor something they have
+ * to know or do.
  */
 const named = (label: string | undefined, rest: string, unnamed: string): string =>
   label === undefined ? unnamed : `${label} — ${rest}`;
@@ -2816,8 +2818,7 @@ const GESTURE_COPY = {
     `⚠ ${named(label, 'could not send, try again', 'Could not send — try again')}`,
   unreachable: (label?: string): string =>
     `⚠ ${named(label, 'could not reach the agent', 'Could not reach the agent')}`,
-  sentToChat: (label?: string): string =>
-    `💬 ${named(label, 'agent not listening, sent to chat', 'Agent not listening — sent to chat')}`,
+  sentToChat: (label?: string): string => named(label, 'sent to the chat', 'Sent to the chat'),
   sendToContinue: (label?: string): string =>
     `💬 ${named(label, 'agent not listening. Send a message to continue.', 'Agent not listening. Send a message to continue.')}`,
   chatRefused: (label?: string): string =>
@@ -3838,18 +3839,24 @@ export function dispatchSubmitAction(args: {
         // `ggui_consume`; servers that CAN answer always send an
         // explicit `true` (the factory wires the registry
         // unconditionally), so confirmed-consumer hosts stay quiet.
-        showActionToast(
-          hostCanReceiveMessages() ? GESTURE_COPY.sentToChat(label) : GESTURE_COPY.sendToContinue(label),
-          'action_required',
-        );
+        // A host that takes the wake-up carries it in its own UI (the
+        // conversation visibly continues, or a prepared message lands in
+        // its input), so nothing is drawn over the card (ggui#1444): the tap
+        // is spoken to assistive tech only. The card draws only when the
+        // visitor must act — this host cannot receive a message at all, or
+        // it refuses this one (`onRefused` below).
+        if (hostCanReceiveMessages()) {
+          announceToast(GESTURE_COPY.sentToChat(label), 'pending');
+        } else {
+          showActionToast(GESTURE_COPY.sendToContinue(label), 'action_required');
+        }
         emitUserActionDoorbell({
           intent,
           sessionId,
           actionId,
           submittedAt: firedAt,
-          // The host refused the wake-up in-band (ggui#1314): the "sent
-          // to chat" reassurance above is no longer true, so say what
-          // the user has to do instead. The gesture itself is safe on
+          // The host refused the wake-up in-band (ggui#1314), so the
+          // visitor has to act: say what. The gesture itself is safe on
           // the pipe; only the wake-up failed.
           onRefused: () => {
             showActionToast(GESTURE_COPY.chatRefused(label), 'action_required');

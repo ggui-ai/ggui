@@ -337,7 +337,9 @@ describe('action-required notice — the one toast the user must operate', () =>
    * a user follow-up in chat and the notice stands until dismissed.
    */
   async function showActionRequired(): Promise<HTMLElement> {
-    setHostCapabilities({ serverTools: {}, message: {} });
+    // A host that cannot receive a message: the visitor must act, so this
+    // notice is drawn (a host that takes the wake-up draws nothing, ggui#1444).
+    setHostCapabilities({ serverTools: {} });
     transport.queueResponse('tools/call', {
       result: { structuredContent: { ok: true, consumerPresent: false } },
     });

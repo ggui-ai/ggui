@@ -521,9 +521,9 @@ describe('doorbell honesty on a host without the message capability (ggui#440)',
     expect(toast?.textContent).toMatch(/send a message|message the agent/i);
   });
 
-  it('keeps the "sent to chat" wording on a host that advertised message', async () => {
+  it('on a host that advertised message, draws nothing and says "sent to the chat" to assistive tech only (ggui#1444)', async () => {
     // Boot with hostCapabilities { message: {} } — the doorbell will
-    // actually arrive, so the original reassurance is accurate.
+    // actually arrive, and the host carries it in its own UI.
     setHostCapabilities({ message: {} });
     transport.queueResponse('tools/call', {
       result: { structuredContent: { ok: true, consumerPresent: false } },
@@ -537,7 +537,14 @@ describe('doorbell honesty on a host without the message capability (ggui#440)',
     await tick();
 
     const toast = document.getElementById('__ggui-action-toast__');
-    expect(toast?.textContent).toMatch(/sent to chat/i);
+    expect(toast?.style.opacity ?? '0').not.toBe('1');
+    expect(
+      document.querySelector('#__ggui-toast-announcer__ [data-ggui-toast-announce="polite"]')?.textContent,
+    ).toBe('Sent to the chat');
+    const doorbell = postMessageSpy.mock.calls.find(
+      ([msg]) => (msg as { method?: string }).method === 'ui/message',
+    );
+    expect(doorbell).toBeDefined();
   });
 });
 
@@ -1680,8 +1687,9 @@ describe('a refused doorbell is named in the view (ggui#1314)', () => {
       },
     };
     __setTelemetrySinkForTest(sink);
-    // A host that advertised message: the doorbell is expected to arrive,
-    // so the toast starts out saying "sent to chat".
+    // A host that advertised message: the doorbell is expected to arrive
+    // and the host carries it, so nothing is drawn until it refuses
+    // (ggui#1444).
     setHostCapabilities({ message: {} });
   });
 
@@ -1715,25 +1723,26 @@ describe('a refused doorbell is named in the view (ggui#1314)', () => {
   }
 
   const toastText = (): string => document.getElementById('__ggui-action-toast__')?.textContent ?? '';
+  const toastShown = (): boolean => document.getElementById('__ggui-action-toast__')?.style.opacity === '1';
 
-  it('an in-band error reply replaces "sent to chat" with what the user must do, and records doorbell.refused', async () => {
+  it('an in-band error reply draws what the user must do, and records doorbell.refused', async () => {
     const id = await ringDoorbell();
-    expect(toastText()).toMatch(/sent to chat/i);
+    expect(toastShown()).toBe(false);
 
     hostReplies({ jsonrpc: '2.0', id, error: { code: -32000, message: 'user declined to send' } });
     await tick();
 
-    expect(toastText()).not.toMatch(/sent to chat/i);
+    expect(toastShown()).toBe(true);
     expect(toastText()).toMatch(/send a message/i);
     expect(recorded.map((r) => r.kind)).toContain('doorbell.refused');
     expect(recorded.find((r) => r.kind === 'doorbell.refused')?.detail).toContain('sess_1');
   });
 
-  it('a success reply changes nothing: the toast still says it was sent to chat', async () => {
+  it('a success reply changes nothing: nothing is drawn', async () => {
     const id = await ringDoorbell();
     hostReplies({ jsonrpc: '2.0', id, result: {} });
     await tick();
-    expect(toastText()).toMatch(/sent to chat/i);
+    expect(toastShown()).toBe(false);
     expect(recorded.map((r) => r.kind)).not.toContain('doorbell.refused');
   });
 
@@ -1742,7 +1751,7 @@ describe('a refused doorbell is named in the view (ggui#1314)', () => {
     hostReplies({ jsonrpc: '2.0', id: id + 1, error: { code: -32000, message: 'not yours' } });
     hostReplies({ jsonrpc: '2.0', id, error: { code: -32000, message: 'not the parent' } }, null);
     await tick();
-    expect(toastText()).toMatch(/sent to chat/i);
+    expect(toastShown()).toBe(false);
     expect(recorded.map((r) => r.kind)).not.toContain('doorbell.refused');
   });
 });
@@ -1851,6 +1860,32 @@ describe('visitor-facing gesture copy (ggui#1444)', () => {
     await tick();
     await tick();
     expect(toast()?.textContent).toBe('⚠ Show prices — could not reach the agent');
+    expectNoInternals();
+  });
+
+  it('the wake-up arms (consumerPresent absent or false): the host takes it → nothing drawn; the host cannot receive one → the must-act notice', async () => {
+    // Arm 1: the host advertised `message`, so it takes the wake-up and
+    // carries it in its own UI: nothing over the card, spoken only.
+    setHostCapabilities({ serverTools: {}, message: {} });
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    tap();
+    await tick();
+    await tick();
+    expect(toastShown()).toBe(false);
+    expect(region('polite')?.textContent).toBe('Sent to the chat');
+    // Arm 2: the host cannot receive a message, so the visitor must act.
+    __resetHostCapabilitiesForTest();
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    tap();
+    await tick();
+    await tick();
+    expect(toastShown()).toBe(true);
+    expect(toast()?.textContent).toBe('💬 Agent not listening. Send a message to continue.');
     expectNoInternals();
   });
 
