@@ -912,7 +912,7 @@ export const renderOutputSchema = z.object({
   /**
    * ggui#1459 — the named effort level the generation that produced this
    * render's code RAN, taken from that generation's own report (never from
-   * a stored profile, which can change between handshake and render).
+   * a stored profile, which a reader cannot tie to this generation).
    * Present only when this call ran a generation that applied a named level
    * (on `rendered`, and on `failed` — a generation that ran and produced
    * nothing still ran the level); absent on a cache hit or blueprint reuse,
@@ -921,8 +921,9 @@ export const renderOutputSchema = z.object({
    *
    * Declared one release before any server sends it: this output reaches
    * `tools/list` closed, so a host must cache a schema naming the member
-   * before a result carries it. Widening the level vocabulary is the same
-   * two-step on this output.
+   * before a result carries it. Servers send it from the release after the
+   * one that declared it (ggui#1459 emit step). Widening the level
+   * vocabulary is the same two-step on this output.
    */
   effort: z
     .enum(APP_GENERATION_PROFILE_EFFORTS)

@@ -1130,6 +1130,24 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(seen.at(-1)).toBeNull();
   });
 
+  it('the rendered result states the level the generation applied — absent with no level, and on a reuse (ggui#1459 emit)', async () => {
+    const ran = await buildColdGenHarness({ coldEffort: 'high' });
+    const withLevel = await ran.harness.handler.handler({ handshakeId: ran.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(withLevel);
+    expect(withLevel.effort).toBe('high');
+
+    const none = await buildColdGenHarness();
+    const noLevel = await none.harness.handler.handler({ handshakeId: none.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(noLevel);
+    expect(noLevel).not.toHaveProperty('effort');
+
+    const cache = await buildAcceptCacheHarness();
+    const reused = await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(reused);
+    expect(reused.cache.hit).toBe(true);
+    expect(reused).not.toHaveProperty('effort');
+  });
+
   it('passes outcome to postSuccessHook — "rendered" on cold gen AND on blueprint reuse (ggui#1227)', async () => {
     const seen: Array<GguiSessionPostSuccessArgs['outcome']> = [];
     const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
@@ -2250,7 +2268,12 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
   // observable.
   async function buildFailingHarness(
     behavior:
-      | { readonly kind: 'result'; readonly error: import('@ggui-ai/protocol').GenerationError }
+      | {
+          readonly kind: 'result';
+          readonly error: import('@ggui-ai/protocol').GenerationError;
+          /** ggui#1459 — the failed generation's own metadata (a harness-failed run reports the level it applied). */
+          readonly metadata?: import('@ggui-ai/mcp-server-core').GenerationMetadata;
+        }
       | { readonly kind: 'throw'; readonly message: string },
     extra: { readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'] } = {},
   ): Promise<{
@@ -2302,7 +2325,11 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       },
       generator: async () => {
         if (behavior.kind === 'throw') throw new Error(behavior.message);
-        return { ok: false, error: behavior.error };
+        return {
+          ok: false,
+          error: behavior.error,
+          ...(behavior.metadata !== undefined ? { metadata: behavior.metadata } : {}),
+        };
       },
     });
     return { handler, renderStore, handshakeStore, handshakeId, notified };
@@ -2342,6 +2369,34 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     });
     return { handler, renderStore, handshakeId };
   }
+
+  it('a failed generation that applied a named level states it on the failed result; one that reports none, or a generator that threw, carries none (ggui#1459 emit)', async () => {
+    const metadata = {
+      provider: 'anthropic',
+      generator: 'ui-gen-fake',
+      model: 'anthropic/fake',
+      inputTokens: 0,
+      outputTokens: 0,
+      latencyMs: 0,
+      cacheHit: false,
+      effort: 'high',
+    } as const;
+    const leveled = await buildFailingHarness({ kind: 'result', error: { code: 'PRODUCTION_FAILED', message: 'harness failed' }, metadata });
+    const withLevel = await leveled.handler.handler({ handshakeId: leveled.handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(withLevel) || withLevel.data.outcome !== 'failed') throw new Error('expected the FAILED arm');
+    expect(withLevel.data.effort).toBe('high');
+    expect(renderOutputSchema.safeParse(withLevel.data).success).toBe(true);
+
+    const bare = await buildFailingHarness({ kind: 'result', error: { code: 'PRODUCTION_FAILED', message: 'provider 500' } });
+    const noLevel = await bare.handler.handler({ handshakeId: bare.handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(noLevel) || noLevel.data.outcome !== 'failed') throw new Error('expected the FAILED arm');
+    expect(noLevel.data).not.toHaveProperty('effort');
+
+    const threw = await buildFailingHarness({ kind: 'throw', message: 'boom' });
+    const thrown = await threw.handler.handler({ handshakeId: threw.handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(thrown) || thrown.data.outcome !== 'failed') throw new Error('expected the FAILED arm');
+    expect(thrown.data).not.toHaveProperty('effort');
+  });
 
   it('generation failure returns the HandlerFailure marker with the pinned schema-conformant envelope', async () => {
     const { handler, handshakeId } = await buildFailingHarness({

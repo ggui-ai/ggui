@@ -2016,6 +2016,8 @@ export function createGguiRenderHandler(
     // ggui#884 — the model a generation ran, for the post-success hook; null
     // until a generation produces an interface (reuse and failure leave it).
     let generationRan: GguiSessionPostSuccessArgs['generation'] = null;
+    // ggui#1459 emit — stamped on the render result (rendered and failed).
+    let effortRan: AppGenerationProfileEffort | undefined;
 
     // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
     // the MCP Apps protocol probe diagnostic system card.
@@ -2542,6 +2544,10 @@ export function createGguiRenderHandler(
         if (!outcome.ok) {
           generationFailure = outcome.failure;
         }
+        // ggui#1459 emit — the level THIS generation applied, from its own
+        // report on either arm; a reuse, a probe, a placeholder and a
+        // refusal never reach here, so they never carry one.
+        if (outcome.effort !== undefined) effortRan = outcome.effort;
         if (deps.generation.cache) {
           cacheMarker = {
             hit: false,
@@ -2775,6 +2781,7 @@ export function createGguiRenderHandler(
             'cold: generation failed — no interface was produced',
         },
         error: generationFailure,
+        ...(effortRan !== undefined ? { effort: effortRan } : {}),
       };
       // Same side-effect seam as the success return: cloud's hook
       // observes EVERY settled render (it already fires with
@@ -2879,6 +2886,9 @@ export function createGguiRenderHandler(
       ...(codeUrl ? { codeUrl, codeHash } : {}),
       ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
       ...(nextStep ? { nextStep } : {}),
+      // ggui#1459 emit — the named level the generation that produced this
+      // code applied (set only on the cold-generation path).
+      ...(effortRan !== undefined ? { effort: effortRan } : {}),
     };
 
     // Success terminal (`render.committed`). Every success path —
@@ -3414,6 +3424,14 @@ type GenerationRunOutcome =
        * null).
        */
       readonly failure: RenderError;
+      /**
+       * ggui#1459 — the named level a generation that RAN applied, when it
+       * failed after running: a harness-failed generation's own
+       * `metadata.effort`, or the level of a generation whose commit was
+       * rejected. Absent when no generation ran (the generator threw,
+       * credentials failed) or when it applied no level.
+       */
+      readonly effort?: AppGenerationProfileEffort;
     };
 
 /**
@@ -3657,7 +3675,8 @@ async function runGenerationIntoGguiSession(
   }
 
   if (!result.ok) {
-    return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
+    const failedEffort = result.metadata?.effort;
+    const failed = await commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
       sessionId,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -3673,6 +3692,9 @@ async function runGenerationIntoGguiSession(
       reason: 'generation-failed',
       ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
     });
+    // ggui#1459 — the generation ran and failed: its own report of the
+    // level it applied rides the failed outcome.
+    return !failed.ok && failedEffort !== undefined ? { ...failed, effort: failedEffort } : failed;
   }
 
   // Happy path — commit the authoritative ComponentGguiSession.
@@ -3791,6 +3813,8 @@ async function runGenerationIntoGguiSession(
         message:
           'generation succeeded but the produced component could not be committed to the render store',
       },
+      // ggui#1459 — the generation ran; its level stands although the commit did not.
+      ...(result.metadata.effort !== undefined ? { effort: result.metadata.effort } : {}),
     };
   }
   // Live-subscriber notify. Cold-generation success — the entry reuses

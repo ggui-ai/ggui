@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The render result's `effort` is now SENT (2026-10-01, ggui#1459 emit step:
+ * no schema change, same draft stamp). `ggui_render` states the named level
+ * the generation that produced the render's code applied, from that
+ * generation's own `GenerationMetadata.effort`: on `rendered`, and on
+ * `failed` when a generation ran and failed after applying a level (its own
+ * failure metadata, or a generation whose commit was rejected). Absent on a
+ * reuse, a probe or placeholder render, a refusal, a generator that threw,
+ * and when no level applied. `structuredContent` only — not the
+ * `ai.ggui/render` slice. Release order: the declare step (2026-09-27,
+ * below) serves on dev, staging and prod and shipped on npm in 0.25.0, so a
+ * server's own `tools/list` names the member wherever it is sent. An npm
+ * reader before 0.25.0 strips it (`renderOutputSchema` is not strict).
+ * --------------------------------------------------------------------
  * JSON-value schema emits a model-API-safe shape (2026-10-01, ggui#1637 —
  * PATCH-class wire fix, same draft stamp): `jsonValueSchema`'s object arm
  * checks its members in code instead of recursing, so the JSON Schema served
