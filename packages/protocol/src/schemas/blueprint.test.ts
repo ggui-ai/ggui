@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { llmBlueprintSourceSchema } from './blueprint';
-import { blueprintSourceSchema, blueprintVarianceSchema } from './blueprint';
+import { blueprintSchema, blueprintSourceSchema, blueprintVarianceSchema, generatorBuildSchema } from './blueprint';
 
 describe('blueprintVarianceSchema', () => {
   it('parses persona/aesthetic/context/seedPrompt and is strict', () => {
@@ -71,5 +71,41 @@ describe('llmBlueprintSourceSchema — mirrors the tightened source (ggui#924)',
     });
     expect(llmBlueprintSourceSchema.safeParse({ kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'anthropic/claude-haiku-4-5' }).success).toBe(false);
     expect(llmBlueprintSourceSchema.safeParse({ kind: 'llm', generator: 'ui-gen-advanced', model: 'claude-opus-4-7' }).success).toBe(false);
+  });
+});
+
+// ggui#1280 — the minting engine's build stamp on the durable record.
+const DIGEST = 'a'.repeat(64);
+const baseRow = {
+  blueprintId: 'bp-1',
+  contractHash: 'hash-1',
+  appId: 'app-1',
+  source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
+  variance: {},
+  createdAt: '2026-09-27T00:00:00.000Z',
+  createdBy: 'agent',
+  contract: { propsSpec: { properties: {} } },
+};
+
+describe('generatorBuildSchema + Blueprint.build (ggui#1280, declare step)', () => {
+  it('parses a build stamp and is strict about its keys', () => {
+    const ok = generatorBuildSchema.safeParse({ version: '0.24.0', mode: 'constrained', digests: { promptTemplateSha256: DIGEST } });
+    expect(ok.success).toBe(true);
+    expect(generatorBuildSchema.safeParse({ digests: {} }).success).toBe(true); // version/mode optional; an empty digest map is a stamp with nothing to say
+    expect(generatorBuildSchema.safeParse({ digests: { x: DIGEST }, extra: 1 }).success).toBe(false);
+    expect(generatorBuildSchema.safeParse({ version: '1' }).success).toBe(false); // digests is required
+  });
+  it('digest values are lowercase hex sha256 — anything else is a bug worth surfacing', () => {
+    expect(generatorBuildSchema.safeParse({ digests: { k: 'not-a-digest' } }).success).toBe(false);
+    expect(generatorBuildSchema.safeParse({ digests: { k: DIGEST.toUpperCase() } }).success).toBe(false);
+  });
+  it('blueprintSchema keeps a build stamp and still parses a row without one (N−1: old rows read as unknown)', () => {
+    const stamped = blueprintSchema.safeParse({ ...baseRow, build: { mode: 'free', digests: { promptTemplateSha256: DIGEST } } });
+    expect(stamped.success).toBe(true);
+    if (stamped.success) expect(stamped.data.build).toEqual({ mode: 'free', digests: { promptTemplateSha256: DIGEST } });
+    const bare = blueprintSchema.safeParse(baseRow);
+    expect(bare.success).toBe(true);
+    if (bare.success) expect(bare.data.build).toBeUndefined();
+    expect(blueprintSchema.safeParse({ ...baseRow, build: { digests: { k: 'nope' } } }).success).toBe(false);
   });
 });

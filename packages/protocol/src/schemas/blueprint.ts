@@ -4,21 +4,22 @@
  * `../types/blueprint.ts` is the declared source of truth; the schema
  * here is `z.ZodType<Blueprint>` so any drift fails compile.
  */
-import { z } from 'zod';
+import { z } from "zod";
 import type {
   AppBlueprintSearchConfig,
   Blueprint,
   BlueprintVariance,
-} from '../types/blueprint';
+  GeneratorBuild,
+} from "../types/blueprint";
 import type {
   BlueprintSource,
   CuratedBlueprintSource,
   LlmBlueprintSource,
   UserBlueprintSource,
-} from '../types/blueprint-source';
-import { isGeneratorId } from '../types/blueprint-source';
-import { MODEL_REF_PREFIXES, isModelRef } from '../types/llm-route';
-import { dataContractSchema, jsonValueSchema } from './data-contract.js';
+} from "../types/blueprint-source";
+import { isGeneratorId } from "../types/blueprint-source";
+import { MODEL_REF_PREFIXES, isModelRef } from "../types/llm-route";
+import { dataContractSchema, jsonValueSchema } from "./data-contract.js";
 
 /**
  * Zod mirror of {@link LlmBlueprintSource} — the engine-generated arm.
@@ -29,29 +30,31 @@ import { dataContractSchema, jsonValueSchema } from './data-contract.js';
  */
 export const llmBlueprintSourceSchema: z.ZodType<LlmBlueprintSource> = z
   .object({
-    kind: z.literal('llm'),
+    kind: z.literal("llm"),
     // ggui#924: the de-modeled identity and the run's `ModelRef` — a
     // modeled id, a bare model name or a second spelling is refused here,
     // naming the field. Template literals (not `z.custom`) so the fields
     // keep their literal types AND render to JSON Schema as `pattern` —
     // this schema is embedded in tool inputs that `tools/list` renders.
-    generator: z.templateLiteral(['ui-gen-', z.string()]).refine(isGeneratorId, {
-      error: 'generator is the de-modeled identity `ui-gen-<tier>` — one tier token, no model segment (e.g. `ui-gen-default`)',
+    generator: z.templateLiteral(["ui-gen-", z.string()]).refine(isGeneratorId, {
+      error:
+        "generator is the de-modeled identity `ui-gen-<tier>` — one tier token, no model segment (e.g. `ui-gen-default`)",
     }),
-    model: z.templateLiteral([z.enum(MODEL_REF_PREFIXES), '/', z.string()]).refine(isModelRef, {
-      error: 'model is the run route in the registry spelling `<prefix>/<model>` (e.g. `anthropic/claude-haiku-4-5`)',
+    model: z.templateLiteral([z.enum(MODEL_REF_PREFIXES), "/", z.string()]).refine(isModelRef, {
+      error:
+        "model is the run route in the registry spelling `<prefix>/<model>` (e.g. `anthropic/claude-haiku-4-5`)",
     }),
   })
   .strict();
 
 /** Zod mirror of {@link UserBlueprintSource} — no engine claim exists. */
 export const userBlueprintSourceSchema: z.ZodType<UserBlueprintSource> = z
-  .object({ kind: z.literal('user') })
+  .object({ kind: z.literal("user") })
   .strict() as z.ZodType<UserBlueprintSource>;
 
 /** Zod mirror of {@link CuratedBlueprintSource}. */
 export const curatedBlueprintSourceSchema: z.ZodType<CuratedBlueprintSource> = z
-  .object({ kind: z.literal('curated') })
+  .object({ kind: z.literal("curated") })
   .strict() as z.ZodType<CuratedBlueprintSource>;
 
 /**
@@ -77,41 +80,54 @@ export const blueprintSourceSchema: z.ZodType<BlueprintSource> = z.union([
  * vendor-neutral.
  */
 /** The four — and only — variance keys; the strict object names them on rejection. */
-export const BLUEPRINT_VARIANCE_KEYS = ['persona', 'aesthetic', 'context', 'seedPrompt'] as const;
+export const BLUEPRINT_VARIANCE_KEYS = ["persona", "aesthetic", "context", "seedPrompt"] as const;
 
 export const blueprintVarianceSchema: z.ZodType<BlueprintVariance> = z
   .object(
     {
-    persona: z
-      .string()
-      .optional()
-      .describe('Design persona, e.g. "minimalist" / "data-dense". Part of cache identity.'),
-    aesthetic: z
-      .string()
-      .optional()
-      .describe('Visual aesthetic, e.g. "calm" / "ornate". Part of cache identity.'),
-    context: z
-      .record(z.string(), jsonValueSchema)
-      .optional()
-      .describe(
-        'Deliberate design-shaping signals (e.g. {situation:"sad"}) — part of cache identity. NOT for per-user runtime data; put that in propsSpec/contextSpec.',
-      ),
-    seedPrompt: z
-      .string()
-      .optional()
-      .describe('Generation seed directive. Part of cache identity.'),
+      persona: z
+        .string()
+        .optional()
+        .describe('Design persona, e.g. "minimalist" / "data-dense". Part of cache identity.'),
+      aesthetic: z
+        .string()
+        .optional()
+        .describe('Visual aesthetic, e.g. "calm" / "ornate". Part of cache identity.'),
+      context: z
+        .record(z.string(), jsonValueSchema)
+        .optional()
+        .describe(
+          'Deliberate design-shaping signals (e.g. {situation:"sad"}) — part of cache identity. NOT for per-user runtime data; put that in propsSpec/contextSpec.'
+        ),
+      seedPrompt: z
+        .string()
+        .optional()
+        .describe("Generation seed directive. Part of cache identity."),
     },
     {
       // A rejection that teaches (ggui#523 item 2): the first live guest
       // turn sent `mood` and got a bare "Unrecognized key" — name the
       // legal set and where the misplaced intent belongs.
       error: (issue) =>
-        issue.code === 'unrecognized_keys'
-          ? `variance: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(', ')} — variance is EXACTLY {${BLUEPRINT_VARIANCE_KEYS.join(', ')}}; put tonal intent in \`aesthetic\`, and per-user runtime data in props / contextSpec, never in variance`
+        issue.code === "unrecognized_keys"
+          ? `variance: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(", ")} — variance is EXACTLY {${BLUEPRINT_VARIANCE_KEYS.join(", ")}}; put tonal intent in \`aesthetic\`, and per-user runtime data in props / contextSpec, never in variance`
           : undefined,
-    },
+    }
   )
   .strict() as z.ZodType<BlueprintVariance>;
+
+/**
+ * Zod mirror of {@link GeneratorBuild} (ggui#1280). Strict: the stamp is a
+ * closed shape; `digests` values are lowercase hex sha256, and anything
+ * else in a persisted row is a bug worth surfacing.
+ */
+export const generatorBuildSchema: z.ZodType<GeneratorBuild> = z
+  .object({
+    version: z.string().min(1).optional(),
+    mode: z.string().min(1).optional(),
+    digests: z.record(z.string().min(1), z.string().regex(/^[0-9a-f]{64}$/)),
+  })
+  .strict();
 
 /**
  * Zod mirror of {@link Blueprint}. Required fields are listed first;
@@ -134,7 +150,7 @@ export const blueprintSchema: z.ZodType<Blueprint> = z
     // the "never false" half of the type.
     isOperatorDefault: z.literal(true).optional(),
     createdAt: z.string().min(1),
-    createdBy: z.enum(['agent', 'operator']),
+    createdBy: z.enum(["agent", "operator"]),
     contract: dataContractSchema,
     // Optional cached embedding vector. Written by BlueprintStore.put
     // when an EmbeddingProvider is wired; read by BlueprintSearch on
@@ -142,6 +158,8 @@ export const blueprintSchema: z.ZodType<Blueprint> = z
     // express readonly so a plain array survives the assignability
     // check via the outer `as z.ZodType<Blueprint>` cast.
     contractEmbedding: z.array(z.number()).optional(),
+    // ggui#1280 — the minting engine's build; absent = `mintedBy: unknown`.
+    build: generatorBuildSchema.optional(),
   })
   .strict() as z.ZodType<Blueprint>;
 

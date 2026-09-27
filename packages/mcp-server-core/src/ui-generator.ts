@@ -20,6 +20,7 @@ import type {
   ModelRef,
   AppGenerationProfile,
   JsonObject,
+  GeneratorBuild,
 } from '@ggui-ai/protocol';
 import type { RenderingContext } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
@@ -226,22 +227,13 @@ export interface UiGenerateInput {
 }
 
 /**
- * The engine's BUILD identity: values that change when the engine's code or
- * templates change and never with the request. Carried on
- * {@link GenerationMetadata.build}; absent when the engine does not report one.
+ * The engine's BUILD identity — declared once in `@ggui-ai/protocol`
+ * (ggui#1280: the durable blueprint carries the same shape as
+ * `Blueprint.build`) and re-exported here under its original name, so
+ * `GenerationMetadata.build` and every consumer that imported it from this
+ * package keep compiling unchanged.
  */
-export interface GeneratorBuild {
-  /** The engine package's version when readable at runtime; absent, never guessed, when not. */
-  readonly version?: string;
-  /** Engine-defined label for the configuration the digests were computed under. Opaque to consumers, like `routeKind`. */
-  readonly mode?: string;
-  /**
-   * Content digests (lowercase hex sha256) that identify the build. Keys are
-   * the engine's own, scoped by `generator`; consumers compare and group by
-   * value, and only a consumer that knows the engine reads a key.
-   */
-  readonly digests: Readonly<Record<string, string>>;
-}
+export type { GeneratorBuild } from '@ggui-ai/protocol';
 
 /**
  * Execution status of the generation's runtime-render probe, when the engine

@@ -31,8 +31,8 @@
  *     source-of-truth divergence. Implementations MAY denormalize
  *     freely; consumers MUST treat `contractHash` as authoritative.
  */
-import type { BlueprintSource } from './blueprint-source.js';
-import type { DataContract, JsonObject } from './data-contract.js';
+import type { BlueprintSource } from "./blueprint-source.js";
+import type { DataContract, JsonObject } from "./data-contract.js";
 
 /**
  * Per-axis weights for the {@link BlueprintSearch} multi-axis scoring
@@ -119,6 +119,29 @@ export interface BlueprintVariance {
 }
 
 /**
+ * The BUILD identity of the engine that minted a blueprint: values that
+ * change when the engine's code or templates change and never with the
+ * request, so results group by the build that produced them (ggui#1280).
+ *
+ * One declaration, here: `@ggui-ai/mcp-server-core` re-exports it under
+ * the same name for `GenerationMetadata.build`, and the durable record
+ * carries it as {@link Blueprint.build}. Absent when the engine reports
+ * none — never guessed.
+ */
+export interface GeneratorBuild {
+  /** The engine package's version when readable at runtime; absent, never guessed, when not. */
+  readonly version?: string;
+  /** Engine-defined label for the configuration the digests were computed under. Opaque to consumers, like `routeKind`. */
+  readonly mode?: string;
+  /**
+   * Content digests (lowercase hex sha256) that identify the build. Keys are
+   * the engine's own, scoped by the source's `generator`; consumers compare
+   * and group by value, and only a consumer that knows the engine reads a key.
+   */
+  readonly digests: Readonly<Record<string, string>>;
+}
+
+/**
  * The variant-unit. See file-level docstring for the locked decisions
  * this shape encodes.
  */
@@ -198,7 +221,7 @@ export interface Blueprint {
    * blueprint; `'operator'` when an explicit `ggui_ops_generate_blueprint`
    * call created it.
    */
-  readonly createdBy: 'agent' | 'operator';
+  readonly createdBy: "agent" | "operator";
   /**
    * Read-cache copy of the contract shape. See file-level docstring
    * for why this is a denormalization, not a source-of-truth
@@ -225,4 +248,21 @@ export interface Blueprint {
    * defends by treating dimension mismatch as embed-axis zero.
    */
   readonly contractEmbedding?: readonly number[];
+  /**
+   * The build of the engine that minted this blueprint (ggui#1280), so a
+   * reused render is separable from a fresh one by the generator that
+   * made its code. Written once at mint from the generation's
+   * `metadata.build`; never rewritten.
+   *
+   * Absent on rows minted before the stamp existed and on engines that
+   * report no build; absence means the minting build is unknown, and a
+   * reader reports it as such rather than failing the row (the first such
+   * reader is the serve trace's `mintedBy`, ggui#1280 read side). Declared
+   * on one release and emitted from the next — the previous release's
+   * `ggui_ops_list_blueprints` output validation parses rows with the
+   * strict `blueprintSchema` and would refuse a stamped one — so a store
+   * MUST persist what it is given here even while no writer produces it
+   * (graded by the `BlueprintStore` conformance kit).
+   */
+  readonly build?: GeneratorBuild;
 }

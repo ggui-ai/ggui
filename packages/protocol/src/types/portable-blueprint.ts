@@ -1,5 +1,5 @@
 import type { DataContract } from "./data-contract.js";
-import type { BlueprintVariance } from "./blueprint.js";
+import type { BlueprintVariance, GeneratorBuild } from "./blueprint.js";
 import type { BlueprintSource } from "./blueprint-source.js";
 
 /**
@@ -59,4 +59,10 @@ export interface PortableBlueprint {
    * handshakes — an offline pool export has no catalog to hash.
    */
   readonly toolIdentityCatalogHash?: string;
+  /**
+   * The minting engine's build (ggui#1280), when the exporting row carried
+   * one. Optional and additive: artifacts exported before this field
+   * existed still import, and importers read absence as `mintedBy: unknown`.
+   */
+  readonly build?: GeneratorBuild;
 }

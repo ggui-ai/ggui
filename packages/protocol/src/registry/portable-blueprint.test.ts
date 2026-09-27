@@ -154,3 +154,19 @@ describe('fromPortableBlueprint', () => {
     expect(result.record).not.toHaveProperty('strayKey');
   });
 });
+
+describe('build stamp on the portable record (ggui#1280)', () => {
+  const build = { version: '0.24.0', mode: 'constrained', digests: { promptTemplateSha256: 'b'.repeat(64) } };
+  it('toPortableBlueprint carries the source build when present and omits the key when absent', () => {
+    expect(toPortableBlueprint({ ...src, build }).build).toEqual(build);
+    expect('build' in toPortableBlueprint(src)).toBe(false);
+  });
+  it('fromPortableBlueprint round-trips a build stamp and rejects a malformed one', () => {
+    const ok = fromPortableBlueprint(toPortableBlueprint({ ...src, build }));
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.record.build).toEqual(build);
+    const bad = fromPortableBlueprint({ ...toPortableBlueprint(src), build: { digests: { k: 'nope' } } });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.reason).toContain('build');
+  });
+});

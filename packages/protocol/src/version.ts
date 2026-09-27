@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The durable blueprint carries its minting engine's build (2026-09-27,
+ * additive, ggui#1280 declare step: MINOR, same draft stamp).
+ * `GeneratorBuild { version?, mode?, digests }` is declared HERE (the core
+ * port re-exports the same name), `Blueprint.build?` and
+ * `PortableBlueprint.build?` carry it, `generatorBuildSchema` mirrors it
+ * (strict; digest values are lowercase hex sha256). Readers treat absence
+ * as `mintedBy: unknown` — a reported category, never an error. Two-step by
+ * design: this release DECLARES the field and every store persists it when
+ * given; no writer EMITS it until this release serves everywhere, because
+ * the previous release's `ggui_ops_list_blueprints` output validation parses
+ * rows with its strict `blueprintSchema` and would refuse a stamped row
+ * (N−1). The emit — handlers passing `metadata.build` into
+ * `registerBlueprint` — lands one release later.
+ * --------------------------------------------------------------------
  * Text blocks carry an optional `phase` (2026-09-27, additive, ggui#1441:
  * MINOR, same draft stamp). `textBlockSchema` gains `phase?: string` —
  * `"interim"` is narration between tool calls, absent or any other value is

@@ -1,11 +1,11 @@
 import type { PortableBlueprint } from '../types/portable-blueprint.js';
 import { PORTABLE_BLUEPRINT_SCHEMA_VERSION } from '../types/portable-blueprint.js';
 import type { DataContract } from '../types/data-contract.js';
-import type { BlueprintVariance } from '../types/blueprint.js';
+import type { BlueprintVariance, GeneratorBuild } from '../types/blueprint.js';
 import type { BlueprintSource } from '../types/blueprint-source.js';
 import { parseBlueprintSource } from '../types/blueprint-source.js';
 import { dataContractSchema } from '../schemas/data-contract.js';
-import { blueprintVarianceSchema } from '../schemas/blueprint.js';
+import { blueprintVarianceSchema, generatorBuildSchema } from '../schemas/blueprint.js';
 import { blueprintKey, variantKey } from './blueprint-key.js';
 import { PROTOCOL_VERSION } from '../version.js';
 import type { ToolCatalogShape } from './blueprint-stamp.js';
@@ -29,6 +29,8 @@ export interface PortableBlueprintSource {
    * intent derivation.
    */
   readonly intent?: string;
+  /** The minting engine's build, when the row carries one (ggui#1280). */
+  readonly build?: GeneratorBuild;
 }
 
 /**
@@ -92,6 +94,7 @@ export function toPortableBlueprint(
     ...(opts?.catalog !== undefined
       ? { toolIdentityCatalogHash: computeToolCatalogHash(opts.catalog) }
       : {}),
+    ...(src.build !== undefined ? { build: src.build } : {}),
   };
 }
 
@@ -170,6 +173,12 @@ export function fromPortableBlueprint(record: unknown): PortableBlueprintImportR
     return { ok: false, reason: `malformed \`variance\`: ${variance.error.message}` };
   }
 
+  const shippedBuild = r['build'];
+  const build = shippedBuild === undefined ? undefined : generatorBuildSchema.safeParse(shippedBuild);
+  if (build !== undefined && !build.success) {
+    return { ok: false, reason: `malformed \`build\`: ${build.error.message}` };
+  }
+
   const keyMismatch =
     blueprintKey(contract.data) !== shippedContractHash ||
     variantKey(variance.data) !== shippedVariantKey;
@@ -187,6 +196,7 @@ export function fromPortableBlueprint(record: unknown): PortableBlueprintImportR
       generatorProtocolVersion,
       ...(intent !== undefined ? { intent } : {}),
       ...(toolIdentityCatalogHash !== undefined ? { toolIdentityCatalogHash } : {}),
+      ...(build !== undefined ? { build: build.data } : {}),
     },
     keyMismatch,
   };
