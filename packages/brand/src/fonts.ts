@@ -12,12 +12,13 @@ export interface SocialCardFont {
 }
 
 // The faces ship in the package's `fonts/` directory, beside `dist/` and
-// `src/`, so the same relative URL resolves from either.
-const FONT_DIR = new URL('../fonts/', import.meta.url);
-
-function face(file: string): Buffer {
-  return readFileSync(new URL(file, FONT_DIR));
-}
+// `src/`, so the same relative URL resolves from either. One literal URL per
+// face: bundlers (Turbopack, webpack, Vite) treat `new URL('<file>',
+// import.meta.url)` as an asset reference and emit the file, while a directory
+// URL joined at runtime is opaque to them and fails to resolve.
+const INTER_REGULAR = new URL('../fonts/Inter-Regular.woff', import.meta.url);
+const INTER_BOLD = new URL('../fonts/Inter-Bold.woff', import.meta.url);
+const GEIST_MONO_REGULAR = new URL('../fonts/GeistMono-Regular.woff', import.meta.url);
 
 /**
  * The social card's faces: Inter Regular and Bold, and Geist Mono Regular,
@@ -27,8 +28,8 @@ function face(file: string): Buffer {
  */
 export function socialCardFonts(): SocialCardFont[] {
   return [
-    { name: 'Inter', data: face('Inter-Regular.woff'), weight: 400, style: 'normal' },
-    { name: 'Inter', data: face('Inter-Bold.woff'), weight: 700, style: 'normal' },
-    { name: 'Geist Mono', data: face('GeistMono-Regular.woff'), weight: 400, style: 'normal' },
+    { name: 'Inter', data: readFileSync(INTER_REGULAR), weight: 400, style: 'normal' },
+    { name: 'Inter', data: readFileSync(INTER_BOLD), weight: 700, style: 'normal' },
+    { name: 'Geist Mono', data: readFileSync(GEIST_MONO_REGULAR), weight: 400, style: 'normal' },
   ];
 }
