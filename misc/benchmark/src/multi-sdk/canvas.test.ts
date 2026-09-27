@@ -37,15 +37,33 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
     const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
     expect(persistCanvasScreenshots(dir, [])).toEqual([]);
   });
+
+  it('forwards the fill instrument (#1120) and the criteria block (#1436) verbatim — a hand-listed projection dropped both', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
+    const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
+    const judge = { k: 1, rule: 'median' as const, samples: [80], sigma: 0, notes: ['ok'] };
+    const criteria = {
+      criteriaSetId: 'set-1', bankVersion: 'v', selectorVersion: 'selector@2',
+      context: { canvas: 'md' as const, hasActions: false, riskTier: 'low' as const, axes: { render: 'static' as const, state: 'none' as const, writes: 'none' as const, fetch: 'none' as const, layout: 'single' as const }, chroma: 'achromatic' as const, profilePresent: false, shell: 'fullscreen' },
+      selection: [], verdicts: [],
+    };
+    const [withBlock, without] = persistCanvasScreenshots(dir, [
+      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 80, passed: true, screenshotPng: png, contentHeight: 900, overflow: false, inkRatio: 0.217, judge, criteria },
+      { canvas: 'lg', viewport: CANVAS_VIEWPORTS.lg, score: 80, passed: true, screenshotPng: png, contentHeight: 700, overflow: false, inkRatio: 0, judge },
+    ]);
+    expect(withBlock).toMatchObject({ inkRatio: 0.217, criteria: { criteriaSetId: 'set-1' } });
+    expect(without).toMatchObject({ inkRatio: 0 });
+    expect(without).not.toHaveProperty('criteria');
+  });
 });
 
 describe('visualCanvasesFromTierEvaluation — the harness path (PNG-free summary) → row canvases without artefact', () => {
   it('maps the evaluator summary and leaves artefact absent', () => {
     const te: EvalResult = {
       issues: [], pass: [],
-      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] } }] },
+      visual: { score: 72, passed: true, canvases: [{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, inkRatio: 0.31, judge: { k: 1, rule: 'median' as const, samples: [72], sigma: 0, notes: ['ok'] } }] },
     };
-    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, judge: { k: 1, rule: 'median', samples: [72], sigma: 0, notes: ['ok'] } }]);
+    expect(visualCanvasesFromTierEvaluation(te)).toEqual([{ canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 72, passed: true, contentHeight: 700, overflow: false, inkRatio: 0.31, judge: { k: 1, rule: 'median', samples: [72], sigma: 0, notes: ['ok'] } }]);
   });
   it('is undefined without a per-canvas summary', () => {
     expect(visualCanvasesFromTierEvaluation(undefined)).toBeUndefined();

@@ -49,6 +49,14 @@ export interface VisualCanvasArtefact {
   readonly judge: CanvasJudgeRecord;
   /** How the judge composed the mount (ggui#1100): `'fill'` on a fullscreen canvas (root stretched to the frame under the design's fill rule); absent on the inline card. */
   readonly fit?: CanvasVisualSummary['fit'];
+  /**
+   * The fill instrument (ggui#1120): the share of the frame's pixels that differ from its dominant
+   * colour, `0` being the blank the judge fails (`canvas-blank`); `null` when the capture was
+   * unreadable. Forwarded verbatim — a row that omits it cannot show what the judge measured.
+   */
+  readonly inkRatio: number | null;
+  /** The typed criteria block (ggui#1436), present when the judge ran with a bank; report-only, forwarded verbatim. */
+  readonly criteria?: CanvasVisualSummary['criteria'];
   readonly artefact?: { readonly path: string; readonly sha256: string; readonly bytes: number };
 }
 
@@ -69,6 +77,8 @@ export function persistCanvasScreenshots(
       overflow: c.overflow,
       judge: c.judge,
       ...(c.fit !== undefined ? { fit: c.fit } : {}),
+      inkRatio: c.inkRatio,
+      ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
       artefact: {
         path,
         sha256: createHash('sha256').update(c.screenshotPng).digest('hex'),
@@ -97,5 +107,7 @@ export function visualCanvasesFromTierEvaluation(
     overflow: c.overflow,
     judge: c.judge,
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
+    inkRatio: c.inkRatio,
+    ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
   }));
 }
