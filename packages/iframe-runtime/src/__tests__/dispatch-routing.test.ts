@@ -921,7 +921,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     ).resolves.toEqual({ ok: true });
   });
 
-  it('a successful gesture after a latch replaces the stale "cannot relay" notice with the normal pending toast (ggui#440 residuals Minor 1)', async () => {
+  it('a successful gesture after a latch retires the stale "cannot relay" notice, and nothing replaces it (ggui#440 residuals Minor 1, ggui#1444)', async () => {
     await latchViaFailedGesture();
     expect(
       document.getElementById('__ggui-action-toast__')?.textContent,
@@ -932,11 +932,10 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     // screen with no successor: the initial `pending` toast at dispatch
     // time was skipped because the latch was still standing when this
     // gesture fired (see the "(1.5)" skip in `dispatchSubmitAction`).
-    // The clear guard must replace the stale notice with the ordinary
-    // pending toast so the normal drain_ack dismissal chain has a
-    // predecessor to dismiss — otherwise the now-false "cannot relay"
-    // notice stands until a `drain_ack` frame that may never arrive in
-    // MCP-Apps relay contexts.
+    // The clear guard must retire the stale notice — otherwise the
+    // now-false "cannot relay" notice stands until a `drain_ack` frame
+    // that may never arrive in MCP-Apps relay contexts. Nothing replaces
+    // it: a relayed tap draws nothing over the card (ggui#1444).
     transport.queueResponse('tools/call', {
       result: { structuredContent: { ok: true, consumerPresent: true } },
     });
@@ -950,8 +949,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
 
     const toast = document.getElementById('__ggui-action-toast__');
-    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
-    expect(toast?.textContent).toBe('→ archive');
+    expect(toast?.style.opacity).toBe('0');
   });
 
   it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events (they are dead taps, summarized at the cleared edge)', async () => {
@@ -1081,6 +1079,9 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
       data: {},
       meta: { sessionId: 'sess_1', appId: 'app_1' },
       dispatchToolName: 'ggui_runtime_submit_action',
+      // The visitor copy names a tap by its declared label, never by the
+      // action name (ggui#1444).
+      label: 'Archive',
     });
   }
 
@@ -1141,7 +1142,7 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     expect(root?.classList.contains(CUE_CLASS)).toBe(false);
     // …it falls through to the toast instead, like any other gesture
     // with nothing usable focused.
-    expect(toastEl()?.textContent).toContain('archive');
+    expect(toastEl()?.textContent).toContain('Archive');
   });
 
   it('does not let a finished pulse truncate the next one', async () => {
@@ -1187,7 +1188,7 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     vi.useFakeTimers();
     fireGesture();
     const first = toastEl()?.textContent ?? '';
-    expect(first).toContain('archive');
+    expect(first).toBe('⚠ Archive — not delivered');
     expect(toastEl()?.style.opacity).toBe('1');
 
     // A second gesture inside the throttle window adds nothing.
@@ -1202,13 +1203,13 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     expect(toastEl()?.textContent).toBe(first);
   });
 
-  it('arms only in the latched state — an unlatched gesture keeps the ordinary pending toast and cues nothing', async () => {
+  it('arms only in the latched state — an unlatched gesture draws nothing and cues nothing', async () => {
     const btn = mountSessionRoot();
     btn.focus();
 
     fireGesture();
 
-    expect(toastEl()?.textContent).toBe('→ archive');
+    expect(toastEl()?.style.opacity ?? '0').not.toBe('1');
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
     expect(document.getElementById(CUE_STYLE_ID)).toBeNull();
     await tick();
@@ -1233,12 +1234,12 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
 
-    // The next gesture is back on the normal path: ordinary pending
-    // toast, no pulse. Nothing the dead zone set is still armed — had
+    // The next gesture is back on the normal path: nothing drawn
+    // (ggui#1444), no pulse. Nothing the dead zone set is still armed — had
     // `relayNoticeDismissed` survived the clear, a later re-latch would
     // skip its own notice's dismissal and cue from the first gesture.
     fireGesture();
-    expect(toastEl()?.textContent).toBe('→ archive');
+    expect(toastEl()?.style.opacity).toBe('0');
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
   });
 
@@ -1475,7 +1476,7 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(toast()?.style.opacity === '0' || toast() === null).toBe(true);
     await attempt();
     // No focused control in this document → the fallback cue toast.
-    expect(toast()?.textContent).toMatch(/not delivered/);
+    expect(toast()?.textContent).toMatch(/not delivered/i);
     expect(toast()?.style.opacity).not.toBe('0');
   });
 
@@ -1743,5 +1744,130 @@ describe('a refused doorbell is named in the view (ggui#1314)', () => {
     await tick();
     expect(toastText()).toMatch(/sent to chat/i);
     expect(recorded.map((r) => r.kind)).not.toContain('doorbell.refused');
+  });
+});
+
+describe('visitor-facing gesture copy (ggui#1444)', () => {
+  // A staging rehearsal drew "→ chooseReply (id: pricing)" over a card after
+  // a chip tap, still up at +18 s. The action NAME and its data are the
+  // author's and the agent's vocabulary, never the visitor's, and a tap the
+  // relay accepted needs no chrome over the card at all: the pending look
+  // belongs to the card's own control (`useActionPending`).
+  const TOAST_ID = '__ggui-action-toast__';
+  const ANNOUNCER_ID = '__ggui-toast-announcer__';
+  const INTENT = 'chooseReply';
+  const DATA = { id: 'pricing' };
+
+  const toast = (): HTMLElement | null => document.getElementById(TOAST_ID);
+  const toastShown = (): boolean => toast()?.style.opacity === '1';
+  const region = (p: 'polite' | 'assertive'): HTMLElement | null =>
+    document.querySelector<HTMLElement>(`#${ANNOUNCER_ID} [data-ggui-toast-announce="${p}"]`);
+  const everythingSaid = (): string =>
+    [toast()?.textContent ?? '', region('polite')?.textContent ?? '', region('assertive')?.textContent ?? ''].join(' | ');
+  const expectNoInternals = (): void => {
+    const said = everythingSaid();
+    expect(said).not.toContain(INTENT);
+    expect(said).not.toContain('pricing');
+  };
+
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    toast()?.remove();
+    document.getElementById(ANNOUNCER_ID)?.remove();
+  });
+
+  function tap(): void {
+    routeDispatch({
+      actionName: INTENT,
+      data: DATA,
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+  }
+
+  it('a tap the relay accepts draws nothing over the card; it says "Sending…" to assistive tech only', async () => {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    tap();
+    expect(toastShown()).toBe(false);
+    expect(region('polite')?.textContent).toBe('Sending…');
+    await tick();
+    await tick();
+    expect(toastShown()).toBe(false);
+    expectNoInternals();
+  });
+
+  it('a tap with no listening agent says so, without the action name or its data', async () => {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    tap();
+    await tick();
+    await tick();
+    expect(toastShown()).toBe(true);
+    expect(toast()?.textContent).toMatch(/agent not listening/i);
+    expectNoInternals();
+  });
+
+  it('a failed enqueue says so, without the action name or its data', async () => {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    tap();
+    await tick();
+    await tick();
+    expect(toast()?.textContent).toMatch(/could not reach the agent/i);
+    expectNoInternals();
+  });
+
+  it('the relay dead zone\'s fallback cue says "not delivered", without the action name, on screen and to assistive tech', async () => {
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', { error: { code: -32601, message: 'method not supported' } });
+    tap();
+    await tick();
+    await tick();
+    expect(toast()?.textContent).toMatch(/cannot relay/i);
+    toast()?.click(); // the user dismisses the standing notice
+    tap(); // no focused control in the session root → the fallback cue toast
+    expect(toast()?.textContent).toMatch(/not delivered/i);
+    expectNoInternals();
+    await tick();
+  });
+
+  it("names the tap by the action's declared label when it has one — never by the name or the data", async () => {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    routeDispatch({
+      actionName: INTENT,
+      data: DATA,
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+      label: 'Show prices',
+    });
+    expect(region('polite')?.textContent).toBe('Show prices — sending…');
+    await tick();
+    await tick();
+    expect(toast()?.textContent).toBe('⚠ Show prices — could not reach the agent');
+    expectNoInternals();
+  });
+
+  it("a new tap retires the previous gesture's standing notice", async () => {
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    tap();
+    await tick();
+    await tick();
+    expect(toastShown()).toBe(true);
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    tap();
+    expect(toastShown()).toBe(false);
+    await tick();
+    await tick();
   });
 });

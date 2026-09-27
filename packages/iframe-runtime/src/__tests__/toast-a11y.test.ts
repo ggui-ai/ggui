@@ -104,12 +104,24 @@ function region(politeness: 'polite' | 'assertive'): HTMLElement | null {
   );
 }
 
+/**
+ * The declared control label each test action carries: what the visitor copy
+ * names a tap by (ggui#1444). The action NAME is never spoken or drawn, so
+ * every assertion below reads the label, and none may find the name.
+ */
+const LABELS: Readonly<Record<string, string>> = {
+  archive: 'Archive',
+  'delete-permanently': 'Delete for good',
+};
+
 function fireGesture(actionName = 'archive'): void {
+  const label = LABELS[actionName];
   routeDispatch({
     actionName,
     data: {},
     meta: { sessionId: 'sess_1', appId: 'app_1' },
     dispatchToolName: 'ggui_runtime_submit_action',
+    ...(label !== undefined ? { label } : {}),
   });
 }
 
@@ -213,7 +225,7 @@ describe('toast announcer — the region exists before the content', () => {
     fireGesture();
 
     expect(region('polite')).toBe(before?.polite);
-    expect(before?.polite.textContent).toBe('→ archive');
+    expect(before?.polite.textContent).toBe('Archive — sending…');
     await tick();
   });
 });
@@ -222,13 +234,22 @@ describe('toast primitive — spoken and visual halves', () => {
   it('routes an informational state to the polite region', async () => {
     fireGesture();
 
-    expect(region('polite')?.textContent).toBe('→ archive');
+    expect(region('polite')?.textContent).toBe('Archive — sending…');
     expect(region('assertive')?.textContent).toBe('');
     await tick();
   });
 
   it('keeps the visible toast out of the accessibility tree', async () => {
+    // A relayed tap draws nothing (ggui#1444), so drive a toast that IS
+    // drawn: a failed enqueue.
+    setHostCapabilities({ serverTools: {}, message: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32000, message: 'relay exploded' },
+    });
     fireGesture();
+    await tick();
+    await tick();
+    expect(toastEl()?.style.opacity).toBe('1');
 
     // The element carries the same sentence the region just announced.
     // Left in the tree it would be read a second time, and it is not a
@@ -250,7 +271,7 @@ describe('toast primitive — spoken and visual halves', () => {
 
     fireGesture();
     // The pending state spoke first, politely.
-    expect(region('polite')?.textContent).toBe('→ archive');
+    expect(region('polite')?.textContent).toBe('Archive — sending…');
     await tick();
     await tick();
 
@@ -293,10 +314,16 @@ describe('toast primitive — spoken and visual halves', () => {
     Reflect.set(window, '__GGUI_TOAST_DISABLED__', true);
     try {
       ensureToastAnnouncer(document);
+      setHostCapabilities({ serverTools: {}, message: {} });
+      transport.queueResponse('tools/call', {
+        error: { code: -32000, message: 'relay exploded' },
+      });
       fireGesture();
+      await tick();
+      await tick();
       expect(toastEl()).not.toBeNull();
       expect(toastEl()?.style.opacity).toBe('1');
-      await tick();
+      expect(region('assertive')?.textContent).not.toBe('');
     } finally {
       Reflect.deleteProperty(window, '__GGUI_TOAST_DISABLED__');
     }
@@ -335,7 +362,7 @@ describe('action-required notice — the one toast the user must operate', () =>
     expect(el.style.pointerEvents).toBe('auto');
     // The name says what activating it DOES, not just what happened.
     const label = el.getAttribute('aria-label') ?? '';
-    expect(label).toContain('agent not listening');
+    expect(label).toMatch(/agent not listening/i);
     expect(label).toMatch(/dismiss/i);
     // The message itself still interrupts — it asks for an action.
     expect(region('assertive')?.textContent).toMatch(/agent not listening/i);
@@ -364,9 +391,16 @@ describe('action-required notice — the one toast the user must operate', () =>
     expect(el.getAttribute('role')).toBe('button');
 
     // The primitive reuses ONE element for every state, so a later
-    // pending toast inherits whatever the notice left on it unless the
-    // control posture is reset on every show.
+    // ordinary toast inherits whatever the notice left on it unless the
+    // control posture is reset on every show. A relayed tap draws nothing
+    // (ggui#1444), so the next toast here is a failed enqueue's.
+    transport.queueResponse('tools/call', {
+      error: { code: -32000, message: 'relay exploded' },
+    });
     fireGesture();
+    await tick();
+    await tick();
+    expect(toastEl()?.textContent).toMatch(/could not reach the agent/i);
 
     expect(toastEl()?.getAttribute('role')).toBeNull();
     expect(toastEl()?.getAttribute('tabindex')).toBeNull();
@@ -412,7 +446,7 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     expect(btn.getAttribute('aria-label')).toBeNull();
     // So the meaning is carried in the runtime's own region instead.
     expect(region('assertive')?.textContent).toMatch(
-      /archive.*not delivered/i,
+      /Archive — not delivered/,
     );
   });
 
@@ -424,7 +458,7 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     vi.useFakeTimers();
     fireGesture();
     const spoken = region('assertive')?.textContent ?? '';
-    expect(spoken).toMatch(/archive.*not delivered/i);
+    expect(spoken).toMatch(/Archive — not delivered/);
 
     // Past the pulse AND past the cue's own expiry, so the next gesture
     // is a real second cue and the region is empty because PRODUCTION
@@ -455,7 +489,7 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
 
     vi.useFakeTimers();
     fireGesture('archive');
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
 
     // A second, DIFFERENT gesture inside the quiet period. Let the
     // first pulse finish so this is a real cue and not the in-flight
@@ -468,8 +502,8 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     // about an action the user did not just attempt. That is worse than
     // silence, so a changed intent always speaks.
     expect(btn.classList.contains(CUE_CLASS)).toBe(true);
-    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
-    expect(region('assertive')?.textContent).not.toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Delete for good/);
+    expect(region('assertive')?.textContent).not.toMatch(/Archive/);
   });
 
   it('retracts the spoken cue instead of leaving it standing forever', async () => {
@@ -499,13 +533,13 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     // pending and due before the second one's.
     vi.advanceTimersByTime(1_000);
     fireGesture('delete-permanently');
-    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
+    expect(region('assertive')?.textContent).toMatch(/Delete for good/);
 
     // Past the first cue's original deadline. An uncancelled timer — or
     // one that cleared the region unconditionally — would retract a
     // message that is only 1.5s old and still describing a live pulse.
     vi.advanceTimersByTime(1_600);
-    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
+    expect(region('assertive')?.textContent).toMatch(/Delete for good/);
 
     // It goes on its own schedule, not its predecessor's.
     vi.advanceTimersByTime(1_000);
@@ -528,11 +562,11 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     fireGesture('delete-permanently');
     vi.advanceTimersByTime(1_000);
     fireGesture('archive');
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
 
     // Past the FIRST archive cue's deadline, well inside the third's.
     vi.advanceTimersByTime(600);
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
   });
 
   it('a cue’s expiry does not silence a toast that is still on screen', async () => {
@@ -547,15 +581,15 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     // read out of the region can tell the dead one from the live one.
     // Only cancelling the retraction when the toast speaks works.
     fireGesture('archive');
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
 
     // Same dead zone, but nothing focused now, so this gesture takes
     // the other cue shape: a real micro-toast, with its own 2.5s life.
     btn.blur();
     vi.advanceTimersByTime(1_000);
     fireGesture('archive');
-    expect(toastEl()?.textContent).toMatch(/archive/i);
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(toastEl()?.textContent).toMatch(/Archive/);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
 
     // The earlier cue's retraction comes due here. The toast is still
     // on screen for another 900ms, so the region must still describe
@@ -563,7 +597,7 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     // in the other direction.
     vi.advanceTimersByTime(1_600);
     expect(toastEl()?.style.opacity).toBe('1');
-    expect(region('assertive')?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/Archive/);
 
     // And it goes when the toast itself goes, not before.
     vi.advanceTimersByTime(1_000);
@@ -579,9 +613,24 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
 
     fireGesture();
 
-    expect(toastEl()?.textContent).toMatch(/archive.*not delivered/i);
+    expect(toastEl()?.textContent).toMatch(/Archive — not delivered/);
     expect(region('assertive')?.textContent).toMatch(
-      /archive.*not delivered/i,
+      /Archive — not delivered/,
     );
+  });
+
+  it('never speaks or draws the action NAME — only the declared label, or nothing (ggui#1444)', async () => {
+    await latchAndDismiss();
+    // Nothing focused → the fallback micro-toast, spoken and drawn.
+    fireGesture('archive');
+    expect(toastEl()?.textContent).toBe('⚠ Archive — not delivered');
+    expect(region('assertive')?.textContent).toBe('⚠ Archive — not delivered');
+    expect(toastEl()?.textContent).not.toMatch(/archive/);
+    // An action with no declared label is named by nothing at all.
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(10_000);
+    fireGesture('unlabelled-action');
+    expect(toastEl()?.textContent).toBe('⚠ Not delivered');
+    expect(region('assertive')?.textContent).not.toMatch(/unlabelled/);
   });
 });

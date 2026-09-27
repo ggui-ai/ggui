@@ -2158,48 +2158,6 @@ function fnv1aHex(payload: string): string {
 }
 
 /**
- * Render a submit-action's `data` payload as a short inline string
- * for embedding in a `ui/message` consent prompt. Goal: human-
- * readable, not a JSON dump. Falls back to truncated JSON for
- * nested values so the prompt doesn't drop information silently.
- *
- * Exported for unit-testing — an earlier implementation returned `''`
- * for primitive payloads (strings/numbers/booleans), which silently
- * vaporised the chip's actual text from the consent prompt and made
- * the LLM think every dispatch was a contentless "Please proceed
- * with **<intent>**" request.
- */
-export function formatSubmitActionDataInline(data: unknown): string {
-  if (data === null || data === undefined) return '';
-  // Bare primitives: render verbatim. Strings unquoted (most legible
-  // in a "Please proceed with X (foo)" sentence). Numbers / booleans
-  // stringified.
-  if (typeof data === 'string') return data;
-  if (typeof data === 'number' || typeof data === 'boolean') return String(data);
-  // Arrays: short JSON, truncated. Length cap mirrors the per-entry
-  // cap below so the consent line stays a single human-readable phrase.
-  if (Array.isArray(data)) {
-    const json = JSON.stringify(data);
-    return json.length > 60 ? `${json.slice(0, 57)}…` : json;
-  }
-  if (typeof data !== 'object') return '';
-  const entries = Object.entries(data as Record<string, unknown>);
-  if (entries.length === 0) return '';
-  const parts = entries.map(([k, v]) => {
-    if (v === null) return `${k}: null`;
-    if (v === undefined) return `${k}: undefined`;
-    if (typeof v === 'string') return `${k}: ${v}`;
-    if (typeof v === 'number' || typeof v === 'boolean') return `${k}: ${v}`;
-    // `JSON.stringify` returns `undefined` for unrepresentable values
-    // (e.g. a `function` field on a form payload object) — guard so
-    // the subsequent `.length` access doesn't crash the dispatch path.
-    const json = JSON.stringify(v) ?? String(v);
-    return `${k}: ${json.length > 40 ? `${json.slice(0, 37)}…` : json}`;
-  });
-  return parts.join(', ');
-}
-
-/**
  * Post an arbitrary JSON-RPC envelope to the iframe's parent
  * window. Internal helper shared across {@link emitAudit} (the
  * fire-and-forget `tools/call` audit envelope) and any other
@@ -2799,8 +2757,9 @@ const ACTION_TOAST_ID = '__ggui-action-toast__';
  *  - Survives React mount transitions inside the iframe.
  *
  * Single global toast (per iframe). Auto-dismisses after 2.5s on
- * `success` / `fallback` outcomes; the `pending` state holds
- * indefinitely until a follow-up call updates it.
+ * `success` / `fallback` outcomes. A successful dispatch draws nothing
+ * here (ggui#1444): its "sending" is spoken only (see
+ * {@link GESTURE_COPY}).
  *
  * The visible element is only half the surface (ggui#447). Every
  * message is also spoken through {@link ensureToastAnnouncer}'s live
@@ -2812,6 +2771,59 @@ const ACTION_TOAST_ID = '__ggui-action-toast__';
  *
  * @internal — runtime-layer concern.
  */
+/**
+ * The `label` an action declares on the render's `actionSpec`, trimmed, or
+ * `undefined` when the render declares none (or is a system / MCP-Apps
+ * render, which carries no actionSpec). By contract the label is the
+ * control's own copy, so it is the one name for a tap a visitor may read
+ * (see {@link GESTURE_COPY}).
+ *
+ * @internal — exported for unit tests.
+ */
+export function declaredActionLabel(
+  render: GguiSession | GguiSessionSeedInput | null,
+  actionName: string,
+): string | undefined {
+  if (render === null || render.type === 'mcpApps' || render.type === 'system') return undefined;
+  const declared = render.actionSpec?.[actionName]?.label;
+  return typeof declared === 'string' && declared.trim() !== '' ? declared.trim() : undefined;
+}
+
+/**
+ * Everything the runtime says to a VISITOR about a gesture (ggui#1444).
+ *
+ * A card's action NAME and the data it sends are the author's and the
+ * agent's vocabulary, never the visitor's: a staging rehearsal drew
+ * "→ chooseReply (id: pricing)" over a card after a chip tap. So no text
+ * here names the action or carries its data. When the action declares a
+ * `label` (by contract the control's own copy, already on screen) the text
+ * names the tap by it, so two failed taps on different controls read as two
+ * different sentences to a screen reader (ggui#447); without one it says
+ * the same thing unnamed. Diagnostics keep the name and data (the
+ * `gesture.*` telemetry records); the screen and the live regions do not.
+ *
+ * `sending` is spoken, never drawn: a tap the relay accepted needs no
+ * chrome over the card, because the pending look belongs to the card's own
+ * control (`useActionPending`). The rest are drawn because each one tells
+ * the visitor something they have to know or do.
+ */
+const named = (label: string | undefined, rest: string, unnamed: string): string =>
+  label === undefined ? unnamed : `${label} — ${rest}`;
+const GESTURE_COPY = {
+  sending: (label?: string): string => named(label, 'sending…', 'Sending…'),
+  notDelivered: (label?: string): string => `⚠ ${named(label, 'not delivered', 'Not delivered')}`,
+  transportError: (label?: string): string =>
+    `⚠ ${named(label, 'could not send, try again', 'Could not send — try again')}`,
+  unreachable: (label?: string): string =>
+    `⚠ ${named(label, 'could not reach the agent', 'Could not reach the agent')}`,
+  sentToChat: (label?: string): string =>
+    `💬 ${named(label, 'agent not listening, sent to chat', 'Agent not listening — sent to chat')}`,
+  sendToContinue: (label?: string): string =>
+    `💬 ${named(label, 'agent not listening. Send a message to continue.', 'Agent not listening. Send a message to continue.')}`,
+  chatRefused: (label?: string): string =>
+    `💬 ${named(label, 'the chat did not take the message. Send a message to continue.', 'The chat did not take the message. Send a message to continue.')}`,
+} as const;
+
 type ToastKind =
   | 'pending'
   | 'success'
@@ -3533,7 +3545,7 @@ function resolveRelayCueTarget(): Element | null {
  * the rest of the session is the same stale-announcement defect the
  * toast half avoids by clearing on hide.
  */
-function announceRelayCue(intent: string): void {
+function announceRelayCue(intent: string, label: string | undefined): void {
   const now = Date.now();
   if (
     intent === lastRelayCueAnnouncedIntent &&
@@ -3545,7 +3557,7 @@ function announceRelayCue(intent: string): void {
   lastRelayCueAnnouncedIntent = intent;
   // `announceToast` cancels any retraction still pending, so the timer
   // armed here is always the only one in flight.
-  announceToast(`⚠ ${intent} — not delivered`, 'error');
+  announceToast(GESTURE_COPY.notDelivered(label), 'error');
   relayCueAnnounceTimer = window.setTimeout(() => {
     relayCueAnnounceTimer = undefined;
     retractRelayCueAnnouncement();
@@ -3586,7 +3598,7 @@ function retractRelayCueAnnouncement(): void {
  * (ggui#447) — the pulse via {@link announceRelayCue}, the fallback via
  * the toast primitive's own announcement.
  */
-function showDeadZoneCue(intent: string): void {
+function showDeadZoneCue(intent: string, label: string | undefined): void {
   if (typeof document === 'undefined') return;
   const target = resolveRelayCueTarget();
   if (target !== null) {
@@ -3597,7 +3609,7 @@ function showDeadZoneCue(intent: string): void {
     if (target.classList.contains(RELAY_CUE_CLASS)) return;
     ensureRelayCueStyle();
     target.classList.add(RELAY_CUE_CLASS);
-    announceRelayCue(intent);
+    announceRelayCue(intent, label);
     // Both cleanup routes cancel the other. Without the `clearTimeout`,
     // a pulse ended early by `animationend` leaves its timer armed, and
     // that timer later strips whatever class is on the element THEN —
@@ -3625,7 +3637,7 @@ function showDeadZoneCue(intent: string): void {
   // a second explanation, so it must clear itself. Throttled because a
   // per-click toast on a host that fails every click is the #426
   // failure mode the latch exists to prevent.
-  showActionToast(`⚠ ${intent} — not delivered`, 'error');
+  showActionToast(GESTURE_COPY.notDelivered(label), 'error');
 }
 
 /**
@@ -3647,6 +3659,8 @@ export function dispatchSubmitAction(args: {
   readonly data: unknown;
   readonly sessionId: string;
   readonly appId: string;
+  /** The action's declared `label`, when it has one — see {@link GESTURE_COPY}. */
+  readonly label?: string;
 }): void {
   if (typeof window === 'undefined') return;
   // Freeze latch (#483): a superseded (history) mount does not drive
@@ -3656,7 +3670,7 @@ export function dispatchSubmitAction(args: {
     currentTelemetrySink?.record('gesture.dropped_superseded', args.intent);
     return;
   }
-  const { toolName, intent, data, sessionId, appId } = args;
+  const { toolName, intent, data, sessionId, appId, label } = args;
   // Gesture-path telemetry — the click's own autopsy trail. #471
   // round 12 hit a frame whose channels + beacons were fully healthy
   // while clicks produced NOTHING observable; without a record at the
@@ -3667,8 +3681,6 @@ export function dispatchSubmitAction(args: {
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
   );
-  const inlineData = formatSubmitActionDataInline(data);
-  const dataPart = inlineData === '' ? '' : ` (${inlineData})`;
   const uiContext = readLocalUiContext();
 
   // (1) Silent context update — fires FIRST and ALWAYS. Primes the
@@ -3712,9 +3724,12 @@ export function dispatchSubmitAction(args: {
   // the user has focused NOW; by the time the relay response settles,
   // focus may have moved on.
   if (!relayIncapabilityAnnounced) {
-    showActionToast(`→ ${intent}${dataPart}`, 'pending');
+    // No pill over the card (ggui#1444): the previous gesture's notice goes,
+    // and "sending" is spoken for assistive tech only.
+    dismissActionToast();
+    announceToast(GESTURE_COPY.sending(label), 'pending');
   } else if (!isRelayNoticeVisible()) {
-    showDeadZoneCue(intent);
+    showDeadZoneCue(intent, label);
   }
 
   // (2) Try submit_action via host relay. Spec-compliant hosts
@@ -3751,7 +3766,7 @@ export function dispatchSubmitAction(args: {
         firedAt,
       });
     } catch {
-      showActionToast(`⚠ ${intent} — transport error`, 'error');
+      showActionToast(GESTURE_COPY.transportError(label), 'error');
       resp = null;
     }
     // Final hop of the gesture autopsy trail — what the relay
@@ -3799,7 +3814,7 @@ export function dispatchSubmitAction(args: {
       // through to the terminal "could not reach the agent" toast a
       // few lines down, which already replaces the stale notice.
       if (classifySubmitActionResponse(resp) === 'success') {
-        showActionToast(`→ ${intent}${dataPart}`, 'pending');
+        dismissActionToast();
       }
     }
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
@@ -3824,9 +3839,7 @@ export function dispatchSubmitAction(args: {
         // explicit `true` (the factory wires the registry
         // unconditionally), so confirmed-consumer hosts stay quiet.
         showActionToast(
-          hostCanReceiveMessages()
-            ? `💬 ${intent}${dataPart} — agent not listening, sent to chat`
-            : `💬 ${intent}${dataPart} — agent not listening. Send a message to continue.`,
+          hostCanReceiveMessages() ? GESTURE_COPY.sentToChat(label) : GESTURE_COPY.sendToContinue(label),
           'action_required',
         );
         emitUserActionDoorbell({
@@ -3839,10 +3852,7 @@ export function dispatchSubmitAction(args: {
           // the user has to do instead. The gesture itself is safe on
           // the pipe; only the wake-up failed.
           onRefused: () => {
-            showActionToast(
-              `💬 ${intent}${dataPart} — the chat did not take the message. Send a message to continue.`,
-              'action_required',
-            );
+            showActionToast(GESTURE_COPY.chatRefused(label), 'action_required');
           },
         });
         return;
@@ -3931,7 +3941,7 @@ export function dispatchSubmitAction(args: {
       );
       return;
     }
-    showActionToast(`⚠ ${intent} — could not reach the agent`, 'error');
+    showActionToast(GESTURE_COPY.unreachable(label), 'error');
   })();
 }
 
@@ -4061,14 +4071,17 @@ export function routeDispatch(args: {
     readonly appId: string;
   };
   readonly dispatchToolName: string;
+  /** The action's declared `label` (visitor copy by contract), when it has one. */
+  readonly label?: string;
 }): void {
-  const { actionName, data, meta, dispatchToolName } = args;
+  const { actionName, data, meta, dispatchToolName, label } = args;
   dispatchSubmitAction({
     toolName: dispatchToolName,
     intent: actionName,
     data,
     sessionId: meta.sessionId,
     appId: meta.appId,
+    ...(label !== undefined ? { label } : {}),
   });
 }
 
@@ -4870,6 +4883,8 @@ async function bootProduction(opts: {
           ) {
             return;
           }
+          // The declared label names the tap in visitor copy (ggui#1444).
+          const label = declaredActionLabel(currentRender, payload.action);
           routeDispatch({
             actionName: payload.action,
             data: payload.data,
@@ -4878,6 +4893,7 @@ async function bootProduction(opts: {
               appId: meta.appId,
             },
             dispatchToolName,
+            ...(label !== undefined ? { label } : {}),
           });
         },
       });
