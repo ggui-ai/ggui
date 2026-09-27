@@ -140,6 +140,25 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     expect(deps.pages[0]).toContain('border-radius: 16px');
     expect(result!.canvases![0]).toMatchObject({ canvas: 'xs-chat-card', contentHeight: 280, overflow: false, passed: true, viewport: { width: 400, height: 640 } });
   });
+  it('the stand-in frame never flatters the card: no shadow, a ring of the card\'s own ink at no more than 8 %, the card\'s own container surface', async () => {
+    // A stand-in more visible than a real host frame would lift every inline card's containment for free. A real chat
+    // host's frame measures about 1.09:1 against its page; this one reads 1.05–1.13:1 on stored cards. Pinned by its CSS
+    // so a later tweak cannot start drawing a stronger edge than a host does.
+    const deps = fitDeps(280);
+    await runVisualEvaluationDetailed(
+      { compiledCode: COMPONENT, originalPrompt: 'a greeting card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
+      deps,
+    );
+    const rule = deps.pages[0]!.match(new RegExp(`\\.${JUDGE_INLINE_FRAME_CLASS} \\{([^}]*)\\}`));
+    expect(rule).not.toBeNull();
+    const decls = rule![1]!;
+    expect(decls).not.toMatch(/shadow/);
+    expect(decls).toContain('background: var(--ggui-color-container)');
+    const ring = decls.match(/border: 1px solid color-mix\(in srgb, var\(--ggui-color-onContainer\) (\d+)%, transparent\)/);
+    expect(ring).not.toBeNull();
+    expect(Number(ring![1])).toBeLessThanOrEqual(8);
+  });
   it('a declared box (#1195) mounts the card at the declared width, on the ground', async () => {
     const deps = fitDeps(300);
     const { result } = await runVisualEvaluationDetailed(
