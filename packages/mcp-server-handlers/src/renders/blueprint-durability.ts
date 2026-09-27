@@ -157,7 +157,8 @@ export function projectDurableBlueprint(
       : {}),
     // ggui#1280 — the minting engine's build, admitted at registration.
     // Written once here at mint (a dedup never reaches this projection) and
-    // never rewritten; the durable record is the stamp's only home.
+    // never rewritten. The registry's vector-store row carries the same
+    // value (ggui#1476).
     ...(blueprint.build !== undefined ? { build: blueprint.build } : {}),
   };
 }

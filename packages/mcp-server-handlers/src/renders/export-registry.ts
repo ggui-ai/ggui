@@ -7,7 +7,9 @@ import {
   type BlueprintSource,
   type DataContract,
   type BlueprintVariance,
+  type GeneratorBuild,
 } from '@ggui-ai/protocol';
+import { readGeneratorBuild } from './blueprint-registry.js';
 
 export interface ExportableBlueprint {
   readonly contract: DataContract;
@@ -28,6 +30,13 @@ export interface ExportableBlueprint {
    * artifactId fallback — useless prose for semantic matching.
    */
   readonly intent?: string;
+  /**
+   * ggui#1476 — the minting engine's build, when the row carries one, so
+   * the export codec (`toPortableBlueprint`) ships the portable
+   * blueprint's `build`. Read through the registry's one reader of the
+   * key; an unreadable stored value is absent.
+   */
+  readonly build?: GeneratorBuild;
 }
 
 /**
@@ -83,6 +92,7 @@ export async function listRegistryBlueprintsForExport(
       }
     }
     const intentRaw = m['intent'];
+    const build = readGeneratorBuild(m, entry.key);
     out.push({
       contract,
       componentCode: codeRaw,
@@ -91,6 +101,7 @@ export async function listRegistryBlueprintsForExport(
       ...(typeof intentRaw === 'string' && intentRaw.length > 0
         ? { intent: intentRaw }
         : {}),
+      ...(build !== undefined ? { build } : {}),
     });
   }
   return out;

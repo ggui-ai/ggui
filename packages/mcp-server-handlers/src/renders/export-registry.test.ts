@@ -23,6 +23,27 @@ describe('listRegistryBlueprintsForExport', () => {
     expect(rows[0]!.source).toEqual({ kind: 'user' });
   });
 
+  it('carries the minting build of a stamped row, and none on an unstamped one (ggui#1476)', async () => {
+    const registry = { embedding, vectorStore: new InMemoryVectorStore(), index: new InMemoryBlueprintIndex() };
+    const build = { version: '0.26.0', mode: 'constrained', digests: { promptTemplateSha256: 'a'.repeat(64) } };
+    await registerBlueprint(registry, 'builder', {
+      kind: 'template',
+      contract: { propsSpec: { properties: { a: { schema: { type: 'string' } } } } },
+      intent: 'stamped', componentCode: 'export default () => null;', variance: {},
+      source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
+      build,
+    });
+    await registerBlueprint(registry, 'builder', {
+      kind: 'template',
+      contract: { propsSpec: { properties: { b: { schema: { type: 'string' } } } } },
+      intent: 'unstamped', componentCode: 'export default () => null;', variance: {},
+      source: { kind: 'user' },
+    });
+    const rows = await listRegistryBlueprintsForExport(registry.vectorStore, 'builder');
+    expect(rows.find((r) => r.intent === 'stamped')?.build).toEqual(build);
+    expect(rows.find((r) => r.intent === 'unstamped')).not.toHaveProperty('build');
+  });
+
   it('throws when the vector store is not enumerable (no listByScope)', async () => {
     // A backend that implements only the base VectorStore contract — no
     // cheap "list all" API. Export must refuse rather than silently

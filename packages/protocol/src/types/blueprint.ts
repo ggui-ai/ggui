@@ -259,12 +259,14 @@ export interface Blueprint {
    * operator-invoked generation, and a generation mint's bytes registered
    * in-process with their generation's provenance
    * (`createRegisterGeneratedBlueprint`, a deployment's bootstrap lane)
-   * when its caller passes the mint's build. The operator door
-   * (`ggui_ops_register_blueprint`) takes no build; a row registered
-   * without generation provenance, installed or seed-imported never
-   * carries it, and a stamp that fails
-   * {@link generatorBuildSchema} is dropped at registration rather than
-   * stored. Declared one release before any writer emitted it, because the
+   * when its caller passes the mint's build — and carried by a portable
+   * export and a seed-pool import of such a row (ggui#1476). The operator
+   * door (`ggui_ops_register_blueprint`) takes no build, and a row
+   * registered without generation provenance or installed never carries
+   * it. A stamp that fails a registry's admission is dropped at
+   * registration rather than stored, and a portable import whose stamp
+   * fails {@link generatorBuildSchema} is rejected whole by
+   * `fromPortableBlueprint`. Declared one release before any writer emitted it, because the
    * previous release's `ggui_ops_list_blueprints` output validation parses
    * rows with the strict `blueprintSchema` and would refuse a stamped one.
    * A store MUST persist what it is given here (graded by the

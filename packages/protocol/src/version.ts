@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The build stamp rides the reference registry's row, a portable export and
+ * a seed-pool import (2026-10-01, ggui#1476: no schema change, same draft
+ * stamp). The registry writes `build` into its vector-store row (a JSON
+ * string, written only when present) and reads it back through one reader
+ * that validates it with `generatorBuildSchema` — an unreadable value drops
+ * the fact, never the row — so a dedup return and a reuse name the MINTING
+ * build. The exporter ships `PortableBlueprint.build` (declared with
+ * ggui#1280), and a seed-pool import keeps it. The admission rule gains a
+ * bound: a stamp over 1024 bytes serialized is dropped with a line, because
+ * the stamp rides every row's vector metadata. Release order: the #1280
+ * emit (2026-09-27, below) serves on dev, staging and prod, and npm 0.25.0
+ * declares `PortableBlueprint.build`, so an importer from 0.25.0 reads an
+ * exported stamp. An older importer reads only the keys it names, so it
+ * ignores the stamp and imports the row.
+ * --------------------------------------------------------------------
  * Runtime telemetry vocabulary (2026-10-01, additive, ggui#1381 — MINOR,
  * same draft stamp): a new subpath, `@ggui-ai/protocol/runtime-telemetry`,
  * holds the kinds `ggui_runtime_telemetry` carries: `RUNTIME_TELEMETRY_KINDS`

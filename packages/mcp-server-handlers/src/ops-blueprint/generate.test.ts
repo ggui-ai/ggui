@@ -330,7 +330,7 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     });
   }
 
-  it("on a cache mirror with no durable store, stamps only the persisted row: the mirror's vector row carries none (ggui#1280)", async () => {
+  it("on a cache mirror with no durable store, the mirror's vector row carries the stamp too (ggui#1280, ggui#1476)", async () => {
     const cacheRegistry = {
       embedding: new MockEmbeddingProvider(),
       vectorStore: new InMemoryVectorStore(),
@@ -342,7 +342,9 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     expect((await deps.blueprintStore.get(result.blueprintId))?.build).toEqual(BUILD);
     const mirror = await findBlueprintExact(cacheRegistry, "app-1", "template", blueprintKey(emptyContract()), variantKey({}));
     expect(mirror).not.toBeNull();
-    expect(mirror).not.toHaveProperty("build");
+    // ggui#1476 — the stamp rides the registry's vector row, so the mirror
+    // names the same minting build as the persisted row.
+    expect(mirror?.build).toEqual(BUILD);
   });
 
   it("writes no build when the engine reported none (ggui#1280)", async () => {

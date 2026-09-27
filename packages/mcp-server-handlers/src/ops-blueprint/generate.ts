@@ -411,9 +411,10 @@ export function createGguiOpsGenerateBlueprintHandler(
       } as const;
       // ggui#1280 — the minting engine's build, through the registry's one
       // admission rule. The durable row below carries it. The cache mirror's
-      // registration receives the same value: it lands on the row the mirror
-      // writes through to a separate durable store, under this same id
-      // (ggui#1497, see `mirrorIntoCache`), and never on its vector-store row.
+      // registration receives the same value: it rides that registry's
+      // vector-store row (ggui#1476) and, when the mirror writes through to a
+      // separate durable store, the row it writes there under this same id
+      // (ggui#1497, see `mirrorIntoCache`).
       const build = admitGeneratorBuild(source, result.metadata.build);
 
       const blueprintId = mintBlueprintId();

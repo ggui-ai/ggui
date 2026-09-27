@@ -163,6 +163,19 @@ describe('buildSeedPool', () => {
     expect(hit?.source).toEqual(LLM_SOURCE);
   });
 
+  it('keeps a stamped record\'s minting build on the loaded row (ggui#1476)', async () => {
+    const build = { version: '0.26.0', mode: 'constrained', digests: { promptTemplateSha256: 'a'.repeat(64) } };
+    const stamped: PortableBlueprint = toPortableBlueprint({
+      contract, componentCode: 'export default () => null;', variance: {}, source: LLM_SOURCE, build,
+    });
+    const poolP = await buildSeedPool({ label: 'stamped', loadAll: async () => [stamped] }, { scope: 'shared' });
+    const hit = await findBlueprintExact(
+      { vectorStore: poolP.registry.vectorStore, index: poolP.registry.index },
+      'shared', 'template', blueprintKey(contract), variantKey({}),
+    );
+    expect(hit?.build).toEqual(build);
+  });
+
   it('skips a schemaVersion-1 record with the canonical rejection message (pool load = skip-with-log)', async () => {
     const v1Record: Record<string, unknown> = { ...record, schemaVersion: 1 };
     delete v1Record['source'];

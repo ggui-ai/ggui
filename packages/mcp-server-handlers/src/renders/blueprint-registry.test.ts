@@ -1240,12 +1240,80 @@ describe('registerBlueprint — durable write-through', () => {
     const later = { ...BUILD, version: '0.25.0' };
     const second = await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: later });
     expect(second.deduped).toBe(true);
-    // The stamp lives on the durable record only: the vector-store row a
-    // dedup returns does not carry it, so a reader resolves it from the
-    // BlueprintStore.
-    expect(second).not.toHaveProperty('build');
+    // ggui#1476 — the vector-store row carries the stamp too, so the row a
+    // dedup returns names the MINTING build, not the later generation's.
+    expect(second.build).toEqual(BUILD);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.build).toEqual(BUILD);
+  });
+
+  // ggui#1476 — the stamp rides the registry's vector row.
+  it('round-trips the build through the vector row: a read-back row names the minting build (ggui#1476)', async () => {
+    const deps = makeDeps();
+    await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: BUILD });
+    const hit = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT), variantKey({}));
+    expect(hit?.build).toEqual(BUILD);
+  });
+
+  it('writes no build key on an unstamped row (ggui#1476)', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM });
+    const rows = await deps.vectorStore.listByScope(SCOPE);
+    expect(rows.find((r) => r.key === bp.id)?.metadata).not.toHaveProperty('build');
+  });
+
+  it('drops an unreadable stored stamp — the FACT, never the row (ggui#1476)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: BUILD });
+    const stored = (await deps.vectorStore.listByScope(SCOPE)).find((r) => r.key === bp.id)!;
+    await deps.vectorStore.putVector(SCOPE, {
+      key: stored.key,
+      vector: await deps.embedding.embed('a notepad'),
+      metadata: { ...stored.metadata, build: '{"digests":{"x":"not-hex"}}' },
+    });
+    const hit = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT), variantKey({}));
+    expect(hit?.id).toBe(bp.id);
+    expect(hit).not.toHaveProperty('build');
+    const unreadable = () =>
+      warn.mock.calls.filter((c) => String(c[0]).includes('blueprint_build_stamp_unreadable') && String(c[0]).includes(bp.id)).length;
+    expect(unreadable()).toBe(1);
+    await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT), variantKey({}));
+    expect(unreadable()).toBe(1); // once per row id per process
+    warn.mockRestore();
+  });
+
+  it('drops a stored stamp that is not a JSON string, with the line — the FACT, never the row (ggui#1476)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, { ...INPUT, source: LLM, build: BUILD });
+    const stored = (await deps.vectorStore.listByScope(SCOPE)).find((r) => r.key === bp.id)!;
+    await deps.vectorStore.putVector(SCOPE, {
+      key: stored.key,
+      vector: await deps.embedding.embed('a notepad'),
+      metadata: { ...stored.metadata, build: 42 },
+    });
+    const hit = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT), variantKey({}));
+    expect(hit?.id).toBe(bp.id);
+    expect(hit).not.toHaveProperty('build');
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('blueprint_build_stamp_unreadable') && String(c[0]).includes('not a JSON string'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('drops a stamp over the size bound with the line, and still registers (ggui#1476)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { blueprintStore, rows } = fakeDurableStore();
+    const digests = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`template${i}Sha256`, 'c'.repeat(64)]));
+    const bp = await registerBlueprint({ ...makeDeps(), durability: { blueprintStore } }, SCOPE, {
+      ...INPUT,
+      source: LLM,
+      build: { version: '0.26.0', mode: 'constrained', digests },
+    });
+    expect(bp.id).toMatch(/^bp_/);
+    expect(bp).not.toHaveProperty('build');
+    expect(rows[0]).not.toHaveProperty('build');
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('blueprint_build_stamp_dropped') && String(c[0]).includes('bytes'))).toBe(true);
+    warn.mockRestore();
   });
 
   it('does NOT re-persist on a dedup return', async () => {

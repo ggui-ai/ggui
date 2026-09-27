@@ -183,10 +183,10 @@ export interface Blueprint {
    * The build of the engine that minted this blueprint (ggui#1280), set
    * only on a generation mint (`source.kind === 'llm'`) whose stamp
    * passed {@link admitGeneratorBuild}. It is written to the DURABLE
-   * record (`projectDurableBlueprint`) and returned on the fresh mint;
-   * it does not ride the vector-store row, so a row read back via
-   * {@link rowToBlueprint} (a dedup return included) always has this
-   * `undefined` — a reader resolves the stamp from the `BlueprintStore`.
+   * record (`projectDurableBlueprint`) and to the vector-store row
+   * (`METADATA_KEYS.build`, ggui#1476), so a row read back via
+   * {@link rowToBlueprint} — a dedup return and a reuse included — names
+   * its MINTING build; an unreadable stored value reads as absent.
    */
   readonly build?: GeneratorBuild;
   /**
@@ -448,6 +448,10 @@ const METADATA_KEYS = {
   aestheticPresetVersion: 'aestheticPresetVersion',
   directionDigest: 'directionDigest',
   directionScope: 'directionScope',
+  // ggui#1476 — the minting engine's build, as a JSON string. Bounded at
+  // admission (MAX_BUILD_STAMP_BYTES) so it cannot crowd a vector backend's
+  // metadata budget; written only when present.
+  build: 'build',
 } as const;
 
 function blueprintToMetadata(
@@ -494,6 +498,7 @@ function blueprintToMetadata(
     ...(bp.directionDigest !== undefined && bp.directionScope !== undefined
       ? { [METADATA_KEYS.directionScope]: bp.directionScope }
       : {}),
+    ...(bp.build !== undefined ? { [METADATA_KEYS.build]: JSON.stringify(bp.build) } : {}),
   };
 }
 
@@ -514,6 +519,53 @@ function readJudgedCanvases(raw: string | number | boolean | null | undefined): 
   } catch {
     return undefined;
   }
+}
+
+/** Row ids whose stored stamp was unreadable, already warned this process. */
+const warnedUnreadableBuildIds = new Set<string>();
+
+/**
+ * ggui#1476 — the minting build a registry row stores, or `undefined` when
+ * the row has none or its stored value is unreadable. The ONE reader of the
+ * `build` key: the registry's row reader and the exporter both call it, so
+ * the key has one owner. It parses the stored JSON and validates it with the
+ * protocol's strict `generatorBuildSchema`; an unreadable value drops the
+ * FACT — the row reads as an unknown minting build — never the row, with one
+ * line per row id per process.
+ */
+export function readGeneratorBuild(
+  metadata: Record<string, string | number | boolean | null>,
+  rowId: string,
+): GeneratorBuild | undefined {
+  const stored = metadata[METADATA_KEYS.build];
+  if (stored === undefined) return undefined;
+  if (typeof stored !== 'string') {
+    warnUnreadableBuild(rowId, `stored as ${stored === null ? 'null' : typeof stored}, not a JSON string`);
+    return undefined;
+  }
+  const raw = stored;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    warnUnreadableBuild(rowId, err instanceof Error ? err.message : String(err));
+    return undefined;
+  }
+  const build = generatorBuildSchema.safeParse(parsed);
+  if (!build.success) {
+    warnUnreadableBuild(rowId, build.error.issues.map((i) => i.message).join('; '));
+    return undefined;
+  }
+  return build.data;
+}
+
+function warnUnreadableBuild(rowId: string, why: string): void {
+  if (warnedUnreadableBuildIds.has(rowId)) return;
+  warnedUnreadableBuildIds.add(rowId);
+  // eslint-disable-next-line no-console -- operator-visible degradation notice
+  console.warn(
+    `[ggui] blueprint registry: blueprint_build_stamp_unreadable — row ${rowId} keeps its code; its minting build reads as unknown (${why})`,
+  );
 }
 
 function readAestheticPreset(
@@ -574,8 +626,10 @@ const warnedBuildStampDrops = new Set<string>();
 
 /**
  * The one admission rule for a blueprint's build stamp (ggui#1280): keep
- * `build` only for code a generation produced (`source.kind === 'llm'`) and
- * only when it passes the protocol's strict `generatorBuildSchema`.
+ * `build` only for code a generation produced (`source.kind === 'llm'`),
+ * only when it passes the protocol's strict `generatorBuildSchema`, and only
+ * when it serializes within {@link MAX_BUILD_STAMP_BYTES} (ggui#1476 — the
+ * stamp rides every vector-store row's metadata).
  * Otherwise the STAMP is dropped, with a line, and the registration goes
  * ahead unstamped: a row whose minting build is unknown is a reported
  * category, never an error, while a malformed stamp on a durable row would
@@ -588,23 +642,37 @@ export function admitGeneratorBuild(
   build: GeneratorBuild | undefined,
 ): GeneratorBuild | undefined {
   if (build === undefined) return undefined;
-  const reason =
-    source.kind !== 'llm'
-      ? 'code no generation produced carries no build'
-      : generatorBuildSchema.safeParse(build).success
-        ? undefined
-        : 'the stamp fails generatorBuildSchema';
-  if (reason === undefined) return build;
-  if (!warnedBuildStampDrops.has(reason)) {
-    warnedBuildStampDrops.add(reason);
+  const drop = ((): { readonly reason: string; readonly detail: string } | undefined => {
+    if (source.kind !== 'llm') return { reason: 'not-generated', detail: 'code no generation produced carries no build' };
+    if (!generatorBuildSchema.safeParse(build).success) return { reason: 'schema', detail: 'the stamp fails generatorBuildSchema' };
+    const bytes = new TextEncoder().encode(JSON.stringify(build)).length;
+    if (bytes > MAX_BUILD_STAMP_BYTES) {
+      return { reason: 'size', detail: `the stamp is ${bytes} bytes, over the ${MAX_BUILD_STAMP_BYTES}-byte bound` };
+    }
+    return undefined;
+  })();
+  if (drop === undefined) return build;
+  if (!warnedBuildStampDrops.has(drop.reason)) {
+    warnedBuildStampDrops.add(drop.reason);
     // eslint-disable-next-line no-console -- operator-visible degradation notice
     console.warn(
-      `[ggui] blueprint registry: blueprint_build_stamp_dropped — ${reason}; ` +
+      `[ggui] blueprint registry: blueprint_build_stamp_dropped — ${drop.detail}; ` +
         'the row registers unstamped (its minting build reads as unknown) (logged once per process per reason)',
     );
   }
   return undefined;
 }
+
+/**
+ * ggui#1476 — the largest build stamp, serialized, a row may carry. The stamp
+ * rides every registry row's vector-store metadata, and a production vector
+ * backend bounds that metadata per row (a filterable-metadata budget of
+ * about 2 KB on one such backend, where a rejected write is swallowed by
+ * registration and reads as a silently empty cache). A real stamp — two
+ * 64-hex digests, a version and a mode — is about 250 bytes; the bound keeps
+ * an engine that reports many more digests from ever reaching that budget.
+ */
+export const MAX_BUILD_STAMP_BYTES = 1024;
 
 function readScalarString(
   value: string | number | boolean | null | undefined,
@@ -715,6 +783,7 @@ function rowToBlueprint(
   const directionDigest = readScalarString(metadata[METADATA_KEYS.directionDigest]);
   const directionScope =
     directionDigest !== undefined ? readDirectionScope(metadata[METADATA_KEYS.directionScope]) : undefined;
+  const build = readGeneratorBuild(metadata, key);
   return {
     id: key,
     kind: kindStr,
@@ -735,6 +804,7 @@ function rowToBlueprint(
     ...(aestheticPreset !== undefined ? { aestheticPreset } : {}),
     ...(directionDigest !== undefined ? { directionDigest } : {}),
     ...(directionScope !== undefined ? { directionScope } : {}),
+    ...(build !== undefined ? { build } : {}),
   };
 }
 
@@ -891,8 +961,9 @@ export async function registerBlueprint(
       ? codeStore.hashOf(input.sourceCode)
       : undefined;
 
-  // ggui#1280 — the minting engine's build, admitted once: the returned
-  // blueprint and the durable record carry it; the vector-store row does not.
+  // ggui#1280 / ggui#1476 — the minting engine's build, admitted once: the
+  // returned blueprint, the durable record and the vector-store row
+  // (`METADATA_KEYS.build`, via `blueprintToMetadata`) all carry it.
   const build = admitGeneratorBuild(input.source, input.build);
   const blueprint: Blueprint = {
     id,

@@ -32,6 +32,36 @@ afterEach(async () => {
 });
 
 describe('shared blueprint pool: full export → artifact → seed pool round trip', () => {
+  it('a stamped blueprint keeps its minting build across export → artifact → seed pool (ggui#1476)', async () => {
+    const build = {
+      version: '0.26.0',
+      mode: 'constrained',
+      digests: { promptTemplateSha256: 'a'.repeat(64), boilerplateTemplateSha256: 'b'.repeat(64) },
+    };
+    const registryA = { embedding, vectorStore: new InMemoryVectorStore(), index: new InMemoryBlueprintIndex() };
+    await registerBlueprint(registryA, 'builder', {
+      kind: 'template',
+      contract,
+      intent: 'a todo list',
+      componentCode: CODE,
+      source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
+      variance: {},
+      build,
+    });
+    const rows = await listRegistryBlueprintsForExport(registryA.vectorStore, 'builder');
+    expect(rows[0]?.build).toEqual(build);
+    await writePoolArtifact(dir, rows.map((r) => toPortableBlueprint(r)));
+    const pool = await buildSeedPool(new FileSystemSeedPoolSource(dir), { scope: 'shared' });
+    const reused = await findBlueprintExact(
+      { vectorStore: pool.registry.vectorStore, index: pool.registry.index },
+      'shared',
+      'template',
+      blueprintKey(contract),
+      variantKey({}),
+    );
+    expect(reused?.build).toEqual(build);
+  });
+
   it('a blueprint registered in deployment A is reusable by exact canonical key in deployment B', async () => {
     // ── Deployment A ──────────────────────────────────────────────────────────
     // Register a template blueprint into a cache registry (in-memory stand-in

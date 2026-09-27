@@ -121,6 +121,12 @@ export async function buildSeedPool(
         // requires it) — an llm-minted record stays llm-sourced in
         // the pool; importing never re-labels authorship.
         source: record.source,
+        // ggui#1476 — the minting build travels with the artifact the same
+        // way. A stamp that fails `generatorBuildSchema` never reaches here:
+        // `fromPortableBlueprint` rejects the whole record above. The registry
+        // then admits what remains — a stamp on non-generated code, or one over
+        // the size bound, is dropped with a line and the row registers.
+        ...(record.build !== undefined ? { build: record.build } : {}),
         variance: record.variance,
       },
       // Seed pool is a fixed curated set — never evict.
