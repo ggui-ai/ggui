@@ -41,7 +41,10 @@ export interface SubscribePayload {
    * bound app (`BOOTSTRAP_APP_MISMATCH`), and on a bearer credential a
    * value other than the identity-default app must pass the
    * deployment's per-app authorization first, else `APP_MISMATCH`
-   * before any session is read or provisioned (SPEC §12.2).
+   * before any session is read or provisioned (SPEC §12.2). For a
+   * credential source the deployment lists as per-app-only, the
+   * identity-default app passes that authorization too, whether this
+   * field is absent or names it.
    */
   appId?: string;
   /** Role of the subscriber: 'user' (Portal) or 'agent' (MCP bridge) */

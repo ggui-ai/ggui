@@ -14,6 +14,7 @@ import { WebSocket, type RawData } from "ws";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import { createGguiServer, type CreateGguiServerOptions, type GguiServer } from "./server.js";
 import type { Logger } from "./logger.js";
+import { InMemoryAuthAdapter } from "@ggui-ai/mcp-server-core/in-memory";
 
 const silentLogger: Logger = {
   info: () => undefined,
@@ -104,5 +105,57 @@ describe("createGguiServer — the live channel runs perAppRouting.authorize on 
     const ws = await openSubscriber({ perAppRouting: perAppRouting(async () => {}) });
     subscribe(ws, "an-owned-app");
     expect((await subscribeAnswer(ws)).type).toBe("ack");
+  });
+});
+
+describe("createGguiServer — perAppRouting.perAppOnlySources reaches the live channel (ggui#1482)", () => {
+  it("a listed source that omits appId is sent to perAppRouting.authorize for its identity-default app and refused", async () => {
+    const seen: string[] = [];
+    const server = createGguiServer({
+      logger: silentLogger,
+      renderChannel: true,
+      auth: new InMemoryAuthAdapter({
+        seedTokens: [
+          {
+            token: "authorize-app-test-token",
+            result: {
+              identity: { kind: "user", userId: "fed-user", appId: "fedapp", roles: [] },
+              source: "oidc",
+            },
+          },
+        ],
+      }),
+      perAppRouting: {
+        ...perAppRouting(async (appId) => {
+          seen.push(appId);
+          throw new Error("Unauthorized");
+        }),
+        perAppOnlySources: ["oidc"],
+      },
+    });
+    started.push(server);
+    const httpServer = await server.listen(0, "127.0.0.1");
+    const addr = httpServer.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const channel = server.renderChannel;
+    if (channel === null) throw new Error("renderChannel: true did not create a channel");
+    const ws = new WebSocket(`ws://127.0.0.1:${addr.port}${channel.path}`, {
+      headers: { authorization: "Bearer authorize-app-test-token" },
+    });
+    sockets.push(ws);
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", () => resolve());
+      ws.once("error", reject);
+    });
+    ws.send(
+      JSON.stringify({
+        type: "subscribe",
+        payload: { sessionId: randomUUID() },
+        requestId: randomUUID(),
+      })
+    );
+    const answer = await subscribeAnswer(ws);
+    expect(answer.type === "error" ? answer.payload.code : answer.type).toBe("APP_MISMATCH");
+    expect(seen).toEqual(["fedapp"]);
   });
 });

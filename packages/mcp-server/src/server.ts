@@ -2099,6 +2099,19 @@ export interface CreateGguiServerOptions {
      */
     readonly pathPrefix?: string;
     readonly authorize?: (urlAppId: string, identity: AuthResult) => Promise<void>;
+    /**
+     * Credential sources that are valid only at their own app's endpoint
+     * (ggui#1482). A request whose identity came from a listed source is
+     * refused before dispatch on every MCP mount without an app in its
+     * URL — the universal route and any isolated `mcpServices` mount
+     * (HTTP 403, `UNAUTHORIZED`, "this credential is valid only at its
+     * app's endpoint"). Those mounts never run `authorize`, so they
+     * must not serve a credential whose checks live there. On the live
+     * channel, a listed source is sent to `authorize` on every bearer
+     * subscribe, its identity-default app included. Listing a source
+     * without an `authorize` callback throws at construction.
+     */
+    readonly perAppOnlySources?: readonly AuthResult["source"][];
   };
 
   /** Structured logger. Defaults to `createConsoleLogger()`. */
@@ -3599,6 +3612,11 @@ export interface GguiServer {
  * server on demand.
  */
 export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer {
+  if ((opts.perAppRouting?.perAppOnlySources?.length ?? 0) > 0 && !opts.perAppRouting?.authorize) {
+    throw new Error(
+      "createGguiServer: perAppRouting.perAppOnlySources lists credential sources that are valid only at their app's endpoint, but perAppRouting.authorize is not wired"
+    );
+  }
   const info: ServerInfo = { ...DEFAULT_INFO, ...opts.info };
   const logger = opts.logger ?? createConsoleLogger({ server: info.name });
   const bodyLimit = opts.bodyLimit ?? "4mb";
@@ -6016,6 +6034,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // identity's own passes the same per-app authorization the
         // `/mcp` endpoint runs on a URL-addressed app.
         ...(opts.perAppRouting?.authorize ? { authorizeApp: opts.perAppRouting.authorize } : {}),
+        // ggui#1482 — a listed source is authorized on every subscribe.
+        ...(opts.perAppRouting?.perAppOnlySources
+          ? { perAppOnlySources: opts.perAppRouting.perAppOnlySources }
+          : {}),
         logger: logger.child({ component: "render-channel" }),
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:

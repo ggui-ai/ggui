@@ -112,7 +112,12 @@ interface Fixture {
  */
 type BootChannelExtras = Pick<
   GguiSessionChannelOptions,
-  'appIdFromIdentity' | 'authorizeApp' | 'bootstrap' | 'cookieAuth' | 'pendingEventConsumer'
+  | 'appIdFromIdentity'
+  | 'authorizeApp'
+  | 'perAppOnlySources'
+  | 'bootstrap'
+  | 'cookieAuth'
+  | 'pendingEventConsumer'
 >;
 
 /**
@@ -732,6 +737,94 @@ describe('handleSubscribe — a declared appId must be one the identity may act 
     fx = await bootChannel({}, () => ({ appIdFromIdentity: () => CALLER_APP }));
     fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
     await fx.nextFrame('ack');
+  });
+});
+
+// ggui#1482 — a credential source the deployment lists as per-app-only
+// passes the per-app authorization on EVERY bearer subscribe, its
+// identity-default app included, so the checks that authorization runs
+// cannot be skipped by omitting `appId` or declaring the identity's own.
+describe('handleSubscribe — a per-app-only source is authorized on every subscribe (ggui#1482)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  function subscribeFrame(sessionId: string, appId?: string): string {
+    return JSON.stringify({
+      type: 'subscribe',
+      payload: { sessionId, ...(appId !== undefined ? { appId } : {}) },
+      requestId: randomUUID(),
+    });
+  }
+
+  // `bootChannel`'s adapter is `devAllowAll`, so every socket's source is 'dev'.
+  it('refuses a listed source that omits appId when the authorization refuses its identity-default app', async () => {
+    const seen: string[] = [];
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => APP_ID,
+      perAppOnlySources: ['dev'],
+      authorizeApp: async (appId: string) => {
+        seen.push(appId);
+        throw new Error('denied');
+      },
+    }));
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('APP_MISMATCH');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+    expect(seen).toEqual([APP_ID]);
+  });
+
+  it("refuses a listed source that declares the identity's own app when the authorization refuses it", async () => {
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => APP_ID,
+      perAppOnlySources: ['dev'],
+      authorizeApp: async () => {
+        throw new Error('denied');
+      },
+    }));
+    fx.ws.send(subscribeFrame(fx.sessionId, APP_ID));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('APP_MISMATCH');
+  });
+
+  it('subscribes a listed source the authorization passes — control', async () => {
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => APP_ID,
+      perAppOnlySources: ['dev'],
+      authorizeApp: async () => {},
+    }));
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+  });
+
+  it('an unlisted source that omits appId is not sent to authorization — control', async () => {
+    const seen: string[] = [];
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => APP_ID,
+      perAppOnlySources: ['oidc'],
+      authorizeApp: async (appId: string) => {
+        seen.push(appId);
+      },
+    }));
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+    expect(seen).toEqual([]);
+  });
+
+  it('listing a source without an authorizeApp refuses to construct the channel', () => {
+    expect(() =>
+      createGguiSessionChannelServer({
+        renderStore: new InMemoryGguiSessionStore(),
+        auth: new InMemoryAuthAdapter({ devAllowAll: true }),
+        logger: createRecordingLogger([], []),
+        perAppOnlySources: ['dev'],
+      }),
+    ).toThrow(/perAppOnlySources/);
   });
 });
 

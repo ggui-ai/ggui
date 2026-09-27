@@ -226,11 +226,12 @@ export interface GguiSessionChannelOptions {
    */
   readonly appIdFromIdentity?: (result: AuthResult) => string;
   /**
-   * Per-app authorization for a subscribe that DECLARES an appId on
-   * the bearer path (ggui#1480, SPEC §12.2). When the declared app is
-   * not the one `appIdFromIdentity` resolves for the identity, the
-   * channel awaits this with that appId and the identity before any
-   * store work; a throw refuses the subscribe with `APP_MISMATCH`.
+   * Per-app authorization on the bearer path (SPEC §12.2). The channel
+   * awaits this with the subscribe's app and the identity before any
+   * store work — when the subscribe DECLARES an app other than the one
+   * `appIdFromIdentity` resolves (ggui#1480), and on EVERY subscribe
+   * from a {@link perAppOnlySources} credential, its identity-default
+   * app included (ggui#1482). A throw refuses with `APP_MISMATCH`.
    * Wire the same check the `/mcp` endpoint runs on a URL-addressed
    * app (`createGguiServer` threads `perAppRouting.authorize`). Absent
    * → a declared appId is trusted, as the `/mcp` endpoint trusts a URL
@@ -239,6 +240,17 @@ export interface GguiSessionChannelOptions {
    * consult it: their credential already binds the app.
    */
   readonly authorizeApp?: (appId: string, identity: AuthResult) => Promise<void>;
+  /**
+   * Credential sources that are valid only for their own app (ggui#1482).
+   * A bearer subscribe whose identity came from a listed source is sent
+   * to {@link authorizeApp} on EVERY subscribe — the identity-default
+   * app included, whether `payload.appId` is omitted or names it — so
+   * the checks that authorization runs cannot be skipped. Listing a
+   * source without an `authorizeApp` throws at construction: the list
+   * says these credentials must be authorized, so the channel never
+   * serves with nothing to authorize them.
+   */
+  readonly perAppOnlySources?: readonly AuthResult["source"][];
   /** Structured logger. */
   readonly logger: Logger;
   /** URL path to mount on. Defaults to `/ws`. */
@@ -657,6 +669,11 @@ export interface GguiSessionChannelServer {
 export function createGguiSessionChannelServer(
   opts: GguiSessionChannelOptions
 ): GguiSessionChannelServer {
+  if ((opts.perAppOnlySources?.length ?? 0) > 0 && opts.authorizeApp === undefined) {
+    throw new Error(
+      "createGguiSessionChannelServer: perAppOnlySources lists credential sources that must be authorized on every subscribe, but no authorizeApp is wired"
+    );
+  }
   const path = opts.path ?? DEFAULT_RENDER_CHANNEL_PATH;
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
@@ -765,6 +782,7 @@ export function createGguiSessionChannelServer(
       cookieAuth: opts.cookieAuth,
       appIdFromIdentity: opts.appIdFromIdentity,
       ...(opts.authorizeApp ? { authorizeApp: opts.authorizeApp } : {}),
+      ...(opts.perAppOnlySources ? { perAppOnlySources: opts.perAppOnlySources } : {}),
       versionPolicy: opts.versionPolicy,
       sendError,
       register,

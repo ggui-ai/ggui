@@ -412,6 +412,109 @@ const perApp = {
   },
 };
 
+async function initializeAt(
+  url: string,
+  path: string,
+  token: string,
+): Promise<{ status: number; body: { error?: Record<string, unknown> } }> {
+  const res = await fetch(`${url}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(INITIALIZE),
+  });
+  const text = await res.text();
+  const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
+  return { status: res.status, body: isJson ? (JSON.parse(text) as { error?: Record<string, unknown> }) : {} };
+}
+
+// ggui#1482 — a credential source the deployment lists as per-app-only is
+// valid only at its app's endpoint: the universal route refuses it before
+// dispatch, so the per-app authorization (which the universal route never
+// runs) cannot be skipped by presenting the credential at `/mcp`.
+describe('mcp-endpoint-routes — the universal route refuses a per-app-only credential source (#1482)', () => {
+  let fx: BootedFixture;
+
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  const perAppOnly = { ...perApp, perAppOnlySources: ['oidc'] as const };
+
+  it('a listed source at the universal route answers 403 UNAUTHORIZED with a message naming its endpoint, and no data — untyped by contract like every auth-class refusal', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perAppOnly });
+    const { status, body } = await initializeAt(fx.url, '/mcp', FEDERATED_TOKEN);
+    expect(status).toBe(403);
+    expect(body.error).toEqual({
+      code: -32007,
+      message: "this credential is valid only at its app's endpoint",
+    });
+  });
+
+  it('the same credential at a per-app endpoint its authorization passes is served — control', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perAppOnly });
+    const { status } = await initializeAt(fx.url, '/apps/ab', FEDERATED_TOKEN);
+    expect(status).toBe(200);
+  });
+
+  it('an unlisted source at the universal route is served — control', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perAppOnly });
+    const { status } = await initializeAt(fx.url, '/mcp', AGENT_TOKEN);
+    expect(status).toBe(200);
+  });
+
+  it('with no source listed, the federated credential is served at the universal route as before — control', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perApp });
+    const { status } = await initializeAt(fx.url, '/mcp', FEDERATED_TOKEN);
+    expect(status).toBe(200);
+  });
+
+  it('an isolated service mount (no app in its URL) refuses a listed source the same way', async () => {
+    const svcTool = {
+      name: 'svc_echo',
+      description: 'Echo.',
+      inputSchema: { q: z.string() },
+      outputSchema: { q: z.string() },
+      handler: async (input: Record<string, unknown>) => ({ q: String(input.q) }),
+    };
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      perAppRouting: perAppOnly,
+      mcpServices: [{ name: 'svc', path: '/svc', handlers: [svcTool] }],
+    });
+    const refused = await initializeAt(fx.url, '/svc', FEDERATED_TOKEN);
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toEqual({
+      code: -32007,
+      message: "this credential is valid only at its app's endpoint",
+    });
+    const served = await initializeAt(fx.url, '/svc', AGENT_TOKEN);
+    expect(served.status).toBe(200);
+  });
+
+  it('the refusal log names the REGISTERED mount as `route` (bounded) and keeps the caller\'s spelling as `path`', async () => {
+    const cap = capturingLogger();
+    fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perAppOnly, logger: cap.logger });
+    const { status } = await initializeAt(fx.url, '/MCP/', FEDERATED_TOKEN);
+    expect(status).toBe(403);
+    const hit = cap.warns.find((w) => w.event === 'per_app_only_source_refused');
+    expect(hit?.fields).toEqual({ route: '/mcp', path: '/MCP/', source: 'oidc', appId: 'a' });
+  });
+
+  it('listing a source without a per-app authorize callback refuses to construct the server', () => {
+    expect(() =>
+      createGguiServer({
+        logger: silentLogger,
+        auth: federatedAndAgentAuth(),
+        perAppRouting: { paramName: 'appId', paramPattern: '[a-z0-9]{2,12}', pathPrefix: '/apps', perAppOnlySources: ['oidc'] },
+      }),
+    ).toThrow(/perAppOnlySources/);
+  });
+});
+
 describe('mcp-endpoint-routes — per-app authorization refusals carry JSON-RPC data (#825)', () => {
   let fx: BootedFixture;
 

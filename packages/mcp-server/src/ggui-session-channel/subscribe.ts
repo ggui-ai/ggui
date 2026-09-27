@@ -162,6 +162,8 @@ export interface SubscribeDeps {
   readonly appIdFromIdentity?: (result: AuthResult) => string;
   /** Per-app authorization for a declared appId — see `GguiSessionChannelOptions.authorizeApp`. */
   readonly authorizeApp?: (appId: string, identity: AuthResult) => Promise<void>;
+  /** Sources authorized on every subscribe — see `GguiSessionChannelOptions.perAppOnlySources`. */
+  readonly perAppOnlySources?: readonly AuthResult["source"][];
   /** Version-handshake policy — see `GguiSessionChannelOptions.versionPolicy`. */
   readonly versionPolicy?: "advisory" | "reject";
   readonly sendError: Outbound["sendError"];
@@ -520,27 +522,33 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // says nothing about whether the app or the session exists. A
     // deployment that wires no authorization keeps today's posture,
     // as the `/mcp` endpoint does for per-app routing without one.
-    if (
-      payload.appId !== undefined &&
-      tokenBoundAppId === undefined &&
-      cookieBound === undefined &&
-      deps.authorizeApp
-    ) {
+    //
+    // A credential whose source the deployment lists as per-app-only
+    // (ggui#1482) passes the same authorization on EVERY subscribe, its
+    // identity-default app included — omitting `appId`, or declaring
+    // the identity's own, must not skip the checks that authorization
+    // runs. The channel refuses to construct with such a list and no
+    // authorization, so this arm can never fail open.
+    if (tokenBoundAppId === undefined && cookieBound === undefined && deps.authorizeApp) {
       const identityAppId = (deps.appIdFromIdentity ?? defaultAppIdFromIdentity)(effectiveIdentity);
-      if (payload.appId !== identityAppId) {
+      const appToAuthorize = payload.appId ?? identityAppId;
+      const perAppOnly = deps.perAppOnlySources?.includes(effectiveIdentity.source) === true;
+      if (perAppOnly || appToAuthorize !== identityAppId) {
         try {
-          await deps.authorizeApp(payload.appId, effectiveIdentity);
+          await deps.authorizeApp(appToAuthorize, effectiveIdentity);
         } catch (err) {
           deps.logger.warn("render_channel_app_refused", {
             sessionId: payload.sessionId,
-            declaredAppId: payload.appId,
+            appId: appToAuthorize,
+            declared: payload.appId !== undefined,
             identityAppId,
+            source: effectiveIdentity.source,
             reason: err instanceof Error ? err.message : String(err),
           });
           deps.sendError(
             ws,
             "APP_MISMATCH",
-            "Subscribe names an app this credential may not act on",
+            "This credential may not act on the app this subscribe resolves",
             message.requestId
           );
           return;

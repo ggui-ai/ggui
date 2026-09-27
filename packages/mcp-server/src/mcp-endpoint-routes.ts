@@ -63,6 +63,7 @@ interface PerAppRouting {
   readonly paramPattern: string;
   readonly pathPrefix?: string;
   readonly authorize?: (urlAppId: string, identity: AuthResult) => Promise<void>;
+  readonly perAppOnlySources?: readonly AuthResult["source"][];
 }
 
 /**
@@ -264,6 +265,14 @@ export function mountMcpEndpoints(opts: MountOptions): void {
          * The per-tool `withAuthGate` remains as defense-in-depth.
          */
         readonly anonymousOpsChallenge?: ReadonlySet<string>;
+        /**
+         * The registered path this handler serves when the request
+         * carries no app in its URL — logged as `route` on a refusal so
+         * a counter dimensioned by it stays bounded (`req.path` is the
+         * caller's spelling: Express matches case-insensitively and
+         * ignores a trailing slash). Defaults to the universal path.
+         */
+        readonly mountPath?: string;
       }
     ) =>
     async (req: Request, res: Response): Promise<void> => {
@@ -438,6 +447,35 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       // may give the refusal a structured JSON-RPC `data` (bounded to
       // 401 / 403, see `mapAuthorizationRefusal`); otherwise — and for
       // every mapping outside those bounds — the default-deny 403 stands.
+      // ggui#1482 — a credential source the deployment lists as
+      // per-app-only is valid only at its app's endpoint. Every mount
+      // this handler serves without an app in its URL (the universal
+      // route, any isolated service) never runs `authorize`, so it
+      // refuses such a credential before dispatch rather than serve it
+      // without the checks that live there. (The control plane's own
+      // federated refusal above answers first on `/control`.) Named in
+      // the message so a caller corrects its URL instead of retrying.
+      // Untyped by contract, like every auth-class refusal (SPEC §7.1):
+      // it is about the caller's credential, not the app's state, so it
+      // carries no `data` and no registry code names it.
+      if (!hasUrlAppId && perAppRouting?.perAppOnlySources?.includes(identity.source)) {
+        reqLogger.warn("per_app_only_source_refused", {
+          route: handlerOpts?.mountPath ?? universalMcpPath,
+          path: req.path,
+          source: identity.source,
+          appId: appIdFromIdentity(identity),
+        });
+        res.status(403).json({
+          jsonrpc: "2.0",
+          error: {
+            code: MCP_ERROR_CODES.UNAUTHORIZED,
+            message: "this credential is valid only at its app's endpoint",
+          },
+          id: null,
+        });
+        return;
+      }
+
       if (hasUrlAppId && perAppRouting?.authorize) {
         try {
           await perAppRouting.authorize(urlAppId, identity);
@@ -564,6 +602,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   // Control plane — anonymous-capable (design-time tools answer
   // bearer-less) with each ops tool re-imposing auth for itself.
   const controlMcpHandler = makeMcpHandler(controlHandlers, {
+    mountPath: CONTROL_PATH,
     anonymous: true,
     rejectFederated: true,
     // The control service captures this set BEFORE stripAudience
@@ -659,7 +698,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     // every canonical route.
     const svcMcpHandler = makeMcpHandler(
       svc.handlers,
-      svc.anonymous ? { anonymous: true } : undefined
+      svc.anonymous ? { anonymous: true, mountPath: svc.path } : { mountPath: svc.path }
     );
     app.post(svc.path, svcMcpHandler);
     app.get(svc.path, methodNotAllowed);
