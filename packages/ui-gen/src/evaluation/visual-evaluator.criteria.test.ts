@@ -17,13 +17,13 @@ import {
 
 const COMPONENT = 'export default function C(){ return null; }';
 const bank = parseCriteriaBank({
-  version: 'v1',
-  applies: { canvases: ['xs-chat-card', 'md'] },
+  version: 'v2',
+  applies: { kind: ['*'], canvases: ['xs-chat-card', 'md'] },
   criteria: [
-    { id: 'floor.fit', severity: 'must', checker: 'instrument', text: 'fits', evidence: 'the bottom edge' },
-    { id: 'floor.copy.app', severity: 'must', checker: 'judge', text: "the app's copy", evidence: 'the greeting' },
-    { id: 'finish.rhythm.radius', severity: 'should', checker: 'judge', text: 'two radius families', evidence: 'the card and the pills' },
-    { id: 'finish.chip.primacy', severity: 'must', checker: 'judge', text: 'one filled chip', evidence: 'the chips', appliesWhen: { hasActions: true } },
+    { id: 'comp.fit', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'fits', evidence: 'the bottom edge' },
+    { id: 'task.copy', scope: {}, severity: 'must', evaluation: 'judge', status: 'planned', text: "the app's copy", evidence: 'the greeting' },
+    { id: 'space.shape', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'two radius families', evidence: 'the card and the pills' },
+    { id: 'state.composer', scope: { kind: 'chat' }, severity: 'must', evaluation: 'judge', status: 'planned', text: 'a composer', evidence: 'the composer' },
   ],
 });
 const context: CriteriaContextInput = {
@@ -77,9 +77,9 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
 
   it('with a bank: the selection is asked in the USER turn (the system prompt untouched), the block records context + selection + K-majority verdicts, the score path is unchanged', async () => {
     const votes = [
-      answer(80, [{ id: 'floor.copy.app', verdict: 'pass', evidence: 'the greeting names the app' }, { id: 'finish.rhythm.radius', verdict: 'fail', evidence: 'three families' }]),
-      answer(80, [{ id: 'floor.copy.app', verdict: 'pass', evidence: 'greeting' }, { id: 'finish.rhythm.radius', verdict: 'fail', evidence: 'three' }]),
-      answer(80, [{ id: 'floor.copy.app', verdict: 'n/a', evidence: 'cannot read' }, { id: 'finish.rhythm.radius', verdict: 'pass', evidence: 'two' }]),
+      answer(80, [{ id: 'task.copy', verdict: 'pass', evidence: 'the greeting names the app' }, { id: 'space.shape', verdict: 'fail', evidence: 'three families' }]),
+      answer(80, [{ id: 'task.copy', verdict: 'pass', evidence: 'greeting' }, { id: 'space.shape', verdict: 'fail', evidence: 'three' }]),
+      answer(80, [{ id: 'task.copy', verdict: 'n/a', evidence: 'cannot read' }, { id: 'space.shape', verdict: 'pass', evidence: 'two' }]),
     ];
     const d = deps(votes);
     const out = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } }, { ...config, judgeK: 3 }, d);
@@ -87,40 +87,40 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     for (const a of d.asked) {
       expect(a.prompt).toBe(VISUAL_EVAL_PROMPT);
       expect(a.criteriaBlock).toContain('from the FRAME only');
-      expect(a.criteriaBlock).toContain('- floor.copy.app (must)');
-      expect(a.criteriaBlock).toContain('- finish.rhythm.radius (should)');
-      expect(a.criteriaBlock).not.toContain('finish.chip.primacy'); // hasActions=false → omitted by the selector
-      expect(a.criteriaBlock).not.toContain('floor.fit'); // an instrument's, never asked of the judge
+      expect(a.criteriaBlock).toContain('- task.copy (must)');
+      expect(a.criteriaBlock).toContain('- space.shape (should)');
+      expect(a.criteriaBlock).not.toContain('state.composer'); // kind unset → omitted by the selector
+      expect(a.criteriaBlock).not.toContain('comp.fit'); // an instrument's, never asked of the judge
     }
     const c = out.result!.canvases![0]!;
     expect(c.score).toBe(80);
     expect(c.passed).toBe(true);
     expect(c.criteria).toBeDefined();
     expect(c.criteria!.criteriaSetId).toHaveLength(16);
-    expect(c.criteria!.bankVersion).toBe('v1');
+    expect(c.criteria!.bankVersion).toBe('v2');
     expect(c.criteria!.context).toEqual({ ...context, canvas: 'xs-chat-card' });
-    expect(c.criteria!.selection.map((s) => s.id)).toEqual(['floor.fit', 'floor.copy.app', 'finish.rhythm.radius']);
+    expect(c.criteria!.selection.map((s) => s.id)).toEqual(['comp.fit', 'task.copy', 'space.shape']);
     const by = Object.fromEntries(c.criteria!.verdicts.map((v) => [v.id, v]));
-    expect(by['floor.copy.app']).toMatchObject({ verdict: 'pass', evidence: 'the greeting names the app', severity: 'must', checker: 'judge' });
-    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'fail', evidence: 'three families', severity: 'should' });
-    expect(by['floor.fit']).toMatchObject({ verdict: 'pass', checker: 'instrument' });
+    expect(by['task.copy']).toMatchObject({ verdict: 'pass', evidence: 'the greeting names the app', severity: 'must', method: 'judge', status: 'planned' });
+    expect(by['space.shape']).toMatchObject({ verdict: 'fail', evidence: 'three families', severity: 'should' });
+    expect(by['comp.fit']).toMatchObject({ verdict: 'pass', method: 'instrument', status: 'live' });
     const summary = summarizeVisualResult(out.result!)!;
     expect(summary.canvases[0]!.criteria).toEqual(c.criteria);
-    expect(summary.criteria).toEqual({ mustFailed: [], shouldFailed: ['finish.rhythm.radius'], mustNa: [] });
+    expect(summary.criteria).toEqual({ mustFailed: [], shouldFailed: ['space.shape'], mustNa: [] });
   });
 
   it('a tie reads n/a "no majority" and a must at n/a is listed in the roll-up, never a pass; the score is unmoved', async () => {
     const votes = [
-      answer(75, [{ id: 'floor.copy.app', verdict: 'pass', evidence: 'a' }]),
-      answer(75, [{ id: 'floor.copy.app', verdict: 'fail', evidence: 'b' }]),
-      answer(75, [{ id: 'floor.copy.app', verdict: 'n/a', evidence: 'c' }]),
+      answer(75, [{ id: 'task.copy', verdict: 'pass', evidence: 'a' }]),
+      answer(75, [{ id: 'task.copy', verdict: 'fail', evidence: 'b' }]),
+      answer(75, [{ id: 'task.copy', verdict: 'n/a', evidence: 'c' }]),
     ];
     const d = deps(votes);
     const out = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } }, { ...config, judgeK: 3 }, d);
     const by = Object.fromEntries(out.result!.canvases![0]!.criteria!.verdicts.map((v) => [v.id, v]));
-    expect(by['floor.copy.app']).toMatchObject({ verdict: 'n/a', evidence: 'no majority' });
-    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
-    expect(summarizeVisualResult(out.result!)!.criteria).toEqual({ mustFailed: [], shouldFailed: [], mustNa: ['floor.copy.app'] });
+    expect(by['task.copy']).toMatchObject({ verdict: 'n/a', evidence: 'no majority' });
+    expect(by['space.shape']).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
+    expect(summarizeVisualResult(out.result!)!.criteria).toEqual({ mustFailed: [], shouldFailed: [], mustNa: ['task.copy'] });
     expect(out.result!.canvases![0]!.score).toBe(75);
   });
 
@@ -128,7 +128,7 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     const withBlock = await runVisualEvaluationDetailed(
       { compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } },
       config,
-      deps([answer(64, [{ id: 'floor.copy.app', verdict: 'fail', evidence: 'lorem' }])]),
+      deps([answer(64, [{ id: 'task.copy', verdict: 'fail', evidence: 'lorem' }])]),
     );
     const without = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } }, config, deps([answer(64)]));
     const a = withBlock.result!.canvases![0]!;
@@ -136,8 +136,8 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     expect([a.score, a.passed, a.judge.samples]).toEqual([b.score, b.passed, b.judge.samples]);
     expect(withBlock.result!.issues.map((i) => i.description)).toEqual(without.result!.issues.map((i) => i.description));
     // N−1: an answer without the array still parses; its judge criteria read n/a "not answered".
-    expect(b.criteria!.verdicts.find((v) => v.id === 'floor.copy.app')).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
-    expect(a.criteria!.verdicts.find((v) => v.id === 'floor.copy.app')).toMatchObject({ verdict: 'fail', evidence: 'lorem' });
+    expect(b.criteria!.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
+    expect(a.criteria!.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'fail', evidence: 'lorem' });
   });
 
   it('a canvas outside the bank\'s `applies` gets a block with an empty selection, no verdicts, and nothing asked of the judge', async () => {

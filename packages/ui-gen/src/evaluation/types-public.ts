@@ -344,12 +344,14 @@ import type { FetchShape, LayoutShape, RenderShape, RiskTier, StateShape, WriteS
 
 export type CriteriaSeverity = "must" | "should";
 export type CriteriaVerdict = "pass" | "fail" | "n/a";
-/** Who may answer a criterion: the judge off the frame, an instrument the capture runs, or a human reader. */
-export type CriteriaChecker = "instrument" | "judge" | "human";
+/** The method that produces a verdict: an instrument's measurement, the vision judge off the frame, or a person's eye. */
+export type CriteriaMethod = "instrument" | "judge" | "human";
+/** The method's readiness, as the bank's author wrote it — the only source of an `n/a` that is not the judge's own. */
+export type CriteriaStatus = "live" | "reference" | "planned" | "manual";
 /**
- * How a criterion entered the selection: bank-level (`static`) or by the selector's rules for this
- * card (`context`). A model PROPOSING a criterion at judge time is RESERVED and not a member until
- * a consumer exists — it would be `should`-only, recorded verbatim, never a gate.
+ * How a criterion entered the selection: bank-level (`static`, an empty scope) or by the selector's
+ * rules for this card (`context`). A model PROPOSING a criterion at judge time is RESERVED and not a
+ * member until a consumer exists — it would be `should`-only, recorded verbatim, never a gate.
  */
 export type CriteriaSource = "static" | "context";
 export type CriteriaChroma = "achromatic" | "chromatic" | "unknown";
@@ -373,6 +375,8 @@ export interface CriteriaContext {
   shell: string;
   /** The caller's item kind (a bootstrap mint's `hello`); hashed when present. */
   kind?: string;
+  /** The styling preset in force (the profile's aesthetic id); a recipe is selected only under its preset. */
+  preset?: string;
 }
 /** What was asked and why — recorded BEFORE the judge runs. Omission is the selector's decision. */
 export interface CriteriaSelection {
@@ -380,11 +384,12 @@ export interface CriteriaSelection {
   source: CriteriaSource;
   reason: string;
 }
-/** One criterion's verdict; `n/a` is the judge's answer ("cannot read this off the frame"), an unanswered id, a tie, or an instrument not run. */
+/** One criterion's verdict; `n/a` is the judge's answer ("cannot read this off the frame"), an unanswered id, a tie, or a method whose `status` is not live. */
 export interface CriterionVerdict {
   id: string;
   severity: CriteriaSeverity;
-  checker: CriteriaChecker;
+  method: CriteriaMethod;
+  status: CriteriaStatus;
   source: CriteriaSource;
   verdict: CriteriaVerdict;
   evidence: string;

@@ -46,13 +46,15 @@ describe('criteriaContextFor (ggui#1436)', () => {
     expect(ctx.profilePresent).toBe(true);
     expect(ctx.shell).toBe('chat');
     expect(ctx.kind).toBe('hello');
+    expect(ctx.preset).toBe('finished');
   });
-  it('no actions, no tokens, no profile, no kind → false / unknown / false / no kind key', () => {
+  it('no actions, no tokens, no profile, no kind → false / unknown / false / no kind or preset key', () => {
     const ctx = criteriaContextFor({ classification: classifyAxes({ contract: noActions }), contract: noActions, cssTokens: undefined, profile: undefined, shell: 'unknown' });
     expect(ctx.hasActions).toBe(false);
     expect(ctx.chroma).toBe('unknown');
     expect(ctx.profilePresent).toBe(false);
     expect('kind' in ctx).toBe(false);
+    expect('preset' in ctx).toBe(false);
     expect(criteriaContextFor({ classification: classifyAxes({ contract: undefined }), contract: undefined, cssTokens: undefined, profile: undefined, shell: 'x' }).hasActions).toBe(false);
   });
 });

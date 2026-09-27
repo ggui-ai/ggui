@@ -38,6 +38,7 @@ export type CriteriaContextInput = Omit<CriteriaContext, 'canvas'>;
 
 export function criteriaContextFor(src: CriteriaContextSources): CriteriaContextInput {
   const v = src.classification.vector;
+  const preset = src.profile?.aesthetic?.id;
   return {
     hasActions: Object.keys(src.contract?.actionSpec ?? {}).length > 0,
     riskTier: src.classification.riskTier,
@@ -46,5 +47,6 @@ export function criteriaContextFor(src: CriteriaContextSources): CriteriaContext
     profilePresent: src.profile !== undefined,
     shell: src.shell,
     ...(src.kind !== undefined ? { kind: src.kind } : {}),
+    ...(preset !== undefined ? { preset } : {}),
   };
 }

@@ -1,16 +1,16 @@
 /**
  * The selector — ggui#1436's "dynamic" layer, deterministic and recorded: a pure function of the
  * bank and the card's context. Same context → same `criteriaSetId` → same selection, so verdicts
- * pair across arms and replay from the record. A criterion the selector excludes is absent from
- * the block (the selector's decision, its reason in `selection[].reason`); a selected criterion the
- * judge cannot read comes back `n/a` (the judge's answer). The two are different signals.
+ * pair across arms and replay from the record. A row the selector excludes is absent from the
+ * block (the selector's decision); a selected row the judge cannot read comes back `n/a` (the
+ * judge's answer). The two are different signals.
  */
 import { createHash } from 'node:crypto';
 import type { CriteriaContext, CriteriaSelection } from '../types-public.js';
-import type { BankCriterion, CriteriaBank } from './bank.js';
+import { bankRows, type BankRow, type CriteriaBank } from './bank.js';
 
 /** Bump when a selection rule changes: it is hashed into every `criteriaSetId`. */
-export const CRITERIA_SELECTOR_VERSION = 'selector@1';
+export const CRITERIA_SELECTOR_VERSION = 'selector@2';
 
 /** The context as one string, keys sorted at every level — what the id hashes and what the record stores. */
 export function canonicalCriteriaContext(ctx: CriteriaContext): string {
@@ -33,30 +33,21 @@ export function criteriaSetIdFor(bankVersion: string, ctx: CriteriaContext): str
     .slice(0, 16);
 }
 
-/** The conditions of `appliesWhen` that hold for this context, or `null` when one fails. */
-function matchedConditions(c: BankCriterion, ctx: CriteriaContext): string[] | null {
-  const w = c.appliesWhen;
-  if (w === undefined) return [];
+/** The scope keys that hold for this context, or `null` when one fails; `[]` for an empty scope (static). */
+function matchedScope(row: BankRow, ctx: CriteriaContext): string[] | null {
+  const s = row.scope;
   const matched: string[] = [];
-  if (w.canvases !== undefined) {
-    if (!w.canvases.includes(ctx.canvas)) return null;
-    matched.push(`canvas=${ctx.canvas}`);
+  if (s.kind !== undefined) {
+    if (ctx.kind !== s.kind) return null;
+    matched.push(`kind=${s.kind}`);
   }
-  if (w.kinds !== undefined) {
-    if (ctx.kind === undefined || !w.kinds.includes(ctx.kind)) return null;
-    matched.push(`kind=${ctx.kind}`);
+  if (s.canvas !== undefined) {
+    if (ctx.canvas !== s.canvas) return null;
+    matched.push(`canvas=${s.canvas}`);
   }
-  if (w.hasActions !== undefined) {
-    if (w.hasActions !== ctx.hasActions) return null;
-    matched.push(`hasActions=${String(ctx.hasActions)}`);
-  }
-  if (w.chroma !== undefined) {
-    if (w.chroma !== ctx.chroma) return null;
-    matched.push(`chroma=${ctx.chroma}`);
-  }
-  if (w.shells !== undefined) {
-    if (!w.shells.includes(ctx.shell)) return null;
-    matched.push(`shell=${ctx.shell}`);
+  if (s.preset !== undefined) {
+    if (ctx.preset !== s.preset) return null;
+    matched.push(`preset=${s.preset}`);
   }
   return matched;
 }
@@ -67,24 +58,22 @@ export interface CriteriaSelectionResult {
 }
 
 /**
- * Select the bank's criteria for one card. The bank-level `applies` gate is read first (canvases
- * always; kind only when the caller named one — a caller without a kind is not gated by kind);
- * then each criterion's `appliesWhen`. Static criteria carry `source: 'static'`.
+ * Select the bank's rows for one card. The bank-level `applies` gate is read first (canvases always;
+ * kind only when the caller named one and the bank names kinds other than `*`); then each row's
+ * `scope`. An empty scope is `static`; a matched scope is `context` with the keys that matched.
  */
 export function selectCriteria(bank: CriteriaBank, ctx: CriteriaContext): CriteriaSelectionResult {
   const criteriaSetId = criteriaSetIdFor(bank.version, ctx);
   const applies = bank.applies;
   if (applies?.canvases !== undefined && !applies.canvases.includes(ctx.canvas)) return { criteriaSetId, selection: [] };
-  if (applies?.kind !== undefined && ctx.kind !== undefined && !applies.kind.includes(ctx.kind)) return { criteriaSetId, selection: [] };
+  if (applies?.kind !== undefined && ctx.kind !== undefined && !applies.kind.includes('*') && !applies.kind.includes(ctx.kind)) {
+    return { criteriaSetId, selection: [] };
+  }
   const selection: CriteriaSelection[] = [];
-  for (const c of bank.criteria) {
-    const matched = matchedConditions(c, ctx);
+  for (const row of bankRows(bank)) {
+    const matched = matchedScope(row, ctx);
     if (matched === null) continue;
-    selection.push(
-      c.appliesWhen === undefined
-        ? { id: c.id, source: 'static', reason: c.scope !== undefined ? `static (scope ${c.scope})` : 'static' }
-        : { id: c.id, source: 'context', reason: `context: ${matched.join(', ')}` },
-    );
+    selection.push(matched.length === 0 ? { id: row.id, source: 'static', reason: 'static' } : { id: row.id, source: 'context', reason: `context: ${matched.join(', ')}` });
   }
   return { criteriaSetId, selection };
 }
