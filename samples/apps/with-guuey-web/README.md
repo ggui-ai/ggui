@@ -26,7 +26,11 @@ A Vite SPA that:
   `localStorage` and resolves it with the package's generic reader
   (`createMcpUiResourceReader` over the same MCP client the guest
   `tools/call` relay holds) — one fresh `resources/read`, fresh mount
-  material, never a replay of stored HTML.
+  material, never a replay of stored HTML;
+- draws a turn's interim narration — the text blocks marked
+  `phase: "interim"`, such as "Looking that up…" — as a status line beside
+  the answer, never inside it, the same rule the guuey chat kit applies
+  (`src/turns.ts`).
 
 ## Before / after
 
@@ -36,7 +40,7 @@ dispatcher: the SSE parsing, per-turn status machine, and transcript fold
 live in `@guuey/agent-client`; resource narrowing, generative-UI
 recognition, and locator rehydration live in `@guuey/mcp-apps-host`; and
 what remains here is rendering — an `App.tsx` that is mostly JSX and
-comments.
+comments, and a `src/turns.ts` that groups the fold's messages into turns.
 
 ## Quickstart
 

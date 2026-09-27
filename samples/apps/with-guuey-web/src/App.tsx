@@ -26,6 +26,7 @@ import {
   type ResolvedViewMount,
   type ViewMount,
 } from '@guuey/mcp-apps-host';
+import { type AssistantTurn, foldAssistantTurns } from './turns';
 
 /**
  * platform-composed (guuey-sdk) chat shell — the web half of the composed
@@ -122,46 +123,6 @@ const adapters: AgentInvokeAdapters = {
   generateId: webAdapters.generateId,
   transport: devInvokeTransport,
 };
-
-/**
- * One agent turn as folded from the AgJSON transcript: the assistant text
- * plus the tool names the turn invoked (rendered as activity chips).
- */
-interface AssistantTurn {
-  key: string;
-  text: string;
-  tools: string[];
-}
-
-/**
- * Group the fold's messages into per-turn assistant output, in first-seen
- * turn order. The dev router runs one turn per invoke, so turn N pairs with
- * the user's Nth message (the zip in `Transcript` below). Text is taken
- * from assistant-role messages only — tool-role messages carry tool-result
- * payloads, not prose.
- */
-function foldAssistantTurns(foldMessages: AgMessage[]): AssistantTurn[] {
-  const turns: AssistantTurn[] = [];
-  const indexByTurn = new Map<string, number>();
-  for (const m of foldMessages) {
-    const turnKey = m.turnId ?? m.id;
-    let i = indexByTurn.get(turnKey);
-    if (i === undefined) {
-      i = turns.length;
-      indexByTurn.set(turnKey, i);
-      turns.push({ key: turnKey, text: '', tools: [] });
-    }
-    const turn = turns[i];
-    for (const block of m.content) {
-      if (block.type === 'text' && m.role === 'assistant') {
-        turn.text += block.text;
-      } else if (block.type === 'tool-call') {
-        turn.tools.push(block.name);
-      }
-    }
-  }
-  return turns;
-}
 
 /** Sandbox-CSP origin lists for a ggui-channel mount. */
 interface SandboxCsp {
@@ -693,7 +654,16 @@ function Transcript({
       );
     }
     const turn = assistantTurns[i];
-    if (turn !== undefined && (turn.text.length > 0 || turn.tools.length > 0)) {
+    if (turn === undefined) continue;
+    // Interim narration is a status line beside the answer, not part of it.
+    turn.narration.forEach((line, j) => {
+      rows.push(
+        <div key={`n${turn.key}-${j}`} className="narration">
+          {line}
+        </div>,
+      );
+    });
+    if (turn.text.length > 0 || turn.tools.length > 0) {
       rows.push(
         <div key={`a${turn.key}`} className="bubble assistant">
           {turn.tools.length > 0 ? (

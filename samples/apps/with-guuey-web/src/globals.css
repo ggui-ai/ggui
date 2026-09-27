@@ -123,6 +123,13 @@ body {
   background: var(--surface-subtle);
 }
 
+.narration {
+  align-self: flex-start;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
