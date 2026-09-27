@@ -35,6 +35,13 @@ plain `{ type, props, key }` objects, so it needs no framework.
   the footer's fact must be one that only a deploy can change.
 - `socialCardFonts()` reads the faces from disk, so it runs in Node, not in
   an edge runtime.
+- Each face is named by its own literal
+  `new URL('../fonts/<face>.woff', import.meta.url)`. A bundler that emits
+  those files for a server build needs nothing more; Next with Turbopack
+  does. Vite's server build, as Astro 7's prerender runs it, leaves the URLs
+  verbatim and emits no font file, so there keep `@ggui-ai/brand` external:
+  `vite.environments.prerender.resolve.external` in Astro 7, since the
+  top-level `ssr.external` does not reach the prerender environment.
 
 ## The wordmark
 
