@@ -6012,6 +6012,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // above — subscribes that omit `payload.appId` resolve their
         // identity-default through the identical rule (SPEC §12.2).
         appIdFromIdentity,
+        // ggui#1480 — a subscribe that declares an app other than its
+        // identity's own passes the same per-app authorization the
+        // `/mcp` endpoint runs on a URL-addressed app.
+        ...(opts.perAppRouting?.authorize ? { authorizeApp: opts.perAppRouting.authorize } : {}),
         logger: logger.child({ component: "render-channel" }),
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:

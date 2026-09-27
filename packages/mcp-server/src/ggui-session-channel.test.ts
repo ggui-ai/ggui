@@ -112,7 +112,7 @@ interface Fixture {
  */
 type BootChannelExtras = Pick<
   GguiSessionChannelOptions,
-  'appIdFromIdentity' | 'bootstrap' | 'cookieAuth' | 'pendingEventConsumer'
+  'appIdFromIdentity' | 'authorizeApp' | 'bootstrap' | 'cookieAuth' | 'pendingEventConsumer'
 >;
 
 /**
@@ -605,6 +605,133 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
     const ack = await fx.nextFrame('ack');
     expect((ack['payload'] as { session?: { id?: string } }).session?.id).toBe(fx.sessionId);
     expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
+  });
+});
+
+// ggui#1480 — on the bearer path a DECLARED appId other than the proved
+// identity's own app must pass the deployment's per-app authorization (the
+// same check the MCP endpoint runs on a URL appId) before it decides the
+// app-scope gate or names a provisioned row's app.
+describe('handleSubscribe — a declared appId must be one the identity may act on (ggui#1480)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  const CALLER_APP = 'app-caller-own';
+  const GO_SPEC: ActionSpec = {
+    go: {
+      label: 'Go',
+      nextStep: 'go_next',
+      schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+  };
+
+  function goFrame(sessionId: string): string {
+    return JSON.stringify({
+      type: 'action',
+      payload: { sessionId, type: 'data:submit', payload: { action: 'go', data: { id: 'x1' } } },
+      requestId: randomUUID(),
+    });
+  }
+
+  function subscribeAs(sessionId: string, appId: string): string {
+    return JSON.stringify({ type: 'subscribe', payload: { sessionId, appId }, requestId: randomUUID() });
+  }
+
+  it("refuses a declared app the deployment does not authorize for this identity — APP_MISMATCH, no ack", async () => {
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => CALLER_APP,
+      authorizeApp: async () => {
+        throw new Error('not an app this identity may act on');
+      },
+    }));
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('APP_MISMATCH');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+    expect(fx.loggedWarns).toContain('render_channel_app_refused');
+  });
+
+  it('lets no action frame reach the refused session — the socket never became its subscriber', async () => {
+    fx = await bootChannel(GO_SPEC, () => ({
+      appIdFromIdentity: () => CALLER_APP,
+      authorizeApp: async () => {
+        throw new Error('not an app this identity may act on');
+      },
+    }));
+    const before = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    await fx.nextFrame('error');
+    fx.ws.send(goFrame(fx.sessionId));
+    await fx.nextFrame('error');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+    const after = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    expect(after?.events.length).toBe(before?.events.length);
+  });
+
+  it('the same action frame lands once the declared app is authorized — control for the instrument above', async () => {
+    fx = await bootChannel(GO_SPEC, () => ({
+      appIdFromIdentity: () => CALLER_APP,
+      authorizeApp: async () => {},
+    }));
+    const before = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    await fx.nextFrame('ack');
+    fx.ws.send(goFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+    const after = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    expect(after?.events.length).toBe((before?.events.length ?? 0) + 1);
+  });
+
+  it('creates no row under an unauthorized declared app for an unknown session id', async () => {
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => CALLER_APP,
+      authorizeApp: async () => {
+        throw new Error('not an app this identity may act on');
+      },
+    }));
+    const fresh = randomUUID();
+    fx.ws.send(subscribeAs(fresh, 'app-someone-else'));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('APP_MISMATCH');
+    expect(await fx.store.get(fresh)).toBeNull();
+  });
+
+  it('sends the declared app to the deployment\'s authorization and subscribes when it passes (a key that owns several apps)', async () => {
+    const seen: string[] = [];
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => CALLER_APP,
+      authorizeApp: async (appId: string) => {
+        seen.push(appId);
+      },
+    }));
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    const ack = await fx.nextFrame('ack');
+    expect((ack['payload'] as { session?: { id?: string } }).session?.id).toBe(fx.sessionId);
+    expect(seen).toEqual([APP_ID]);
+  });
+
+  it("does not consult the authorization when the declared app is the identity's own — control", async () => {
+    const seen: string[] = [];
+    fx = await bootChannel({}, () => ({
+      appIdFromIdentity: () => APP_ID,
+      authorizeApp: async (appId: string) => {
+        seen.push(appId);
+      },
+    }));
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    await fx.nextFrame('ack');
+    expect(seen).toEqual([]);
+  });
+
+  it('keeps today\'s behaviour when the deployment wires no per-app authorization, as the MCP endpoint does — control', async () => {
+    fx = await bootChannel({}, () => ({ appIdFromIdentity: () => CALLER_APP }));
+    fx.ws.send(subscribeAs(fx.sessionId, APP_ID));
+    await fx.nextFrame('ack');
   });
 });
 

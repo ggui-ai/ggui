@@ -217,12 +217,28 @@ export interface GguiSessionChannelOptions {
   readonly auth: AuthAdapter;
   /**
    * Maps resolved identity → the appId for subscribes that omit
-   * `payload.appId` (SPEC §12.2 identity-default resolution). Defaults
-   * to `defaultAppIdFromIdentity` — same mapping the `/mcp` endpoint
+   * `payload.appId` (SPEC §12.2 identity-default resolution), and on
+   * the bearer path decides whether a DECLARED appId is the identity's
+   * own or must pass {@link authorizeApp}. Defaults to
+   * `defaultAppIdFromIdentity` — same mapping the `/mcp` endpoint
    * uses. Token-bound subscribes (wsToken / console cookie) never
    * consult this seam: their credential already binds the appId.
    */
   readonly appIdFromIdentity?: (result: AuthResult) => string;
+  /**
+   * Per-app authorization for a subscribe that DECLARES an appId on
+   * the bearer path (ggui#1480, SPEC §12.2). When the declared app is
+   * not the one `appIdFromIdentity` resolves for the identity, the
+   * channel awaits this with that appId and the identity before any
+   * store work; a throw refuses the subscribe with `APP_MISMATCH`.
+   * Wire the same check the `/mcp` endpoint runs on a URL-addressed
+   * app (`createGguiServer` threads `perAppRouting.authorize`). Absent
+   * → a declared appId is trusted, as the `/mcp` endpoint trusts a URL
+   * appId under per-app routing without an authorize callback.
+   * Credential-bound subscribes (wsToken / console cookie) never
+   * consult it: their credential already binds the app.
+   */
+  readonly authorizeApp?: (appId: string, identity: AuthResult) => Promise<void>;
   /** Structured logger. */
   readonly logger: Logger;
   /** URL path to mount on. Defaults to `/ws`. */
@@ -748,6 +764,7 @@ export function createGguiSessionChannelServer(
       bootstrap: opts.bootstrap,
       cookieAuth: opts.cookieAuth,
       appIdFromIdentity: opts.appIdFromIdentity,
+      ...(opts.authorizeApp ? { authorizeApp: opts.authorizeApp } : {}),
       versionPolicy: opts.versionPolicy,
       sendError,
       register,

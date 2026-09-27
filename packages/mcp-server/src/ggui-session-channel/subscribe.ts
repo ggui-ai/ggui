@@ -160,6 +160,8 @@ export interface SubscribeDeps {
   readonly cookieAuth?: GguiSessionChannelCookieAuth;
   /** Identity → appId mapping — see `GguiSessionChannelOptions.appIdFromIdentity`. */
   readonly appIdFromIdentity?: (result: AuthResult) => string;
+  /** Per-app authorization for a declared appId — see `GguiSessionChannelOptions.authorizeApp`. */
+  readonly authorizeApp?: (appId: string, identity: AuthResult) => Promise<void>;
   /** Version-handshake policy — see `GguiSessionChannelOptions.versionPolicy`. */
   readonly versionPolicy?: "advisory" | "reject";
   readonly sendError: Outbound["sendError"];
@@ -504,6 +506,46 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         sessionId: bound.sessionId,
         appId: bound.appId,
       });
+    }
+
+    // A DECLARED app on the bearer path is a claim, not a binding
+    // (ggui#1480, SPEC §12.2). The wsToken and console-cookie paths
+    // above already refuse a declared appId their credential does not
+    // bind; the bearer path proves only an identity. When the declared
+    // app is not that identity's own, it MUST pass the deployment's
+    // per-app authorization — the same check the `/mcp` endpoint runs
+    // on a URL-addressed app — before it decides the app-scope gate or
+    // names a provisioned row's app below. Refused before any store
+    // read, with one fixed answer whatever the reason, so the refusal
+    // says nothing about whether the app or the session exists. A
+    // deployment that wires no authorization keeps today's posture,
+    // as the `/mcp` endpoint does for per-app routing without one.
+    if (
+      payload.appId !== undefined &&
+      tokenBoundAppId === undefined &&
+      cookieBound === undefined &&
+      deps.authorizeApp
+    ) {
+      const identityAppId = (deps.appIdFromIdentity ?? defaultAppIdFromIdentity)(effectiveIdentity);
+      if (payload.appId !== identityAppId) {
+        try {
+          await deps.authorizeApp(payload.appId, effectiveIdentity);
+        } catch (err) {
+          deps.logger.warn("render_channel_app_refused", {
+            sessionId: payload.sessionId,
+            declaredAppId: payload.appId,
+            identityAppId,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+          deps.sendError(
+            ws,
+            "APP_MISMATCH",
+            "Subscribe names an app this credential may not act on",
+            message.requestId
+          );
+          return;
+        }
+      }
     }
 
     // Identity-default appId resolution (SPEC §12.2): `payload.appId`

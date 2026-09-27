@@ -36,7 +36,12 @@ export interface SubscribePayload {
    * resolves it server-side.
    *
    * When present it MUST match the GguiSession's bound `appId` or the
-   * subscribe fails `APP_MISMATCH` (SPEC §12.2.3).
+   * subscribe fails `APP_MISMATCH` (SPEC §12.2.3). It MUST also be an
+   * app the proved credential may act on: a `wsToken` must name its
+   * bound app (`BOOTSTRAP_APP_MISMATCH`), and on a bearer credential a
+   * value other than the identity-default app must pass the
+   * deployment's per-app authorization first, else `APP_MISMATCH`
+   * before any session is read or provisioned (SPEC §12.2).
    */
   appId?: string;
   /** Role of the subscriber: 'user' (Portal) or 'agent' (MCP bridge) */
