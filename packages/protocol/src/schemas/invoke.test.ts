@@ -216,3 +216,26 @@ describe('invoke request schema', () => {
     ).toThrow();
   });
 });
+
+describe('text block `phase` — interim narration vs answer text (ggui#1441, N−1 both ways)', () => {
+  // The previous release's payload: no `phase`. Parses unchanged — an
+  // older server never sends it, and this schema keeps not requiring it.
+  it('a text block without `phase` (the previous release) parses unchanged', () => {
+    const previous = { type: 'text', text: 'Here is your booking.' };
+    expect(contentBlockSchema.parse(previous)).toEqual(previous);
+  });
+
+  it('a text block with `phase: "interim"` keeps it — narration between tool calls', () => {
+    const interim = { type: 'text', text: 'Looking up the booking…', phase: 'interim' };
+    expect(contentBlockSchema.parse(interim)).toEqual(interim);
+  });
+
+  it('an unrecognized phase value is kept, never refused — a consumer reads it as answer text', () => {
+    const future = { type: 'text', text: 'Done.', phase: 'summary' };
+    expect(contentBlockSchema.parse(future)).toEqual(future);
+  });
+
+  it('a non-string phase is refused at the door', () => {
+    expect(() => contentBlockSchema.parse({ type: 'text', text: 'x', phase: 7 })).toThrow();
+  });
+});

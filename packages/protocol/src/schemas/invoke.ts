@@ -17,10 +17,28 @@ import { interfaceContextSchema } from './interface-context';
 
 // ── Content blocks ────────────────────────────────────────────────────
 
-/** Plain text content — streamed via `text_delta` events. */
+/**
+ * Plain text content — streamed via `text_delta` events.
+ *
+ * `phase` (ggui#1441) says what the text IS in the turn: `"interim"` is
+ * narration between tool calls — a host may show it as a status line and
+ * keep it out of the answer, including after a reload — and absent, or any
+ * other value, is answer text. The vocabulary is open on purpose: it mirrors
+ * the AgJSON `phase` a hosted thread already carries, which is not this
+ * package's to narrow, so a consumer MUST NOT refuse a value it does not
+ * recognize; it reads it as answer text. Optional in both directions: an
+ * older reader strips it and shows answer text, an older server never sends
+ * it.
+ */
 export const textBlockSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
+  phase: z
+    .string()
+    .optional()
+    .describe(
+      'What this text is in the turn: "interim" = narration between tool calls (a host may show it as a status line, not as answer text); absent or any other value = answer text. Never refuse a value you do not recognize — read it as answer text.',
+    ),
 });
 
 /** Tool call initiated by the agent. Input may arrive via `input_json_delta`. */

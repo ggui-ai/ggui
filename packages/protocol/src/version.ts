@@ -6,6 +6,16 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Text blocks carry an optional `phase` (2026-09-27, additive, ggui#1441:
+ * MINOR, same draft stamp). `textBlockSchema` gains `phase?: string` —
+ * `"interim"` is narration between tool calls, absent or any other value is
+ * answer text; the vocabulary is open (it mirrors AgJSON's `phase`, not ours
+ * to narrow), and a consumer never refuses a value it does not recognize.
+ * N−1 both ways by construction: the previous release's payload (no
+ * `phase`) parses unchanged, a payload with `phase` keeps it, an older
+ * reader strips it and shows answer text, an older server never sends it.
+ * No PROTOCOL_VERSION move.
+ * --------------------------------------------------------------------
  * `ggui_consume`'s `nextStep` is now SENT (2026-09-27, ggui#1399 step 2:
  * no schema change, same draft stamp). Declared in 0.24.0 (step 1), the
  * member rides every non-empty drain as `{ tool: 'ggui_amend',
