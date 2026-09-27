@@ -345,12 +345,6 @@ export function parseAppThemeAtReadDoor(input: unknown): AppThemeReadDoorResult 
 }
 
 /**
- * The ONE refusal body every write door returns for an overlay it will not
- * store (ggui#987 §3.4): REST 422 `invalid_app_config`, the AppSync
- * `errorInfo`, the MCP ops door's `{ ok: false }` structured content. A
- * discriminated union by key — exactly one of the four.
- */
-/**
  * The CARRY read — the REPRODUCE side of the two-read-paths rule stated on
  * {@link parseAppThemeAtReadDoor} (ggui#1155).
  *
@@ -503,6 +497,15 @@ export function appThemeWouldDropRefusalText(wouldDrop: readonly string[]): stri
   );
 }
 
+/**
+ * The ONE refusal body every write door returns for a theme it will not
+ * store (ggui#987 §3.4): REST 422 `invalid_app_config`, the AppSync
+ * `errorInfo`, the MCP ops door's `{ ok: false }` structured content. A
+ * discriminated union by key — exactly one of the five. A door raises the
+ * subset its checks reach; `unknown` stays in the union for doors on an
+ * earlier release, since a current door admits keys outside the manifest
+ * (ggui#1286).
+ */
 export const appThemeRefusalBodySchema = z.union([
   z.object({ uncovered: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),
   z.object({ unknown: z.object({ light: z.array(z.string()), dark: z.array(z.string()) }).strict() }).strict(),

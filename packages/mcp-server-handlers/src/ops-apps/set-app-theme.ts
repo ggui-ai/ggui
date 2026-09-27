@@ -15,15 +15,19 @@
  *   2. attestation — `overlayHash` is recomputed with
  *      `canonicalOverlayHash` and a mismatch is refused;
  *   3. coverage — the injected overlay validator judges each mode's
- *      set against the consumed-token manifest: a key outside the
- *      manifest (`unknown`) or a consumed token left unset
- *      (`uncovered`) is refused, per mode.
+ *      set against the consumed-token manifest: a consumed token left
+ *      unset (`uncovered`) is refused, per mode. A key outside the
+ *      manifest (`unknown`) is ADMITTED, never refused (ggui#1286): the
+ *      theme is stored verbatim and the write logs the names
+ *      (`app_theme_unknown_overlay_names`).
  *
  * A refusal is a schema-conformant `{ ok: false, code:
  * 'invalid_app_config', refusal }` RESULT (not a thrown error): the
- * body is one of the four the protocol names
- * (`appThemeRefusalBodySchema`), so a client reads the same refusal
- * from every write door a deployment offers, this one included.
+ * body is one the protocol names (`appThemeRefusalBodySchema`, five
+ * bodies; this door raises three of them: `refused: 'v1 shape'`,
+ * `overlayHash: 'mismatch'` and `uncovered`), so a client reads the
+ * same refusal from every write door a deployment offers, this one
+ * included. A body the schema itself rejects carries `issues` instead.
  *
  * Ownership: `AppsSource.get` first (scoped by `ownerSub`); cross-user
  * probes return the uniform "not found" shape. The store scopes the
@@ -80,7 +84,7 @@ const outputSchema = {
   updatedAt: z.string().optional(),
   /** Present on a refusal: the one refusal class this door emits. */
   code: z.literal('invalid_app_config').optional(),
-  /** Present on a coverage / attestation / v1-shape refusal — one of the four protocol-named bodies. */
+  /** Present on a coverage / attestation / v1-shape refusal — a protocol-named body (`appThemeRefusalBodySchema`). */
   refusal: appThemeRefusalBodySchema.optional(),
   /** Present on a shape refusal the schema itself raised — its messages, one per issue. */
   issues: z.array(z.string()).optional(),

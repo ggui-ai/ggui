@@ -104,12 +104,13 @@ describe('appThemeSchema (v2, ggui#987)', () => {
 });
 
 describe('appThemeRefusalBodySchema — the one write-door refusal shape', () => {
-  it('accepts exactly one of the four bodies', () => {
+  it('accepts each of the five bodies', () => {
     for (const body of [
       { uncovered: { light: ['--ggui-color-outline'], dark: [] } },
       { unknown: { light: [], dark: ['--ggui-color-surface'] } },
       { overlayHash: 'mismatch' },
       { refused: 'v1 shape' },
+      { wouldDrop: ['fonts'] },
     ]) expect(appThemeRefusalBodySchema.safeParse(body).success, JSON.stringify(body)).toBe(true);
   });
   it('refuses a body that names two reasons or an unknown one', () => {

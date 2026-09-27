@@ -4,8 +4,10 @@
  * `appThemeSchema`), ATTESTATION (`overlayHash` recomputed), and
  * COVERAGE (the injected overlay validator — both modes); a refusal is
  * a schema-conformant `{ ok: false, code: 'invalid_app_config', refusal }`
- * result whose body is one of the four the protocol names, so every
- * write door (REST, AppSync, this one) says the same thing.
+ * result whose body is one the protocol names (this door raises three of
+ * the five), so every write door (REST, AppSync, this one) says the same
+ * thing. A key outside the manifest is admitted and named, never refused
+ * (ggui#1286).
  */
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalOverlayHash, type AppTheme } from '@ggui-ai/protocol';
