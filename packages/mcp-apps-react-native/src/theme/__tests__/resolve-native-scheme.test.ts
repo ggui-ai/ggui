@@ -23,4 +23,13 @@ describe('resolveNativeScheme — terminal-consumer ladder', () => {
     expect(resolveNativeScheme(undefined, null)).toBe('light');
     expect(resolveNativeScheme(undefined, undefined)).toBe('light');
   });
+
+  // React Native >= 0.82 reports 'unspecified' when the app has not chosen a
+  // scheme (`Appearance.setColorScheme('unspecified')`). It names no scheme,
+  // so the OS layer is absent: the embedder prop still wins, and without one
+  // the terminal default fires. It must never reach the chrome as a scheme.
+  it("an OS scheme of 'unspecified' is absent, not a scheme", () => {
+    expect(resolveNativeScheme(undefined, 'unspecified')).toBe('light');
+    expect(resolveNativeScheme('dark', 'unspecified')).toBe('dark');
+  });
 });

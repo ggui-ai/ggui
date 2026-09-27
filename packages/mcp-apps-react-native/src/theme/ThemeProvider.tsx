@@ -94,6 +94,14 @@ export interface ThemeProviderProps {
 }
 
 /**
+ * What `useColorScheme()` can report across the supported React Native
+ * range: before 0.82 it is `'light' | 'dark' | null | undefined`, and from
+ * 0.82 it is `'light' | 'dark' | 'unspecified'`. Only `'light'` and
+ * `'dark'` name a scheme.
+ */
+type OsColorScheme = 'light' | 'dark' | 'unspecified' | null | undefined;
+
+/**
  * TERMINAL CONSUMER of the theme-mode ladder (adversarial-cycle
  * ruling, ggui#598 leg 4): the RN provider paints the NATIVE chrome
  * around the WebView — there is no downstream layer left to fill an
@@ -102,7 +110,8 @@ export interface ThemeProviderProps {
  * terminal-consumer default (the same posture as the design package's
  * css-tokens terminal default), NOT a mid-ladder defaulting: it fires
  * only after the embedder's explicit prop AND the OS scheme are both
- * absent (`useColorScheme()` → null, rare). Mid-ladder code — anything
+ * absent (`useColorScheme()` → null, rare, or `'unspecified'`, which
+ * names no scheme). Mid-ladder code — anything
  * with a layer below it — must never default; it delegates to
  * `@ggui-ai/protocol/integrations/theme-binding` and lets absence
  * propagate (the composition law).
@@ -112,9 +121,10 @@ export interface ThemeProviderProps {
  */
 export function resolveNativeScheme(
   prop: 'light' | 'dark' | undefined,
-  system: 'light' | 'dark' | null | undefined,
+  system: OsColorScheme,
 ): 'light' | 'dark' {
-  return prop ?? system ?? 'light';
+  const os = system === 'light' || system === 'dark' ? system : undefined;
+  return prop ?? os ?? 'light';
 }
 
 export function ThemeProvider({ colorScheme: colorSchemeProp, children }: ThemeProviderProps) {
