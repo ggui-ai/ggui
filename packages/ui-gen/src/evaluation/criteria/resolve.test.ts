@@ -9,12 +9,12 @@ import { selectCriteria } from './select.js';
 const bank = parseCriteriaBank({
   version: 'v1',
   criteria: [
-    { id: 'floor.fit', level: 'must', checker: 'instrument', text: 'fits', evidence: 'the bottom edge' },
-    { id: 'finish.canvas.inhabited', level: 'should', checker: 'instrument', text: 'inhabited', evidence: 'the void' },
-    { id: 'finish.colour.contrast', level: 'must', checker: 'instrument', text: 'AA', evidence: 'the text on the field' },
-    { id: 'finish.rhythm.radius', level: 'should', checker: 'judge', text: 'two radius families', evidence: 'the card and the pills' },
-    { id: 'floor.copy.app', level: 'must', checker: 'judge', text: 'the app\'s copy', evidence: 'the greeting' },
-    { id: 'floor.void.placed', level: 'should', checker: 'human', text: 'placed void', evidence: 'the empty region' },
+    { id: 'floor.fit', severity: 'must', checker: 'instrument', text: 'fits', evidence: 'the bottom edge' },
+    { id: 'finish.canvas.inhabited', severity: 'should', checker: 'instrument', text: 'inhabited', evidence: 'the void' },
+    { id: 'finish.colour.contrast', severity: 'must', checker: 'instrument', text: 'AA', evidence: 'the text on the field' },
+    { id: 'finish.rhythm.radius', severity: 'should', checker: 'judge', text: 'two radius families', evidence: 'the card and the pills' },
+    { id: 'floor.copy.app', severity: 'must', checker: 'judge', text: 'the app\'s copy', evidence: 'the greeting' },
+    { id: 'floor.void.placed', severity: 'should', checker: 'human', text: 'placed void', evidence: 'the empty region' },
   ],
 });
 const ctx: CriteriaContext = {
@@ -34,8 +34,8 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     ];
     const block = resolveCriteriaBlock({ bank, context: ctx, selected, answers, measurements: m });
     const by = Object.fromEntries(block.verdicts.map((v) => [v.id, v]));
-    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'pass', evidence: 'card + pills only', level: 'should', checker: 'judge', source: 'static' });
-    expect(by['floor.copy.app']).toMatchObject({ verdict: 'n/a', evidence: 'no majority', level: 'must' });
+    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'pass', evidence: 'card + pills only', severity: 'should', checker: 'judge', source: 'static' });
+    expect(by['floor.copy.app']).toMatchObject({ verdict: 'n/a', evidence: 'no majority', severity: 'must' });
     expect(block.criteriaSetId).toBe(selected.criteriaSetId);
     expect(block.context).toEqual(ctx);
     expect(block.bankVersion).toBe('v1');

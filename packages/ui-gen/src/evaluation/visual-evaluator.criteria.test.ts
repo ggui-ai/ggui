@@ -20,10 +20,10 @@ const bank = parseCriteriaBank({
   version: 'v1',
   applies: { canvases: ['xs-chat-card', 'md'] },
   criteria: [
-    { id: 'floor.fit', level: 'must', checker: 'instrument', text: 'fits', evidence: 'the bottom edge' },
-    { id: 'floor.copy.app', level: 'must', checker: 'judge', text: "the app's copy", evidence: 'the greeting' },
-    { id: 'finish.rhythm.radius', level: 'should', checker: 'judge', text: 'two radius families', evidence: 'the card and the pills' },
-    { id: 'finish.chip.primacy', level: 'must', checker: 'judge', text: 'one filled chip', evidence: 'the chips', appliesWhen: { hasActions: true } },
+    { id: 'floor.fit', severity: 'must', checker: 'instrument', text: 'fits', evidence: 'the bottom edge' },
+    { id: 'floor.copy.app', severity: 'must', checker: 'judge', text: "the app's copy", evidence: 'the greeting' },
+    { id: 'finish.rhythm.radius', severity: 'should', checker: 'judge', text: 'two radius families', evidence: 'the card and the pills' },
+    { id: 'finish.chip.primacy', severity: 'must', checker: 'judge', text: 'one filled chip', evidence: 'the chips', appliesWhen: { hasActions: true } },
   ],
 });
 const context: CriteriaContextInput = {
@@ -101,8 +101,8 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     expect(c.criteria!.context).toEqual({ ...context, canvas: 'xs-chat-card' });
     expect(c.criteria!.selection.map((s) => s.id)).toEqual(['floor.fit', 'floor.copy.app', 'finish.rhythm.radius']);
     const by = Object.fromEntries(c.criteria!.verdicts.map((v) => [v.id, v]));
-    expect(by['floor.copy.app']).toMatchObject({ verdict: 'pass', evidence: 'the greeting names the app', level: 'must', checker: 'judge' });
-    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'fail', evidence: 'three families', level: 'should' });
+    expect(by['floor.copy.app']).toMatchObject({ verdict: 'pass', evidence: 'the greeting names the app', severity: 'must', checker: 'judge' });
+    expect(by['finish.rhythm.radius']).toMatchObject({ verdict: 'fail', evidence: 'three families', severity: 'should' });
     expect(by['floor.fit']).toMatchObject({ verdict: 'pass', checker: 'instrument' });
     const summary = summarizeVisualResult(out.result!)!;
     expect(summary.canvases[0]!.criteria).toEqual(c.criteria);

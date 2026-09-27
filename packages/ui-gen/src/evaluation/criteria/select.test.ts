@@ -9,10 +9,10 @@ const bank = parseCriteriaBank({
   version: 'v1',
   applies: { kind: ['hello'], canvases: ['xs-chat-card', 'md'] },
   criteria: [
-    { id: 'floor.fit', level: 'must', checker: 'instrument', scope: 'static', text: 't', evidence: 'e' },
-    { id: 'finish.chip.primacy', level: 'must', checker: 'judge', text: 't', evidence: 'e', appliesWhen: { hasActions: true } },
-    { id: 'finish.colour.field', level: 'must', checker: 'instrument', text: 't', evidence: 'e', appliesWhen: { chroma: 'chromatic', canvases: ['xs-chat-card'] } },
-    { id: 'hello.greeting', level: 'should', checker: 'judge', text: 't', evidence: 'e', appliesWhen: { kinds: ['hello'] } },
+    { id: 'floor.fit', severity: 'must', checker: 'instrument', scope: 'static', text: 't', evidence: 'e' },
+    { id: 'finish.chip.primacy', severity: 'must', checker: 'judge', text: 't', evidence: 'e', appliesWhen: { hasActions: true } },
+    { id: 'finish.colour.field', severity: 'must', checker: 'instrument', text: 't', evidence: 'e', appliesWhen: { chroma: 'chromatic', canvases: ['xs-chat-card'] } },
+    { id: 'hello.greeting', severity: 'should', checker: 'judge', text: 't', evidence: 'e', appliesWhen: { kinds: ['hello'] } },
   ],
 });
 const ctx: CriteriaContext = {

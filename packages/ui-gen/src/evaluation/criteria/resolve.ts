@@ -68,7 +68,7 @@ export function resolveCriteriaBlock(args: {
       const kind = INSTRUMENT_BY_ID[c.id];
       read = kind === undefined ? { verdict: 'n/a', evidence: 'instrument not run' } : instrumentVerdict(kind, args.measurements);
     } else read = { verdict: 'n/a', evidence: "reader's column" };
-    verdicts.push({ id: c.id, level: c.level, checker: c.checker, source: s.source, verdict: read.verdict, evidence: read.evidence });
+    verdicts.push({ id: c.id, severity: c.severity, checker: c.checker, source: s.source, verdict: read.verdict, evidence: read.evidence });
   }
   return {
     criteriaSetId: args.selected.criteriaSetId,
@@ -85,7 +85,7 @@ export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSe
   const byId = new Map<string, BankCriterion>(bank.criteria.map((c) => [c.id, c]));
   const asked = selected.selection.map((s) => byId.get(s.id)).filter((c): c is BankCriterion => c !== undefined && c.checker === 'judge');
   if (asked.length === 0) return '';
-  const lines = asked.map((c) => `- ${c.id} (${c.level}): ${c.text} Evidence must name: ${c.evidence}`);
+  const lines = asked.map((c) => `- ${c.id} (${c.severity}): ${c.text} Evidence must name: ${c.evidence}`);
   return (
     '## Criteria — answer each one from the FRAME only\n' +
     'Read these off the screenshot. Never infer them from the request, the styling profile or any direction text above.\n' +

@@ -1241,8 +1241,8 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
   }));
   // ggui#1436 — the roll-up: ids failed / unreadable across canvases, deduped; a must at n/a is listed, never passed.
   const blocks = result.canvases.map((c) => c.criteria).filter((b): b is CriteriaBlock => b !== undefined);
-  const idsWhere = (level: 'must' | 'should', verdict: 'fail' | 'n/a'): string[] => [
-    ...new Set(blocks.flatMap((b) => b.verdicts.filter((v) => v.level === level && v.verdict === verdict).map((v) => v.id))),
+  const idsWhere = (severity: 'must' | 'should', verdict: 'fail' | 'n/a'): string[] => [
+    ...new Set(blocks.flatMap((b) => b.verdicts.filter((v) => v.severity === severity && v.verdict === verdict).map((v) => v.id))),
   ];
   const rollup: CriteriaRollup | undefined =
     blocks.length > 0 ? { mustFailed: idsWhere('must', 'fail'), shouldFailed: idsWhere('should', 'fail'), mustNa: idsWhere('must', 'n/a') } : undefined;

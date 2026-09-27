@@ -342,7 +342,7 @@ export interface CanvasJudgeRecord {
 // stamps so yesterday's `eval.json` and an old judge answer still parse (N−1).
 import type { FetchShape, LayoutShape, RenderShape, RiskTier, StateShape, WriteShape } from "../classifier/axes.js";
 
-export type CriteriaLevel = "must" | "should";
+export type CriteriaSeverity = "must" | "should";
 export type CriteriaVerdict = "pass" | "fail" | "n/a";
 /** Who may answer a criterion: the judge off the frame, an instrument the capture runs, or a human reader. */
 export type CriteriaChecker = "instrument" | "judge" | "human";
@@ -383,7 +383,7 @@ export interface CriteriaSelection {
 /** One criterion's verdict; `n/a` is the judge's answer ("cannot read this off the frame"), an unanswered id, a tie, or an instrument not run. */
 export interface CriterionVerdict {
   id: string;
-  level: CriteriaLevel;
+  severity: CriteriaSeverity;
   checker: CriteriaChecker;
   source: CriteriaSource;
   verdict: CriteriaVerdict;

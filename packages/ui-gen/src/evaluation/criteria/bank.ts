@@ -28,7 +28,7 @@ export const bankCriterionSchema = z.object({
   id: z.string().regex(CRITERION_ID, 'a criterion id is family.property[.facet], lower-case family'),
   /** The standard's property number (1–5) or a name; informational — `null` where the author left it unset. */
   property: z.union([z.number().int(), z.string()]).nullable().optional(),
-  level: z.enum(['must', 'should']),
+  severity: z.enum(['must', 'should']),
   /** Who may answer: the judge off the frame, an instrument the capture runs, or a human reader. */
   checker: z.enum(['instrument', 'judge', 'human']),
   /** The author's scope word (`static` or a binding key); carried into the record, not interpreted by the v1 selector. */

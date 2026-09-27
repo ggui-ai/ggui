@@ -6,10 +6,10 @@ const V1 = {
   version: '2026-09-27.1',
   applies: { kind: ['hello'], canvases: ['xs-chat-card', 'md', 'phone'] },
   criteria: [
-    { id: 'finish.colour.field', property: 2, level: 'must', checker: 'instrument', scope: 'static', text: 'The primary appears as a field.', evidence: 'the band or panel', fix: 'Add a band.' },
-    { id: 'finish.rhythm.radius', property: null, level: 'should', checker: 'judge', text: 'At most two radius families.', evidence: 'the card and the pills' },
-    { id: 'floor.copy.app', level: 'must', checker: 'judge', text: 'The copy is the app\'s.', evidence: 'the greeting line', appliesWhen: { kinds: ['hello'] } },
-    { id: 'floor.fit', level: 'must', checker: 'instrument', text: 'The card fits its box.', evidence: 'the bottom edge', extra: 'tomorrow\'s field' },
+    { id: 'finish.colour.field', property: 2, severity: 'must', checker: 'instrument', scope: 'static', text: 'The primary appears as a field.', evidence: 'the band or panel', fix: 'Add a band.' },
+    { id: 'finish.rhythm.radius', property: null, severity: 'should', checker: 'judge', text: 'At most two radius families.', evidence: 'the card and the pills' },
+    { id: 'floor.copy.app', severity: 'must', checker: 'judge', text: 'The copy is the app\'s.', evidence: 'the greeting line', appliesWhen: { kinds: ['hello'] } },
+    { id: 'floor.fit', severity: 'must', checker: 'instrument', text: 'The card fits its box.', evidence: 'the bottom edge', extra: 'tomorrow\'s field' },
   ],
 };
 
