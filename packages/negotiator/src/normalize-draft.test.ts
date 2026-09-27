@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { actionEntrySchema, lintContract, streamChannelEntrySchema } from '@ggui-ai/protocol';
-import { normalizeDraft } from './normalize-draft.js';
+import { liftedRequiredNames, normalizeDraft } from './normalize-draft.js';
 
 describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', () => {
   it('drops a stray propsSpec-wrapper `required` array (R1) → draft now lint-clean, todos preserved', () => {
@@ -196,5 +196,33 @@ describe('normalizeDraft — keeps every member the protocol entry schemas name 
     };
     const out = normalizeDraft(draft) as { streamSpec: Record<string, Record<string, unknown>> };
     expect(Object.keys(out.streamSpec['ticks'] ?? {}).sort()).toEqual(memberKeys);
+  });
+});
+
+describe('liftedRequiredNames — which wrapper-level `required` names the lift applies to (ggui#1454)', () => {
+  it('names the entries the lift touches, in the wrapper order; skips a ghost name and an entry with its own word', () => {
+    const draft = {
+      propsSpec: {
+        required: ['bookingId', 'ghost', 'date', 'note'],
+        properties: {
+          bookingId: { schema: { type: 'string' } },
+          date: { schema: { type: 'string' }, required: false },
+          note: { schema: { type: 'string' } },
+        },
+      },
+    };
+    expect(liftedRequiredNames(draft)).toEqual(['bookingId', 'note']);
+    // the lift and the report agree: exactly these entries gain required: true
+    const out = normalizeDraft(draft) as { propsSpec: { properties: Record<string, Record<string, unknown>> } };
+    expect(Object.entries(out.propsSpec.properties).filter(([, e]) => e['required'] === true).map(([n]) => n)).toEqual(['bookingId', 'note']);
+  });
+  it('is empty when nothing is lifted: no wrapper `required`, a non-array, or no draft', () => {
+    expect(liftedRequiredNames({ propsSpec: { properties: { a: { schema: { type: 'string' } } } } })).toEqual([]);
+    expect(liftedRequiredNames({ propsSpec: { required: 'a', properties: { a: { schema: { type: 'string' } } } } })).toEqual([]);
+    expect(liftedRequiredNames(undefined)).toEqual([]);
+  });
+  it('a name the wrapper lists twice is lifted once and reported once', () => {
+    const draft = { propsSpec: { required: ['a', 'a'], properties: { a: { schema: { type: 'string' } } } } };
+    expect(liftedRequiredNames(draft)).toEqual(['a']);
   });
 });

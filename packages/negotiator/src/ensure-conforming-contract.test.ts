@@ -314,3 +314,33 @@ describe('ensureConformingContract — findings are attributed and never duplica
     ]);
   });
 });
+
+describe('ggui#1454 — a lifted wrapper-level `required` is reported as a repair, not a refusal', () => {
+  it('the CTR_SHAPE_UNRECOGNIZED_KEYS finding at propsSpec names the entries the lift set required', async () => {
+    const draft = {
+      propsSpec: {
+        properties: { heading: { schema: { type: 'string' } }, total: { schema: { type: 'number' } } },
+        required: ['heading'],
+      },
+    };
+    const result = await ensureConformingContract({ llm: llmThatMustNotBeCalled() }, { draft, intent: 'heading and total card' });
+    expect(result.method).toBe('normalized');
+    expect(result.contract?.propsSpec?.properties?.['heading']).toMatchObject({ required: true });
+    expect(result.findings.map((f) => [f.code, f.path])).toEqual([['CTR_SHAPE_UNRECOGNIZED_KEYS', 'propsSpec']]);
+    expect(result.findings[0]!.message).toMatch(/lifted/i);
+    expect(result.findings[0]!.message).toContain('propsSpec.properties.heading.required');
+    expect(result.findings[0]!.message).not.toContain('total');
+  });
+  it("a stray wrapper key that is NOT `required` keeps the gate's own message — nothing was lifted", async () => {
+    const draft = {
+      propsSpec: {
+        additionalProperties: false,
+        properties: { heading: { required: true, schema: { type: 'string' } } },
+      },
+    };
+    const result = await ensureConformingContract({ llm: llmThatMustNotBeCalled() }, { draft, intent: 'heading card' });
+    expect(result.method).toBe('normalized');
+    expect(result.findings.map((f) => f.code)).toEqual(['CTR_SHAPE_UNRECOGNIZED_KEYS']);
+    expect(result.findings[0]!.message).not.toMatch(/lifted/i);
+  });
+});

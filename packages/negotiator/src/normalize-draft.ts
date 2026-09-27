@@ -130,6 +130,31 @@ function cleanAgentToolMap(
  * (the top-level DataContract schema is `.passthrough()`); only the
  * `.strict()` spec wrappers and entries are cleaned.
  */
+/**
+ * The prop names a wrapper-level `propsSpec.required: [...]` will be
+ * lifted onto by {@link normalizeDraft} (ggui#1432): each listed name that
+ * has an entry and whose entry declares no `required` of its own, in the
+ * wrapper's order and de-duplicated. A ghost name (no entry) and an entry
+ * with its own word are skipped, exactly as the lift skips them. Empty when
+ * nothing lifts.
+ *
+ * One source of truth for the lift and for the finding that reports it
+ * (ggui#1454): the gate's `CTR_SHAPE_UNRECOGNIZED_KEYS` at `propsSpec` is
+ * a repair here, not a refusal, and its message says which entries gained
+ * `required: true`.
+ */
+export function liftedRequiredNames(draft: unknown): readonly string[] {
+  if (!isRecord(draft) || !isRecord(draft['propsSpec'])) return [];
+  const wrapper = draft['propsSpec'];
+  if (!Array.isArray(wrapper['required']) || !isRecord(wrapper['properties'])) return [];
+  const entries = wrapper['properties'];
+  // De-duplicated: a name the wrapper lists twice lifts once and is reported once.
+  return [...new Set(wrapper['required'].filter((name): name is string => typeof name === 'string'))].filter((name) => {
+    const entry = entries[name];
+    return isRecord(entry) && entry['required'] === undefined;
+  });
+}
+
 export function normalizeDraft(draft: unknown): unknown {
   if (!isRecord(draft)) return draft;
   const out: Record<string, unknown> = { ...draft };
@@ -146,12 +171,12 @@ export function normalizeDraft(draft: unknown): unknown {
     }
     if (isRecord(ps['properties'])) {
       const cleaned = cleanEntryMap(ps['properties'], PROP_ENTRY_KEYS, ['schema']);
-      const declaredRequired = Array.isArray(wrapper['required'])
-        ? wrapper['required'].filter((name): name is string => typeof name === 'string')
-        : [];
-      for (const name of declaredRequired) {
+      // The same selection `liftedRequiredNames` reports (one source of truth);
+      // `cleanEntryMap` keeps an entry's own `required`, so the test is the same on
+      // the cleaned map as on the raw one.
+      for (const name of liftedRequiredNames(draft)) {
         const entry = cleaned[name];
-        if (!isRecord(entry) || entry['required'] !== undefined) continue; // no entry, or the entry's own word wins
+        if (!isRecord(entry)) continue;
         cleaned[name] = { ...entry, required: true };
       }
       ps['properties'] = cleaned;

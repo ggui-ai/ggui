@@ -42,7 +42,7 @@ import {
 } from '@ggui-ai/protocol';
 import type { LLMCaller } from './llm-caller.js';
 import { synthesizeContract } from './synthesize-contract.js';
-import { normalizeDraft } from './normalize-draft.js';
+import { liftedRequiredNames, normalizeDraft } from './normalize-draft.js';
 import { salvageConformingSubset } from './salvage-draft.js';
 
 /**
@@ -148,12 +148,25 @@ export async function ensureConformingContract(
     };
   }
 
+  // ggui#1454 — a wrapper-level `propsSpec.required: [...]` is refused by the
+  // gate as an unrecognized key and LIFTED by `normalizeDraft` onto the named
+  // entries (ggui#1432). The finding stays (the draft used a non-wire shape,
+  // and the agent should see that); its message says the key was honoured,
+  // so it reads as a repair, not a refusal to fix and re-handshake for.
+  const lifted = liftedRequiredNames(args.draft);
+  const liftNote =
+    lifted.length > 0
+      ? ` — the wrapper-level \`required\` is not a wire key; it was lifted into ${lifted
+          .map((name) => `propsSpec.properties.${name}.required = true`)
+          .join(', ')} (repaired, not refused)`
+      : '';
   const errorFindings: SuggestionFinding[] = lint.errors.map(
     (e): SuggestionFinding => ({
       code: e.code,
       severity: 'error',
       path: e.path,
-      message: e.message,
+      message:
+        e.code === 'CTR_SHAPE_UNRECOGNIZED_KEYS' && e.path === 'propsSpec' ? `${e.message}${liftNote}` : e.message,
     }),
   );
 
