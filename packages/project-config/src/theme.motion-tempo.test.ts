@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { deriveThemeVariables } from '@ggui-ai/design/themes';
-import { normalizeThemeDocument, parseThemeDocument, type ThemeDocument } from './theme.js';
+import { normalizeThemeDocument, parseThemeDocument, safeParseThemeDocument, type ThemeDocument } from './theme.js';
 
 const color = (hex: string) => ({ $type: 'color', $value: hex }) as const;
 const dim = (v: string) => ({ $type: 'dimension', $value: v }) as const;
@@ -51,6 +51,15 @@ describe('motion tempo reaches the card — ggui#1106', () => {
     expect(dtcg.motion.duration?.base).toBeUndefined();
     expect(dtcg.motion.easing?.standard?.$value).toBe('ease-out');
     expect(dtcg.motion.reduce).toBe('ignore');
+  });
+
+  it('the override is BOUNDED: the three steps and three roles are admitted, a free-map step or role is refused at the door', () => {
+    const withMotion = (motion: object) => safeParseThemeDocument({ ...baseTheme, motion: { transition: {}, ...motion } });
+    expect(withMotion({ duration: { fast: { $type: 'duration', $value: '100ms' }, base: { $type: 'duration', $value: '200ms' }, slow: { $type: 'duration', $value: '300ms' } } }).success).toBe(true);
+    expect(withMotion({ easing: { standard: { $type: 'cubicBezier', $value: 'ease-out' }, emphasized: { $type: 'cubicBezier', $value: 'ease-in-out' }, exit: { $type: 'cubicBezier', $value: 'ease-in' } } }).success).toBe(true);
+    expect(withMotion({ duration: { instant: { $type: 'duration', $value: '0ms' } } }).success).toBe(false);
+    expect(withMotion({ duration: { slower: { $type: 'duration', $value: '600ms' } } }).success).toBe(false);
+    expect(withMotion({ easing: { bouncy: { $type: 'cubicBezier', $value: 'ease' } } }).success).toBe(false);
   });
 
   it('a document without motion keeps the layer-1 motion block — no tempo, no easing, no reduce', () => {

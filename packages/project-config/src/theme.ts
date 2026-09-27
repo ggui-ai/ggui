@@ -14,9 +14,13 @@
  * ramps, every `on*` ink and container, the neutral ladder, outlines,
  * `elevated`, the type scale from the one `font.ramp` — is DERIVED by
  * the one producer (`deriveThemeVariables`), so the retired ladders
- * (`font.size`, `font.lineHeight`, `motion.duration`, `motion.easing`)
- * and `$metadata.fontUrl` are refused, not ignored. Fonts are declared
- * as `typography.faces` (https `src` only); the card installs them.
+ * (`font.size`, `font.lineHeight`, the FREE-MAP `motion.duration` /
+ * `motion.easing`) and `$metadata.fontUrl` are refused, not ignored.
+ * `motion` admits only the bounded tempo override (ggui#1093 P1c,
+ * consumed since ggui#1106): three duration steps (`fast` / `base` /
+ * `slow`) and three easing roles (`standard` / `emphasized` / `exit`),
+ * nothing else. Fonts are declared as `typography.faces` (https `src`
+ * only); the card installs them.
  *
  * **External-tool leniency.** `motion`, `accessibility`, `zIndex` and
  * the DTCG metadata fields stay OPTIONAL; {@link normalizeThemeDocument}
