@@ -407,3 +407,28 @@ describe('createUiGenerator — the runtime probe rides the metadata (ggui#1380)
     expect(direct.metadata.runtimeProbe).not.toHaveProperty('queuedMs');
   });
 });
+
+// ggui#1459 — the level whose dials this generation APPLIED rides the metadata,
+// so a host stamps the level it ran, never the one it stored.
+describe('createUiGenerator — the effort level run rides the metadata (ggui#1459)', () => {
+  beforeEach(() => {
+    dispatchMock.mockReset();
+  });
+  it('a generation handed a named level reports that level', async () => {
+    dispatchMock.mockResolvedValue(fakeResult());
+    const out = await createUiGenerator().generate({ ...fakeInput(), profile: { effort: 'high' } });
+    expect(out.ok).toBe(true);
+    expect(out.metadata?.effort).toBe('high');
+  });
+  it('no named level: the key is absent, never a default', async () => {
+    dispatchMock.mockResolvedValue(fakeResult());
+    const out = await createUiGenerator().generate(fakeInput());
+    expect(out.metadata !== undefined && 'effort' in out.metadata).toBe(false);
+  });
+  it('a harness failure still names the level that ran', async () => {
+    dispatchMock.mockRejectedValue(new Error('harness exploded'));
+    const out = await createUiGenerator().generate({ ...fakeInput(), profile: { effort: 'low' } });
+    expect(out.ok).toBe(false);
+    expect(out.metadata?.effort).toBe('low');
+  });
+});

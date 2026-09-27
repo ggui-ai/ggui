@@ -38,6 +38,7 @@ import type {
   JsonObject,
   GeneratorId,
   ModelRef,
+  AppGenerationProfileEffort,
 } from "@ggui-ai/protocol";
 import { isGeneratorId, modelRefOfRoute } from "@ggui-ai/protocol";
 import type { GadgetCatalogAdapter } from "@ggui-ai/gadgets";
@@ -362,6 +363,9 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
               }
             : undefined;
 
+      // ggui#1459 — the named level whose dials this generation applied; set
+      // where the dials are resolved, read by both metadata arms below.
+      let effortRan: AppGenerationProfileEffort | undefined;
       try {
         const tools = createGeneratorTools({
           ...(input.contract ? { contract: input.contract } : {}),
@@ -408,6 +412,7 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
         // deployment's options for THIS generation; absent ⇒ untouched.
         // Prompt bytes never move with it (dials only).
         const dials = effortDials(input.profile?.effort);
+        if (dials !== undefined) effortRan = input.profile?.effort;
         const effectiveMaxAttempts = dials?.maxAttempts ?? maxAttempts;
         const effectiveMaxEvalRounds = dials?.maxEvalRounds ?? maxEvalRounds;
         const effectiveEvaluation =
@@ -471,6 +476,8 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
           attempts: result.turnsUsed,
           // ggui#1280 — the build that made this generation (template keys, never per-request).
           build: generatorBuild(designMode ?? DEFAULT_DESIGN_MODE),
+          // ggui#1459 — the level that ran; absent when none was applied.
+          ...(effortRan !== undefined ? { effort: effortRan } : {}),
           // Prompt-cache counters are provider-specific (Claude reports
           // them; others omit). Pass through truthfully — absent on the
           // adapter result stays absent here, never defaulted to 0.
@@ -517,6 +524,8 @@ export function createUiGenerator(options: CreateUiGeneratorOptions = {}): UiGen
             cacheHit: false,
             // ggui#1280 — a failed generation still names the build that failed.
             build: generatorBuild(designMode ?? DEFAULT_DESIGN_MODE),
+            // ggui#1459 — and the level it ran, when one was applied.
+            ...(effortRan !== undefined ? { effort: effortRan } : {}),
           },
         };
       } finally {

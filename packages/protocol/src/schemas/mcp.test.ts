@@ -31,6 +31,7 @@ import {
  * threads `blueprintDraft` → `suggestion` → `decision`.
  */
 import { describe, it, expect } from 'vitest';
+import { APP_GENERATION_PROFILE_EFFORTS } from './app-generation-profile';
 import type { z } from 'zod';
 import {
   RUNTIME_PULL_MAX_LIMIT,
@@ -1628,5 +1629,33 @@ describe('pendingEventSchema — the drained row is parsed at the store boundary
   it('carries no sequence — nothing writes one and nothing reads one; an old row\'s key strips', () => {
     expectTypeOf<PendingEvent>().not.toHaveProperty('sequence');
     expect(pendingEventSchema.parse({ ...ROW, sequence: 7 })).toEqual(ROW);
+  });
+});
+
+// ggui#1459 (declare step) — the render result may name the effort level its
+// generation RAN. Declared one release before any server sends it: the output
+// reaches tools/list closed, so a host must cache a schema naming the member first.
+describe('renderOutputSchema.effort — declared (ggui#1459)', () => {
+  const previousRelease = {
+    outcome: 'rendered' as const,
+    sessionId: 'render_1',
+    resourceUri: 'ui://ggui/render/render_1',
+    action: 'create' as const,
+    contractHash: '1c00b3ab282a45f6',
+    blueprintId: 'bp_550e8400-e29b-41d4-a716-446655440000',
+    variantKey: 'v_default',
+    cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+  };
+  it('a render result without effort still parses unchanged (the served tag-13 bytes are the kit\'s n1-compat case)', () => {
+    expect(renderOutputSchema.parse(previousRelease)).toEqual(previousRelease);
+  });
+  it('keeps every level of the profile vocabulary', () => {
+    for (const effort of APP_GENERATION_PROFILE_EFFORTS) {
+      expect(renderOutputSchema.parse({ ...previousRelease, effort }).effort).toBe(effort);
+    }
+  });
+  it('refuses a level outside the vocabulary and a non-string value', () => {
+    expect(renderOutputSchema.safeParse({ ...previousRelease, effort: 'max' }).success).toBe(false);
+    expect(renderOutputSchema.safeParse({ ...previousRelease, effort: 12 }).success).toBe(false);
   });
 });

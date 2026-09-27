@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The render result declares `effort?` (2026-09-27, additive, ggui#1459
+ * declare step: MINOR, same draft stamp). `renderOutputSchema.effort` is the
+ * named level (`APP_GENERATION_PROFILE_EFFORTS`) the generation that produced
+ * the render's code RAN — the engine reports it on
+ * `GenerationMetadata.effort?` (core port, additive) and ui-gen sets it
+ * exactly when a named level's dials were applied, on success and on
+ * harness-failed metadata. Two-step by
+ * design: this release DECLARES the member (the output reaches `tools/list`
+ * closed, so a host must cache a schema naming it first); no server sends
+ * it until this release serves everywhere, and then only on `rendered` /
+ * `failed` results whose generation applied a named level.
+ * --------------------------------------------------------------------
  * The durable blueprint carries its minting engine's build (2026-09-27,
  * additive, ggui#1280 declare step: MINOR, same draft stamp).
  * `GeneratorBuild { version?, mode?, digests }` is declared HERE (the core

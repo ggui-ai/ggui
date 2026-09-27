@@ -38,6 +38,7 @@ import {
 } from '../types/refusal-codes';
 
 import { RUNTIME_TELEMETRY_MAX_EVENTS } from './runtime-telemetry-limits';
+import { APP_GENERATION_PROFILE_EFFORTS } from './app-generation-profile';
 
 // ── Wired Tool Input Shapes ──
 //
@@ -907,6 +908,27 @@ export const renderOutputSchema = z.object({
     .optional()
     .describe(
       'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
+    ),
+  /**
+   * ggui#1459 — the named effort level the generation that produced this
+   * render's code RAN, taken from that generation's own report (never from
+   * a stored profile, which can change between handshake and render).
+   * Present only when this call ran a generation that applied a named level
+   * (on `rendered`, and on `failed` — a generation that ran and produced
+   * nothing still ran the level); absent on a cache hit or blueprint reuse,
+   * on `refused`, in placeholder mode, and when no level was named. It
+   * states the level that ran, by its name in the profile vocabulary.
+   *
+   * Declared one release before any server sends it: this output reaches
+   * `tools/list` closed, so a host must cache a schema naming the member
+   * before a result carries it. Widening the level vocabulary is the same
+   * two-step on this output.
+   */
+  effort: z
+    .enum(APP_GENERATION_PROFILE_EFFORTS)
+    .optional()
+    .describe(
+      'The generation effort level this render\'s code was produced at. Present only when a fresh generation ran a named level; absent on a reuse, on a refusal, and when no level was named.',
     ),
   /**
    * In-result failure marker — present iff the tool result is

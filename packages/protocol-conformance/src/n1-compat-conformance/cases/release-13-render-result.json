@@ -1,0 +1,25 @@
+{
+  "name": "release-13-render-result",
+  "description": "A ggui_render result as ggui tag 13 (5903985f2, serving prod) emitted it on a cold generation — captured verbatim from dev serving that tag (`ggui-protocol-5903985f2f46`, 2026-09-27T04:36Z) on a fixture app: `outcome: rendered`, the six identity fields, and the cache marker, WITHOUT `effort`. Today's renderOutputSchema MUST accept it: `effort` (#1459) is optional, so a consumer holding this release's result keeps parsing (VERSION-POLICY §3.6).",
+  "release": {
+    "label": "ggui tag 13",
+    "sha": "5903985f2"
+  },
+  "wire": "render-result",
+  "payload": {
+    "outcome": "rendered",
+    "sessionId": "render_63607d1b-afbf-405b-aa0d-43e1c27fc474",
+    "resourceUri": "ui://ggui/render/render_63607d1b-afbf-405b-aa0d-43e1c27fc474/9a679f0634bac356",
+    "action": "create",
+    "contractHash": "9a679f0634bac356",
+    "blueprintId": "bp_62c8adae-6405-4093-8a35-15f827a6f703",
+    "variantKey": "44136fa355b3678a",
+    "cache": {
+      "hit": false,
+      "llmCallsAvoided": 0,
+      "kind": "cold",
+      "reason": "cold: generated fresh — no saved interface fit this render"
+    }
+  },
+  "expect": "accepted"
+}

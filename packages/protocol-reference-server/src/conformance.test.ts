@@ -164,6 +164,8 @@ const EXPECTED_PASSING = [
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
   'n1-compat/forward-render-meta-unknown-member',
+  // Sorted order: 'release-13…' sorts before 'release-2…'.
+  'n1-compat/release-13-render-result',
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',

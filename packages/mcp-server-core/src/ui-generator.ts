@@ -21,6 +21,7 @@ import type {
   AppGenerationProfile,
   JsonObject,
   GeneratorBuild,
+  AppGenerationProfileEffort,
 } from '@ggui-ai/protocol';
 import type { RenderingContext } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
@@ -412,6 +413,12 @@ export interface GenerationMetadata {
    * does not report one.
    */
   readonly build?: GeneratorBuild;
+  /**
+   * The named effort level whose dials this generation APPLIED (ggui#1459) —
+   * reported by the engine that ran it, so a host stamps the level that ran,
+   * never the one it stored. Absent when the engine applied no named level.
+   */
+  readonly effort?: AppGenerationProfileEffort;
   /**
    * The runtime-render probe's record for this generation — see
    * {@link GenerationRuntimeProbe}. Absent when no probe ran after the
