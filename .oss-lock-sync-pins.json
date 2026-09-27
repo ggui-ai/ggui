@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-26T15:39:34.138Z",
+  "generatedAt": "2026-09-27T11:01:28.118Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -215,6 +215,7 @@
     "fast-uri",
     "fast-xml-builder",
     "fast-xml-parser",
+    "fflate",
     "flatted",
     "function.prototype.name",
     "happy-dom",
@@ -555,6 +556,9 @@
     "fast-uri",
     "fast-xml-builder",
     "fast-xml-parser",
+    "fflate@0.4.x",
+    "fflate@0.7.x",
+    "fflate@0.8.x",
     "flatted",
     "function.prototype.name",
     "happy-dom",
