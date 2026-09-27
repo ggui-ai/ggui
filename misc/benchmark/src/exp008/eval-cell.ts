@@ -1,9 +1,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { DataContract, JsonObject, AppGenerationProfile, AppTheme } from '@ggui-ai/protocol';
 import { parseAppGenerationProfileAtReadDoor, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
-import { CANVAS_CLASSES } from '@ggui-ai/ui-gen/evaluation';
+import { CANVAS_CLASSES, criteriaContextFor, parseCriteriaBank, type CriteriaBank, type CriteriaContextInput } from '@ggui-ai/ui-gen/evaluation';
+import { classifyAxes } from '@ggui-ai/ui-gen/classifier';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
@@ -117,6 +119,25 @@ export interface BootstrapJudgeInput {
   readonly themeStripped?: readonly string[];
   /** ggui#1195 — the box the mint composed the chat card at, when the order declared one; absent = the class box (an older mint wrote none). */
   readonly canvasViewport?: DeclaredCanvasViewport;
+  /** ggui#1436 — the criteria set the mint wrote (`criteria: { digest, set }`), read through the bank loader; absent on an older mint. */
+  readonly criteria?: JudgeInputCriteria;
+  /** Why a present `criteria` member was not read — named on the row, never silently dropped (N−1: a newer writer's shape). */
+  readonly criteriaDropped?: string;
+}
+
+/**
+ * ggui#1436 — the criteria bank as the mint handed it over. The mint owns the set; the judge that scores
+ * the cell is handed it here, so its typed block sits beside the score that binds (report-only).
+ */
+export interface JudgeInputCriteria {
+  readonly bank: CriteriaBank;
+  /** The digest the mint named. */
+  readonly digest: string;
+  /**
+   * sha256 of `JSON.stringify(set)` as READ — the raw set, never the parsed bank: the loader drops the
+   * set's page-only members, so a digest over the parsed bank would never match the mint's.
+   */
+  readonly digestComputed: string;
 }
 
 /**
@@ -212,6 +233,9 @@ export interface CellInputs {
   readonly themeStripped?: readonly string[];
   /** ggui#1195 — the declared box from judge-input.json; the visual judge captures that canvas at it. Absent = class box. */
   readonly canvasViewport?: DeclaredCanvasViewport;
+  /** ggui#1436 — the criteria set from judge-input.json, and why a present one was not read. */
+  readonly criteria?: JudgeInputCriteria;
+  readonly criteriaDropped?: string;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -291,6 +315,23 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     throw new Error(`eval-cell: ${JUDGE_INPUT_FILE} "themeId" must be a non-empty string when present (in ${dir})`);
   }
   const themeId = typeof raw.themeId === 'string' ? raw.themeId : undefined;
+  // ggui#1436 — the criteria set: tolerant like the other members of a newer writer, and never silent —
+  // a set this judge cannot read is dropped WITH its reason on the row, and the cell is judged without it.
+  let criteria: JudgeInputCriteria | undefined;
+  let criteriaDropped: string | undefined;
+  if (raw.criteria !== undefined) {
+    const c = raw.criteria;
+    if (!isJsonObject(c) || typeof c.digest !== 'string' || !isJsonObject(c.set)) {
+      criteriaDropped = '"criteria" is not { digest: string, set: object }';
+    } else {
+      const digestComputed = createHash('sha256').update(JSON.stringify(c.set)).digest('hex').slice(0, 16);
+      try {
+        criteria = { bank: parseCriteriaBank(c.set), digest: c.digest, digestComputed };
+      } catch (err) {
+        criteriaDropped = `"criteria.set" refused by the bank loader — ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+  }
   return {
     prompt: raw.prompt,
     ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
@@ -300,6 +341,8 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
+    ...(criteria !== undefined ? { criteria } : {}),
+    ...(criteriaDropped !== undefined ? { criteriaDropped } : {}),
   };
 }
 
@@ -365,6 +408,8 @@ export function readCellInputs(dir: string): CellInputs {
   let profileStripped: readonly string[] | undefined;
   let themeStripped: readonly string[] | undefined;
   let canvasViewport: DeclaredCanvasViewport | undefined;
+  let criteria: JudgeInputCriteria | undefined;
+  let criteriaDropped: string | undefined;
   if (ref === null) {
     const judge = readJudgeInput(dir);
     commit = bootstrapCommit(judge, contractJson.contract);
@@ -374,6 +419,8 @@ export function readCellInputs(dir: string): CellInputs {
     profileStripped = judge.profileStripped;
     themeStripped = judge.themeStripped;
     canvasViewport = judge.canvasViewport;
+    criteria = judge.criteria;
+    criteriaDropped = judge.criteriaDropped;
   } else {
     commit = commitForRef(ref);
     profile = undefined;
@@ -405,6 +452,8 @@ export function readCellInputs(dir: string): CellInputs {
     ...(profileStripped !== undefined ? { profileStripped } : {}),
     ...(themeStripped !== undefined ? { themeStripped } : {}),
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
+    ...(criteria !== undefined ? { criteria } : {}),
+    ...(criteriaDropped !== undefined ? { criteriaDropped } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -491,6 +540,8 @@ export type VisualJudge = (ctx: {
   sampleProps?: JsonObject;
   /** ggui#1195 — the declared box for one canvas; the judge captures that canvas at it (`VisualEvalConfig.canvasViewports`). */
   canvasViewport?: DeclaredCanvasViewport;
+  /** ggui#1436 — the criteria bank and the card's context: the judge adds the typed block beside the score (report-only). */
+  criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
 }) => Promise<VisualOutcome | VisualUnavailable | null>;
 
 /**
@@ -640,6 +691,8 @@ export interface CellReport extends BenchmarkRunResultDisplay {
     readonly promptDigests?: { readonly constrained: string; readonly free: string };
     /** ggui#1249: the image the cell was judged on (the eval task's `GIT_SHA` / `BENCH_SOURCE_HASH` env) — absent on a run without them. */
     readonly evalImage?: EvalImage;
+    /** ggui#1436 — the digest of the criteria set the judge was handed (computed on the set as read); absent = no set. */
+    readonly criteriaDigest?: string;
     /** Visual score summary of the cell (the per-canvas mean when canvases ran). */
     readonly visual?: { readonly score: number; readonly passed: boolean };
     readonly visualJudge?: VisualJudgeIdentity;
@@ -665,6 +718,10 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   if (inputs.bootstrap) notes.push(BOOTSTRAP_NOTE);
   if (inputs.profileStripped !== undefined && inputs.profileStripped.length > 0) notes.push(profileMembersStrippedNote(inputs.profileStripped));
   if (inputs.themeStripped !== undefined && inputs.themeStripped.length > 0) notes.push(themeMembersStrippedNote(inputs.themeStripped));
+  if (inputs.criteriaDropped !== undefined) notes.push(`criteria dropped — ${inputs.criteriaDropped}`);
+  if (inputs.criteria !== undefined && inputs.criteria.digest !== inputs.criteria.digestComputed) {
+    notes.push(`criteria digest mismatch — judge-input names ${inputs.criteria.digest}, the set as read hashes to ${inputs.criteria.digestComputed}`);
+  }
   if (inputs.propsSource === 'empty') notes.push(inputs.exampleFields !== undefined ? exampleFieldsNote(inputs.exampleFields) : EMPTY_PROPS_NOTE);
   if (!inputs.judgeable) notes.push(NOT_JUDGEABLE_NOTE);
   if (!deps.mintReceipt) notes.push(MINT_RECEIPT_ABSENT_NOTE);
@@ -706,6 +763,20 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
       ...(inputs.canvasViewport !== undefined ? { canvasViewport: inputs.canvasViewport } : {}),
+      ...(inputs.criteria !== undefined
+        ? {
+            criteria: {
+              bank: inputs.criteria.bank,
+              context: criteriaContextFor({
+                classification: classifyAxes({ contract: inputs.contract, prompt: inputs.prompt }),
+                contract: inputs.contract,
+                cssTokens: undefined,
+                profile: inputs.profile,
+                shell: inputs.mint.canvas === 'xs-chat-card' ? 'chat' : 'fullscreen',
+              }),
+            },
+          }
+        : {}),
     });
     if (isVisualUnavailable(outcome)) {
       visualUnavailable = outcome;
@@ -807,6 +878,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
           }
         : {}),
       ...(deps.evalImage !== undefined ? { evalImage: deps.evalImage } : {}),
+      ...(inputs.criteria !== undefined ? { criteriaDigest: inputs.criteria.digestComputed } : {}),
       ...(visual !== undefined ? { visual } : {}),
       ...(deps.visual && deps.visualJudge
         ? {

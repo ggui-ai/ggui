@@ -124,7 +124,7 @@ async function main() {
   // it (report.meta.visualUnavailableReason) — never a silent pass, never a
   // bare null when a reason exists.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, themeId, canvasViewport }) => {
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, themeId, canvasViewport, criteria }) => {
         const { runVisualEvaluationDetailed, CANVAS_CLASSES, cssTokensForAppTheme } = await import('@ggui-ai/ui-gen/evaluation');
         try {
           const d = await runVisualEvaluationDetailed(
@@ -132,7 +132,8 @@ async function main() {
             // composes (judgedCssTokens, #1023); neither = the design defaults (no cssTokens key)
             (() => {
               const cssTokens = judgedCssTokens({ theme, themeId }, cssTokensForAppTheme);
-              return { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(cssTokens !== undefined ? { cssTokens } : {}) };
+              // ggui#1436 — the criteria bank the mint handed over: the judge adds the typed block beside the score (report-only)
+              return { compiledCode, originalPrompt, ...(profile ? { profile } : {}), ...(cssTokens !== undefined ? { cssTokens } : {}), ...(criteria ? { criteria } : {}) };
             })(),
             {
               ...JUDGE_CONFIG,
