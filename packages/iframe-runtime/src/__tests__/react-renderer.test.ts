@@ -151,7 +151,7 @@ describe('mountReactRoot — per-app theme overlay', () => {
   });
 
   it('merges the overlay INTO the scoped in-tree block — the :root append alone is cascade-dead for components', async () => {
-    // rnd/gen-ui/beauty/experiments/001: the scoped token block mounts
+    // The scoped token block mounts
     // INSIDE the scope div (body), later in document order than any
     // head-level style — so a `:root`-only overlay can never recolor
     // tree content. The overlay must ALSO ride the scoped style, after

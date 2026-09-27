@@ -334,7 +334,7 @@ export function framelessSuppressionRule(scopeClass: string): string {
 }
 
 /**
- * The expanded frame (ggui#1083 cut 2; `rnd/gen-ui/beauty/expanded-frame-direction.md` v1.2):
+ * The expanded frame (ggui#1083 cut 2; the expanded-frame direction v1.2):
  * inside a host's canvas panel the panel carries the one chrome, and the card fills it.
  *
  * - Its OUTER radius is the theme's `xl` radius stop, in every bucket. That is the rule the guuey

@@ -360,12 +360,10 @@ let activeThemeUnsubscribe: (() => void) | null = null;
  * the spec's `'light' | 'dark'` literals (dropped, never guessed —
  * the same tolerant posture as `projectHostContext`).
  *
- * This is the INPUT leg of host-theme adaptation
- * (rnd/gen-ui/beauty/experiments/002-host-theme-adaptation.md, ggui#551):
+ * This is the INPUT leg of host-theme adaptation (ggui#551):
  * `hostContext.theme` alone reaches only `data-theme` +
  * `color-scheme` via `applyDocumentTheme` — nothing in the token
- * pipeline keys off it, so a dark host painted the light ladder
- * (host-fit 46.0 vs 87.7 with the dark ladder, probe `cc728a8eb`).
+ * pipeline keys off it, so a dark host painted the light ladder.
  * Under ggui#987 §4 the embedding host OWNS runtime mode: when it
  * announces one, `buildOpts` paints it over every stamped opinion; the
  * stamped layers decide only when the host is silent. Read live from

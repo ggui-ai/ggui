@@ -1,5 +1,5 @@
 /**
- * Pin (ggui#1083 cut 2, `rnd/gen-ui/beauty/expanded-frame-direction.md` v1.2): inside a host's
+ * Pin (ggui#1083 cut 2, the expanded-frame direction v1.2): inside a host's
  * fullscreen canvas the panel carries the one chrome and the card fills it — on ONE rhythm.
  *
  * - The panel's OUTER radius is the theme's `xl` radius stop. The guuey widget pins its own panel

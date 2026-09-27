@@ -32,7 +32,7 @@
  *   prompt changes, these labels must be re-adjudicated — record the
  *   sweep in the experiment ledger.
  *
- * Experiment: rnd/gen-ui/economy/experiments/001-match-precision-instrument.md
+ * The match-precision instrument (ggui#556).
  */
 import type { DataContract, BlueprintVariance } from '@ggui-ai/protocol';
 

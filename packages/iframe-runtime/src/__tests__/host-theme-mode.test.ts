@@ -1,11 +1,9 @@
 /**
- * Host-announced theme mode as the `themeMode` fallback (ggui#551,
- * rnd/gen-ui/beauty/experiments/002-host-theme-adaptation.md).
+ * Host-announced theme mode as the `themeMode` fallback (ggui#551).
  *
  * `hostContext.theme` alone reaches only `data-theme` + `color-scheme`
  * (ext-apps `applyDocumentTheme`); nothing in the token pipeline keys
- * off it, so a dark host painted the LIGHT ladder — probe `cc728a8eb`
- * measured host-fit 46.0 vs 87.7 once the dark ladder is selected.
+ * off it, so a dark host painted the LIGHT ladder.
  * `buildOpts` (runtime.ts, closure-local to `bootSequence`) now reads
  * `meta.themeMode ?? hostAnnouncedThemeMode()`. This spec pins the
  * input half through the same App-injection seam `dispatch-routing`

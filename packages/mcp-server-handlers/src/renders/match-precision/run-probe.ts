@@ -47,8 +47,7 @@
  * (id, cosine, cached intent) and each judge call (order, wall-clock,
  * candidates shown, decision or error).
  *
- * Experiments: rnd/gen-ui/economy/experiments/001-match-precision-instrument.md
- * (and 002, the second-judge arm)
+ * The match-precision instrument (ggui#556) and its second-judge arm.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
