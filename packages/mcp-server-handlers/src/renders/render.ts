@@ -49,6 +49,7 @@
 import { randomUUID, randomBytes } from 'node:crypto';
 import { DomainError } from '@ggui-ai/protocol';
 import {
+  type AppGenerationProfileEffort,
   type AppTheme,
   type BlueprintVariance,
   type GadgetDescriptor,
@@ -446,8 +447,17 @@ export interface GguiSessionPostSuccessArgs {
    * `null` when no model ran: a blueprint reuse, or a generation that
    * failed before producing an interface. A hook that prices or audits by
    * model reads it here instead of re-deriving the route (ggui#884).
+   *
+   * `effort` is the named level whose dials that generation APPLIED, as the
+   * engine reported it (`GenerationMetadata.effort`, ggui#1459) — absent when
+   * it applied none. A hook that meters or audits by level reads the level
+   * that RAN here, never a stored profile read on its own, which can change
+   * between the handshake and the render.
    */
-  readonly generation: { readonly model: string } | null;
+  readonly generation: {
+    readonly model: string;
+    readonly effort?: AppGenerationProfileEffort;
+  } | null;
   /**
    * Identity of the stored component that served this render — the
    * same value the wire output's `blueprintId` carries (empty string
@@ -1950,7 +1960,7 @@ export function createGguiRenderHandler(
     let resolvedBlueprintIdentity: 'ephemeral' | undefined;
     // ggui#884 — the model a generation ran, for the post-success hook; null
     // until a generation produces an interface (reuse and failure leave it).
-    let generationRan: { readonly model: string } | null = null;
+    let generationRan: GguiSessionPostSuccessArgs['generation'] = null;
 
     // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
     // the MCP Apps protocol probe diagnostic system card.
@@ -2463,7 +2473,10 @@ export function createGguiRenderHandler(
         // A component materialised with an LLM source ⇒ a model ran; the
         // no-component branches carry no source and leave it null.
         if (outcome.ok && outcome.source !== undefined) {
-          generationRan = { model: outcome.source.model };
+          generationRan = {
+            model: outcome.source.model,
+            ...(outcome.effort !== undefined ? { effort: outcome.effort } : {}),
+          };
         }
         if (!outcome.ok) {
           generationFailure = outcome.failure;
@@ -3308,6 +3321,11 @@ type GenerationRunOutcome =
        */
       readonly source?: LlmBlueprintSource;
       /**
+       * ggui#1459 — the named level the generation applied, read from its own
+       * `metadata.effort`; absent when it applied none.
+       */
+      readonly effort?: AppGenerationProfileEffort;
+      /**
        * #460 — the id registration minted (or dedup-returned) BEFORE
        * the success commit. Present exactly when `resolveBlueprintId`
        * was supplied and returned one; the committed identity record
@@ -3694,6 +3712,7 @@ async function runGenerationIntoGguiSession(
     componentCode: result.response.componentCode,
     createdAt: nowIso,
     source: producedSource,
+    ...(result.metadata.effort !== undefined ? { effort: result.metadata.effort } : {}),
     ...(resolvedBlueprintId !== undefined
       ? { blueprintId: resolvedBlueprintId }
       : {}),

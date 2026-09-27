@@ -61,6 +61,7 @@ import type {
 import {
   isFailedRenderOutput,
   renderOutputSchema,
+  type AppGenerationProfileEffort,
   type AppTheme,
   type BlueprintVariance,
   type DataContract,
@@ -167,7 +168,7 @@ const fakeEmbedding: EmbeddingProvider = {
 
 /** Pre-resolved generator escape hatch — returns fixed componentCode,
  *  no LLM. */
-function fakeGenerator(componentCode: string, sourceCode?: string) {
+function fakeGenerator(componentCode: string, sourceCode?: string, effort?: AppGenerationProfileEffort) {
   return async (
     input: { request: { sessionId: string } },
   ): Promise<UiGenerateResult> => ({
@@ -185,6 +186,7 @@ function fakeGenerator(componentCode: string, sourceCode?: string) {
       outputTokens: 0,
       latencyMs: 0,
       cacheHit: false,
+      ...(effort !== undefined ? { effort } : {}),
     },
   });
 }
@@ -227,6 +229,8 @@ function buildHandler(opts: {
   readonly vectorStore: InMemoryVectorStore;
   readonly index: InMemoryBlueprintIndex;
   readonly coldCode: string;
+  /** ggui#1459 — the level the fake generator reports it applied (`metadata.effort`). */
+  readonly coldEffort?: AppGenerationProfileEffort;
   /**
    * Optional authored source the fake generator's response carries
    * alongside `coldCode` — threads through to
@@ -321,7 +325,7 @@ function buildHandler(opts: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
         model: 'anthropic/claude-haiku-4-5',
-        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode),
+        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort),
       },
       resolveLlm: () => null,
       blueprints: { get: async () => null, list: async () => [] },
@@ -332,7 +336,7 @@ function buildHandler(opts: {
         ...(opts.cacheDurability ? { durability: opts.cacheDurability } : {}),
       },
     },
-    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode),
+    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort),
   });
 }
 
@@ -535,6 +539,8 @@ async function buildAcceptCacheHarnessFor(
  *  matchedBlueprint), so render falls through to generation. */
 async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+  /** ggui#1459 — see {@link buildHandler}'s `coldEffort`. */
+  readonly coldEffort?: AppGenerationProfileEffort;
   readonly renderTtlMs?: number;
   readonly renderIdentityStore?: RenderIdentityStore;
   /** #460 — injectable so a test can make registration fail. */
@@ -582,6 +588,7 @@ async function buildColdGenHarness(extraOpts: {
     vectorStore,
     index,
     coldCode: COLD_CODE,
+    ...(extraOpts.coldEffort !== undefined ? { coldEffort: extraOpts.coldEffort } : {}),
     ...(extraOpts.postSuccessHook
       ? { postSuccessHook: extraOpts.postSuccessHook }
       : {}),
@@ -856,6 +863,22 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const cache = await buildAcceptCacheHarness({ postSuccessHook });
     await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
     expect(seen.at(-1)).toBeNull();
+  });
+
+  it('passes the level the generation RAN on generation.effort — from the generator\'s own report, absent when none was applied (ggui#1459)', async () => {
+    const seen: Array<GguiSessionPostSuccessArgs['generation']> = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
+      seen.push(a.generation);
+    };
+    const ran = await buildColdGenHarness({ postSuccessHook, coldEffort: 'high' });
+    await ran.harness.handler.handler({ handshakeId: ran.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toEqual({ model: 'anthropic/fake', effort: 'high' });
+
+    const none = await buildColdGenHarness({ postSuccessHook });
+    await none.harness.handler.handler({ handshakeId: none.handshakeId, props: {} }, CTX);
+    const g = seen.at(-1);
+    expect(g).toEqual({ model: 'anthropic/fake' });
+    expect(g !== null && g !== undefined && 'effort' in g).toBe(false);
   });
 
   it('passes outcome to postSuccessHook — "rendered" on cold gen AND on blueprint reuse (ggui#1227)', async () => {
