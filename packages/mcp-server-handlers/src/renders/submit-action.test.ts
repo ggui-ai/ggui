@@ -15,7 +15,7 @@
  * (claude.ai, Claude Desktop) because the rejection round-trip is
  * fail-soft client-side.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import {
   InMemoryActiveConsumerRegistry,
@@ -427,6 +427,104 @@ describe('createGguiSubmitActionHandler', () => {
     if (rejected.ok) throw new Error('expected reject');
     expect(rejected.code).toBe('INVALID_ACTION_KIND');
     expect(typeof rejected.message).toBe('string');
+  });
+
+  // ggui#1479 — a dispatch writes only to a session of the caller's own app.
+  describe("writes only to a session the caller's app owns (ggui#1479)", () => {
+    const sessionId = 'render-owned-by-app_1';
+    const card: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt: 0,
+      lastActivityAt: 0,
+      expiresAt: 0,
+      epoch: 1,
+      actionSpec: { confirm: { label: 'Confirm', oneShot: true } },
+    };
+    const dispatch = {
+      ...baseEnv,
+      sessionId,
+      kind: 'dispatch' as const,
+      payload: { intent: 'confirm', actionData: null, uiContext: {} },
+    };
+    const otherAppCtx = { ...ctx, appId: 'app_other' };
+
+    it("answers another app's credential exactly as it answers a session that does not exist, and writes nothing", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      const crossApp = await h.handler(dispatch, otherAppCtx);
+
+      const absent = createGguiSubmitActionHandler({
+        pendingEventConsumer: new InMemoryPendingEventConsumer(),
+        renderStore: new InMemoryGguiSessionStore(),
+      });
+      const missing = await absent.handler(dispatch, otherAppCtx);
+      expect(missing).toMatchObject({ ok: false, code: 'PIPE_NOT_FOUND' });
+      expect(crossApp).toEqual(missing);
+
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(0);
+      expect((await store.listEventsSince(sessionId, 0, 10))?.events ?? []).toHaveLength(0);
+      const got = await store.get(sessionId);
+      expect(got?.render.type === 'component' ? got.render.spentOneShots : undefined).toBeUndefined();
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith('[ggui] runtime_cross_app_refused '));
+      expect(line).toBeDefined();
+      expect(JSON.parse(String(line).slice('[ggui] runtime_cross_app_refused '.length))).toEqual({
+        tool: 'ggui_runtime_submit_action',
+        sessionId,
+        callerAppId: 'app_other',
+        ownerAppId: 'app_1',
+      });
+      warn.mockRestore();
+    });
+
+    it("fails closed on a MISSING row: a foreign caller whose target's pipe still accepts appends gets PIPE_NOT_FOUND and nothing is appended", async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      const out = await h.handler(dispatch, otherAppCtx);
+      expect(out).toMatchObject({ ok: false, code: 'PIPE_NOT_FOUND' });
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(0);
+    });
+
+    it("fails closed on a store that THROWS: PIPE_NOT_FOUND, nothing appended, and the refusal is named", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      vi.spyOn(store, 'get').mockRejectedValue(new Error('throttled'));
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      const out = await h.handler(dispatch, otherAppCtx);
+      expect(out).toMatchObject({ ok: false, code: 'PIPE_NOT_FOUND' });
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(0);
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith('[ggui] runtime_ownership_unverified '));
+      expect(line).toBeDefined();
+      expect(JSON.parse(String(line).slice('[ggui] runtime_ownership_unverified '.length))).toEqual({
+        tool: 'ggui_runtime_submit_action',
+        sessionId,
+        callerAppId: 'app_other',
+        reason: 'read-failed',
+      });
+      warn.mockRestore();
+    });
+
+    it("still pipes a dispatch from the session's own app (control)", async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      await consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect((await consumer.consumeAndClear(sessionId, 50)).events).toHaveLength(1);
+    });
   });
 
   // ggui#1358 step 2 — the relay validates `actionData` against the card's

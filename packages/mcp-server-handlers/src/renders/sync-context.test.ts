@@ -209,23 +209,65 @@ describe('createGguiSyncContextHandler', () => {
       expect(out.code).toBe('SESSION_NOT_FOUND');
     });
 
-    it('rejects cross-app snapshot with TENANT_MISMATCH', async () => {
-      const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
+    // ggui#1479 — the decision is the caller's own app (ctx.appId) against
+    // the session's; the request's declared `appId` is accepted (older
+    // runtimes send it) and never decides.
+    it("writes when the caller's app owns the session, whatever app the request declares (ggui#1479)", async () => {
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1', contextSpec: { note: { schema: { type: 'string' } } } });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
-        {
-          sessionId,
-          appId: 'app-OTHER',
-          snapshot: {},
-        },
-        // Note: handler reads the appId off the wire payload (the
-        // bootstrap-captured appId), NOT off ctx — app-scope gate
-        // compares wire-appId to render-appId.
+        { sessionId, appId: 'app-OTHER', snapshot: { note: 'mine' } },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.ok).toBe(false);
-      if (out.ok) throw new Error('expected reject');
-      expect(out.code).toBe('TENANT_MISMATCH');
+      expect(out).toEqual({ ok: true });
+      const stored = await renderStore.get(sessionId);
+      expect(stored?.render.type === 'component' ? stored.render.contextSnapshot : undefined).toEqual({ note: 'mine' });
+    });
+
+    // ggui#1479 — the gate is the caller's own app (ctx.appId), never the
+    // app the request declares.
+    it("answers another app's credential that declares the owning app exactly as an unknown session, and leaves the snapshot untouched (ggui#1479)", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1', contextSpec: { note: { schema: { type: 'string' } } }, initialSnapshot: { note: 'mine' } });
+      const h = createGguiSyncContextHandler({ renderStore });
+      const out = await h.handler(
+        { sessionId, appId: 'app-1', snapshot: { note: 'forged' } },
+        { appId: 'app-OTHER', requestId: 'r1' },
+      );
+      const unknown = await createGguiSyncContextHandler({ renderStore: new InMemoryGguiSessionStore() }).handler(
+        { sessionId, appId: 'app-1', snapshot: { note: 'forged' } },
+        { appId: 'app-OTHER', requestId: 'r1' },
+      );
+      expect(unknown).toMatchObject({ ok: false, code: 'SESSION_NOT_FOUND' });
+      expect(out).toEqual(unknown);
+      const stored = await renderStore.get(sessionId);
+      expect(stored?.render.type === 'component' ? stored.render.contextSnapshot : undefined).toEqual({ note: 'mine' });
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith('[ggui] runtime_cross_app_refused '));
+      expect(line).toBeDefined();
+      expect(JSON.parse(String(line).slice('[ggui] runtime_cross_app_refused '.length))).toEqual({
+        tool: 'ggui_runtime_sync_context',
+        sessionId,
+        callerAppId: 'app-OTHER',
+        ownerAppId: 'app-1',
+      });
+      warn.mockRestore();
+    });
+
+    it("answers another app's credential that declares its own app exactly as an unknown session, and leaves the snapshot untouched (ggui#1479)", async () => {
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1', contextSpec: { note: { schema: { type: 'string' } } }, initialSnapshot: { note: 'mine' } });
+      const h = createGguiSyncContextHandler({ renderStore });
+      const crossApp = await h.handler(
+        { sessionId, appId: 'app-OTHER', snapshot: { note: 'forged' } },
+        { appId: 'app-OTHER', requestId: 'r1' },
+      );
+      const unknown = await createGguiSyncContextHandler({ renderStore: new InMemoryGguiSessionStore() }).handler(
+        { sessionId, appId: 'app-OTHER', snapshot: { note: 'forged' } },
+        { appId: 'app-OTHER', requestId: 'r1' },
+      );
+      expect(unknown).toMatchObject({ ok: false, code: 'SESSION_NOT_FOUND' });
+      expect(crossApp).toEqual(unknown);
+      const stored = await renderStore.get(sessionId);
+      expect(stored?.render.type === 'component' ? stored.render.contextSnapshot : undefined).toEqual({ note: 'mine' });
     });
   });
 

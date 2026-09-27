@@ -79,7 +79,8 @@ import {
   type ActiveConsumerRegistry,
   type StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
-import { defineHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
+import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 import { assertActionContract } from './assert-action-contract.js';
 import { recordCommittedOneShot } from './record-committed-one-shot.js';
 
@@ -263,24 +264,51 @@ export interface GguiSubmitActionHandlerDeps {
  * is named on one warn line, never allowed to fail the dispatch.
  */
 /**
- * Read the dispatch's render row for the `actionSpec` gate (ggui#1358).
- * `null` = no such render; `undefined` = no store, or the store failed to
- * read (named on one warn line) — either way there is no spec to enforce.
+ * The answer for a dispatch whose session has no pipe — and, ggui#1479, for
+ * one whose ownership is not proven: one shape for every case, so the
+ * refusal reveals neither that the session exists nor who owns it.
+ */
+function pipeNotFound(sessionId: string): UserActionRejected {
+  return {
+    ok: false,
+    code: 'PIPE_NOT_FOUND',
+    message: `submit_action: no pending-events pipe for sessionId "${sessionId}". The GguiSession may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
+  };
+}
+
+/**
+ * What the dispatch's render-row read found (ggui#1479). Four distinct
+ * facts, so "no store configured" is never confused with "the store could
+ * not be read": the app-scope gate passes only `no-store` (a store-less
+ * server keeps no per-app session rows to check) and a `row` of the caller's own
+ * app, and FAILS CLOSED on `missing` and `read-failed`.
+ */
+type GateRead =
+  | { readonly kind: 'no-store' }
+  | { readonly kind: 'row'; readonly stored: StoredGguiSession }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'read-failed' };
+
+/**
+ * Read the dispatch's render row — for the app-scope gate (ggui#1479) and,
+ * once that passes, the `actionSpec` gate (ggui#1358). A failed read is named
+ * on one warn line.
  */
 async function readStoredRenderForGate(
   deps: GguiSubmitActionHandlerDeps,
   sessionId: string,
-): Promise<StoredGguiSession | null | undefined> {
+): Promise<GateRead> {
   const store = deps.renderStore;
-  if (store === undefined) return undefined;
+  if (store === undefined) return { kind: 'no-store' };
   try {
-    return await store.get(sessionId);
+    const stored = await store.get(sessionId);
+    return stored === null ? { kind: 'missing' } : { kind: 'row', stored };
   } catch (err) {
     deps.logger?.warn?.('submit_action_gate_store_read_failed', {
       sessionId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return undefined;
+    return { kind: 'read-failed' };
   }
 }
 
@@ -326,7 +354,7 @@ export function createGguiSubmitActionHandler(
         visibility: ['app'] as const,
       },
     },
-    async handler(input): Promise<UserActionOutput> {
+    async handler(input, ctx: HandlerContext): Promise<UserActionOutput> {
       // Two-tier validation: zod for top-level field presence + types,
       // then `isGguiSubmitActionInput` for per-kind payload narrowing
       // (same source of truth callers use elsewhere — single point of
@@ -396,11 +424,27 @@ export function createGguiSubmitActionHandler(
         // one warn line and the dispatch passes ungated: the card's own
         // validator already refused what this gate refuses, and an
         // unreadable store must not turn every gesture into a refusal.
-        const stored = await readStoredRenderForGate(deps, env.sessionId);
+        // App-scope gate (ggui#1479): a dispatch writes only to a session the
+        // caller's own app (`ctx.appId`) is proven to own. It FAILS CLOSED —
+        // a missing row or a store that could not be read answers exactly as
+        // a session with no pipe, as does a row another app owns — before
+        // the contract gate, the append, the ledger write and the spend. An
+        // honest gesture refused here falls through to `ui/message`, so it
+        // degrades rather than being lost. Only a store-less server, which
+        // keeps no per-app session rows, skips the check.
+        const read = await readStoredRenderForGate(deps, env.sessionId);
+        if (read.kind === 'missing') return pipeNotFound(env.sessionId);
+        if (read.kind === 'read-failed') {
+          logOwnershipUnverified('ggui_runtime_submit_action', env.sessionId, ctx.appId, 'read-failed');
+          return pipeNotFound(env.sessionId);
+        }
+        if (read.kind === 'row' && read.stored.appId !== ctx.appId) {
+          logCrossAppRefused('ggui_runtime_submit_action', env.sessionId, ctx.appId, read.stored.appId);
+          return pipeNotFound(env.sessionId);
+        }
+        const stored = read.kind === 'row' ? read.stored : undefined;
         const activeActionSpec =
-          stored !== null && stored !== undefined && stored.render.type === 'component'
-            ? stored.render.actionSpec
-            : undefined;
+          stored !== undefined && stored.render.type === 'component' ? stored.render.actionSpec : undefined;
         try {
           assertActionContract(activeActionSpec, {
             action: dispatchPayload.intent,
@@ -559,11 +603,7 @@ export function createGguiSubmitActionHandler(
             err instanceof PendingPipeNotFoundError ||
             (err instanceof Error && err.name === 'PendingPipeNotFoundError')
           ) {
-            return {
-              ok: false,
-              code: 'PIPE_NOT_FOUND',
-              message: `submit_action: no pending-events pipe for sessionId "${env.sessionId}". The GguiSession may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
-            };
+            return pipeNotFound(env.sessionId);
           }
           // Non-pipe-class error: still surface as PIPE_NOT_FOUND so
           // the iframe falls through gracefully; the operator sees the

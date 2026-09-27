@@ -66,7 +66,8 @@ import type {
   GguiSessionStore,
   RenderIdentityStore,
 } from '@ggui-ai/mcp-server-core';
-import { defineHandler } from '../types.js';
+import { defineHandler, type HandlerContext } from '../types.js';
+import { logCrossAppRefused } from './cross-app-refused.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
@@ -98,6 +99,10 @@ const inputSchema = {
 
 const outputSchema = {
   ok: z.boolean(),
+  // `TENANT_MISMATCH` is no longer emitted (ggui#1479: a session another app
+  // owns answers `SESSION_NOT_FOUND`). It stays declared for one release so
+  // a host holding this release's `tools/list` still accepts it from a
+  // previous-release server during a rolling deploy.
   code: z
     .enum([
       'SESSION_NOT_FOUND',
@@ -158,7 +163,7 @@ export function createGguiSyncContextHandler(
     _meta: {
       ui: { visibility: ['app'] as const },
     },
-    async handler(input): Promise<SyncContextOutput> {
+    async handler(input, ctx: HandlerContext): Promise<SyncContextOutput> {
       const parsed = z.object(inputSchema).safeParse(input);
       if (!parsed.success) {
         return {
@@ -169,7 +174,9 @@ export function createGguiSyncContextHandler(
             .join('; ')}`,
         };
       }
-      const { sessionId, appId, snapshot } = parsed.data;
+      // The declared `appId` is accepted (older runtimes send it) and never
+      // decides: the app gate below is the caller's own app (ggui#1479).
+      const { sessionId, snapshot } = parsed.data;
 
       // Bound the snapshot. contextSpec is observable state for the
       // agent, NOT content storage. Reject (not truncate) so authors
@@ -185,22 +192,17 @@ export function createGguiSyncContextHandler(
       }
 
       const stored = await deps.renderStore.get(sessionId);
-      if (!stored) {
+      // App-scope gate (ggui#1479): a session writes only for the caller's
+      // own app (`ctx.appId`, the proved identity), never for the app the
+      // request declares. A session another app owns answers exactly as a
+      // session that does not exist — no existence or ownership oracle —
+      // and the refusal is named on one line (ids only, no payload).
+      if (!stored || stored.appId !== ctx.appId) {
+        if (stored) logCrossAppRefused('ggui_runtime_sync_context', sessionId, ctx.appId, stored.appId);
         return {
           ok: false,
           code: 'SESSION_NOT_FOUND',
           message: `render "${sessionId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
-        };
-      }
-      // App-scope gate. Without this, a malicious iframe (or a buggy
-      // bootstrap that captured a stale appId) could write context
-      // onto a render it doesn't own. Match the appId carried on
-      // the bootstrap against the render's appId; mismatch = drop.
-      if (stored.appId !== appId) {
-        return {
-          ok: false,
-          code: 'TENANT_MISMATCH',
-          message: `render "${sessionId}" is owned by a different app — request declared "${appId}" but render is bound to "${stored.appId}".`,
         };
       }
       // mcpApps locator renders have no contextSpec — they're
