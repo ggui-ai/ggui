@@ -85,7 +85,15 @@ export function resolveCriteriaBlock(args: {
 }
 
 /** The judge's prompt block for the selected `judge` rows; empty when none is selected. */
-export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSelectionResult): string {
+/**
+ * The inline chat card is sized to its content by the host (its box grows and shrinks with the card; a
+ * `maxHeight` caps and scrolls), so the `xs-chat-card` frame's empty region under the card belongs to
+ * the host, never to the card. Composition and space criteria are judged INSIDE the card's content
+ * extent on that canvas; every other canvas is a fixed box the card must inhabit.
+ */
+export const CHAT_CARD_EXTENT_LINE =
+  "This frame is an inline chat card the host sizes to its content: judge composition and space INSIDE the card's own extent, never the empty region beneath it in the viewport — that region belongs to the host, not the card.";
+export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSelectionResult, canvas?: CriteriaContext['canvas']): string {
   const byId = new Map<string, BankRow>(bankRows(bank).map((r) => [r.id, r]));
   const asked = selected.selection.map((s) => byId.get(s.id)).filter((r): r is BankRow => r !== undefined && r.evaluation === 'judge');
   if (asked.length === 0) return '';
@@ -93,6 +101,7 @@ export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSe
   return (
     '## Criteria — answer each one from the FRAME only\n' +
     'Read these off the screenshot. Never infer them from the request, the styling profile or any direction text above.\n' +
+    (canvas === 'xs-chat-card' ? `${CHAT_CARD_EXTENT_LINE}\n` : '') +
     `${lines.join('\n')}\n` +
     'Add to your JSON a top-level "criteria" array with exactly these ids: ' +
     '[{ "id": "<id>", "verdict": "pass" | "fail" | "n/a", "evidence": "<one sentence naming the region or element you read it from>" }]. ' +

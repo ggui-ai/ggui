@@ -1059,7 +1059,7 @@ export async function runVisualEvaluationDetailed(
       const criteriaSelected =
         context.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(context.criteria.bank, criteriaContext) : undefined;
       const criteriaBlock =
-        context.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected) : '';
+        context.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, canvas) : '';
       const answers = await Promise.all(
         Array.from({ length: k }, () =>
           judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas, criteriaBlock),
@@ -1332,7 +1332,7 @@ export async function judgeStoredCapture(
   const criteriaSelected =
     input.criteria !== undefined && criteriaContext !== undefined ? selectCriteria(input.criteria.bank, criteriaContext) : undefined;
   const criteriaBlock =
-    input.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected) : '';
+    input.criteria !== undefined && criteriaSelected !== undefined ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected, canvas) : '';
   const answers = await Promise.all(
     Array.from({ length: k }, () => judgeAndParse(judge, config, model, png, input.originalPrompt, profileBlock, canvas, criteriaBlock)),
   );

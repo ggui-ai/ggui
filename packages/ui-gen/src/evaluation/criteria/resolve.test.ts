@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CriteriaContext } from '../types-public.js';
 import { parseCriteriaBank } from './bank.js';
-import { buildCriteriaJudgeBlock, resolveCriteriaBlock } from './resolve.js';
+import { CHAT_CARD_EXTENT_LINE, buildCriteriaJudgeBlock, resolveCriteriaBlock } from './resolve.js';
 import { selectCriteria } from './select.js';
 
 const bank = parseCriteriaBank({
@@ -69,6 +69,10 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     expect(block).not.toContain('comp.fit');
     expect(block).not.toContain('comp.void');
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [] })).toBe('');
+    // the inline chat card is host-sized: the block says to judge inside the card's extent on that canvas only
+    expect(buildCriteriaJudgeBlock(bank, selected, 'xs-chat-card')).toContain(CHAT_CARD_EXTENT_LINE);
+    expect(buildCriteriaJudgeBlock(bank, selected, 'md')).not.toContain(CHAT_CARD_EXTENT_LINE);
+    expect(block).not.toContain(CHAT_CARD_EXTENT_LINE);
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [{ id: 'comp.fit', source: 'static', reason: 'static' }] })).toBe('');
   });
 });
