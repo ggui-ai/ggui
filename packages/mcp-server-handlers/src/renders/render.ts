@@ -1017,8 +1017,10 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * OSS default: `randomUUID()` (no prefix). Hosted impls that need
    * a typed prefix (e.g. `rend_<uuid>`) supply this dep so the prefix
    * convention propagates without forking the factory's id-minting
-   * site. Called ONLY on the create path — `target.sessionId`
-   * resolution + reuse skip this entirely.
+   * site. Called whenever the handler mints a fresh id: when the
+   * handshake carries no `target.sessionId`, or when that id's row
+   * exists but is not visible to the caller (ggui#1484). A visible
+   * target (reuse) and a target no row backs (kept verbatim) skip it.
    */
   readonly sessionIdFactory?: () => string;
 }
@@ -1748,9 +1750,14 @@ export function createGguiRenderHandler(
     // suggest reusing an existing render via `target.sessionId` (the
     // cache / update path); absent ⇒ mint a fresh id. Reuse only
     // counts when the existing render is visible to the caller
-    // (same appId, and same userId when the stored row carries one) —
-    // cross-app / cross-user id collisions fall back to mint.
+    // (same appId, and same userId when the stored row carries one).
+    // A requested id whose row exists but is NOT visible — another
+    // app's or another subject's session — is never reused and never
+    // written: it falls back to a fresh id (ggui#1484). A requested id
+    // that no row backs is kept, so a negotiator can pre-assign one.
     const requestedId = handshakeRecord.target.sessionId;
+    const mintSessionId = (): string =>
+      deps.sessionIdFactory ? deps.sessionIdFactory() : randomUUID();
     let sessionId: string;
     let action: RenderOutput['action'];
 
@@ -1760,13 +1767,11 @@ export function createGguiRenderHandler(
         sessionId = existing.id;
         action = 'reuse';
       } else {
-        sessionId = requestedId;
+        sessionId = existing ? mintSessionId() : requestedId;
         action = 'create';
       }
     } else {
-      sessionId = deps.sessionIdFactory
-        ? deps.sessionIdFactory()
-        : randomUUID();
+      sessionId = mintSessionId();
       action = 'create';
     }
     attempt.sessionId = sessionId;

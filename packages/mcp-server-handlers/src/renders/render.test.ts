@@ -355,6 +355,8 @@ function buildRecord(opts: {
   readonly matchedBlueprint?: HandshakeRecord['matchedBlueprint'];
   /** Agreed contract for the record. Defaults to {@link CONTRACT}. */
   readonly contract?: DataContract;
+  /** Routing hint a negotiator set (the reuse path). Defaults to `{}`. */
+  readonly target?: HandshakeRecord['target'];
 }): HandshakeRecord {
   const contract = opts.contract ?? CONTRACT;
   return {
@@ -365,7 +367,7 @@ function buildRecord(opts: {
       intent: 'a test card',
       blueprintDraft: { contract },
     },
-    target: {},
+    target: opts.target ?? {},
     suggestion: {
       origin: opts.origin,
       rationale: 'test',
@@ -616,6 +618,92 @@ async function buildColdGenHarness(extraOpts: {
     handshakeId,
   };
 }
+
+// ggui#1484 — a negotiator's `target.sessionId` is reused only when that
+// session is visible to the caller (same app, and same subject when the row
+// has one). A requested id whose row exists but is NOT visible — another
+// app's session — is never reused and never written: the render mints a
+// fresh id, as the reuse block's own comment has always said.
+describe('createGguiRenderHandler — a requested session id reused only when visible (ggui#1484)', () => {
+  async function seedForeignRow(store: InMemoryGguiSessionStore, id: string): Promise<void> {
+    const now = Date.now();
+    await store.commit({
+      appId: 'app-someone-else',
+      render: {
+        id,
+        appId: 'app-someone-else',
+        type: 'component',
+        componentCode: 'export default function Theirs() { return null; }',
+        eventSequence: 0,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60 * 60 * 1000,
+      },
+    });
+  }
+
+  it("mints a fresh id when the requested session belongs to another app, and leaves that app's render untouched", async () => {
+    const { harness } = await buildColdGenHarness();
+    const foreignId = 'render_foreign-collision-1';
+    await seedForeignRow(harness.renderStore, foreignId);
+    const handshakeId = 'hs-target-foreign';
+    await seedHandshake(
+      harness.handshakeStore,
+      handshakeId,
+      buildRecord({ handshakeId, origin: 'agent', target: { sessionId: foreignId } }),
+    );
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.sessionId).not.toBe(foreignId);
+    const theirs = await harness.renderStore.get(foreignId);
+    expect(theirs?.appId).toBe('app-someone-else');
+    expect(theirs?.render.type === 'component' ? theirs.render.componentCode : undefined).toBe(
+      'export default function Theirs() { return null; }',
+    );
+  });
+
+  it("reuses the requested id when the caller's own app owns the session — control", async () => {
+    const { harness } = await buildColdGenHarness();
+    const ownId = 'render_own-reuse-1';
+    const now = Date.now();
+    await harness.renderStore.commit({
+      appId: APP_ID,
+      render: {
+        id: ownId,
+        appId: APP_ID,
+        type: 'component',
+        componentCode: 'export default function Mine() { return null; }',
+        eventSequence: 0,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60 * 60 * 1000,
+      },
+    });
+    const handshakeId = 'hs-target-own';
+    await seedHandshake(
+      harness.handshakeStore,
+      handshakeId,
+      buildRecord({ handshakeId, origin: 'agent', target: { sessionId: ownId } }),
+    );
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.sessionId).toBe(ownId);
+  });
+
+  it('keeps a requested id that no row backs — a negotiator may pre-assign a fresh id — control', async () => {
+    const { harness } = await buildColdGenHarness();
+    const freshId = 'render_preassigned-1';
+    const handshakeId = 'hs-target-fresh';
+    await seedHandshake(
+      harness.handshakeStore,
+      handshakeId,
+      buildRecord({ handshakeId, origin: 'agent', target: { sessionId: freshId } }),
+    );
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.sessionId).toBe(freshId);
+  });
+});
 
 describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
   it('(a) surfaces blueprintId / contractHash / variantKey / cache and survives renderOutputSchema.parse', async () => {
