@@ -28,6 +28,8 @@ import {
   InMemoryAuthAdapter,
   InMemoryThreadStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import { SqliteThreadStore } from '@ggui-ai/mcp-server-core/sqlite';
+import type { ThreadStore } from '@ggui-ai/mcp-server-core';
 import { createGguiServer, type GguiServer } from './server.js';
 
 interface BootedFixture {
@@ -704,5 +706,76 @@ describe('thread transport — SSE /threads/:id/stream', () => {
     const events = await collectPromise;
     expect(events).toHaveLength(1);
     expect((events[0]!.data as { message: { seq: number } }).message.seq).toBe(1);
+  });
+});
+
+// ── Text block `phase` through the thread surface (ggui#1441) ─────────
+
+/**
+ * A text block's `phase` says what the text IS in the turn: `"interim"` is
+ * narration between tool calls, absent or any other value is answer text
+ * (`textBlockSchema` in `@ggui-ai/protocol`). The thread surface keeps
+ * message blocks opaque (`blocks: unknown[]`, never parsed against the
+ * content-block schema), so a block round-trips as it was written: through
+ * `POST /threads/:id/messages`, `GET /threads/:id/messages` and the SSE
+ * `thread-message` frame, on both shipped stores.
+ *
+ * N−1, both ways: the previous release's payload (no `phase`) comes back
+ * unchanged, `"interim"` is kept, and a value this release does not
+ * recognize is kept too — a reader decides what it means, the thread never
+ * refuses it. The surface adds no block validation of its own, so it does
+ * not refuse a non-string `phase` either: refusing would make the thread
+ * door stricter than the release before it.
+ */
+describe.each([
+  ['in-memory', (): ThreadStore => new InMemoryThreadStore()],
+  ['sqlite', (): ThreadStore => new SqliteThreadStore({ filename: ':memory:' })],
+])('thread transport — text block phase round-trips (ggui#1441, %s store)', (_name, makeStore) => {
+  let fx: BootedFixture;
+  beforeEach(async () => {
+    fx = await boot({
+      auth: new InMemoryAuthAdapter({ devAllowAll: true }),
+      threads: { store: makeStore() },
+    });
+  });
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  const CASES = [
+    ['the previous release (no phase)', { type: 'text', text: 'Here is your booking.' }],
+    ['interim narration', { type: 'text', text: 'Looking up the booking…', phase: 'interim' }],
+    ['a value this release does not recognize', { type: 'text', text: 'Done.', phase: 'summary' }],
+  ] as const;
+
+  it.each(CASES)('%s: POST, GET and the SSE frame all carry the block as written', async (_label, block) => {
+    const created = await call(fx.url, 'POST', '/threads', 'dev', { appId: 'app-1' });
+    expect(created.status).toBe(201);
+    const { id } = created.json as { id: string };
+
+    const blocks = [block, { type: 'tool_use', id: 'tu_1', name: 'lookup', input: {} }];
+    const posted = await call(fx.url, 'POST', `/threads/${id}/messages`, 'dev', {
+      key: 'k1',
+      authorRole: 'agent',
+      kind: 'text',
+      blocks,
+      textPreview: block.text,
+    });
+    expect(posted.status).toBe(201);
+    expect((posted.json as { blocks: unknown[] }).blocks).toEqual(blocks);
+
+    const listed = await call(fx.url, 'GET', `/threads/${id}/messages`, 'dev');
+    expect(listed.status).toBe(200);
+    const page = listed.json as { messages: Array<{ blocks: unknown[] }> };
+    expect(page.messages[0]!.blocks).toEqual(blocks);
+
+    const resp = await fetch(`${fx.url}/threads/${id}/stream`, {
+      headers: { authorization: 'Bearer dev' },
+    });
+    expect(resp.status).toBe(200);
+    const events = await collectSseEvents(resp, 1);
+    const frame = events[0]!.data as { type: string; message: { blocks: unknown[] } };
+    expect(frame.type).toBe('thread-message');
+    expect(frame.message.blocks).toEqual(blocks);
   });
 });

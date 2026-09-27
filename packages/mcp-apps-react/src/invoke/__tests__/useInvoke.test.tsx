@@ -139,6 +139,40 @@ describe('useInvoke', () => {
     expect(result.current.error).toBeNull();
   });
 
+  // ggui#1441 — a text block's `phase` ("interim" = narration between tool
+  // calls; absent or any other value = answer text) survives the client: the
+  // event parse keeps it (`textBlockSchema`) and the delta merge spreads the
+  // block rather than rebuilding it. N−1: the previous release's block (no
+  // phase) stays without one, and an unrecognized value is kept, not refused.
+  it('keeps a text block\'s phase through content_block_start and its text deltas (ggui#1441)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        { type: 'message_start', message: { id: 'msg_p', role: 'assistant', model: 'test' } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '', phase: 'interim' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Looking up ' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'the booking…' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 't1', name: 'lookup', input: {} } },
+        { type: 'content_block_stop', index: 1 },
+        { type: 'content_block_start', index: 2, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: 'Here it is.' } },
+        { type: 'content_block_stop', index: 2 },
+        { type: 'content_block_start', index: 3, content_block: { type: 'text', text: 'Done.', phase: 'summary' } },
+        { type: 'content_block_stop', index: 3 },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { input_tokens: 1, output_tokens: 1 } },
+        { type: 'message_stop' },
+      ]),
+    );
+    const { result } = renderHook(() => useInvoke(), { wrapper: wrap(makeAppConfig()) });
+    await act(async () => {
+      await result.current.send('where is my booking');
+    });
+    const assistant = result.current.messages[1];
+    expect(assistant?.content[0]).toEqual({ type: 'text', text: 'Looking up the booking…', phase: 'interim' });
+    expect(assistant?.content[2]).toEqual({ type: 'text', text: 'Here it is.' });
+    expect(assistant?.content[3]).toEqual({ type: 'text', text: 'Done.', phase: 'summary' });
+  });
+
   it('forwards conversation history on the second turn (excluding the in-flight assistant)', async () => {
     fetchMock
       .mockResolvedValueOnce(
