@@ -64,7 +64,7 @@ overrides:
   metro-runtime@0.83: ^0.83.8
   metro-source-map@0.83: ^0.83.8
   immutable@<3.8.3: ^3.8.3
-  '@guuey/mcp-apps-host': 0.29.0
+  '@guuey/mcp-apps-host': 0.30.0
   '@a2a-js/sdk': 0.3.14
   '@adobe/css-tools': 4.5.0
   '@anthropic-ai/bedrock-sdk': 0.33.3
@@ -192,8 +192,8 @@ overrides:
   '@esbuild/win32-x64@0.27.x': 0.27.7
   '@esbuild/win32-x64@0.28.x': 0.28.2
   '@google-cloud/storage': 7.21.0
-  '@guuey/mcp-apps-host@0.29.x': 0.29.0
-  '@guuey/threads': 0.29.0
+  '@guuey/mcp-apps-host@0.30.x': 0.30.0
+  '@guuey/threads': 0.30.0
   '@hono/node-server': 2.1.0
   '@huggingface/jinja': 0.5.9
   '@img/sharp-freebsd-wasm32': 0.35.4
@@ -273,7 +273,7 @@ overrides:
   '@rollup/rollup-win32-ia32-msvc': 4.62.4
   '@rollup/rollup-win32-x64-gnu': 4.62.4
   '@rollup/rollup-win32-x64-msvc': 4.62.4
-  '@silverprotocol/core': 0.9.0
+  '@silverprotocol/core': 0.11.0
   '@sinclair/typebox': 0.27.12
   '@smithy/core': 3.32.0
   '@smithy/credential-provider-imds': 4.4.16
@@ -446,17 +446,17 @@ importers:
         specifier: workspace:*
         version: link:../../packages/protocol
       '@guuey/mcp-apps-host':
-        specifier: 0.29.0
-        version: 0.29.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+        specifier: 0.30.0
+        version: 0.30.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@guuey/threads':
-        specifier: 0.29.0
-        version: 0.29.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
+        specifier: 0.30.0
+        version: 0.30.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
       '@silverprotocol/core':
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: 0.11.0
+        version: 0.11.0
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -738,8 +738,8 @@ importers:
         version: 4.13.7
     devDependencies:
       '@silverprotocol/core':
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: 0.11.0
+        version: 0.11.0
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.4
@@ -1241,8 +1241,8 @@ importers:
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
       '@silverprotocol/core':
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: 0.11.0
+        version: 0.11.0
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -3208,8 +3208,8 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@ggui-ai/protocol@0.23.0':
-    resolution: {integrity: sha512-iRyDTbloCApVaQv72VU1EELxLgkxgH/up5EzLBlYYnLteBMif+8btij7LGPwmB1HbRLqwgvkCu2SqrlEDc2QvA==}
+  '@ggui-ai/protocol@0.24.0':
+    resolution: {integrity: sha512-Iin+EDAEd7gQz0TlwUm59dBaqEPFNIEdQMIZ3fXpYIp53DBalhh4PitYIA7FLExVmmYJD9P6c/e0jMk1Y9sWoA==}
     engines: {node: '>=22.0.0'}
 
   '@google-cloud/opentelemetry-cloud-monitoring-exporter@0.21.0':
@@ -3335,16 +3335,16 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@guuey/mcp-apps-host@0.29.0':
-    resolution: {integrity: sha512-xGO/bf/9+MiRRvBeyDLSsuClGZ7BncqVva6BXykgCsKRz1dJMBCum7ADSbqLfbuFVDwZU8xJZPpKAzu44jdS3w==}
+  '@guuey/mcp-apps-host@0.30.0':
+    resolution: {integrity: sha512-0mWElYlZYRBcekWfqweNck6RbvhvRIU/cu+YLsuGtgk2x4nsxgnFxJdq5a+0nyX3769NA2lw/RpUvrz93yXy7A==}
     peerDependencies:
       react: ^19.2.8
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@guuey/threads@0.29.0':
-    resolution: {integrity: sha512-OnbJIc08SLkqEz2deoG3e/cw+OKbQt/PFozxeR0PHoLyeKdCVVTi3p0vqkVCfgyftBia/QWW3jdTJDmAFAPdOA==}
+  '@guuey/threads@0.30.0':
+    resolution: {integrity: sha512-5pmupxs/UDYUyG3dDI/WuCJ020orgaVfKvs1hrXof2K8H637KxZTUDdDdyO/r+VAcvpbzKaH95x88UrSB8Vv9Q==}
     peerDependencies:
       vitest: '>=3.2.7 <5'
     peerDependenciesMeta:
@@ -4963,8 +4963,8 @@ packages:
     resolution: {integrity: sha512-qv7+G3J2cc6wwFj3yKvXOamzqhMwSk1ogPGmhpS8iXllcPrJaIIBA+4HbttlHVu1pqWTdmaCH/WE7UOC51kdoA==}
     engines: {node: ^20.17.0 || >=22.9.0}
 
-  '@silverprotocol/core@0.9.0':
-    resolution: {integrity: sha512-OMMC6Cax6fAik2KUSxqEIxoNRTN1zeaPeyxvFHRGisPJE5fpmwv+wrRrrlTyV26jzitLBCiSy0XQSBK8LVXKvQ==}
+  '@silverprotocol/core@0.11.0':
+    resolution: {integrity: sha512-0zUsswTusYxmKjnTdFAJFbu5ye6TNrPI1rk2J5hJF9XtFbkLxWl/i9Cm897NEIbJ8cpVIiWFkOkNnoc1UzKRQA==}
 
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==}
@@ -11263,7 +11263,7 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@ggui-ai/protocol@0.23.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ggui-ai/protocol@0.24.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       ajv: 8.20.0
@@ -11484,11 +11484,11 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@guuey/mcp-apps-host@0.29.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
+  '@guuey/mcp-apps-host@0.30.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
     dependencies:
-      '@ggui-ai/protocol': 0.23.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@ggui-ai/protocol': 0.24.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
-      '@silverprotocol/core': 0.9.0
+      '@silverprotocol/core': 0.11.0
     optionalDependencies:
       react: 19.2.8
     transitivePeerDependencies:
@@ -11496,10 +11496,10 @@ snapshots:
       - react-dom
       - zod
 
-  '@guuey/threads@0.29.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
+  '@guuey/threads@0.30.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
     dependencies:
-      '@guuey/mcp-apps-host': 0.29.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
-      '@silverprotocol/core': 0.9.0
+      '@guuey/mcp-apps-host': 0.30.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+      '@silverprotocol/core': 0.11.0
     optionalDependencies:
       vitest: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
     transitivePeerDependencies:
@@ -12043,7 +12043,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       mariadb: 3.5.4
     transitivePeerDependencies:
       - better-sqlite3
@@ -12096,7 +12096,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.19.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0)(sqlite3@5.1.7)
       pg: 8.19.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
@@ -13111,7 +13111,7 @@ snapshots:
       '@sigstore/core': 3.2.1
       '@sigstore/protobuf-specs': 0.5.1
 
-  '@silverprotocol/core@0.9.0':
+  '@silverprotocol/core@0.11.0':
     dependencies:
       zod: 4.4.3
 
