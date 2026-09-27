@@ -17,9 +17,11 @@ import { z, type ZodRawShape } from 'zod';
 import { renderOutputSchema, type ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
+  createGguiAmendHandler,
   createGguiConsumeHandler,
   createGguiRuntimePullHandler,
   createGguiSubmitActionHandler,
+  createGguiUpdateHandler,
 } from '@ggui-ai/mcp-server-handlers/renders';
 import {
   InMemoryActiveConsumerRegistry,
@@ -1035,5 +1037,180 @@ describe('buildMcpServer — consume and submit_action log their session (#1395)
     } finally {
       await r.close();
     }
+  });
+});
+
+/**
+ * ggui#1474 — the mutation and render tools' lines carry the session they
+ * acted on, each with its own proof, so an instrument joins a reaction to
+ * its tap exactly instead of by app and time order:
+ *   1. amend / update — the session the shared mutation core app-scope-gated
+ *      before returning (a missing or cross-app session throws first), read
+ *      from the OUTPUT; the caller's input rides the error line as
+ *      `claimedSessionId`, a claim by name;
+ *   2. render — the session id this call minted for the caller's app, read
+ *      from the OUTPUT: on `rendered` and on `failed`; a refusal mints none
+ *      and logs none, and render's input names no session to claim. The id
+ *      is this call's, not proof that a row backs it (the handler swallows a
+ *      store commit rejection).
+ */
+describe('buildMcpServer — amend, update and render log their session (#1474)', () => {
+  const info = { name: 'test', version: '0.0.1' };
+
+  interface LogCall {
+    readonly event: string;
+    readonly fields: Record<string, unknown>;
+  }
+
+  function capturingLogger(calls: LogCall[]): Logger {
+    const logger: Logger = {
+      info: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      warn: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      error: (event, fields) => calls.push({ event, fields: fields ?? {} }),
+      debug: () => undefined,
+      child: () => logger,
+    };
+    return logger;
+  }
+
+  async function seededStore(sessionId: string, appId: string = baseCtx.appId): Promise<InMemoryGguiSessionStore> {
+    const store = new InMemoryGguiSessionStore();
+    const now = Date.now();
+    const render: ComponentGguiSession = {
+      id: sessionId,
+      appId,
+      type: 'component',
+      componentCode: 'export default () => null;',
+      eventSequence: 0,
+      createdAt: now,
+      lastActivityAt: now,
+      expiresAt: now + 60_000,
+    };
+    await store.commit({ render, appId });
+    return store;
+  }
+
+  async function invokedLines(
+    handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+    call: { name: string; arguments: Record<string, unknown> },
+  ): Promise<LogCall[]> {
+    const calls: LogCall[] = [];
+    const server = buildMcpServer(info, handlers, () => baseCtx, capturingLogger(calls));
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'session-log-1474', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      await client.callTool(call).catch(() => undefined);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+    return calls.filter((c) => c.event === 'tool_invoked');
+  }
+
+  const RENDERED = {
+    outcome: 'rendered',
+    sessionId: 'render_1474',
+    resourceUri: 'ui://ggui/render/render_1474/9a679f0634bac356',
+    action: 'create',
+    contractHash: '9a679f0634bac356',
+    blueprintId: 'bp_62c8adae-6405-4093-8a35-15f827a6f703',
+    variantKey: '44136fa355b3678a',
+    cache: { hit: false, llmCallsAvoided: 0, kind: 'cold', reason: 'cold: generated fresh' },
+  } as const;
+  const FAILED = {
+    outcome: 'failed',
+    sessionId: 'render_1474_failed',
+    action: 'create',
+    contractHash: '9a679f0634bac356',
+    blueprintId: '',
+    variantKey: '44136fa355b3678a',
+    cache: { hit: false, llmCallsAvoided: 0, kind: 'cold', reason: 'cold: generated fresh' },
+    error: { code: 'PRODUCTION_FAILED', message: 'generation failed' },
+  } as const;
+  const REFUSED = {
+    outcome: 'refused',
+    refusal: { code: 'hard_cap_exceeded', message: 'cap reached', fix: 'wait', retry: 'next-period', handshake: 'intact' },
+  } as const;
+
+  function renderReturning(result: object, opts: { readonly throws?: true } = {}): SharedHandler<ZodRawShape, ZodRawShape> {
+    return {
+      name: 'ggui_render',
+      description: 'render, fixed result',
+      inputSchema: { handshakeId: z.string() },
+      outputSchema: renderOutputSchema.shape,
+      outputEnvelopeSchema: renderOutputSchema,
+      async handler(): Promise<object> {
+        if (opts.throws === true) throw new Error('boom');
+        return result;
+      },
+    };
+  }
+
+  it('a successful amend carries the session it amended', async () => {
+    const store = await seededStore('render-amend-1474');
+    const invoked = await invokedLines([createGguiAmendHandler({ renderStore: store })], {
+      name: 'ggui_amend',
+      arguments: { sessionId: 'render-amend-1474', kind: 'merge', patch: { title: 'x' } },
+    });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_amend', outcome: 'success', sessionId: 'render-amend-1474' });
+  });
+
+  it('a successful update carries the session it updated', async () => {
+    const store = await seededStore('render-update-1474');
+    const invoked = await invokedLines([createGguiUpdateHandler({ renderStore: store })], {
+      name: 'ggui_update',
+      arguments: { sessionId: 'render-update-1474', kind: 'merge', patch: { title: 'y' } },
+    });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_update', outcome: 'success', sessionId: 'render-update-1474' });
+  });
+
+  it("an amend of another app's session logs the claim by name, never a sessionId", async () => {
+    const store = await seededStore('render-other-app', 'app-other');
+    const invoked = await invokedLines([createGguiAmendHandler({ renderStore: store })], {
+      name: 'ggui_amend',
+      arguments: { sessionId: 'render-other-app', kind: 'merge', patch: { title: 'x' } },
+    });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_amend', outcome: 'error', claimedSessionId: 'render-other-app' });
+    expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
+  });
+
+  it('a rendered result carries the session the render minted, read from the output', async () => {
+    const invoked = await invokedLines([renderReturning(RENDERED)], { name: 'ggui_render', arguments: { handshakeId: 'hs-1' } });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_render', outcome: 'success', sessionId: 'render_1474' });
+  });
+
+  it("a failed render's line carries the session it minted", async () => {
+    const invoked = await invokedLines([renderReturning(handlerFailure(FAILED, 'generation failed'))], {
+      name: 'ggui_render',
+      arguments: { handshakeId: 'hs-1' },
+    });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_render', sessionId: 'render_1474_failed' });
+  });
+
+  it('a refused render mints no session and logs none', async () => {
+    const invoked = await invokedLines([renderReturning(handlerFailure(REFUSED, 'hard_cap_exceeded: cap reached wait'))], {
+      name: 'ggui_render',
+      arguments: { handshakeId: 'hs-1' },
+    });
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
+    expect(invoked[0]?.fields).not.toHaveProperty('claimedSessionId');
+  });
+
+  it('a render that throws logs no claim — its input names no session', async () => {
+    const invoked = await invokedLines(
+      [renderReturning(RENDERED, { throws: true })],
+      { name: 'ggui_render', arguments: { handshakeId: 'hs-1' } },
+    );
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_render', outcome: 'error' });
+    expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
+    expect(invoked[0]?.fields).not.toHaveProperty('claimedSessionId');
   });
 });

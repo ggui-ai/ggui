@@ -281,8 +281,10 @@ function classifyFailurePayload(
 }
 
 /**
- * Per-session fields on the `tool_invoked` line of the three session-keyed
- * runtime tools (ggui#1377 for pull; ggui#1395 for consume and submit).
+ * Per-session fields on the `tool_invoked` line of the session-keyed tools:
+ * the three runtime tools (ggui#1377 for pull; ggui#1395 for consume and
+ * submit) and the mutation and render tools (ggui#1474 — amend, update,
+ * render), so an instrument joins a reaction to its tap by session.
  *
  * In a composition that wires no logger into these handlers, this line is
  * their whole trace. ggui#1376 had to be read per app and minute; these
@@ -292,7 +294,7 @@ function classifyFailurePayload(
  * never a spread.
  *
  * What a `sessionId` on a SUCCESS line proves, per tool — never raw caller
- * input in any of the three:
+ * input in any of them:
  *   - pull and consume: a session the caller's app owns. Both throw on an
  *     unknown or cross-app session before they return (the visibility gate),
  *     so every success line of theirs qualifies.
@@ -303,6 +305,23 @@ function classifyFailurePayload(
  *     so the claim stops there. An audit kind (`openLink`,
  *     `requestDisplayMode`, an extension kind) touches no pipe and carries no
  *     session at all: its `sessionId` was never read by anything.
+ *   - amend and update: a session the caller's app owns, read from the
+ *     OUTPUT. Both run the shared mutation core, which app-scope-gates the
+ *     session (`renderStore.get` + an `appId` match) and throws
+ *     `GguiSessionNotFoundError` on a missing or cross-app one before any
+ *     return — so the output's `sessionId` is the gated one, including when
+ *     an in-process caller threads it through the context rather than the
+ *     input.
+ *   - render: the session id this call MINTED for the caller's app, read
+ *     from the OUTPUT (never caller input — render's input names no
+ *     session). A `rendered` result carries it, and so does a `failed` one
+ *     (on the in-result failure line); a `refused` result mints none. It
+ *     proves the id is this call's, NOT that a row backs it: the handler
+ *     swallows a render-store commit rejection (the placeholder, probe,
+ *     cache-hit and error-record commits, and the cold-generation success
+ *     commit, which then answers `failed`), so on those paths the id names
+ *     no row, or only a provisional placeholder — the claim stops there,
+ *     and a consumer that needs the row reads it from the store.
  *
  * Consume adds `eventCount`, `status`, `timeoutS` (the requested timeout; 0
  * when omitted, the handler's own default) and `aborted: true` when the
@@ -314,7 +333,14 @@ const SESSION_TOOLS: ReadonlySet<string> = new Set([
   'ggui_runtime_pull',
   'ggui_consume',
   'ggui_runtime_submit_action',
+  'ggui_amend',
+  'ggui_update',
+  'ggui_render',
 ]);
+
+/** ggui#1474 — session tools whose logged session is the OUTPUT's (the gated or committed one), not the input's. */
+const OUTPUT_SESSION_TOOLS: ReadonlySet<string> = new Set(['ggui_amend', 'ggui_update', 'ggui_render']);
+
 
 interface SessionLogFields {
   readonly sessionId?: string;
@@ -334,8 +360,8 @@ function sessionFields(
   ctx: HandlerContext,
 ): SessionLogFields {
   if (!SESSION_TOOLS.has(tool)) return {};
-  const sessionId = input['sessionId'];
-  if (typeof sessionId !== 'string') return {};
+  const sessionId = OUTPUT_SESSION_TOOLS.has(tool) ? output['sessionId'] : input['sessionId'];
+  if (typeof sessionId !== 'string' || sessionId === '') return {};
   if (tool === 'ggui_runtime_submit_action') {
     if (input['kind'] !== 'dispatch') return {};
     if (output['ok'] !== true) {
@@ -365,8 +391,10 @@ function sessionFields(
 const CLAIMED_SESSION_ID_MAX_CHARS = 128;
 
 /**
- * The caller's CLAIMED session on an `outcome: 'error'` line of the same
- * three tools (ggui#1395). A refused consume — unknown or cross-app
+ * The caller's CLAIMED session on an `outcome: 'error'` line of the session
+ * tools (ggui#1395; amend and update since ggui#1474). Render's input schema
+ * declares no `sessionId` and the MCP SDK strips undeclared keys before the
+ * handler runs, so a render line never carries a claim. A refused consume — unknown or cross-app
  * session, the visibility gate — is the one failure of the tap → consume
  * chain that is otherwise invisible per session. It is raw caller input,
  * the first on this line: named as a claim so it never reads as an owned
