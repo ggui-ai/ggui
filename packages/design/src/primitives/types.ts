@@ -793,6 +793,12 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
    * @default false
    */
   loading?: boolean;
+  /**
+   * The HTML button type. Defaults to `'button'`, so a Button inside a `<form>` never submits it on click:
+   * the ONE control that submits the form sets `type="submit"`; secondary controls keep the default.
+   * @default 'button'
+   */
+  type?: 'button' | 'submit' | 'reset';
   /** ReactNode rendered before children, inside the flex layout with `var(--ggui-spacing-2)` gap. */
   leftIcon?: ReactNode;
   /** ReactNode rendered after children, inside the flex layout with `var(--ggui-spacing-2)` gap. */

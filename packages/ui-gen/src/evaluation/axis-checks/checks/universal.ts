@@ -642,6 +642,48 @@ function runFixtureDefaultEcho(input: AxisCheckInput): EvalIssue[] {
   return issues;
 }
 
+// ── universal.form_submit_control (ggui#1443 — a form whose buttons cannot submit it) ──
+// The design `Button` defaults to `type="button"` (the safe default: no accidental
+// submits from secondary controls), so the control that submits a `<form onSubmit>`
+// must say `type="submit"`. A generated composer rendered its Send as a type-less
+// `Button` inside the form: clicking it did nothing, only Enter submitted, and the
+// card passed quality (#1398's dumps: 5 of 9 form cells, both arms). FAIL: a form
+// with buttons and no submitting control is a control that does not work. A form
+// without any button is not this check's claim; a form without `onSubmit` is not
+// read (nothing to submit to).
+const FORM_OPEN_RX = /<form\b[^<>]*\bonSubmit\s*=[^<>]*>/g;
+const CONTROL_TAG_RX = /<(?:Button|button|input)\b[^<>]*>/g;
+const SUBMIT_TYPE_RX = /\btype\s*=\s*(?:["']submit["']|\{\s*["']submit["']\s*\})/;
+/** Every `<form … onSubmit=…>…</form>` block in the source, verbatim (up to the first `</form>` after each opening tag). */
+export function submitForms(sourceCode: string): string[] {
+  const out: string[] = [];
+  for (const m of sourceCode.matchAll(FORM_OPEN_RX)) {
+    const start = m.index ?? 0;
+    const end = sourceCode.indexOf("</form>", start + m[0].length);
+    out.push(end === -1 ? sourceCode.slice(start) : sourceCode.slice(start, end + "</form>".length));
+  }
+  return out;
+}
+function runFormSubmitControl(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const issues: EvalIssue[] = [];
+  for (const form of submitForms(input.sourceCode)) {
+    const controls = [...form.matchAll(CONTROL_TAG_RX)].map((m) => m[0]);
+    if (controls.length === 0) continue;
+    if (controls.some((tag) => SUBMIT_TYPE_RX.test(tag))) continue;
+    const named = controls.find((tag) => /<Button\b/.test(tag)) ?? controls[0]!;
+    issues.push(
+      mkIssue(
+        "universal.form_submit_control",
+        `A <form onSubmit> renders ${controls.length} control(s) and none submits it: the design Button defaults to type="button", so clicking ${named.length > 60 ? `${named.slice(0, 57)}…` : named} does nothing — only Enter in a field submits.`,
+        'Give the control that submits this form type="submit" — a Button inside a form defaults to type="button" and never submits on click; keep type="button" on the others.',
+        "fail",
+      ),
+    );
+  }
+  return issues;
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.icon_name_known",
@@ -678,6 +720,12 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runTerminalActionUnguarded,
+  },
+  {
+    id: "universal.form_submit_control",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runFormSubmitControl,
   },
   {
     id: "universal.fixture_default_echo",
