@@ -9,6 +9,7 @@ export {
 } from './context';
 export { useAction } from './useAction';
 export { useActionSpent, type ActionSpentSource } from './action-spent';
+export { useActionPending, type ActionPendingSource } from './action-pending';
 export { useGguiContext } from './useGguiContext';
 export { useStream, type StreamResult } from './useStream';
 export { useContract, type InferredContractHooks, type ManualContractHooks } from './useContract';

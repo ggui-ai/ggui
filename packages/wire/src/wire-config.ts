@@ -28,6 +28,7 @@ import {
   ClientContractViolationError,
   validateOutboundActionEnvelope,
 } from './contract';
+import type { ActionPendingSource } from './action-pending';
 import type { ActionSpentSource } from './action-spent';
 import type { DispatchSuppressedInfo, WireConfig } from './context';
 import { payloadSignature } from './dispatch-dedup';
@@ -180,6 +181,20 @@ export interface BuildWireConfigOptions {
    */
   readonly spentInputsChanged?: (listener: () => void) => () => void;
   /**
+   * The host's notice that a frame for this session landed: a props update,
+   * an amend, a new render (ggui#1398). That frame is the agent's answer, so
+   * every action {@link BuiltWireConfig.actionPending} reads as pending stops
+   * being pending. Optional: without it, pending clears only at
+   * {@link actionPendingBoundMs}. Returns the unsubscribe.
+   */
+  readonly pendingInputsChanged?: (listener: () => void) => () => void;
+  /**
+   * How long a dispatched action reads as pending when no frame lands, so a
+   * host that never answers cannot leave a control frozen (ggui#1398).
+   * Default 20 000 ms.
+   */
+  readonly actionPendingBoundMs?: number;
+  /**
    * Validate the built envelope before emission. Defaults to wire's
    * own {@link validateOutboundActionEnvelope}. The iframe runtime
    * injects its precompiled-validator variant so the dispatch never
@@ -246,7 +261,11 @@ export interface BuildWireConfigOptions {
  * `useActionSpent` can read it. It is not a `WireConfig` member, so the
  * generation prompt's WireConfig reference does not change.
  */
-export type BuiltWireConfig = WireConfig & { readonly actionSpent: ActionSpentSource };
+export type BuiltWireConfig = WireConfig & {
+  readonly actionSpent: ActionSpentSource;
+  /** The card's in-flight actions (ggui#1398), provided through `ActionPendingContext` so `useActionPending` can read it. */
+  readonly actionPending: ActionPendingSource;
+};
 
 /**
  * Build a `WireConfig` over the shared dispatch/subscribe pipeline.
@@ -264,6 +283,9 @@ export type BuiltWireConfig = WireConfig & { readonly actionSpent: ActionSpentSo
  * `complete`) wire hooks consume. Reserved-channel late subscribers
  * are caught up synchronously from the bus's bounded replay ring.
  */
+/** How long a dispatched action reads as pending when no frame lands (ggui#1398). */
+const DEFAULT_ACTION_PENDING_BOUND_MS = 20_000;
+
 export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
   let internalSeq = 0;
   const nextClientSeq =
@@ -310,8 +332,46 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
   // the same lifetime and never released here.
   opts.spentInputsChanged?.(notifySpent);
 
+  // ggui#1398 — dispatched actions waiting for the agent's answer. Each
+  // pending name holds its bound timer; the session's next frame clears them
+  // all, since that frame is the answer.
+  const pendingBoundMs = opts.actionPendingBoundMs ?? DEFAULT_ACTION_PENDING_BOUND_MS;
+  const pending = new Map<string, ReturnType<typeof setTimeout>>();
+  const pendingListeners = new Set<() => void>();
+  const notifyPending = (): void => {
+    for (const listener of [...pendingListeners]) listener();
+  };
+  const markPending = (actionName: string): void => {
+    const previous = pending.get(actionName);
+    if (previous !== undefined) clearTimeout(previous);
+    pending.set(
+      actionName,
+      setTimeout(() => {
+        pending.delete(actionName);
+        notifyPending();
+      }, pendingBoundMs),
+    );
+    notifyPending();
+  };
+  const actionPending: ActionPendingSource = {
+    isPending: (actionName) => pending.has(actionName),
+    subscribe: (listener) => {
+      pendingListeners.add(listener);
+      return () => {
+        pendingListeners.delete(listener);
+      };
+    },
+  };
+  opts.pendingInputsChanged?.(() => {
+    if (pending.size === 0) return;
+    for (const timer of pending.values()) clearTimeout(timer);
+    pending.clear();
+    notifyPending();
+  });
+
   return {
     actionSpent,
+    actionPending,
     app: opts.app,
     render: opts.render,
     auth: opts.auth,
@@ -369,6 +429,7 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
         notifySpent();
       }
       opts.emitEnvelope(envelope);
+      markPending(actionName);
     },
     subscribe: (channelName, handler) => {
       return opts.streamBus.subscribe(channelName, (env) => {

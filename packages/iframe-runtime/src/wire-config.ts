@@ -75,7 +75,8 @@ export interface BuildRootWireConfigOptions {
   /**
    * The runtime's notice that the current render was replaced (a props
    * update, a later live frame), so the card's spent state is re-read at
-   * once (ggui#1223). Passed through as wire's `spentInputsChanged`.
+   * once (ggui#1223), and the card's in-flight dispatches clear (ggui#1398).
+   * Passed through as wire's `spentInputsChanged` and `pendingInputsChanged`.
    */
   readonly renderChanges?: (listener: () => void) => () => void;
   /** Handle to the renderer's WS manager; used for outbound `action` frames. */
@@ -223,6 +224,9 @@ export function buildRootWireConfig(
     },
     onActionSpecAbsent: nameUnenforceableOnce,
     ...(opts.renderChanges !== undefined ? { spentInputsChanged: opts.renderChanges } : {}),
+    // ggui#1398 — a replaced render is the session's next frame: the agent's
+    // answer, so every in-flight dispatch stops reading pending.
+    ...(opts.renderChanges !== undefined ? { pendingInputsChanged: opts.renderChanges } : {}),
     // ggui#1223 — the card's persisted spent `oneShot` names. A re-served card
     // boots a new iframe, so the guard's in-memory set starts empty; the
     // render's record says what this card already spent. It counts only when

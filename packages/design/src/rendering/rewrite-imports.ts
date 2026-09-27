@@ -107,6 +107,10 @@ export const WIRE_EXPORTS = [
   // its runtime's shim lacks fails at module link. A card generated to use it
   // must never meet a runtime without it.
   'useActionSpent',
+  // ggui#1398: whether a dispatched action is waiting for the agent's answer,
+  // as data. Served one release before the triad teaches it, for the same
+  // reason as `useActionSpent` above.
+  'useActionPending',
   // Provider component
   'GguiWireProvider',
 ] as const;

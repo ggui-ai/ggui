@@ -43,7 +43,7 @@ import type { AppTheme, GguiSession } from '@ggui-ai/protocol/wire';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
 import { GguiWireProvider, type BuiltWireConfig } from '@ggui-ai/wire';
-import { ActionSpentContext } from '@ggui-ai/wire/internal';
+import { ActionPendingContext, ActionSpentContext } from '@ggui-ai/wire/internal';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
   mountProvisional,
@@ -68,7 +68,9 @@ export interface RenderItemOptions {
    *  today's DynamicComponent fallback when no GguiRender parent is
    *  present). The config carries the card's `actionSpent` source
    *  (ggui#1223), and the component mounts inside `ActionSpentContext` too,
-   *  so `useActionSpent` reads the one-shot guard's own spent set. */
+   *  so `useActionSpent` reads the one-shot guard's own spent set; likewise
+   *  `actionPending` inside `ActionPendingContext` (ggui#1398), so
+   *  `useActionPending` reads the card's in-flight dispatches. */
   readonly scopedWireConfig: BuiltWireConfig | null;
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this render. */
@@ -357,7 +359,10 @@ export async function mountRender(
         ? mountedComponent
         : createElement(GguiWireProvider, {
             config,
-            children: createElement(ActionSpentContext.Provider, { value: config.actionSpent, children: mountedComponent }),
+            children: createElement(ActionSpentContext.Provider, {
+              value: config.actionSpent,
+              children: createElement(ActionPendingContext.Provider, { value: config.actionPending, children: mountedComponent }),
+            }),
           });
     return currentOpts.wrapOuter !== undefined
       ? currentOpts.wrapOuter(wireWrapped)

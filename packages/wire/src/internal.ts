@@ -10,6 +10,8 @@
  * `ActionSpentContext` (ggui#1223) is here for the same reason: the runtime
  * provides the card's spent state through it, and generated code reads that
  * state only through `useActionSpent` and cannot provide its own.
+ * `ActionPendingContext` (ggui#1398) likewise, read only through
+ * `useActionPending`.
  */
 export {
   claimConnectionWriter,
@@ -23,3 +25,4 @@ export {
   type ConnectionWriter,
 } from './connection-store';
 export { ActionSpentContext } from './action-spent';
+export { ActionPendingContext } from './action-pending';

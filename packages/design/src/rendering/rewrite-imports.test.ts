@@ -18,6 +18,16 @@ describe('rewriteImports — data-url mode', () => {
     expect(result).not.toContain('"react"');
   });
 
+  it('the @ggui-ai/wire shim serves the hooks declared a release before the triad teaches them (useActionSpent ggui#1223, useActionPending ggui#1398)', () => {
+    // The data-url shim exports ONLY the names in WIRE_EXPORTS; a card that
+    // imports one it lacks fails at module link in the browser. (The inline
+    // path resolves wire through a namespace proxy and would not notice.)
+    const result = rewriteImports(`import { useActionSpent, useActionPending } from "@ggui-ai/wire";`, opts);
+    const shim = decodeURIComponent(result.slice(result.indexOf('data:text/javascript,') + 'data:text/javascript,'.length));
+    expect(shim).toContain('export const useActionSpent = w.useActionSpent;');
+    expect(shim).toContain('export const useActionPending = w.useActionPending;');
+  });
+
   it('rewrites react/jsx-runtime to a data URL', () => {
     const code = `import { jsx } from "react/jsx-runtime";`;
     const result = rewriteImports(code, opts);
