@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { DataContract, JsonObject, AppGenerationProfile, AppTheme } from '@ggui-ai/protocol';
 import { parseAppGenerationProfileAtReadDoor, parseAppThemeAtReadDoor } from '@ggui-ai/protocol';
 import type { EvalResult, VisualEvalConfig, VisualEvaluationResult } from '@ggui-ai/ui-gen/evaluation';
-import { CANVAS_CLASSES, criteriaContextFor, parseCriteriaBank, type CriteriaBank, type CriteriaContextInput } from '@ggui-ai/ui-gen/evaluation';
+import { CANVAS_CLASSES, criteriaContextFor, cssTokensForAppTheme, parseCriteriaBank, type CriteriaBank, type CriteriaContextInput } from '@ggui-ai/ui-gen/evaluation';
 import { classifyAxes } from '@ggui-ai/ui-gen/classifier';
 import type { GenerationResult } from '@ggui-ai/ui-gen/harness/result-types';
 import type { DesignMode } from '@ggui-ai/ui-gen';
@@ -767,12 +767,15 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
         ? {
             criteria: {
               bank: inputs.criteria.bank,
+              // The SAME context the mint's in-loop round records for this card, so the two blocks carry one
+              // criteria set id: the tokens the card paints with (composed as the mint composes them, light) and
+              // the mint's shell — `chat` for the chat card, else `unknown` (the harness names only a chat shell).
               context: criteriaContextFor({
                 classification: classifyAxes({ contract: inputs.contract, prompt: inputs.prompt }),
                 contract: inputs.contract,
-                cssTokens: undefined,
+                cssTokens: judgedCssTokens({ ...(inputs.theme !== undefined ? { theme: inputs.theme } : {}), ...(inputs.themeId !== undefined ? { themeId: inputs.themeId } : {}) }, cssTokensForAppTheme),
                 profile: inputs.profile,
-                shell: inputs.mint.canvas === 'xs-chat-card' ? 'chat' : 'fullscreen',
+                shell: inputs.mint.canvas === 'xs-chat-card' ? 'chat' : 'unknown',
               }),
             },
           }

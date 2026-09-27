@@ -10,7 +10,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { DataContract, JsonObject } from '@ggui-ai/protocol';
+import type { AppTheme, DataContract, JsonObject } from '@ggui-ai/protocol';
+import { getDefaultThemeId, getThemeIds } from '@ggui-ai/design/themes';
+import { classifyAxes } from '@ggui-ai/ui-gen/classifier';
+import { criteriaContextFor, cssTokensForAppTheme, type CriteriaContextInput } from '@ggui-ai/ui-gen/evaluation';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
 import type { PanelEvalResult } from '../multi-sdk/post-eval.js';
 import { evaluateCell, readCellInputs } from './eval-cell';
@@ -35,12 +38,19 @@ const SET: JsonObject = {
 };
 const digestOf = (set: JsonObject): string => createHash('sha256').update(JSON.stringify(set)).digest('hex').slice(0, 16);
 
-function bootstrapCell(judgeInput: JsonObject): string {
+/** A valid app theme as judge-input.json holds it (the schema's required overlayHash + both mode projections). */
+const THEME_JSON: JsonObject = {
+  overlayHash: 'ab'.repeat(32),
+  overlays: { light: { '--ggui-color-onContainer': '#ffffff' }, dark: { '--ggui-color-onContainer': '#0a0a0a' } },
+};
+const PRESET = getThemeIds().find((id) => id !== getDefaultThemeId());
+
+function bootstrapCell(judgeInput: JsonObject, mint: JsonObject = MINT): string {
   const dir = mkdtempSync(join(tmpdir(), 'exp008-criteria-'));
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: CONTRACT, contractKey: 'k1', commitRef: null }));
-  writeFileSync(join(dir, 'mint.json'), JSON.stringify(MINT));
+  writeFileSync(join(dir, 'mint.json'), JSON.stringify(mint));
   writeFileSync(join(dir, 'judge-input.json'), JSON.stringify(judgeInput));
   return dir;
 }
@@ -99,6 +109,33 @@ describe('ggui#1436 — the criteria set rides judge-input.json to the eval task
     expect(report.meta.notes.some((n) => n.startsWith('criteria dropped — '))).toBe(true);
     const malformed = readCellInputs(bootstrapCell({ prompt: 'a welcome card', criteria: 'not an object' }));
     expect(malformed.criteriaDropped).toBe('"criteria" is not { digest: string, set: object }');
+  });
+
+  it('the judge is handed the SAME context the mint records for the card — its paint tokens, its shell — so both blocks carry one criteria set id', async () => {
+    // the mint's in-loop round: cssTokensForAppTheme(theme, 'light', themeId) when the app has either; shell = 'chat' on
+    // a declared chat shell, else "unknown" (the harness names only a chat shell).
+    const mintSide = (theme: AppTheme | undefined, themeId: string | undefined, shell: string): CriteriaContextInput =>
+      criteriaContextFor({
+        classification: classifyAxes({ contract: CONTRACT, prompt: 'a welcome card' }),
+        contract: CONTRACT,
+        cssTokens: theme !== undefined || themeId !== undefined ? cssTokensForAppTheme(theme, 'light', themeId) : undefined,
+        profile: undefined,
+        shell,
+      });
+    const judged = async (judgeInput: JsonObject, mint: JsonObject): Promise<{ seen: CriteriaContextInput | undefined; theme: AppTheme | undefined; themeId: string | undefined }> => {
+      const dir = bootstrapCell(judgeInput, mint);
+      const inputs = readCellInputs(dir);
+      let seen: CriteriaContextInput | undefined;
+      await evaluateCell(inputs, { dir, playwright: neverLaunch, panel, visual: async (ctx) => { seen = ctx.criteria?.context; return null; } });
+      return { seen, theme: inputs.theme, themeId: inputs.themeId };
+    };
+    const criteria = { digest: digestOf(SET), set: SET };
+    const themedChat = await judged({ prompt: 'a welcome card', criteria, theme: THEME_JSON, ...(PRESET !== undefined ? { themeId: PRESET } : {}) }, MINT);
+    expect(themedChat.theme).toBeDefined();
+    expect(themedChat.seen).toEqual(mintSide(themedChat.theme, themedChat.themeId, 'chat'));
+    expect(themedChat.seen?.chroma).not.toBe('unknown');
+    const plainFullscreen = await judged({ prompt: 'a welcome card', criteria }, { ...MINT, canvas: 'md', requested: { designMode: 'free', canvas: 'md' } });
+    expect(plainFullscreen.seen).toEqual(mintSide(undefined, undefined, 'unknown'));
   });
 
   it('a digest that does not match the set as read is named on the row (the set is still used, report-only)', async () => {
