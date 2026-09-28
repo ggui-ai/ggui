@@ -72,6 +72,8 @@ export interface MakeStreamEnvelopeInput {
   readonly payload: JsonValue;
   readonly complete?: boolean;
   readonly seq?: number;
+  /** The epoch `seq` counts in (ggui#1531); stamped with `seq`, never alone. */
+  readonly streamEpoch?: string;
   /** See {@link MakeActionEnvelopeInput.schemaVersion}. */
   readonly schemaVersion?: string;
 }
@@ -126,9 +128,11 @@ export function makeActionEnvelope<TPayload = JsonValue>(
  * Build a {@link StreamEnvelope} with `schemaVersion` stamped to
  * {@link PROTOCOL_SCHEMA_VERSION} unless the caller overrides.
  *
- * Filters `undefined` optional fields (`complete`, `seq`) so the
- * serialized wire message omits them. `seq` is server-assigned in
- * practice — callers pass the value the buffer hands them.
+ * Filters `undefined` optional fields (`complete`, `seq`,
+ * `streamEpoch`) so the serialized wire message omits them. `seq` and
+ * `streamEpoch` are server-assigned in practice — callers pass the values
+ * the buffer hands them. An epoch is stamped only beside a `seq`: an
+ * epoch names the counter a `seq` counts in, so alone it means nothing.
  */
 export function makeStreamEnvelope(
   parts: MakeStreamEnvelopeInput,
@@ -140,7 +144,10 @@ export function makeStreamEnvelope(
     payload: parts.payload,
   };
   if (parts.complete !== undefined) envelope.complete = parts.complete;
-  if (parts.seq !== undefined) envelope.seq = parts.seq;
+  if (parts.seq !== undefined) {
+    envelope.seq = parts.seq;
+    if (parts.streamEpoch !== undefined) envelope.streamEpoch = parts.streamEpoch;
+  }
   const stamp = resolveSchemaVersion(parts);
   if (stamp !== undefined) envelope.schemaVersion = stamp;
   return envelope;

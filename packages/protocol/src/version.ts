@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A session's stream counter carries a generation, `streamEpoch`
+ * (2026-09-29, additive, ggui#1531: MINOR, same draft stamp). Three
+ * optional fields: `StreamEnvelope.streamEpoch` beside every `seq`,
+ * `AckPayload.streamEpoch` beside `streamSeq`, and
+ * `SubscribePayload.fromEpoch` beside `fromSeq`. A new epoch means the
+ * counter restarted, so `seq` values may repeat: a client that dedupes by
+ * `seq` resets to nothing applied, and a server holding another epoch
+ * than a resume's `fromEpoch` replays everything it retains. An absent
+ * epoch is unknown, never a mismatch, so either side may predate it.
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The view-origin proof v1 is declared (2026-09-29, additive, ggui#1415:
  * MINOR, same draft stamp). Nothing sends a proof or refuses a call at this
  * release. Three pieces reach the wire:

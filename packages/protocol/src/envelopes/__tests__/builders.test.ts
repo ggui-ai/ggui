@@ -152,6 +152,14 @@ describe('makeStreamEnvelope', () => {
     });
   });
 
+  it('stamps the stream epoch beside seq, and never alone (ggui#1531)', () => {
+    const base = { sessionId: 'render-1', channel: 'tasks', mode: 'append' as const, payload: { todo: 'x' } };
+    expect(makeStreamEnvelope({ ...base, seq: 7, streamEpoch: 'ep_1' })).toMatchObject({ seq: 7, streamEpoch: 'ep_1' });
+    // An epoch names the counter a seq counts in; without a seq it means nothing.
+    expect('streamEpoch' in makeStreamEnvelope({ ...base, streamEpoch: 'ep_1' })).toBe(false);
+    expect('streamEpoch' in makeStreamEnvelope({ ...base, seq: 7 })).toBe(false);
+  });
+
   it('produced envelope is assignable to StreamEnvelope', () => {
     const env: StreamEnvelope = makeStreamEnvelope({
       sessionId: 'render-1',

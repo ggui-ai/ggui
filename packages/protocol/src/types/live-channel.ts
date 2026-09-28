@@ -76,6 +76,18 @@ export interface SubscribePayload {
    */
   fromSeq?: number;
   /**
+   * The stream epoch `fromSeq` was counted in: the `streamEpoch` of the
+   * envelope (or ack) that `fromSeq` came from (ggui#1531). Sent only
+   * with `fromSeq`, and only when the client holds an epoch.
+   *
+   * A server that knows epochs and holds a different one treats
+   * `fromSeq` as a cursor into a counter that has since restarted: it
+   * replays everything it retains, as for `fromSeq: 0`, and sets
+   * `replayTruncated` on the ack. A server that predates epochs ignores
+   * it and honors `fromSeq` alone.
+   */
+  fromEpoch?: string;
+  /**
    * Opaque WS auth credential for initial subscribe — the live-channel
    * counterpart to a bearer token. Symmetric with {@link
    * SubscribePayload.sessionId}/`appId`/`wsUrl` — names what it auths.
@@ -187,6 +199,18 @@ export interface AckPayload {
    * 0 means the render has recorded no outbound envelopes yet.
    */
   streamSeq?: number;
+  /**
+   * The stream epoch `streamSeq` counts in (ggui#1531; see
+   * {@link StreamEnvelope.streamEpoch}). An ack whose epoch differs from
+   * the one the client holds means the session's counter restarted: the
+   * client resets to nothing applied before it applies the replay.
+   *
+   * Absent on a server that predates epochs, and when the session has
+   * no counter yet. Absent is unknown, never a mismatch: the client
+   * keeps its numeric fallback (an ack `streamSeq` below the highest
+   * `seq` it applied means the counter restarted).
+   */
+  streamEpoch?: string;
   /**
    * Truthy when the server could NOT honor the client's `fromSeq`
    * fully — some envelopes with `seq > fromSeq` have been evicted
@@ -305,6 +329,22 @@ export interface StreamEnvelope {
    * unstamped delivery as single-shot with no replay possible.
    */
   seq?: number;
+  /**
+   * The generation of the session's stream counter (ggui#1531): an
+   * opaque string the server mints whenever it creates the counter
+   * `seq` counts in. A `seq` is meaningful only within its epoch: a new
+   * epoch means the counter restarted, and `seq` values may repeat.
+   *
+   * A client that dedupes or resumes by `seq` keeps `(epoch, highest
+   * seq applied)`. An envelope whose epoch differs from the one it holds
+   * resets it to nothing applied: it adopts the new epoch and applies
+   * the envelope, whatever its `seq`. That covers a counter that
+   * restarts while the socket stays open, which no ack announces.
+   *
+   * Present exactly when `seq` is, on a server that knows epochs.
+   * Absent is unknown, never a mismatch.
+   */
+  streamEpoch?: string;
   /**
    * Protocol schema version stamped by the producer. Pre-launch:
    * advisory — consumers MUST NOT reject on mismatch. A future
