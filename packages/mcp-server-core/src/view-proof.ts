@@ -16,6 +16,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   MCP_APP_AI_GGUI_VIEW_META_KEY,
+  VIEW_PROOF_V1_BOUND_ARGS,
   VIEW_KID_LABEL_V1,
   VIEW_PROOF_FLAG_USER_ACTIVATION,
   VIEW_PROOF_ROOT_MAX_CHARS,
@@ -27,7 +28,7 @@ import {
   type ViewProofTool,
   type ViewRootSrc,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { JsonObject } from '@ggui-ai/protocol';
+import type { JsonObject, JsonValue } from '@ggui-ai/protocol';
 
 const b64u = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
 
@@ -104,8 +105,14 @@ export interface VerifyViewProofInput {
    */
   readonly requestMeta: Readonly<Record<string, unknown>> | undefined;
   readonly toolName: ViewProofTool;
-  /** The call's arguments after the server's own input validation. */
-  readonly args: JsonObject;
+  /**
+   * The call's arguments as the transport has them, after its own input
+   * validation. Only the tool's bound arguments are read, after `callmac`
+   * passes, and they are checked to be JSON in place, never copied: the
+   * tag covers exactly the values the handler receives. Bound arguments
+   * that are not JSON (possible only in process) are `verifier_error`.
+   */
+  readonly args: Readonly<Record<string, unknown>>;
   /** The session the call names (`args.sessionId`). */
   readonly sessionId: string;
   /** The caller's proved app (`ctx.appId`), never the app the arguments declare. */
@@ -159,7 +166,14 @@ export function verifyViewProof(input: VerifyViewProofInput, secret: string): Vi
     if (!tagEquals(expectedCall, proof.callmac)) return { verdict: 'invalid', reason: 'bad_mac' };
     if (proof.claims.sessionId !== input.sessionId) return { verdict: 'invalid', reason: 'session_mismatch' };
     if (proof.claims.appId !== input.appId) return { verdict: 'invalid', reason: 'app_mismatch' };
-    const expectedArgs = hmac(K, viewProofArgsBytes(input.toolName, input.args));
+    const bound: JsonObject = {};
+    for (const key of VIEW_PROOF_V1_BOUND_ARGS[input.toolName]) {
+      const value = input.args[key];
+      if (value === undefined) continue;
+      if (!isJsonValue(value)) throw new TypeError(`the bound argument ${key} of ${input.toolName} is not JSON`);
+      bound[key] = value;
+    }
+    const expectedArgs = hmac(K, viewProofArgsBytes(input.toolName, bound));
     if (!tagEquals(expectedArgs, proof.argmac)) return { verdict: 'invalid', reason: 'args_mismatch' };
     const flags = Number.parseInt(proof.flags, 16);
     return {
@@ -179,6 +193,39 @@ export function verifyViewProof(input: VerifyViewProofInput, secret: string): Vi
     const errorClass = err instanceof Error ? err.name : typeof err;
     return { verdict: 'invalid', reason: 'verifier_error', errorClass: errorClass.slice(0, 64) };
   }
+}
+
+/**
+ * Whether a value is JSON, checked in place and iteratively (any depth): a
+ * string, a boolean, null, a finite number, an array of JSON, or a plain
+ * object of JSON. Nothing is copied, so an own `__proto__` member stays
+ * what it is. A value reached twice (a cycle or a shared reference, both
+ * possible only in process) is not JSON.
+ */
+function isJsonValue(root: unknown): root is JsonValue {
+  const pending: unknown[] = [root];
+  const seen = new Set<object>();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') continue;
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) return false;
+      continue;
+    }
+    if (typeof value !== 'object' || seen.has(value)) return false;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        if (!(i in value)) return false;
+        pending.push(value[i]);
+      }
+      continue;
+    }
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return false;
+    for (const member of Object.values(value)) pending.push(member);
+  }
+  return true;
 }
 
 /** Whether a root `P` is short enough to carry a view key. */

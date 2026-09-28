@@ -23,7 +23,7 @@ import {
   verifyViewProof,
   type VerifyViewProofInput,
 } from './view-proof.js';
-import type { JsonValue } from '@ggui-ai/protocol';
+import type { JsonObject, JsonValue } from '@ggui-ai/protocol';
 import { mintViewRoot, verifyToken } from './ws-tokens.js';
 
 const [vector] = VIEW_PROOF_V1_VECTORS;
@@ -62,7 +62,7 @@ function signedCall(argmac: string): string {
 }
 
 /** Re-sign the vector's call over other arguments, under the vector's key: a view that signed those. */
-function signedOver(args: VerifyViewProofInput['args']): string {
+function signedOver(args: JsonObject): string {
   const K = deriveViewKey(vector.root, vector.secret);
   const argmac = b64u(createHmac('sha256', K).update(viewProofArgsBytes('ggui_runtime_submit_action', args)).digest());
   const callmac = b64u(
@@ -238,6 +238,82 @@ describe('verifyViewProof (ggui#1415)', () => {
       verdict: 'invalid',
       reason: 'bad_mac',
     });
+  });
+
+  it('reads only the bound arguments, as the transport has them: an absent optional one is absent, an unbound one is ignored', () => {
+    const K = deriveViewKey(vector.root, vector.secret);
+    const signed = { sessionId: vector.args.sessionId, sinceSequence: 3 };
+    const argmac = b64u(createHmac('sha256', K).update(viewProofArgsBytes('ggui_runtime_pull', signed)).digest());
+    const callmac = b64u(
+      createHmac('sha256', K)
+        .update(viewProofCallBytes({ toolName: 'ggui_runtime_pull', nonce: vector.nonce, vtime: vector.vtime, flags: '0', argmac }))
+        .digest(),
+    );
+    const proof = formatViewProofV1({ root: vector.root, nonce: vector.nonce, vtime: vector.vtime, flags: '0', argmac, callmac });
+    // `limit` validated as absent, and `wait` is not a bound argument of pull.
+    const args = { sessionId: vector.args.sessionId, sinceSequence: 3, limit: undefined, wait: 5 };
+    expect(verifyViewProof(call({ requestMeta: meta(proof), toolName: 'ggui_runtime_pull', args }), vector.secret)).toMatchObject({
+      verdict: 'valid',
+    });
+  });
+
+  it('bound arguments that are not JSON (only possible in process) are verifier_error, never a throw', () => {
+    const proof = signedCall(vector.argmac);
+    const args = { ...vector.args, payload: { intent: 'submit', actionData: { at: new Date(0) } } };
+    expect(verifyViewProof(call({ requestMeta: meta(proof), args }), vector.secret)).toEqual({
+      verdict: 'invalid',
+      reason: 'verifier_error',
+      errorClass: 'TypeError',
+    });
+  });
+
+  it('covers exactly the values the handler receives: an own __proto__ member a view signed verifies, and one a relay adds is args_mismatch', () => {
+    // JSON.parse makes `__proto__` an own member, as a wire call's arguments carry it.
+    const signedArgs: JsonObject = JSON.parse(
+      '{"kind":"dispatch","payload":{"intent":"submit","actionData":{"__proto__":{"x":1},"answer":"yes"},"uiContext":{}},"sessionId":"' +
+        vector.args.sessionId +
+        '","appId":"app_demo","actionId":"a3f2b1d4","firedAt":"2026-09-28T10:00:00.000Z"}',
+    );
+    const proof = signedOver(signedArgs);
+    expect(verifyViewProof(call({ requestMeta: meta(proof), args: signedArgs }), vector.secret)).toMatchObject({ verdict: 'valid' });
+    const relayed: JsonObject = JSON.parse(
+      '{"kind":"dispatch","payload":{"intent":"submit","actionData":{"__proto__":{"x":1},"answer":"yes"},"uiContext":{"draft":""}},"sessionId":"' +
+        vector.args.sessionId +
+        '","appId":"app_demo","actionId":"a3f2b1d4","firedAt":"2026-09-28T10:00:00.000Z"}',
+    );
+    const vectorSigned = verifyViewProof(call({ requestMeta: meta(vector.proof), args: relayed }), vector.secret);
+    expect(vectorSigned).toEqual({ verdict: 'invalid', reason: 'args_mismatch' });
+  });
+
+  it('the guard and the canonical form agree on every member a wire call can carry: __proto__, constructor, toString, and a duplicated key read as its last value', () => {
+    const raw =
+      '{"kind":"dispatch","payload":{"intent":"submit","actionData":{"constructor":{"a":1},"toString":"x","__proto__":[1],"dup":1,"dup":2},"uiContext":{}},"sessionId":"' +
+      vector.args.sessionId +
+      '","appId":"app_demo","actionId":"a3f2b1d4","firedAt":"2026-09-28T10:00:00.000Z"}';
+    const args: JsonObject = JSON.parse(raw);
+    const proof = signedOver(args);
+    expect(verifyViewProof(call({ requestMeta: meta(proof), args }), vector.secret)).toMatchObject({ verdict: 'valid' });
+    // Each member is covered: changing any one of them is args_mismatch.
+    const edits: Array<[string, string]> = [
+      ['"constructor":{"a":1}', '"constructor":{"a":2}'],
+      ['"toString":"x"', '"toString":"y"'],
+      ['"__proto__":[1]', '"__proto__":[2]'],
+      ['"dup":2', '"dup":3'],
+      [',"dup":2', ''],
+    ];
+    for (const [from, to] of edits) {
+      const relayed: JsonObject = JSON.parse(raw.replace(from, to));
+      expect(verifyViewProof(call({ requestMeta: meta(proof), args: relayed }), vector.secret), from).toEqual({
+        verdict: 'invalid',
+        reason: 'args_mismatch',
+      });
+    }
+  });
+
+  it('reads no argument before the call tag passes: a stranger with arguments that are not JSON gets bad_mac', () => {
+    const args = { ...vector.args, payload: { intent: 'submit', actionData: { at: new Date(0) } } };
+    const tampered = tamperCallmac(vector.proof);
+    expect(verifyViewProof(call({ requestMeta: meta(tampered), args }), vector.secret)).toEqual({ verdict: 'invalid', reason: 'bad_mac' });
   });
 
   it('refuses a tag in a non-canonical base64url spelling of the same bytes', () => {
