@@ -292,19 +292,33 @@ function scrimTint(tone: NonNullable<DtcgTheme['scrim']>['tone'] | undefined): s
   return tokenValue(tone);
 }
 
-/** Synthesise a family's ten stops from its `500` anchor (stated stops win). */
-function familyRamp(group: Tokens, anchor: string): Record<string, string> {
+/** Synthesise a family's ten stops from its `500` anchor (stated stops win) on the theme's `ground`. */
+function familyRamp(group: Tokens, anchor: string, ground: string): Record<string, string> {
   const statedStops: Record<string, string> = {};
   for (const stop of STOPS) {
     const v = stated(group, stop);
     if (v !== undefined) statedStops[stop] = v;
   }
-  return rampFrom(statedStops, anchor);
+  return rampFrom(statedStops, anchor, ground);
 }
 
-/** A family's ten stops from the ones stated + the OKLCH scale around the anchor for the rest. */
-function rampFrom(statedStops: Readonly<Record<string, string>>, anchor: string): Record<string, string> {
+/**
+ * ggui#1495 — the OKLCH chroma below which an anchor is near-neutral: its hue is noise (a near-black accent carries a
+ * trace of blue or green), so its LIGHT stops take the ground's hue instead — tints read at the host's temperature,
+ * not the noise's. Chromatic anchors (every brand hue) sit well above it and are unchanged.
+ */
+export const NEUTRAL_ANCHOR_CHROMA = 0.02;
+/** The light stops (50 … 400) a near-neutral anchor takes from the ground. */
+const LIGHT_STOP_COUNT = 5;
+
+/**
+ * A family's ten stops from the ones stated + the OKLCH scale around the anchor for the rest. A near-neutral anchor
+ * (chroma below {@link NEUTRAL_ANCHOR_CHROMA}) takes its light stops from the ground mixed toward the anchor, at each
+ * stop's scale lightness and the GROUND's hue (ggui#1495); its dark stops, and every chromatic anchor, are unchanged.
+ */
+function rampFrom(statedStops: Readonly<Record<string, string>>, anchor: string, ground?: string): Record<string, string> {
   const a = hexToOklch(anchor);
+  const g = ground !== undefined && a.c < NEUTRAL_ANCHOR_CHROMA ? hexToOklch(ground) : undefined;
   const out: Record<string, string> = {};
   STOPS.forEach((stop, i) => {
     const v = statedStops[stop];
@@ -312,7 +326,17 @@ function rampFrom(statedStops: Readonly<Record<string, string>>, anchor: string)
       out[stop] = v;
       return;
     }
-    out[stop] = stop === '500' ? anchor : oklchToHex({ l: RAMP_L[i]!, c: a.c * RAMP_C[i]!, h: a.h });
+    if (stop === '500') {
+      out[stop] = anchor;
+      return;
+    }
+    if (g !== undefined && i < LIGHT_STOP_COUNT) {
+      // How far from the ground toward the anchor this stop's lightness sits; the chroma follows the same share.
+      const t = g.l === a.l ? 1 : Math.min(1, Math.max(0, (RAMP_L[i]! - g.l) / (a.l - g.l)));
+      out[stop] = oklchToHex({ l: RAMP_L[i]!, c: g.c + (a.c - g.c) * t, h: g.h });
+      return;
+    }
+    out[stop] = oklchToHex({ l: RAMP_L[i]!, c: a.c * RAMP_C[i]!, h: a.h });
   });
   return out;
 }
@@ -444,7 +468,7 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
         anchor = '#000000';
       }
     }
-    const ramp = familyRamp(g, anchor);
+    const ramp = familyRamp(g, anchor, ground);
     for (const stop of STOPS) V[`--ggui-color-${fam}-${stop}`] = ramp[stop]!;
     const cap = fam[0]!.toUpperCase() + fam.slice(1);
     V[`--ggui-color-on${cap}`] = single(`on${cap}`) ?? onColourFor(ramp['500']!);
@@ -662,7 +686,7 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
     }
     const anchor = statedStops['500'] ?? (fam === 'tertiary' ? (get('tertiary') ?? get('primary-500')) : undefined);
     if (anchor === undefined) continue;
-    const ramp = rampFrom(statedStops, anchor);
+    const ramp = rampFrom(statedStops, anchor, ground);
     for (const stop of STOPS) put(`${fam}-${stop}`, ramp[stop]!);
     const cap = fam[0]!.toUpperCase() + fam.slice(1);
     put(`on${cap}`, onColourFor(ramp['500']!));
