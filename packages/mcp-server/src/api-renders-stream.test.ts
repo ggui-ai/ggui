@@ -24,9 +24,11 @@ import express from 'express';
 import type { Server as HttpServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mintWsToken } from '@ggui-ai/mcp-server-core';
+import { isRecord } from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryCodeStore,
+  InMemoryGguiSessionStreamBuffer,
   InMemoryGguiSessionStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -136,7 +138,9 @@ interface ServerFixture {
   store: InMemoryGguiSessionStore;
 }
 
-async function bootServer(opts: { eventCount?: number; logger?: Logger } = {}): Promise<ServerFixture> {
+async function bootServer(
+  opts: { eventCount?: number; logger?: Logger; streamBuffer?: InMemoryGguiSessionStreamBuffer } = {},
+): Promise<ServerFixture> {
   const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-stream-test' });
   const seedCount = opts.eventCount ?? 0;
@@ -157,6 +161,7 @@ async function bootServer(opts: { eventCount?: number; logger?: Logger } = {}): 
     wsTokenSecret: SECRET,
     codeStore: new InMemoryCodeStore(),
     publicBaseUrl: 'https://test.example',
+    ...(opts.streamBuffer !== undefined ? { streamBuffer: opts.streamBuffer } : {}),
   });
   const httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -391,6 +396,45 @@ describe('GET /api/sessions/:sessionId/stream — framing + ledger replay', () =
     } finally {
       await stream.close();
     }
+  });
+});
+
+describe('GET /api/sessions/:sessionId/stream — ?fromEpoch= (ggui#1531)', () => {
+  let fx: ServerFixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.server.close();
+      fx = null;
+    }
+  });
+
+  async function ackWith(query: (epoch: string) => string): Promise<Record<string, unknown>> {
+    const streamBuffer = new InMemoryGguiSessionStreamBuffer();
+    fx = await bootServer({ streamBuffer });
+    const recorded = await streamBuffer.record({ sessionId: fx.sessionId, channel: '_ggui:preview', mode: 'replace', payload: { n: 1 } });
+    await streamBuffer.record({ sessionId: fx.sessionId, channel: '_ggui:preview', mode: 'replace', payload: { n: 2 } });
+    const epoch = recorded.envelope.streamEpoch ?? '';
+    const stream = await openStream(streamUrl(fx, `wsToken=${encodeURIComponent(fx.validToken)}&${query(epoch)}`));
+    try {
+      const buf = await stream.readUntil((b) => b.includes('"type":"ack"'));
+      const ackLine = buf.split('\n').find((l) => l.startsWith('data: ') && l.includes('"type":"ack"'));
+      const frame: unknown = JSON.parse(ackLine?.slice('data: '.length) ?? '{}');
+      const payload = isRecord(frame) && isRecord(frame['payload']) ? frame['payload'] : {};
+      return { ...payload, epoch };
+    } finally {
+      await stream.close();
+    }
+  }
+
+  it('a resume whose epoch is not the session’s reads as a restarted counter: the ack reports the gap', async () => {
+    const ack = await ackWith(() => 'fromSeq=1&fromEpoch=an-epoch-long-gone');
+    expect(ack).toMatchObject({ streamSeq: 2, streamEpoch: ack['epoch'], replayTruncated: true });
+  });
+
+  it('a resume in the session’s own epoch reports no gap — control', async () => {
+    const ack = await ackWith((epoch) => `fromSeq=1&fromEpoch=${encodeURIComponent(epoch)}`);
+    expect(ack).toMatchObject({ streamSeq: 2, streamEpoch: ack['epoch'] });
+    expect(ack).not.toHaveProperty('replayTruncated');
   });
 });
 

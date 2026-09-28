@@ -638,6 +638,8 @@ export interface GguiSessionChannelServer {
     readonly sink: SubscriberSink;
     readonly sinceSequence?: number;
     readonly fromSeq?: number;
+    /** The epoch `fromSeq` was counted in (ggui#1531); read only beside it. */
+    readonly fromEpoch?: string;
     /**
      * The credential the transport authenticated (ggui#1488), logged as
      * `render_channel_subscribed.source`; the SSE route passes
@@ -874,6 +876,7 @@ export function createGguiSessionChannelServer(
         transport: "sse",
         ...(args.sinceSequence !== undefined ? { sinceSequence: args.sinceSequence } : {}),
         ...(args.fromSeq !== undefined ? { fromSeq: args.fromSeq } : {}),
+        ...(args.fromEpoch !== undefined ? { fromEpoch: args.fromEpoch } : {}),
         ...(args.credential !== undefined ? { credential: args.credential } : {}),
       });
     },

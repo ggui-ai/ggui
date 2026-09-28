@@ -14,6 +14,7 @@ import type {
   GguiSessionStreamBuffer,
   StoredGguiSession,
   StreamFanout,
+  StreamCursor,
 } from "@ggui-ai/mcp-server-core";
 import type { AckPayload, SubscribePayload } from "@ggui-ai/protocol";
 import { PROTOCOL_SCHEMA_VERSION, UPGRADE_REQUIRED } from "@ggui-ai/protocol";
@@ -162,6 +163,8 @@ export type CompleteSubscribeArgs = {
   readonly sinceSequence?: number;
   /** Stream-buffer cursor — replays `data` frames per policy when set. */
   readonly fromSeq?: number;
+  /** The epoch `fromSeq` was counted in (ggui#1531); read only beside it. */
+  readonly fromEpoch?: string;
   /** Correlates the ack / error frames to a WS request. SSE has none. */
   readonly requestId?: string;
   /**
@@ -660,6 +663,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       ws,
       ...(payload.sinceSequence !== undefined ? { sinceSequence: payload.sinceSequence } : {}),
       ...(payload.fromSeq !== undefined ? { fromSeq: payload.fromSeq } : {}),
+      ...(typeof payload.fromEpoch === "string" && payload.fromEpoch !== "" ? { fromEpoch: payload.fromEpoch } : {}),
       ...(message.requestId ? { requestId: message.requestId } : {}),
       ...(viaWsToken
         ? { credential: "ws_token" as const }
@@ -683,7 +687,14 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // replay or published to the fan-out iterator subscribed below, and
     // the per-subscriber `seq <= replayCompletedSeq` guard drops the
     // copies the replay already carries.
-    const snapshotSeq = await deps.streamBuffer.currentSeq(stored.id);
+    //
+    // The seq and the epoch it counts in are read at once when the buffer
+    // can (ggui#1531); a buffer that predates epochs gives the seq alone.
+    const snapshot: StreamCursor =
+      deps.streamBuffer.currentCursor !== undefined
+        ? await deps.streamBuffer.currentCursor(stored.id)
+        : { seq: await deps.streamBuffer.currentSeq(stored.id) };
+    const snapshotSeq = snapshot.seq;
 
     // Phase B: a render IS the addressable unit, so the active item
     // is the resolved render's visible-bits surface itself.
@@ -701,9 +712,18 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       activeItem.type !== "mcpApps" && activeItem.type !== "system"
         ? activeItem.streamSpec
         : undefined;
+    //
+    // A resume whose cursor belongs to a counter that has since restarted
+    // (ggui#1531) replays everything retained, from 0, and reports the gap:
+    // its epoch differs from the session's, or, from a client that sent no
+    // epoch, its `fromSeq` is above anything the counter has assigned.
+    const counterRestarted =
+      args.fromSeq !== undefined &&
+      ((args.fromEpoch !== undefined && snapshot.epoch !== undefined && args.fromEpoch !== snapshot.epoch) ||
+        args.fromSeq > snapshotSeq);
     const replay =
       args.fromSeq !== undefined
-        ? await deps.streamBuffer.replay(stored.id, args.fromSeq, activeStreamSpec)
+        ? await deps.streamBuffer.replay(stored.id, counterRestarted ? 0 : args.fromSeq, activeStreamSpec)
         : await deps.streamBuffer.replay(stored.id, 0, undefined);
 
     // Subscribe to the StreamFanout BEFORE constructing the Subscriber:
@@ -719,7 +739,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       appId: stored.appId,
       identity: args.identity,
       connectedAt: Date.now(),
-      replayCompletedSeq: snapshotSeq,
+      replayCursor: { seq: snapshotSeq, epoch: snapshot.epoch },
       iter: fanoutIter,
       // Per-subscriber channel-subscribe tracker. Populated
       // lazily by the `channel_subscribe` handler when the operator
@@ -767,7 +787,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       const firstLedgerPage =
         sinceSeqValid !== undefined ? await deps.renderStore.listEventsSince(stored.id, sinceSeqValid, 100) : undefined;
 
-      const resumeTruncated = args.fromSeq !== undefined && replay?.truncated === true;
+      const resumeTruncated = args.fromSeq !== undefined && (replay?.truncated === true || counterRestarted);
       deps.logger.info("render_channel_subscribed", {
         sessionId: stored.id,
         appId: stored.appId,
@@ -777,6 +797,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         snapshotSeq,
         replayCount: replay?.envelopes.length ?? 0,
         replayTruncated: resumeTruncated,
+        ...(counterRestarted ? { counterRestarted: true } : {}),
         // The credential the subscribe came on (ggui#1488): a wsToken, the
         // console cookie, or the adapter's bearer source. The first two ride
         // a synthetic identity whose own `source` would misreport them.
@@ -789,6 +810,8 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         timestamp: Date.now(),
         session: stored.render,
         streamSeq: snapshotSeq,
+        // The epoch `streamSeq` counts in (ggui#1531), when the buffer has one.
+        ...(snapshot.epoch !== undefined ? { streamEpoch: snapshot.epoch } : {}),
         // Advertise the server's protocol version on every successful
         // subscribe ack (SPEC §11.2.2). Clients whose
         // CLIENT_SUPPORTED_VERSIONS doesn't contain this string surface

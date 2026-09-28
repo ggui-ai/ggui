@@ -1301,3 +1301,93 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
     expect(out.events).toHaveLength(0);
   });
 });
+
+describe('the stream counter epoch on the live channel (ggui#1531)', () => {
+  let fx: Fixture | undefined;
+  afterEach(async () => {
+    await fx?.close();
+    fx = undefined;
+  });
+
+  const streamSpec = { feed: { mode: 'append' as const, replay: 'all' as const, schema: { type: 'object' as const } } };
+
+  async function bootWithStream() {
+    const streamBuffer = new InMemoryGguiSessionStreamBuffer();
+    const streamFanout = new InProcessStreamFanout();
+    const booted = await bootChannel({}, () => ({ streamBuffer, streamFanout }));
+    const stored = await booted.store.get(booted.sessionId);
+    if (stored === null || stored.render.type !== 'component') throw new Error('the fixture commits a component render');
+    await booted.store.commit({ appId: APP_ID, render: { ...stored.render, streamSpec } });
+    const publish = async (n: number) => {
+      const recorded = await streamBuffer.record({ sessionId: booted.sessionId, channel: 'feed', mode: 'append', payload: { n } }, streamSpec);
+      await streamFanout.publish({ sessionId: booted.sessionId, envelope: recorded.envelope });
+      return recorded.envelope;
+    };
+    return { booted, streamBuffer, publish };
+  }
+
+  const subscribe = (sessionId: string, extra: Record<string, unknown> = {}): string =>
+    JSON.stringify({ type: 'subscribe', payload: { sessionId, appId: APP_ID, ...extra }, requestId: randomUUID() });
+
+  it('a subscriber attached across a counter restart receives the new generation’s frames, though their seq is below its cursor', async () => {
+    const { booted, streamBuffer, publish } = await bootWithStream();
+    fx = booted;
+    await publish(1);
+    await publish(2);
+    await publish(3);
+    fx.ws.send(subscribe(fx.sessionId));
+    const ack = await fx.nextFrame('ack');
+    expect(ack['payload']).toMatchObject({ streamSeq: 3, streamEpoch: expect.any(String) });
+    // The counter restarts while the socket stays open: no new ack announces it.
+    await streamBuffer.clear(fx.sessionId);
+    const after = await publish(4);
+    expect(after.seq).toBe(1);
+    const data = await fx.nextFrame('data');
+    expect(data['payload']).toMatchObject({ seq: 1, payload: { n: 4 }, streamEpoch: after.streamEpoch });
+    expect(after.streamEpoch).not.toBe((ack['payload'] as { streamEpoch: string }).streamEpoch);
+  });
+
+  it('a resume whose epoch is not the session’s replays everything retained and says the history has a gap', async () => {
+    const { booted, publish } = await bootWithStream();
+    fx = booted;
+    const first = await publish(1);
+    await publish(2);
+    fx.ws.send(subscribe(fx.sessionId, { fromSeq: 1, fromEpoch: 'an-epoch-long-gone' }));
+    const ack = await fx.nextFrame('ack');
+    expect(ack['payload']).toMatchObject({ streamSeq: 2, streamEpoch: first.streamEpoch, replayTruncated: true });
+    expect((await fx.nextFrame('data'))['payload']).toMatchObject({ seq: 1 });
+    expect((await fx.nextFrame('data'))['payload']).toMatchObject({ seq: 2 });
+  });
+
+  it('a resume from a client with no epoch whose fromSeq is past anything the counter assigned is read the same way', async () => {
+    const { booted, publish } = await bootWithStream();
+    fx = booted;
+    await publish(1);
+    fx.ws.send(subscribe(fx.sessionId, { fromSeq: 40 }));
+    const ack = await fx.nextFrame('ack');
+    expect(ack['payload']).toMatchObject({ streamSeq: 1, replayTruncated: true });
+    expect((await fx.nextFrame('data'))['payload']).toMatchObject({ seq: 1 });
+  });
+
+  it('a resume in the session’s own epoch replays only past its cursor, with no gap — control', async () => {
+    const { booted, publish } = await bootWithStream();
+    fx = booted;
+    const first = await publish(1);
+    await publish(2);
+    fx.ws.send(subscribe(fx.sessionId, { fromSeq: 1, fromEpoch: first.streamEpoch }));
+    const ack = await fx.nextFrame('ack');
+    expect(ack['payload']).not.toHaveProperty('replayTruncated');
+    expect((await fx.nextFrame('data'))['payload']).toMatchObject({ seq: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fx.frames.filter((f) => f['type'] === 'data')).toEqual([]);
+  });
+
+  it('an ack before the session has any counter carries no epoch', async () => {
+    const { booted } = await bootWithStream();
+    fx = booted;
+    fx.ws.send(subscribe(fx.sessionId));
+    const ack = await fx.nextFrame('ack');
+    expect(ack['payload']).toMatchObject({ streamSeq: 0 });
+    expect(ack['payload']).not.toHaveProperty('streamEpoch');
+  });
+});

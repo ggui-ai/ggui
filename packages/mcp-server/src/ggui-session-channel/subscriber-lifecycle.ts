@@ -18,6 +18,7 @@
  * subscriber for this render", regardless of transport.
  */
 
+import { admitLiveEnvelope } from './stream-epoch.js';
 import type { WebSocket } from "ws";
 import type { Logger } from "../logger.js";
 import type { Subscriber, WsSubscriber } from "./internal-types.js";
@@ -81,7 +82,16 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
       for (;;) {
         const { value, done } = await sub.iter.next();
         if (done) return;
-        if (value.seq <= sub.replayCompletedSeq) continue;
+        const admission = admitLiveEnvelope(sub.replayCursor, value);
+        if (admission.epochChanged !== undefined) {
+          deps.logger.info("stream_epoch_changed", {
+            sessionId: sub.sessionId,
+            from: admission.epochChanged.from,
+            to: admission.epochChanged.to,
+            transport: sub.transport,
+          });
+        }
+        if (!admission.deliver) continue;
         if (!sub.sink.isOpen()) {
           await sub.iter.return?.();
           return;

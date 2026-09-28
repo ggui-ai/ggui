@@ -4,6 +4,7 @@
  * (or re-exported) from `../ggui-session-channel.ts`.
  */
 
+import type { StreamReplayCursor } from './stream-epoch.js';
 import type { AuthResult, BufferedStreamEnvelope } from "@ggui-ai/mcp-server-core";
 import type { JsonObject } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
@@ -53,16 +54,19 @@ interface SubscriberBase {
   readonly identity: AuthResult;
   readonly connectedAt: number;
   /**
-   * Largest outbound `seq` the initial replay (or subscribe snapshot)
-   * covered for this subscriber. Live fan-out skips envelopes with
-   * `seq <= replayCompletedSeq` to prevent double delivery — those
-   * were (or will be) delivered via the replay phase.
+   * The replay boundary: the largest outbound `seq` the initial replay
+   * (or subscribe snapshot) covered for this subscriber, and the epoch
+   * that `seq` counts in (ggui#1531). Live fan-out skips envelopes of the
+   * same epoch with `seq <= replayCursor.seq` to prevent double delivery,
+   * since those were (or will be) delivered via the replay phase. A live
+   * envelope of another epoch means the counter restarted: it is
+   * delivered and moves the cursor (`admitLiveEnvelope`).
    *
-   * For fresh subscribers (no `fromSeq`), this is the stream cursor
-   * at subscribe time; they never see the pre-existing buffer, only
-   * new deliveries.
+   * For fresh subscribers (no `fromSeq`), `seq` is the stream cursor at
+   * subscribe time; they never see the pre-existing buffer, only new
+   * deliveries.
    */
-  readonly replayCompletedSeq: number;
+  readonly replayCursor: StreamReplayCursor;
   /**
    * Per-subscriber live-tail iterator from `streamFanout.subscribe`.
    * Owned by the subscriber for its full lifetime; ending it (via

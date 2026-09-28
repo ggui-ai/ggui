@@ -12,6 +12,7 @@
  * inline comments here cover impl-level decisions only.
  */
 
+import { admitLiveEnvelope } from "./stream-epoch.js";
 import type {
   GguiSessionStore,
   GguiSessionStreamBuffer,
@@ -347,13 +348,21 @@ export function createOutbound(deps: OutboundDeps): Outbound {
       // subscribe-replay (policy 'all'/'latest') or is deliberately
       // invisible to late subscribers (policy 'none') — never re-send.
       // Unstamped frames were never buffered; replay cannot duplicate
-      // them, so they pass. Non-data frames carry no seq semantics.
-      if (
-        frame.type === "data" &&
-        typeof frame.payload.seq === "number" &&
-        frame.payload.seq <= sub.replayCompletedSeq
-      ) {
-        continue;
+      // them, so they pass. A frame of another epoch means the counter
+      // restarted: it passes and moves the subscriber's cursor, by the
+      // same rule as the pump (ggui#1531). Non-data frames carry no seq
+      // semantics.
+      if (frame.type === "data") {
+        const admission = admitLiveEnvelope(sub.replayCursor, frame.payload);
+        if (admission.epochChanged !== undefined) {
+          deps.logger.info("stream_epoch_changed", {
+            sessionId,
+            from: admission.epochChanged.from,
+            to: admission.epochChanged.to,
+            transport: sub.transport,
+          });
+        }
+        if (!admission.deliver) continue;
       }
       sub.sink.write(frame);
     }

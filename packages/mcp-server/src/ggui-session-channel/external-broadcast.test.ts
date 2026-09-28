@@ -2,7 +2,7 @@
  * `externalBroadcast` replay-dedupe guard (#435 half 2).
  *
  * The in-process pump (`subscriber-lifecycle.ts:pumpSubscriber`) skips
- * any live envelope whose `seq <= sub.replayCompletedSeq` — those were
+ * any live envelope whose `seq <= sub.replayCursor.seq` — those were
  * (or will be) delivered via the subscribe-time replay, so re-sending
  * them live would double-deliver. `externalBroadcast` is the OTHER
  * delivery leg for the same live frames — the cross-pod Redis-broadcast
@@ -14,7 +14,7 @@
  * These tests exercise `createOutbound` directly (not the full channel
  * server): a fake `wsSubscribers` set built from real `ws` sockets (so
  * `send`'s `readyState` check is genuine, not stubbed) with controlled
- * `replayCompletedSeq` values, spying on each socket's `send` to observe
+ * `replayCursor` values, spying on each socket's `send` to observe
  * delivery without needing a live client-side reader.
  */
 import { randomUUID } from 'node:crypto';
@@ -70,9 +70,9 @@ async function openSocketPair(
 
 interface Fixture {
   readonly outbound: Outbound;
-  /** Bound to `sessionId`, replayCompletedSeq 5 — replay already covered seq<=5. */
+  /** Bound to `sessionId`, replayCursor.seq 5 — replay already covered seq<=5. */
   readonly sendA: MockInstance;
-  /** Bound to `sessionId`, replayCompletedSeq 0 — replay covered nothing. */
+  /** Bound to `sessionId`, replayCursor.seq 0 — replay covered nothing. */
   readonly sendB: MockInstance;
   /** Bound to a DIFFERENT sessionId — cross-session non-interference control. */
   readonly sendOther: MockInstance;
@@ -106,7 +106,7 @@ async function buildFixture(): Promise<Fixture> {
     appId: 'app-test',
     identity: IDENTITY,
     connectedAt,
-    replayCompletedSeq: 5,
+    replayCursor: { seq: 5, epoch: undefined },
     iter: idleIter(),
     channelSubs: new Map(),
   };
@@ -118,7 +118,7 @@ async function buildFixture(): Promise<Fixture> {
     appId: 'app-test',
     identity: IDENTITY,
     connectedAt,
-    replayCompletedSeq: 0,
+    replayCursor: { seq: 0, epoch: undefined },
     iter: idleIter(),
     channelSubs: new Map(),
   };
@@ -130,7 +130,7 @@ async function buildFixture(): Promise<Fixture> {
     appId: 'app-test',
     identity: IDENTITY,
     connectedAt,
-    replayCompletedSeq: 0,
+    replayCursor: { seq: 0, epoch: undefined },
     iter: idleIter(),
     channelSubs: new Map(),
   };
@@ -193,7 +193,7 @@ describe('externalBroadcast — replay-dedupe guard mirrors the in-process pump'
     }
   });
 
-  it('a data frame at seq=3 is suppressed for the subscriber whose replay already covered it (replayCompletedSeq=5), delivered to the one it did not (replayCompletedSeq=0)', async () => {
+  it('a data frame at seq=3 is suppressed for the subscriber whose replay already covered it (replayCursor.seq 5), delivered to the one it did not (replayCursor.seq 0)', async () => {
     fx = await buildFixture();
     fx.outbound.externalBroadcast(fx.sessionId, dataFrame(fx.sessionId, 3));
 
@@ -219,7 +219,7 @@ describe('externalBroadcast — replay-dedupe guard mirrors the in-process pump'
     expect(fx.sendB).toHaveBeenCalledTimes(1);
   });
 
-  it('a props_update frame is delivered to both subscribers regardless of replayCompletedSeq — no seq semantics apply', async () => {
+  it('a props_update frame is delivered to both subscribers regardless of replayCursor — no seq semantics apply', async () => {
     fx = await buildFixture();
     fx.outbound.externalBroadcast(fx.sessionId, propsUpdateFrame(fx.sessionId));
 
@@ -235,5 +235,61 @@ describe('externalBroadcast — replay-dedupe guard mirrors the in-process pump'
     expect(fx.sendA).not.toHaveBeenCalled();
     expect(fx.sendB).not.toHaveBeenCalled();
     expect(fx.sendOther).not.toHaveBeenCalled();
+  });
+});
+
+describe('externalBroadcast — a counter that restarts under a connected subscriber (ggui#1531)', () => {
+  it('delivers the new generation’s frame at a low seq, moves the cursor to its epoch, and names the change; a same-epoch frame the replay covered is still suppressed', async () => {
+    const wss = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => wss.once('listening', resolve));
+    const addr = wss.address();
+    if (!addr || typeof addr === 'string') throw new Error('no address');
+    const { client, serverWs } = await openSocketPair(wss, `ws://127.0.0.1:${addr.port}`);
+    const lines: Array<[string, Record<string, unknown> | undefined]> = [];
+    const recording: Logger = {
+      info: (event, fields) => void lines.push([event, fields]),
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      child: () => recording,
+    };
+    const sessionId = randomUUID();
+    const sub: Subscriber = {
+      transport: 'ws',
+      ws: serverWs,
+      sink: createWsSink(serverWs, recording),
+      sessionId,
+      appId: 'app-test',
+      identity: IDENTITY,
+      connectedAt: Date.now(),
+      replayCursor: { seq: 5, epoch: 'epoch-one' },
+      iter: idleIter(),
+      channelSubs: new Map(),
+    };
+    const send = vi.spyOn(serverWs, 'send');
+    const outbound = createOutbound({
+      logger: recording,
+      renderStore: new InMemoryGguiSessionStore(),
+      streamBuffer: new InMemoryGguiSessionStreamBuffer(),
+      streamFanout: new InProcessStreamFanout(),
+      wsSubscribers: new Set([sub]),
+    });
+    const frame = (seq: number, streamEpoch: string): WebSocketMessage => ({
+      type: 'data',
+      payload: { sessionId, channel: 'test-channel', mode: 'append', payload: {}, seq, streamEpoch },
+    });
+    try {
+      outbound.externalBroadcast(sessionId, frame(3, 'epoch-one'));
+      expect(send).not.toHaveBeenCalled();
+      outbound.externalBroadcast(sessionId, frame(1, 'epoch-two'));
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(sub.replayCursor).toEqual({ seq: 0, epoch: 'epoch-two' });
+      expect(lines.filter(([event]) => event === 'stream_epoch_changed')).toEqual([
+        ['stream_epoch_changed', { sessionId, from: 'epoch-one', to: 'epoch-two', transport: 'ws' }],
+      ]);
+    } finally {
+      client.close();
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+    }
   });
 });

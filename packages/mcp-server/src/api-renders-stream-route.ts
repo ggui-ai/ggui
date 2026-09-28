@@ -31,7 +31,8 @@
  * Cursor spaces: `Last-Event-ID` (browser-stamped on auto-reconnect)
  * WINS over `?sinceSequence=`; the query seeds the first connect
  * (EventSource cannot set headers). `?fromSeq=` mirrors
- * `SubscribePayload.fromSeq` for the stream-buffer plane — note it is
+ * `SubscribePayload.fromSeq` for the stream-buffer plane (and
+ * `?fromEpoch=` its `fromEpoch`, ggui#1531) — note it is
  * frozen in the EventSource URL, so duplicate `data` frames after an
  * auto-reconnect are expected; ledger + stream deliveries are
  * documented at-least-once and clients dedupe by seq.
@@ -206,6 +207,11 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
       }
       fromSeq = parsed;
     }
+    // The epoch `fromSeq` was counted in (ggui#1531). Opaque and
+    // server-minted: any non-empty value is compared as it is, and one
+    // that does not match the session's replays everything retained.
+    const fromEpochRaw = req.query["fromEpoch"];
+    const fromEpoch = typeof fromEpochRaw === "string" && fromEpochRaw.length > 0 ? fromEpochRaw : undefined;
     // Last-Event-ID (browser-stamped on auto-reconnect) WINS over the
     // query seed. Malformed header → warn + fall back to the query
     // (never a 4xx: the header is browser-controlled, and failing the
@@ -330,6 +336,7 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
         credential: "ws_token",
         ...(sinceSequence !== undefined ? { sinceSequence } : {}),
         ...(fromSeq !== undefined ? { fromSeq } : {}),
+        ...(fromEpoch !== undefined ? { fromEpoch } : {}),
       });
       detachFn = detach;
       if (torn) {
