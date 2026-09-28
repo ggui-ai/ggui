@@ -33,6 +33,7 @@
  * become a load-bearing public API.
  */
 export type {
+  HeldCredential,
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
 } from './types.js';
