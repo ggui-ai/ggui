@@ -128,6 +128,8 @@ export type McpAppAiGguiMetaParseResult =
        * refresh this through its host.
        */
       readonly held?: HeldCredential;
+      /** The slice's view key root, when it carries one (ggui#1415). */
+      readonly viewRoot?: ViewRoot;
     }
   | {
       readonly ok: false;
@@ -143,6 +145,8 @@ export type McpAppAiGguiMetaParseResult =
       readonly reason: 'EXPIRED_BOOTSTRAP';
       readonly meta: McpAppAiGguiRenderMeta;
       readonly held: HeldCredential;
+      /** The slice's view key root, captured before its credential was dropped (ggui#1415). */
+      readonly viewRoot?: ViewRoot;
     };
 
 /**
@@ -159,6 +163,20 @@ export interface HeldCredential {
   readonly pollingUrl?: string;
   /** `root`: minted with the render. `refreshed`: came back from a refresh. */
   readonly origin: 'root' | 'refreshed';
+}
+
+/**
+ * The key root a view proves its app-only runtime calls with (ggui#1415):
+ * `P`, the payload segment of the slice's `wsToken`, and `K`, the slice's
+ * `viewKey`. Runtime-local, never a protocol member: the parse captures it
+ * from the slice before an expired credential is dropped, and the runtime
+ * adopts it only once `P` decodes to the slice's own session.
+ */
+export interface ViewRoot {
+  /** `P`: the `wsToken`'s payload segment, base64url. */
+  readonly root: string;
+  /** `K`: the slice's `viewKey`, base64url. */
+  readonly key: string;
 }
 
 // `RendererWebSocketManagerOptions` retired in B3b — the WS lifecycle

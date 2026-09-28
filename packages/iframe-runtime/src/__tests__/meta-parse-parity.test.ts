@@ -7,6 +7,10 @@
  * that way). The fixture is typed `Omit<Required<...>, 'kind'>` so a
  * new interface field breaks this build until the fixture gains it —
  * then the round-trip fails until the projection carries it.
+ *
+ * One field leaves the meta on purpose: `viewKey` (ggui#1415) is captured
+ * into the parse's `viewRoot`, beside the meta, never into it. The test
+ * accounts for it there, so it is routed rather than silently dropped.
  */
 import { describe, it, expect } from 'vitest';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -18,6 +22,9 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://example.test/ws',
   wsToken: 'tok-1',
+  // ggui#1415 — the view key, rooted in the wsToken beside it. The parse
+  // routes it into `viewRoot`, never into the meta.
+  viewKey: 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A',
   // Far-future so the expired-creds degrade path (which deliberately
   // DROPS the live trio) does not fire.
   expiresAt: '2099-01-01T00:00:00.000Z',
@@ -62,7 +69,9 @@ describe('validateMeta — full-slice key-set parity', () => {
     const result = validateMeta(FULL);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`expected ok, got ${result.reason}`);
-    expect(Object.keys(result.meta).sort()).toEqual(Object.keys(FULL).sort());
-    expect(result.meta).toEqual(FULL);
+    const { viewKey, ...projected } = FULL;
+    expect(Object.keys(result.meta).sort()).toEqual(Object.keys(projected).sort());
+    expect(result.meta).toEqual(projected);
+    expect(result.viewRoot).toEqual({ root: 'tok-1', key: viewKey });
   });
 });

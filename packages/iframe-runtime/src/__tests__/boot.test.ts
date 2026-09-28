@@ -18,6 +18,7 @@ import {
   buildHappyInitResult,
   tick,
 } from './boot-helpers.js';
+import { createViewRootHolder } from '../view-root.js';
 
 /**
  * jsdom smoke for the renderer's full boot sequence (no-renderer
@@ -772,5 +773,79 @@ describe('bootSequence — the read-plane door (ggui#537, read-plane-only postur
     const result = await bootPromise;
     expect(result.ok).toBe(true);
     expect(transport.methodsSeen).toContain('resources/read');
+  });
+});
+
+describe('bootSequence — the view key root (ggui#1415)', () => {
+  const KEY = 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A';
+  const rootAt = (iat: number): string =>
+    Buffer.from(
+      JSON.stringify({ sessionId: 'render_001', appId: 'app_001', kind: 'ws', iat, exp: iat + 180, jti: `j${iat}`, kid: 'k', src: 'result' }),
+      'utf8',
+    ).toString('base64url');
+  const keyedAt = (iat: number): McpAppAiGguiRenderMeta => ({ ...VALID_META, wsToken: `${rootAt(iat)}.c2ln`, viewKey: KEY });
+
+  it('adopts the root the boot slice carries, from the tool result it booted from', async () => {
+    const viewRoots = createViewRootHolder();
+    const { app, transport, pushToolResult } = buildBootHarness();
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'keyed'));
+    const bootPromise = bootSequence({
+      doc: document.implementation.createHTMLDocument('renderer-test'),
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 500,
+      viewRoots,
+    });
+    await tick();
+    pushToolResult(keyedAt(100));
+    expect((await bootPromise).ok).toBe(true);
+    expect(viewRoots.current('render_001')).toMatchObject({ root: rootAt(100), key: KEY, claims: { iat: 100 } });
+  });
+
+  it('adopts a preResolved slice\'s root', async () => {
+    const viewRoots = createViewRootHolder();
+    const { app, transport } = buildBootHarness();
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'pre-resolved'));
+    const result = await bootSequence({
+      doc: document.implementation.createHTMLDocument('renderer-test'),
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      preResolved: { meta: VALID_META, viewRoot: { root: rootAt(100), key: KEY } },
+      toolResultTimeoutMs: 50,
+      viewRoots,
+    });
+    expect(result.ok).toBe(true);
+    expect(viewRoots.current('render_001')?.claims).toMatchObject({ iat: 100 });
+  });
+
+  it('after the boot, a later tool result for the same session moves the root forward, never back', async () => {
+    const viewRoots = createViewRootHolder();
+    const { app, transport, pushToolResult } = buildBootHarness();
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'keyed'));
+    const bootPromise = bootSequence({
+      doc: document.implementation.createHTMLDocument('renderer-test'),
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 500,
+      viewRoots,
+    });
+    await tick();
+    pushToolResult(keyedAt(100));
+    expect((await bootPromise).ok).toBe(true);
+
+    pushToolResult(keyedAt(200));
+    await tick();
+    expect(viewRoots.current('render_001')?.claims).toMatchObject({ iat: 200 });
+
+    pushToolResult(keyedAt(150));
+    pushToolResult(VALID_META);
+    await tick();
+    expect(viewRoots.current('render_001')?.claims).toMatchObject({ iat: 200 });
   });
 });

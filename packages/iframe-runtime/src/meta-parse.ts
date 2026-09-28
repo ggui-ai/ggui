@@ -62,6 +62,7 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { HeldCredential, McpAppAiGguiMetaParseResult } from './types.js';
 import { postObservabilityToParent } from './observability.js';
+import { viewRootOf } from './view-root.js';
 
 /**
  * Type guard — true iff `value` is a non-null, non-array plain object.
@@ -372,10 +373,23 @@ export function validateMeta(
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
 
+  // The view key root (ggui#1415) is read from the slice as delivered,
+  // before the projection drops an expired live pair: a view proves with the
+  // root the server issued whether or not the credential beside it is still
+  // live. It rides beside the meta, never inside it.
+  const viewRoot = viewRootOf(meta);
+  const withRoot = viewRoot !== undefined ? { viewRoot } : {};
   const result = projectMeta(meta, hasStaticContent);
-  if (!result.ok) return result;
+  if (!result.ok) {
+    return result.reason === 'EXPIRED_BOOTSTRAP' ? { ...result, ...withRoot } : result;
+  }
 
-  return { ok: true, meta: result.meta, ...(result.held !== undefined ? { held: result.held } : {}) };
+  return {
+    ok: true,
+    meta: result.meta,
+    ...(result.held !== undefined ? { held: result.held } : {}),
+    ...withRoot,
+  };
 }
 
 /**

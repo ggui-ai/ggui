@@ -237,7 +237,19 @@ function base64UrlDecode(segment: string): string | undefined {
   }
 }
 
-function decodeRootClaims(root: string): ViewRootClaims | ViewProofParseFailure {
+/** A root the v1 grammar can carry: the `root` group of {@link VIEW_PROOF_V1_PATTERN}. */
+const VIEW_ROOT_V1_SHAPE = /^[A-Za-z0-9_-]{16,768}$/;
+
+/**
+ * Decode a root `P` to the claims it carries, unauthenticated: what
+ * {@link parseViewProof} reads from a proof's root, and what a view reads
+ * from its own root before it signs with it. `malformed`: not a root the v1
+ * grammar can carry (base64url, 16 to {@link VIEW_PROOF_ROOT_MAX_CHARS}
+ * characters), or not a claims object; `wrong_kind`: a root whose `kind`
+ * is not `ws`. Never throws.
+ */
+export function decodeViewRootClaims(root: string): ViewRootClaims | ViewProofParseFailure {
+  if (!VIEW_ROOT_V1_SHAPE.test(root)) return 'malformed';
   const text = base64UrlDecode(root);
   if (text === undefined) return 'malformed';
   let parsed: JsonValue;
@@ -286,7 +298,7 @@ export function parseViewProof(value: JsonValue | undefined): ViewProofParse {
   ) {
     return { ok: false, reason: 'malformed' };
   }
-  const claims = decodeRootClaims(root);
+  const claims = decodeViewRootClaims(root);
   if (typeof claims === 'string') return { ok: false, reason: claims };
   return { ok: true, proof: { version: 'v1', root, nonce, vtime, flags, argmac, callmac, claims } };
 }

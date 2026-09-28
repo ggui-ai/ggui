@@ -36,6 +36,7 @@ export type {
   HeldCredential,
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
+  ViewRoot,
 } from './types.js';
 export {
   parseMetaFromGlobal,

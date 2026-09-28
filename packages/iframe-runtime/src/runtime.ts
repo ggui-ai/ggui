@@ -63,7 +63,9 @@ import type {
   HeldCredential,
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
+  ViewRoot,
 } from './types.js';
+import { createViewRootHolder, type ViewRootHolder } from './view-root.js';
 import { createStreamSeqTracker, type StreamSeqTracker } from './stream-seq.js';
 import { createLadderSet } from './ladders.js';
 import {
@@ -740,6 +742,12 @@ export interface BootSequenceOptions {
    * timeout so the spec doesn't hang.
    */
   readonly toolResultTimeoutMs?: number;
+  /**
+   * Test seam for the view's key root (ggui#1415): the holder the boot and
+   * every later tool result offer their slice's root to. Defaults to the
+   * document's one holder.
+   */
+  readonly viewRoots?: ViewRootHolder;
 }
 
 /**
@@ -967,7 +975,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // notice and leaning on SDK replay for correctness. Registering here
   // covers every boot path; arrivals before a renderer publishes
   // `applyRender` no-op inside the listener.
-  installPersistentToolResultListener(app);
+  const viewRoots = opts.viewRoots ?? documentViewRoots;
+  installPersistentToolResultListener(app, viewRoots);
 
   // Fresh boot ⇒ the relay latch and the connection store start
   // aligned (ggui#670): a standing latch from a prior mount in a
@@ -1073,6 +1082,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       ? { ok: true, meta: resolved.meta }
       : { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   const held = resolved?.held;
+  const viewRoot = resolved?.viewRoot;
 
   // hostContext is captured opportunistically from
   // `app.getHostContext()` — populated by App's `ui/initialize`
@@ -1108,6 +1118,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // `ai.ggui/render` slice. The parser surfaces it directly on
   // `parsed.meta`.
   const meta = parsed.meta;
+  // The boot slice's view key root (ggui#1415), adopted only when it decodes
+  // to this slice's session.
+  viewRoots.offer(meta.sessionId, viewRoot);
 
   // Install the precompiled, eval-free contract validators shipped on
   // the bootstrap BEFORE any wire traffic is validated. Self-contained
@@ -1800,7 +1813,16 @@ function shouldAutostart(): boolean {
 export interface BootMeta {
   readonly meta: McpAppAiGguiRenderMeta;
   readonly held?: HeldCredential;
+  /** The slice's view key root, when it carries one (ggui#1415). */
+  readonly viewRoot?: ViewRoot;
 }
+
+/**
+ * The document's view key root (ggui#1415). One per document, like the
+ * mount it proves for: the boot and every later tool result offer their
+ * slice's root to it, and it keeps the newest valid one.
+ */
+const documentViewRoots: ViewRootHolder = createViewRootHolder();
 
 /**
  * A parse result as a boot slice: the ok arm, or an expired live-only
@@ -1808,11 +1830,12 @@ export interface BootMeta {
  * live); `null` for every other failure.
  */
 function bootMetaOf(result: McpAppAiGguiMetaParseResult): BootMeta | null {
-  if (result.ok) {
-    return result.held !== undefined ? { meta: result.meta, held: result.held } : { meta: result.meta };
-  }
-  if (result.reason === 'EXPIRED_BOOTSTRAP') return { meta: result.meta, held: result.held };
-  return null;
+  if (!result.ok && result.reason !== 'EXPIRED_BOOTSTRAP') return null;
+  return {
+    meta: result.meta,
+    ...(result.held !== undefined ? { held: result.held } : {}),
+    ...(result.viewRoot !== undefined ? { viewRoot: result.viewRoot } : {}),
+  };
 }
 
 /**
@@ -4534,15 +4557,20 @@ export function __resetInterceptorsForTest(): void {
  * its event system. The App handle is passed by the boot path
  * directly (pre-connect, so `getCurrentApp()` is not yet set).
  */
-function installPersistentToolResultListener(app: App): void {
+function installPersistentToolResultListener(app: App, viewRoots: ViewRootHolder): void {
   if (persistentToolResultListenerApps.has(app)) return;
   persistentToolResultListenerApps.add(app);
   let lastMetaKey: string | null = null;
   app.addEventListener('toolresult', (params) => {
     // A re-mount re-applies the static seed only; the one live channel is
     // the boot's, so a credential held here has nothing to refresh.
-    const meta = extractMetaFromToolResult(params)?.meta;
-    if (meta === undefined) return;
+    const resolved = extractMetaFromToolResult(params);
+    if (resolved === null) return;
+    const meta = resolved.meta;
+    // A later slice's view key root (ggui#1415) is offered whether or not it
+    // re-mounts anything: the holder keeps it only for its own session and
+    // only when it is newer, and ignores a slice that carries none.
+    viewRoots.offer(meta.sessionId, resolved.viewRoot);
     // Cheap dedupe — the host may emit the same tool-result more
     // than once (claude.ai re-broadcasts on iframe re-attach).
     // Re-mounting the same slice meta would flicker without changing

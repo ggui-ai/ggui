@@ -18,6 +18,7 @@ import {
   VIEW_PROOF_V1_PATTERN,
   VIEW_PROOF_V1_VECTORS,
   VIEW_ROOT_SRC,
+  decodeViewRootClaims,
   formatViewProofV1,
   isViewProofTool,
   parseViewProof,
@@ -186,6 +187,33 @@ describe('parseViewProof (ggui#1415)', () => {
     expect(parseViewProof(withRoot(rootOf({ ...claims, src: 'console' })))).toEqual({ ok: false, reason: 'malformed' });
     for (const src of VIEW_ROOT_SRC) {
       expect(parseViewProof(withRoot(rootOf({ ...claims, src })))).toMatchObject({ ok: true, proof: { claims: { src } } });
+    }
+  });
+});
+
+describe('decodeViewRootClaims (ggui#1415)', () => {
+  const claims = { sessionId: 's-1', appId: 'a', kind: 'ws', iat: 1, exp: 2, jti: 'j', kid: 'k' };
+
+  it("decodes a view's own root to the claims a proof's root decodes to, unauthenticated", () => {
+    const parsed = parseViewProof(vector.proof);
+    if (!parsed.ok) throw new Error(`the vector must parse, got ${parsed.reason}`);
+    expect(decodeViewRootClaims(vector.root)).toEqual(parsed.proof.claims);
+    expect(decodeViewRootClaims(rootOf(claims))).toEqual(claims);
+  });
+
+  it('names why a string is not a root the v1 grammar can carry, and never throws', () => {
+    const cases: Array<[string, string]> = [
+      ['', 'malformed'],
+      ['short', 'malformed'],
+      [`${rootOf(claims)}+`, 'malformed'],
+      [rootOf({ ...claims, pad: 'x'.repeat(600) }), 'malformed'],
+      [Buffer.from('not json at all').toString('base64url'), 'malformed'],
+      [rootOf({ ...claims, iat: '1' }), 'malformed'],
+      [rootOf({ ...claims, src: 'console' }), 'malformed'],
+      [rootOf({ ...claims, kind: 'session' }), 'wrong_kind'],
+    ];
+    for (const [root, reason] of cases) {
+      expect(decodeViewRootClaims(root), root.slice(0, 40)).toBe(reason);
     }
   });
 });
