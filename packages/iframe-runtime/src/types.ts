@@ -122,11 +122,44 @@ export type McpAppAiGguiMetaParseResult =
       readonly ok: true;
       readonly meta: McpAppAiGguiRenderMeta;
       readonly hostContext?: HostContextProjection;
+      /**
+       * The live credential the parse dropped because it had expired
+       * (ggui#1496). The meta carries no live trio then; the view may
+       * refresh this through its host.
+       */
+      readonly held?: HeldCredential;
     }
   | {
       readonly ok: false;
-      readonly reason: McpAppAiGguiMetaParseFailureReason;
+      readonly reason: Exclude<McpAppAiGguiMetaParseFailureReason, 'EXPIRED_BOOTSTRAP'>;
+    }
+  | {
+      readonly ok: false;
+      /**
+       * A live-only slice whose credential expired. It still carries the
+       * projected meta (with no live trio) and the held credential, so a
+       * view with a host relay can refresh before giving up (ggui#1496).
+       */
+      readonly reason: 'EXPIRED_BOOTSTRAP';
+      readonly meta: McpAppAiGguiRenderMeta;
+      readonly held: HeldCredential;
     };
+
+/**
+ * A view's live credential, with the URLs that carry it (ggui#1496).
+ * Runtime-local, never a protocol member: the parse returns an expired one
+ * as `held`, and the credential controller refreshes it.
+ */
+export interface HeldCredential {
+  readonly wsToken: string;
+  readonly wsUrl: string;
+  /** ISO-8601, as the slice or the refresh stated it. */
+  readonly expiresAt?: string;
+  readonly sseUrl?: string;
+  readonly pollingUrl?: string;
+  /** `root`: minted with the render. `refreshed`: came back from a refresh. */
+  readonly origin: 'root' | 'refreshed';
+}
 
 // `RendererWebSocketManagerOptions` retired in B3b — the WS lifecycle
 // moved to `@ggui-ai/live-channel`'s `WSTransport`.

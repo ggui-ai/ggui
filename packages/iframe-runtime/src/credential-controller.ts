@@ -26,18 +26,9 @@
 import { parseDomainErrorText } from "@ggui-ai/protocol";
 import { withWsToken } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { unwrapCallToolResult } from "./call-tool-unwrap.js";
+import type { HeldCredential } from "./types.js";
 
-/** The live credential a view holds, with the URLs that carry it. */
-export interface HeldCredential {
-  readonly wsToken: string;
-  readonly wsUrl: string;
-  /** ISO-8601, as the slice or the refresh stated it. */
-  readonly expiresAt?: string;
-  readonly sseUrl?: string;
-  readonly pollingUrl?: string;
-  /** `root`: minted with the render. `refreshed`: came back from a refresh. */
-  readonly origin: "root" | "refreshed";
-}
+export type { HeldCredential };
 
 /** What reported the expiry. Every source but `boot` follows a drop. */
 export type ExpirySource = "ws" | "polling" | "bridge" | "boot";

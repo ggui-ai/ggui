@@ -60,7 +60,7 @@ import {
   parseMcpAppAiGguiRenderMeta,
   type ParseMcpAppAiGguiRenderMetaOptions,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppAiGguiMetaParseResult } from './types.js';
+import type { HeldCredential, McpAppAiGguiMetaParseResult } from './types.js';
 import { postObservabilityToParent } from './observability.js';
 
 /**
@@ -196,20 +196,31 @@ function projectMeta(
   meta: McpAppAiGguiRenderMeta,
   hasStaticContent: boolean,
 ):
-  | { ok: true; meta: McpAppAiGguiRenderMeta }
-  | { ok: false; reason: 'MALFORMED_BOOTSTRAP' | 'EXPIRED_BOOTSTRAP' } {
+  | { ok: true; meta: McpAppAiGguiRenderMeta; held?: HeldCredential }
+  | { ok: false; reason: 'MALFORMED_BOOTSTRAP' }
+  | { ok: false; reason: 'EXPIRED_BOOTSTRAP'; meta: McpAppAiGguiRenderMeta; held: HeldCredential } {
   let expiresAt = meta.expiresAt;
   let dropLiveCreds = false;
+  let held: HeldCredential | undefined;
   if (expiresAt !== undefined) {
     const ts = Date.parse(expiresAt);
     if (Number.isNaN(ts)) {
       return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
     }
     if (ts <= Date.now()) {
-      // Expired — only hard-fail when no static content is present.
-      // With static content, mount the UI without live mode.
-      if (!hasStaticContent) {
-        return { ok: false, reason: 'EXPIRED_BOOTSTRAP' };
+      // Expired: the live trio leaves the meta, so nothing subscribes with
+      // a dead token, and comes back as `held`, so the view can refresh it
+      // through its host (ggui#1496). Without static content the slice is
+      // still EXPIRED_BOOTSTRAP, now carrying what a refresh needs.
+      if (isNonEmptyString(meta.wsUrl) && isNonEmptyString(meta.wsToken)) {
+        held = {
+          wsToken: meta.wsToken,
+          wsUrl: meta.wsUrl,
+          expiresAt,
+          ...(meta.sseUrl !== undefined ? { sseUrl: meta.sseUrl } : {}),
+          ...(meta.pollingUrl !== undefined ? { pollingUrl: meta.pollingUrl } : {}),
+          origin: 'root',
+        };
       }
       dropLiveCreds = true;
       expiresAt = undefined;
@@ -312,7 +323,13 @@ function projectMeta(
     ...(meta.codeB64 !== undefined ? { codeB64: meta.codeB64 } : {}),
     ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
   };
-  return { ok: true, meta: projected };
+  if (dropLiveCreds && !hasStaticContent) {
+    // Live-only and expired. `held` is always set here: validateMeta admits a
+    // live-only slice only with a live trio.
+    if (held === undefined) return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
+    return { ok: false, reason: 'EXPIRED_BOOTSTRAP', meta: projected, held };
+  }
+  return { ok: true, meta: projected, ...(held !== undefined ? { held } : {}) };
 }
 
 /**
@@ -358,7 +375,7 @@ export function validateMeta(
   const result = projectMeta(meta, hasStaticContent);
   if (!result.ok) return result;
 
-  return { ok: true, meta: result.meta };
+  return { ok: true, meta: result.meta, ...(result.held !== undefined ? { held: result.held } : {}) };
 }
 
 /**

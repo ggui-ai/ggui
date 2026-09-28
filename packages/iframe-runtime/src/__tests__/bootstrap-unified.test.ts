@@ -236,13 +236,17 @@ describe('Slice 14 — per-mode validation', () => {
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
-  it('rejects expired live-mode bootstrap', () => {
-    expect(
-      validateMeta({
-        ...liveBootstrap,
-        expiresAt: '2000-01-01T00:00:00.000Z',
-      }),
-    ).toEqual({ ok: false, reason: 'EXPIRED_BOOTSTRAP' });
+  it('rejects expired live-mode bootstrap, holding its credential for a refresh (ggui#1496)', () => {
+    const result = validateMeta({
+      ...liveBootstrap,
+      expiresAt: '2000-01-01T00:00:00.000Z',
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'EXPIRED_BOOTSTRAP' });
+    // Still a rejection; it now carries the expired credential so a view
+    // with a host relay can refresh it before giving up.
+    if (result.ok || result.reason !== 'EXPIRED_BOOTSTRAP') throw new Error('expected EXPIRED_BOOTSTRAP');
+    expect(result.held.wsToken).toBe(liveBootstrap.wsToken);
+    expect(result.meta.wsToken).toBeUndefined();
   });
 });
 
