@@ -1,9 +1,9 @@
 /**
  * Handler-level byte-identity coverage for the render-resource read
- * gate (render-read-gate.ts, wired into `registerGguiRenderResourceTemplate`
+ * gate (`renderReadAllowed`, now in @ggui-ai/mcp-server-handlers/renders; wired into `registerGguiRenderResourceTemplate`
  * — see docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §3).
  *
- * `render-read-gate.test.ts` pins `renderReadAllowed`'s allow/deny
+ * `render-read-gate.test.ts` (in @ggui-ai/mcp-server-handlers) pins `renderReadAllowed`'s allow/deny
  * decision in isolation. This file pins the OUTER contract the gate
  * exists to serve: a caller who reads a sessionId they cannot access
  * (denied) must receive a response BYTE-IDENTICAL to the response for

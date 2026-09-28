@@ -19,6 +19,7 @@ import {
   parseMcpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { isRecord } from '@ggui-ai/protocol';
+import { verifyToken } from '@ggui-ai/mcp-server-core';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -872,6 +873,31 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     };
   }
 
+  it('the server wires the authorized refresh: a rendered session\'s own envelope re-mints a fresh root for its app (ggui#1496 part B)', async () => {
+    const bootstrap = await mintRenderBootstrap();
+    const result = await client.callTool({
+      name: 'ggui_runtime_refresh_ws_token',
+      arguments: { envelope: bootstrap.token },
+    });
+    expect(result.isError).toBeFalsy();
+    const out = result.structuredContent as { ok: boolean; envelope?: string };
+    expect(out.ok).toBe(true);
+    const verified = verifyToken(out.envelope ?? '', 'test-secret-32bytes-for-hmac-1234', 'ws');
+    expect(verified.ok).toBe(true);
+    expect(verified.ok && verified.claims.sessionId).toBe(bootstrap.sessionId);
+    expect(verified.ok && verified.claims.appId).toBe(bootstrap.appId);
+    expect(out.envelope).not.toBe(bootstrap.token);
+  });
+
+  it('the wired refresh refuses a tampered envelope with BOOTSTRAP_INVALID (ggui#1496 part B)', async () => {
+    const bootstrap = await mintRenderBootstrap();
+    const result = await client.callTool({
+      name: 'ggui_runtime_refresh_ws_token',
+      arguments: { envelope: `${bootstrap.token.slice(0, -2)}xx` },
+    });
+    expect(result.structuredContent).toMatchObject({ ok: false, code: 'BOOTSTRAP_INVALID' });
+  });
+
   it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {
     const bootstrap = await mintRenderBootstrap();
     // Open WS with ?wsToken= gate — upgrade-time AuthAdapter is skipped.
@@ -932,9 +958,9 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     // `BOOTSTRAP_INVALID`. Under the signed-envelope model, a transient
     // WS drop reconnects with the SAME envelope (no fresh handshake)
     // as long as the envelope is still inside its TTL. Replay defense
-    // is now anchored on the signed `exp` claim + the refresh-window
-    // cap on the original `iat` (see `refreshWsToken`), not
-    // on a server-side jti-claim Map.
+    // is anchored on the signed `exp` claim, and a renewal past it needs
+    // the authorized refresh (ggui#1496 part B), not a server-side
+    // jti-claim Map.
     const bootstrap = await mintRenderBootstrap();
 
     async function subscribeWithBootstrap(): Promise<{ ok: true; sessionToken?: string } | { ok: false; code: string }> {

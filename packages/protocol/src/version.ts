@@ -6,6 +6,25 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_runtime_refresh_ws_token` is an AUTHORIZED re-mint (2026-09-28,
+ * ggui#1496 part B, slice 1: MINOR, same draft stamp). It re-mints a view's
+ * live credential, at any age, only for a caller the render read door's
+ * own predicate admits to the envelope's session (the app, then the
+ * subject, on the live row). A missing, foreign or subject-refused session
+ * gets the same not-found `ggui_runtime_pull` throws, and no refresh window
+ * applies.
+ *
+ * The advertised output schema is byte-identical to the previous release's.
+ * It still declares `REFRESH_WINDOW_CLOSED`, which only a previous-release
+ * server sends, so a client that cached either release's schema accepts
+ * every answer (the N−1 fixture is pinned in `@ggui-ai/mcp-server`).
+ *
+ * New export `withWsToken(url, wsToken)`: the inverse of
+ * {@link composeSessionApiUrls}' token parameter, so a view that holds a
+ * refreshed token re-derives its token-bearing URLs without the refresh
+ * sending them. The package-API removals this slice makes ride VERSION-POLICY
+ * §3.7 (a pre-1.0 lockstep minor).
+ * --------------------------------------------------------------------
  * A shell retries a content-hashed runtime bundle ONCE through its unhashed
  * twin (2026-09-28, additive, ggui#1501: MINOR, same draft stamp); the thin
  * shell then reports `BUNDLE_FETCH_FAILED` as before, and the self-contained

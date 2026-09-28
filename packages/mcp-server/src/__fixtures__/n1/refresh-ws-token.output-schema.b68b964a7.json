@@ -1,0 +1,27 @@
+{
+  "_receipt": "ggui_runtime_refresh_ws_token's advertised outputSchema as served at tag 14 (b68b964a7; the handler file is unchanged from there to 2bf83e311). ggui#1496 part B keeps it byte-identical at N: a client that cached this schema must accept every answer an N server gives.",
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "ok": {
+        "type": "boolean"
+      },
+      "code": {
+        "type": "string",
+        "enum": ["BOOTSTRAP_INVALID", "REFRESH_WINDOW_CLOSED", "BOOTSTRAP_NOT_SUPPORTED"]
+      },
+      "message": {
+        "type": "string"
+      },
+      "envelope": {
+        "type": "string"
+      },
+      "expiresAt": {
+        "type": "string"
+      }
+    },
+    "required": ["ok"],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  }
+}

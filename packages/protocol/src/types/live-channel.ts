@@ -91,8 +91,9 @@ export interface SubscribePayload {
    *   - Opaque to the client — validated server-side against the
    *     subscribe's `sessionId` + `appId`.
    *   - Short TTL (seconds-to-minutes); stale tokens are rejected
-   *     (refresh via `ggui_runtime_refresh_ws_token` within the
-   *     refresh window, otherwise re-handshake).
+   *     (refresh via `ggui_runtime_refresh_ws_token`, an authorized
+   *     re-mint at any age for a caller admitted to the session, ggui#1496;
+   *     otherwise re-handshake).
    *   - Reusable within TTL (G14, 2026-05-23) so a transient WS drop
    *     can reconnect without a fresh handshake.
    *

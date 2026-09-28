@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderReadAllowed } from "./render-read-gate.js";
-// `HandlerContext` isn't exported from `./build-mcp.js` (only imported
-// there); import from its actual home, matching render-read-gate.ts.
-import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
+import type { HandlerContext } from "../types.js";
 
 const APP = "app_a";
 // #446 — the subject is `userId`, written at commit. This fixture used

@@ -809,6 +809,38 @@ export function composeSessionApiUrls(
   };
 }
 
+/**
+ * Swap the token in a token-bearing session-API URL for `wsToken`: the
+ * inverse of {@link composeSessionApiUrls}' one `wsToken` query parameter
+ * (ggui#1496 part B).
+ *
+ * After an authorized refresh the view holds a fresh token and the URLs its
+ * slice stamped. This re-derives exactly what the composer would have
+ * written for the new token, so the refresh never has to send URLs.
+ *
+ * String-level: the path, every other parameter, their order and a fragment
+ * pass through untouched. Only the value of the ONE parameter named exactly
+ * `wsToken` is replaced, URL-encoded like the composer does. Returns
+ * `undefined` when the URL has no such parameter, or more than one. The
+ * caller then leaves that rung without a token rather than appending one.
+ *
+ * @public
+ */
+export function withWsToken(url: string, wsToken: string): string | undefined {
+  const hashAt = url.indexOf('#');
+  const beforeHash = hashAt === -1 ? url : url.slice(0, hashAt);
+  const fragment = hashAt === -1 ? '' : url.slice(hashAt);
+  const queryAt = beforeHash.indexOf('?');
+  if (queryAt === -1) return undefined;
+  const params = beforeHash.slice(queryAt + 1).split('&');
+  const hits = params.filter((param) => param.split('=')[0] === 'wsToken');
+  if (hits.length !== 1) return undefined;
+  const replaced = params.map((param) =>
+    param.split('=')[0] === 'wsToken' ? `wsToken=${encodeURIComponent(wsToken)}` : param,
+  );
+  return `${beforeHash.slice(0, queryAt)}?${replaced.join('&')}${fragment}`;
+}
+
 
 // =============================================================================
 // Request-side `_meta` — host-supplied metadata on inbound `tools/call`.

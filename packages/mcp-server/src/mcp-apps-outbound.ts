@@ -94,7 +94,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
-import { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
+import { renderReadAllowed, type RenderReadRowView } from "@ggui-ai/mcp-server-handlers/renders";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
 import { RUNTIME_BUNDLE_PLAIN_NAME } from "./runtime-bundle-hash.js";
@@ -1835,7 +1835,7 @@ export interface GguiRenderResourceTemplateOptions {
   /**
    * Per-request handler-context accessor — the SAME AsyncLocalStorage
    * read the tool path uses. The per-session resource handler gates
-   * reads on it (render-read-gate.ts). Absent ⇒ the handler fails
+   * reads on it (`renderReadAllowed`, in @ggui-ai/mcp-server-handlers/renders). Absent ⇒ the handler fails
    * closed for rows scoped to any app other than the single-app
    * default (compose paths that cannot thread a context keep working
    * for OSS single-app flows only).

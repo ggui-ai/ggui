@@ -12,10 +12,11 @@
  *     The MCP Apps iframe receives it on the
  *     `_meta["ai.ggui/render"].wsToken` slice field. **Reusable within TTL**
  *     (G14, 2026-05-23) so a transient WS drop can reconnect without a
- *     fresh handshake. After TTL expiry the client either refreshes
- *     the envelope via `ggui_runtime_refresh_ws_token` (allowed within
- *     `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` of the
- *     original `iat`) or re-handshakes.
+ *     fresh handshake. After TTL expiry the view refreshes it through
+ *     `ggui_runtime_refresh_ws_token`, an AUTHORIZED re-mint: the
+ *     envelope is verified at any age ({@link verifyWsTokenSignature}),
+ *     and the caller must be admitted to the session before anything is
+ *     minted (ggui#1496 part B).
  *
  *   - **Session token** — longer-TTL, reusable, minted by the live-
  *     channel server on the FIRST successful ws-token-authed subscribe
@@ -93,16 +94,14 @@ export interface WsTokenClaims {
 export const DEFAULT_WS_TOKEN_TTL_SEC = 180;
 export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
 /**
- * Refresh-window multiplier for ws tokens (G14, 2026-05-23).
- *
- * Signature-valid ws tokens are refreshable for
- * `iat + DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` seconds —
- * i.e. for one extra TTL window past expiry. Past that, the client
- * must re-handshake (matcher-cache hit makes that cheap).
- *
- * Bounded purely by the original `iat` claim, not server state — the
- * refresh path is stateless. Operators tune the window by overriding
- * `refreshWindowSec` on `refreshWsToken`.
+ * Reserved for bounding possession-only ws-token renewals (ggui#1496 part B,
+ * slice 2): such a renewal will stay within
+ * `root iat + DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` seconds.
+ * Nothing reads it at this release, and tokens carry no root-iat claim yet:
+ * `GET /api/sessions/:id/state` still re-mints a fresh ws token for anyone
+ * holding an unexpired one, with no bound. The authorized refresh
+ * (`ggui_runtime_refresh_ws_token`) is not bounded by it either, because
+ * each of its calls is authorized.
  */
 export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 /**
@@ -168,9 +167,9 @@ function mintToken(
  * `_meta["ai.ggui/render"].wsToken` slice field of a `ggui_render` tool result,
  * is consumed at iframe `subscribe`, and remains valid for `ttlSec`
  * (default 180s) to absorb transient WS drops without a fresh
- * handshake (G14, 2026-05-23). Post-TTL: the iframe MAY refresh via
- * {@link refreshWsToken} for one extra TTL window past `iat`;
- * past that, a fresh handshake is required.
+ * handshake (G14, 2026-05-23). Post-TTL: the view refreshes through
+ * `ggui_runtime_refresh_ws_token`, an authorized re-mint gated on the
+ * session (ggui#1496 part B); see {@link verifyWsTokenSignature}.
  */
 export function mintWsToken(
   input: MintTokenInput,
@@ -237,11 +236,7 @@ export type VerifyTokenFailure =
   | 'invalid_signature'
   | 'expired'
   | 'wrong_kind'
-  | 'malformed_claims'
-  /** G14 refresh-only: signature valid + signed shape correct, but the
-   *  refresh window (`iat + refreshWindowSec`) has closed. The client
-   *  must re-handshake. */
-  | 'refresh_window_closed';
+  | 'malformed_claims';
 
 export type VerifyTokenResult =
   | { readonly ok: true; readonly claims: WsTokenClaims }
@@ -255,6 +250,33 @@ export type VerifyTokenResult =
  * comparison; don't short-circuit on the first byte mismatch.
  */
 export function verifyToken(
+  token: string,
+  secret: string,
+  expectedKind: TokenKind,
+): VerifyTokenResult {
+  const result = verifySignedClaims(token, secret, expectedKind);
+  if (!result.ok) return result;
+  const now = Math.floor(Date.now() / 1000);
+  if (result.claims.exp <= now) return { ok: false, reason: 'expired' };
+  return result;
+}
+
+/**
+ * Verify a ws envelope's signature, shape and kind at ANY age: the expiry
+ * is NOT checked (ggui#1496 part B).
+ *
+ * This is the first step of the authorized refresh
+ * (`ggui_runtime_refresh_ws_token`): the envelope proves the view was
+ * given a credential for its session, and the handler then authorizes the
+ * CALLER against that session before minting anything. A possession
+ * check alone never mints. `'expired'` is never returned.
+ */
+export function verifyWsTokenSignature(token: string, secret: string): VerifyTokenResult {
+  return verifySignedClaims(token, secret, 'ws');
+}
+
+/** Signature (timing-safe), claim shape and kind — everything but the expiry. */
+function verifySignedClaims(
   token: string,
   secret: string,
   expectedKind: TokenKind,
@@ -309,158 +331,7 @@ export function verifyToken(
   if (claims.kind !== expectedKind) {
     return { ok: false, reason: 'wrong_kind' };
   }
-  const now = Math.floor(Date.now() / 1000);
-  if (claims.exp <= now) return { ok: false, reason: 'expired' };
   return { ok: true, claims };
-}
-
-/**
- * Options for {@link refreshWsToken}.
- */
-export interface RefreshWsTokenOptions {
-  /**
-   * TTL of the NEWLY-minted ws envelope (seconds). Defaults to
-   * {@link DEFAULT_WS_TOKEN_TTL_SEC}. Pass the same TTL the mint path
-   * uses so refreshed envelopes match freshly minted ones.
-   */
-  readonly ttlSec?: number;
-  /**
-   * Refresh-window length (seconds), measured from the ORIGINAL
-   * envelope's `iat`. Defaults to
-   * `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * (ttlSec ?? DEFAULT_WS_TOKEN_TTL_SEC)`
-   * — one extra TTL window past mint time. Past this, the caller
-   * MUST re-handshake; the refresh path returns
-   * `'refresh_window_closed'`.
-   *
-   * Bounding the window on the ORIGINAL `iat` (not the current
-   * `exp`) is deliberate: it caps the total reachable lifetime of a
-   * stolen envelope to `iat + refreshWindowSec`, independent of how
-   * many refreshes the caller pumps through.
-   */
-  readonly refreshWindowSec?: number;
-}
-
-/**
- * Result of {@link refreshWsToken}.
- *
- *   - `ok: true`: caller may swap the old envelope for `token` and
- *     resume normally. The new envelope's `claims.iat` is the refresh
- *     time, NOT the original mint; the `expiresAt` field returns the
- *     new `claims.exp` (epoch-seconds → ISO-8601 conversion is the
- *     transport-layer's job).
- *   - `ok: false`: the caller MUST re-handshake. `reason` distinguishes
- *     `'invalid_signature'` / `'malformed_claims'` (caller is broken
- *     or attacking — log + reject) from `'refresh_window_closed'` /
- *     `'wrong_kind'` (legitimate caller whose envelope aged out — do
- *     the cheap re-handshake).
- */
-export type RefreshWsTokenResult =
-  | {
-      readonly ok: true;
-      readonly token: string;
-      readonly claims: WsTokenClaims;
-    }
-  | {
-      readonly ok: false;
-      readonly reason: VerifyTokenFailure;
-    };
-
-/**
- * Refresh a (possibly-expired-but-signature-valid) ws token.
- *
- * Stateless: verifies HMAC against the same secret used at mint, accepts
- * the envelope if its ORIGINAL `iat` is within the refresh window
- * (`now - iat <= refreshWindowSec`), and mints a fresh ws envelope
- * with new `iat` + `exp` + `jti`. The new envelope is bound to the SAME
- * `sessionId` + `appId` as the original (a refresh never re-scopes).
- *
- * Failure semantics — the refresh path tolerates `'expired'` (that's its
- * whole purpose) but NOT `'invalid_signature'` / `'malformed_claims'`
- * (caller is broken or attacking) and NOT `'refresh_window_closed'`
- * (envelope is too old; force the caller back through the handshake
- * cache, which is cheap by design).
- */
-export function refreshWsToken(
-  token: string,
-  secret: string,
-  opts: RefreshWsTokenOptions = {},
-): RefreshWsTokenResult {
-  const ttlSec = opts.ttlSec ?? DEFAULT_WS_TOKEN_TTL_SEC;
-  const refreshWindowSec =
-    opts.refreshWindowSec ??
-    DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttlSec;
-
-  // Decode + signature-verify WITHOUT the standard expiry check — the
-  // whole point of refresh is to accept expired-but-signed envelopes.
-  // We reuse `verifyToken`'s machinery for tamper / shape / kind checks
-  // and conditionally pass-through `'expired'` because that IS the
-  // refresh case.
-  const result = verifyToken(token, secret, 'ws');
-  let claims: WsTokenClaims | undefined;
-  if (result.ok) {
-    claims = result.claims;
-  } else if (result.reason === 'expired') {
-    // Re-decode the payload to get claims (verifyToken already
-    // signature-checked + kind-checked; we know it's safe to re-parse).
-    const [payloadB64] = token.split('.');
-    if (payloadB64) {
-      try {
-        const raw = JSON.parse(
-          base64urlDecode(payloadB64).toString('utf8'),
-        ) as Record<string, unknown>;
-        // Re-validate the shape — we already passed it once in
-        // verifyToken, so this should always succeed; explicit re-check
-        // keeps the `claims!` non-null assertion below honest.
-        if (
-          typeof raw.sessionId === 'string' &&
-          typeof raw.appId === 'string' &&
-          typeof raw.iat === 'number' &&
-          typeof raw.exp === 'number' &&
-          typeof raw.jti === 'string' &&
-          raw.kind === 'ws'
-        ) {
-          claims = {
-            sessionId: raw.sessionId,
-            appId: raw.appId,
-            kind: raw.kind,
-            iat: raw.iat,
-            exp: raw.exp,
-            jti: raw.jti,
-          };
-        }
-      } catch {
-        // Drop through — `claims` stays undefined, surfaced below as
-        // `'malformed_claims'`.
-      }
-    }
-    if (!claims) return { ok: false, reason: 'malformed_claims' };
-  } else {
-    // Hard reject: tamper / format / kind / shape failures must NOT
-    // refresh — those signal a broken or hostile caller, not a stale
-    // envelope.
-    return { ok: false, reason: result.reason };
-  }
-
-  // Refresh-window check is the only state we add beyond `verifyToken`.
-  const now = Math.floor(Date.now() / 1000);
-  if (now - claims.iat > refreshWindowSec) {
-    return { ok: false, reason: 'refresh_window_closed' };
-  }
-
-  // Mint a fresh ws token with the SAME sessionId + appId. New iat,
-  // exp, jti — the new envelope's lifetime starts from `now`, but the
-  // refresh window remains anchored to the ORIGINAL iat the caller
-  // first received (callers that refresh repeatedly cannot extend the
-  // window arbitrarily — see RefreshWsTokenOptions.refreshWindowSec).
-  const { token: newToken, claims: newClaims } = mintWsToken(
-    {
-      sessionId: claims.sessionId,
-      appId: claims.appId,
-      ttlSec,
-    },
-    secret,
-  );
-  return { ok: true, token: newToken, claims: newClaims };
 }
 
 /**

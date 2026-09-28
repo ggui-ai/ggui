@@ -572,7 +572,6 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
             ? { ok: true, sessionId, appId: APP_ID }
             : { ok: false, reason: 'invalid' },
         issueSessionToken: () => 'reconnect-token-1',
-        refresh: () => ({ ok: false, reason: 'invalid' }),
       },
     }));
     fx.ws.send(subscribeSansAppId(fx.sessionId, { wsToken: 'tok-valid' }));
@@ -589,7 +588,6 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
             ? { ok: true, sessionId, appId: APP_ID }
             : { ok: false, reason: 'invalid' },
         issueSessionToken: () => 'reconnect-token-1',
-        refresh: () => ({ ok: false, reason: 'invalid' }),
       },
     }));
     fx.ws.send(

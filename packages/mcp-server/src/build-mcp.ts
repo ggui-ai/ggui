@@ -445,7 +445,7 @@ export function buildMcpServer(
       // Thread the same per-request context accessor + logger the tool
       // path uses (`getContext`, param 3 of `buildMcpServer`) so the
       // per-session resource handler's render-read gate sees the
-      // caller (render-read-gate.ts).
+      // caller (`renderReadAllowed`, @ggui-ai/mcp-server-handlers/renders).
       ...(opts.selfContained !== undefined
         ? { selfContained: { ...opts.selfContained, getContext, logger } }
         : {}),

@@ -20,6 +20,7 @@ import {
   parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
   composeSessionApiUrls,
+  withWsToken,
   type SessionApiUrls,
   deriveContextName,
   isMcpAppsGguiSession,
@@ -815,6 +816,28 @@ describe('emit ⇔ parse round-trip', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.meta).toEqual(meta);
+  });
+});
+
+describe('withWsToken (ggui#1496 part B)', () => {
+  it('re-derives exactly what the composer would write for the new token', () => {
+    for (const [oldTok, newTok] of [['old', 'new'], ['a+b/c=&d', 'x y/z?']]) {
+      const before = composeSessionApiUrls('https://x.example', 'r 1', oldTok);
+      const after = composeSessionApiUrls('https://x.example', 'r 1', newTok);
+      expect(withWsToken(before.pollingUrl, newTok)).toBe(after.pollingUrl);
+      expect(withWsToken(before.sseUrl, newTok)).toBe(after.sseUrl);
+    }
+  });
+
+  it('touches nothing but the one parameter: order, other params and the fragment survive', () => {
+    expect(withWsToken('https://x.example/p?x=1&wsToken=t&y=2#f', 'n')).toBe('https://x.example/p?x=1&wsToken=n&y=2#f');
+    expect(withWsToken('/api/sessions/r/events?wsToken=t', 'n')).toBe('/api/sessions/r/events?wsToken=n');
+  });
+
+  it('is undefined for a URL with no wsToken parameter, or more than one — never appends', () => {
+    expect(withWsToken('https://x.example/api/sessions/r/events', 'n')).toBeUndefined();
+    expect(withWsToken('https://x.example/p?wsTokenX=t', 'n')).toBeUndefined();
+    expect(withWsToken('https://x.example/p?wsToken=a&wsToken=b', 'n')).toBeUndefined();
   });
 });
 

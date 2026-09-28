@@ -178,8 +178,9 @@ export {
   type GguiRefreshWsTokenOutput,
   type RefreshAccepted,
   type RefreshRejected,
-  type WsTokenRefreshSeam,
+  type WsEnvelopeVerdict,
 } from "./refresh-ws-token.js";
+export { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
 export {
   appGadgetsForContract,
   generationInputsForHandshake,

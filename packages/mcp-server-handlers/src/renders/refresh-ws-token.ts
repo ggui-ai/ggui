@@ -1,62 +1,52 @@
 /**
- * `ggui_runtime_refresh_ws_token` — iframe-internal MCP tool that
- * swaps a (possibly-expired-but-signature-valid) WS auth envelope
- * for a fresh one without a re-handshake.
+ * `ggui_runtime_refresh_ws_token` — an AUTHORIZED re-mint of a view's live
+ * credential (ggui#1496 part B).
  *
- * Registered with `_meta.ui.visibility: ['app']` per MCP Apps spec
- * §401: only the iframe (view) may call. The agent never sees it on
- * its `tools/list` — the agent has no business in the live-channel
- * auth lifecycle.
+ * Registered with `_meta.ui.visibility: ['app']` per MCP Apps spec §401:
+ * the view calls it through its host's `tools/call` relay, which is the
+ * same relay the view's bridge rung (`ggui_runtime_pull`) already depends
+ * on. The agent never sees it on its `tools/list`.
  *
- * **Wire shape** (iframe-runtime postMessages via `tools/call`, host
- * relays to the MCP server):
+ * **Wire shape:** `{ envelope }` in; `{ ok: true, envelope, expiresAt }`,
+ * or `{ ok: false, code, message }` for a deployment-level or envelope-level
+ * refusal. A refusal about the SESSION is thrown, not returned.
  *
- * ```jsonc
- * {
- *   "method": "tools/call",
- *   "params": {
- *     "name": "ggui_runtime_refresh_ws_token",
- *     "arguments": {
- *       "envelope": "<base64url(payload)>.<base64url(hmac)>"
- *     }
- *   }
- * }
- * ```
+ * **Answers, in order:**
+ *   1. The deployment wires no render store, verifier or minter:
+ *      `BOOTSTRAP_NOT_SUPPORTED`. This is decided before the envelope is
+ *      read, because it is deployment-wide and leaks nothing.
+ *   2. The envelope fails its signature, shape or kind (it may be of ANY
+ *      age): `BOOTSTRAP_INVALID`.
+ *   3. The envelope's session is missing, belongs to another app, or
+ *      belongs to another subject: the SAME `GguiSessionNotFoundError`
+ *      `ggui_runtime_pull` throws, byte-identical. The gate is the read
+ *      door's own predicate ({@link renderReadAllowed}) on the LIVE row.
+ *      An evicted session answers not-found here; only a host-driven
+ *      `resources/read` re-mints one.
+ *   4. The store read throws: that error propagates. It is never folded
+ *      into the not-found, and nothing is minted.
+ *   5. Otherwise the deployment's minter mints a fresh ROOT credential for
+ *      the session.
  *
- * **Behavior:**
- *   - Signature OK + inside refresh window → returns
- *     `{ok:true, envelope:"...", expiresAt:"<ISO-8601>"}`. The iframe
- *     swaps in `envelope` for subsequent WS subscribes.
- *   - Refresh window closed (envelope older than
- *     `iat + refreshWindowSec`) → returns
- *     `{ok:false, code:"REFRESH_WINDOW_CLOSED"}`. Client MUST
- *     re-handshake (the matcher cache makes this cheap by design).
- *   - Tamper / format / kind failure → returns
- *     `{ok:false, code:"BOOTSTRAP_INVALID"}`. Client MUST
- *     re-handshake; the exact breakage is logged server-side.
- *   - No refresh seam wired on this deployment → returns
- *     `{ok:false, code:"BOOTSTRAP_NOT_SUPPORTED"}`.
- *
- * The `BOOTSTRAP_*` error codes are wire-frozen host-observable
- * lifecycle signals — host integrations pattern-match on them. They
- * stay spelled "BOOTSTRAP_" for back-compat with the previous naming;
- * the credential field itself is now `wsToken` everywhere internally.
- *
- * Stateless on the server side: validation is HMAC + claim arithmetic
- * only, no per-envelope state lookup. A hosted deployment's tool
- * wrapper composes this with the same
- * `MCP_BOOTSTRAP_SECRET` the render handler signs against.
+ * Every call is authorized by the caller's own connection, so no refresh
+ * window bounds this path. A holder of an envelope who is not admitted to
+ * its session gets nothing. The advertised output schema is unchanged from
+ * the release before (its `code` enum still names `REFRESH_WINDOW_CLOSED`,
+ * which this server never sends), so a client that cached the previous
+ * schema accepts every answer (N−1, pinned in `@ggui-ai/mcp-server`).
  */
-
 import { z } from 'zod';
-import { defineHandler } from '../types.js';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import { defineHandler, type HandlerContext } from '../types.js';
+import { GguiSessionNotFoundError } from './errors.js';
+import { renderReadAllowed } from './render-read-gate.js';
 
 const inputSchema = {
   envelope: z
     .string()
     .min(1, 'envelope is required')
     .describe(
-      'The current WS auth envelope (e.g. `_meta["ai.ggui/render"].token` from the original `ggui_render` result). May be expired (within the refresh window). MUST NOT be tampered with — the server HMAC-verifies the signature against the same secret used at mint.',
+      'The view\'s current WS auth envelope (the `wsToken` of its `_meta["ai.ggui/render"]` slice), at any age. The server verifies its signature, then admits the CALLER to the envelope\'s session before minting a fresh one.',
     ),
 } as const;
 
@@ -66,13 +56,13 @@ const outputSchema = {
   /**
    * On `ok:false`, the canonical rejection code:
    *   - `'BOOTSTRAP_INVALID'` — signature mismatch, malformed envelope,
-   *     wrong kind (e.g. a session token submitted for ws-token
-   *     refresh). Iframe MUST re-handshake.
-   *   - `'REFRESH_WINDOW_CLOSED'` — signature valid, but the envelope
-   *     is older than `iat + refreshWindowSec`. Iframe MUST re-handshake.
-   *   - `'BOOTSTRAP_NOT_SUPPORTED'` — this deployment didn't wire a
-   *     refresh seam (no signing secret configured). Iframe MUST
-   *     re-handshake.
+   *     or the wrong kind (e.g. a session token submitted here).
+   *   - `'REFRESH_WINDOW_CLOSED'` — declared for N−1 only: a previous-
+   *     release server sends it; this server never does.
+   *   - `'BOOTSTRAP_NOT_SUPPORTED'` — the deployment wires no render
+   *     store, envelope verifier or minter.
+   *   A session the caller cannot see is NOT answered here: it throws the
+   *   same not-found `ggui_runtime_pull` throws.
    */
   code: z
     .enum([
@@ -102,116 +92,113 @@ export interface RefreshAccepted {
 
 export interface RefreshRejected {
   readonly ok: false;
-  readonly code:
-    | 'BOOTSTRAP_INVALID'
-    | 'REFRESH_WINDOW_CLOSED'
-    | 'BOOTSTRAP_NOT_SUPPORTED';
+  /** `REFRESH_WINDOW_CLOSED` stays declared for N−1 (a previous-release
+   *  server sends it); this server never does. */
+  readonly code: 'BOOTSTRAP_INVALID' | 'REFRESH_WINDOW_CLOSED' | 'BOOTSTRAP_NOT_SUPPORTED';
   readonly message: string;
 }
 
 /**
- * The `ggui_runtime_refresh_ws_token` output union — the wire shape
- * `structuredContent` carries. Exported so callers (iframe runtime,
- * e2e specs) type their reads against the handler's own contract
- * instead of re-declaring it.
+ * The `ggui_runtime_refresh_ws_token` output union: the wire shape
+ * `structuredContent` carries. Exported so callers (the iframe runtime,
+ * e2e specs) type their reads against the handler's own contract.
  */
 export type GguiRefreshWsTokenOutput = RefreshAccepted | RefreshRejected;
 
-/**
- * Refresh seam — implementations receive the inbound envelope and
- * return either the freshly-minted envelope or a discriminated failure.
- * The OSS server wires this against `refreshWsToken` from
- * `@ggui-ai/mcp-server-core` (same HMAC secret as the render minter).
- *
- * Defined here (not imported from `mcp-server-core`) to keep the
- * handler package free of an extra dep — a hosted deployment composes the
- * seam in its own tool wrapper, and the OSS factory composes one too.
- */
-export interface WsTokenRefreshSeam {
-  refresh(envelope: string):
-    | { ok: true; token: string; expiresAt: string }
-    | { ok: false; reason: 'window_closed' | 'invalid' };
-}
+/** A ws envelope's signature-and-kind verdict, at ANY age: the claims the refresh needs. */
+export type WsEnvelopeVerdict =
+  | { readonly ok: true; readonly sessionId: string; readonly appId: string; readonly iat: number }
+  | { readonly ok: false };
 
 export interface GguiRefreshWsTokenHandlerDeps {
+  /** The session store the gate reads the LIVE row from. */
+  readonly renderStore?: GguiSessionStore;
   /**
-   * The refresh seam — typically the same `channelWsToken.refresh`
-   * the render-channel server wires for WS upgrade validation, so
-   * both code paths share one HMAC secret and one refresh-window
-   * policy. Absence is tolerated (`BOOTSTRAP_NOT_SUPPORTED` on every
-   * call); same fail-closed posture as the other ws-token-aware
-   * handlers.
+   * Verify an envelope's signature, shape and kind at any age. Wired over
+   * the deployment's ws-token secret (`verifyWsTokenSignature` in
+   * `@ggui-ai/mcp-server-core`).
    */
-  readonly refreshSeam?: WsTokenRefreshSeam;
+  readonly verify?: (envelope: string) => WsEnvelopeVerdict;
+  /**
+   * The deployment's ROOT minter for a session's live credential: the same
+   * one the render result and the read door stamp with.
+   */
+  readonly mint?: (sessionId: string, appId: string) => { readonly token: string; readonly expiresAt: string };
+}
+
+/** One structured line per outcome, ids only. Handlers carry no logger. */
+function logRefreshed(fields: { sessionId: string; appId: string; source: string | null; rootAgeSec: number }): void {
+  // eslint-disable-next-line no-console -- operator-visible structured line; handlers carry no logger
+  console.info(`[ggui] ws_token_refreshed ${JSON.stringify(fields)}`);
+}
+function logRefused(fields: { reason: 'not_supported' | 'invalid' | 'not_found' | 'read_failed'; source: string | null }): void {
+  // eslint-disable-next-line no-console -- operator-visible structured line; handlers carry no logger
+  console.warn(`[ggui] ws_token_refresh_refused ${JSON.stringify(fields)}`);
 }
 
 /**
- * Build the `ggui_runtime_refresh_ws_token` handler.
- *
- * The handler IS the contract: stateless, single I/O envelope, no DB,
- * no render-state lookup, no log spam on per-call success. The only
- * server-side state it touches is the HMAC secret captured by the
- * refresh seam at construction time.
+ * Build the `ggui_runtime_refresh_ws_token` handler. Without all three
+ * deps it answers `BOOTSTRAP_NOT_SUPPORTED` on every call.
  */
-export function createGguiRefreshWsTokenHandler(
-  deps: GguiRefreshWsTokenHandlerDeps = {},
-) {
+export function createGguiRefreshWsTokenHandler(deps: GguiRefreshWsTokenHandlerDeps = {}) {
   return defineHandler({
     name: 'ggui_runtime_refresh_ws_token',
     title: '[runtime] Refresh WS Token',
     audience: ['runtime'],
     description:
-      'Refreshes a (possibly-expired-but-signature-valid) WS auth envelope into a fresh one without a re-handshake. Stateless on the server — HMAC verify + refresh-window arithmetic only. iframe calls this when its WS subscribe returns `BOOTSTRAP_EXPIRED`; on `ok:true`, the iframe swaps in `envelope` and reconnects. On `ok:false`, the iframe MUST re-handshake (cheap via the matcher cache). Never invoked by the agent directly — `_meta.ui.visibility: [\'app\']` restricts callers to MCP Apps views per spec §401; the agent has no business in the live-channel auth lifecycle.',
+      "Re-mints a view's live-channel credential for a caller admitted to its session. The view sends its current envelope, at any age; the server verifies the envelope's signature, admits the caller to the envelope's session exactly as the render read door does (the app, then the subject), and mints a fresh credential. A session the caller cannot see answers not-found, as `ggui_runtime_pull` does. Called by the view (`_meta.ui.visibility: ['app']`, MCP Apps §401), never by the agent.",
     inputSchema,
     outputSchema,
     _meta: {
       ui: {
-        // Spec §401: only an MCP Apps view (iframe) can call. Outer
-        // agent does NOT see this tool on its tools/list.
+        // Spec §401: only an MCP Apps view (iframe) can call. The agent
+        // does NOT see this tool on its tools/list.
         visibility: ['app'] as const,
       },
     },
-    async handler(input): Promise<GguiRefreshWsTokenOutput> {
-      const parsed = z.object(inputSchema).safeParse(input);
-      if (!parsed.success) {
-        return {
-          ok: false,
-          code: 'BOOTSTRAP_INVALID',
-          message: `refresh_ws_token: envelope rejected at input validation: ${parsed.error.issues
-            .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
-            .join('; ')}`,
-        };
-      }
-      if (!deps.refreshSeam) {
+    async handler(input, ctx: HandlerContext): Promise<GguiRefreshWsTokenOutput> {
+      const source = ctx.authSource ?? null;
+      // 1. Deployment-level: decided before the envelope is read.
+      if (!deps.renderStore || !deps.verify || !deps.mint) {
+        logRefused({ reason: 'not_supported', source });
         return {
           ok: false,
           code: 'BOOTSTRAP_NOT_SUPPORTED',
-          message:
-            'refresh_ws_token: this deployment did not wire a ws-token-refresh seam. The iframe MUST re-handshake.',
+          message: 'refresh_ws_token: this server wires no live-credential refresh. The view keeps its current channel.',
         };
       }
-      const result = deps.refreshSeam.refresh(parsed.data.envelope);
-      if (result.ok) {
-        return {
-          ok: true,
-          envelope: result.token,
-          expiresAt: result.expiresAt,
-        };
-      }
-      if (result.reason === 'window_closed') {
+      // 2. The envelope: signature, shape and kind, at any age.
+      const parsed = z.object(inputSchema).safeParse(input);
+      const verdict = parsed.success ? deps.verify(parsed.data.envelope) : { ok: false as const };
+      if (!verdict.ok) {
+        logRefused({ reason: 'invalid', source });
         return {
           ok: false,
-          code: 'REFRESH_WINDOW_CLOSED',
-          message:
-            'refresh_ws_token: envelope is past its refresh window (iat + refreshWindowSec). The iframe MUST re-handshake — the matcher cache makes this cheap.',
+          code: 'BOOTSTRAP_INVALID',
+          message: 'refresh_ws_token: the envelope failed verification (tampered, malformed, or wrong kind).',
         };
       }
-      return {
-        ok: false,
-        code: 'BOOTSTRAP_INVALID',
-        message:
-          'refresh_ws_token: envelope failed HMAC verification (tampered, malformed, or wrong kind). The iframe MUST re-handshake.',
-      };
+      // 3–4. The caller against the LIVE row: the read door's predicate.
+      let stored: Awaited<ReturnType<GguiSessionStore['get']>>;
+      try {
+        stored = await deps.renderStore.get(verdict.sessionId);
+      } catch (err) {
+        logRefused({ reason: 'read_failed', source });
+        throw err;
+      }
+      if (!stored || stored.appId !== verdict.appId || !renderReadAllowed(stored, ctx)) {
+        logRefused({ reason: 'not_found', source });
+        throw new GguiSessionNotFoundError(verdict.sessionId);
+      }
+      // 5. A fresh root credential for the session.
+      const minted = deps.mint(stored.id, stored.appId);
+      logRefreshed({
+        sessionId: stored.id,
+        appId: stored.appId,
+        source,
+        rootAgeSec: Math.max(0, Math.floor(Date.now() / 1000) - verdict.iat),
+      });
+      return { ok: true, envelope: minted.token, expiresAt: minted.expiresAt };
     },
   });
 }

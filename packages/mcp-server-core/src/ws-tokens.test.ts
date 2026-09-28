@@ -9,12 +9,9 @@
  *     into a generic failure).
  *   - Wrong-kind isolation — a session token MUST NOT verify as a
  *     ws token even when the signature is otherwise valid.
- *   - `refreshWsToken` happy path: expired-but-signed envelope
- *     returns a new token with the same `(sessionId, appId)` and a
- *     fresh `iat` / `exp` / `jti`.
- *   - Refresh window closure — past `iat + refreshWindowSec`, refresh
- *     rejects with `'refresh_window_closed'`.
- *   - Refresh rejects tampered envelopes (no second-chance HMAC).
+ *   - `verifyWsTokenSignature` verifies a signed ws envelope at ANY age
+ *     (the first step of the authorized refresh, ggui#1496 part B), and
+ *     refuses a tampered, foreign-secret, wrong-kind or malformed one.
  *   - `WsTokenReplayCache` still claims fresh jtis and rejects
  *     re-claims (the cache stays exported for opt-in single-use
  *     callers).
@@ -23,7 +20,6 @@
  */
 import {
   afterEach,
-  beforeEach,
   describe,
   expect,
   it,
@@ -31,12 +27,11 @@ import {
 } from 'vitest';
 import {
   WsTokenReplayCache,
-  DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER,
   DEFAULT_WS_TOKEN_TTL_SEC,
   mintWsToken,
   mintSessionToken,
-  refreshWsToken,
   verifyToken,
+  verifyWsTokenSignature,
 } from './ws-tokens.js';
 
 const SECRET = 'test-secret-32bytes-for-hmac-1234';
@@ -112,128 +107,38 @@ describe('mintWsToken / verifyToken roundtrip', () => {
   });
 });
 
-describe('refreshWsToken', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-23T00:00:00Z'));
-  });
-
+describe('verifyWsTokenSignature — a ws envelope at ANY age (ggui#1496 part B)', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('refreshes an expired-but-signed envelope into a fresh token', () => {
-    const { token, claims } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a', ttlSec: 5 },
-      SECRET,
-    );
-    // Advance past expiry, still inside refresh window (2 * 5s = 10s).
-    vi.setSystemTime(new Date('2026-05-23T00:00:08Z'));
-    const refreshed = refreshWsToken(token, SECRET, { ttlSec: 5 });
-    expect(refreshed.ok).toBe(true);
-    if (!refreshed.ok) throw new Error('unreachable');
-    expect(refreshed.claims.sessionId).toBe('sess_a');
-    expect(refreshed.claims.appId).toBe('app_a');
-    expect(refreshed.claims.jti).not.toBe(claims.jti);
-    expect(refreshed.claims.iat).toBeGreaterThan(claims.iat);
-    expect(refreshed.claims.exp).toBeGreaterThan(claims.exp);
-
-    // The fresh envelope verifies cleanly under the standard path.
-    const verified = verifyToken(refreshed.token, SECRET, 'ws');
-    expect(verified.ok).toBe(true);
+  it('verifies a long-expired envelope by its signature and kind, and returns its claims', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-01T00:00:00Z'));
+    const { token, claims } = mintWsToken({ sessionId: 's-1', appId: 'app-1' }, SECRET);
+    vi.setSystemTime(new Date('2026-09-11T00:00:00Z'));
+    expect(verifyToken(token, SECRET, 'ws')).toEqual({ ok: false, reason: 'expired' });
+    const r = verifyWsTokenSignature(token, SECRET);
+    expect(r).toEqual({ ok: true, claims });
   });
 
-  it('refreshes a still-valid envelope (refresh is idempotent within TTL)', () => {
-    const { token } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a', ttlSec: 30 },
-      SECRET,
-    );
-    const refreshed = refreshWsToken(token, SECRET, { ttlSec: 30 });
-    expect(refreshed.ok).toBe(true);
+  it('refuses a tampered envelope', () => {
+    const { token } = mintWsToken({ sessionId: 's-1', appId: 'app-1' }, SECRET);
+    expect(verifyWsTokenSignature(`${token.slice(0, -2)}xx`, SECRET)).toEqual({ ok: false, reason: 'invalid_signature' });
   });
 
-  it('rejects with `refresh_window_closed` past `iat + refreshWindowSec`', () => {
-    const { token } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a', ttlSec: 5 },
-      SECRET,
-    );
-    // Refresh window = 2 * 5s = 10s. Advance 11s past iat.
-    vi.setSystemTime(new Date('2026-05-23T00:00:11Z'));
-    const refreshed = refreshWsToken(token, SECRET, { ttlSec: 5 });
-    expect(refreshed.ok).toBe(false);
-    if (!refreshed.ok) {
-      expect(refreshed.reason).toBe('refresh_window_closed');
-    }
+  it('refuses an envelope signed under another secret', () => {
+    const { token } = mintWsToken({ sessionId: 's-1', appId: 'app-1' }, 'another-secret');
+    expect(verifyWsTokenSignature(token, SECRET)).toEqual({ ok: false, reason: 'invalid_signature' });
   });
 
-  it('respects an explicit refreshWindowSec override', () => {
-    const { token } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a', ttlSec: 5 },
-      SECRET,
-    );
-    // Refresh-window override = 30s, well past default 10s.
-    vi.setSystemTime(new Date('2026-05-23T00:00:20Z'));
-    const refreshed = refreshWsToken(token, SECRET, {
-      ttlSec: 5,
-      refreshWindowSec: 30,
-    });
-    expect(refreshed.ok).toBe(true);
+  it('refuses a session token: the kind must be ws', () => {
+    const { token } = mintSessionToken({ sessionId: 's-1', appId: 'app-1' }, SECRET);
+    expect(verifyWsTokenSignature(token, SECRET)).toEqual({ ok: false, reason: 'wrong_kind' });
   });
 
-  it('rejects a tampered envelope (no second-chance HMAC)', () => {
-    const { token } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a', ttlSec: 5 },
-      SECRET,
-    );
-    const tampered = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
-    // Tampered AND expired — but tamper detection wins; the envelope
-    // never reaches the refresh-window check.
-    vi.setSystemTime(new Date('2026-05-23T00:00:08Z'));
-    const refreshed = refreshWsToken(tampered, SECRET, { ttlSec: 5 });
-    expect(refreshed.ok).toBe(false);
-    if (!refreshed.ok) expect(refreshed.reason).toBe('invalid_signature');
-  });
-
-  it('rejects a session token (wrong kind)', () => {
-    const { token } = mintSessionToken(
-      { sessionId: 'sess_a', appId: 'app_a' },
-      SECRET,
-    );
-    const refreshed = refreshWsToken(token, SECRET);
-    expect(refreshed.ok).toBe(false);
-    if (!refreshed.ok) expect(refreshed.reason).toBe('wrong_kind');
-  });
-
-  it('uses default refresh window when none supplied', () => {
-    const { token } = mintWsToken(
-      { sessionId: 'sess_a', appId: 'app_a' },
-      SECRET,
-    );
-    // Just inside the default window: TTL=180s, multiplier=2 → 360s.
-    vi.setSystemTime(
-      new Date(
-        Date.now() +
-          (DEFAULT_WS_TOKEN_TTL_SEC *
-            DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER -
-            5) *
-            1000,
-      ),
-    );
-    const inside = refreshWsToken(token, SECRET);
-    expect(inside.ok).toBe(true);
-
-    // Just outside.
-    vi.setSystemTime(
-      new Date(
-        Date.now() +
-          (DEFAULT_WS_TOKEN_TTL_SEC *
-            DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER +
-            10) *
-            1000,
-      ),
-    );
-    const outside = refreshWsToken(token, SECRET);
-    expect(outside.ok).toBe(false);
+  it('refuses a malformed envelope', () => {
+    expect(verifyWsTokenSignature('no-dot-here', SECRET)).toEqual({ ok: false, reason: 'invalid_format' });
   });
 });
 

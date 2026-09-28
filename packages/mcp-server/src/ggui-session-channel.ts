@@ -156,7 +156,6 @@ export type { GguiSessionChannelLocalToolsOptions } from "./ggui-session-channel
 // the package surface is unchanged.
 export type {
   GguiSessionChannelBootstrap,
-  GguiSessionChannelBootstrapRefreshResult,
   GguiSessionChannelBootstrapVerifyResult,
   GguiSessionChannelCookieAuth,
 } from "./ggui-session-channel/subscribe.js";

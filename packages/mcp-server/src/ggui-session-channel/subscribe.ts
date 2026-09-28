@@ -65,8 +65,9 @@ import type { SubscriberLifecycle } from "./subscriber-lifecycle.js";
  * G14 (2026-05-23): bootstrap envelopes are no longer single-use. A
  * signature-valid + unexpired token authenticates EVERY subscribe
  * within the TTL window; transient WS drops reconnect without a fresh
- * handshake. Past expiry, the iframe MAY refresh via the
- * {@link refresh} surface; past the refresh window, fresh handshake.
+ * handshake. Past expiry, the view refreshes through
+ * `ggui_runtime_refresh_ws_token`, which re-mints only for a caller
+ * admitted to the session (ggui#1496 part B).
  */
 export type GguiSessionChannelBootstrapVerifyResult =
   | {
@@ -76,30 +77,15 @@ export type GguiSessionChannelBootstrapVerifyResult =
     }
   | { readonly ok: false; readonly reason: "expired" | "invalid" };
 
-/**
- * Result of {@link GguiSessionChannelBootstrap.refresh}.
- *
- *   - `ok: true`: caller swaps the old envelope for `token` and resumes.
- *   - `ok: false`: caller MUST re-handshake (refresh window closed,
- *     tampered envelope, etc.).
- */
-export type GguiSessionChannelBootstrapRefreshResult =
-  | {
-      readonly ok: true;
-      readonly token: string;
-      readonly expiresAt: string;
-    }
-  | { readonly ok: false; readonly reason: "window_closed" | "invalid" };
-
 export interface GguiSessionChannelBootstrap {
   /**
    * Verify a `SubscribePayload.wsToken` token.
    *
    * Returns the bound identity on success, or a discriminated failure.
-   * The channel server maps `'expired'` to `BOOTSTRAP_EXPIRED` so the
-   * iframe can branch on refresh-vs-rehandshake, and `'invalid'` to
-   * `BOOTSTRAP_INVALID` for tamper / format / kind failures (no
-   * refresh on those).
+   * The channel server maps `'expired'` to `BOOTSTRAP_EXPIRED` (the view
+   * then refreshes through `ggui_runtime_refresh_ws_token`, an authorized
+   * re-mint), and `'invalid'` to `BOOTSTRAP_INVALID` for tamper, format or
+   * kind failures.
    */
   verify(token: string): GguiSessionChannelBootstrapVerifyResult;
   /**
@@ -108,21 +94,6 @@ export interface GguiSessionChannelBootstrap {
    * `verify()` on a bootstrap subscribe.
    */
   issueSessionToken(sessionId: string, appId: string): string;
-  /**
-   * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
-   * into a new envelope with a fresh TTL. Used by the
-   * `ggui_runtime_refresh_ws_token` MCP tool — iframes that see their
-   * bootstrap drift out of the TTL window swap in the refreshed
-   * envelope without going back through `ggui_render`.
-   *
-   * Stateless: verifies HMAC against the same secret used at mint,
-   * checks the refresh window against the ORIGINAL `iat`, and mints
-   * a fresh bootstrap envelope bound to the SAME `(sessionId, appId)`.
-   * Past the refresh window the result is `{ok:false, reason:
-   * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
-   * 'invalid'}`.
-   */
-  refresh(token: string): GguiSessionChannelBootstrapRefreshResult;
 }
 
 /**

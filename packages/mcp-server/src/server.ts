@@ -76,7 +76,7 @@ import {
   isTokenRegisteringAuthAdapter,
   mintSessionToken,
   mintWsToken,
-  refreshWsToken,
+  verifyWsTokenSignature,
   verifyToken,
 } from "@ggui-ai/mcp-server-core";
 import {
@@ -923,25 +923,16 @@ export function defaultHandlers(deps: {
      */
     readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
     /**
-     * Optional bootstrap-refresh seam for the
-     * `ggui_runtime_refresh_ws_token` tool (G14, 2026-05-23). When
-     * supplied, the tool registers and validates each refresh request
-     * via this seam's HMAC check + refresh-window arithmetic. Typically
-     * wired against the SAME `channelBootstrap.refresh` the
-     * render-channel server uses for WS upgrade validation, so both
-     * paths share one HMAC secret and one refresh-window policy.
+     * Verify a ws envelope's signature, shape and kind at ANY age, for the
+     * `ggui_runtime_refresh_ws_token` tool (ggui#1496 part B). The tool is
+     * registered only when this AND `mintBootstrap` are wired. It re-mints
+     * through `mintBootstrap` for a caller the read door's predicate admits
+     * to the envelope's session.
      *
-     * Absent: the tool is NOT registered on this deployment. iframes
-     * fall back to the historical "fresh handshake on every reconnect"
-     * posture — fast via the matcher cache, but more wire traffic than
-     * a stateless refresh.
-     *
-     * `createGguiServer` wires this from the `mcpAppsEnabled` branch's
-     * `channelBootstrap.refresh` so the factory's behavior matches the
-     * tool-side composition every deployment of this server family
-     * uses.
+     * `createGguiServer` wires it over the same secret its minter signs
+     * with (`verifyWsTokenSignature` from `@ggui-ai/mcp-server-core`).
      */
-    readonly bootstrapRefresh?: import("@ggui-ai/mcp-server-handlers/renders").WsTokenRefreshSeam;
+    readonly wsTokenVerify?: (envelope: string) => import("@ggui-ai/mcp-server-handlers/renders").WsEnvelopeVerdict;
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
@@ -1245,16 +1236,17 @@ export function defaultHandlers(deps: {
         ...(deps.logger ? { logger: deps.logger } : {}),
       })
     );
-    // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-
-    // envelope refresh tool. Registered only when a refresh seam is
-    // wired (typically `channelBootstrap.refresh` from the
-    // mcpAppsEnabled branch). Without the seam, the tool would always
-    // return BOOTSTRAP_NOT_SUPPORTED, which is honest but useless on
-    // tools/list — skip registration entirely.
-    if (deps.render.bootstrapRefresh) {
+    // `ggui_runtime_refresh_ws_token` — the authorized re-mint of a
+    // view's live credential (ggui#1496 part B). Registered only when the
+    // deployment can both verify an envelope and mint a credential;
+    // without either, the tool would answer BOOTSTRAP_NOT_SUPPORTED on
+    // every call, which is honest but useless on tools/list.
+    if (deps.render.wsTokenVerify && deps.render.mintBootstrap) {
       handlers.push(
         createGguiRefreshWsTokenHandler({
-          refreshSeam: deps.render.bootstrapRefresh,
+          renderStore: deps.render.renderStore,
+          verify: deps.render.wsTokenVerify,
+          mint: deps.render.mintBootstrap,
         })
       );
     }
@@ -3860,6 +3852,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     | ((sessionId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
   let channelBootstrap: import("./ggui-session-channel.js").GguiSessionChannelBootstrap | undefined;
+  // The authorized refresh's envelope check (ggui#1496 part B): signature,
+  // shape and kind at ANY age, over the same secret the minter signs with.
+  let wsTokenVerify:
+    | ((envelope: string) => import("@ggui-ai/mcp-server-handlers/renders").WsEnvelopeVerdict)
+    | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
   // session tokens, console cookies). Distinct `kind` claims
   // prevent cross-kind confusion; sharing the secret keeps the
@@ -3912,24 +3909,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         const { token } = mintSessionToken({ sessionId, appId }, secret);
         return token;
       },
-      refresh: (token) => {
-        const result = refreshWsToken(token, secret);
-        if (result.ok) {
-          return {
-            ok: true,
-            token: result.token,
-            expiresAt: new Date(result.claims.exp * 1000).toISOString(),
-          };
-        }
-        if (result.reason === "refresh_window_closed") {
-          return { ok: false, reason: "window_closed" };
-        }
-        // Tamper / format / kind / shape failures collapse into a
-        // single `invalid` — the iframe MUST re-handshake; the exact
-        // breakage type is logged server-side, not surfaced on the
-        // wire (would be useful only to attackers probing the surface).
-        return { ok: false, reason: "invalid" };
-      },
+    };
+    wsTokenVerify = (envelope) => {
+      const result = verifyWsTokenSignature(envelope, secret);
+      return result.ok
+        ? { ok: true, sessionId: result.claims.sessionId, appId: result.claims.appId, iat: result.claims.iat }
+        : { ok: false };
     };
   }
 
@@ -4346,15 +4331,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { postFailureHook: opts.renderPostFailureHook }
                 : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
-              // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
-              // the WS upgrade path uses — sharing it means one HMAC
-              // secret + one refresh-window policy across the verify
-              // path and the `ggui_runtime_refresh_ws_token` tool.
-              // Absent when MCP Apps isn't enabled or no bootstrap
-              // secret is wired; the tool isn't registered in that case.
-              ...(channelBootstrap
-                ? { bootstrapRefresh: { refresh: channelBootstrap.refresh } }
-                : {}),
+              // The authorized refresh's envelope check (ggui#1496 part B),
+              // over the same secret as `mintBootstrap`. Absent when MCP
+              // Apps isn't enabled; the tool isn't registered then.
+              ...(wsTokenVerify ? { wsTokenVerify } : {}),
               // Iframe-runtime bundle URL — padded onto the
               // `ai.ggui/render.runtimeUrl` slice field by the render
               // handler's resultMeta. C8 made this required on

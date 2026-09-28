@@ -1,10 +1,4 @@
-// `HandlerContext` is not exported from `./build-mcp.js` (only imported
-// there) and has no home under mcp-server-core either — its actual
-// definition lives in `@ggui-ai/mcp-server-handlers`, the same package
-// build-mcp.ts itself imports it from. Importing straight from there
-// also sidesteps a circular import: mcp-apps-outbound.ts (which
-// build-mcp.ts imports) needs `renderReadAllowed` from this module.
-import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
+import type { HandlerContext } from '../types.js';
 
 /** The two row fields the read gate consults. */
 export interface RenderReadRowView {
@@ -30,6 +24,15 @@ export interface RenderReadRowView {
 
 /**
  * Per-session render-resource read gate (rehydration access control).
+ *
+ * ONE predicate for the two doors that re-issue a live credential for an
+ * EXISTING session by locator: the read door (`resources/read` of
+ * `ui://ggui/render/...`) and the authorized refresh
+ * (`ggui_runtime_refresh_ws_token`, ggui#1496 part B), which re-mints no
+ * weaker and no stronger than the read door. Other doors mint under their
+ * own gates (`ggui_render` creates the session; `ggui_update` and
+ * `ggui_list_sessions` gate on the app, and the list on the user when set;
+ * `/state` on possession of an unexpired token, bounded in slice 2).
  *
  * Rungs, in order (spec §3):
  *  1. Fail closed without a request context.
