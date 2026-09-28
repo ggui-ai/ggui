@@ -105,6 +105,8 @@ export interface LadderSetOptions {
   readonly onAck: (ack: AckPayload) => void;
   /** Each refresh a ladder asked for, and what it got. */
   readonly onRefresh?: (source: ExpirySource, outcome: RefreshOutcome) => void;
+  /** An ack showed the server's stream counter restarted below the view's cursor, which was forgotten. */
+  readonly onStreamRestart?: (serverSeq: number) => void;
   /** The runtime's registry of relay refusal codes that confirm the host cannot relay `tools/call`. */
   readonly isConfirmedRelayRefusalCode: (code: number) => boolean;
   /** The live channel ended (R4); every ladder is already disposed. */
@@ -252,9 +254,19 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     switchTo(ladder);
   };
 
+  /** An ack's `streamSeq` below the view's stream cursor means the server's counter restarted. */
+  const readStreamSeq = (ack: AckPayload): void => {
+    if (ack.streamSeq !== undefined && opts.streamSeq?.observeServerSeq(ack.streamSeq) === true) {
+      opts.onStreamRestart?.(ack.streamSeq);
+    }
+  };
+
   const onAck = (ladder: LadderState, ack: AckPayload): void => {
     accept(ladder);
-    if (holder === ladder) opts.onAck(ack);
+    if (holder !== ladder) return;
+    // Before the replay that follows the ack is applied.
+    readStreamSeq(ack);
+    opts.onAck(ack);
   };
 
   const reportExpired = async (ladder: LadderState, source: ExpirySource): Promise<void> => {
@@ -468,8 +480,9 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
       active = ladder;
       holder = ladder;
       const result = await bind(ladder);
-      if (result.ack !== undefined && spec.credential !== undefined) {
-        opts.controller?.markAccepted(spec.credential);
+      if (result.ack !== undefined) {
+        readStreamSeq(result.ack);
+        if (spec.credential !== undefined) opts.controller?.markAccepted(spec.credential);
       }
       return result;
     },

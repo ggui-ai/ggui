@@ -68,3 +68,21 @@ describe('data handler: a stamped envelope is applied at most once (ggui#1496)',
     expect(streamSeq.last()).toBe(5);
   });
 });
+
+describe('stream cursor: the server counter restarted (ggui#1496)', () => {
+  it('observeServerSeq below the highest applied seq forgets the cursor and says so; at or above it keeps it', () => {
+    const t = createStreamSeqTracker();
+    t.admit(9);
+    expect(t.observeServerSeq(9)).toBe(false);
+    expect(t.observeServerSeq(12)).toBe(false);
+    expect(t.last()).toBe(9);
+    expect(t.observeServerSeq(2)).toBe(true);
+    expect(t.last()).toBeUndefined();
+    expect(t.admit(1)).toBe(true);
+  });
+
+  it('with nothing applied yet there is nothing to forget', () => {
+    const t = createStreamSeqTracker();
+    expect(t.observeServerSeq(0)).toBe(false);
+  });
+});

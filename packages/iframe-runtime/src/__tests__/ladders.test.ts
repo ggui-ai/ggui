@@ -73,8 +73,8 @@ const ROOT: HeldCredential = {
   origin: 'root',
 };
 
-function ack(sequence = 1): unknown {
-  return { type: 'ack', payload: { sequence, timestamp: 0 } };
+function ack(sequence = 1, streamSeq?: number): unknown {
+  return { type: 'ack', payload: { sequence, timestamp: 0, ...(streamSeq !== undefined ? { streamSeq } : {}) } };
 }
 
 function eventsBody(lastSequence: number, events: unknown[] = []): unknown {
@@ -373,5 +373,39 @@ describe('ladder set: an honest end (R4) — fed by the bridge pulls only', () =
     ]);
     expect(r.ends).toEqual([]);
     expect(r.bridgeCalls.mock.calls.length).toBeGreaterThan(3);
+  });
+});
+
+describe('ladder set: a restarted server stream counter (the ack reveals it)', () => {
+  it('an ack whose streamSeq is below the view cursor resets it, so the next seq 1 is applied', async () => {
+    const r = rig();
+    const boot = await bootedOnWs(r);
+    r.streamSeq.admit(9);
+    // The WS reconnects; the server's counter restarted and now reads 2.
+    boot.emit(ack(2, 2));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.streamSeq.last()).toBeUndefined();
+    expect(r.streamSeq.admit(1)).toBe(true);
+  });
+
+  it('an ack at or above the view cursor leaves it alone', async () => {
+    const r = rig();
+    const boot = await bootedOnWs(r);
+    r.streamSeq.admit(9);
+    boot.emit(ack(2, 9));
+    boot.emit(ack(3, 12));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.streamSeq.last()).toBe(9);
+    expect(r.streamSeq.admit(9)).toBe(false);
+  });
+
+  it('the first ack of a ladder is read the same way', async () => {
+    const r = rig();
+    r.streamSeq.admit(9);
+    const booting = r.set.connectBoot(WS_ONLY);
+    await vi.advanceTimersByTimeAsync(1);
+    FakeWebSocket.instances[0]?.emit(ack(1, 0));
+    await booting;
+    expect(r.streamSeq.last()).toBeUndefined();
   });
 });
