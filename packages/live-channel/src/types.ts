@@ -248,6 +248,28 @@ export interface ChannelFrame<TPayload = unknown> {
 }
 
 /**
+ * A consumer's reading of one inbound frame, for the WebSocket retry
+ * budget (ggui#1496). The library stays protocol-unaware: it never reads
+ * a frame's meaning itself, it asks the consumer's {@link FrameClassifier}.
+ *
+ * - `'accepted'` — the server took the subscription. The retry budget
+ *   resets, so a connection that drops after it was accepted retries
+ *   from a full budget.
+ * - `'refused-terminal'` — retrying the same subscribe cannot succeed
+ *   (for example a refused credential). The transport closes the socket
+ *   and reports `'failed'` at once, without retrying, so a failover can
+ *   move to its next rung.
+ */
+export type FrameVerdict = 'accepted' | 'refused-terminal';
+
+/**
+ * Classifies an inbound frame for the retry budget. Return `undefined`
+ * for a frame that says neither. The frame is still dispatched to its
+ * handler whatever the verdict.
+ */
+export type FrameClassifier = (frame: ChannelFrame) => FrameVerdict | undefined;
+
+/**
  * Handle returned by `ChannelRegistry.bind()`. Caller uses
  * `dispose()` to shut down the transport (on iframe re-mount, page
  * unload, etc.). `status` reflects the live transport state.

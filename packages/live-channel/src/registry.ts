@@ -65,6 +65,7 @@ import type {
   BindOptions,
   ChannelHandler,
   ChannelLogger,
+  FrameClassifier,
   PollingTransportHandle,
   RegistryPollingOptions,
   RegistrySseOptions,
@@ -100,6 +101,13 @@ export interface ChannelRegistryOptions {
    * its URL; polling has no handshake.
    */
   readonly subscribeFrameBuilder: SubscribeFrameBuilder;
+  /**
+   * The consumer's reading of inbound frames for the WebSocket retry
+   * budget (ggui#1496) — which frame means the server accepted the
+   * subscription, and which refusal no retry can fix. Passed to every
+   * WS rung. Absent, the budget resets whenever a socket opens.
+   */
+  readonly classifyFrame?: FrameClassifier;
   /**
    * Test hook — inject a WebSocket constructor. Defaults to
    * `globalThis.WebSocket`.
@@ -303,6 +311,9 @@ export class ChannelRegistry {
               ...(logger !== undefined ? { logger } : {}),
               ...(this.opts.webSocketFactory !== undefined
                 ? { webSocketFactory: this.opts.webSocketFactory }
+                : {}),
+              ...(this.opts.classifyFrame !== undefined
+                ? { classifyFrame: this.opts.classifyFrame }
                 : {}),
             };
             return new WSTransport(wsOpts);

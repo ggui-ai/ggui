@@ -265,3 +265,113 @@ describe('WSTransport — fail-fast on never-opened-close', () => {
     expect(transport.status).toBe('closed'); // not 'failed'
   });
 });
+
+/**
+ * ggui#1496 — the retry budget resets when the consumer says the server
+ * ACCEPTED the subscription, not when the socket merely opens. The
+ * library stays protocol-unaware: the consumer's `classifyFrame` reads a
+ * frame's meaning, the transport only applies the verdict.
+ */
+describe('WSTransport — retry budget follows the consumer verdict (ggui#1496)', () => {
+  const REFUSAL = { type: 'error', payload: { code: 'SOME_TRANSIENT_REFUSAL', message: 'not now' } };
+  const AUTH_REFUSAL = { type: 'error', payload: { code: 'BOOTSTRAP_EXPIRED', message: 'expired' } };
+  const ACK = { type: 'ack', payload: {} };
+  const classifyFrame = (frame: { readonly type: string; readonly payload: unknown }) => {
+    if (frame.type === 'ack') return 'accepted' as const;
+    const p = frame.payload;
+    if (frame.type === 'error' && typeof p === 'object' && p !== null && 'code' in p && p.code === 'BOOTSTRAP_EXPIRED') {
+      return 'refused-terminal' as const;
+    }
+    return undefined;
+  };
+
+  function harness(withClassifier: boolean) {
+    const fakes: FakeSocket[] = [];
+    const statuses: string[] = [];
+    const errorsSeen: unknown[] = [];
+    const handlers = new Map<string, ChannelHandler>([
+      ['error', { type: 'error', onMessage: (payload: unknown) => { errorsSeen.push(payload); } }],
+    ]);
+    const transport = new WSTransport({
+      url: 'ws://refusing',
+      subscribeFrame: () => SUBSCRIBE_FRAME,
+      handlers,
+      onStatusChange: (s) => statuses.push(s),
+      ...(withClassifier ? { classifyFrame } : {}),
+      webSocketFactory: () => {
+        const f = new FakeSocket();
+        fakes.push(f);
+        return f as unknown as WebSocket;
+      },
+    });
+    /** One attempt that opens, is refused by the server, and is closed. */
+    const openThenRefuse = (): void => {
+      const f = fakes[fakes.length - 1]!;
+      f.triggerOpen();
+      f.triggerMessage(REFUSAL);
+      f.triggerClose(1008);
+      vi.advanceTimersByTime(60_000);
+    };
+    return { fakes, statuses, errorsSeen, transport, openThenRefuse };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a socket that opens and is refused, again and again, reaches failed after the retry budget', async () => {
+    const h = harness(true);
+    h.transport.start();
+    for (let i = 0; i < 12; i += 1) {
+      if (h.transport.status === 'failed') break;
+      h.openThenRefuse();
+    }
+    expect(h.transport.status).toBe('failed');
+    // The first socket plus MAX_RECONNECT_ATTEMPTS (10) retries, and no more.
+    expect(h.fakes).toHaveLength(11);
+    await h.transport.dispose();
+  });
+
+  it('an accepted subscription resets the budget', async () => {
+    const h = harness(true);
+    h.transport.start();
+    for (let i = 0; i < 9; i += 1) h.openThenRefuse();
+    // The tenth socket is accepted, runs, and then drops.
+    const accepted = h.fakes[h.fakes.length - 1]!;
+    accepted.triggerOpen();
+    accepted.triggerMessage(ACK);
+    accepted.triggerClose(1006);
+    vi.advanceTimersByTime(60_000);
+    for (let i = 0; i < 9; i += 1) h.openThenRefuse();
+    expect(h.transport.status).not.toBe('failed');
+    await h.transport.dispose();
+  });
+
+  it('an auth-class refusal fails at once, is still handed to the consumer, and is never retried with the same credential', async () => {
+    const h = harness(true);
+    h.transport.start();
+    const f = h.fakes[0]!;
+    f.triggerOpen();
+    f.triggerMessage(AUTH_REFUSAL);
+    // The transport closes the refused socket itself.
+    expect(f.closeCalled).toBe(true);
+    f.triggerClose(1000);
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(h.transport.status).toBe('failed');
+    expect(h.statuses.at(-1)).toBe('failed');
+    expect(h.errorsSeen).toEqual([AUTH_REFUSAL.payload]);
+    expect(h.fakes).toHaveLength(1);
+    await h.transport.dispose();
+  });
+
+  it('without a classifier, the budget still resets on open (behaviour unchanged for consumers that do not opt in)', async () => {
+    const h = harness(false);
+    h.transport.start();
+    for (let i = 0; i < 15; i += 1) h.openThenRefuse();
+    expect(h.transport.status).not.toBe('failed');
+    await h.transport.dispose();
+  });
+});

@@ -15,6 +15,7 @@ import type {
   ChannelFrame,
   ChannelHandler,
   ChannelLogger,
+  FrameClassifier,
   TransportStatus,
   WsTransportHandle,
 } from './types.js';
@@ -73,6 +74,15 @@ export interface WSTransportOptions {
    * into transport internals.
    */
   readonly onStatusChange?: (status: TransportStatus) => void;
+  /**
+   * The consumer's verdict on inbound frames (ggui#1496). With it, the
+   * retry budget resets only when a frame is `'accepted'` (the server
+   * took the subscription), so a socket that opens and is then refused
+   * still spends the budget and the transport reaches `'failed'`; a
+   * `'refused-terminal'` frame fails the transport at once. Without it,
+   * the budget resets whenever a socket opens.
+   */
+  readonly classifyFrame?: FrameClassifier;
 }
 
 class BoundedQueue {
@@ -116,6 +126,12 @@ export class WSTransport implements WsTransportHandle {
    * connects, drops, and re-connects doesn't accumulate stale signal.
    */
   private consecutiveNeverOpenedCloses = 0;
+  /**
+   * Set when the consumer classed a frame `'refused-terminal'`: the
+   * socket is closed and the next `onclose` reports `'failed'` instead
+   * of scheduling a retry with the same subscribe.
+   */
+  private refusedTerminal = false;
 
   constructor(private readonly opts: WSTransportOptions) {}
 
@@ -154,7 +170,10 @@ export class WSTransport implements WsTransportHandle {
 
     socket.onopen = () => {
       if (this.disposed) return;
-      this.reconnectAttempts = 0;
+      // With a consumer verdict, only an accepted subscription resets
+      // the budget (ggui#1496): an open socket the server then refuses
+      // must still count toward MAX_RECONNECT_ATTEMPTS.
+      if (this.opts.classifyFrame === undefined) this.reconnectAttempts = 0;
       // Mark this attempt as having opened. A subsequent close is
       // transient (drop after successful connect), NOT structural
       // unreachability — reset the consecutive-never-opened streak.
@@ -183,12 +202,30 @@ export class WSTransport implements WsTransportHandle {
       }
       // Pong is purely a heartbeat ack; not routable.
       if (parsed.type === 'pong') return;
+      // The consumer's handler sees the frame whatever the verdict.
       this.dispatch(parsed);
+      const verdict = this.opts.classifyFrame?.(parsed);
+      if (verdict === 'accepted') {
+        this.reconnectAttempts = 0;
+      } else if (verdict === 'refused-terminal') {
+        this.refusedTerminal = true;
+        this.opts.logger?.warn?.('channel_ws_refused_terminal', {
+          url: this.opts.url,
+          frame_type: parsed.type,
+          reason: 'The consumer classed this refusal as one no retry of the same subscribe can fix. Failing without retrying.',
+        });
+        // close() with no code or reason cannot throw (WHATWG WebSocket).
+        socket.close();
+      }
     };
 
     socket.onclose = (event) => {
       if (this.disposed) return;
       this.stopPing();
+      if (this.refusedTerminal) {
+        this.setStatus('failed');
+        return;
+      }
       this.setStatus('closed');
       // Fail-fast on never-opened-close streak. The browser refuses
       // CSP-blocked `wss://` BEFORE handshake — no `onopen`, immediate

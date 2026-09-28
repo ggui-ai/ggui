@@ -5,6 +5,8 @@ export type {
   ChannelFrame,
   ChannelHandler,
   ChannelLogger,
+  FrameClassifier,
+  FrameVerdict,
   PollingTransportHandle,
   RegistryPollingOptions,
   RegistrySseOptions,

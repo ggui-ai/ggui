@@ -35,6 +35,15 @@ const registry = new ChannelRegistry({
     type: "subscribe",
     payload: { sessionId, appId, wsToken },
   }),
+  // Optional: tell the WebSocket transport what your server's frames mean
+  // for its retry budget. "accepted" (your subscribe acknowledgement)
+  // resets the budget; "refused-terminal" (a refusal no retry of the same
+  // subscribe can fix, such as an expired credential) fails the transport
+  // at once so the registry moves to its next transport. Without it, the
+  // budget resets whenever a socket opens, so a server that opens and then
+  // refuses every subscribe is retried indefinitely.
+  classifyFrame: (frame) =>
+    frame.type === "ack" ? "accepted" : isAuthRefusal(frame) ? "refused-terminal" : undefined,
 });
 registry.register(propsUpdateHandler);
 registry.register(drainAckHandler);

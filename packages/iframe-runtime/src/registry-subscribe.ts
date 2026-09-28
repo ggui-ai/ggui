@@ -50,6 +50,7 @@ import type {
   AnyTransportHandle,
   ChannelLogger,
   ChannelRegistry,
+  FrameClassifier,
   RegistryPollingOptions,
   RegistrySseOptions,
   TransportStatus,
@@ -267,6 +268,36 @@ const PRE_ACK_AUTH_CODES: ReadonlySet<string> = new Set<AuthFailureCode>([
 function isAuthFailureCode(code: string): code is AuthFailureCode {
   return PRE_ACK_AUTH_CODES.has(code);
 }
+
+/**
+ * The iframe's verdict on channel frames for the WebSocket retry budget
+ * (ggui#1496), handed to every `ChannelRegistry` the runtime builds.
+ *
+ * - An `ack` is an accepted subscription, so the budget resets. It no
+ *   longer resets when a socket merely opens: a socket the server opens
+ *   and then refuses at subscribe used to reset it on every attempt, so
+ *   the transport never reached `'failed'` and the failover never moved.
+ * - An `error` whose code is a {@link PRE_ACK_AUTH_CODES} member is a
+ *   refusal no retry of the same credential can fix (the subscribe is
+ *   rebuilt from the same `wsToken` each attempt), so the transport
+ *   fails at once and the ladder moves to its next rung. The same list
+ *   classifies the handshake's typed error, so the two cannot drift.
+ */
+export const classifyChannelFrame: FrameClassifier = (frame) => {
+  if (frame.type === 'ack') return 'accepted';
+  if (frame.type !== 'error') return undefined;
+  const payload = frame.payload;
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'code' in payload &&
+    typeof payload.code === 'string' &&
+    isAuthFailureCode(payload.code)
+  ) {
+    return 'refused-terminal';
+  }
+  return undefined;
+};
 
 /**
  * Map a pre-ack `error` frame onto a non-UPGRADE_REQUIRED ProtocolError.

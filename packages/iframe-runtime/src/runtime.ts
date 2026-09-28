@@ -107,6 +107,7 @@ import {
   createRenderHandler,
 } from './channels/index.js';
 import {
+  classifyChannelFrame,
   connectViaRegistry,
   type ConnectFn,
   type RegistrySubscribeHandle,
@@ -1613,6 +1614,7 @@ function createPlaceholderRegistry(params: {
           : {}),
       },
     }),
+    classifyFrame: classifyChannelFrame,
   });
   registry.register(
     createRenderHandler({
@@ -5145,6 +5147,7 @@ async function bootProduction(opts: {
               : {}),
           },
         }),
+        classifyFrame: classifyChannelFrame,
       });
       channelRegistry.register(
         createRenderHandler({
