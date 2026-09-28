@@ -335,18 +335,58 @@ describe('WSTransport — retry budget follows the consumer verdict (ggui#1496)'
     await h.transport.dispose();
   });
 
-  it('an accepted subscription resets the budget', async () => {
+  it('an accepted subscription that holds resets the budget', async () => {
     const h = harness(true);
     h.transport.start();
     for (let i = 0; i < 9; i += 1) h.openThenRefuse();
-    // The tenth socket is accepted, runs, and then drops.
+    // The tenth socket is accepted, runs past the hold window, and then drops.
     const accepted = h.fakes[h.fakes.length - 1]!;
     accepted.triggerOpen();
     accepted.triggerMessage(ACK);
+    vi.advanceTimersByTime(5_001);
     accepted.triggerClose(1006);
     vi.advanceTimersByTime(60_000);
     for (let i = 0; i < 9; i += 1) h.openThenRefuse();
     expect(h.transport.status).not.toBe('failed');
+    await h.transport.dispose();
+  });
+
+  it('an ack followed by a close inside the hold window does not reset the budget: a repeating ack-then-close reaches failed (ggui#1533)', async () => {
+    const h = harness(true);
+    h.transport.start();
+    for (let i = 0; i < 12; i += 1) {
+      if (h.transport.status === 'failed') break;
+      const f = h.fakes[h.fakes.length - 1]!;
+      f.triggerOpen();
+      f.triggerMessage(ACK);
+      // The server's subscribe fails after its ack and closes at once.
+      f.triggerClose(1011);
+      vi.advanceTimersByTime(60_000);
+    }
+    expect(h.transport.status).toBe('failed');
+    // The first socket plus MAX_RECONNECT_ATTEMPTS (10) retries, as for any refusal.
+    expect(h.fakes).toHaveLength(11);
+    await h.transport.dispose();
+  });
+
+  it('a repeating ack-then-1012 takes the 100 ms service-restart retry once, then backs off (ggui#1533)', async () => {
+    const h = harness(true);
+    h.transport.start();
+    const openAckClose = (): void => {
+      const f = h.fakes[h.fakes.length - 1]!;
+      f.triggerOpen();
+      f.triggerMessage(ACK);
+      f.triggerClose(1012);
+    };
+    openAckClose();
+    vi.advanceTimersByTime(100);
+    expect(h.fakes).toHaveLength(2);
+    openAckClose();
+    // The second retry is no longer the service-restart fast path.
+    vi.advanceTimersByTime(100);
+    expect(h.fakes).toHaveLength(2);
+    vi.advanceTimersByTime(60_000);
+    expect(h.fakes).toHaveLength(3);
     await h.transport.dispose();
   });
 

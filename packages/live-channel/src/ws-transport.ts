@@ -43,6 +43,15 @@ const SERVICE_RESTART_RECONNECT_DELAY_MS = 100;
  * `FailoverHandle` without false-positiving on a single packet loss.
  */
 const NEVER_OPENED_FAIL_FAST_THRESHOLD = 2;
+
+/**
+ * How long an accepted subscription must hold before it resets the retry
+ * budget (ggui#1533). A server whose subscribe fails right after its ack
+ * closes within a second or so; resetting on the ack itself would restart
+ * the budget on every such cycle, so the transport would retry at its
+ * first-step delay forever and never fail over.
+ */
+const ACCEPTED_HOLD_MS = 5_000;
 // Bumped from 50 → 500 at B3 (parity with the retired
 // `RendererWebSocketManager`) — chatty outbound frames during a long
 // disconnect can buffer more than 50 outbound frames before the
@@ -104,6 +113,8 @@ export class WSTransport implements WsTransportHandle {
   private readonly queue = new BoundedQueue(OUTBOUND_QUEUE_LIMIT);
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Pending budget reset for an accepted subscription, due once it has held for {@link ACCEPTED_HOLD_MS}. */
+  private acceptedHoldTimer: ReturnType<typeof setTimeout> | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
   private currentStatus: TransportStatus = 'connecting';
@@ -206,7 +217,15 @@ export class WSTransport implements WsTransportHandle {
       this.dispatch(parsed);
       const verdict = this.opts.classifyFrame?.(parsed);
       if (verdict === 'accepted') {
-        this.reconnectAttempts = 0;
+        // The budget resets once the subscription has held, not on the ack
+        // itself (ggui#1533): an ack followed by a quick close must still
+        // count toward MAX_RECONNECT_ATTEMPTS.
+        if (this.acceptedHoldTimer === null) {
+          this.acceptedHoldTimer = setTimeout(() => {
+            this.acceptedHoldTimer = null;
+            this.reconnectAttempts = 0;
+          }, ACCEPTED_HOLD_MS);
+        }
       } else if (verdict === 'refused-terminal') {
         this.refusedTerminal = true;
         this.opts.logger?.warn?.('channel_ws_refused_terminal', {
@@ -222,6 +241,7 @@ export class WSTransport implements WsTransportHandle {
     socket.onclose = (event) => {
       if (this.disposed) return;
       this.stopPing();
+      this.cancelAcceptedHold();
       if (this.refusedTerminal) {
         this.setStatus('failed');
         return;
@@ -293,6 +313,13 @@ export class WSTransport implements WsTransportHandle {
     this.queue.push(frame);
   }
 
+  /** A close before the hold window ends means the subscription did not hold: no budget reset. */
+  private cancelAcceptedHold(): void {
+    if (this.acceptedHoldTimer === null) return;
+    clearTimeout(this.acceptedHoldTimer);
+    this.acceptedHoldTimer = null;
+  }
+
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
@@ -300,6 +327,7 @@ export class WSTransport implements WsTransportHandle {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.cancelAcceptedHold();
     this.stopPing();
     if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
       try {
