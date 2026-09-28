@@ -85,7 +85,6 @@ export interface ChannelSubscriptionsDeps {
    * subscriber.
    */
   readonly subscribersByWs: WeakMap<WebSocket, WsSubscriber>;
-  readonly send: Outbound["send"];
   readonly sendChannelError: Outbound["sendChannelError"];
 }
 
@@ -163,7 +162,10 @@ export function createChannelSubscriptions(deps: ChannelSubscriptionsDeps): Chan
       // socket is a `send_failed` warning at best.
       if (sub.ws.readyState !== sub.ws.OPEN) return;
       state.seq += 1;
-      deps.send(sub.ws, {
+      // Through the subscriber's sink, like every data-carrying writer,
+      // so a poll that lands while the subscribe tail is still writing
+      // its replay is held until after it (ggui#1525).
+      sub.sink.write({
         type: "channel_payload",
         payload: {
           sessionId: sub.sessionId,

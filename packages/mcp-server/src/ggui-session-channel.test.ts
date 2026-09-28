@@ -50,6 +50,7 @@ import {
   InMemoryGguiSessionStore,
   InMemoryGguiSessionStreamBuffer,
   InMemoryPendingEventConsumer,
+  InProcessStreamFanout,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiConsumeHandler } from '@ggui-ai/mcp-server-handlers/renders';
 import { isHandlerFailure, type HandlerFailure } from '@ggui-ai/mcp-server-handlers';
@@ -88,6 +89,7 @@ const APP_ID = 'app-channel-test';
 
 interface Fixture {
   readonly httpServer: HttpServer;
+  readonly channel: ReturnType<typeof createGguiSessionChannelServer>;
   readonly store: InMemoryGguiSessionStore;
   readonly sessionId: string;
   readonly ws: WebSocket;
@@ -120,6 +122,7 @@ type BootChannelExtras = Pick<
   | 'cookieAuth'
   | 'pendingEventConsumer'
   | 'streamBuffer'
+  | 'streamFanout'
 > &
   Partial<Pick<GguiSessionChannelOptions, 'logger'>>;
 
@@ -132,8 +135,8 @@ type BootChannelExtras = Pick<
 async function bootChannel(
   actionSpec: ActionSpec,
   makeExtras?: (sessionId: string) => BootChannelExtras,
+  store: InMemoryGguiSessionStore = new InMemoryGguiSessionStore(),
 ): Promise<Fixture> {
-  const store = new InMemoryGguiSessionStore();
   const sessionId = randomUUID();
   const now = Date.now();
   await store.commit({
@@ -207,6 +210,7 @@ async function bootChannel(
 
   return {
     httpServer,
+    channel,
     store,
     sessionId,
     ws,
@@ -315,6 +319,136 @@ describe('handleSubscribe — a fresh subscribe replays known-reserved channels 
     // over the render's spec returns it.
     const resumed = await streamBuffer.replay(fx.sessionId, 0, streamSpec);
     expect(resumed.envelopes.map((e) => e.channel).sort()).toEqual(['_ggui:preview', 'feed']);
+  });
+});
+
+describe('completeSubscribe — the replay is on the wire before any live frame (ggui#1525)', () => {
+  let fx: Fixture | undefined;
+  afterEach(async () => {
+    await fx?.close();
+    fx = undefined;
+  });
+
+  /** A render store whose ledger read waits until the test opens it, or fails. */
+  class GatedLedgerStore extends InMemoryGguiSessionStore {
+    private enterResolve: () => void = () => undefined;
+    private releaseResolve: () => void = () => undefined;
+    readonly entered: Promise<void> = new Promise((resolve) => {
+      this.enterResolve = resolve;
+    });
+    private readonly gate: Promise<void> = new Promise((resolve) => {
+      this.releaseResolve = resolve;
+    });
+    constructor(private readonly failRead: boolean = false) {
+      super();
+    }
+    open(): void {
+      this.releaseResolve();
+    }
+    override async listEventsSince(
+      sessionId: string,
+      sinceSeq: number,
+      limit: number,
+    ): ReturnType<InMemoryGguiSessionStore['listEventsSince']> {
+      this.enterResolve();
+      await this.gate;
+      if (this.failRead) throw new Error('ledger read failed');
+      return super.listEventsSince(sessionId, sinceSeq, limit);
+    }
+  }
+
+  const streamSpec = { feed: { mode: 'replace' as const, replay: 'all' as const, schema: { type: 'object' as const } } };
+
+  async function bootGated(store: GatedLedgerStore) {
+    const streamBuffer = new InMemoryGguiSessionStreamBuffer();
+    const streamFanout = new InProcessStreamFanout();
+    const booted = await bootChannel({}, () => ({ streamBuffer, streamFanout }), store);
+    const stored = await booted.store.get(booted.sessionId);
+    if (stored === null || stored.render.type !== 'component') throw new Error('the fixture commits a component render');
+    await booted.store.commit({ appId: APP_ID, render: { ...stored.render, streamSpec } });
+    return { fx: booted, streamBuffer, streamFanout };
+  }
+
+  async function publishLive(
+    streamBuffer: InMemoryGguiSessionStreamBuffer,
+    streamFanout: InProcessStreamFanout,
+    sessionId: string,
+    n: number,
+  ): Promise<number> {
+    const recorded = await streamBuffer.record({ sessionId, channel: 'feed', mode: 'replace', payload: { n } }, streamSpec);
+    await streamFanout.publish({ sessionId, envelope: recorded.envelope });
+    return recorded.envelope.seq;
+  }
+
+  const frameOrder = (frames: ReadonlyArray<Record<string, unknown>>): string[] =>
+    frames.map((f) =>
+      f['type'] === 'data' ? `data:${String((f['payload'] as { seq: number }).seq)}` : String(f['type']),
+    );
+
+  it('live frames written while the ledger is read (the pump, and a cross-replica direct walk) arrive after the ack, the ledger replay and the stream replay', async () => {
+    const store = new GatedLedgerStore();
+    const booted = await bootGated(store);
+    fx = booted.fx;
+    await fx.store.appendEvent({ sessionId: fx.sessionId, type: 'user.submitted', data: { n: 0 } });
+    const replayed = await booted.streamBuffer.record(
+      { sessionId: fx.sessionId, channel: 'feed', mode: 'replace', payload: { n: 1 } },
+      streamSpec,
+    );
+
+    fx.ws.send(
+      JSON.stringify({
+        type: 'subscribe',
+        payload: { sessionId: fx.sessionId, appId: APP_ID, sinceSequence: 0, fromSeq: 0 },
+        requestId: randomUUID(),
+      }),
+    );
+    await store.entered;
+    // Two writers other than the subscribe tail, while the ledger is read:
+    // the live pump (an in-process publish) and a direct walk (a frame
+    // another replica delivered through externalBroadcast).
+    const live = await publishLive(booted.streamBuffer, booted.streamFanout, fx.sessionId, 2);
+    // Let the pump write its frame first, so the test fixes which of the
+    // two held frames came first and the flush's FIFO order is checked.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fx.channel.externalBroadcast(fx.sessionId, {
+      type: 'data',
+      payload: { sessionId: fx.sessionId, channel: 'feed', mode: 'replace', payload: { n: 3 }, seq: 3 },
+    });
+    // Give either writer the chance to reach the wire now.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    store.open();
+    const deadline = Date.now() + 5_000;
+    // All five frames, whatever their order: the ack, the ledger event,
+    // the stream replay and the two live frames.
+    while (fx.frames.length < 5 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(frameOrder(fx.frames)).toEqual([
+      'ack',
+      'render_event',
+      `data:${String(replayed.envelope.seq)}`,
+      `data:${String(live)}`,
+      'data:3',
+    ]);
+  });
+
+  it('a ledger read that fails still leaves the subscriber pumped, as before: nothing is left counted and silent', async () => {
+    const store = new GatedLedgerStore(true);
+    const booted = await bootGated(store);
+    fx = booted.fx;
+    fx.ws.send(
+      JSON.stringify({
+        type: 'subscribe',
+        payload: { sessionId: fx.sessionId, appId: APP_ID, sinceSequence: 0 },
+        requestId: randomUUID(),
+      }),
+    );
+    await store.entered;
+    store.open();
+    await fx.nextFrame('ack');
+    const live = await publishLive(booted.streamBuffer, booted.streamFanout, fx.sessionId, 1);
+    const frame = await fx.nextFrame('data');
+    expect((frame['payload'] as { seq: number }).seq).toBe(live);
   });
 });
 

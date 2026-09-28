@@ -761,7 +761,6 @@ export function createGguiSessionChannelServer(
     renderStore: opts.renderStore,
     localTools: opts.streamWebSocketLocalTools,
     subscribersByWs,
-    send,
     sendChannelError,
   });
 

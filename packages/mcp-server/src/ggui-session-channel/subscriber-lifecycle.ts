@@ -69,12 +69,12 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
    * frames with `seq <= replayCompletedSeq` were (or will be)
    * delivered via the replay path on subscribe.
    *
-   * The pump's first action is `await iter.next()`, which yields
-   * control back to the event loop. This is what preserves the
-   * subscribe-handler ordering invariant: ack → replay frames →
-   * live frames. The replay-frame send loop completes synchronously
-   * before the pump can ever send anything, regardless of fanout
-   * timing.
+   * The ordering invariant ack → replay frames → live frames is kept by
+   * the subscribe tail, not by timing: `sub.sink` is gated until the
+   * tail has written the ack and every replay frame, so whatever the
+   * pump writes meanwhile is held and flushed after them. The tail is
+   * NOT synchronous when `sinceSequence` is set (it awaits the ledger
+   * read), which is why the gate exists (ggui#1525).
    */
   async function pumpSubscriber(sub: Subscriber): Promise<void> {
     try {

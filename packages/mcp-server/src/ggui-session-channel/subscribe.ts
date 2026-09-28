@@ -198,9 +198,11 @@ export interface SubscribeHandlers {
   /**
    * The transport-neutral subscribe tail, order preserved exactly:
    * stream-cursor snapshot → stream-buffer replay read → StreamFanout
-   * iterator → register (pump starts) → ack → GguiSessionEvent-ledger
-   * replay (`render_event` frames, `resumeId` = ledger seq) →
-   * stream-replay `data` frames. WS `handleSubscribe` calls this after
+   * iterator → register (pump starts; every write to the subscriber's
+   * sink is held until the replay below is written, ggui#1525) → ack →
+   * GguiSessionEvent-ledger replay (`render_event` frames, `resumeId` =
+   * ledger seq) → stream-replay `data` frames → release of the held
+   * frames. WS `handleSubscribe` calls this after
    * its auth/provision head; SSE attaches call it via
    * `GguiSessionChannelServer.attachExternalSubscriber`.
    *
@@ -224,6 +226,57 @@ const BOOTSTRAP_PENDING_MARKER = "__bootstrap_pending__";
 /** Is `identity` the unverified upgrade-time placeholder above? */
 function isBootstrapPendingIdentity(identity: AuthResult): boolean {
   return identity.identity.kind === "user" && identity.identity.userId === BOOTSTRAP_PENDING_MARKER;
+}
+
+
+/**
+ * A subscriber's sink as every writer other than the subscribe tail sees it
+ * (ggui#1525). Until {@link release}, frames are held in arrival order;
+ * `release` flushes them and passes every later write straight through.
+ *
+ * The tail writes the ack and the replay frames through the raw sink, and
+ * awaits the ledger read in between when `sinceSequence` is set. Meanwhile
+ * the subscriber is registered, so the live pump, the direct walks (a
+ * `render` or `props_update`, a `drain_ack`, a cross-replica
+ * `externalBroadcast`) and a source-fed `channel_payload` poll can already
+ * write to it. Held here, their frames reach the wire after the replay,
+ * which is the order the ack promises: ack → replay → live.
+ *
+ * One writer stays outside, by design: a `channel_error` answering the
+ * client's own `channel_subscribe` goes straight to the socket. It carries
+ * no stream state and replies to a request the client just sent.
+ *
+ * A read that stalls holds these frames for as long as it stalls; the
+ * store's own read timeout is what bounds it.
+ */
+function holdUntilReplayed(sink: SubscriberSink): {
+  readonly sink: SubscriberSink;
+  readonly release: () => void;
+} {
+  type Held = { readonly frame: WebSocketMessage; readonly opts: { readonly resumeId?: string } | undefined };
+  let held: Held[] | undefined = [];
+  return {
+    sink: {
+      isOpen: () => sink.isOpen(),
+      end: (reason) => sink.end(reason),
+      write: (frame, opts) => {
+        if (held !== undefined) {
+          held.push({ frame, opts });
+          return;
+        }
+        sink.write(frame, opts);
+      },
+    },
+    release: () => {
+      const queue = held;
+      held = undefined;
+      if (queue === undefined) return;
+      for (const { frame, opts } of queue) {
+        if (!sink.isOpen()) return;
+        sink.write(frame, opts);
+      }
+    },
+  };
 }
 
 export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers {
@@ -620,9 +673,11 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // between here and registration gets seq > snapshotSeq, so the
     // subscriber will receive it via live fan-out (not via replay).
     //
-    // This is race-safe in single-threaded JS: the next few lines run
-    // synchronously up to `register(sub)`, and fan-out's per-subscriber
-    // `seq <= replayCompletedSeq` guard takes care of the window.
+    // This is race-safe: a delivery landing between this read and
+    // `register(sub)` (the replay read below is awaited) is either in the
+    // replay or published to the fan-out iterator subscribed below, and
+    // the per-subscriber `seq <= replayCompletedSeq` guard drops the
+    // copies the replay already carries.
     const snapshotSeq = await deps.streamBuffer.currentSeq(stored.id);
 
     // Phase B: a render IS the addressable unit, so the active item
@@ -653,6 +708,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // point onward queues into our iterator — paired with the
     // replayCompletedSeq cursor below, that's race-free.
     const fanoutIter = deps.streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
+    const gate = holdUntilReplayed(sink);
     const base = {
       sessionId: stored.id,
       appId: stored.appId,
@@ -665,134 +721,145 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       // wired `streamWebSocketLocalTools`; stays empty otherwise
       // (structurally so for SSE — no inbound channel).
       channelSubs: new Map<string, ChannelSubscriptionState>(),
-      sink,
+      // Every writer but this tail goes through the gate until the
+      // replay is on the wire (ggui#1525); the tail writes to `sink`.
+      sink: gate.sink,
     };
     const sub: Subscriber =
       args.transport === "ws"
         ? { ...base, transport: "ws", ws: args.ws }
         : { ...base, transport: "sse" };
     deps.register(sub);
-    deps.logger.info("render_channel_subscribed", {
-      sessionId: stored.id,
-      appId: stored.appId,
-      identityKind: args.identity.identity.kind,
-      transport: args.transport,
-      fromSeq: args.fromSeq,
-      snapshotSeq,
-      replayCount: replay?.envelopes.length ?? 0,
-      replayTruncated: replay?.truncated ?? false,
-      // The credential the subscribe came on (ggui#1488): a wsToken, the
-      // console cookie, or the adapter's bearer source. The first two ride
-      // a synthetic identity whose own `source` would misreport them.
-      bootstrap: args.credential === "ws_token",
-      source: args.credential ?? args.identity.source,
-    });
+    // From here the subscriber is registered, so the live pump and the
+    // direct walks can write to it; the gate holds their frames until the
+    // ack and every replay frame below are written (ggui#1525). `finally`:
+    // a subscribe that throws past this point still releases them, and the
+    // subscriber stays live as it did before.
+    try {
+      deps.logger.info("render_channel_subscribed", {
+        sessionId: stored.id,
+        appId: stored.appId,
+        identityKind: args.identity.identity.kind,
+        transport: args.transport,
+        fromSeq: args.fromSeq,
+        snapshotSeq,
+        replayCount: replay?.envelopes.length ?? 0,
+        replayTruncated: replay?.truncated ?? false,
+        // The credential the subscribe came on (ggui#1488): a wsToken, the
+        // console cookie, or the adapter's bearer source. The first two ride
+        // a synthetic identity whose own `source` would misreport them.
+        bootstrap: args.credential === "ws_token",
+        source: args.credential ?? args.identity.source,
+      });
 
-    const ackPayload: AckPayload = {
-      sequence: stored.eventSequence,
-      timestamp: Date.now(),
-      session: stored.render,
-      streamSeq: snapshotSeq,
-      // Advertise the server's protocol version on every successful
-      // subscribe ack (SPEC §11.2.2). Clients whose
-      // CLIENT_SUPPORTED_VERSIONS doesn't contain this string surface
-      // UpgradeRequiredError to their caller; clients that don't wire
-      // the handshake ignore the field (legacy-pass-through).
-      serverVersion: PROTOCOL_SCHEMA_VERSION,
-      ...(replay?.truncated ? { replayTruncated: true } : {}),
-    };
-    sink.write({
-      type: "ack",
-      payload: ackPayload,
-      ...(args.requestId ? { requestId: args.requestId } : {}),
-    });
+      const ackPayload: AckPayload = {
+        sequence: stored.eventSequence,
+        timestamp: Date.now(),
+        session: stored.render,
+        streamSeq: snapshotSeq,
+        // Advertise the server's protocol version on every successful
+        // subscribe ack (SPEC §11.2.2). Clients whose
+        // CLIENT_SUPPORTED_VERSIONS doesn't contain this string surface
+        // UpgradeRequiredError to their caller; clients that don't wire
+        // the handshake ignore the field (legacy-pass-through).
+        serverVersion: PROTOCOL_SCHEMA_VERSION,
+        ...(replay?.truncated ? { replayTruncated: true } : {}),
+      };
+      sink.write({
+        type: "ack",
+        payload: ackPayload,
+        ...(args.requestId ? { requestId: args.requestId } : {}),
+      });
 
-    // R7 — GguiSessionEvent ledger replay. When `args.sinceSequence` is
-    // present, fetch events with `seq > sinceSequence` from the per-
-    // render ledger and emit each as a `render_event` wire frame
-    // BEFORE the per-channel stream-buffer replay. Consumers dispatch
-    // by `event.type` to fold the wire-frame-equivalent handler
-    // (render/props_update/etc.) — same cursor model as the HTTP
-    // `/api/sessions/:id/events?sinceSequence=N` endpoint.
-    //
-    // Each replay frame carries `resumeId` = the ledger seq — the SSE
-    // sink stamps it as the `id:` field so the browser's Last-Event-ID
-    // lands on the exact same cursor space; the WS sink ignores it.
-    //
-    // Pagination: a hasMore-loop over 100-event pages (the HTTP
-    // route's default page size). Strict superset of the previous
-    // single-page-100 WS behavior.
-    //
-    // Horizon gate: a cursor below the server's replay horizon OR
-    // above `lastSequence` (stale from a different deployment) emits
-    // an error frame with `code: 'REPLAY_HORIZON_PASSED'` and skips
-    // the replay. The frame carries `resumeId` = lastSequence — a
-    // dispatched id-bearing frame advances the browser's Last-Event-ID
-    // to the fresh high-water mark, and the ack snapshot already
-    // re-mounted state. Client recovery: re-mount from a fresh /state
-    // read (WS) / the already-delivered ack (SSE).
-    if (args.sinceSequence !== undefined) {
-      const sinceSeq = args.sinceSequence;
-      if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
-        sink.write({
-          type: "error",
-          payload: {
-            code: "INVALID_SINCE_SEQUENCE",
-            message: "sinceSequence must be a non-negative integer",
-          },
-          ...(args.requestId ? { requestId: args.requestId } : {}),
-        });
-      } else {
-        let cursor = sinceSeq;
-        let firstPage = true;
-        for (;;) {
-          const ledger = await deps.renderStore.listEventsSince(stored.id, cursor, 100);
-          if (ledger === null) {
-            // GguiSession disappeared between resolve and ledger read —
-            // already handled by the broader error envelope path;
-            // nothing to do here.
-            break;
-          }
-          if (firstPage && (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq)) {
-            sink.write(
-              {
-                type: "error",
-                payload: {
-                  code: "REPLAY_HORIZON_PASSED",
-                  message: `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
-                  details: { currentSequence: ledger.lastSequence },
+      // R7 — GguiSessionEvent ledger replay. When `args.sinceSequence` is
+      // present, fetch events with `seq > sinceSequence` from the per-
+      // render ledger and emit each as a `render_event` wire frame
+      // BEFORE the per-channel stream-buffer replay. Consumers dispatch
+      // by `event.type` to fold the wire-frame-equivalent handler
+      // (render/props_update/etc.) — same cursor model as the HTTP
+      // `/api/sessions/:id/events?sinceSequence=N` endpoint.
+      //
+      // Each replay frame carries `resumeId` = the ledger seq — the SSE
+      // sink stamps it as the `id:` field so the browser's Last-Event-ID
+      // lands on the exact same cursor space; the WS sink ignores it.
+      //
+      // Pagination: a hasMore-loop over 100-event pages (the HTTP
+      // route's default page size). Strict superset of the previous
+      // single-page-100 WS behavior.
+      //
+      // Horizon gate: a cursor below the server's replay horizon OR
+      // above `lastSequence` (stale from a different deployment) emits
+      // an error frame with `code: 'REPLAY_HORIZON_PASSED'` and skips
+      // the replay. The frame carries `resumeId` = lastSequence — a
+      // dispatched id-bearing frame advances the browser's Last-Event-ID
+      // to the fresh high-water mark, and the ack snapshot already
+      // re-mounted state. Client recovery: re-mount from a fresh /state
+      // read (WS) / the already-delivered ack (SSE).
+      if (args.sinceSequence !== undefined) {
+        const sinceSeq = args.sinceSequence;
+        if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
+          sink.write({
+            type: "error",
+            payload: {
+              code: "INVALID_SINCE_SEQUENCE",
+              message: "sinceSequence must be a non-negative integer",
+            },
+            ...(args.requestId ? { requestId: args.requestId } : {}),
+          });
+        } else {
+          let cursor = sinceSeq;
+          let firstPage = true;
+          for (;;) {
+            const ledger = await deps.renderStore.listEventsSince(stored.id, cursor, 100);
+            if (ledger === null) {
+              // GguiSession disappeared between resolve and ledger read —
+              // already handled by the broader error envelope path;
+              // nothing to do here.
+              break;
+            }
+            if (firstPage && (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq)) {
+              sink.write(
+                {
+                  type: "error",
+                  payload: {
+                    code: "REPLAY_HORIZON_PASSED",
+                    message: `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
+                    details: { currentSequence: ledger.lastSequence },
+                  },
+                  ...(args.requestId ? { requestId: args.requestId } : {}),
                 },
-                ...(args.requestId ? { requestId: args.requestId } : {}),
-              },
-              { resumeId: String(ledger.lastSequence) }
-            );
-            break;
+                { resumeId: String(ledger.lastSequence) }
+              );
+              break;
+            }
+            firstPage = false;
+            for (const event of ledger.events) {
+              // GguiSessionEvent is now the wire-shape ledger primitive
+              // (Wave 7 of flatten-render-identity, 2026-05-28); no
+              // projection — emit the store's row directly.
+              sink.write({ type: "render_event", payload: event }, { resumeId: String(event.seq) });
+              cursor = event.seq;
+            }
+            // Defensive: an empty page with hasMore would loop forever;
+            // the store contract never produces it, but a broken adapter
+            // must not spin the server.
+            if (!ledger.hasMore || ledger.events.length === 0) break;
           }
-          firstPage = false;
-          for (const event of ledger.events) {
-            // GguiSessionEvent is now the wire-shape ledger primitive
-            // (Wave 7 of flatten-render-identity, 2026-05-28); no
-            // projection — emit the store's row directly.
-            sink.write({ type: "render_event", payload: event }, { resumeId: String(event.seq) });
-            cursor = event.seq;
-          }
-          // Defensive: an empty page with hasMore would loop forever;
-          // the store contract never produces it, but a broken adapter
-          // must not spin the server.
-          if (!ledger.hasMore || ledger.events.length === 0) break;
         }
       }
-    }
 
-    // Send replay frames AFTER the ack. Ordering by `seq` ASC — the
-    // buffer returns them pre-sorted. Client sees ack(streamSeq=N) →
-    // up to N replay `data` frames → live tail (seq > N). No explicit
-    // "replay end" marker is needed; the client uses envelope.seq as
-    // the single source of truth for ordering.
-    if (replay) {
-      for (const env of replay.envelopes) {
-        sink.write({ type: "data", payload: env });
+      // Send replay frames AFTER the ack. Ordering by `seq` ASC — the
+      // buffer returns them pre-sorted. Client sees ack(streamSeq=N) →
+      // up to N replay `data` frames → live tail (seq > N). No explicit
+      // "replay end" marker is needed; the client uses envelope.seq as
+      // the single source of truth for ordering.
+      if (replay) {
+        for (const env of replay.envelopes) {
+          sink.write({ type: "data", payload: env });
+        }
       }
+    } finally {
+      gate.release();
     }
 
     return {
