@@ -357,6 +357,59 @@ describe('the subscribe payload carries the adopted token (ggui#1496 F5)', () =>
     expect(next.url).toContain('wsToken=tok-new');
   });
 
+  it('R4: a not-found on the bridge after a successful pull ends the live channel, with one typed error and one observability event', async () => {
+    const { app, transport, pushToolResult } = buildBootHarness();
+    let pulls = 0;
+    transport.respondBy('tools/call', () => {
+      pulls += 1;
+      if (pulls >= 2) {
+        return { result: { isError: true, content: [{ type: 'text', text: 'session_not_found: no live session render_001' }] } };
+      }
+      const body = { events: [], lastSequence: 0, hasMore: false };
+      return { result: { structuredContent: body, content: [{ type: 'text', text: JSON.stringify(body) }] } };
+    });
+    const protocolErrors: unknown[] = [];
+    const observed: unknown[] = [];
+    const done = bootSequence({
+      doc: document.implementation.createHTMLDocument('held-credential-r4'),
+      app,
+      transport,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 500,
+      credentialTiming: noWait,
+      onProtocolError: (e) => protocolErrors.push(e),
+      onObserve: (e) => observed.push(e),
+    });
+    await tick();
+    const { sseUrl: _sse, pollingUrl: _polling, ...wsOnly } = LIVE_ONLY_EXPIRED;
+    pushToolResult({ ...wsOnly, expiresAt: FUTURE });
+    for (let i = 0; i < 200 && (FakeWebSocket.instances[0]?.sent.length ?? 0) === 0; i++) await tick();
+    const boot = FakeWebSocket.instances[0];
+    boot?.onmessage?.({ data: JSON.stringify({ type: 'ack', payload: { sequence: 1, timestamp: 0 } }) });
+    expect((await done).ok).toBe(true);
+    // The server drops the session: WS refuses, the ladder demotes to its bridge.
+    boot?.onmessage?.({
+      data: JSON.stringify({ type: 'error', payload: { code: 'SESSION_NOT_FOUND', message: 'gone' } }),
+    });
+    const ended = (): boolean =>
+      observed.some((e) => typeof e === 'object' && e !== null && Reflect.get(e, 'reason') === 'live-channel-ended');
+    for (let i = 0; i < 400 && !ended(); i++) await tick();
+    expect(observed).toContainEqual({
+      kind: 'subscribe-failed',
+      reason: 'live-channel-ended',
+      message: 'the session is gone (session_not_found, after a successful pull)',
+    });
+    expect(protocolErrors).toContainEqual({
+      kind: 'transport',
+      code: 'DISCONNECTED',
+      retryable: false,
+      message: 'the session is gone (session_not_found, after a successful pull)',
+    });
+    const pullsAtEnd = pulls;
+    for (let i = 0; i < 20; i++) await tick();
+    expect(pulls).toBe(pullsAtEnd);
+  });
+
   it('a BOOTSTRAP_EXPIRED refusal before the ack whose refresh is refused ends the boot as before (WS_HANDSHAKE_FAILED)', async () => {
     const { result, notifyParent } = await refusedAtSubscribe(() => ({
       structuredContent: { ok: false, code: 'BOOTSTRAP_NOT_SUPPORTED', message: 'no refresh here' },
