@@ -204,9 +204,12 @@ export interface HandlerContext {
   /**
    * A per-request memo of session-row reads (ggui#1415), shared by the
    * transport's proof gate and the handler so the row is read once per
-   * request. Read it through {@link readSessionRow}, never directly.
-   * `undefined` when the transport provides none; the handler then reads
-   * its store.
+   * request. Read it through {@link readSessionRow}, never directly, and
+   * only for the request's FIRST read of a row: every later read of the
+   * same row in the request gets that first answer. A read that must
+   * observe a write made earlier in this request, or a retry loop, reads
+   * the store directly. `undefined` when the transport provides none; the
+   * handler then reads its store.
    */
   readonly sessionRows?: SessionRowReads;
 }
@@ -216,6 +219,8 @@ export interface HandlerContext {
  * for one session id is made once, and every later read of the same pair
  * in the request shares its answer, a failure included. Reads of another
  * store never share: the memo is keyed by the store as well as the id.
+ * It answers a request's first read of a row; a read that must observe
+ * this request's own write, or a retry, goes to the store.
  */
 export interface SessionRowReads {
   read(store: GguiSessionStore, sessionId: string): Promise<StoredGguiSession | null>;
@@ -242,7 +247,11 @@ export function createSessionRowReads(): SessionRowReads {
   };
 }
 
-/** Read a session row through the request's memo when there is one, else from the store. */
+/**
+ * Read a session row through the request's memo when there is one, else
+ * from the store. For the request's first read of the row only (see
+ * {@link HandlerContext.sessionRows}).
+ */
 export function readSessionRow(
   ctx: HandlerContext,
   store: GguiSessionStore,
