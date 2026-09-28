@@ -304,7 +304,7 @@ describe('connectViaRegistry — version handshake', () => {
     }
   });
 
-  it('rejects with a plain Error when server emits a non-upgrade error pre-ack + emits typed ProtocolError', async () => {
+  it('resolves with the bound handle and `refused` on an auth-class refusal pre-ack, and still emits the typed ProtocolError (ggui#1496 fact 3)', async () => {
     const emitted: ProtocolError[] = [];
     const handlePromise = connectViaRegistry({
       meta: META,
@@ -323,13 +323,12 @@ describe('connectViaRegistry — version handshake', () => {
       payload: { code: 'BOOTSTRAP_EXPIRED', message: 'ws token expired' },
     });
 
-    await expect(handlePromise).rejects.toThrow('ws token expired');
-    try {
-      await handlePromise;
-    } catch (err) {
-      expect(err).toBeInstanceOf(Error);
-      expect(err).not.toBeInstanceOf(UpgradeRequiredError);
-    }
+    // The caller keeps the ladder: the refusal failed the WS rung, and the
+    // ladder demotes while the view refreshes its credential.
+    const result = await handlePromise;
+    expect(result.refused).toEqual({ code: 'BOOTSTRAP_EXPIRED', message: 'ws token expired' });
+    expect(result.ack).toBeUndefined();
+    expect(result.handle.kind).toBe('ws');
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (authErr && authErr.kind === 'auth') {

@@ -380,7 +380,9 @@ describe('connectViaRegistry — onProtocolError', () => {
       },
     });
 
-    await expect(promise).rejects.toThrow('no render');
+    // ggui#1496 fact 3: an auth-class refusal resolves with the handle, so
+    // the caller keeps the ladder; the typed error still emits.
+    await expect(promise).resolves.toMatchObject({ refused: { code: 'SESSION_NOT_FOUND', message: 'no render' } });
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (!authErr || authErr.kind !== 'auth') throw new Error('unreachable');

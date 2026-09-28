@@ -1500,6 +1500,25 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     sseUrl !== undefined || pollingBaseUrl !== undefined || bridgeApp !== null
       ? createSequenceCursor(meta.lastSequence ?? 0)
       : undefined;
+  // How a boot ends when its subscribe fails short of UPGRADE_REQUIRED:
+  // a transport or auth failure.
+  function endOnSubscribeFailure(message: string): BootSequenceResult {
+    if (mountedRender !== null) {
+      // DEGRADE — a transport/auth failure AFTER a static seed already
+      // painted. Keep the mounted content, skip live updates (props_update
+      // simply stops arriving), and do NOT tear down or surface a
+      // bootstrap failure. connectFn already emitted the typed
+      // `subscribe-failed` observability event on its own onObserve path.
+      setStatus(refs, `live updates unavailable: ${message}`, 'connecting');
+      emitCodeReadyOnce();
+      return { ok: true, mountedRender };
+    }
+    if (renderer !== null) rendererHooks?.teardown?.(renderer);
+    setStatus(refs, `WS handshake failed: ${message}`, 'error');
+    emitBootFailure('WS_HANDSHAKE_FAILED', message);
+    return { ok: false, mountedRender };
+  }
+
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
@@ -1602,21 +1621,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       emitBootFailure('UPGRADE_REQUIRED', message);
       return { ok: false, mountedRender };
     }
-    const message = err instanceof Error ? err.message : String(err);
-    if (mountedRender !== null) {
-      // DEGRADE — a transport/auth failure AFTER a static seed already
-      // painted. Keep the mounted content, skip live updates (props_update
-      // simply stops arriving), and do NOT tear down or surface a
-      // bootstrap failure. connectFn already emitted the typed
-      // `subscribe-failed` observability event on its own onObserve path.
-      setStatus(refs, `live updates unavailable: ${message}`, 'connecting');
-      emitCodeReadyOnce();
-      return { ok: true, mountedRender };
-    }
-    if (renderer !== null) rendererHooks?.teardown?.(renderer);
-    setStatus(refs, `WS handshake failed: ${message}`, 'error');
-    emitBootFailure('WS_HANDSHAKE_FAILED', message);
-    return { ok: false, mountedRender };
+    return endOnSubscribeFailure(err instanceof Error ? err.message : String(err));
+  }
+  // A pre-ack auth-class refusal resolves with the ladder instead of
+  // rejecting (ggui#1496 fact 3); the boot ends on it as it did on the
+  // rejection.
+  if (handle.refused !== undefined) {
+    return endOnSubscribeFailure(handle.refused.message ?? handle.refused.code);
   }
 
   telemetry?.record(

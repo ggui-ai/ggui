@@ -231,11 +231,12 @@ describe('the subscribe payload carries the adopted token (ggui#1496 F5)', () =>
   it('the first subscribe after a boot refresh sends the adopted wsToken, never the expired one', async () => {
     const { app, transport, pushToolResult } = buildBootHarness();
     transport.queueResponse('tools/call', adoptedReply('tok-new', FUTURE));
+    const notifyParent = vi.fn();
     const done = bootSequence({
       doc: document.implementation.createHTMLDocument('held-credential-ws'),
       app,
       transport,
-      notifyParent: vi.fn(),
+      notifyParent,
       toolResultTimeoutMs: 500,
       credentialTiming: noWait,
     });
@@ -249,10 +250,14 @@ describe('the subscribe payload carries the adopted token (ggui#1496 F5)', () =>
     if (first === undefined) throw new Error('no subscribe frame was sent');
     const frame: unknown = JSON.parse(first);
     expect(frame).toMatchObject({ type: 'subscribe', payload: { sessionId: 'render_001', wsToken: 'tok-new' } });
-    // End the handshake with a terminal refusal so the boot settles.
+    // End the handshake with an auth refusal. It resolves with the ladder
+    // (fact 3), and a boot with nothing painted still ends as it did when
+    // the refusal rejected.
     FakeWebSocket.instances[0]?.onmessage?.({
       data: JSON.stringify({ type: 'error', payload: { code: 'BOOTSTRAP_INVALID', message: 'test end' } }),
     });
-    await done;
+    const result = await done;
+    expect(result.ok).toBe(false);
+    expect(bootFailures(notifyParent).map((f) => f.reason)).toEqual(['WS_HANDSHAKE_FAILED']);
   });
 });

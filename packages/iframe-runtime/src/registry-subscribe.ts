@@ -86,6 +86,21 @@ export interface RegistrySubscribeHandle {
    * absent entirely (exact-optional).
    */
   readonly ack?: AckPayload;
+  /**
+   * The auth-class code the server refused the subscribe with before any
+   * ack (ggui#1496). The refusal failed the WS rung, and the ladder in
+   * `handle` goes on demoting; the caller keeps it, so that a view which
+   * refreshes its credential can dispose it when the new ladder takes
+   * over. Absent on an accepted bind. The typed auth `ProtocolError` has
+   * already been emitted.
+   */
+  readonly refused?: SubscribeRefusal;
+}
+
+/** A pre-ack auth-class refusal, with the server's message when it sent one. */
+export interface SubscribeRefusal {
+  readonly code: AuthFailureCode;
+  readonly message?: string;
 }
 
 /**
@@ -450,6 +465,17 @@ export function connectViaRegistry(
         }
         settled = true;
         emitProtocolError(classifyPreAckError(errPayload));
+        if (isAuthFailureCode(errPayload.code)) {
+          // An auth-class refusal fails the WS rung (the classifier's
+          // verdict) and the ladder demotes; resolve with the handle so
+          // the caller keeps it (ggui#1496).
+          refusalState.refusal = {
+            code: errPayload.code,
+            ...(errPayload.message !== undefined ? { message: errPayload.message } : {}),
+          };
+          refusalState.onRefused?.();
+          return;
+        }
         reject(new Error(errPayload.message ?? errPayload.code));
       },
     });
@@ -461,6 +487,11 @@ export function connectViaRegistry(
       payload: AckPayload | null;
       onAck: (() => void) | null;
     } = { payload: null, onAck: null };
+    // Same hand-off for a pre-ack auth-class refusal (ggui#1496).
+    const refusalState: {
+      refusal: SubscribeRefusal | null;
+      onRefused: (() => void) | null;
+    } = { refusal: null, onRefused: null };
 
     const mappedStatusCallback = (status: TransportStatus): void => {
       // `connecting` is the initial state from WSTransport — first
@@ -562,6 +593,17 @@ export function connectViaRegistry(
           return;
         }
         const wsHandle = bound;
+        // A refusal that landed while bind was resolving settles now;
+        // one that lands later settles through its continuation.
+        const refusal = refusalState.refusal;
+        if (refusal !== null) {
+          resolve({ handle: wsHandle, refused: refusal });
+          return;
+        }
+        refusalState.onRefused = () => {
+          const late = refusalState.refusal;
+          if (late !== null) resolve({ handle: wsHandle, refused: late });
+        };
         // If we already received the ack while bind was resolving,
         // settle the outer Promise now.
         if (ackResolverState.payload !== null) {
