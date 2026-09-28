@@ -75,6 +75,11 @@ export {
   type ParsedEpochUri,
 } from './epoch-uri.js';
 
+// View-origin proof v1 (ggui#1415): the request key, the grammar and the
+// exact bytes a view signs. Re-exported here, the package's MCP-Apps
+// surface; the seam itself lives in view-proof.ts.
+export * from './view-proof.js';
+
 /**
  * The single `_meta.ui.resourceUri` value ggui uses across every MCP Apps
  * host surface. Exposed as a named constant so tool-declaration code,
