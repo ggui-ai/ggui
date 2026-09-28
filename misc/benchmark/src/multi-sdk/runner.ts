@@ -769,19 +769,30 @@ export function formatVarianceBlock(
  *
  * Role values may be bare (`--model gemini-3.5-flash`) while
  * `MODEL_REGISTRY` is keyed by LiteLLM `provider/model` ids — when the
- * bare form misses the registry, normalize by unique suffix match.
- * Unknown ids pass through so `calculateCost` flags them loudly.
+ * bare form misses the registry, normalize by unique suffix match. A
+ * provider snapshot pin (`-YYYYMMDD`) resolves to its undated key, exactly
+ * and then by suffix, as the judges' rule does. Unknown ids pass through so
+ * `calculateCost` flags them loudly.
  */
 export function resolveCostModelId(
   models: ModelRoles | undefined,
   baseModelId: string,
 ): string {
   const effective = models?.coding ?? models?.default ?? baseModelId;
+  const keys = Object.keys(MODEL_REGISTRY) as ModelId[];
   if (effective in MODEL_REGISTRY) return effective;
-  const bySuffix = (Object.keys(MODEL_REGISTRY) as ModelId[]).find((id) =>
-    id.endsWith(`/${effective}`),
-  );
-  return bySuffix ?? effective;
+  const bySuffix = keys.find((id) => id.endsWith(`/${effective}`));
+  if (bySuffix) return bySuffix;
+  // A provider snapshot pin (`-YYYYMMDD`) is the same model as its undated registry key: try the undated id
+  // exactly (`anthropic/claude-haiku-4-5-20251001` → `anthropic/claude-haiku-4-5`), then as a suffix (a bare
+  // `claude-haiku-4-5-20251001`). Without this a dated coding id missed and its coding priced at $0.
+  const undated = effective.replace(/-\d{8}$/, "");
+  if (undated !== effective) {
+    if (undated in MODEL_REGISTRY) return undated;
+    const byUndatedSuffix = keys.find((id) => id.endsWith(`/${undated}`));
+    if (byUndatedSuffix) return byUndatedSuffix;
+  }
+  return effective;
 }
 
 /**

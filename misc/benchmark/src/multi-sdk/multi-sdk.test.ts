@@ -376,6 +376,31 @@ describe('resolveCostModelId', () => {
     ).toBe('totally-unknown-model');
   });
 
+  // A date-pinned coding id (a provider snapshot, `-YYYYMMDD`) is the same model as its undated registry key —
+  // before this it missed the registry and the coding priced at $0 behind a one-time console warn.
+  it('a date-pinned provider-prefixed coding id resolves to its undated registry key', () => {
+    expect(resolveCostModelId(undefined, 'anthropic/claude-haiku-4-5-20251001')).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('a date-pinned BARE coding override resolves through the undated suffix', () => {
+    expect(resolveCostModelId({ coding: 'claude-haiku-4-5-20251001' }, 'gemini/gemini-3.1-flash-lite')).toBe(
+      'anthropic/claude-haiku-4-5',
+    );
+  });
+
+  it('a date-pinned id whose undated form is unknown still passes through (a MISS stays loud)', () => {
+    expect(resolveCostModelId({ coding: 'totally-unknown-model-20250101' }, 'gemini/gemini-3.1-flash-lite')).toBe(
+      'totally-unknown-model-20250101',
+    );
+  });
+
+  it('a date-pinned coding id is priced at its undated rate, never $0', () => {
+    const tokens = { input: 100_000, output: 200_000 };
+    const dated = calculateCost(resolveCostModelId(undefined, 'anthropic/claude-haiku-4-5-20251001'), tokens);
+    expect(dated).toBeGreaterThan(0);
+    expect(dated).toBe(calculateCost('anthropic/claude-haiku-4-5', tokens));
+  });
+
   it('Exp-45 regression: an overridden run is priced at the OVERRIDE rate, not the base rate', () => {
     const tokens = { input: 100_000, output: 200_000 };
     const overridden = calculateCost(
