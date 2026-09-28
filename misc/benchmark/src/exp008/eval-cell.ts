@@ -18,7 +18,7 @@ import { DEFAULT_GENERATOR_SLUG, REPORT_SCHEMA_VERSION } from '../multi-sdk/type
 import { runContractBehaviorCheck } from '../multi-sdk/contract-behavior.js';
 import { deriveRuntimeProbeVerdict, type RuntimeProbeVerdict } from '../multi-sdk/runtime-probe.js';
 import { persistCanvasScreenshots, type CanvasClass, type CanvasScreenshot, type VisualCanvasArtefact } from '../multi-sdk/canvas.js';
-import { readCanvasPresentations, type CanvasPresentation, type PresentationRead } from './presentation.js';
+import { presentationEcho, readCanvasPresentations, type CanvasPresentation, type PresentationEcho, type PresentationRead } from './presentation.js';
 import { evaluateAestheticsPanel, selectPanelPrompt, type PanelEvalResult, type PanelPrompt } from '../multi-sdk/post-eval.js';
 import { mapRunResult } from '../multi-sdk/reporter.js';
 import { calculateCost, judgePanelCostUsd, resolveCostModelId, resolveJudgeCostModelId, runPostGeneration } from '../multi-sdk/runner.js';
@@ -241,8 +241,8 @@ export interface CellInputs {
   readonly criteriaDropped?: string;
   /**
    * ggui#1492 — the host's presentation per judged canvas from judge-input.json, as this reader read it (a
-   * pre-check: malformed entries drop here and are noted). NOT echoed as "applied": the report's echo comes from
-   * the judge's own result, once the judge reports what it drew.
+   * pre-check: malformed entries drop here and are noted). The report's echo is built from the judge's own
+   * per-canvas outcome, not from this read (`presentationEcho`).
    */
   readonly presentation?: PresentationRead;
   readonly contract: DataContract;
@@ -682,6 +682,12 @@ export interface EvalCellDeps {
 /** `report.json`: one published row + the cell's own record. */
 export interface CellReport extends BenchmarkRunResultDisplay {
   readonly schemaVersion: typeof EXP008_CELL_REPORT_VERSION;
+  /**
+   * ggui#1492 — the host presentation this cell was judged under, as the JUDGE drew it (its per-canvas outcome),
+   * and every entry dropped by the pre-check or set aside by the judge, with the reason. Top-level: the binder
+   * digests THIS echo, never the writer's input. Absent when judge-input.json carried no `canvasPresentations`.
+   */
+  readonly presentation?: PresentationEcho;
   /** The published-report shape the row mirrors. */
   readonly reportSchemaVersion: typeof REPORT_SCHEMA_VERSION;
   readonly meta: {
@@ -817,6 +823,16 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   }
   const visualMs = Date.now() - t2;
 
+  // ggui#1492 — the echo is what the JUDGE drew (its per-canvas outcome), never this reader's prediction. Every
+  // entry the judge set aside, and every entry it did not report on, is named on the row.
+  let presentation: PresentationEcho | undefined;
+  if (inputs.presentation !== undefined) {
+    const { echo, judgeIgnored, unreported } = presentationEcho(inputs.presentation, visualOutcome?.canvases);
+    presentation = echo;
+    for (const m of judgeIgnored) notes.push(`presentation ignored by the judge — ${m.canvas}: ${m.reason}`);
+    for (const canvas of unreported) notes.push(`presentation not reported by the judge — ${canvas}`);
+  }
+
   // The cell's generation as the row records it — copied off the mint's
   // OBSERVED harness result (cloud #975 d1), never re-derived here.
   const mint = inputs.mint;
@@ -875,6 +891,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
     ...mapRunResult(result),
     schemaVersion: EXP008_CELL_REPORT_VERSION,
     reportSchemaVersion: REPORT_SCHEMA_VERSION,
+    ...(presentation !== undefined ? { presentation } : {}),
     meta: {
       cellId: mint.cellId,
       runId: mint.runId,

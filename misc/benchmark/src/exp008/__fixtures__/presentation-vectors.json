@@ -11,7 +11,8 @@
     "box_on_declared_primary",
     "color_not_hex",
     "frame_off_inline",
-    "frame_malformed"
+    "frame_malformed",
+    "ground_on_inline"
   ],
   "rows": [
     {
@@ -1122,6 +1123,68 @@
           {
             "canvas": "xs-chat-card",
             "reason": "frame_malformed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an inline entry with a top-level ground is refused: its room lives on frame.ground, which the judge would draw instead",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          },
+          "ground": "#f6f5ee"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "ground_on_inline"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an inline top-level ground is refused as ground_on_inline even when it is also not hex",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          },
+          "ground": "not-a-colour"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "ground_on_inline"
           }
         ]
       }

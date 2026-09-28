@@ -13,13 +13,20 @@
 //   a canvas this cell does not judge ⇒ `canvas_not_judged`; a missing or blank label ⇒ `label_missing`
 //   a box outside 200..2560 integer px ⇒ `box_out_of_bounds`; a box on the declared primary ⇒ `box_on_declared_primary`
 //     (the declared viewport already boxes it — one box per canvas); framing the primary is allowed
+//   a top-level ground on the inline card ⇒ `ground_on_inline` (its room is `frame.ground`)
 //   a ground or frame colour that is not lowercase `#rrggbb` ⇒ `color_not_hex`
 //   a frame number outside the judge's bounds (ring 0..8 px, alpha 0..1, radius 0..64 px, floor 0..2560 px) ⇒ `frame_malformed`
 //   a frame on any canvas but the inline card ⇒ `frame_off_inline`; a frame missing a member ⇒ `frame_malformed`
 
 import type { JsonObject, JsonValue } from '@ggui-ai/protocol';
-import { CANVAS_CLASSES, HOST_COLOUR_PATTERN, HOST_FRAME_BOUNDS, type VisualEvalConfig } from '@ggui-ai/ui-gen/evaluation';
-import type { CanvasClass } from '../multi-sdk/canvas.js';
+import {
+  CANVAS_CLASSES,
+  HOST_COLOUR_PATTERN,
+  HOST_FRAME_BOUNDS,
+  type HostPresentationIgnoredReason,
+  type VisualEvalConfig,
+} from '@ggui-ai/ui-gen/evaluation';
+import type { CanvasClass, CanvasScreenshot } from '../multi-sdk/canvas.js';
 
 /** The judge's per-canvas capture boxes, as its config types them. */
 export type JudgeCanvasViewports = NonNullable<VisualEvalConfig['canvasViewports']>;
@@ -67,6 +74,9 @@ export const PRESENTATION_MALFORMED_REASONS = [
   'color_not_hex',
   'frame_off_inline',
   'frame_malformed',
+  // The inline card's room lives on `frame.ground`, and the judge would draw that one instead — so an inline
+  // entry carrying a top-level `ground` is refused, never half-applied.
+  'ground_on_inline',
 ] as const;
 export type PresentationMalformedReason = (typeof PRESENTATION_MALFORMED_REASONS)[number];
 
@@ -201,6 +211,10 @@ export function readCanvasPresentations(
       readBox = { width, height };
     }
     const ground = member(entry, 'ground');
+    if (ground !== undefined && canvas === INLINE_CANVAS) {
+      malformed.push({ canvas, reason: 'ground_on_inline' });
+      continue;
+    }
     if (ground !== undefined && !isHex(ground)) {
       malformed.push({ canvas, reason: 'color_not_hex' });
       continue;
@@ -262,4 +276,60 @@ export function hostPresentationsFor(applied: readonly CanvasPresentation[]): Ju
     };
   }
   return byCanvas;
+}
+
+/** Why an entry is not in the echo's `applied`: this reader's pre-check, or the judge's own verdict. */
+export type PresentationEchoReason = PresentationMalformedReason | HostPresentationIgnoredReason;
+
+/**
+ * report.json's top-level `presentation`, which the binder digests: what the JUDGE drew, never this reader's
+ * prediction. `applied` is every canvas whose judge outcome is `applied`, as the judge reports it drew it, with
+ * `canvas` and the box this cell handed it (`canvasViewports`) added back. `malformed` is this reader's drops (`by: 'reader'`),
+ * then every entry the judge set aside, with the judge's reason (`by: 'judge'`).
+ */
+export interface PresentationEcho {
+  readonly applied: readonly CanvasPresentation[];
+  /** `by` names who dropped the entry: this reader's pre-check, or the judge (two readers of one contract disagreeing). */
+  readonly malformed: readonly { readonly canvas: string; readonly reason: PresentationEchoReason; readonly by: 'reader' | 'judge' }[];
+}
+
+/**
+ * Build the echo from the pre-check read and the judge's per-canvas results. An entry handed to the judge with no
+ * outcome on its canvas (the judge did not run that canvas, or did not run) is in neither list — it was not drawn,
+ * and it was not malformed; it is returned as `unreported` so the caller names it on the row.
+ */
+export function presentationEcho(
+  read: PresentationRead,
+  judged: readonly Pick<CanvasScreenshot, 'canvas' | 'presentation'>[] | undefined,
+): {
+  readonly echo: PresentationEcho;
+  /** The entries the judge set aside, with its reason — also in `echo.malformed`, returned apart so the caller notes them. */
+  readonly judgeIgnored: PresentationEcho['malformed'];
+  readonly unreported: readonly CanvasClass[];
+} {
+  const outcomes = new Map((judged ?? []).map((c) => [c.canvas, c.presentation] as const));
+  const applied: CanvasPresentation[] = [];
+  const ignored: { canvas: string; reason: PresentationEchoReason; by: 'judge' }[] = [];
+  const unreported: CanvasClass[] = [];
+  for (const p of read.applied) {
+    const outcome = outcomes.get(p.canvas);
+    if (outcome === undefined) {
+      unreported.push(p.canvas);
+      continue;
+    }
+    if (outcome.status === 'ignored') {
+      ignored.push({ canvas: p.canvas, reason: outcome.reason, by: 'judge' });
+      continue;
+    }
+    const drawn = outcome.applied;
+    applied.push({
+      canvas: p.canvas,
+      label: drawn.label,
+      ...(p.box !== undefined ? { box: p.box } : {}),
+      ...(drawn.ground !== undefined ? { ground: drawn.ground } : {}),
+      ...(drawn.frame !== undefined ? { frame: drawn.frame } : {}),
+    });
+  }
+  const byReader = read.malformed.map((m) => ({ canvas: m.canvas, reason: m.reason, by: 'reader' as const }));
+  return { echo: { applied, malformed: [...byReader, ...ignored] }, judgeIgnored: ignored, unreported };
 }

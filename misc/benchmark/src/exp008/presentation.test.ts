@@ -11,8 +11,8 @@ import { PRESENTATION_MALFORMED_REASONS, readCanvasPresentations, type Presentat
 import type { CanvasClass } from '../multi-sdk/canvas.js';
 
 const TABLE_FILE = join(__dirname, '__fixtures__', 'presentation-vectors.json');
-/** sha256 of the writer's table as committed (the writer's `__fixtures__/presentation-vectors.json`, blob 690298e45dd3). */
-const TABLE_SHA256 = '808ae35a4be240127e8e83106d41b4e1f2207c2236abfe8936992d07385ce9a6';
+/** sha256 of the writer's table as committed (the writer's `__fixtures__/presentation-vectors.json`, blob 099c1385ea2a). */
+const TABLE_SHA256 = '9a725858d4569079781585bf85ae8bded3b017080461407d823f220636fa8d04';
 
 interface VectorRow {
   readonly name: string;
