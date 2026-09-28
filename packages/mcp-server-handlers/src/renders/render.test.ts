@@ -54,6 +54,7 @@ import {
 import type {
   CodeStore,
   EmbeddingProvider,
+  GenerationMetadata,
   RenderIdentityRecord,
   RenderIdentityStore,
   UiGenerateResult,
@@ -167,6 +168,12 @@ const fakeEmbedding: EmbeddingProvider = {
   embed: async () => [0, 0, 0, 0],
 };
 
+/** ggui#1513 — the token counts the fake generator reports (`metadata.*Tokens`). */
+type ColdTokens = Pick<
+  GenerationMetadata,
+  'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheCreationTokens'
+>;
+
 /** Pre-resolved generator escape hatch — returns fixed componentCode,
  *  no LLM. */
 function fakeGenerator(
@@ -174,6 +181,7 @@ function fakeGenerator(
   sourceCode?: string,
   effort?: AppGenerationProfileEffort,
   build?: GeneratorBuild,
+  tokens?: ColdTokens,
 ) {
   return async (
     input: { request: { sessionId: string } },
@@ -188,10 +196,14 @@ function fakeGenerator(
       provider: 'anthropic',
       generator: 'ui-gen-fake',
       model: 'anthropic/fake',
-      inputTokens: 0,
-      outputTokens: 0,
+      inputTokens: tokens?.inputTokens ?? 0,
+      outputTokens: tokens?.outputTokens ?? 0,
       latencyMs: 0,
       cacheHit: false,
+      ...(tokens?.cacheReadTokens !== undefined ? { cacheReadTokens: tokens.cacheReadTokens } : {}),
+      ...(tokens?.cacheCreationTokens !== undefined
+        ? { cacheCreationTokens: tokens.cacheCreationTokens }
+        : {}),
       ...(effort !== undefined ? { effort } : {}),
       ...(build !== undefined ? { build } : {}),
     },
@@ -240,6 +252,8 @@ function buildHandler(opts: {
   readonly coldEffort?: AppGenerationProfileEffort;
   /** ggui#1280 — the build the fake generator reports (`metadata.build`). */
   readonly coldBuild?: GeneratorBuild;
+  /** ggui#1513 — the token counts the fake generator reports. */
+  readonly coldTokens?: ColdTokens;
   /**
    * Optional authored source the fake generator's response carries
    * alongside `coldCode` — threads through to
@@ -334,7 +348,7 @@ function buildHandler(opts: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
         model: 'anthropic/claude-haiku-4-5',
-        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild),
+        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens),
       },
       resolveLlm: () => null,
       blueprints: { get: async () => null, list: async () => [] },
@@ -345,7 +359,7 @@ function buildHandler(opts: {
         ...(opts.cacheDurability ? { durability: opts.cacheDurability } : {}),
       },
     },
-    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild),
+    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens),
   });
 }
 
@@ -554,6 +568,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly coldEffort?: AppGenerationProfileEffort;
   /** ggui#1280 — see {@link buildHandler}'s `coldBuild`. */
   readonly coldBuild?: GeneratorBuild;
+  /** ggui#1513 — see {@link buildHandler}'s `coldTokens`. */
+  readonly coldTokens?: ColdTokens;
   readonly renderTtlMs?: number;
   readonly renderIdentityStore?: RenderIdentityStore;
   /** #460 — injectable so a test can make registration fail. */
@@ -603,6 +619,7 @@ async function buildColdGenHarness(extraOpts: {
     coldCode: COLD_CODE,
     ...(extraOpts.coldEffort !== undefined ? { coldEffort: extraOpts.coldEffort } : {}),
     ...(extraOpts.coldBuild !== undefined ? { coldBuild: extraOpts.coldBuild } : {}),
+    ...(extraOpts.coldTokens !== undefined ? { coldTokens: extraOpts.coldTokens } : {}),
     ...(extraOpts.postSuccessHook
       ? { postSuccessHook: extraOpts.postSuccessHook }
       : {}),
@@ -958,7 +975,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
 
     const cold = await buildColdGenHarness({ postSuccessHook });
     await cold.harness.handler.handler({ handshakeId: cold.handshakeId, props: {} }, CTX);
-    expect(seen.at(-1)).toEqual({ model: 'anthropic/fake' });
+    expect(seen.at(-1)).toEqual({ model: 'anthropic/fake', usage: { inputTokens: 0, outputTokens: 0 } });
 
     const cache = await buildAcceptCacheHarness({ postSuccessHook });
     await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
@@ -972,13 +989,46 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     };
     const ran = await buildColdGenHarness({ postSuccessHook, coldEffort: 'high' });
     await ran.harness.handler.handler({ handshakeId: ran.handshakeId, props: {} }, CTX);
-    expect(seen.at(-1)).toEqual({ model: 'anthropic/fake', effort: 'high' });
+    expect(seen.at(-1)).toEqual({
+      model: 'anthropic/fake',
+      effort: 'high',
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
 
     const none = await buildColdGenHarness({ postSuccessHook });
     await none.harness.handler.handler({ handshakeId: none.handshakeId, props: {} }, CTX);
     const g = seen.at(-1);
-    expect(g).toEqual({ model: 'anthropic/fake' });
+    expect(g).toEqual({ model: 'anthropic/fake', usage: { inputTokens: 0, outputTokens: 0 } });
     expect(g !== null && g !== undefined && 'effort' in g).toBe(false);
+  });
+
+  it('passes the token counts the generation reported on generation.usage — cache counters only when reported, null on reuse (ggui#1513)', async () => {
+    const seen: Array<GguiSessionPostSuccessArgs['generation']> = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
+      seen.push(a.generation);
+    };
+    const cached = await buildColdGenHarness({
+      postSuccessHook,
+      coldTokens: { inputTokens: 1200, outputTokens: 340, cacheReadTokens: 9000, cacheCreationTokens: 450 },
+    });
+    await cached.harness.handler.handler({ handshakeId: cached.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)?.usage).toEqual({
+      inputTokens: 1200,
+      outputTokens: 340,
+      cacheReadTokens: 9000,
+      cacheCreationTokens: 450,
+    });
+
+    // A provider that reports no prompt-cache counters: absent stays absent, never a zero.
+    const plain = await buildColdGenHarness({ postSuccessHook, coldTokens: { inputTokens: 80, outputTokens: 20 } });
+    await plain.harness.handler.handler({ handshakeId: plain.handshakeId, props: {} }, CTX);
+    const usage = seen.at(-1)?.usage;
+    expect(usage).toEqual({ inputTokens: 80, outputTokens: 20 });
+    expect(usage !== undefined && ('cacheReadTokens' in usage || 'cacheCreationTokens' in usage)).toBe(false);
+
+    const cache = await buildAcceptCacheHarness({ postSuccessHook });
+    await cache.harness.handler.handler({ handshakeId: cache.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toBeNull();
   });
 
   it('passes outcome to postSuccessHook — "rendered" on cold gen AND on blueprint reuse (ggui#1227)', async () => {

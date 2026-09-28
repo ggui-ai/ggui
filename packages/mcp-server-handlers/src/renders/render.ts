@@ -75,6 +75,7 @@ import {
 import type {
   AppMetadataStore,
   BlueprintProvider,
+  GenerationMetadata,
   KeyValueStore,
   LlmSelection,
   PendingEventConsumer,
@@ -387,6 +388,27 @@ interface RenderAttempt {
 }
 
 /**
+ * The token counts a generation reported, as {@link GguiSessionPostSuccessArgs}
+ * carries them (ggui#1513) — derived from `GenerationMetadata`, never a
+ * parallel shape.
+ */
+type GenerationUsage = Readonly<
+  Pick<GenerationMetadata, 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheCreationTokens'>
+>;
+
+/** Project a generation's reported counts; a cache counter the provider did not report stays absent, never a zero. */
+function generationUsage(metadata: GenerationMetadata): GenerationUsage {
+  return {
+    inputTokens: metadata.inputTokens,
+    outputTokens: metadata.outputTokens,
+    ...(metadata.cacheReadTokens !== undefined ? { cacheReadTokens: metadata.cacheReadTokens } : {}),
+    ...(metadata.cacheCreationTokens !== undefined
+      ? { cacheCreationTokens: metadata.cacheCreationTokens }
+      : {}),
+  };
+}
+
+/**
  * Argument bundle handed to {@link GguiRenderHandlerDeps.postSuccessHook}.
  *
  * Carries the resolved render state at success-time so cloud-side
@@ -454,10 +476,21 @@ export interface GguiSessionPostSuccessArgs {
    * it applied none. A hook that meters or audits by level reads the level
    * that RAN here, never a stored profile read on its own, which can change
    * between the handshake and the render.
+   *
+   * `usage` is the token counts the generator reported for that generation
+   * (`GenerationMetadata`, ggui#1513): the uncached input, the output, and the
+   * provider's prompt-cache reads and writes when it reports them. For
+   * `@ggui-ai/ui-gen`'s generator those are its coding turns and any in-loop
+   * text-evaluation rounds, summed; the in-loop visual judge's calls are not
+   * included, and an evaluation round on a different model is summed into the
+   * same counts. A hook that meters or audits by tokens reads the counts that
+   * ran here instead of re-deriving them. This handler sets `usage` on every
+   * generation it ran, so a hook reads an absent `usage` as unmeasured.
    */
   readonly generation: {
     readonly model: string;
     readonly effort?: AppGenerationProfileEffort;
+    readonly usage?: GenerationUsage;
   } | null;
   /**
    * Identity of the stored component that served this render — the
@@ -2482,6 +2515,7 @@ export function createGguiRenderHandler(
           generationRan = {
             model: outcome.source.model,
             ...(outcome.effort !== undefined ? { effort: outcome.effort } : {}),
+            ...(outcome.usage !== undefined ? { usage: outcome.usage } : {}),
           };
         }
         if (!outcome.ok) {
@@ -3332,6 +3366,11 @@ type GenerationRunOutcome =
        */
       readonly effort?: AppGenerationProfileEffort;
       /**
+       * ggui#1513 — the token counts the generation reported, read from its own
+       * `metadata`; present exactly when `source` is.
+       */
+      readonly usage?: GenerationUsage;
+      /**
        * #460 — the id registration minted (or dedup-returned) BEFORE
        * the success commit. Present exactly when `resolveBlueprintId`
        * was supplied and returned one; the committed identity record
@@ -3736,6 +3775,7 @@ async function runGenerationIntoGguiSession(
     createdAt: nowIso,
     source: producedSource,
     ...(result.metadata.effort !== undefined ? { effort: result.metadata.effort } : {}),
+    usage: generationUsage(result.metadata),
     ...(resolvedBlueprintId !== undefined
       ? { blueprintId: resolvedBlueprintId }
       : {}),

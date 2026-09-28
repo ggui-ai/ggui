@@ -384,6 +384,11 @@ export interface GenerationMetadata {
   generator: GeneratorId;
   /** The model the LLM call ran on — `provider/model` of the route (`ModelRef`, ggui#924). */
   model: ModelRef;
+  /**
+   * Input tokens NOT served from a prompt cache. Cache reads and writes are
+   * counted apart, in {@link cacheReadTokens} / {@link cacheCreationTokens},
+   * never in both, so a host that meters tokens prices each at its own rate.
+   */
   inputTokens: number;
   outputTokens: number;
   latencyMs: number;
@@ -391,9 +396,9 @@ export interface GenerationMetadata {
   cacheHit: boolean;
   /** Retry / turn count. 0 means single-shot success. */
   attempts?: number;
-  /** Prompt-cache tokens read on this generation (provider-specific; absent when unsupported). Observability only. */
+  /** Prompt-cache tokens read on this generation (provider-specific; absent when unsupported). Counted apart from `inputTokens`. */
   readonly cacheReadTokens?: number;
-  /** Prompt-cache tokens written on this generation (provider-specific; absent when unsupported). Observability only. */
+  /** Prompt-cache tokens written on this generation (provider-specific; absent when unsupported). Counted apart from `inputTokens`. */
   readonly cacheCreationTokens?: number;
   /**
    * Optional generator-specific routing tag for finer-grained
