@@ -53,7 +53,7 @@ export function createDataHandler(
       ) {
         return;
       }
-      if (!deps.streamSeq.admit(envelope.seq)) return;
+      if (!deps.streamSeq.admit(envelope.seq, envelope.streamEpoch)) return;
 
       // Active render carries the streamSpec — mirrors
       // `GguiRender.handleServerMessage`.

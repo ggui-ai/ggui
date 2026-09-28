@@ -73,8 +73,16 @@ const ROOT: HeldCredential = {
   origin: 'root',
 };
 
-function ack(sequence = 1, streamSeq?: number): unknown {
-  return { type: 'ack', payload: { sequence, timestamp: 0, ...(streamSeq !== undefined ? { streamSeq } : {}) } };
+function ack(sequence = 1, streamSeq?: number, streamEpoch?: string): unknown {
+  return {
+    type: 'ack',
+    payload: {
+      sequence,
+      timestamp: 0,
+      ...(streamSeq !== undefined ? { streamSeq } : {}),
+      ...(streamEpoch !== undefined ? { streamEpoch } : {}),
+    },
+  };
 }
 
 function eventsBody(lastSequence: number, events: unknown[] = []): unknown {
@@ -407,5 +415,42 @@ describe('ladder set: a restarted server stream counter (the ack reveals it)', (
     FakeWebSocket.instances[0]?.emit(ack(1, 0));
     await booting;
     expect(r.streamSeq.last()).toBeUndefined();
+  });
+});
+
+describe('ladder set: the stream epoch (ggui#1531)', () => {
+  it('a rebuilt ladder resumes with fromEpoch beside fromSeq once the view knows an epoch; the boot subscribe carries neither', async () => {
+    const r = rig();
+    const boot = await bootedOnWs(r);
+    expect(boot.sent[0]).not.toHaveProperty('payload.fromSeq');
+    expect(boot.sent[0]).not.toHaveProperty('payload.fromEpoch');
+    r.streamSeq.admit(7, 'E1');
+    boot.emit({ type: 'error', payload: { code: 'BOOTSTRAP_EXPIRED', message: 'expired' } });
+    await vi.advanceTimersByTimeAsync(1);
+    const next = FakeWebSocket.instances[1];
+    if (next === undefined) throw new Error('no rebind socket');
+    expect(next.sent[0]).toMatchObject({ type: 'subscribe', payload: { fromSeq: 7, fromEpoch: 'E1' } });
+  });
+
+  it('with no epoch known, the resume carries fromSeq alone', async () => {
+    const r = rig();
+    const boot = await bootedOnWs(r);
+    r.streamSeq.admit(7);
+    boot.emit({ type: 'error', payload: { code: 'BOOTSTRAP_EXPIRED', message: 'expired' } });
+    await vi.advanceTimersByTimeAsync(1);
+    const next = FakeWebSocket.instances[1];
+    if (next === undefined) throw new Error('no rebind socket');
+    expect(next.sent[0]).toMatchObject({ payload: { fromSeq: 7 } });
+    expect(next.sent[0]).not.toHaveProperty('payload.fromEpoch');
+  });
+
+  it('an ack naming a different epoch resets the cursor, even with a higher streamSeq', async () => {
+    const r = rig();
+    const boot = await bootedOnWs(r);
+    r.streamSeq.admit(9, 'E1');
+    boot.emit(ack(2, 40, 'E2'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.streamSeq.last()).toBeUndefined();
+    expect(r.streamSeq.epoch()).toBe('E2');
   });
 });

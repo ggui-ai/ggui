@@ -1547,10 +1547,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         `${source}:${outcome.kind === 'refused' ? `refused:${outcome.code}` : outcome.kind}`,
       );
     },
-    // The server's stream counter restarted below this view's cursor; the
-    // cursor was forgotten so new envelopes are not dropped as repeats.
-    onStreamRestart: (serverSeq) => {
-      telemetry?.record('stream.counter_restart', String(serverSeq));
+    // The server's stream counter restarted (a new epoch, or a count below
+    // this view's cursor); the cursor was forgotten so new envelopes are
+    // not dropped as repeats.
+    onStreamRestart: (streamSeq, streamEpoch) => {
+      telemetry?.record('stream.counter_restart', `${streamSeq ?? '-'}:${streamEpoch ?? '-'}`);
     },
     // An honest end (R4, ggui#1496): a bridge pull confirmed the live
     // channel cannot come back — the host refuses to relay it, or the

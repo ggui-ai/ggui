@@ -303,6 +303,28 @@ describe('SSETransport — sequence cursor', () => {
   });
 });
 
+describe('SSETransport — stream epoch (ggui#1531)', () => {
+  let t: SSETransport | undefined;
+  afterEach(() => {
+    void t?.dispose();
+  });
+  it('appends &fromEpoch= beside &fromSeq=, and never without it', () => {
+    const { sources, factory } = makeFactory();
+    let seqCursor: number | undefined = undefined;
+    t = new SSETransport({
+      sse: { url: SSE_URL, fromSeq: () => seqCursor, fromEpoch: () => 'E1' },
+      handlers: new Map<string, ChannelHandler>(),
+      eventSourceFactory: factory,
+    });
+    t.start();
+    expect(sources[0]!.url).toBe(SSE_URL);
+    sources[0]!.triggerError(2);
+    seqCursor = 4;
+    t.start();
+    expect(sources[1]!.url).toBe(`${SSE_URL}&fromSeq=4&fromEpoch=E1`);
+  });
+});
+
 describe('SSETransport — failure policy', () => {
   it('marks status failed when the factory throws (construct guard)', () => {
     const statuses: string[] = [];

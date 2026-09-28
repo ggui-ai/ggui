@@ -249,13 +249,15 @@ export class SSETransport implements SseTransportHandle {
    * this query param.
    */
   private composeUrl(): string {
-    const { url, initialSinceSequence, fromSeq } = this.opts.sse;
+    const { url, initialSinceSequence, fromSeq, fromEpoch } = this.opts.sse;
     const seed = typeof initialSinceSequence === 'function' ? initialSinceSequence() : initialSinceSequence;
     const cursor = this.lastSequence ?? seed;
     const streamCursor = fromSeq?.();
+    const streamEpoch = streamCursor !== undefined ? fromEpoch?.() : undefined;
     const query = [
       ...(cursor !== undefined ? [`sinceSequence=${cursor}`] : []),
       ...(streamCursor !== undefined ? [`fromSeq=${streamCursor}`] : []),
+      ...(streamEpoch !== undefined ? [`fromEpoch=${encodeURIComponent(streamEpoch)}`] : []),
     ];
     if (query.length === 0) return url;
     const separator = url.includes('?') ? '&' : '?';

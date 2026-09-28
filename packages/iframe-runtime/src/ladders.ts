@@ -105,8 +105,8 @@ export interface LadderSetOptions {
   readonly onAck: (ack: AckPayload) => void;
   /** Each refresh a ladder asked for, and what it got. */
   readonly onRefresh?: (source: ExpirySource, outcome: RefreshOutcome) => void;
-  /** An ack showed the server's stream counter restarted below the view's cursor, which was forgotten. */
-  readonly onStreamRestart?: (serverSeq: number) => void;
+  /** An ack showed the server's stream counter restarted (a new epoch, or a count below the view's cursor), and the cursor was forgotten. */
+  readonly onStreamRestart?: (streamSeq: number | undefined, streamEpoch: string | undefined) => void;
   /** The runtime's registry of relay refusal codes that confirm the host cannot relay `tools/call`. */
   readonly isConfirmedRelayRefusalCode: (code: number) => boolean;
   /** The live channel ended (R4); every ladder is already disposed. */
@@ -256,8 +256,8 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
 
   /** An ack's `streamSeq` below the view's stream cursor means the server's counter restarted. */
   const readStreamSeq = (ack: AckPayload): void => {
-    if (ack.streamSeq !== undefined && opts.streamSeq?.observeServerSeq(ack.streamSeq) === true) {
-      opts.onStreamRestart?.(ack.streamSeq);
+    if (opts.streamSeq?.observeAck(ack.streamSeq, ack.streamEpoch) === true) {
+      opts.onStreamRestart?.(ack.streamSeq, ack.streamEpoch);
     }
   };
 
@@ -317,6 +317,8 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
         claim(ladder);
         const wsToken = ladder.spec.credential?.wsToken;
         const fromSeq = ladder.rebuilt ? opts.streamSeq?.last() : undefined;
+        // `fromEpoch` rides only beside `fromSeq` (ggui#1531): it names the generation that count is in.
+        const fromEpoch = fromSeq !== undefined ? opts.streamSeq?.epoch() : undefined;
         return {
           type: 'subscribe',
           payload: {
@@ -324,6 +326,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
             appId: opts.meta.appId,
             ...(wsToken !== undefined ? { wsToken } : {}),
             ...(fromSeq !== undefined ? { fromSeq } : {}),
+            ...(fromEpoch !== undefined ? { fromEpoch } : {}),
           },
         };
       },
@@ -378,7 +381,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
             url: spec.sseUrl,
             initialSinceSequence: () => view.get(),
             ...(ladder.rebuilt && opts.streamSeq !== undefined
-              ? { fromSeq: opts.streamSeq.last }
+              ? { fromSeq: opts.streamSeq.last, fromEpoch: opts.streamSeq.epoch }
               : {}),
             onSequence: (seq: number) => view.advance(seq),
           }

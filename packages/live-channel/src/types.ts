@@ -191,6 +191,12 @@ export interface RegistrySseOptions {
    */
   readonly fromSeq?: () => number | undefined;
   /**
+   * The generation the stream cursor counts in (`SubscribePayload.fromEpoch`'s
+   * SSE counterpart, ggui#1531): read on every connect and appended as
+   * `&fromEpoch=<e>` only beside `&fromSeq=`, never on its own.
+   */
+  readonly fromEpoch?: () => string | undefined;
+  /**
    * Cursor bridge. Fired once per dispatched frame that carries a
    * parseable `id:` (the server stamps SSE `id:` = event-ledger
    * sequence on ledger-backed replay frames). Consumers thread this
