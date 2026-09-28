@@ -14,7 +14,7 @@
  * structurally skipped for the basic tests; one test deliberately
  * runs real Playwright to exercise the full path).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { DataContract } from '@ggui-ai/protocol';
 import type {
   UiGenerateInput,
@@ -34,6 +34,52 @@ import {
   buildSlowStageComplaints,
   buildIterationFeedback,
 } from './feedback.js';
+import {
+  runRenderCheck,
+  type RenderCheckResult,
+} from '../harness/check/runtime-render/index.js';
+
+/**
+ * ggui#1473 — the render check, real by default. The loop tests below pin
+ * the iteration loop (its cap, and feedback carried between rounds), not
+ * the render check, which has its own suite. The real check spends about
+ * 10 s per round on BAD_COUNTER (a button that never dispatches), so a
+ * five-round cap test ran past its 30 s timeout at ordinary load. Those
+ * tests take the verdict the real check gives that card; the rest of the
+ * file keeps the real check.
+ */
+vi.mock('../harness/check/runtime-render/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../harness/check/runtime-render/index.js')>();
+  return { ...actual, runRenderCheck: vi.fn(actual.runRenderCheck) };
+});
+
+/** The real render check's verdict on COUNTER_SOURCE_BAD, copied from a run of it (issue fields and stats; `renderMs` zeroed). */
+const BAD_COUNTER_CHECK: RenderCheckResult = {
+  ok: false,
+  issues: [
+    {
+      check: 'action-wiring',
+      outcome: 'failed',
+      subject: 'increment',
+      reason: "Hook useAction('increment') is destructured but never referenced in any JSX attribute",
+    },
+  ],
+  stats: { actionsChecked: 1, streamsChecked: 0, renderMs: 0 },
+};
+
+/** Loop tests: every round's render check answers BAD_COUNTER_CHECK at once; restored to the real check after. */
+function useBadCounterCheck(): void {
+  beforeEach(() => {
+    vi.mocked(runRenderCheck).mockClear();
+    vi.mocked(runRenderCheck).mockResolvedValue(BAD_COUNTER_CHECK);
+  });
+  afterEach(async () => {
+    const actual = await vi.importActual<typeof import('../harness/check/runtime-render/index.js')>(
+      '../harness/check/runtime-render/index.js',
+    );
+    vi.mocked(runRenderCheck).mockImplementation(actual.runRenderCheck);
+  });
+}
 
 const FAKE_PLAYWRIGHT = {
   chromium: {
@@ -273,6 +319,8 @@ describe('createAdvancedUiGenerator — empty actionSpec skips slow stage', () =
 });
 
 describe('createAdvancedUiGenerator — iteration cap', () => {
+  useBadCounterCheck();
+
   it('respects maxIterations and clamps to HARD_MAX_ITERATIONS', async () => {
     // Inner always returns the same bad-counter result; no fast-stage
     // pass possible. We should see exactly maxIterations attempts.
@@ -295,6 +343,7 @@ describe('createAdvancedUiGenerator — iteration cap', () => {
     // Always-persist: result is still returned even after exhaustion.
     expect(result.ok).toBe(true);
     expect(innerSpy).toHaveBeenCalledTimes(2);
+    expect(runRenderCheck).toHaveBeenCalledTimes(2);
   });
 
   it('clamps maxIterations above HARD_MAX_ITERATIONS to 5', async () => {
@@ -312,6 +361,7 @@ describe('createAdvancedUiGenerator — iteration cap', () => {
     });
     await gen.generate({ ...NULL_INPUT, contract: COUNTER_CONTRACT });
     expect(innerSpy).toHaveBeenCalledTimes(5);
+    expect(runRenderCheck).toHaveBeenCalledTimes(5);
   });
 
   it('floors fractional maxIterations and forces a minimum of 1', async () => {
@@ -432,6 +482,8 @@ describe('feedback builders — diagnostic shapes', () => {
 });
 
 describe('createAdvancedUiGenerator — feedback accumulates across iterations', () => {
+  useBadCounterCheck();
+
   it('appends round-1 complaints to round-2 user prompt', async () => {
     // Stub inner so we can inspect the prompts it receives.
     const calls: string[] = [];
