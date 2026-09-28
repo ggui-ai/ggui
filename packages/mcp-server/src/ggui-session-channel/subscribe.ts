@@ -767,6 +767,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       const firstLedgerPage =
         sinceSeqValid !== undefined ? await deps.renderStore.listEventsSince(stored.id, sinceSeqValid, 100) : undefined;
 
+      const resumeTruncated = args.fromSeq !== undefined && replay?.truncated === true;
       deps.logger.info("render_channel_subscribed", {
         sessionId: stored.id,
         appId: stored.appId,
@@ -775,7 +776,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         fromSeq: args.fromSeq,
         snapshotSeq,
         replayCount: replay?.envelopes.length ?? 0,
-        replayTruncated: replay?.truncated ?? false,
+        replayTruncated: resumeTruncated,
         // The credential the subscribe came on (ggui#1488): a wsToken, the
         // console cookie, or the adapter's bearer source. The first two ride
         // a synthetic identity whose own `source` would misreport them.
@@ -794,7 +795,11 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         // UpgradeRequiredError to their caller; clients that don't wire
         // the handshake ignore the field (legacy-pass-through).
         serverVersion: PROTOCOL_SCHEMA_VERSION,
-        ...(replay?.truncated ? { replayTruncated: true } : {}),
+        // Only a resume can have a gap: `replayTruncated` is "absent on
+        // fresh subscribes" (`AckPayload`). A fresh subscribe still walks the
+        // reserved channels from 0, and a buffer whose retention expired
+        // reports that walk truncated, which says nothing to this client.
+        ...(resumeTruncated ? { replayTruncated: true } : {}),
       };
       sink.write({
         type: "ack",

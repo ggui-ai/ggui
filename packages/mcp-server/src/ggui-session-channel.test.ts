@@ -323,6 +323,45 @@ describe('handleSubscribe — a fresh subscribe replays known-reserved channels 
   });
 });
 
+describe('the ack reports replayTruncated only for a resume (AckPayload.replayTruncated: "absent on fresh subscribes")', () => {
+  let fx: Fixture | undefined;
+  afterEach(async () => {
+    await fx?.close();
+    fx = undefined;
+  });
+
+  /** A buffer that reports every replay as truncated, as one whose retention expired would. */
+  class TruncatingBuffer extends InMemoryGguiSessionStreamBuffer {
+    override async replay(
+      ...args: Parameters<InMemoryGguiSessionStreamBuffer['replay']>
+    ): ReturnType<InMemoryGguiSessionStreamBuffer['replay']> {
+      return { ...(await super.replay(...args)), truncated: true };
+    }
+  }
+
+  async function ackFor(fromSeq: number | undefined): Promise<Record<string, unknown>> {
+    const streamBuffer = new TruncatingBuffer();
+    fx = await bootChannel({}, () => ({ streamBuffer }));
+    fx.ws.send(
+      JSON.stringify({
+        type: 'subscribe',
+        payload: { sessionId: fx.sessionId, appId: APP_ID, ...(fromSeq !== undefined ? { fromSeq } : {}) },
+        requestId: randomUUID(),
+      }),
+    );
+    const ack = await fx.nextFrame('ack');
+    return ack['payload'] as Record<string, unknown>;
+  }
+
+  it('a fresh subscribe (no fromSeq) never carries replayTruncated, whatever the buffer reports for its reserved-channel walk', async () => {
+    expect(await ackFor(undefined)).not.toHaveProperty('replayTruncated');
+  });
+
+  it('a resume (fromSeq present) carries it when the buffer reports a gap — control', async () => {
+    expect(await ackFor(0)).toMatchObject({ replayTruncated: true });
+  });
+});
+
 describe('completeSubscribe — the replay is on the wire before any live frame (ggui#1525)', () => {
   let fx: Fixture | undefined;
   afterEach(async () => {
