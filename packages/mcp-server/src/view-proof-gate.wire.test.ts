@@ -78,7 +78,7 @@ function capturingLogger(lines: Line[]): Logger {
   return logger;
 }
 
-function signDispatch(): string {
+function signDispatch(args: JsonObject = dispatch): string {
   const root = mintViewRoot({ sessionId, appId: 'app-1', src: 'result' }, SECRET);
   const P = root.token.split('.')[0] ?? '';
   const K = Buffer.from(root.viewKey ?? '', 'base64url');
@@ -86,7 +86,7 @@ function signDispatch(): string {
   const nonce = 'AAECAwQFBgcICQoLDA0ODw';
   const vtime = String(Date.now());
   const flags = '1';
-  const argmac = createHmac('sha256', K).update(viewProofArgsBytes(toolName, dispatch)).digest('base64url');
+  const argmac = createHmac('sha256', K).update(viewProofArgsBytes(toolName, args)).digest('base64url');
   const callmac = createHmac('sha256', K)
     .update(viewProofCallBytes({ toolName, nonce, vtime, flags, argmac }))
     .digest('base64url');
@@ -94,7 +94,12 @@ function signDispatch(): string {
 }
 
 async function withServer(
-  run: (client: Client, lines: Line[], store: InMemoryGguiSessionStore) => Promise<void>,
+  run: (
+    client: Client,
+    lines: Line[],
+    store: InMemoryGguiSessionStore,
+    consumer: InMemoryPendingEventConsumer,
+  ) => Promise<void>,
   extra: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> = [],
 ): Promise<void> {
   const lines: Line[] = [];
@@ -116,7 +121,7 @@ async function withServer(
   const client = new Client({ name: 'view-proof-gate-wire-test', version: '0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    await run(client, lines, store);
+    await run(client, lines, store, consumer);
   } finally {
     await client.close();
     await server.close();
@@ -197,6 +202,35 @@ describe('the view-proof measuring gate over a real SDK client (ggui#1415)', () 
       for (const segment of proof.split('.').slice(1).filter((part) => part.length >= 8)) {
         expect(text).not.toContain(segment);
       }
+    });
+  });
+
+  it('end to end, the handler acts on exactly the values the gate verified: a signed nested __proto__ member reaches the pipe as signed', async () => {
+    // A view's arguments as the wire carries them: JSON.parse makes the
+    // nested `__proto__` an own member, and the MCP SDK client sends it.
+    const signed: JsonObject = JSON.parse(
+      '{"kind":"dispatch","payload":{"intent":"confirm","actionData":{"__proto__":{"x":1},"constructor":"c","n":1},"uiContext":{}},"sessionId":"' +
+        sessionId +
+        '","appId":"app-1","actionId":"b4e1c2d3","firedAt":"2026-09-29T00:00:00.000Z"}',
+    );
+    const payload = signed['payload'];
+    const signedActionData = typeof payload === 'object' && payload !== null && !Array.isArray(payload) ? payload['actionData'] : undefined;
+    await withServer(async (client, lines, _store, consumer) => {
+      const result = await client.callTool({
+        name: 'ggui_runtime_submit_action',
+        arguments: signed,
+        _meta: { [MCP_APP_AI_GGUI_VIEW_META_KEY]: signDispatch(signed) },
+      });
+      expect(result.structuredContent).toMatchObject({ ok: true });
+      // The gate verified these arguments, through the SDK's own input parse...
+      expect(invoked(lines, 'ggui_runtime_submit_action')).toMatchObject({ viewProof: 'valid' });
+      // ...and the handler put exactly those values on the pipe.
+      const [event] = (await consumer.consumeAndClear(sessionId, 50)).events;
+      const received = event?.envelope;
+      expect(received).toMatchObject({ type: 'action', intent: 'confirm' });
+      const actionData = received !== undefined && 'actionData' in received ? received.actionData : undefined;
+      expect(JSON.stringify(actionData)).toBe(JSON.stringify(signedActionData));
+      expect(JSON.stringify(actionData)).toContain('"__proto__":{"x":1}');
     });
   });
 
