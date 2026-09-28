@@ -23,7 +23,7 @@
  * from a refusal signal, never derived from a token's issue time: a
  * chained token can legitimately live less than a full TTL.
  */
-import { parseDomainErrorText } from "@ggui-ai/protocol";
+import { parseDomainErrorText } from "@ggui-ai/protocol/wire";
 import { withWsToken } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { unwrapCallToolResult } from "./call-tool-unwrap.js";
 import type { HeldCredential } from "./types.js";
