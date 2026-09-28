@@ -268,6 +268,7 @@ export {
   type MatchBlueprintOptions,
 } from "./blueprint-matcher.js";
 export {
+  attachAuthoredSource,
   BlueprintRejectedError,
   composeEmbeddingInput,
   composeExactKey,
@@ -282,6 +283,8 @@ export {
   type BlueprintIndex,
   type BlueprintKind,
   type BlueprintRegistryDeps,
+  type AttachAuthoredSourceOutcome,
+  type AttachAuthoredSourceResult,
   type ContractValidator,
   type RegisterBlueprintInput,
   type BlueprintIntentSource,

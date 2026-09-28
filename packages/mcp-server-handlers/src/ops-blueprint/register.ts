@@ -42,9 +42,12 @@ import type {
   TelemetrySink,
 } from "@ggui-ai/mcp-server-core";
 import {
+  llmBlueprintSourceSchema,
   opsRegisterBlueprintInputSchema,
   type Blueprint,
+  type BlueprintSource,
   type DataContract,
+  type LlmBlueprintSource,
   type OpsRegisterBlueprintInput,
   type OpsRegisterBlueprintOutput,
   type UserBlueprintSource,
@@ -144,11 +147,242 @@ export interface GguiOpsRegisterBlueprintDeps {
   readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
+/**
+ * What one registration records about where its bytes came from.
+ */
+interface RegistrationProvenance {
+  readonly source: BlueprintSource;
+  /**
+   * The authored (pre-compile) form of `componentCode`, when the caller
+   * has one — only the in-process generated-bytes path supplies it
+   * ({@link createRegisterGeneratedBlueprint}). Never on the wire.
+   */
+  readonly sourceCode?: string;
+}
+
+/**
+ * The registration body both entries share: app resolution, the
+ * contract gates, the durable row, the cache mirror, the default pin and
+ * the event. The two entries differ only in the provenance they pass.
+ */
+function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
+  const now = deps.now ?? (() => new Date().toISOString());
+  const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
+
+  return async function registerVariant(
+    parsed: OpsRegisterBlueprintInput,
+    ctx: HandlerContext,
+    provenance: RegistrationProvenance
+  ): Promise<{ readonly blueprintId: string; readonly codeHash: string }> {
+
+    const appId = await resolveEffectiveAppId({
+      toolName: "ggui_ops_register_blueprint",
+      inputAppId: parsed.appId,
+      ctx,
+      ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+    });
+
+    // Reject retired top-level contract fields BEFORE any
+    // persistence so an operator-supplied row can't smuggle
+    // deprecated vocabulary (`terminal`, `consumeSpec`,
+    // `interaction`, `commandSpec`, `behaviorSpec`) into the
+    // registry. The same gate fires on the render + handshake seams
+    // in `renders/`.
+    assertContractNoRetiredFields(parsed.contract);
+
+    // Every `contract.clientCapabilities.gadgets[*]` MUST resolve
+    // in `App.gadgets` by `(package, export name)` — the wire
+    // carries no version; the operator's catalog is the version
+    // pin. Fails fast with a precise reject before any state
+    // mutation. No-op when no `appMetadataStore` is bound.
+    if (deps.appMetadataStore) {
+      const appRecord = await deps.appMetadataStore.get(appId);
+      assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
+    }
+
+    // 1. Normalize the persona + run near-dup detection. Same
+    // posture as ops_generate.
+    const normalizedPersona = normalizePersona(parsed.persona);
+    if (normalizedPersona !== undefined && deps.listAllForApp) {
+      try {
+        const allForApp = await deps.listAllForApp(appId);
+        const existingPersonas: ReadonlyArray<string> = allForApp
+          .map((bp) => bp.variance.persona)
+          .filter((p): p is string => typeof p === "string");
+        const dup = findNearDuplicatePersona(normalizedPersona, existingPersonas);
+        if (dup && dup.nearestExisting !== null) {
+          try {
+            deps.telemetry?.emit({
+              name: "near-duplicate-persona",
+              at: Date.now(),
+              attributes: {
+                appId,
+                requestId: ctx.requestId,
+                candidate: normalizedPersona,
+                existing: dup.nearestExisting,
+                distance: dup.nearestDistance,
+              },
+            });
+          } catch {
+            // Swallow telemetry-side throws.
+          }
+        }
+      } catch {
+        // Swallow enumeration failures — the near-dup warning is
+        // an early-detection signal, not a gate.
+      }
+    }
+
+    // 2. Compute canonical hashes.
+    const contract: DataContract = parsed.contract;
+    const contractHash = blueprintKey(contract);
+    const componentCode = parsed.componentCode;
+    const codeHash = createHash("sha256").update(componentCode).digest("hex");
+
+    // ggui#1427 — a scope without a digest is a scope for nothing: refused
+    // before anything is persisted (see DirectionScopeWithoutDigestError).
+    if (parsed.directionScope !== undefined && parsed.directionDigest === undefined) {
+      throw new DirectionScopeWithoutDigestError();
+    }
+
+    const blueprintId = mintBlueprintId();
+    // ONE variance for BOTH stores. The cache row's exact key is
+    // `variantKey(variance)`; omitting it on the cache call filed every
+    // variant under the default-variant key, where an earlier registration
+    // of the same contract already sat — the mirror then returned THAT row
+    // and the new variant was never bound (the durable row said one thing,
+    // the served index another). Same rule as ops_generate.
+    const variance = {
+      ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
+      ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
+      ...(parsed.context !== undefined ? { context: parsed.context } : {}),
+      ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
+    };
+    const blueprint: Blueprint = {
+      blueprintId,
+      contractHash,
+      appId,
+      codeHash,
+      // The caller's provenance, on BOTH stores this call writes (MVB
+      // row here, cache mirror below): the user arm for operator-
+      // supplied bytes, the llm arm for engine-generated ones.
+      source: provenance.source,
+      variance,
+      createdAt: now(),
+      createdBy: "operator",
+      contract,
+    };
+
+    // 3. Persist the blueprint + code body.
+    await deps.blueprintStore.put(blueprint);
+    if (deps.putCode) {
+      await deps.putCode(codeHash, componentCode);
+    }
+
+    // 3.5 Mirror into the cache vectorStore so the agent-facing
+    // matchBlueprint exact-key probe (handshake + render) finds this
+    // operator-registered blueprint. Symmetric with ops_generate's
+    // dual-write — see #358.
+    if (deps.cacheRegistry) {
+      try {
+        // ggui#1427 — the request's own sentence, when the caller has it
+        // (symmetric with `*_generate_*`'s `intent`): prompt-only, never
+        // part of the cache identity.
+        const intentForCache =
+          parsed.intent ??
+          parsed.seedPrompt ??
+          normalizedPersona ??
+          `operator-registered blueprint (${blueprintId})`;
+        await registerBlueprint(deps.cacheRegistry, appId, {
+          kind: "template",
+          contract,
+          intent: intentForCache,
+          // ggui#1275 — an explicit intent or a seed prompt states the
+          // UI's task. A persona describes the agent and the placeholder
+          // describes nothing: both are stand-ins the matcher's judge
+          // never sees.
+          intentSource:
+            parsed.intent !== undefined || parsed.seedPrompt !== undefined
+              ? "authored"
+              : "fallback",
+          // ggui#1427 — the fit facts `fits()` reads before the judge
+          // ranks this row. Absent inputs write nothing (not-evaluated).
+          ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
+          ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
+          ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
+          ...(parsed.directionDigest !== undefined && parsed.directionScope !== undefined
+            ? { directionScope: parsed.directionScope }
+            : {}),
+          componentCode,
+          // ggui#1493 — the authored form of `componentCode`, when the
+          // caller has one (the in-process generated-bytes path only).
+          // The registry persists its hash and body only when a code
+          // store is bound and the pair is not byte-identical.
+          ...(provenance.sourceCode !== undefined ? { sourceCode: provenance.sourceCode } : {}),
+          // Same provenance as the MVB row above — one call, one
+          // provenance claim across both stores.
+          source: provenance.source,
+          // The cache row MUST carry the same variance as the MVB row —
+          // its exact key is `variantKey(variance)`.
+          variance,
+          // An operator invoked this tool. Without it the durable
+          // record would claim the standard agent flow minted a row
+          // that is retained permanently.
+          createdBy: "operator",
+        });
+      } catch (err) {
+        try {
+          deps.telemetry?.emit({
+            name: "blueprint.cache_mirror_failed",
+            at: Date.now(),
+            attributes: {
+              appId,
+              requestId: ctx.requestId,
+              blueprintId,
+              contractHash,
+              errorClass: err instanceof Error ? err.name : "unknown",
+              errorMessage: err instanceof Error ? err.message : String(err),
+            },
+          });
+        } catch {
+          // Swallow telemetry-side throws.
+        }
+      }
+    }
+
+    // 4. Pin as operator default when requested.
+    if (parsed.setAsOperatorDefault === true) {
+      await deps.blueprintStore.setOperatorDefault(blueprintId);
+    }
+
+    try {
+      deps.telemetry?.emit({
+        name: "blueprint.registered",
+        at: Date.now(),
+        attributes: {
+          appId,
+          requestId: ctx.requestId,
+          blueprintId,
+          contractHash,
+          // Flat-codec provenance key — 'user' on the operator door,
+          // 'llm' on the generated-bytes path.
+          sourceKind: provenance.source.kind,
+          createdBy: "operator",
+          setAsOperatorDefault: parsed.setAsOperatorDefault === true,
+        },
+      });
+    } catch {
+      // Swallow telemetry-side throws.
+    }
+
+    return { blueprintId, codeHash };
+  };
+}
+
 export function createGguiOpsRegisterBlueprintHandler(
   deps: GguiOpsRegisterBlueprintDeps
 ) {
-  const now = deps.now ?? (() => new Date().toISOString());
-  const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
+  const registerVariant = makeRegisterCore(deps);
 
   return defineHandler({
     name: "ggui_ops_register_blueprint",
@@ -163,201 +397,9 @@ export function createGguiOpsRegisterBlueprintHandler(
       ctx: HandlerContext
     ): Promise<OpsRegisterBlueprintOutput> {
       const parsed: OpsRegisterBlueprintInput = opsRegisterBlueprintInputSchema.parse(rawInput);
-
-      const appId = await resolveEffectiveAppId({
-        toolName: "ggui_ops_register_blueprint",
-        inputAppId: parsed.appId,
-        ctx,
-        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
-      });
-
-      // Reject retired top-level contract fields BEFORE any
-      // persistence so an operator-supplied row can't smuggle
-      // deprecated vocabulary (`terminal`, `consumeSpec`,
-      // `interaction`, `commandSpec`, `behaviorSpec`) into the
-      // registry. The same gate fires on the render + handshake seams
-      // in `renders/`.
-      assertContractNoRetiredFields(parsed.contract);
-
-      // Every `contract.clientCapabilities.gadgets[*]` MUST resolve
-      // in `App.gadgets` by `(package, export name)` — the wire
-      // carries no version; the operator's catalog is the version
-      // pin. Fails fast with a precise reject before any state
-      // mutation. No-op when no `appMetadataStore` is bound.
-      if (deps.appMetadataStore) {
-        const appRecord = await deps.appMetadataStore.get(appId);
-        assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
-      }
-
-      // 1. Normalize the persona + run near-dup detection. Same
-      // posture as ops_generate.
-      const normalizedPersona = normalizePersona(parsed.persona);
-      if (normalizedPersona !== undefined && deps.listAllForApp) {
-        try {
-          const allForApp = await deps.listAllForApp(appId);
-          const existingPersonas: ReadonlyArray<string> = allForApp
-            .map((bp) => bp.variance.persona)
-            .filter((p): p is string => typeof p === "string");
-          const dup = findNearDuplicatePersona(normalizedPersona, existingPersonas);
-          if (dup && dup.nearestExisting !== null) {
-            try {
-              deps.telemetry?.emit({
-                name: "near-duplicate-persona",
-                at: Date.now(),
-                attributes: {
-                  appId,
-                  requestId: ctx.requestId,
-                  candidate: normalizedPersona,
-                  existing: dup.nearestExisting,
-                  distance: dup.nearestDistance,
-                },
-              });
-            } catch {
-              // Swallow telemetry-side throws.
-            }
-          }
-        } catch {
-          // Swallow enumeration failures — the near-dup warning is
-          // an early-detection signal, not a gate.
-        }
-      }
-
-      // 2. Compute canonical hashes.
-      const contract: DataContract = parsed.contract;
-      const contractHash = blueprintKey(contract);
-      const componentCode = parsed.componentCode;
-      const codeHash = createHash("sha256").update(componentCode).digest("hex");
-
-      // ggui#1427 — a scope without a digest is a scope for nothing: refused
-      // before anything is persisted (see DirectionScopeWithoutDigestError).
-      if (parsed.directionScope !== undefined && parsed.directionDigest === undefined) {
-        throw new DirectionScopeWithoutDigestError();
-      }
-
-      const blueprintId = mintBlueprintId();
-      // ONE variance for BOTH stores. The cache row's exact key is
-      // `variantKey(variance)`; omitting it on the cache call filed every
-      // variant under the default-variant key, where an earlier registration
-      // of the same contract already sat — the mirror then returned THAT row
-      // and the new variant was never bound (the durable row said one thing,
-      // the served index another). Same rule as ops_generate.
-      const variance = {
-        ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
-        ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
-        ...(parsed.context !== undefined ? { context: parsed.context } : {}),
-        ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
-      };
-      const blueprint: Blueprint = {
-        blueprintId,
-        contractHash,
-        appId,
-        codeHash,
-        // Operator-supplied bytes, no LLM dispatch — provenance is the
-        // user arm on BOTH stores this handler writes (MVB row here,
-        // cache mirror below). No engine claim exists to record.
-        source: USER_SOURCE,
-        variance,
-        createdAt: now(),
-        createdBy: "operator",
-        contract,
-      };
-
-      // 3. Persist the blueprint + code body.
-      await deps.blueprintStore.put(blueprint);
-      if (deps.putCode) {
-        await deps.putCode(codeHash, componentCode);
-      }
-
-      // 3.5 Mirror into the cache vectorStore so the agent-facing
-      // matchBlueprint exact-key probe (handshake + render) finds this
-      // operator-registered blueprint. Symmetric with ops_generate's
-      // dual-write — see #358.
-      if (deps.cacheRegistry) {
-        try {
-          // ggui#1427 — the request's own sentence, when the caller has it
-          // (symmetric with `*_generate_*`'s `intent`): prompt-only, never
-          // part of the cache identity.
-          const intentForCache =
-            parsed.intent ??
-            parsed.seedPrompt ??
-            normalizedPersona ??
-            `operator-registered blueprint (${blueprintId})`;
-          await registerBlueprint(deps.cacheRegistry, appId, {
-            kind: "template",
-            contract,
-            intent: intentForCache,
-            // ggui#1275 — an explicit intent or a seed prompt states the
-            // UI's task. A persona describes the agent and the placeholder
-            // describes nothing: both are stand-ins the matcher's judge
-            // never sees.
-            intentSource:
-              parsed.intent !== undefined || parsed.seedPrompt !== undefined
-                ? "authored"
-                : "fallback",
-            // ggui#1427 — the fit facts `fits()` reads before the judge
-            // ranks this row. Absent inputs write nothing (not-evaluated).
-            ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
-            ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
-            ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
-            ...(parsed.directionDigest !== undefined && parsed.directionScope !== undefined
-              ? { directionScope: parsed.directionScope }
-              : {}),
-            componentCode,
-            // Same user-arm provenance as the MVB row above — one
-            // handler call, one provenance claim across both stores.
-            source: USER_SOURCE,
-            // The cache row MUST carry the same variance as the MVB row —
-            // its exact key is `variantKey(variance)`.
-            variance,
-            // An operator invoked this tool. Without it the durable
-            // record would claim the standard agent flow minted a row
-            // that is retained permanently.
-            createdBy: "operator",
-          });
-        } catch (err) {
-          try {
-            deps.telemetry?.emit({
-              name: "blueprint.cache_mirror_failed",
-              at: Date.now(),
-              attributes: {
-                appId,
-                requestId: ctx.requestId,
-                blueprintId,
-                contractHash,
-                errorClass: err instanceof Error ? err.name : "unknown",
-                errorMessage: err instanceof Error ? err.message : String(err),
-              },
-            });
-          } catch {
-            // Swallow telemetry-side throws.
-          }
-        }
-      }
-
-      // 4. Pin as operator default when requested.
-      if (parsed.setAsOperatorDefault === true) {
-        await deps.blueprintStore.setOperatorDefault(blueprintId);
-      }
-
-      try {
-        deps.telemetry?.emit({
-          name: "blueprint.registered",
-          at: Date.now(),
-          attributes: {
-            appId,
-            requestId: ctx.requestId,
-            blueprintId,
-            contractHash,
-            // Flat-codec provenance key — always 'user' on this path.
-            sourceKind: USER_SOURCE.kind,
-            createdBy: "operator",
-            setAsOperatorDefault: parsed.setAsOperatorDefault === true,
-          },
-        });
-      } catch {
-        // Swallow telemetry-side throws.
-      }
-
+      // Operator-supplied bytes, no LLM dispatch: the user arm, and no
+      // authored source (this door never carries one — ggui#1477).
+      const { blueprintId, codeHash } = await registerVariant(parsed, ctx, { source: USER_SOURCE });
       return {
         blueprintId,
         codeHash,
@@ -365,4 +407,83 @@ export function createGguiOpsRegisterBlueprintHandler(
       };
     },
   });
+}
+
+/**
+ * Engine-generated bytes and the authored source they were compiled
+ * from — what {@link createRegisterGeneratedBlueprint} registers.
+ */
+export interface GeneratedBlueprintBytes {
+  /**
+   * The authored (pre-compile) source that `componentCode` was compiled
+   * from. **Caller obligation:** it MUST be that exact pair, produced by
+   * one generation (for the runner: one mint cell's `source.tsx` with its
+   * `compiled.js`). Nothing here recompiles it to check — that is why
+   * this entry is in-process only and the public operator door takes no
+   * source. A pair that is byte-identical records no source (the
+   * registry's collapse rule), which is the honest answer for a
+   * generation that produced no distinct authored form.
+   */
+  readonly sourceCode: string;
+  /**
+   * The generation's own provenance, read from what the generation
+   * reported (the runner: the cell's receipt) — never a placeholder or a
+   * lane default. An `llm` record with a guessed model is a provenance
+   * claim nobody made. Validated against the protocol's schema.
+   */
+  readonly source: LlmBlueprintSource;
+}
+
+/** What {@link createRegisterGeneratedBlueprint}'s entry returns. */
+export interface RegisterGeneratedBlueprintOutput {
+  readonly blueprintId: string;
+  readonly codeHash: string;
+  readonly source: LlmBlueprintSource;
+}
+
+/**
+ * The in-process generated-bytes registration entry. `input` is the same
+ * RAW input `ggui_ops_register_blueprint` takes — parsed with its schema
+ * on entry, so a value the schema refuses throws, exactly as it would
+ * through the operator door.
+ */
+export type RegisterGeneratedBlueprint = (
+  input: Record<string, unknown>,
+  generated: GeneratedBlueprintBytes,
+  ctx: HandlerContext
+) => Promise<RegisterGeneratedBlueprintOutput>;
+
+/**
+ * ggui#1493 (ggui#1477's source half) — register ENGINE-GENERATED bytes
+ * with the authored source they were compiled from, in-process.
+ *
+ * Same body as `ggui_ops_register_blueprint` (one durable row, one cache
+ * mirror, the same gates and variance), with two differences: provenance
+ * is the generation's `llm` arm, and the authored source reaches the
+ * cache registry, so a render that reuses the registration serves it
+ * (`ggui_get_render_source`, save-to-library). It is NOT an MCP tool and
+ * is on no wire: the public operator door stays source-free, because it
+ * cannot verify that supplied source compiles to the supplied code.
+ *
+ * Refuses, before anything is persisted, provenance the protocol's
+ * `llmBlueprintSourceSchema` rejects and an empty `sourceCode`.
+ */
+export function createRegisterGeneratedBlueprint(
+  deps: GguiOpsRegisterBlueprintDeps
+): RegisterGeneratedBlueprint {
+  const registerVariant = makeRegisterCore(deps);
+  return async (input, generated, ctx) => {
+    const parsed: OpsRegisterBlueprintInput = opsRegisterBlueprintInputSchema.parse(input);
+    const source: LlmBlueprintSource = llmBlueprintSourceSchema.parse(generated.source);
+    if (generated.sourceCode.length === 0) {
+      throw new Error(
+        "registerGeneratedBlueprint: sourceCode must be the non-empty authored source componentCode was compiled from"
+      );
+    }
+    const { blueprintId, codeHash } = await registerVariant(parsed, ctx, {
+      source,
+      sourceCode: generated.sourceCode,
+    });
+    return { blueprintId, codeHash, source };
+  };
 }

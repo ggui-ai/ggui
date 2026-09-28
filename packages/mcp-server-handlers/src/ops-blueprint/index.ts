@@ -34,7 +34,11 @@ export {
 } from './generate.js';
 export {
   createGguiOpsRegisterBlueprintHandler,
+  createRegisterGeneratedBlueprint,
+  type GeneratedBlueprintBytes,
   type GguiOpsRegisterBlueprintDeps,
+  type RegisterGeneratedBlueprint,
+  type RegisterGeneratedBlueprintOutput,
 } from './register.js';
 export {
   createGguiOpsListBlueprintsHandler,

@@ -334,9 +334,27 @@ describe('writeBlueprintDurably — unwired', () => {
   it('touches nothing — not even the code store — without a blueprint store', async () => {
     const { store: codeStore, put: codePut } = fakeCodeStore();
     await writeBlueprintDurably({ codeStore }, 'app-1', makeRegistryBlueprint());
-    // A body with no row to reference it is pure orphan; skip the write
-    // rather than pay for garbage.
+    // A compiled body with no durable row to reference it is pure
+    // orphan; skip the write rather than pay for garbage.
     expect(codePut).not.toHaveBeenCalled();
+  });
+
+  // ggui#1493 — the authored-source body has a referencer WITHOUT a
+  // durable row: the cache row's `sourceCodeHash`, which the registry
+  // stamps whenever a code store is bound. So the body is written under
+  // the same condition, or the cache row points at nothing.
+  it('writes the authored-source body when its hash was stamped, even without a blueprint store — and still no compiled body or row', async () => {
+    const { store: codeStore, put: codePut, objects } = fakeCodeStore();
+    const SOURCE = 'export default function W() { return <div>authored</div>; }';
+    const hash = codeStore.hashOf(SOURCE);
+    await writeBlueprintDurably(
+      { codeStore },
+      'app-1',
+      makeRegistryBlueprint({ sourceCode: SOURCE, sourceCodeHash: hash }),
+    );
+    expect(codePut).toHaveBeenCalledTimes(1);
+    expect(objects.get(hash)).toBe(SOURCE);
+    expect([...objects.keys()]).toEqual([hash]);
   });
 });
 

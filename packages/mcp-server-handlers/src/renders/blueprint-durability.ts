@@ -173,32 +173,23 @@ export async function writeBlueprintDurably(
   createdBy: DurableBlueprint['createdBy'] = 'agent',
 ): Promise<void> {
   const blueprintStore = deps?.blueprintStore;
-  if (!blueprintStore) return;
-
-  // Body first — see the module docstring on why an orphan body beats a
-  // row that points at nothing.
-  let codeHash: string | undefined;
   const codeStore = deps?.codeStore;
-  if (codeStore && blueprint.componentCode.length > 0) {
-    try {
-      const hash = codeStore.hashOf(blueprint.componentCode);
-      await codeStore.put(hash, blueprint.componentCode);
-      codeHash = hash;
-    } catch (err) {
-      logDurabilityFailure(CODE_WRITE_FAILED, blueprint, appId, err);
-    }
-  }
 
   // Authored source body, own try/catch — a distinct
-  // failure mode from the compiled-code write above. `sourceCodeHash`
+  // failure mode from the compiled-code write below. `sourceCodeHash`
   // is already decided (computed at registration, already on the
   // vector-store row); this write just persists the body it points at.
-  // A failure here does NOT withhold `sourceCodeHash` from the durable
-  // row below (contrast `codeHash`, which IS withheld on failure) — see
-  // `projectDurableBlueprint`'s comment. The degradation is honest and
-  // non-fatal: a reuse read that resolves the hash but finds
-  // `codeStore.get(hash) === null` gracefully skips, surfacing as the
-  // typed `render_source_unavailable` at the tool layer, never an error.
+  // ggui#1493 — it is written whenever that hash was stamped, WITH OR
+  // WITHOUT a durable blueprint store: the cache row's `sourceCodeHash`
+  // already references it, so it is never an orphan, and gating it on
+  // the durable store left a cache row pointing at nothing wherever a
+  // code store was bound alone. A failure here does NOT withhold
+  // `sourceCodeHash` from the durable row below (contrast `codeHash`,
+  // which IS withheld on failure) — see `projectDurableBlueprint`'s
+  // comment. The degradation is honest and non-fatal: a reuse read that
+  // resolves the hash but finds `codeStore.get(hash) === null`
+  // gracefully skips, surfacing as the typed `render_source_unavailable`
+  // at the tool layer, never an error.
   if (
     codeStore &&
     blueprint.sourceCode !== undefined &&
@@ -208,6 +199,24 @@ export async function writeBlueprintDurably(
       await codeStore.put(blueprint.sourceCodeHash, blueprint.sourceCode);
     } catch (err) {
       logDurabilityFailure(SOURCE_WRITE_FAILED, blueprint, appId, err);
+    }
+  }
+
+  // The compiled body and the durable row need a durable store: without
+  // one, nothing references the compiled body (the cache row carries the
+  // code inline), so writing it would be pure orphan.
+  if (!blueprintStore) return;
+
+  // Body first — see the module docstring on why an orphan body beats a
+  // row that points at nothing.
+  let codeHash: string | undefined;
+  if (codeStore && blueprint.componentCode.length > 0) {
+    try {
+      const hash = codeStore.hashOf(blueprint.componentCode);
+      await codeStore.put(hash, blueprint.componentCode);
+      codeHash = hash;
+    } catch (err) {
+      logDurabilityFailure(CODE_WRITE_FAILED, blueprint, appId, err);
     }
   }
 

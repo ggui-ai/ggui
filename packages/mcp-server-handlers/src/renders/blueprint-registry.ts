@@ -1221,6 +1221,153 @@ export async function recordBlueprintHit(
   });
 }
 
+/** What {@link attachAuthoredSource} did — or, on a dry run, would do. */
+export type AttachAuthoredSourceOutcome =
+  | 'attached'
+  | 'already_attached'
+  | 'skipped_identical'
+  | 'refused_mismatch'
+  | 'not_found'
+  | 'lost_race';
+
+/** How many times {@link attachAuthoredSource} re-puts from a fresh read before reporting `lost_race`. */
+const ATTACH_PUT_ATTEMPTS = 3;
+
+/** The result of {@link attachAuthoredSource}. */
+export interface AttachAuthoredSourceResult {
+  readonly outcome: AttachAuthoredSourceOutcome;
+  /**
+   * Echoed so a dry run's `attached` ("would attach") can never be read
+   * back as a write in a runner's log or count.
+   */
+  readonly dryRun: boolean;
+  /** The registry row's id, when one was found at the exact key. */
+  readonly blueprintId?: string;
+}
+
+/**
+ * ggui#1493 — attach the authored source to an EXISTING registration: the
+ * backfill for rows registered from compiled bytes alone, before generated
+ * bytes carried their source. First-write-wins means such a row can never
+ * be re-registered with source, so the source is added to the row in place.
+ *
+ * In-process only, never on a wire. **Trust condition, enforced:** the
+ * given `componentCode` MUST byte-equal the code the row already serves —
+ * that is what makes `sourceCode` the source of THAT row, and a mismatch is
+ * refused without writing anything. The caller supplies the one-generation
+ * pair (for a runner: a mint cell's `source.tsx` with its `compiled.js`).
+ *
+ * The row is found by its exact key — `(kind, contract, variance)` — so a
+ * caller that knows only the durable record's id resolves it through what
+ * was registered. Outcomes, first match wins:
+ *   - `not_found`: no row bound at the exact key;
+ *   - `refused_mismatch`: the row serves different code;
+ *   - `already_attached`: the row already carries a `sourceCodeHash`;
+ *   - `skipped_identical`: the source is byte-identical to the code (the
+ *     registry's collapse rule — no distinct authored form exists);
+ *   - `attached`: the body is written to the code store FIRST, then the row
+ *     is re-put with `sourceCodeHash` added and every other key and the
+ *     vector kept — and read back until the hash holds;
+ *   - `lost_race`: the hash did not hold after bounded re-puts, or the row
+ *     was deleted or rewritten with other code while attaching. The row is
+ *     never resurrected, and `attached` is never reported for a row that
+ *     does not carry the hash.
+ *
+ * **Concurrency.** The row is also rewritten, whole, by the hit counter
+ * ({@link recordBlueprintHit}, fire-and-forget on every cache hit) with no
+ * compare-and-set on the vector store. A hit bump that read the row before
+ * this write and lands after it drops the hash. The read-back and re-puts
+ * narrow that window; they cannot close it, since a bump that read before
+ * the verifying read can still land after it. **A caller's receipt is a
+ * follow-up `dryRun: true` pass over the same rows**: every row this pass
+ * reported `attached` must then read `already_attached`, and any that
+ * reads `attached` is attached again.
+ *
+ * `dryRun: true` runs the same reads, compare and skip rules and returns
+ * the same outcome word with no code-store put and no re-put. A missing
+ * code store, or an empty `sourceCode`, throws before anything is read.
+ */
+export async function attachAuthoredSource(
+  deps: BlueprintRegistryDeps,
+  scope: string,
+  target: {
+    readonly kind?: BlueprintKind;
+    readonly contract: DataContract;
+    readonly variance?: BlueprintVariance;
+  },
+  pair: { readonly componentCode: string; readonly sourceCode: string },
+  options: { readonly dryRun?: boolean } = {},
+): Promise<AttachAuthoredSourceResult> {
+  const dryRun = options.dryRun === true;
+  const codeStore = deps.durability?.codeStore;
+  if (codeStore === undefined) {
+    throw new Error(
+      'attachAuthoredSource: no code store is bound, so the authored source has nowhere to live',
+    );
+  }
+  if (pair.sourceCode.length === 0) {
+    throw new Error('attachAuthoredSource: sourceCode must be the non-empty authored source');
+  }
+  const exactKey = composeExactKey(
+    target.kind ?? 'template',
+    blueprintKey(target.contract),
+    variantKey(target.variance),
+  );
+  const id = await deps.index.getId(scope, exactKey);
+  if (!id) return { outcome: 'not_found', dryRun };
+  const row = await readRegistryRow(deps.vectorStore, scope, id);
+  if (!row) return { outcome: 'not_found', dryRun, blueprintId: id };
+  if (readScalarString(row.metadata[METADATA_KEYS.componentCode]) !== pair.componentCode) {
+    return { outcome: 'refused_mismatch', dryRun, blueprintId: id };
+  }
+  if (readScalarString(row.metadata[METADATA_KEYS.sourceCodeHash]) !== undefined) {
+    return { outcome: 'already_attached', dryRun, blueprintId: id };
+  }
+  if (pair.sourceCode === pair.componentCode) {
+    return { outcome: 'skipped_identical', dryRun, blueprintId: id };
+  }
+  if (dryRun) return { outcome: 'attached', dryRun, blueprintId: id };
+
+  // Reuse the row's own vector when the keyed read supplied it (every
+  // in-repo backend is keyed); re-embed only on a vectorless rung.
+  const vector = 'vector' in row ? row.vector : await reembed(deps, row.metadata);
+  if (!vector) {
+    throw new Error(
+      `attachAuthoredSource: row ${JSON.stringify(id)} could not be re-embedded, so it was left unchanged`,
+    );
+  }
+  const hash = codeStore.hashOf(pair.sourceCode);
+  // Body first: a body with no pointer is an orphan; a pointer with no
+  // body is a row that promises source it cannot serve.
+  await codeStore.put(hash, pair.sourceCode);
+
+  let current: { readonly vector: readonly number[]; readonly metadata: typeof row.metadata } = {
+    vector,
+    metadata: row.metadata,
+  };
+  for (let attempt = 0; attempt < ATTACH_PUT_ATTEMPTS; attempt++) {
+    await deps.vectorStore.putVector(scope, {
+      key: id,
+      vector: [...current.vector],
+      metadata: { ...current.metadata, [METADATA_KEYS.sourceCodeHash]: hash },
+    });
+    const fresh = await readRegistryRow(deps.vectorStore, scope, id);
+    // Deleted or evicted meanwhile: never bring it back unbound.
+    if (!fresh) return { outcome: 'lost_race', dryRun, blueprintId: id };
+    if (readScalarString(fresh.metadata[METADATA_KEYS.sourceCodeHash]) === hash) {
+      return { outcome: 'attached', dryRun, blueprintId: id };
+    }
+    // Rewritten with other code meanwhile: the source is not this row's.
+    if (readScalarString(fresh.metadata[METADATA_KEYS.componentCode]) !== pair.componentCode) {
+      return { outcome: 'lost_race', dryRun, blueprintId: id };
+    }
+    const freshVector = 'vector' in fresh ? fresh.vector : await reembed(deps, fresh.metadata);
+    if (!freshVector) return { outcome: 'lost_race', dryRun, blueprintId: id };
+    current = { vector: freshVector, metadata: fresh.metadata };
+  }
+  return { outcome: 'lost_race', dryRun, blueprintId: id };
+}
+
 async function reembed(
   deps: Partial<BlueprintRegistryDeps>,
   metadata: Record<string, string | number | boolean | null>,

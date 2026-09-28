@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   InMemoryBlueprintIndex,
+  InMemoryCodeStore,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { BlueprintStore, EnumerableVectorStore } from '@ggui-ai/mcp-server-core';
+import type { BlueprintStore, EnumerableVectorStore, VectorEntry } from '@ggui-ai/mcp-server-core';
 import type {
   Blueprint as DurableBlueprint,
   BlueprintSource,
@@ -13,6 +14,7 @@ import type {
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import type { ContractValidationResult } from '@ggui-ai/negotiator';
 import {
+  attachAuthoredSource,
   registerBlueprint,
   findBlueprintExact,
   findBlueprintsByEmbedding,
@@ -1731,5 +1733,154 @@ describe('registerBlueprint — directionScope beside the digest (cto on ggui#14
     const rows = await deps.vectorStore.listByScope(SCOPE);
     const bareRow = rows.find((r) => r.key === bare.id);
     expect(Object.keys(bareRow!.metadata)).not.toContain('directionScope');
+  });
+});
+
+// ggui#1493 — the backfill: a row registered from compiled bytes alone
+// gains its authored source in place, only when the given code is the
+// code the row already serves.
+describe('attachAuthoredSource (ggui#1493)', () => {
+  const CODE = 'export default () => null;';
+  const SOURCE = 'export default function Notepad() { return <textarea />; }';
+
+  async function seeded() {
+    const codeStore = new InMemoryCodeStore();
+    const deps = { ...makeDeps(), durability: { codeStore } };
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'Build a notepad',
+      componentCode: CODE,
+      source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
+    });
+    await recordBlueprintHit(deps, SCOPE, bp.id);
+    return { deps, codeStore, bp };
+  }
+
+  const target = { contract: NOTEPAD_CONTRACT };
+
+  it('a dry run reports "attached" with dryRun echoed, and writes nothing', async () => {
+    const { deps, codeStore } = await seeded();
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE }, { dryRun: true });
+    expect(out).toMatchObject({ outcome: 'attached', dryRun: true });
+    expect(await codeStore.get(codeStore.hashOf(SOURCE))).toBeNull();
+    const row = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(row!.sourceCodeHash).toBeUndefined();
+  });
+
+  it('attaches: the body lands in the code store and the row gains sourceCodeHash, keeping its other keys', async () => {
+    const { deps, codeStore, bp } = await seeded();
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    expect(out).toEqual({ outcome: 'attached', dryRun: false, blueprintId: bp.id });
+    expect(await codeStore.get(codeStore.hashOf(SOURCE))).toBe(SOURCE);
+    const row = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(row!.id).toBe(bp.id);
+    expect(row!.sourceCodeHash).toBe(codeStore.hashOf(SOURCE));
+    expect(row!.componentCode).toBe(CODE);
+    expect(row!.hitCount).toBe(1);
+    expect(row!.source).toEqual(bp.source);
+  });
+
+  it('is idempotent: a second call reports already_attached', async () => {
+    const { deps } = await seeded();
+    await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    const again = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    expect(again.outcome).toBe('already_attached');
+  });
+
+  it('refuses a pair whose code is not the code the row serves, and writes nothing', async () => {
+    const { deps, codeStore } = await seeded();
+    const out = await attachAuthoredSource(deps, SCOPE, target, {
+      componentCode: 'export default () => "different";',
+      sourceCode: SOURCE,
+    });
+    expect(out.outcome).toBe('refused_mismatch');
+    expect(await codeStore.get(codeStore.hashOf(SOURCE))).toBeNull();
+    const row = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(row!.sourceCodeHash).toBeUndefined();
+  });
+
+  it('skips a source byte-identical to the code — no distinct authored form', async () => {
+    const { deps } = await seeded();
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: CODE });
+    expect(out.outcome).toBe('skipped_identical');
+  });
+
+  it('reports not_found when nothing is bound at the exact key', async () => {
+    const { deps } = await seeded();
+    const out = await attachAuthoredSource(deps, SCOPE, { contract: NOTEPAD_CONTRACT, variance: { persona: 'nobody' } }, {
+      componentCode: CODE,
+      sourceCode: SOURCE,
+    });
+    expect(out).toEqual({ outcome: 'not_found', dryRun: false });
+  });
+
+  // A store whose row is rewritten by a concurrent writer right after the
+  // attach's put — the hit counter's whole-row read-modify-write, which
+  // carries the metadata it read BEFORE the attach and so drops the hash.
+  class RacingVectorStore extends InMemoryVectorStore {
+    stale: VectorEntry | null = null;
+    clobbers = 0;
+    deleteAfterAttach = false;
+    override async putVector(scope: string, entry: VectorEntry): Promise<void> {
+      await super.putVector(scope, entry);
+      if (entry.metadata['sourceCodeHash'] === undefined) return;
+      if (this.deleteAfterAttach) {
+        await super.deleteVector(scope, entry.key);
+        return;
+      }
+      if (this.clobbers > 0 && this.stale) {
+        this.clobbers -= 1;
+        await super.putVector(scope, this.stale);
+      }
+    }
+  }
+
+  async function seededRacing() {
+    const codeStore = new InMemoryCodeStore();
+    const vectorStore = new RacingVectorStore();
+    const deps = { ...makeDeps(), vectorStore, durability: { codeStore } };
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'Build a notepad',
+      componentCode: CODE,
+      source: { kind: 'llm', generator: 'ui-gen-default', model: 'anthropic/claude-haiku-4-5' },
+    });
+    vectorStore.stale = await vectorStore.getByKey(SCOPE, bp.id);
+    return { deps, vectorStore, codeStore, bp };
+  }
+
+  it('re-puts from a fresh read when a concurrent row write erased the hash, and reports attached only once it holds', async () => {
+    const { deps, vectorStore, codeStore } = await seededRacing();
+    vectorStore.clobbers = 1;
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    expect(out.outcome).toBe('attached');
+    const row = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(row!.sourceCodeHash).toBe(codeStore.hashOf(SOURCE));
+  });
+
+  it('reports lost_race, never attached, when the hash still does not hold after the bounded retries', async () => {
+    const { deps, vectorStore } = await seededRacing();
+    vectorStore.clobbers = 99;
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    expect(out.outcome).toBe('lost_race');
+    const row = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(row!.sourceCodeHash).toBeUndefined();
+  });
+
+  it('reports lost_race and does not resurrect a row deleted while attaching', async () => {
+    const { deps, vectorStore, bp } = await seededRacing();
+    vectorStore.deleteAfterAttach = true;
+    const out = await attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE });
+    expect(out.outcome).toBe('lost_race');
+    expect(await vectorStore.getByKey(SCOPE, bp.id)).toBeNull();
+  });
+
+  it('throws with no code store bound — the source would have nowhere to live', async () => {
+    const deps = makeDeps();
+    await expect(
+      attachAuthoredSource(deps, SCOPE, target, { componentCode: CODE, sourceCode: SOURCE }),
+    ).rejects.toThrow(/no code store/);
   });
 });

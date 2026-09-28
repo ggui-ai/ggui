@@ -101,6 +101,7 @@ import {
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type {
+  BlueprintRegistryDeps,
   GguiRenderHandlerDeps,
   HandlerContext,
   SharedHandler,
@@ -406,11 +407,7 @@ export type OpsBlueprintBundle = {
    * matchBlueprint exact-key probe (handshake + render) finds them.
    * Same bundle the render handler reads/writes.
    */
-  readonly cacheRegistry?: {
-    readonly embedding: EmbeddingProvider;
-    readonly vectorStore: VectorStore;
-    readonly index: BlueprintIndex;
-  };
+  readonly cacheRegistry?: BlueprintRegistryDeps;
   /**
    * Authorization seam for cross-app curation. When omitted, the
    * default server binds an allow-all authorizer — the
@@ -447,18 +444,14 @@ function buildOpsBlueprintDeps(input: {
    * negotiator + render handler already consume — single source of
    * truth for the cache identity.
    */
-  readonly cacheRegistry?: {
-    readonly embedding: EmbeddingProvider;
-    readonly vectorStore: VectorStore;
-    readonly index: BlueprintIndex;
-    /**
-     * Declared because the ops path receives the SAME bundle the render
-     * path does, durability included — omitting it here made
-     * operator-invoked registrations silently write durable rows
-     * through a field the type said was not there.
-     */
-    readonly durability?: BlueprintDurabilityDeps;
-  };
+  /**
+   * `BlueprintRegistryDeps` — durability included, because the ops path
+   * receives the SAME bundle the render path does. Omitting it made
+   * operator-invoked registrations write through a field the type said
+   * was not there (and, ggui#1493, left the ops mirror unable to carry
+   * the authored source's code store).
+   */
+  readonly cacheRegistry?: BlueprintRegistryDeps;
   /**
    * Authorization seam for cross-app curation. When omitted, the
    * default server binds an allow-all authorizer — the
@@ -478,11 +471,7 @@ function buildOpsBlueprintDeps(input: {
       ctx: HandlerContext
     ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
     readonly blueprints?: BlueprintProvider;
-    readonly cacheRegistry?: {
-      readonly embedding: EmbeddingProvider;
-      readonly vectorStore: VectorStore;
-      readonly index: BlueprintIndex;
-    };
+    readonly cacheRegistry?: BlueprintRegistryDeps;
     readonly authorizeAppAccess: OpsBlueprintAppAuthorizer;
   };
 } {
