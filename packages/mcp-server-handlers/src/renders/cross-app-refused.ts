@@ -14,9 +14,17 @@ export function logCrossAppRefused(tool: string, sessionId: string, callerAppId:
  * ggui#1479 — the line a refusal leaves when a session's ownership could not
  * be read at all (the store threw): the tool, the session, the caller's app
  * and why. The call fails closed; this line is how an outage reads apart
- * from a probe.
+ * from a probe. A caller with no logger of its own passes the store's error
+ * text, so the cause rides the same line (ggui#1514).
  */
-export function logOwnershipUnverified(tool: string, sessionId: string, callerAppId: string, reason: 'read-failed'): void {
+export function logOwnershipUnverified(
+  tool: string,
+  sessionId: string,
+  callerAppId: string,
+  reason: 'read-failed',
+  error?: string,
+): void {
+  const fields = error === undefined ? { tool, sessionId, callerAppId, reason } : { tool, sessionId, callerAppId, reason, error };
   // eslint-disable-next-line no-console -- operator-visible structured refusal line; handlers carry no logger
-  console.warn(`[ggui] runtime_ownership_unverified ${JSON.stringify({ tool, sessionId, callerAppId, reason })}`);
+  console.warn(`[ggui] runtime_ownership_unverified ${JSON.stringify(fields)}`);
 }

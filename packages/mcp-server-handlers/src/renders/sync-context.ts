@@ -65,9 +65,10 @@ import {
 import type {
   GguiSessionStore,
   RenderIdentityStore,
+  StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext } from '../types.js';
-import { logCrossAppRefused } from './cross-app-refused.js';
+import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
@@ -127,6 +128,19 @@ type SyncContextRejected = {
   readonly message: string;
 };
 type SyncContextOutput = SyncContextAccepted | SyncContextRejected;
+
+/**
+ * The one answer for a session this caller cannot sync: missing, another
+ * app's (ggui#1479), or unreadable (ggui#1514). One shape for all three, so
+ * the refusal reveals neither existence, ownership nor store health.
+ */
+function sessionNotFound(sessionId: string): SyncContextRejected {
+  return {
+    ok: false,
+    code: 'SESSION_NOT_FOUND',
+    message: `render "${sessionId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
+  };
+}
 
 export interface CreateGguiSyncContextHandlerDeps {
   readonly renderStore: GguiSessionStore;
@@ -191,7 +205,24 @@ export function createGguiSyncContextHandler(
         };
       }
 
-      const stored = await deps.renderStore.get(sessionId);
+      // A read that FAILS answers exactly as a session that does not exist
+      // (ggui#1514), as dispatch's gate does: it fails closed (nothing is
+      // written), and the answer carries no store-health signal a caller
+      // could tell apart from not-found. The cause is named on the
+      // ownership line.
+      let stored: StoredGguiSession | null;
+      try {
+        stored = await deps.renderStore.get(sessionId);
+      } catch (err) {
+        logOwnershipUnverified(
+          'ggui_runtime_sync_context',
+          sessionId,
+          ctx.appId,
+          'read-failed',
+          err instanceof Error ? err.message : String(err),
+        );
+        return sessionNotFound(sessionId);
+      }
       // App-scope gate (ggui#1479): a session writes only for the caller's
       // own app (`ctx.appId`, the proved identity), never for the app the
       // request declares. A session another app owns answers exactly as a
@@ -199,11 +230,7 @@ export function createGguiSyncContextHandler(
       // and the refusal is named on one line (ids only, no payload).
       if (!stored || stored.appId !== ctx.appId) {
         if (stored) logCrossAppRefused('ggui_runtime_sync_context', sessionId, ctx.appId, stored.appId);
-        return {
-          ok: false,
-          code: 'SESSION_NOT_FOUND',
-          message: `render "${sessionId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
-        };
+        return sessionNotFound(sessionId);
       }
       // mcpApps locator renders have no contextSpec — they're
       // embedded third-party iframes the iframe-runtime doesn't

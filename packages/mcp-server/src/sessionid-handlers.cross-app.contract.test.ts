@@ -43,6 +43,7 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import type { StoredGguiSession } from '@ggui-ai/mcp-server-core';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
 import { InMemoryToolIdentityCatalogStore } from '@ggui-ai/mcp-server-handlers/renders';
@@ -250,5 +251,71 @@ describe('every sessionId handler refuses another app\'s session exactly as a mi
         }
       });
     }
+  }
+});
+
+/**
+ * ggui#1514 — a render store whose read THROWS. The two runtime write tools,
+ * which a view-origin refusal hands a failed read (ggui#1415, Enforcement b),
+ * answer it byte-identically to a store that never held the id, and write
+ * nothing. Every other `not-found` handler is pinned as it answers today, so
+ * a change in how any of them meets a failed read is a decision, not drift.
+ */
+const FAILED_READ: Record<string, 'as-missing' | 'throws'> = {
+  ggui_runtime_submit_action: 'as-missing',
+  ggui_runtime_sync_context: 'as-missing',
+  ggui_amend: 'throws',
+  ggui_update: 'throws',
+  ggui_consume: 'throws',
+  ggui_emit: 'throws',
+  ggui_get_render_source: 'throws',
+  ggui_get_session: 'throws',
+  ggui_runtime_pull: 'throws',
+};
+
+class ReadFailingStore extends InMemoryGguiSessionStore {
+  override async get(): Promise<StoredGguiSession | null> {
+    throw new Error('render store read failed');
+  }
+}
+
+describe('a render store whose read throws (ggui#1514)', () => {
+  it('every not-found handler is classified for a failed read, and the table names nothing else', () => {
+    const notFound = Object.entries(CLASSIFIED)
+      .filter(([, spec]) => spec.kind === 'not-found')
+      .map(([name]) => name)
+      .sort();
+    expect(Object.keys(FAILED_READ).sort()).toEqual(notFound);
+  });
+
+  for (const [name, expected] of Object.entries(FAILED_READ)) {
+    it(`${name}: a failed read ${expected === 'as-missing' ? 'answers exactly as a missing session and writes nothing' : 'throws (pinned as it is today)'}`, async () => {
+      const spec = CLASSIFIED[name];
+      expect(spec, `${name} is classified`).toBeDefined();
+      if (!spec) return;
+      const sessionId = 'render_failed_read_1514';
+
+      const failingConsumer = new InMemoryPendingEventConsumer();
+      failingConsumer.markCreated(sessionId);
+      const failing = build(new ReadFailingStore(), failingConsumer).find((h) => h.name === name);
+      expect(failing, `${name} is registered on the failing store`).toBeDefined();
+      if (!failing) return;
+      const failed = await answerOf(() => failing.handler(spec.input(sessionId, APP_A), ctxOf(APP_A)));
+
+      const emptyConsumer = new InMemoryPendingEventConsumer();
+      emptyConsumer.markCreated(sessionId);
+      const empty = build(new InMemoryGguiSessionStore(), emptyConsumer).find((h) => h.name === name);
+      expect(empty, `${name} is registered on the empty store`).toBeDefined();
+      if (!empty) return;
+      const missing = await answerOf(() => empty.handler(spec.input(sessionId, APP_A), ctxOf(APP_A)));
+
+      if (expected === 'as-missing') {
+        expect(failed).toBe(missing);
+        expect(failingConsumer.pendingCount(sessionId)).toBe(0);
+      } else {
+        expect(failed).toContain('"threw"');
+        expect(failed).not.toBe(missing);
+      }
+    });
   }
 });

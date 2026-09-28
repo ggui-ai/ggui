@@ -6,6 +6,7 @@ import {
 import type {
   RenderIdentityRecord,
   RenderIdentityStore,
+  StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import type {
   ComponentGguiSession,
@@ -268,6 +269,38 @@ describe('createGguiSyncContextHandler', () => {
       expect(crossApp).toEqual(unknown);
       const stored = await renderStore.get(sessionId);
       expect(stored?.render.type === 'component' ? stored.render.contextSnapshot : undefined).toEqual({ note: 'mine' });
+    });
+
+    // ggui#1514 — a store that cannot be read answers as an unknown session
+    // and names the cause on the ownership line.
+    it('answers a session read that fails exactly as an unknown session, and names the cause on runtime_ownership_unverified (ggui#1514)', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      class ReadFailingStore extends InMemoryGguiSessionStore {
+        override async get(): Promise<StoredGguiSession | null> {
+          throw new Error('store unavailable');
+        }
+      }
+      const input = { sessionId: 'render-1', appId: 'app-1', snapshot: { note: 'x' } };
+      const failed = await createGguiSyncContextHandler({ renderStore: new ReadFailingStore() }).handler(input, {
+        appId: 'app-1',
+        requestId: 'r1',
+      });
+      const unknown = await createGguiSyncContextHandler({ renderStore: new InMemoryGguiSessionStore() }).handler(input, {
+        appId: 'app-1',
+        requestId: 'r1',
+      });
+      expect(unknown).toMatchObject({ ok: false, code: 'SESSION_NOT_FOUND' });
+      expect(failed).toEqual(unknown);
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith('[ggui] runtime_ownership_unverified '));
+      expect(line).toBeDefined();
+      expect(JSON.parse(String(line).slice('[ggui] runtime_ownership_unverified '.length))).toEqual({
+        tool: 'ggui_runtime_sync_context',
+        sessionId: 'render-1',
+        callerAppId: 'app-1',
+        reason: 'read-failed',
+        error: 'store unavailable',
+      });
+      warn.mockRestore();
     });
   });
 
