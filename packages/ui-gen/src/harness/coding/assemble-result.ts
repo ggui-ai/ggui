@@ -119,6 +119,8 @@ export async function assembleGenerationResult(
     ...(telemetry.cacheCreationTokens !== undefined
       ? { cacheCreationTokens: telemetry.cacheCreationTokens }
       : {}),
+    // ggui#1522 — the in-loop visual judge's spend, beside `tokens` and never inside it.
+    ...(telemetry.inLoopVisualTokens !== undefined ? { inLoopVisualTokens: telemetry.inLoopVisualTokens } : {}),
     generationTimeMs: totalMs,
     turnsUsed: telemetry.turnsUsed,
     passesUsed: 1,

@@ -24,6 +24,7 @@ import {
 } from "./run-coding-turn.js";
 import { runEvalRound } from "./run-eval-round.js";
 import type { TokenUsage } from "./run-eval-round.js";
+import type { VisualLegTokens } from "../../evaluation/visual-evaluator.js";
 import type { SameExchangeBreak } from "../result-types.js";
 
 type PreWarmedEvalContext =
@@ -75,6 +76,12 @@ export interface GenerateTelemetry {
    */
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  /**
+   * ggui#1522 — the in-loop visual judge's spend across eval rounds, apart from {@link totalIn} / {@link totalOut}
+   * (priced at the coding and text-evaluator models): this part is priced at the VISUAL agent's model. Stays
+   * `undefined` while no round reported one.
+   */
+  inLoopVisualTokens?: VisualLegTokens;
   /** Latest evalResult — undefined when eval was disabled or never ran. */
   evalResult: EvalResult | undefined;
   /**
@@ -165,6 +172,25 @@ export function absorbTokens(telemetry: GenerateTelemetry, usage: TokenUsage): v
   if (usage.cacheCreation !== undefined) {
     telemetry.cacheCreationTokens = (telemetry.cacheCreationTokens ?? 0) + usage.cacheCreation;
   }
+}
+
+/** ggui#1522 — fold one round's in-loop visual spend into the run's own part (never into `totalIn` / `totalOut`). */
+export function absorbInLoopVisualTokens(telemetry: GenerateTelemetry, part: VisualLegTokens | undefined): void {
+  if (part === undefined) return;
+  const prev = telemetry.inLoopVisualTokens;
+  const prevCriteria = prev?.criteria;
+  const criteria =
+    part.criteria === undefined
+      ? prevCriteria
+      : {
+          inputTokens: (prevCriteria?.inputTokens ?? 0) + part.criteria.inputTokens,
+          outputTokens: (prevCriteria?.outputTokens ?? 0) + part.criteria.outputTokens,
+        };
+  telemetry.inLoopVisualTokens = {
+    inputTokens: (prev?.inputTokens ?? 0) + part.inputTokens,
+    outputTokens: (prev?.outputTokens ?? 0) + part.outputTokens,
+    ...(criteria !== undefined ? { criteria } : {}),
+  };
 }
 
 /**
@@ -413,6 +439,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         if (round.contractFeedback) telemetry.contractFeedback = round.contractFeedback;
         evalDone = round.evalDone;
         absorbTokens(telemetry, round.evalTokens);
+        absorbInLoopVisualTokens(telemetry, round.inLoopVisualTokens);
 
         if (round.control === "break") break;
         // round.control === "feedback" — set next coding turn input.

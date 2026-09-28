@@ -52,6 +52,7 @@ import type {
   VisualEvalOutcome,
   VisualFitConfig,
   VisualFitOutcome,
+  VisualLegTokens,
 } from "../../evaluation/visual-evaluator.js";
 
 type PreWarmedEvalContext =
@@ -181,6 +182,12 @@ export interface EvalRoundResult {
   readonly preWarmedContext: PreWarmedEvalContext | null | undefined;
   /** Tokens added during this round — caller adds to its own totals. */
   readonly evalTokens: TokenUsage;
+  /**
+   * ggui#1522 — the in-loop visual judge's spend this round, apart from {@link evalTokens} (the text evaluator's,
+   * priced at its model): already recorded in the cost tracker at the visual agent's model. Absent when no visual
+   * leg ran or it reported no tokens.
+   */
+  readonly inLoopVisualTokens?: VisualLegTokens;
   /** Wall-clock of the parallel LLM + visual eval block (zero on the
    *  low-risk bypass path, which exits before `Promise.all`). Caller
    *  accumulates into its `cumulativeEvalLlmMs`. */
@@ -591,6 +598,7 @@ export async function runEvalRound(
 
   let evalResult: EvalResult | undefined;
   let evalTokens: TokenUsage = { input: 0, output: 0 };
+  let inLoopVisualTokens: VisualLegTokens | undefined = undefined;
   let evalLlmMs = 0;
 
   try {
@@ -641,6 +649,7 @@ export async function runEvalRound(
           prevFailFingerprints,
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: "",
           isEvalFeedback: false,
@@ -665,6 +674,7 @@ export async function runEvalRound(
           prevFailFingerprints,
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
@@ -683,6 +693,7 @@ export async function runEvalRound(
         prevFailFingerprints,
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: "",
         isEvalFeedback: false,
@@ -772,6 +783,7 @@ export async function runEvalRound(
           prevFailFingerprints,
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
@@ -797,6 +809,7 @@ export async function runEvalRound(
         prevFailFingerprints,
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: "",
         isEvalFeedback: false,
@@ -917,6 +930,14 @@ export async function runEvalRound(
     evalLlmMs = Date.now() - evalLlmStart;
     llmResult = llm;
     visualIssues = visual?.issues ?? null;
+    // ggui#1522 — the in-loop visual judge's own spend: recorded in the tracker at the VISUAL agent's model, so
+    // `canContinue()` sees it, and carried apart from `evalTokens` (the text evaluator's model).
+    inLoopVisualTokens = visual?.tokens;
+    if (inLoopVisualTokens !== undefined) {
+      costTracker.record(visualEvalAgent.model, inLoopVisualTokens.inputTokens, inLoopVisualTokens.outputTokens);
+      const criteriaSpend = inLoopVisualTokens.criteria;
+      if (criteriaSpend !== undefined) costTracker.record(visualEvalAgent.model, criteriaSpend.inputTokens, criteriaSpend.outputTokens);
+    }
     const visualSummary: VisualEvalSummary | undefined = visual?.summary;
     // ggui#1221 — the judge leg's coverage is ALWAYS stamped: ran / skipped (with the
     // reason) / not-applicable when no visual leg was configured for this round.
@@ -1046,6 +1067,7 @@ export async function runEvalRound(
           prevFailFingerprints: enrichedFingerprints,
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
@@ -1079,6 +1101,7 @@ export async function runEvalRound(
           prevFailFingerprints: new Set([...currFailFingerprints, ...contractFails.map(fingerprintFail)]),
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
@@ -1105,6 +1128,7 @@ export async function runEvalRound(
         prevFailFingerprints: currFailFingerprints,
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: "",
         isEvalFeedback: false,
@@ -1186,6 +1210,7 @@ export async function runEvalRound(
           prevFailFingerprints: new Set([...currFailFingerprints, ...stuckContractFails.map(fingerprintFail)]),
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
@@ -1202,6 +1227,7 @@ export async function runEvalRound(
         prevFailFingerprints: currFailFingerprints,
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: "",
         isEvalFeedback: false,
@@ -1272,6 +1298,7 @@ export async function runEvalRound(
           prevFailFingerprints: new Set([...currFailFingerprints, ...fitFails.map(fingerprintFail)]),
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: fitLines.join("\n\n"),
           isEvalFeedback: true,
@@ -1301,6 +1328,7 @@ export async function runEvalRound(
           prevFailFingerprints: new Set([...currFailFingerprints, ...capContractFails.map(fingerprintFail)]),
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: contractLines.join("\n\n"),
           isEvalFeedback: true,
@@ -1327,6 +1355,7 @@ export async function runEvalRound(
           prevFailFingerprints: currFailFingerprints,
           preWarmedContext,
           evalTokens,
+          ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
           evalLlmMs,
           lastResultText: "",
           isEvalFeedback: false,
@@ -1359,6 +1388,7 @@ export async function runEvalRound(
         ]),
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: probeLines.join("\n\n"),
         isEvalFeedback: true,
@@ -1380,6 +1410,7 @@ export async function runEvalRound(
         prevFailFingerprints: currFailFingerprints,
         preWarmedContext,
         evalTokens,
+        ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
         evalLlmMs,
         lastResultText: "",
         isEvalFeedback: false,
@@ -1431,6 +1462,7 @@ export async function runEvalRound(
       ),
       preWarmedContext,
       evalTokens,
+      ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
       evalLlmMs,
       lastResultText: issueLines.join("\n\n"),
       isEvalFeedback: true,
@@ -1463,6 +1495,7 @@ export async function runEvalRound(
       prevFailFingerprints,
       preWarmedContext,
       evalTokens,
+      ...(inLoopVisualTokens !== undefined ? { inLoopVisualTokens } : {}),
       evalLlmMs,
       lastResultText: "",
       isEvalFeedback: false,

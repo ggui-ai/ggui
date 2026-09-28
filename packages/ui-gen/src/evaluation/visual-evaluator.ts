@@ -1842,6 +1842,16 @@ function getDefaultVisualModel(provider: 'claude' | 'google'): string {
 // Tier 2 adapter — returns EvalIssue[]
 // ---------------------------------------------------------------------------
 
+/**
+ * ggui#1522 — what a visual leg's judge calls spent: the scoring calls, and the report-only criteria calls apart
+ * (ggui#1436). Priced at the VISUAL agent's model, never folded into a text evaluator's or a coding turn's tokens.
+ */
+export interface VisualLegTokens {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly criteria?: CriteriaCallTokens;
+}
+
 /** What the harness's eval round consumes from the visual leg. */
 export interface VisualEvalOutcome {
   /** Tier-2 issues (empty when no browser is available). */
@@ -1858,6 +1868,11 @@ export interface VisualEvalOutcome {
    * summary used to be indistinguishable from a clean single-shot run.
    */
   coverage: VisualCoverage;
+  /**
+   * ggui#1522 — the leg's own spend, when its judge ran and reported tokens. The round records it in the cost
+   * tracker at the visual agent's model and carries it apart; absent on a skipped leg.
+   */
+  tokens?: VisualLegTokens;
 }
 
 /**
@@ -1881,7 +1896,16 @@ export async function runVisualEval(
   const issues: EvalIssue[] = (result.issues || []).map(toEvalIssue);
   const summary = summarizeVisualResult(result);
   const coverage: VisualCoverage = { status: 'ran' };
-  return summary === undefined ? { issues, coverage } : { issues, summary, coverage };
+  // ggui#1522 — the judge's spend rides the outcome; until now it was dropped here, before the harness saw it.
+  const tokens: VisualLegTokens | undefined =
+    result.inputTokens !== undefined && result.outputTokens !== undefined
+      ? {
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          ...(result.criteriaTokens !== undefined ? { criteria: result.criteriaTokens } : {}),
+        }
+      : undefined;
+  return { issues, ...(summary !== undefined ? { summary } : {}), coverage, ...(tokens !== undefined ? { tokens } : {}) };
 }
 
 /** A judge-shaped issue as the harness's tier-2 issue: critical ⇒ a blocking fail, anything else ⇒ a warn. */

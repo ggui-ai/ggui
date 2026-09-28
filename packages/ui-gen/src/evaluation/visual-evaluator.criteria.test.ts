@@ -15,6 +15,7 @@ import { parseCriteriaBank } from './criteria/bank.js';
 import type { CriteriaContextInput } from './criteria/context.js';
 import { CARD_OVERFLOW_X_EXPRESSION,
   VISUAL_EVAL_PROMPT,
+  runVisualEval,
   runVisualEvaluationDetailed,
   summarizeVisualResult,
   type ScreenshotBrowser,
@@ -167,6 +168,17 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     expect(c.criteriaTokens).toEqual({ inputTokens: 100, outputTokens: 50 });
     expect(out.result!.criteriaTokens).toEqual({ inputTokens: 100, outputTokens: 50 });
     expect(c.score).toBe(80);
+  });
+
+  it('ggui#1522 — the harness adapter hands the leg spend on: scoring tokens, and the criteria call apart', async () => {
+    const out = await runVisualEval(
+      { compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } },
+      { ...config, judgeK: 3 },
+      deps([answer(80)], answer(80, [{ id: 'task.copy', verdict: 'pass', evidence: 'g' }])),
+    );
+    expect(out.tokens).toEqual({ inputTokens: 3 * 10, outputTokens: 3 * 5, criteria: { inputTokens: 100, outputTokens: 50 } });
+    const bare = await runVisualEval({ compiledCode: COMPONENT, originalPrompt: 'a card' }, config, deps([answer(80)]));
+    expect(bare.tokens).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 
   it('no bank → no criteria spend reported anywhere', async () => {

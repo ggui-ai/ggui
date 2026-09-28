@@ -13,6 +13,7 @@ import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { AdapterResult } from "../adapters/types.js";
 import type { RenderingContext } from "../contract-context.js";
 import type { EvalResult } from "../evaluation/types-public.js";
+import type { VisualLegTokens } from "../evaluation/visual-evaluator.js";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
 // =============================================================================
@@ -66,6 +67,14 @@ export interface GenerationResult extends AdapterResult {
   passesUsed: number;
   /** Three-tier evaluation result (tier 0 + LLM tier 1+2 + visual) */
   evalResult?: EvalResult;
+  /**
+   * ggui#1522 — what the IN-LOOP visual judge spent during this generation (its scoring calls, and its report-only
+   * criteria calls apart), priced at the visual agent's model. NOT inside `tokens`, which covers the coding turns
+   * and the text evaluator. And NOT the same calls as a post-generation judge's own visual pass (a benchmark
+   * report's `meta.costs.visualUsd`): a cost rule that adds both is correct, one read as the other double-counts.
+   * Absent when no in-loop visual leg ran or it reported no tokens.
+   */
+  inLoopVisualTokens?: VisualLegTokens;
   /** Set only when the same-exchange guard ended the run (ggui#404); no key otherwise. */
   sameExchangeBreak?: SameExchangeBreak;
   /** Whether background improvement should be spawned (auto-improve mode) */
