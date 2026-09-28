@@ -17,7 +17,6 @@
  * `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` flips skip → hard-fail.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import type { FrameLocator, Locator } from 'playwright-core';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
@@ -28,82 +27,7 @@ import {
 } from '../fixtures/mcp-app-host.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
-
-/**
- * `save` is a REPEATABLE action, and both halves of that are declared by
- * the fixture rather than assumed here: it is absent from ui-gen's
- * `TERMINAL_WORDS` (`submit|confirm|approve|schedule|reserve|book|pay|
- * checkout|purchase|order`), and {@link SHARED_INTENT} says the click
- * "fires the save action immediately". So its control MUST survive its
- * own gesture.
- *
- * Why this assertion exists at all (ggui#1108, Exp 005): over-guarding
- * has **no lexical signal**. Terminality does — the action's name — which
- * is why `universal.terminal_action_unguarded` can be keyword-shaped.
- * Nothing in generated source distinguishes a correctly guarded terminal
- * control from a wrongly guarded repeatable one; the only distinguishing
- * act is interacting a SECOND time, which is what the click loop below
- * already does. That made the loop an accidental detector. This makes it
- * an explicit one.
- *
- * It buys LEGIBILITY, not coverage: the loop already fails when the
- * control is guarded, but it fails as a 30s `element is not enabled`
- * timeout that cost a bisect to interpret. A detector whose output has to
- * be decoded gets misread by whoever meets it first.
- *
- * Scope, deliberately: ONE spec asserts this, not three. 01 and 10 share
- * the fixture and keep the bare loop, so this claim has a single owner.
- * And it sees exactly one shape — a single-action Save contract — so a
- * model that over-guards only book/pay-shaped repeatables passes here
- * clean. This is a regression tripwire, never the acceptance criterion
- * for a prompt change.
- *
- * Pending is not guarding (ggui#1398). A control that dispatches an action
- * shows it is working until the agent's answer repaints the card, or until
- * the runtime's pending bound passes: it is `disabled`, `aria-busy`, and
- * often relabelled ("Saving…", which `/save/i` does not match). Nothing
- * answers the gesture in this scenario, so the pending state lasts the
- * whole bound. The check therefore asks two things: right after the
- * gesture the control is still there (a visible `/save/i` control, or a
- * pending `aria-busy` one), and within the bound it comes back as an
- * enabled `/save/i` control. A guarded control never comes back.
- */
-/** `DEFAULT_ACTION_PENDING_BOUND_MS` in `@ggui-ai/wire`'s wire-config, plus margin. */
-const PENDING_CLEARS_WITHIN_MS = 20_000 + 10_000;
-
-async function expectSaveStillRepeatable(appFrame: FrameLocator, controls: Locator): Promise<void> {
-  const visible = controls.filter({ visible: true });
-  const pending = appFrame.locator('button[aria-busy="true"]').filter({ visible: true });
-  expect(
-    (await visible.count()) + (await pending.count()),
-    'repeatable action `save` lost its control after firing — no visible /save/i ' +
-      'control and no pending (aria-busy) control remains. `save` is not in ui-gen ' +
-      'TERMINAL_WORDS and SHARED_INTENT declares the click fires it immediately, so ' +
-      'the control must survive its own gesture.',
-  ).toBeGreaterThan(0);
-
-  const enabledAgain = await expect
-    .poll(async () => (await visible.count()) > 0 && (await visible.first().isEnabled()), {
-      timeout: PENDING_CLEARS_WITHIN_MS,
-      interval: 500,
-    })
-    .toBe(true)
-    .then(
-      () => true,
-      () => false,
-    );
-  const label = (
-    await (enabledAgain ? visible : pending).first().innerText({ timeout: 1_000 }).catch(() => '')
-  ).trim();
-  expect(
-    enabledAgain,
-    `repeatable action \`save\` was guarded after firing — ${PENDING_CLEARS_WITHIN_MS} ms ` +
-      `later the control reads "${label}" and is still not an enabled /save/i control. ` +
-      `A pending state clears within the runtime's bound; this one did not. \`save\` is ` +
-      `not in ui-gen TERMINAL_WORDS and SHARED_INTENT declares the click fires it ` +
-      `immediately, so it must accept a second interaction.`,
-  ).toBe(true);
-}
+import { expectSaveStillRepeatable } from '../fixtures/repeatable-control.js';
 
 for (const provider of PROVIDERS) {
   const hasKey = !!process.env[provider.apiKey];
