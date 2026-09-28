@@ -51,6 +51,7 @@ import Database, {
 } from 'better-sqlite3';
 import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
+  type PendingEventAppendOutcome,
   type PendingEventConsumeResult,
   type PendingEventConsumer,
   parsePendingEventRow,
@@ -190,20 +191,20 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     return txn();
   }
 
-  async append(sessionId: string, event: PendingEvent): Promise<void> {
+  async append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome> {
     // The producer's row is validated before anything is stored (ggui#839):
     // the type erases `.min(1)`, so an empty `id` compiles — it must not land.
     parsePendingEventRow(sessionId, event);
-    const txn = this.db.transaction(() => {
+    const txn = this.db.transaction((): PendingEventAppendOutcome => {
       const pipe = this.stmts.getPipe.get(sessionId);
       if (!pipe) {
         throw new PendingPipeNotFoundError(sessionId);
       }
       // Per-id idempotency (ggui#405) — the seen-ledger insert and the
       // event insert share this transaction, so a duplicate can never
-      // slip between the check and the write.
+      // slip between the check and the write. Its outcome is ggui#1517's.
       const marked = this.stmts.markEventSeen.run(sessionId, event.id);
-      if (marked.changes === 0) return; // duplicate — silent no-op
+      if (marked.changes === 0) return 'duplicate'; // nothing stored
       const seqRow = this.stmts.nextSeq.get(sessionId);
       const seq = seqRow?.next_seq ?? 1;
       const t = this.now();
@@ -214,8 +215,9 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
         t,
       );
       this.stmts.updateActivity.run(t, pipe.expires_at, sessionId);
+      return 'appended';
     });
-    txn();
+    return txn();
   }
 
   markCreated(sessionId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {

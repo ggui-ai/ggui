@@ -23,6 +23,7 @@
 
 import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
+  type PendingEventAppendOutcome,
   type PendingEventConsumeResult,
   type PendingEventConsumer,
   parsePendingEventRow,
@@ -67,20 +68,22 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
     });
   }
 
-  async append(sessionId: string, event: PendingEvent): Promise<void> {
+  async append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome> {
     // Validated before it is stored (ggui#839) — the struct then holds only
     // rows that passed, which is why the drain parses nothing.
     parsePendingEventRow(sessionId, event);
-    return this.withMutex(sessionId, async () => {
+    return this.withMutex(sessionId, async (): Promise<PendingEventAppendOutcome> => {
       const entry = this.pipes.get(sessionId);
       if (!entry) {
         throw new PendingPipeNotFoundError(sessionId);
       }
-      // Per-id idempotency (ggui#405) — see the interface contract.
-      if (entry.seenEventIds.has(event.id)) return;
+      // Per-id idempotency (ggui#405) and its outcome (ggui#1517) — see the
+      // interface contract.
+      if (entry.seenEventIds.has(event.id)) return 'duplicate';
       entry.seenEventIds.add(event.id);
       entry.events.push(event);
       entry.lastActivityAt = Date.now();
+      return 'appended';
     });
   }
 

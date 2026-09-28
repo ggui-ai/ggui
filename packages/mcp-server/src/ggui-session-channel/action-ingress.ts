@@ -6,7 +6,11 @@
  * to the client.
  */
 
-import type { GguiSessionStore, PendingEventConsumer } from "@ggui-ai/mcp-server-core";
+import type {
+  GguiSessionStore,
+  PendingEventAppendOutcome,
+  PendingEventConsumer,
+} from "@ggui-ai/mcp-server-core";
 import {
   assertActionContract,
   recordCommittedOneShot,
@@ -262,7 +266,11 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
     // reaped) degrades to ledger-only with a warn — the WS client has
     // no `ui/message` fallback to branch on, so a new error frame
     // would be vocabulary without a consumer.
-    const consumeWrite: Promise<void> = (() => {
+    //
+    // The append's outcome (ggui#1517) is not read here: this path mints
+    // the pipe id per frame (`toConsumeEventEntry`), so a duplicate cannot
+    // arise, and the ledger write is this path's load-bearing one.
+    const consumeWrite: Promise<PendingEventAppendOutcome | void> = (() => {
       if (deps.pendingEventConsumer === undefined || envelope.type !== "data:submit") {
         return Promise.resolve();
       }

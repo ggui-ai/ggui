@@ -63,6 +63,13 @@ import {
  * poll loop terminates on `'expired'` (TTL elapsed) — the pipe
  * surfaces the same status the underlying render reports.
  */
+/**
+ * What one {@link PendingEventConsumer.append} did (ggui#1517): `'appended'`
+ * when that call stored the row, `'duplicate'` when its `(sessionId, id)`
+ * was already recorded in the pipe's lifetime and nothing was stored.
+ */
+export type PendingEventAppendOutcome = 'appended' | 'duplicate';
+
 export interface PendingEventConsumeResult {
   readonly events: ReadonlyArray<PendingEvent>;
   readonly status: GguiSessionStatus;
@@ -131,8 +138,9 @@ export interface PendingEventConsumer {
    *
    * IDEMPOTENCY (ggui#405): `event.id` is a non-empty string (the
    * protocol's `pendingEventSchema`), and append MUST be idempotent per
-   * `(sessionId, event.id)` for the pipe's LIFETIME — a duplicate append is a silent no-op, including
-   * after the original entry was drained by `consumeAndClear`. This is
+   * `(sessionId, event.id)` for the pipe's LIFETIME — a duplicate append stores nothing, including
+   * after the original entry was drained by `consumeAndClear`, and reports
+   * `'duplicate'` (see OUTCOME below). This is
    * what makes transport-level retries of `ggui_runtime_submit_action`
    * safe: a relay that lost the RESPONSE (but whose request was
    * delivered) can replay without double-firing the user's gesture.
@@ -143,9 +151,20 @@ export interface PendingEventConsumer {
    * WS dedup requires the client-minted `actionId` on the wire
    * envelope (ggui#599 leg 2).
    *
+   * OUTCOME (ggui#1517): resolve `'appended'` when THIS call stored the
+   * row, and `'duplicate'` when `(sessionId, event.id)` was already
+   * recorded in the pipe's lifetime, drained or not. The caller needs it
+   * because a gesture has effects beyond the pipe: the dispatch handler
+   * writes the `user.submitted` ledger row only on `'appended'`, so a
+   * relay's retry is one gesture in the ledger as well as on the pipe.
+   * An adapter written against the earlier port resolves nothing
+   * (`void`); every caller reads that as `'appended'`, the behaviour
+   * that predates the outcome, and never as a reason to skip an effect.
+   * The published conformance suite pins the outcome.
+   *
    * @throws when the pipe row doesn't exist.
    */
-  append(sessionId: string, event: PendingEvent): Promise<void>;
+  append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome | void>;
 
   /**
    * Open a pipe for `sessionId` so subsequent `append` /

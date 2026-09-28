@@ -23,7 +23,7 @@ import {
   InMemoryGguiSessionStore,
   InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import type { GguiSessionStore, PendingEventConsumer } from '@ggui-ai/mcp-server-core';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import {
   createGguiSubmitActionHandler,
@@ -687,6 +687,115 @@ describe('createGguiSubmitActionHandler', () => {
       ]);
       const drained = await consumer.consumeAndClear(sessionId, 100);
       expect(drained.events.length).toBe(1);
+    });
+  });
+
+  // ggui#1517 — a relay that lost the response retries the same dispatch.
+  // The pipe dedupes by `(sessionId, actionId)`; the ledger row is the one
+  // effect that is not idempotent, so it is the one a duplicate skips. The
+  // spend is idempotent and is re-applied, which closes the window where the
+  // original appended and died before spending.
+  describe('a retried dispatch (same actionId) is one gesture (ggui#1517)', () => {
+    const sessionId = 'render-retry-1';
+    const card: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt: 0,
+      lastActivityAt: 0,
+      expiresAt: 0,
+      epoch: 1,
+      actionSpec: { submit: { label: 'Submit', oneShot: true } },
+    };
+    const dispatch = {
+      ...baseEnv,
+      sessionId,
+      kind: 'dispatch' as const,
+      payload: { intent: 'submit', actionData: null, uiContext: {} },
+    };
+
+    async function ledgerRows(store: InMemoryGguiSessionStore): Promise<number> {
+      const page = await store.listEventsSince(sessionId, 0, 100);
+      return (page?.events ?? []).filter((e) => e.type === 'user.submitted').length;
+    }
+
+    async function spentOf(store: InMemoryGguiSessionStore) {
+      const got = await store.get(sessionId);
+      return got?.render.type === 'component' ? got.render.spentOneShots : undefined;
+    }
+
+    it('answers ok both times, writes ONE ledger row and ONE pipe entry, and names the repeat', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      const warnings: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        renderStore: store,
+        logger: { warn: (msg, data) => warnings.push({ msg, data }) },
+      });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect(await ledgerRows(store)).toBe(1);
+      expect((await consumer.consumeAndClear(sessionId, 100)).events.length).toBe(1);
+      expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['submit'] });
+      expect(warnings).toEqual([
+        { msg: 'submit_action_duplicate_dispatch', data: { sessionId, actionId: baseEnv.actionId } },
+      ]);
+    });
+
+    it('re-applies the spend on a duplicate: an original that appended and died before spending is spent by its retry', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      // The original's append landed; its ledger write and spend never ran.
+      await consumer.append(sessionId, {
+        id: baseEnv.actionId,
+        envelope: {
+          type: 'action',
+          sessionId,
+          intent: 'submit',
+          actionData: null,
+          uiContext: {},
+          actionId: baseEnv.actionId,
+          firedAt: baseEnv.firedAt,
+        },
+        createdAt: baseEnv.firedAt,
+      });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['submit'] });
+      expect(await ledgerRows(store)).toBe(0);
+      expect((await consumer.consumeAndClear(sessionId, 100)).events.length).toBe(1);
+    });
+
+    it('an adapter written against the pre-outcome port (append returns nothing) gets the ledger and the spend on every call', async () => {
+      const inner = new InMemoryPendingEventConsumer();
+      inner.markCreated(sessionId);
+      const preOutcome: PendingEventConsumer = {
+        consumeAndClear: (id, ttlMs) => inner.consumeAndClear(id, ttlMs),
+        append: async (id, event): Promise<void> => {
+          await inner.append(id, event);
+        },
+      };
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      const warnings: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: preOutcome,
+        renderStore: store,
+        logger: { warn: (msg, data) => warnings.push({ msg, data }) },
+      });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      expect(await h.handler(dispatch, ctx)).toEqual({ ok: true });
+      // No outcome is read as 'appended': today's behaviour, never a suppression.
+      expect(await ledgerRows(store)).toBe(2);
+      expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['submit'] });
+      expect(warnings).toEqual([]);
     });
   });
 });

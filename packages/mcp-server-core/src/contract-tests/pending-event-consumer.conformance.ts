@@ -7,6 +7,9 @@
  *     return on the first call only.
  *   - `append` ordering — multiple events appended in order surface
  *     in FIFO order on the next `consumeAndClear`.
+ *   - `append`'s outcome — `'appended'` for the call that stored the row,
+ *     `'duplicate'` for every repeat of its `(sessionId, id)`, drained or
+ *     not (ggui#1517).
  *   - `PendingPipeNotFoundError` shape — thrown on consume/append against
  *     an unseeded render; class instanceof OR `name` field check both
  *     pass (cloud's adapter throws its own class).
@@ -151,6 +154,37 @@ export function runPendingEventConsumerConformance(
           } catch (err) {
             expect((err as Error).name).toBe('PendingPipeNotFoundError');
           }
+        });
+      });
+    });
+
+    describe("append reports its outcome, once per (sessionId, id) for the pipe's lifetime (ggui#405, ggui#1517)", () => {
+      it("the first append of an id reports 'appended'; a repeat reports 'duplicate' and stores nothing", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          expect(await consumer.append('render-1', row('once'))).toBe('appended');
+          expect(await consumer.append('render-1', row('once'))).toBe('duplicate');
+          const out = await consumer.consumeAndClear('render-1', 1000);
+          expect(out.events.map((e) => e.id)).toEqual(['once']);
+        });
+      });
+
+      it("a repeat after the row was drained still reports 'duplicate' and is not delivered again", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          expect(await consumer.append('render-1', row('drained'))).toBe('appended');
+          expect((await consumer.consumeAndClear('render-1', 1000)).events.length).toBe(1);
+          expect(await consumer.append('render-1', row('drained'))).toBe('duplicate');
+          expect((await consumer.consumeAndClear('render-1', 1000)).events).toEqual([]);
+        });
+      });
+
+      it("the same id on another session is that session's own row: 'appended'", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-A');
+          await seed('render-B');
+          expect(await consumer.append('render-A', row('shared'))).toBe('appended');
+          expect(await consumer.append('render-B', row('shared'))).toBe('appended');
         });
       });
     });

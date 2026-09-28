@@ -77,6 +77,7 @@ import {
 import {
   PendingPipeNotFoundError,
   type ActiveConsumerRegistry,
+  type PendingEventAppendOutcome,
   type StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext } from '../types.js';
@@ -223,8 +224,8 @@ export interface GguiSubmitActionHandlerDeps {
    */
   readonly consumerGraceMs?: number;
   /**
-   * Optional append-only event ledger. When wired, the handler
-   * dual-writes every successful dispatch envelope to BOTH:
+   * Optional append-only event ledger. When wired, the handler writes
+   * every dispatch envelope to BOTH, in this order:
    *
    *   1. {@link pendingEventConsumer.append} — the queue that wakes
    *      `ggui_consume` (load-bearing for the live click loop;
@@ -232,7 +233,10 @@ export interface GguiSubmitActionHandlerDeps {
    *   2. `renderStore.appendEvent({type:'user.submitted', data})` —
    *      the retained audit ledger (best-effort; errors logged but
    *      do NOT fail the dispatch — the user's gesture reaching the
-   *      agent is more important than audit persistence).
+   *      agent is more important than audit persistence). Skipped when
+   *      the append reports `'duplicate'` (a relay's retry of a gesture
+   *      the ledger already has, ggui#1517), and written when the append
+   *      throws (the gesture happened; the answer is still the refusal).
    *
    * The two streams have orthogonal semantics by design (per
    * `pending-event-consumer.ts`): queue drains on every consume,
@@ -248,9 +252,10 @@ export interface GguiSubmitActionHandlerDeps {
   readonly renderStore?: import('@ggui-ai/mcp-server-core').GguiSessionStore;
   /**
    * Optional logger for best-effort audit-write failures. When the
-   * dual-write to `renderStore.appendEvent` errors (e.g., SQLite
+   * write to `renderStore.appendEvent` errors (e.g., SQLite
    * write contention, DynamoDB throttle), we log + swallow rather
-   * than fail the dispatch. Absent → silent swallow.
+   * than fail the dispatch. Absent → silent swallow. It also names a
+   * duplicate dispatch (`submit_action_duplicate_dispatch`, ggui#1517).
    */
   readonly logger?: {
     readonly warn?: (msg: string, data?: Record<string, unknown>) => void;
@@ -323,6 +328,31 @@ async function readStoredRenderForGate(
       error: err instanceof Error ? err.message : String(err),
     });
     return { kind: 'read-failed' };
+  }
+}
+
+/**
+ * Write a dispatch's `user.submitted` ledger row. Best-effort audit: a
+ * failure is named on one warn line and never fails the dispatch, because
+ * the gesture reaching the agent matters more than the audit row.
+ */
+async function writeDispatchLedger(
+  deps: GguiSubmitActionHandlerDeps,
+  actionEnvelope: ConsumeEventEntry,
+): Promise<void> {
+  if (deps.renderStore === undefined) return;
+  try {
+    await deps.renderStore.appendEvent({
+      sessionId: actionEnvelope.sessionId,
+      type: 'user.submitted',
+      data: actionEnvelope,
+    });
+  } catch (err) {
+    deps.logger?.warn?.('submit_action_ledger_write_failed', {
+      sessionId: actionEnvelope.sessionId,
+      actionId: actionEnvelope.actionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -485,49 +515,47 @@ export function createGguiSubmitActionHandler(
           firedAt: env.firedAt,
         };
         try {
-          // Dual-write: queue (load-bearing) + ledger (best-effort
-          // audit). Fired concurrently via `Promise.allSettled` so
-          // each outcome is inspected independently — queue rejection
-          // re-thrown to surface as `PIPE_NOT_FOUND`; ledger rejection
-          // logged + swallowed so audit-store hiccups never silence
-          // the user's click. The audit fires regardless of queue
-          // success — the gesture happened either way, and the ledger
-          // reflects that.
-          const ledgerWrite: Promise<unknown> = deps.renderStore
-            ? deps.renderStore.appendEvent({
-                sessionId: env.sessionId,
-                type: 'user.submitted',
-                data: actionEnvelope,
-              })
-            : Promise.resolve();
-          const [queueResult, ledgerResult] = await Promise.allSettled([
-            deps.pendingEventConsumer.append(env.sessionId, {
+          // The pipe append goes FIRST (load-bearing: a rejection answers
+          // `PIPE_NOT_FOUND`), because its outcome decides the ledger write
+          // (ggui#1517). The pipe dedupes by `(sessionId, actionId)`, so a
+          // relay retrying a call whose response it lost reads `'duplicate'`.
+          // The `user.submitted` ledger row is the one effect of a gesture
+          // that is not idempotent, so it is the one a duplicate skips. An
+          // adapter that reports nothing (written against the earlier port)
+          // reads as `'appended'`, the behaviour that predates the outcome.
+          // The ledger is best-effort audit: its failure is logged and never
+          // fails the dispatch. When the append itself fails, the gesture
+          // still happened, so the ledger records it before the refusal.
+          let appended: PendingEventAppendOutcome | void;
+          try {
+            appended = await deps.pendingEventConsumer.append(env.sessionId, {
               // Use the iframe-supplied `actionId` as the pipe entry's
               // stable id so consume's drain_ack frame carries the SAME
               // id the iframe-runtime's toast resolution is keyed on.
               id: env.actionId,
               envelope: actionEnvelope,
               createdAt: env.firedAt,
-            }),
-            ledgerWrite,
-          ]);
-          if (queueResult.status === 'rejected') {
-            throw queueResult.reason;
+            });
+          } catch (err) {
+            await writeDispatchLedger(deps, actionEnvelope);
+            throw err;
           }
-          if (ledgerResult.status === 'rejected') {
-            deps.logger?.warn?.('submit_action_ledger_write_failed', {
+          if (appended === 'duplicate') {
+            deps.logger?.warn?.('submit_action_duplicate_dispatch', {
               sessionId: env.sessionId,
               actionId: env.actionId,
-              error:
-                ledgerResult.reason instanceof Error
-                  ? ledgerResult.reason.message
-                  : String(ledgerResult.reason),
             });
+          } else {
+            await writeDispatchLedger(deps, actionEnvelope);
           }
           // ggui#1223 / #1305 — the gesture is on the pipe, so a committed
           // `oneShot` now spends its card durably. This never changes the
           // answer: a dispatch that fails the card's contract was accepted
-          // above exactly as before and simply does not spend.
+          // above exactly as before and simply does not spend. It runs on a
+          // duplicate too (ggui#1517): the spend is idempotent per
+          // `{epoch, action}` (the session-store conformance suite pins a
+          // repeat as a no-op), and re-applying it closes the window where
+          // the original appended and failed before it could spend.
           await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored);
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight
