@@ -771,6 +771,8 @@ export const CARD_HEIGHT_EXPRESSION =
  * frame (and the judge's stand-in) clips at the card's edge, so the capture cannot show it, while a visitor's frame
  * scrolls it sideways: only a measurement carries it.
  */
+/** The sideways reading layout rounding alone can produce (ggui#1475): `scrollWidth` and `clientWidth` are integers. */
+export const OVERFLOW_X_ROUNDING_PX = 1;
 export const CARD_OVERFLOW_X_EXPRESSION =
   "(() => { const r = document.getElementById('root'); return r ? Math.max(0, Math.ceil(r.scrollWidth - r.clientWidth)) : null; })()";
 
@@ -1057,7 +1059,9 @@ function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | 
  */
 function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
   const px = frame.attempt.overflowX;
-  if (px === undefined || px === null || px <= 0 || frame.policy.overflow === 'none') return null;
+  // `scrollWidth` / `clientWidth` are rounded integers: a fractional layout width reads as 1 px past the card with
+  // nothing a visitor could see, so 1 px is rounding and an overflow starts at 2.
+  if (px === undefined || px === null || px <= OVERFLOW_X_ROUNDING_PX || frame.policy.overflow === 'none') return null;
   return canvasOverflowXIssue(canvas, frame.viewport, px, frame.policy.overflow);
 }
 

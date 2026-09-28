@@ -182,6 +182,17 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     const fit = await runVisualFit({ compiledCode: COMPONENT, originalPrompt: 'a greeting card' }, { canvases: ['xs-chat-card'] }, fitDeps(280, 85, 200));
     expect(fit.status === 'measured' && fit.issues.map((i) => [i.severity, i.subcategory])).toEqual([['critical', 'canvas-overflow-x']]);
   });
+  it('a 1 px sideways reading is layout rounding, never an overflow; 2 px is', async () => {
+    // scrollWidth and clientWidth are rounded integers, so a fractional layout width can read as 1 px past the card
+    // with nothing a visitor could see. A critical there would buy a re-mint for nothing.
+    const one = fitDeps(280, 85, 1);
+    const { result: r1 } = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a greeting card' }, { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] }, one);
+    expect(r1!.issues.some((i) => i.dimension === 'canvas-overflow-x')).toBe(false);
+    expect(r1!.canvases![0]!.passed).toBe(true);
+    const two = fitDeps(280, 85, 2);
+    const { result: r2 } = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a greeting card' }, { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] }, two);
+    expect(r2!.issues.find((i) => i.dimension === 'canvas-overflow-x')?.severity).toBe('critical');
+  });
   it('a declared box (#1195) mounts the card at the declared width, on the ground', async () => {
     const deps = fitDeps(300);
     const { result } = await runVisualEvaluationDetailed(
