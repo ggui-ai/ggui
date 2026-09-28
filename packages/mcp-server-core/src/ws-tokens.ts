@@ -55,6 +55,7 @@
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { defaultViewKid, deriveViewKey, viewRootFits } from './view-proof.js';
 
 /**
  * Token kinds carried in the `kind` claim. Each discriminator defines
@@ -102,6 +103,18 @@ export interface WsTokenClaims {
    * `rootIat + refresh window`, so the chain ends there.
    */
   readonly rootIat?: number;
+  /**
+   * The key id of the secret that signed the token (ggui#1415): its
+   * `defaultViewKid` at this release. Present only on a token a
+   * key-issuing door minted ({@link mintViewRoot}), whose payload is a
+   * view key's root. A verifier that does not know it ignores it.
+   */
+  readonly kid?: string;
+  /**
+   * Which key-issuing door minted the token (ggui#1415): `result` (a render
+   * or update tool result) or `read` (a view's `resources/read`).
+   */
+  readonly src?: 'result' | 'read';
 }
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
@@ -178,6 +191,8 @@ function mintToken(
     defaultTtlSec: number;
     rootIat?: number;
     notAfter?: number;
+    kid?: string;
+    src?: 'result' | 'read';
   },
   secret: string,
 ): { token: string; claims: WsTokenClaims } {
@@ -195,6 +210,8 @@ function mintToken(
     exp,
     jti: base64url(randomBytes(12)),
     ...(input.rootIat !== undefined ? { rootIat: input.rootIat } : {}),
+    ...(input.kid !== undefined ? { kid: input.kid } : {}),
+    ...(input.src !== undefined ? { src: input.src } : {}),
   };
   const payloadB64 = base64url(Buffer.from(JSON.stringify(claims), 'utf8'));
   const sig = sign(payloadB64, secret);
@@ -224,6 +241,50 @@ export function mintWsToken(
     },
     secret,
   );
+}
+
+/** A key-issuing mint's input: a root ws token, and the door that issues it. */
+export interface MintViewRootInput extends MintTokenInput {
+  readonly src: 'result' | 'read';
+}
+
+/** A root ws token, and the view key rooted in it when its payload fits. */
+export interface MintedViewRoot {
+  readonly token: string;
+  readonly claims: WsTokenClaims;
+  /** `base64url(K)` for the token's payload `P` (ggui#1415). */
+  readonly viewKey?: string;
+  /**
+   * Why no view key was issued: `oversize` when `P` is longer than a proof
+   * can carry. The door logs it (`view_key_not_issued`), and the session
+   * reads as unkeyed rather than as a missing proof.
+   */
+  readonly viewKeyNotIssued?: 'oversize';
+}
+
+/**
+ * Mint a root ws token at a key-issuing door (ggui#1415): an ordinary ws
+ * token to every verifier, stamped with the signing secret's key id and the
+ * door, and the view key derived from its payload. Only the doors that
+ * deliver a view to an app-credentialed caller call this; a bearer door
+ * mints with {@link mintWsToken} and never issues a view key.
+ */
+export function mintViewRoot(input: MintViewRootInput, secret: string): MintedViewRoot {
+  const minted = mintToken(
+    {
+      sessionId: input.sessionId,
+      appId: input.appId,
+      ...(input.ttlSec !== undefined ? { ttlSec: input.ttlSec } : {}),
+      kind: 'ws',
+      defaultTtlSec: DEFAULT_WS_TOKEN_TTL_SEC,
+      kid: defaultViewKid(secret),
+      src: input.src,
+    },
+    secret,
+  );
+  const root = minted.token.split('.')[0] ?? '';
+  if (!viewRootFits(root)) return { ...minted, viewKeyNotIssued: 'oversize' };
+  return { ...minted, viewKey: deriveViewKey(root, secret).toString('base64url') };
 }
 
 /**
@@ -329,6 +390,8 @@ function verifySignedClaims(
       typeof raw.exp !== 'number' ||
       typeof raw.jti !== 'string' ||
       (raw.rootIat !== undefined && typeof raw.rootIat !== 'number') ||
+      (raw.kid !== undefined && typeof raw.kid !== 'string') ||
+      (raw.src !== undefined && raw.src !== 'result' && raw.src !== 'read') ||
       (raw.kind !== 'ws' &&
         raw.kind !== 'session' &&
         raw.kind !== 'console-session')
@@ -343,6 +406,8 @@ function verifySignedClaims(
       exp: raw.exp,
       jti: raw.jti,
       ...(typeof raw.rootIat === 'number' ? { rootIat: raw.rootIat } : {}),
+      ...(typeof raw.kid === 'string' ? { kid: raw.kid } : {}),
+      ...(raw.src === 'result' || raw.src === 'read' ? { src: raw.src } : {}),
     };
   } catch {
     return { ok: false, reason: 'malformed_claims' };

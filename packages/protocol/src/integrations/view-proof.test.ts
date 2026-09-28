@@ -25,6 +25,7 @@ import {
   viewProofBoundArgs,
   viewProofCallBytes,
 } from './view-proof.js';
+import type { JsonValue } from '../types/data-contract.js';
 
 const [vector] = VIEW_PROOF_V1_VECTORS;
 const b64u = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
@@ -154,7 +155,7 @@ describe('parseViewProof (ggui#1415)', () => {
 
   it('names why a value is not a proof, and never throws', () => {
     const claims = { sessionId: 's', appId: 'a', kind: 'ws', iat: 1, exp: 2, jti: 'j', kid: 'k' };
-    const cases: Array<[unknown, string]> = [
+    const cases: Array<[JsonValue | undefined, string]> = [
       [undefined, 'malformed'],
       [42, 'malformed'],
       ['a'.repeat(1025), 'malformed'],
@@ -169,7 +170,7 @@ describe('parseViewProof (ggui#1415)', () => {
       [withRoot(rootOf({ ...claims, kind: 'session' })), 'wrong_kind'],
     ];
     for (const [value, reason] of cases) {
-      const parsed = parseViewProof(value as Parameters<typeof parseViewProof>[0]);
+      const parsed = parseViewProof(value);
       expect(parsed, String(value).slice(0, 40)).toEqual({ ok: false, reason });
     }
     expect(parseViewProof(withRoot(rootOf(claims)))).toMatchObject({ ok: true, proof: { claims } });

@@ -78,6 +78,7 @@ export * from './kv-store.js';
 // credential mint + verify. General (not MCP-Apps-specific); MCP Apps
 // outbound delivery is today's only consumer.
 export * from './ws-tokens.js';
+export * from './view-proof.js';
 
 // Stable-identity registry for external MCP servers. General seam;
 // MCP Apps inbound hosting is today's primary consumer.
