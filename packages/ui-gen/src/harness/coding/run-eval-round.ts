@@ -932,6 +932,10 @@ export async function runEvalRound(
     visualIssues = visual?.issues ?? null;
     // ggui#1522 — the in-loop visual judge's own spend: recorded in the tracker at the VISUAL agent's model, so
     // `canContinue()` sees it, and carried apart from `evalTokens` (the text evaluator's model).
+    // The report-only criteria calls (ggui#1436) count toward the cap too, deliberately: the cap bounds MONEY SPENT,
+    // and a cap that left out real spend would under-count exactly as this leg did before. So under a tight cap a
+    // configured criteria bank's calls can end the eval loop earlier — the one place a report-only block reaches an
+    // outcome, and it does so through its cost, never through its answers. The tracker's total feeds no metered figure.
     inLoopVisualTokens = visual?.tokens;
     if (inLoopVisualTokens !== undefined) {
       costTracker.record(visualEvalAgent.model, inLoopVisualTokens.inputTokens, inLoopVisualTokens.outputTokens);
