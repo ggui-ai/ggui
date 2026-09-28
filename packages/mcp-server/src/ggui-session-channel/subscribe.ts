@@ -199,10 +199,12 @@ export interface SubscribeHandlers {
    * The transport-neutral subscribe tail, order preserved exactly:
    * stream-cursor snapshot → stream-buffer replay read → StreamFanout
    * iterator → register (pump starts; every write to the subscriber's
-   * sink is held until the replay below is written, ggui#1525) → ack →
-   * GguiSessionEvent-ledger replay (`render_event` frames, `resumeId` =
-   * ledger seq) → stream-replay `data` frames → release of the held
-   * frames. WS `handleSubscribe` calls this after
+   * sink is held until the replay below is written, ggui#1525) → the
+   * first GguiSessionEvent-ledger page read, when `sinceSequence` is set
+   * (before the ack, so a failed read sends none, ggui#1528) → ack →
+   * ledger replay (`render_event` frames, `resumeId` = ledger seq; later
+   * pages read as they go) → stream-replay `data` frames → release of the
+   * held frames. WS `handleSubscribe` calls this after
    * its auth/provision head; SSE attaches call it via
    * `GguiSessionChannelServer.attachExternalSubscriber`.
    *
@@ -749,6 +751,22 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // failure that repeats for one render (a row the store cannot read)
     // would become a tight reconnect loop per open view.
     try {
+      // The first ledger page is read BEFORE the ack (ggui#1528). It is the
+      // read that can fail for a row the store cannot read, and failing
+      // before the ack means the client gets no ack for a subscribe that
+      // could not complete: a client whose retry budget resets on an
+      // accepted ack then counts the attempt as failed and backs off to
+      // its cap, instead of reconnecting once a second forever. Only the
+      // first page: every SSE open carries `sinceSequence`, often 0, so
+      // reading every page first would hold a render's whole ledger in
+      // memory per open. Later pages stream after the ack as before.
+      const sinceSeqValid =
+        args.sinceSequence !== undefined && Number.isInteger(args.sinceSequence) && args.sinceSequence >= 0
+          ? args.sinceSequence
+          : undefined;
+      const firstLedgerPage =
+        sinceSeqValid !== undefined ? await deps.renderStore.listEventsSince(stored.id, sinceSeqValid, 100) : undefined;
+
       deps.logger.info("render_channel_subscribed", {
         sessionId: stored.id,
         appId: stored.appId,
@@ -809,8 +827,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       // re-mounted state. Client recovery: re-mount from a fresh /state
       // read (WS) / the already-delivered ack (SSE).
       if (args.sinceSequence !== undefined) {
-        const sinceSeq = args.sinceSequence;
-        if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
+        if (sinceSeqValid === undefined) {
           sink.write({
             type: "error",
             payload: {
@@ -820,11 +837,15 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
             ...(args.requestId ? { requestId: args.requestId } : {}),
           });
         } else {
+          const sinceSeq = sinceSeqValid;
           let cursor = sinceSeq;
           let firstPage = true;
           for (;;) {
-            const ledger = await deps.renderStore.listEventsSince(stored.id, cursor, 100);
-            if (ledger === null) {
+            // The first page was read before the ack; later pages are read here.
+            const ledger = firstPage
+              ? firstLedgerPage
+              : await deps.renderStore.listEventsSince(stored.id, cursor, 100);
+            if (ledger === null || ledger === undefined) {
               // GguiSession disappeared between resolve and ledger read —
               // already handled by the broader error envelope path;
               // nothing to do here.

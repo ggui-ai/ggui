@@ -457,6 +457,10 @@ describe('completeSubscribe — the replay is on the wire before any live frame 
     store.open();
     expect(await closed).toBe(1011);
     expect(fx.channel.subscriberCount).toBe(0);
+    // The first ledger page is read before the ack, so a failed read sends
+    // none: a client whose retry budget resets on an accepted ack counts
+    // the attempt as failed and backs off to its cap, rather than looping.
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
   }, 5_000);
 
   it('an external (SSE) attach whose ledger read fails rejects, ends its sink with internal_error and leaves no subscriber (ggui#1528)', async () => {
