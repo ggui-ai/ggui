@@ -102,6 +102,13 @@ export interface LadderSetOptions {
 export interface LadderSet {
   /** Bind the boot ladder. The caller handles its first ack, or its refusal. */
   connectBoot(spec: LadderSpec): Promise<RegistrySubscribeHandle>;
+  /**
+   * The boot ladder's first refresh, when it reported an expiry; `undefined`
+   * when it reported none. A WS frame is classified in the same task that
+   * dispatches it, so a `BOOTSTRAP_EXPIRED` refusal has already asked for its
+   * refresh by the time `connectBoot` resolves with it.
+   */
+  bootRefresh(): Promise<RefreshOutcome> | undefined;
   /** Send on the active ladder's WS, when it has one. */
   send(msg: Parameters<WsTransportHandle['send']>[0]): void;
 }
@@ -118,6 +125,8 @@ interface LadderState {
   bridgeEntered: boolean;
   polling410Seen: boolean;
   lastStatus: ConnectionStatus | undefined;
+  /** The first refresh this ladder asked for, when it reported an expiry. */
+  refresh: Promise<RefreshOutcome> | undefined;
 }
 
 interface Ladder extends LadderState {
@@ -194,7 +203,9 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     const credential = ladder.spec.credential;
     const controller = opts.controller;
     if (controller === null || credential === undefined || ladder.disposed) return;
-    const outcome = await controller.onExpired(credential, source);
+    const pending = controller.onExpired(credential, source);
+    if (ladder.refresh === undefined) ladder.refresh = pending;
+    const outcome = await pending;
     opts.onRefresh?.(source, outcome);
     if (outcome.kind === 'adopted') rebind(ladder, outcome.credential, source);
   };
@@ -212,6 +223,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
       bridgeEntered: false,
       polling410Seen: false,
       lastStatus: undefined,
+      refresh: undefined,
     };
     const classifyFrame: FrameClassifier = (frame) => {
       ladder.wsFrameSeen = true;
@@ -370,9 +382,11 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     );
   };
 
+  let bootLadder: Ladder | undefined;
   return {
     async connectBoot(spec) {
       const ladder = build(spec, false, false);
+      bootLadder = ladder;
       active = ladder;
       holder = ladder;
       const result = await bind(ladder);
@@ -381,6 +395,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
       }
       return result;
     },
+    bootRefresh: () => bootLadder?.refresh,
     send(msg) {
       const handle = active?.handle;
       if (handle !== undefined && handle.kind === 'ws') handle.send(msg);

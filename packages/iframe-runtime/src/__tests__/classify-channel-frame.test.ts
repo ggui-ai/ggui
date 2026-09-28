@@ -38,10 +38,15 @@ describe('classifyChannelFrame (ggui#1496)', () => {
 
   it('every ChannelRegistry the runtime builds is given the classifier', () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const src = readFileSync(resolve(here, '..', 'runtime.ts'), 'utf8');
-    const builds = src.split('new ChannelRegistry({').length - 1;
-    const given = src.split('classifyFrame: classifyChannelFrame').length - 1;
-    expect(builds).toBeGreaterThan(0);
-    expect(given).toBe(builds);
+    const read = (file: string): string => readFileSync(resolve(here, '..', file), 'utf8');
+    // The ladder set builds every registry the runtime binds (ggui#1496),
+    // one per credential; runtime.ts builds none of its own.
+    expect(read('runtime.ts').split('new ChannelRegistry({').length - 1).toBe(0);
+    const ladders = read('ladders.ts');
+    expect(ladders.split('new ChannelRegistry({').length - 1).toBe(1);
+    // Its per-ladder classifier observes the frame, then answers with this
+    // one's verdict, and that classifier is what the registry is given.
+    expect(ladders.split('return classifyChannelFrame(frame);').length - 1).toBe(1);
+    expect(ladders.split('      classifyFrame,\n').length - 1).toBe(1);
   });
 });

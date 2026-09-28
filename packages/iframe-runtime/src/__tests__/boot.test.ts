@@ -557,9 +557,12 @@ describe('bootSequence — failover-ladder composition (WS → SSE → polling �
     });
 
     // SSE rung: verbatim server-stamped URL + cursor seeded from the
-    // boot snapshot's lastSequence.
+    // boot snapshot's lastSequence, read when the rung connects
+    // (ggui#1496: a function, so a rung built early opens from the
+    // cursor as it stands then).
     expect(opts.sse?.url).toBe(SSE_URL);
-    expect(opts.sse?.initialSinceSequence).toBe(7);
+    const seed = opts.sse?.initialSinceSequence;
+    expect(typeof seed === 'function' ? seed() : seed).toBe(7);
 
     // Polling rung: cursor-aware URL reads the SAME seed.
     expect(opts.polling).toBeDefined();

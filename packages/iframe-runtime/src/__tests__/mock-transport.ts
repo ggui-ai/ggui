@@ -74,6 +74,13 @@ export class MockTransport implements Transport {
   /** Reply queue keyed by method. FIFO per method. */
   private readonly replies = new Map<string, QueuedReply[]>();
 
+  /**
+   * Reply by the request's params, for a method whose concurrent calls
+   * need different answers (two tools behind one `tools/call`). Consulted
+   * when the method's FIFO queue is empty.
+   */
+  private readonly responders = new Map<string, (params: unknown) => QueueResponseOptions>();
+
   /** Outbound message capture — every payload sent by the bound peer. */
   public readonly sent: JSONRPCMessage[] = [];
 
@@ -118,6 +125,20 @@ export class MockTransport implements Transport {
     if (!hasId || typeof bag.method !== 'string') return;
 
     const queued = this.replies.get(bag.method);
+    const responder = this.responders.get(bag.method);
+    if ((queued === undefined || queued.length === 0) && responder !== undefined) {
+      const opts = responder((message as { params?: unknown }).params);
+      const id = bag.id as number | string;
+      const out = (
+        opts.error !== undefined
+          ? { jsonrpc: '2.0', id, error: { code: opts.error.code ?? -32000, message: opts.error.message } }
+          : { jsonrpc: '2.0', id, result: opts.result ?? {} }
+      ) as JSONRPCMessage;
+      queueMicrotask(() => {
+        if (this.onmessage !== undefined) this.onmessage(out);
+      });
+      return;
+    }
     if (queued === undefined || queued.length === 0) return;
     const reply = queued.shift();
     if (reply === undefined) return;
@@ -142,6 +163,11 @@ export class MockTransport implements Transport {
    * When {@link QueueResponseOptions.error} is set, builds the error
    * envelope instead.
    */
+  /** Answer every request of `method` (once its FIFO queue is empty) by its params. */
+  respondBy(method: string, responder: (params: unknown) => QueueResponseOptions): void {
+    this.responders.set(method, responder);
+  }
+
   queueResponse(method: string, opts: QueueResponseOptions): void {
     const list = this.replies.get(method) ?? [];
     const buildReply: QueuedReplyFactory = (id) => {

@@ -65,6 +65,7 @@ import type {
   McpAppAiGguiMetaParseResult,
 } from './types.js';
 import { createStreamSeqTracker, type StreamSeqTracker } from './stream-seq.js';
+import { createLadderSet } from './ladders.js';
 import {
   BOOT_REFRESH_RETRIES,
   createCredentialController,
@@ -99,8 +100,7 @@ import {
   type ChannelTransportRouter,
 } from './channel-transport.js';
 import { RelayIncapableError } from './relay-incapability.js';
-import { ChannelRegistry } from '@ggui-ai/live-channel';
-import type { WsTransportHandle } from '@ggui-ai/live-channel';
+import type { ChannelHandler, WsTransportHandle } from '@ggui-ai/live-channel';
 import {
   createTelemetrySink,
   type TelemetrySink,
@@ -114,16 +114,11 @@ import {
   createRenderHandler,
 } from './channels/index.js';
 import {
-  classifyChannelFrame,
   connectViaRegistry,
   type ConnectFn,
   type RegistrySubscribeHandle,
 } from './registry-subscribe.js';
-import {
-  buildBridgePolling,
-  buildEventsPolling,
-  createSequenceCursor,
-} from './events-polling.js';
+import { createSequenceCursor } from './events-polling.js';
 import { unwrapCallToolResult } from './call-tool-unwrap.js';
 import {
   ensureStatusDom,
@@ -771,12 +766,6 @@ export interface RendererHooks {
    */
   setup(params: {
     readonly meta: McpAppAiGguiRenderMeta;
-    /**
-     * The view's live token as of NOW (ggui#1496): a subscribe frame reads
-     * it when the frame is built, never `meta.wsToken`, so a credential the
-     * view adopted reaches the next subscribe payload.
-     */
-    readonly currentWsToken: () => string | undefined;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
@@ -842,20 +831,17 @@ export interface RendererHandle {
    */
   readonly channelTransport: ChannelTransportRouter;
   /**
-   * Channel-client registry holding handlers for every WS frame type
-   * the iframe routes (`render`, `data`, `props_update`, `drain_ack`,
-   * `channel_payload`, `channel_error`). The
-   * registry-bound transport is the sole dispatch surface — frames
-   * arrive directly through registered handlers, no longer through a
+   * The handlers for every frame type the iframe routes (`render`,
+   * `data`, `props_update`, `drain_ack`, `channel_payload`,
+   * `channel_error`). Frames arrive directly through them, not through a
    * separate `onMessage` callback.
    *
-   * `bootSequence` calls `registry.bind(...)` indirectly through the
-   * `connectFn` seam after `setup()` returns. Post-bind, registration
-   * of new handlers is frozen (the registry guards against it); the
-   * `subscribe-handshake` handlers (`ack`, `error`) are added by
-   * `connectViaRegistry` and consumed during handshake resolution.
+   * `bootSequence`'s ladder set (ggui#1496) registers these same objects
+   * on each ladder's registry, one per credential, behind a gate that
+   * lets only the ladder holding the data deliver. `connectViaRegistry`
+   * adds the per-ladder `subscribe-handshake` handlers (`ack`, `error`).
    */
-  readonly channelRegistry: ChannelRegistry;
+  readonly channelHandlers: readonly ChannelHandler[];
   /**
    * The view's stream cursor (ggui#1496): the highest stamped `data`
    * envelope `seq` applied. The `data` handler dedupes on it, and a new
@@ -1156,7 +1142,6 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
   let liveMeta: McpAppAiGguiRenderMeta = meta;
-  const currentWsToken = (): string | undefined => liveMeta.wsToken;
 
   // Renderer wiring — when supplied, the handler routes frames through
   // the single-render mount surface + WireConfig + StreamBus. When
@@ -1169,7 +1154,6 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     rendererHooks !== undefined
       ? rendererHooks.setup({
           meta,
-          currentWsToken,
           renderInto: refs.renderRoot,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -1205,22 +1189,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 
   setStatus(refs, `Connecting to ${meta.sessionId}…`, 'connecting');
 
-  // Boot-without-renderer path: we still need a ChannelRegistry to
-  // receive frames, because the registry is the only dispatch
-  // surface. Build a minimal one with just the `render` placeholder
-  // handler so non-renderer consumers (boot.test.ts) can observe
-  // bootstrap-orchestration outcomes without paying React import
-  // cost. The handler logs status but does not mount React.
-  const placeholderRegistry =
-    renderer === null
-      ? createPlaceholderRegistry({
-          meta,
-          currentWsToken,
-          statusRefs: refs,
-          pinnedSessionId,
-        })
-      : null;
-  const activeRegistry = renderer?.channelRegistry ?? placeholderRegistry!;
+  // The handlers every ladder delivers through. Boot-without-renderer
+  // (boot.test.ts) gets just the `render` placeholder handler, so
+  // non-renderer consumers observe bootstrap-orchestration outcomes
+  // without paying React import cost; it logs status but does not mount
+  // React.
+  const channelHandlers: readonly ChannelHandler[] =
+    renderer?.channelHandlers ??
+    createPlaceholderHandlers({ statusRefs: refs, pinnedSessionId });
 
   /**
    * Apply an ack's render snapshot to the runtime — when the ack
@@ -1519,92 +1495,78 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, mountedRender };
   }
 
+  // The ladder set (ggui#1496) owns every ladder this view binds: the boot
+  // ladder below, and each one an adopted credential builds after it. It
+  // composes a ladder's fallback rungs (WS → SSE → polling → bridge-pull)
+  // from the credential's server-stamped wsToken-gated URLs and the shared
+  // cursor seeded from `meta.lastSequence` — same cursor model as the WS
+  // `sinceSequence` replay, so switching transports loses no event. The
+  // bridge rung, the universal floor for CSP-jailed hosts (claude.ai),
+  // exists whenever the App handle is bound.
+  const ladders = createLadderSet({
+    meta,
+    handlers: channelHandlers,
+    cursor: ladderCursor,
+    streamSeq: renderer?.streamSeq,
+    controller: credentialController,
+    connectFn,
+    bridgeCallTool:
+      bridgeApp !== null
+        ? (name, args) => bridgeApp.callServerTool({ name, arguments: args })
+        : undefined,
+    onStatus: (status) => {
+      telemetry?.record(`status.${status}`);
+      setStatus(
+        refs,
+        status === 'connected' ? 'Connected.' : `Connection ${status}…`,
+        status,
+      );
+      // Propagate WS status to the per-channel transport router so
+      // it can flip WS-bound channels into polling
+      // fallback (on disconnect) and re-send `channel_subscribe`
+      // on reconnect. No-op when renderer wiring is absent.
+      if (renderer !== null) {
+        renderer.channelTransport.onWsStatusChange(status);
+      }
+    },
+    // Reconnect-with-rebootstrap — every ack after the boot's first one,
+    // from the ladder holding the data (a WS reconnect's, or a rebuilt
+    // ladder's), reapplies the server's authoritative `render` snapshot:
+    // a render or update that landed while the live channel was down
+    // restores without an agent re-prompt. The first render a refreshing
+    // boot receives this way is its code-ready.
+    onAck: (ack) => {
+      void applyAck(ack).then(() => {
+        if (mountedRender !== null) emitCodeReadyOnce();
+      });
+    },
+    onRefresh: (source, outcome) => {
+      telemetry?.record(
+        'credential.refresh',
+        `${source}:${outcome.kind === 'refused' ? `refused:${outcome.code}` : outcome.kind}`,
+      );
+    },
+    // Live-channel diagnostics tap — every channel_* event the
+    // transports emit (failover swaps, polling budget exhaustion,
+    // SSE lifecycle) lands in the telemetry buffer. Without this the
+    // ladder's story on sandboxed hosts is unobservable.
+    ...(telemetry !== null ? { logger: telemetry.channelLogger } : {}),
+    // Typed errors and observability from each subscribe, forwarded
+    // through the runtime's own emitters.
+    ...(onProtocolError !== undefined ? { onProtocolError } : {}),
+    ...(onObserve !== undefined ? { onObserve } : {}),
+  });
+  // The boot ladder carries the controller's credential object itself, so
+  // an expiry it reports is recognised as the current credential's.
+  const bootCredential: HeldCredential | undefined = hasLiveTrio(liveMeta)
+    ? (credentialController?.current() ?? heldCredentialOf(liveMeta))
+    : undefined;
   let handle: RegistrySubscribeHandle;
   try {
-    handle = await connectFn({
-      meta: liveMeta,
-      registry: activeRegistry,
-      // Live-channel diagnostics tap — every channel_* event the
-      // transports emit (failover swaps, polling budget exhaustion,
-      // SSE lifecycle) lands in the telemetry buffer. Without this the
-      // ladder's story on sandboxed hosts is unobservable.
-      ...(telemetry !== null ? { logger: telemetry.channelLogger } : {}),
-      onStatusChange: (status) => {
-        telemetry?.record(`status.${status}`);
-        setStatus(
-          refs,
-          status === 'connected' ? 'Connected.' : `Connection ${status}…`,
-          status,
-        );
-        // Propagate WS status to the per-channel transport router so
-        // it can flip WS-bound channels into polling
-        // fallback (on disconnect) and re-send `channel_subscribe`
-        // on reconnect. No-op when renderer wiring is absent.
-        if (renderer !== null) {
-          renderer.channelTransport.onWsStatusChange(status);
-        }
-      },
-      // Forward typed errors from subscribe through the runtime's
-      // own emitter — connectViaRegistry classifies transport + auth
-      // + version + protocol errors on its own, we just plumb them
-      // along.
-      ...(onProtocolError !== undefined ? { onProtocolError } : {}),
-      // Forward observability emissions — connectFn owns the
-      // schema-version-mismatch + subscribe-failed kinds.
-      ...(onObserve !== undefined ? { onObserve } : {}),
-      // Reconnect-with-rebootstrap — on every ack received AFTER the
-      // initial handshake settled, reapply the server's authoritative
-      // `render` snapshot. A render or update that landed during a WS
-      // dropout window restores here without an agent re-prompt.
-      onResubscribeAck: (ack) => {
-        void applyAck(ack);
-      },
-      // Failover-ladder fallback rungs (WS → SSE → polling →
-      // bridge-pull), composed once at bind time from the
-      // server-stamped wsToken-gated URLs + `meta.lastSequence`
-      // (shared cursor seed). FailoverHandle descends a rung on each
-      // 'failed'; the bridge rung is terminal (never emits 'failed').
-      //
-      // Same cursor model as the WS subscribe `sinceSequence` replay
-      // path — switching transports does not lose events.
-      ...(sseUrl !== undefined && ladderCursor !== undefined
-        ? {
-            sse: {
-              url: sseUrl,
-              initialSinceSequence: ladderCursor.get(),
-              onSequence: (seq: number) => {
-                ladderCursor.advance(seq);
-              },
-            },
-          }
-        : {}),
-      ...(pollingBaseUrl !== undefined && ladderCursor !== undefined
-        ? {
-            polling: buildEventsPolling({
-              baseUrl: pollingBaseUrl,
-              cursor: ladderCursor,
-            }),
-          }
-        : {}),
-      // Bridge-pull terminal rung — composed whenever the App handle
-      // is bound (it always is by this point in the boot: connectApp
-      // succeeded and setCurrentApp ran above), INDEPENDENT of
-      // sseUrl/pollingUrl presence. This is the universal floor for
-      // CSP-jailed hosts (claude.ai) where the iframe has no network
-      // path at all: the ledger is pulled via `ggui_runtime_pull`
-      // `tools/call`s over the host's postMessage bridge. Shares the
-      // SAME ladder cursor — a demotion into the bridge resumes from
-      // whatever the rungs above already delivered.
-      ...(bridgeApp !== null && ladderCursor !== undefined
-        ? {
-            bridge: buildBridgePolling({
-              callTool: (name, args) =>
-                bridgeApp.callServerTool({ name, arguments: args }),
-              sessionId: meta.sessionId,
-              cursor: ladderCursor,
-            }),
-          }
-        : {}),
+    handle = await ladders.connectBoot({
+      credential: bootCredential,
+      sseUrl,
+      pollingUrl: pollingBaseUrl,
     });
   } catch (err) {
     // UPGRADE_REQUIRED is TERMINAL even when static content already
@@ -1624,9 +1586,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return endOnSubscribeFailure(err instanceof Error ? err.message : String(err));
   }
   // A pre-ack auth-class refusal resolves with the ladder instead of
-  // rejecting (ggui#1496 fact 3); the boot ends on it as it did on the
-  // rejection.
-  if (handle.refused !== undefined) {
+  // rejecting (ggui#1496 fact 3). For an expired credential the boot
+  // ladder has already asked for a refresh; when it adopts a new one, the
+  // ladder that credential builds takes the view over, so the boot goes on
+  // wiring. A refresh that is skipped or refused, and any other refusal,
+  // end the boot as the rejection did.
+  const bootRefresh =
+    handle.refused?.code === 'BOOTSTRAP_EXPIRED' ? await ladders.bootRefresh() : undefined;
+  const refreshing = bootRefresh?.kind === 'adopted';
+  if (handle.refused !== undefined && !refreshing) {
     return endOnSubscribeFailure(handle.refused.message ?? handle.refused.code);
   }
 
@@ -1641,7 +1609,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // ride app.callServerTool, not the transport), so its sends drop —
   // the same posture a post-swap FailoverHandle already has.
   const transportSend = (msg: Parameters<WsTransportHandle['send']>[0]): void => {
-    if (handle.handle.kind === 'ws') handle.handle.send(msg);
+    // The active ladder's WS (ggui#1496): after a rebind, the new one's.
+    ladders.send(msg);
   };
   if (renderer !== null && rendererHooks?.attachManager !== undefined) {
     rendererHooks.attachManager(renderer, { send: transportSend });
@@ -1676,6 +1645,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   if (handle.ack !== undefined) {
     await applyAck(handle.ack);
   }
+  if (refreshing) {
+    // A refreshed credential was adopted and its ladder is binding; it takes
+    // the view over at its ack, which applies the render (and code-ready
+    // with it). Until then the active ladder's own status stands.
+    if (mountedRender !== null) emitCodeReadyOnce();
+    return { ok: true, mountedRender };
+  }
   setConnectedStatus(refs);
   // Lifecycle `code-ready` — terminal happy state. Emitted ONCE per boot
   // (a static+live meta already fired it from the seed mount, so this is
@@ -1688,43 +1664,24 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 }
 
 /**
- * Build a minimal `ChannelRegistry` for boot paths without renderer
- * wiring (boot.test.ts + the C7a placeholder-only spec). The registry
- * carries just the `render` handler — which logs status but does not
- * mount React — so consumers can observe bootstrap-orchestration
- * outcomes without paying React import cost. Every other frame type
- * silently drops. Production boots through `bootProduction` which
- * supplies a fully-populated renderer with the rich handler set.
+ * The handler set for boot paths without renderer wiring (boot.test.ts +
+ * the C7a placeholder-only spec): just the `render` handler — which logs
+ * status but does not mount React — so consumers can observe
+ * bootstrap-orchestration outcomes without paying React import cost.
+ * Every other frame type silently drops. Production boots through
+ * `bootProduction`, whose renderer supplies the rich handler set.
  */
-function createPlaceholderRegistry(params: {
-  readonly meta: McpAppAiGguiRenderMeta;
-  /** See {@link RendererHooks.setup}'s `currentWsToken`. */
-  readonly currentWsToken: () => string | undefined;
+function createPlaceholderHandlers(params: {
   readonly statusRefs: StatusRefs;
   /** Pin — render frames with a different sessionId drop with a warning. */
   readonly pinnedSessionId: string;
-}): ChannelRegistry {
-  const registry = new ChannelRegistry({
-    subscribeFrameBuilder: () => {
-      const wsToken = params.currentWsToken();
-      return {
-        type: 'subscribe',
-        payload: {
-          sessionId: params.meta.sessionId,
-          appId: params.meta.appId,
-          ...(wsToken !== undefined ? { wsToken } : {}),
-        },
-      };
-    },
-    classifyFrame: classifyChannelFrame,
-  });
-  registry.register(
+}): readonly ChannelHandler[] {
+  return [
     createRenderHandler({
       statusRefs: params.statusRefs,
       pinnedSessionId: params.pinnedSessionId,
     }),
-  );
-  return registry;
+  ];
 }
 
 /**
@@ -4821,7 +4778,7 @@ async function bootProduction(opts: {
   // Renderer wiring hook — constructs buses + single-render mount surface
   // + wire config on demand inside bootSequence.
   const renderer: RendererHooks = {
-    setup: ({ meta, currentWsToken, renderInto, statusRefs, onObserve }) => {
+    setup: ({ meta, renderInto, statusRefs, onObserve }) => {
       // Post-Phase-B `meta` is the flat render slice — `sessionId` /
       // `appId` / `runtimeUrl` / `wsUrl` / `wsToken` / `themeId` /
       // `gadgets` / `publicEnv` / `contextSlots` /
@@ -5293,31 +5250,17 @@ async function bootProduction(opts: {
           : {}),
       });
 
-      // B3b — live-channel registry owns dispatch for every routable
-      // WS frame type. Each handler closes over the renderer state it
-      // needs. `bootSequence` calls `connectFn` (default
-      // `connectViaRegistry`) which registers the `ack` + `error`
-      // handshake handlers and binds the WS transport — frames then
-      // arrive directly through the registered handlers without an
-      // intermediate `onMessage` fan-out.
+      // B3b — the handler for every routable frame type, each closing
+      // over the renderer state it needs. The runtime's ladder set
+      // (ggui#1496) registers these same handler objects on every ladder
+      // it binds, one registry per credential; `connectViaRegistry` adds
+      // the `ack` + `error` handshake handlers and binds the transport,
+      // and frames arrive directly through them.
       //
       // CLIENT_SUPPORTED_VERSIONS handshake is enforced inside
       // `connectViaRegistry`'s ack-handler closure (NOT here).
-      const channelRegistry = new ChannelRegistry({
-        subscribeFrameBuilder: () => {
-          const wsToken = currentWsToken();
-          return {
-            type: 'subscribe',
-            payload: {
-              sessionId: meta.sessionId,
-              appId: meta.appId,
-              ...(wsToken !== undefined ? { wsToken } : {}),
-            },
-          };
-        },
-        classifyFrame: classifyChannelFrame,
-      });
-      channelRegistry.register(
+      const channelHandlers: ChannelHandler[] = [];
+      channelHandlers.push(
         createRenderHandler({
           statusRefs,
           pinnedSessionId: meta.sessionId,
@@ -5326,7 +5269,7 @@ async function bootProduction(opts: {
         }),
       );
       const streamSeq = createStreamSeqTracker();
-      channelRegistry.register(
+      channelHandlers.push(
         createDataHandler({
           getCurrentGguiSession: () => currentRender,
           streamBus,
@@ -5349,7 +5292,7 @@ async function bootProduction(opts: {
         currentTelemetrySink?.record('epoch.frozen', String(selfEpoch));
         applyFreezeCue(renderInto);
       };
-      channelRegistry.register(
+      channelHandlers.push(
         createPropsUpdateHandler({
           getCurrentGguiSession: () => currentRender,
           applyRender,
@@ -5358,15 +5301,15 @@ async function bootProduction(opts: {
           isSuperseded: () => superseded,
         }),
       );
-      channelRegistry.register(
+      channelHandlers.push(
         createDrainAckHandler({ dispatch: dispatchDrainAck }),
       );
-      channelRegistry.register(
+      channelHandlers.push(
         createChannelPayloadHandler({
           getChannelTransport: () => channelTransport,
         }),
       );
-      channelRegistry.register(
+      channelHandlers.push(
         createChannelErrorHandler({
           getChannelTransport: () => channelTransport,
         }),
@@ -5381,7 +5324,7 @@ async function bootProduction(opts: {
         validatorCtx,
         manager,
         channelTransport,
-        channelRegistry,
+        channelHandlers,
         streamSeq,
         composedGadgets,
       };
