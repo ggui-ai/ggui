@@ -167,6 +167,25 @@ export function viewProofCallBytes(call: ViewProofCallFields): Uint8Array {
   ]);
 }
 
+/**
+ * The key-issuing doors a root can name in its `src` claim: `result` (a
+ * render or update tool result) and `read` (a view's `resources/read`).
+ * The only list of them. A closed set: a root naming any other value is
+ * refused (`parseViewProof` reads it `malformed`, the ws token verifier
+ * `malformed_claims`). So a new door's value is added here one release
+ * BEFORE any door mints with it, and a door mints it only once no replica
+ * that refuses it is left in the roll (VERSION-POLICY §3.6, the sender
+ * obligation). Adding a value and minting with it in one release makes
+ * every older replica in a roll refuse that door's tokens.
+ */
+export const VIEW_ROOT_SRC = ['result', 'read'] as const;
+export type ViewRootSrc = (typeof VIEW_ROOT_SRC)[number];
+
+/** Whether a value is one of {@link VIEW_ROOT_SRC}. */
+export function isViewRootSrc(value: unknown): value is ViewRootSrc {
+  return value === 'result' || value === 'read';
+}
+
 /** The claims a proof's root `P` carries, as the verifier reads them. */
 export interface ViewRootClaims {
   readonly sessionId: string;
@@ -176,7 +195,8 @@ export interface ViewRootClaims {
   readonly exp: number;
   readonly jti: string;
   readonly kid: string;
-  readonly src?: 'result' | 'read';
+  /** The key-issuing door: one of {@link VIEW_ROOT_SRC}, a closed set (read its rule before widening it). */
+  readonly src?: ViewRootSrc;
 }
 
 /** A parsed v1 proof: its fields, and the claims its root decodes to (not yet authenticated). */
@@ -236,7 +256,7 @@ function decodeRootClaims(root: string): ViewRootClaims | ViewProofParseFailure 
     typeof kid !== 'string' ||
     typeof iat !== 'number' ||
     typeof exp !== 'number' ||
-    (src !== undefined && src !== 'result' && src !== 'read')
+    (src !== undefined && !isViewRootSrc(src))
   ) {
     return 'malformed';
   }

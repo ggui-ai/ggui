@@ -25,6 +25,7 @@ import {
   viewProofCallBytes,
   type ViewProofParseFailure,
   type ViewProofTool,
+  type ViewRootSrc,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { JsonObject } from '@ggui-ai/protocol';
 
@@ -71,7 +72,7 @@ export type ViewProofInvalidReason =
 /** What a valid proof lets the server observe; none of it gates. */
 export interface ViewProofObservations {
   readonly kid: string;
-  readonly src?: 'result' | 'read';
+  readonly src?: ViewRootSrc;
   /** The root envelope's issued-at and expiry, epoch seconds. */
   readonly rootIat: number;
   readonly rootExp: number;

@@ -55,6 +55,7 @@
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { isViewRootSrc, type ViewRootSrc } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { defaultViewKid, deriveViewKey, viewRootFits } from './view-proof.js';
 
 /**
@@ -113,8 +114,17 @@ export interface WsTokenClaims {
   /**
    * Which key-issuing door minted the token (ggui#1415): `result` (a render
    * or update tool result) or `read` (a view's `resources/read`).
+   *
+   * A closed set, `VIEW_ROOT_SRC` in `@ggui-ai/protocol`: this release's
+   * verifier refuses a token carrying any other value
+   * (`malformed_claims`). So a new door's value is accepted by verifiers
+   * one release BEFORE any door mints with it, and a door starts minting it
+   * only once no replica that refuses it is left in the roll
+   * (VERSION-POLICY §3.6, the sender obligation). Adding the value and
+   * minting with it in one release makes every older replica in a roll
+   * refuse that door's tokens.
    */
-  readonly src?: 'result' | 'read';
+  readonly src?: ViewRootSrc;
 }
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
@@ -192,7 +202,7 @@ function mintToken(
     rootIat?: number;
     notAfter?: number;
     kid?: string;
-    src?: 'result' | 'read';
+    src?: ViewRootSrc;
   },
   secret: string,
 ): { token: string; claims: WsTokenClaims } {
@@ -245,7 +255,7 @@ export function mintWsToken(
 
 /** A key-issuing mint's input: a root ws token, and the door that issues it. */
 export interface MintViewRootInput extends MintTokenInput {
-  readonly src: 'result' | 'read';
+  readonly src: ViewRootSrc;
 }
 
 /** A root ws token, and the view key rooted in it when its payload fits. */
@@ -391,7 +401,7 @@ function verifySignedClaims(
       typeof raw.jti !== 'string' ||
       (raw.rootIat !== undefined && typeof raw.rootIat !== 'number') ||
       (raw.kid !== undefined && typeof raw.kid !== 'string') ||
-      (raw.src !== undefined && raw.src !== 'result' && raw.src !== 'read') ||
+      (raw.src !== undefined && !isViewRootSrc(raw.src)) ||
       (raw.kind !== 'ws' &&
         raw.kind !== 'session' &&
         raw.kind !== 'console-session')
@@ -407,7 +417,7 @@ function verifySignedClaims(
       jti: raw.jti,
       ...(typeof raw.rootIat === 'number' ? { rootIat: raw.rootIat } : {}),
       ...(typeof raw.kid === 'string' ? { kid: raw.kid } : {}),
-      ...(raw.src === 'result' || raw.src === 'read' ? { src: raw.src } : {}),
+      ...(isViewRootSrc(raw.src) ? { src: raw.src } : {}),
     };
   } catch {
     return { ok: false, reason: 'malformed_claims' };

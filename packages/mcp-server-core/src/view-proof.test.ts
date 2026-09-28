@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MCP_APP_AI_GGUI_VIEW_META_KEY,
   VIEW_PROOF_ROOT_MAX_CHARS,
+  VIEW_ROOT_SRC,
   VIEW_PROOF_V1_VECTORS,
   formatViewProofV1,
   parseViewProof,
@@ -106,7 +107,25 @@ describe('the view key and its key id (ggui#1415)', () => {
       claims: { kid: 'k', src: 'result' },
     });
     expect(verifyToken(signed({ ...base, kid: 7 }), secret, 'ws')).toEqual({ ok: false, reason: 'malformed_claims' });
-    expect(verifyToken(signed({ ...base, src: 'console' }), secret, 'ws')).toEqual({ ok: false, reason: 'malformed_claims' });
+  });
+
+  it('refuses a door it does not know, so a new door is accepted one release before any door mints with it (VERSION-POLICY §3.6)', () => {
+    // Widening this set and minting with the new value in the same release
+    // makes every older replica in a roll refuse that door's tokens.
+    const secret = 's3cret';
+    const payload = Buffer.from(
+      JSON.stringify({ sessionId: 'render_x', appId: 'app_x', kind: 'ws', iat: 1, exp: 4_000_000_000, jti: 'j', src: 'console' }),
+      'utf8',
+    ).toString('base64url');
+    const token = `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
+    expect(verifyToken(token, secret, 'ws')).toEqual({ ok: false, reason: 'malformed_claims' });
+    // Every value of the one list verifies, and a mint can stamp each.
+    for (const src of VIEW_ROOT_SRC) {
+      expect(verifyToken(mintViewRoot({ sessionId: 'render_x', appId: 'app_x', src }, secret).token, secret, 'ws')).toMatchObject({
+        ok: true,
+        claims: { src },
+      });
+    }
   });
 
   it('keys a root exactly as long as a proof can carry, and a proof on it parses; one character more is not keyed', () => {

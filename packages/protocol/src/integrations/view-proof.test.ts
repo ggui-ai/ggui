@@ -17,6 +17,7 @@ import {
   VIEW_PROOF_V1_MAX_CHARS,
   VIEW_PROOF_V1_PATTERN,
   VIEW_PROOF_V1_VECTORS,
+  VIEW_ROOT_SRC,
   formatViewProofV1,
   isViewProofTool,
   parseViewProof,
@@ -166,7 +167,6 @@ describe('parseViewProof (ggui#1415)', () => {
       [withRoot(Buffer.from('not json at all').toString('base64url')), 'malformed'],
       [withRoot(rootOf({ ...claims, kid: undefined })), 'malformed'],
       [withRoot(rootOf({ ...claims, iat: '1' })), 'malformed'],
-      [withRoot(rootOf({ ...claims, src: 'console' })), 'malformed'],
       [withRoot(rootOf({ ...claims, kind: 'session' })), 'wrong_kind'],
     ];
     for (const [value, reason] of cases) {
@@ -174,5 +174,18 @@ describe('parseViewProof (ggui#1415)', () => {
       expect(parsed, String(value).slice(0, 40)).toEqual({ ok: false, reason });
     }
     expect(parseViewProof(withRoot(rootOf(claims)))).toMatchObject({ ok: true, proof: { claims } });
+  });
+
+  it('reads a root naming a door it does not know as malformed, so a new door is accepted one release before any door mints with it (VERSION-POLICY §3.6)', () => {
+    // The one list of doors. Widening it is a two-release change: accept the
+    // value here in one release, and mint with it only in a later one, once
+    // no replica that refuses it is left in the roll. Change this line only
+    // with that plan.
+    expect(VIEW_ROOT_SRC).toEqual(['result', 'read']);
+    const claims = { sessionId: 's', appId: 'a', kind: 'ws', iat: 1, exp: 2, jti: 'j', kid: 'k' };
+    expect(parseViewProof(withRoot(rootOf({ ...claims, src: 'console' })))).toEqual({ ok: false, reason: 'malformed' });
+    for (const src of VIEW_ROOT_SRC) {
+      expect(parseViewProof(withRoot(rootOf({ ...claims, src })))).toMatchObject({ ok: true, proof: { claims: { src } } });
+    }
   });
 });
