@@ -181,7 +181,9 @@ export async function writeBlueprintDurably(
   // vector-store row); this write just persists the body it points at.
   // ggui#1493 — it is written whenever that hash was stamped, WITH OR
   // WITHOUT a durable blueprint store: the cache row's `sourceCodeHash`
-  // already references it, so it is never an orphan, and gating it on
+  // references it when it is written, so it is not written as an orphan (a
+  // later eviction of that capped cache row can still leave it
+  // unreferenced in a code-store-only deployment), and gating it on
   // the durable store left a cache row pointing at nothing wherever a
   // code store was bound alone. A failure here does NOT withhold
   // `sourceCodeHash` from the durable row below (contrast `codeHash`,

@@ -79,10 +79,12 @@ const opsOutputSchema = z.object({
 const USER_SOURCE: UserBlueprintSource = { kind: "user" };
 
 /**
- * Deps for `ggui_ops_register_blueprint`. Mirrors `*_generate_*`'s
- * deps minus `resolveLlm`, `blueprints`, and `registry` (no generator
- * dispatch — provenance is structurally `{kind: 'user'}`, so there is
- * no slug to resolve).
+ * Deps shared by `ggui_ops_register_blueprint` and the in-process
+ * {@link createRegisterGeneratedBlueprint}. Mirrors `*_generate_*`'s deps
+ * minus `resolveLlm`, `blueprints` and `registry`: neither entry dispatches
+ * a generator, so there is no slug to resolve. The operator door stamps
+ * `{kind: 'user'}`; the generated entry takes the generation's own `llm`
+ * record.
  */
 export interface GguiOpsRegisterBlueprintDeps {
   /**
@@ -417,8 +419,8 @@ export interface GeneratedBlueprintBytes {
   /**
    * The authored (pre-compile) source that `componentCode` was compiled
    * from. **Caller obligation:** it MUST be that exact pair, produced by
-   * one generation (for the runner: one mint cell's `source.tsx` with its
-   * `compiled.js`). Nothing here recompiles it to check — that is why
+   * one generation (for example, the authored `.tsx` a generation wrote
+   * and the module compiled from it). Nothing here recompiles it to check — that is why
    * this entry is in-process only and the public operator door takes no
    * source. A pair that is byte-identical records no source (the
    * registry's collapse rule), which is the honest answer for a
@@ -426,9 +428,8 @@ export interface GeneratedBlueprintBytes {
    */
   readonly sourceCode: string;
   /**
-   * The generation's own provenance, read from what the generation
-   * reported (the runner: the cell's receipt) — never a placeholder or a
-   * lane default. An `llm` record with a guessed model is a provenance
+   * The generation's own provenance, read from what the generation itself
+   * reported — never a placeholder or a configured default. An `llm` record with a guessed model is a provenance
    * claim nobody made. Validated against the protocol's schema.
    */
   readonly source: LlmBlueprintSource;

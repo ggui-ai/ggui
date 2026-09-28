@@ -1255,7 +1255,8 @@ export interface AttachAuthoredSourceResult {
  * given `componentCode` MUST byte-equal the code the row already serves —
  * that is what makes `sourceCode` the source of THAT row, and a mismatch is
  * refused without writing anything. The caller supplies the one-generation
- * pair (for a runner: a mint cell's `source.tsx` with its `compiled.js`).
+ * pair (for example, the authored `.tsx` a generation wrote and the module
+ * compiled from it).
  *
  * The row is found by its exact key — `(kind, contract, variance)` — so a
  * caller that knows only the durable record's id resolves it through what

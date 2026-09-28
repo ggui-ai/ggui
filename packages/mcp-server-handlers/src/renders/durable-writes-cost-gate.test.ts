@@ -148,9 +148,11 @@ describe('an unbound durable blueprint pair is free and silent', () => {
     }
   });
 
-  it('writes nothing when the pair carries only a body store', async () => {
-    // The row store is the gate: a body with no row to reference it is
-    // pure orphan, so a codeStore-only pair must not upload one.
+  it('uploads no compiled body and writes no row when the pair carries only a body store', async () => {
+    // The row store gates the COMPILED body: with no durable row to
+    // reference it, a codeStore-only pair must not upload it. The one body
+    // a codeStore-only pair does upload is an authored source whose hash
+    // the registry stamped (ggui#1493); this registration carries none.
     const codeStore: CodeStore & { put: ReturnType<typeof vi.fn> } = {
       durability: 'ephemeral',
       hashOf: vi.fn(() => 'deadbeef'),

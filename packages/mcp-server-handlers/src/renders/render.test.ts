@@ -1080,10 +1080,11 @@ describe('createGguiRenderHandler — authored source rides cache-reuse', () => 
         embedding: fakeEmbedding,
         vectorStore,
         index,
-        // writeBlueprintDurably no-ops entirely without a blueprintStore
-        // bound (it's the "row" half of the body-then-row write) — the
-        // source BODY write (this test's whole point) never happens
-        // without one, even though codeStore alone is bound.
+        // ggui#1493: the authored-source body is written whenever the
+        // registry stamped sourceCodeHash (a codeStore is bound), with or
+        // without a blueprintStore. The blueprintStore here adds only the
+        // durable row and the compiled body; it is not what writes the
+        // source body this test reads back.
         durability: { blueprintStore: new InMemoryBlueprintStore(), codeStore },
       },
       APP_ID,
