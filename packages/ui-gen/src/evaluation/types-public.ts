@@ -410,6 +410,34 @@ export interface CriteriaRollup {
   mustNa: string[];
 }
 
+/** ggui#1492 — a host"s frame round the inline card, as data. Colours are `#rrggbb`; the ring"s `alpha` is 0..1. */
+export interface HostInlineFrame {
+  /** The frame"s surface — what shows behind a transparent card, and under the floor"s residual. */
+  readonly surface: string;
+  /** The room the frame sits in (the page ground round it). */
+  readonly ground: string;
+  readonly ring: { readonly widthPx: number; readonly color: string; readonly alpha: number };
+  readonly radiusPx: number;
+  /** The host"s minimum frame height: a card shorter than it sits in a frame this tall, and the visitor sees the rest as void. */
+  readonly minHeightPx?: number;
+}
+/** ggui#1492 — how a host presents one canvas: the label the judge is told, the page ground, and (the inline card only) its frame. */
+export interface CanvasHostPresentation {
+  readonly label: string;
+  /** The page ground under a fill canvas"s panel; the inline card"s ground lives on its {@link HostInlineFrame}. */
+  readonly ground?: string;
+  readonly frame?: HostInlineFrame;
+}
+/** ggui#1492 — why the judge did not draw a canvas's host presentation. The codes are the lane reader's own. */
+export type HostPresentationIgnoredReason = "label_missing" | "color_not_hex" | "frame_off_inline" | "frame_malformed" | "ground_on_inline";
+/**
+ * ggui#1492 — what the judge DID with a canvas's host presentation, read from the judge itself: `applied` carries
+ * the presentation it drew, `ignored` the reason it drew none. Absent when the caller supplied no presentation.
+ */
+export type CanvasPresentationOutcome =
+  | { readonly status: "applied"; readonly applied: CanvasHostPresentation }
+  | { readonly status: "ignored"; readonly reason: HostPresentationIgnoredReason };
+
 export interface CanvasVisualSummary {
   canvas: CanvasClass;
   viewport: { width: number; height: number };
@@ -432,6 +460,8 @@ export interface CanvasVisualSummary {
   judge: CanvasJudgeRecord;
   /** ggui#1436 — the typed criteria block, when a bank was configured; report-only. */
   criteria?: CriteriaBlock;
+  /** ggui#1492 — what the judge did with this canvas's host presentation, when one was supplied. */
+  presentation?: CanvasPresentationOutcome;
   /**
    * How the judge composed the mount (ggui#1100): `'fill'` on every
    * fullscreen canvas — the served runtime's fit, the root stretched to

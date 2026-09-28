@@ -26,6 +26,10 @@ export type {
   VisualEvalSummary,
   CanvasJudgeRecord,
   CanvasVisualSummary,
+  CanvasHostPresentation,
+  HostInlineFrame,
+  CanvasPresentationOutcome,
+  HostPresentationIgnoredReason,
   EvalCriterion,
   CriterionCoverage,
   CriterionRunStatus,
@@ -132,8 +136,6 @@ export type {
   ScreenshotPage,
   ScreenshotClip,
   NaturalCaptureOptions,
-  CanvasHostPresentation,
-  HostInlineFrame,
   ChromiumProvider,
 } from './visual-evaluator.js';
 

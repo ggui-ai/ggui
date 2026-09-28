@@ -32,7 +32,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { CanvasJudgeRecord, CanvasVisualSummary, EvalIssue, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
+import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
@@ -150,6 +150,8 @@ export interface CanvasVisualResult {
   declared?: true;
   /** ggui#1436 — the typed criteria block, when a bank was configured. */
   criteria?: CriteriaBlock;
+  /** ggui#1492 — what the judge did with this canvas's host presentation (drawn, or ignored and why), when one was supplied. */
+  presentation?: CanvasPresentationOutcome;
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
@@ -244,24 +246,6 @@ export const JUDGE_INLINE_PAD_PX = JUDGE_GROUND_MARGIN_PX + JUDGE_INLINE_FRAME_B
 /** How far in the inline card's ink is read: past the margin, the frame's ring and its rounded corner, so the host's frame never counts as paint. */
 export const JUDGE_INLINE_INK_INSET_PX = JUDGE_INLINE_PAD_PX + JUDGE_INLINE_FRAME_RADIUS_PX;
 
-/** ggui#1492 — a host's frame round the inline card, as data. Colours are `#rrggbb`; the ring's `alpha` is 0..1. */
-export interface HostInlineFrame {
-  /** The frame's surface — what shows behind a transparent card, and under the floor's residual. */
-  readonly surface: string;
-  /** The room the frame sits in (the page ground round it). */
-  readonly ground: string;
-  readonly ring: { readonly widthPx: number; readonly color: string; readonly alpha: number };
-  readonly radiusPx: number;
-  /** The host's minimum frame height: a card shorter than it sits in a frame this tall, and the visitor sees the rest as void. */
-  readonly minHeightPx?: number;
-}
-/** ggui#1492 — how a host presents one canvas: the label the judge is told, the page ground, and (the inline card only) its frame. */
-export interface CanvasHostPresentation {
-  readonly label: string;
-  /** The page ground under a fill canvas's panel; the inline card's ground lives on its {@link HostInlineFrame}. */
-  readonly ground?: string;
-  readonly frame?: HostInlineFrame;
-}
 /**
  * The bounds a host frame must meet to be drawn (ggui#1492), exported so a lane's reader applies exactly the frames
  * this judge draws: an entry the reader accepts and the judge ignores would be echoed as applied while never drawn.
@@ -273,24 +257,32 @@ export const HOST_FRAME_BOUNDS = {
   radiusPx: { min: 0, max: 64 },
   minHeightPx: { min: 0, max: 2560 },
 } as const;
-function usablePresentation(canvas: CanvasClass, p: CanvasHostPresentation | undefined): CanvasHostPresentation | undefined {
+/**
+ * ggui#1492 — what this judge will do with a canvas's host presentation: draw it, or ignore it with the lane
+ * reader's own reason code. `undefined` when none was supplied. Every string drawn reaches the page's CSS, so a
+ * colour must be `#rrggbb` and a number must sit inside {@link HOST_FRAME_BOUNDS}; an inline card's room lives on
+ * its frame, so a top-level `ground` there is refused rather than silently unused.
+ */
+function resolvePresentation(canvas: CanvasClass, p: CanvasHostPresentation | undefined): CanvasPresentationOutcome | undefined {
   if (p === undefined) return undefined;
-  const bad = (why: string): undefined => {
-    console.warn(`[visual-eval] host presentation for ${canvas} ignored: ${why}`);
-    return undefined;
+  const ignored = (reason: HostPresentationIgnoredReason, why: string): CanvasPresentationOutcome => {
+    console.warn(`[visual-eval] host presentation for ${canvas} ignored (${reason}): ${why}`);
+    return { status: 'ignored', reason };
   };
-  if (typeof p.label !== 'string' || p.label.length === 0) return bad('no label');
-  if (p.ground !== undefined && !HOST_COLOUR_PATTERN.test(p.ground)) return bad('ground is not #rrggbb');
+  const inline = canvasFitPolicy(canvas).capture === 'natural';
+  if (typeof p.label !== 'string' || p.label.length === 0) return ignored('label_missing', 'no label');
+  if (p.ground !== undefined && !HOST_COLOUR_PATTERN.test(p.ground)) return ignored('color_not_hex', 'ground is not #rrggbb');
+  if (inline && p.ground !== undefined) return ignored('ground_on_inline', "the inline card's room is its frame's ground");
   const f = p.frame;
   if (f !== undefined) {
-    if (canvasFitPolicy(canvas).capture !== 'natural') return bad('a frame on a canvas that is not the inline card');
-    if (![f.surface, f.ground, f.ring.color].every((c) => HOST_COLOUR_PATTERN.test(c))) return bad('a frame colour is not #rrggbb');
+    if (!inline) return ignored('frame_off_inline', 'a frame on a canvas that is not the inline card');
+    if (![f.surface, f.ground, f.ring.color].every((c) => HOST_COLOUR_PATTERN.test(c))) return ignored('color_not_hex', 'a frame colour is not #rrggbb');
     const B = HOST_FRAME_BOUNDS;
     const inRange = (n: number, b: { readonly min: number; readonly max: number }): boolean => Number.isFinite(n) && n >= b.min && n <= b.max;
-    if (!inRange(f.ring.widthPx, B.ringWidthPx) || !inRange(f.ring.alpha, B.ringAlpha) || !inRange(f.radiusPx, B.radiusPx)) return bad('a frame number out of range');
-    if (f.minHeightPx !== undefined && !inRange(f.minHeightPx, B.minHeightPx)) return bad('minHeightPx out of range');
+    if (!inRange(f.ring.widthPx, B.ringWidthPx) || !inRange(f.ring.alpha, B.ringAlpha) || !inRange(f.radiusPx, B.radiusPx)) return ignored('frame_malformed', 'a frame number out of range');
+    if (f.minHeightPx !== undefined && !inRange(f.minHeightPx, B.minHeightPx)) return ignored('frame_malformed', 'minHeightPx out of range');
   }
-  return p;
+  return { status: 'applied', applied: p };
 }
 /** What the inline card's page adds per side, where its ink is read from, and the host's floor — from the host frame when given, else the stand-in's. */
 interface InlineGeometry {
@@ -1097,8 +1089,8 @@ interface CanvasFrame {
   readonly attempt: ScreenshotAttempt;
   /** The capture's ink extent (ggui#1120); `null` when there is no capture or it could not be read. */
   readonly ink: InkExtent | null;
-  /** ggui#1492 — the host presentation this canvas was framed under, when the caller supplied a usable one. */
-  readonly presentation?: CanvasHostPresentation;
+  /** ggui#1492 — what the judge did with this canvas's host presentation, when the caller supplied one. */
+  readonly presentation?: CanvasPresentationOutcome;
 }
 /** The capture's ink extent (ggui#1120), read inside a drawn panel's chrome; an unreadable capture is reported, never blank. */
 function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass, inlineInkInsetPx: number = JUDGE_INLINE_INK_INSET_PX): InkExtent | null {
@@ -1134,7 +1126,8 @@ async function frameCanvas(
   const policy = canvasFitPolicy(canvas);
   const fit = canvasFit(canvas);
   const chrome = canvasChrome(canvas);
-  const presentation = usablePresentation(canvas, hostPresentations?.[canvas]);
+  const outcome = resolvePresentation(canvas, hostPresentations?.[canvas]);
+  const presentation = outcome?.status === 'applied' ? outcome.applied : undefined;
   const geometry = inlineGeometry(presentation?.frame);
   const canvasHtml =
     fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation) : html;
@@ -1147,7 +1140,7 @@ async function frameCanvas(
   return {
     viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt,
     ink: readInk(captured.png, chrome, canvas, geometry.inkInsetPx),
-    ...(presentation !== undefined ? { presentation } : {}),
+    ...(outcome !== undefined ? { presentation: outcome } : {}),
   };
 }
 
@@ -1301,7 +1294,7 @@ export async function runVisualEvaluationDetailed(
       const criteriaBlock =
         context.criteria !== undefined && criteriaSelected !== undefined
           ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, {
-              frame: { canvas, width: viewport.width, height: viewport.height, ...(frame.presentation !== undefined ? { hostLabel: frame.presentation.label } : {}) },
+              frame: { canvas, width: viewport.width, height: viewport.height, ...(frame.presentation?.status === 'applied' ? { hostLabel: frame.presentation.applied.label } : {}) },
               ...(config.sampleProps !== undefined ? { propsJson: JSON.stringify(config.sampleProps) } : {}),
             })
           : '';
@@ -1376,6 +1369,7 @@ export async function runVisualEvaluationDetailed(
         ...(fit !== undefined ? { fit } : {}),
         ...(frame.declared ? { declared: true as const } : {}),
         ...(criteria !== undefined ? { criteria } : {}),
+        ...(frame.presentation !== undefined ? { presentation: frame.presentation } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
@@ -1488,6 +1482,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     judge: c.judge,
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
     ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
+    ...(c.presentation !== undefined ? { presentation: c.presentation } : {}),
   }));
   // ggui#1436 — the roll-up: ids failed / unreadable across canvases, deduped; a must at n/a is listed, never passed.
   const blocks = result.canvases.map((c) => c.criteria).filter((b): b is CriteriaBlock => b !== undefined);
@@ -1852,6 +1847,8 @@ export interface CanvasFitReading {
   readonly inkRatio: number | null;
   /** `true` when the order declared this canvas's box. */
   readonly declared?: true;
+  /** ggui#1492 — what the judge did with this canvas's host presentation, when one was supplied. */
+  readonly presentation?: CanvasPresentationOutcome;
 }
 
 /** `measured` = every canvas was framed (its fit issues, possibly none); `unavailable` = no verdict, with why. */
@@ -1915,6 +1912,7 @@ export async function runVisualFit(
       overflow,
       inkRatio,
       ...(frame.declared ? { declared: true as const } : {}),
+      ...(frame.presentation !== undefined ? { presentation: frame.presentation } : {}),
     });
     console.log(
       `[visual-fit] canvas=${canvas} ${frame.viewport.width}×${frame.viewport.height} ` +

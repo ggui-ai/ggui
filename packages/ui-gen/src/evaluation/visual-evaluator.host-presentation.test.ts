@@ -16,10 +16,12 @@ import {
   JUDGE_INLINE_FRAME_CLASS,
   JUDGE_PANEL_CLASS,
   runVisualEvaluationDetailed,
-  type CanvasHostPresentation,
+  runVisualFit,
+  summarizeVisualResult,
   type ScreenshotBrowser,
   type VisualEvalDeps,
 } from './visual-evaluator.js';
+import type { CanvasHostPresentation } from './types-public.js';
 
 const COMPONENT = 'export default function C(){ return null; }';
 interface Clip { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
@@ -160,6 +162,34 @@ describe('ggui#1492 — the bounds a frame must meet are exported, so a lane\'s 
   });
 });
 
+describe('ggui#1492 — what the judge DID is read from the judge: applied (with the presentation drawn) or ignored (with the reason)', () => {
+  it('an applied presentation rides the canvas result, its summary and the fit reading', async () => {
+    const d = deps(300);
+    const { result } = await runVisualEvaluationDetailed(CONTEXT, { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card', 'md'], hostPresentations: { 'xs-chat-card': WIDGET } }, d);
+    const [xs, md] = result!.canvases!;
+    expect(xs!.presentation).toEqual({ status: 'applied', applied: WIDGET });
+    expect(md!.presentation).toBeUndefined();
+    expect(summarizeVisualResult(result!)!.canvases[0]!.presentation).toEqual({ status: 'applied', applied: WIDGET });
+    const fit = await runVisualFit(CONTEXT, { canvases: ['xs-chat-card'], hostPresentations: { 'xs-chat-card': WIDGET } }, deps(300));
+    expect(fit.status === 'measured' && fit.readings[0]!.presentation).toEqual({ status: 'applied', applied: WIDGET });
+  });
+
+  it('an ignored entry says why, in the reader\'s own codes; an inline card\'s top-level ground is refused, never silently unused', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const outcome = async (canvas: 'xs-chat-card' | 'md', p: CanvasHostPresentation) => {
+      const { result } = await runVisualEvaluationDetailed(CONTEXT, { provider: 'claude', passThreshold: 70, canvases: [canvas], hostPresentations: { [canvas]: p } }, deps(300));
+      return result!.canvases![0]!.presentation;
+    };
+    expect(await outcome('xs-chat-card', { ...WIDGET, label: '' })).toEqual({ status: 'ignored', reason: 'label_missing' });
+    expect(await outcome('xs-chat-card', { ...WIDGET, ground: '#eaeae3' })).toEqual({ status: 'ignored', reason: 'ground_on_inline' });
+    expect(await outcome('xs-chat-card', { ...WIDGET, frame: { ...WIDGET.frame!, radiusPx: 65 } })).toEqual({ status: 'ignored', reason: 'frame_malformed' });
+    expect(await outcome('md', { label: 'a pane', ground: 'blue' })).toEqual({ status: 'ignored', reason: 'color_not_hex' });
+    expect(await outcome('md', { label: 'a pane', frame: WIDGET.frame! })).toEqual({ status: 'ignored', reason: 'frame_off_inline' });
+    expect(await outcome('md', { label: 'a pane', ground: '#eaeae3' })).toEqual({ status: 'applied', applied: { label: 'a pane', ground: '#eaeae3' } });
+    warn.mockRestore();
+  });
+});
+
 describe('ggui#1492 — absent is today; an unusable entry is ignored for its own canvas', () => {
   it('no presentation and an empty map build byte-identical pages', async () => {
     const a = deps(300);
@@ -189,8 +219,8 @@ describe('ggui#1492 — absent is today; an unusable entry is ignored for its ow
     );
     expect(bad.pages.map(stable)).toEqual(today.pages.map(stable));
     expect(warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('host presentation'))).toEqual([
-      '[visual-eval] host presentation for xs-chat-card ignored: a frame colour is not #rrggbb',
-      '[visual-eval] host presentation for md ignored: a frame on a canvas that is not the inline card',
+      '[visual-eval] host presentation for xs-chat-card ignored (color_not_hex): a frame colour is not #rrggbb',
+      '[visual-eval] host presentation for md ignored (frame_off_inline): a frame on a canvas that is not the inline card',
     ]);
     warn.mockRestore();
   });
