@@ -97,8 +97,9 @@ export interface SubscribePayload {
    *   - Reusable within TTL (G14, 2026-05-23) so a transient WS drop
    *     can reconnect without a fresh handshake.
    *
-   * On a successful ws-token-authed subscribe, the server SHOULD issue
-   * a longer-lived reconnect credential via {@link AckPayload.sessionToken}.
+   * A reconnect presents a live `wsToken` again; the server mints no
+   * reconnect credential into the ack (ggui#1488, see
+   * {@link AckPayload.sessionToken}).
    *
    * Mutually compatible with upstream bearer-auth (`Authorization`
    * header / `?token=` query). When both are present, server behavior
@@ -193,25 +194,17 @@ export interface AckPayload {
    */
   replayTruncated?: boolean;
   /**
-   * Reconnect credential issued on successful ws-token-authed subscribe.
+   * A reconnect credential the previous release minted on a ws-token-authed
+   * subscribe. A server at this release sends none (ggui#1488): no server
+   * ever verified it, so on the bearer reconnect it was documented for it
+   * proved nothing of its own, and no client read it. A client MUST NOT
+   * depend on it; a reconnect presents a live `wsToken` again.
    *
-   * General transport-credential slot — the type system does NOT
-   * couple this field to any integration (same positioning as
-   * {@link SubscribePayload.wsToken}). Servers that accepted a WS
-   * token on `subscribe` SHOULD mint a longer-lived render-scoped
-   * token and return it here so the client can reconnect without
-   * re-minting from the original credential source.
+   * Declared optional until the release after the one that stops sending
+   * it, so a client parsing an ack from either release accepts it
+   * (VERSION-POLICY §3.6).
    *
-   * Semantics:
-   *   - Longer TTL than the ws token (minutes-to-hours).
-   *   - Bound to the same `sessionId` + `appId`.
-   *   - Passed on reconnect via the standard bearer path
-   *     (`Authorization: Bearer <sessionToken>` or `?token=`), NOT in
-   *     `SubscribePayload.wsToken` (which is short-TTL and credential-scoped).
-   *
-   * Absent when the subscribe was bearer-authed (no ws-token-bound
-   * reconnect credential needed) and on servers that don't implement
-   * ws-token auth.
+   * @deprecated Sent by no server at this release; removed in the next.
    */
   sessionToken?: string;
   /**

@@ -1,6 +1,6 @@
 {
   "capturedFrom": "b68b964a7:oss/packages/mcp-server-core/src/ws-tokens.ts",
-  "note": "A ws token minted by tag 14's own mintWsToken (Date.now pinned to iat), with the secret below. Tag 14 writes exactly these six claims and no rootIat (ggui#1496 part B, slice 2).",
+  "note": "Tokens minted by tag 14's own mintWsToken and mintSessionToken (Date.now pinned to iat), with the secret below. Tag 14 writes exactly these six claims and no rootIat (ggui#1496 part B, slice 2). Every release before the one that stops the ack's session token (ggui#1488) still mints 'session' tokens, so sessionToken is the kind of token a rolling previous-release server can still hand out.",
   "secret": "n1-fixture-secret-b68b964a7-yyyyyyyyyyyyyyyy",
   "token": "eyJzZXNzaW9uSWQiOiJzZXNzLW4xIiwiYXBwSWQiOiJhcHAtbjEiLCJraW5kIjoid3MiLCJpYXQiOjE3OTAwMDAwMDAsImV4cCI6MTc5MDAwMDE4MCwianRpIjoicWpXS3llRlpKcklkbzlBQSJ9.mBSQUNj6qt199HL6U81I3e-xfpJB0R9yMOs6u2WAH6c",
   "claims": {
@@ -10,5 +10,14 @@
     "iat": 1790000000,
     "exp": 1790000180,
     "jti": "qjWKyeFZJrIdo9AA"
+  },
+  "sessionToken": "eyJzZXNzaW9uSWQiOiJzZXNzLW4xIiwiYXBwSWQiOiJhcHAtbjEiLCJraW5kIjoic2Vzc2lvbiIsImlhdCI6MTc5MDAwMDAwMCwiZXhwIjoxNzkwMDE0NDAwLCJqdGkiOiI0Y1FBaHVzUlNjUGVlQmFjIn0.nIwUNmlN_cDlublToauMI__W7oPb4YZZ8TSn61S9rr0",
+  "sessionClaims": {
+    "sessionId": "sess-n1",
+    "appId": "app-n1",
+    "kind": "session",
+    "iat": 1790000000,
+    "exp": 1790014400,
+    "jti": "4cQAhusRScPeeBac"
   }
 }

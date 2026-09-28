@@ -20,12 +20,12 @@
  * with MCP Apps pay none of its weight, and the blast radius of any spec
  * drift is bounded to callers that explicitly import from here.
  *
- * Core still carries two fields that make the bootstrap flow work —
- * `SubscribePayload.wsToken?: string` and `AckPayload.sessionToken?:
- * string`. Those are deliberately framed as **general transport bootstrap
- * credentials** (opaque strings), not MCP-Apps-specific. Any future
- * bootstrap mechanism (short-code auto-login, signed-URL bootstrap, etc.)
- * reuses the same slots.
+ * Core still carries the field that makes the bootstrap flow work,
+ * `SubscribePayload.wsToken?: string`, deliberately framed as a **general
+ * transport bootstrap credential** (an opaque string), not MCP-Apps-specific.
+ * Any future bootstrap mechanism (short-code auto-login, signed-URL
+ * bootstrap, etc.) reuses the same slot. (`AckPayload.sessionToken` is
+ * deprecated: no server mints it, ggui#1488.)
  */
 
 import type {

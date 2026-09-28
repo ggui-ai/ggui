@@ -36,6 +36,7 @@ import {
   type GguiSessionChannelServer,
 } from './ggui-session-channel.js';
 import { createGguiServer, type GguiServer } from './server.js';
+import type { Logger } from './logger.js';
 
 const silentLogger = {
   info: () => undefined,
@@ -135,7 +136,7 @@ interface ServerFixture {
   store: InMemoryGguiSessionStore;
 }
 
-async function bootServer(opts: { eventCount?: number } = {}): Promise<ServerFixture> {
+async function bootServer(opts: { eventCount?: number; logger?: Logger } = {}): Promise<ServerFixture> {
   const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-stream-test' });
   const seedCount = opts.eventCount ?? 0;
@@ -147,7 +148,7 @@ async function bootServer(opts: { eventCount?: number } = {}): Promise<ServerFix
     });
   }
   const server = createGguiServer({
-    logger: silentLogger,
+    logger: opts.logger ?? silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     renderChannel: true,
@@ -322,6 +323,30 @@ describe('GET /api/sessions/:sessionId/stream — framing + ledger replay', () =
     if (fx) {
       await fx.server.close();
       fx = null;
+    }
+  });
+
+  it('logs render_channel_subscribed {transport: sse, bootstrap: true, source: ws_token}: the stream is wsToken-only (ggui#1488)', async () => {
+    const infos: Array<{ event: string; fields: Record<string, unknown> }> = [];
+    const logger: Logger = {
+      info: (event, fields) => {
+        infos.push({ event, fields: fields ?? {} });
+      },
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      child: () => logger,
+    };
+    fx = await bootServer({ logger });
+    const stream = await openStream(streamUrl(fx, `wsToken=${encodeURIComponent(fx.validToken)}`));
+    try {
+      await stream.readUntil((b) => b.includes('"type":"ack"'));
+      const subscribed = infos
+        .filter((l) => l.event === 'render_channel_subscribed')
+        .map((l) => ({ transport: l.fields['transport'], bootstrap: l.fields['bootstrap'], source: l.fields['source'] }));
+      expect(subscribed).toEqual([{ transport: 'sse', bootstrap: true, source: 'ws_token' }]);
+    } finally {
+      await stream.close();
     }
   });
 

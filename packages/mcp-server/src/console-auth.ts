@@ -1,13 +1,13 @@
 /**
  * Embedded-ui cookie auth plane.
  *
- * This module owns the THIRD of the three token kinds the server
- * tracks for the embedded UI:
+ * This module owns the second of the two token kinds the server mints
+ * for the embedded UI (a third, the reconnect "session" token, is minted
+ * by no server since ggui#1488):
  *
- *   1. bootstrap tokens       — short-TTL, single-use, MCP Apps iframes.
- *   2. session tokens         — longer-TTL, reusable, post-bootstrap
- *                               reconnect creds.
- *   3. console cookies    — longer-TTL, reusable, same-origin
+ *   1. ws (bootstrap) tokens  — short-TTL, reusable within TTL, MCP Apps
+ *                               iframes.
+ *   2. console cookies    — longer-TTL, reusable, same-origin
  *                               browser-only, issued by this server
  *                               for ITS OWN console landing/viewer
  *                               pages. **Scoped narrowly**: consumed
@@ -17,10 +17,10 @@
  *                               `/threads`, or any other ingress.
  *
  * Isolation invariant (load-bearing). The cookie uses the SAME HMAC
- * shape as the bootstrap/session tokens but a distinct `kind` claim
+ * shape as the ws (bootstrap) token but a distinct `kind` claim
  * (`'console-session'`). That makes cross-kind confusion
- * impossible: a cookie value CAN'T verify as a bootstrap or session
- * token. Secrets are shared across kinds because they live in the
+ * impossible: a cookie value CAN'T verify as a ws token, nor any
+ * other kind as a cookie. Secrets are shared across kinds because they live in the
  * same trust domain (server-minted same-origin creds) and kind
  * discrimination is sufficient.
  *
@@ -71,7 +71,7 @@ export interface DevtoolCookieMint {
 export interface MintDevtoolCookieInput {
   readonly sessionId: string;
   readonly appId: string;
-  /** HMAC secret. Shared with bootstrap + session tokens by design. */
+  /** HMAC secret. Shared with the ws (bootstrap) tokens by design. */
   readonly secret: string;
   /** Cookie TTL in seconds. Defaults to 8 hours. */
   readonly ttlSec?: number;

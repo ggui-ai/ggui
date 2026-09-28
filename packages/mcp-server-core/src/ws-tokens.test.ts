@@ -31,13 +31,17 @@ import {
   WsTokenReplayCache,
   DEFAULT_WS_TOKEN_TTL_SEC,
   mintWsToken,
-  mintSessionToken,
   verifyToken,
   verifyWsTokenSignature,
   type WsTokenClaims,
 } from './ws-tokens.js';
 
 const SECRET = 'test-secret-32bytes-for-hmac-1234';
+
+/** Tokens tag 14's own minters produced (ggui#1496 part B slice 2, ggui#1488). */
+const N1 = JSON.parse(
+  readFileSync(new URL('./__fixtures__/n1/ws-token.b68b964a7.json', import.meta.url), 'utf8'),
+) as { secret: string; token: string; claims: WsTokenClaims; sessionToken: string };
 
 describe('mintWsToken / verifyToken roundtrip', () => {
   it('mints a signed envelope that verifies cleanly within TTL', () => {
@@ -83,14 +87,9 @@ describe('mintWsToken / verifyToken roundtrip', () => {
     vi.useRealTimers();
   });
 
-  it('rejects a session token verified as a ws token', () => {
-    const { token } = mintSessionToken(
-      { sessionId: 'sess_a', appId: 'app_a' },
-      SECRET,
-    );
-    const verified = verifyToken(token, SECRET, 'ws');
-    expect(verified.ok).toBe(false);
-    if (!verified.ok) expect(verified.reason).toBe('wrong_kind');
+  it('rejects a session token verified as a ws token: one tag 14 minted reads wrong_kind, not malformed (ggui#1488)', () => {
+    const verified = verifyToken(N1.sessionToken, N1.secret, 'ws');
+    expect(verified).toEqual({ ok: false, reason: 'wrong_kind' });
   });
 
   it('rejects under a different secret', () => {
@@ -136,8 +135,7 @@ describe('verifyWsTokenSignature — a ws envelope at ANY age (ggui#1496 part B)
   });
 
   it('refuses a session token: the kind must be ws', () => {
-    const { token } = mintSessionToken({ sessionId: 's-1', appId: 'app-1' }, SECRET);
-    expect(verifyWsTokenSignature(token, SECRET)).toEqual({ ok: false, reason: 'wrong_kind' });
+    expect(verifyWsTokenSignature(N1.sessionToken, N1.secret)).toEqual({ ok: false, reason: 'wrong_kind' });
   });
 
   it('refuses a malformed envelope', () => {
@@ -158,9 +156,6 @@ function payloadOf(token: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as Record<string, unknown>;
 }
 
-const N1 = JSON.parse(
-  readFileSync(new URL('./__fixtures__/n1/ws-token.b68b964a7.json', import.meta.url), 'utf8'),
-) as { secret: string; token: string; claims: WsTokenClaims };
 
 describe('rootIat — the root a possession renewal chains from (ggui#1496 part B, slice 2)', () => {
   afterEach(() => {

@@ -79,13 +79,13 @@ createGguiServer({ console: { path: "/ui" } });
 
 ## Auth planes (distinct by design)
 
-The console cookie is a **third token kind**, NOT a
-rebadge of bootstrap/session tokens:
+The console cookie is its own token kind, NOT a
+rebadge of the ws (bootstrap) token:
 
 | Ingress          | Credential                    | Who mints it                       |
 | ---------------- | ----------------------------- | ---------------------------------- |
 | `/mcp`           | `Authorization: Bearer …`     | AuthAdapter / pairing              |
-| `/ws` (MCP Apps) | `?bootstrap=<token>`          | `ggui_render` bootstrap mint       |
+| `/ws` (MCP Apps) | `?wsToken=<token>`            | `ggui_render` bootstrap mint       |
 | `/ws` (console)  | `ggui_console_session` cookie | `POST /ggui/console/render-cookie` |
 
 The cookie authenticates **only** the live-channel `/ws` upgrade. It is

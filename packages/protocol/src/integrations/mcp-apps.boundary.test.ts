@@ -230,11 +230,12 @@ describe('StreamSpec / ActionSpec / PropsSpec boundary lock (type-level)', () =>
   });
 });
 
-describe('Ack credential slot is generic, not MCP-Apps-typed (type-level)', () => {
-  // `AckPayload.sessionToken` is deliberately framed as a GENERAL
-  // transport credential (an opaque string), NOT as an MCP-Apps-typed
-  // field. This lock ensures a future change doesn't accidentally
-  // narrow it to an `McpAppAiGguiRenderMeta`-shaped object.
+describe('Ack credential slot stays an optional opaque string through its deprecation (type-level)', () => {
+  // `AckPayload.sessionToken` is deprecated (ggui#1488): no server at this
+  // release sends it, and it is removed in the next. Until then an ack
+  // from the previous release, which carries it as an opaque string, MUST
+  // still type-check (VERSION-POLICY §3.6), so the field stays optional
+  // and string-typed, not narrowed to an MCP-Apps-typed object.
   it('AckPayload.sessionToken is a string, not a typed credential object', () => {
     const a: AckPayload = {
       sequence: 1,

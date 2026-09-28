@@ -2,8 +2,8 @@
  * Subscribe / credential-path family for the live channel — upgrade-
  * time identity resolution across the three auth planes (bearer via
  * the AuthAdapter, ws-token bootstrap, console cookie) and the
- * `subscribe` handler itself: version handshake, bootstrap verify +
- * reconnect-credential mint, identity-default appId resolution,
+ * `subscribe` handler itself: version handshake, bootstrap verify,
+ * identity-default appId resolution,
  * dev-mode render provisioning, replay, registration, and the ack.
  */
 
@@ -46,10 +46,11 @@ import type { SubscriberLifecycle } from "./subscriber-lifecycle.js";
  *      (invalid sig, expired, wrong kind, replayed, etc.).
  *   2. The bound `sessionId` MUST match the one on the subscribe
  *      payload. Mismatches are rejected with a clean error.
- *   3. On success, the server mints a reconnect credential via
- *      `issueSessionToken(sessionId, appId)` and returns it in
- *      `AckPayload.sessionToken`. The iframe stores this for WS
- *      reconnects via the normal bearer path.
+ *   3. On success, the subscribe binds to that identity. No reconnect
+ *      credential is minted (ggui#1488): a reconnect presents a live
+ *      `wsToken` again, renewed before it expires through
+ *      `GET /api/sessions/:id/state`, or at any age through
+ *      `ggui_runtime_refresh_ws_token`.
  *
  * Bootstrap auth is MUTUALLY EXCLUSIVE with the upstream `AuthAdapter`
  * bearer path at subscribe time — when a bootstrap token is present,
@@ -88,12 +89,6 @@ export interface GguiSessionChannelBootstrap {
    * kind failures.
    */
   verify(token: string): GguiSessionChannelBootstrapVerifyResult;
-  /**
-   * Mint a longer-lived reconnect credential to return in
-   * `AckPayload.sessionToken`. Called only after a successful
-   * `verify()` on a bootstrap subscribe.
-   */
-  issueSessionToken(sessionId: string, appId: string): string;
 }
 
 /**
@@ -149,6 +144,13 @@ export interface SubscribeDeps {
  * `/api/sessions/:sessionId/stream`) runs BEFORE this; the tail trusts
  * `stored` + `identity` as already-authorized.
  */
+/**
+ * A subscribe's credential when it is not the auth adapter's bearer
+ * (ggui#1488): a `wsToken`, or the console cookie. Logged as
+ * `render_channel_subscribed.source`.
+ */
+export type SubscribeCredential = "ws_token" | "console_cookie";
+
 export type CompleteSubscribeArgs = {
   /** Resolved render row the subscriber binds to. */
   readonly stored: StoredGguiSession;
@@ -162,8 +164,13 @@ export type CompleteSubscribeArgs = {
   readonly fromSeq?: number;
   /** Correlates the ack / error frames to a WS request. SSE has none. */
   readonly requestId?: string;
-  /** Bootstrap-minted reconnect credential to stamp on the ack. */
-  readonly sessionToken?: string;
+  /**
+   * The credential the subscribe came on, when it is not the auth
+   * adapter's bearer: a `wsToken` (the bootstrap path, on the WebSocket or
+   * the SSE stream) or the console cookie. Both resolve to a synthetic
+   * identity whose own `source` would misreport them.
+   */
+  readonly credential?: SubscribeCredential;
 } & (
   | {
       readonly transport: "ws";
@@ -392,7 +399,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // AuthAdapter identity — iframes don't carry bearer tokens.
     // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
-    let mintedSessionToken: string | undefined;
+    let viaWsToken = false;
     let tokenBoundAppId: string | undefined;
     if (typeof payload.wsToken === "string" && payload.wsToken.length > 0) {
       if (!deps.bootstrap) {
@@ -471,10 +478,7 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         },
         source: "apikey",
       };
-      // Mint the reconnect credential now — before create/observe
-      // work — so a downstream failure doesn't leave the client with
-      // no way to resume.
-      mintedSessionToken = deps.bootstrap.issueSessionToken(bound.sessionId, bound.appId);
+      viaWsToken = true;
       deps.logger.info("render_channel_bootstrap_accepted", {
         sessionId: bound.sessionId,
         appId: bound.appId,
@@ -599,7 +603,11 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       ...(payload.sinceSequence !== undefined ? { sinceSequence: payload.sinceSequence } : {}),
       ...(payload.fromSeq !== undefined ? { fromSeq: payload.fromSeq } : {}),
       ...(message.requestId ? { requestId: message.requestId } : {}),
-      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
+      ...(viaWsToken
+        ? { credential: "ws_token" as const }
+        : cookieBound !== undefined
+          ? { credential: "console_cookie" as const }
+          : {}),
     });
   }
 
@@ -673,7 +681,11 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       snapshotSeq,
       replayCount: replay?.envelopes.length ?? 0,
       replayTruncated: replay?.truncated ?? false,
-      bootstrap: args.sessionToken !== undefined,
+      // The credential the subscribe came on (ggui#1488): a wsToken, the
+      // console cookie, or the adapter's bearer source. The first two ride
+      // a synthetic identity whose own `source` would misreport them.
+      bootstrap: args.credential === "ws_token",
+      source: args.credential ?? args.identity.source,
     });
 
     const ackPayload: AckPayload = {
@@ -688,7 +700,6 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       // the handshake ignore the field (legacy-pass-through).
       serverVersion: PROTOCOL_SCHEMA_VERSION,
       ...(replay?.truncated ? { replayTruncated: true } : {}),
-      ...(args.sessionToken !== undefined ? { sessionToken: args.sessionToken } : {}),
     };
     sink.write({
       type: "ack",

@@ -118,7 +118,8 @@ type BootChannelExtras = Pick<
   | 'bootstrap'
   | 'cookieAuth'
   | 'pendingEventConsumer'
->;
+> &
+  Partial<Pick<GguiSessionChannelOptions, 'logger'>>;
 
 /**
  * Boot a channel server over a bare http server, commit a component
@@ -571,13 +572,64 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
           token === 'tok-valid'
             ? { ok: true, sessionId, appId: APP_ID }
             : { ok: false, reason: 'invalid' },
-        issueSessionToken: () => 'reconnect-token-1',
       },
     }));
     fx.ws.send(subscribeSansAppId(fx.sessionId, { wsToken: 'tok-valid' }));
     const ack = await fx.nextFrame('ack');
-    expect((ack['payload'] as { sessionToken?: string }).sessionToken).toBe('reconnect-token-1');
+    // ggui#1488: the ack mints no reconnect credential; nothing verified one.
+    expect(ack['payload']).not.toHaveProperty('sessionToken');
     expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
+  });
+
+  it('logs render_channel_subscribed with the credential it came on: a wsToken subscribe {bootstrap: true, source: ws_token}, a bearer one {bootstrap: false, source: its auth source}, a console-cookie one {bootstrap: false, source: console_cookie} (ggui#1488)', async () => {
+    const subscribedOf = async (
+      subscribe: (sessionId: string) => string,
+      extras: (sessionId: string) => BootChannelExtras,
+    ): Promise<Array<{ bootstrap: unknown; source: unknown }>> => {
+      const infos: Array<{ event: string; fields: Record<string, unknown> }> = [];
+      const logger: Logger = {
+        info: (event, fields) => {
+          infos.push({ event, fields: fields ?? {} });
+        },
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined,
+        child: () => logger,
+      };
+      fx = await bootChannel({}, (sessionId) => ({ ...extras(sessionId), logger }));
+      fx.ws.send(subscribe(fx.sessionId));
+      await fx.nextFrame('ack');
+      await fx.close();
+      fx = null;
+      return infos
+        .filter((l) => l.event === 'render_channel_subscribed')
+        .map((l) => ({ bootstrap: l.fields['bootstrap'], source: l.fields['source'] }));
+    };
+    const viaToken = await subscribedOf(
+      (sessionId) => subscribeSansAppId(sessionId, { wsToken: 'tok-valid' }),
+      (sessionId) => ({
+        bootstrap: {
+          verify: (token) =>
+            token === 'tok-valid' ? { ok: true, sessionId, appId: APP_ID } : { ok: false, reason: 'invalid' },
+        },
+      }),
+    );
+    expect(viaToken).toEqual([{ bootstrap: true, source: 'ws_token' }]);
+    const viaBearer = await subscribedOf(
+      (sessionId) => subscribeSansAppId(sessionId),
+      () => ({ appIdFromIdentity: () => APP_ID }),
+    );
+    expect(viaBearer).toEqual([{ bootstrap: false, source: 'dev' }]);
+    const viaCookie = await subscribedOf(
+      (sessionId) => subscribeSansAppId(sessionId),
+      (sessionId) => ({
+        cookieAuth: {
+          readCookie: () => 'cookie-value',
+          verify: () => ({ sessionId, appId: APP_ID }),
+        },
+      }),
+    );
+    expect(viaCookie).toEqual([{ bootstrap: false, source: 'console_cookie' }]);
   });
 
   it('a PRESENT appId contradicting the wsToken binding still rejects BOOTSTRAP_APP_MISMATCH', async () => {
@@ -587,7 +639,6 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
           token === 'tok-valid'
             ? { ok: true, sessionId, appId: APP_ID }
             : { ok: false, reason: 'invalid' },
-        issueSessionToken: () => 'reconnect-token-1',
       },
     }));
     fx.ws.send(

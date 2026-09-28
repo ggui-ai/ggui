@@ -5,7 +5,7 @@
  * `ggui_render` tool call with bootstrap `_meta` on the result,
  * `resources/read ui://ggui/render` serving the thin shell, and a
  * real live-channel subscribe with the minted bootstrap token producing
- * an ack with a reconnect `sessionToken`.
+ * an ack, which carries no reconnect credential (ggui#1488).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
@@ -862,7 +862,7 @@ describe('root doors mint with the configured wsTokenTtlSec (ggui#1496 part B, s
   });
 });
 
-describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
+describe('end-to-end bootstrap subscribe → ack', () => {
   let fx: Fixture;
   let client: Client;
 
@@ -960,7 +960,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     expect(result.structuredContent).toMatchObject({ ok: false, code: 'BOOTSTRAP_INVALID' });
   });
 
-  it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {
+  it('bootstrap-auth subscribe succeeds, and the ack mints no reconnect sessionToken (ggui#1488)', async () => {
     const bootstrap = await mintRenderBootstrap();
     // Open WS with ?wsToken= gate — upgrade-time AuthAdapter is skipped.
     const ws = new WebSocket(
@@ -1004,8 +1004,8 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
 
     const ack = await ackPromise;
     expect(ack.sequence).toBeDefined();
-    expect(typeof ack.sessionToken).toBe('string');
-    expect((ack.sessionToken as string).length).toBeGreaterThan(10);
+    // No reconnect credential: nothing ever verified one (ggui#1488).
+    expect(ack).not.toHaveProperty('sessionToken');
     // Phase B replaced the prior `stack: GguiSession[]` ack slot with a
     // single `session: GguiSession` (a render IS the addressable unit).
     expect(ack.session).toBeDefined();
@@ -1065,9 +1065,9 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     const second = await subscribeWithBootstrap();
     expect(second.ok).toBe(true);
     if (second.ok) {
-      // Each subscribe still mints a fresh sessionToken — that's the
-      // longer-TTL reconnect credential and is per-subscribe by design.
-      expect(typeof second.sessionToken).toBe('string');
+      // The reused envelope is the reconnect credential; the ack mints
+      // none of its own (ggui#1488).
+      expect(second.sessionToken).toBeUndefined();
     }
   });
 

@@ -10,8 +10,8 @@
  *      HTML lives on this URI per `mcp-apps-outbound.ts`).
  *   3. `ggui_render` returns `_meta["ai.ggui/render"]` carrying the WS
  *      URL + token + sessionId + appId + runtimeUrl.
- *   4. WebSocket subscribe with the bootstrap token yields an `ack`
- *      with a reconnect `sessionToken`.
+ *   4. WebSocket subscribe with the bootstrap token yields an `ack`,
+ *      which mints no reconnect `sessionToken` (ggui#1488).
  *
  * That's the minimum claude.ai does on a single user-message turn,
  * minus the LLM tool-selection layer (which is host-side, not
@@ -95,7 +95,8 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     expect(ack.kind, `WS ack expected, got code=${ack.code ?? '(none)'}`).toBe(
       'ack',
     );
-    expect(ack.sessionToken, 'ack must carry reconnect sessionToken').toBeTruthy();
+    // ggui#1488: the ack mints no reconnect credential.
+    expect(ack.sessionToken, 'ack must carry no reconnect sessionToken').toBeUndefined();
   });
 
   it('caches tools/list — second listTools() call is idempotent', async () => {

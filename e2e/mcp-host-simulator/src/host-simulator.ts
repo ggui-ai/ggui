@@ -15,8 +15,8 @@
  *      `resultMeta._meta.ggui.bootstrap`, the host opens the iframe
  *      with the bootstrap token + WS URL.
  *   4. WebSocket subscribe — iframe runtime connects with the
- *      bootstrap token, gets an ack with a reconnect `sessionToken`,
- *      then receives event frames pushed by the server.
+ *      bootstrap token, gets an ack, then receives event frames pushed
+ *      by the server.
  *   5. **Submit-action bridge** (separate slice T2.5) — when the
  *      iframe renders an action-bound button + the user "clicks" it,
  *      the iframe posts `ui/message` to the host; the host replies
@@ -154,7 +154,7 @@ export interface CallToolResult {
 /**
  * WebSocket ack frame the iframe runtime expects after subscribe.
  * Mirrors the live-channel wire shape:
- *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, session } }`
+ *   - Ack:   `{ type: 'ack', payload: { sequence, session } }`
  *   - Error: `{ type: 'error', payload: { code } }`
  *
  * The simulator normalises both into a single discriminator on `kind`
@@ -162,7 +162,11 @@ export interface CallToolResult {
  */
 export interface SubscribeAck {
   readonly kind: "ack" | "error";
-  /** Set on `ack` — the reconnect token replacing the bootstrap one. */
+  /**
+   * Set only on an ack from a server of a release that still minted a
+   * reconnect credential (deprecated, ggui#1488). Parsed so a test can
+   * assert its absence against a current server.
+   */
   readonly sessionToken?: string;
   /** Set on `ack` — current sequence number for reconnect resume. */
   readonly sequence?: number;
@@ -667,8 +671,7 @@ export class HostSimulator {
   /**
    * Open a WebSocket to the bootstrap's `wsUrl`, send a `subscribe`
    * frame with the token, await the ack. Returns the parsed ack
-   * frame — the test can assert `kind === 'ack'` and pull the
-   * `sessionToken` for reconnect tests.
+   * frame — the test can assert `kind === 'ack'`.
    *
    * Does NOT keep the socket open beyond ack; the caller can pass
    * `keepOpen: true` to retain the WS for streaming-event tests.

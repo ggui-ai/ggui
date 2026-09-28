@@ -326,6 +326,8 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
         appId: stored.appId,
         identity,
         sink,
+        // The stream is wsToken-only; the identity above is synthetic.
+        credential: "ws_token",
         ...(sinceSequence !== undefined ? { sinceSequence } : {}),
         ...(fromSeq !== undefined ? { fromSeq } : {}),
       });

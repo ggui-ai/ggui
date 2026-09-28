@@ -90,6 +90,7 @@ import {
   createSubscribeHandlers,
   type GguiSessionChannelBootstrap,
   type GguiSessionChannelCookieAuth,
+  type SubscribeCredential,
 } from "./ggui-session-channel/subscribe.js";
 import { createSubscriberLifecycle } from "./ggui-session-channel/subscriber-lifecycle.js";
 import type { Logger } from "./logger.js";
@@ -158,6 +159,7 @@ export type {
   GguiSessionChannelBootstrap,
   GguiSessionChannelBootstrapVerifyResult,
   GguiSessionChannelCookieAuth,
+  SubscribeCredential,
 } from "./ggui-session-channel/subscribe.js";
 
 // Transport-neutral subscriber write surface — implemented by the WS
@@ -279,9 +281,9 @@ export interface GguiSessionChannelOptions {
   readonly streamFanout?: StreamFanout;
   /**
    * Optional bootstrap-auth plumbing. When present, the channel
-   * accepts `SubscribePayload.wsToken` and issues reconnect
-   * credentials in `AckPayload.sessionToken`. When absent, bootstrap
-   * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
+   * accepts `SubscribePayload.wsToken`; it mints no reconnect
+   * credential (ggui#1488). When absent, bootstrap tokens are rejected
+   * with `BOOTSTRAP_NOT_SUPPORTED`.
    */
   readonly bootstrap?: GguiSessionChannelBootstrap;
 
@@ -636,6 +638,12 @@ export interface GguiSessionChannelServer {
     readonly sink: SubscriberSink;
     readonly sinceSequence?: number;
     readonly fromSeq?: number;
+    /**
+     * The credential the transport authenticated (ggui#1488), logged as
+     * `render_channel_subscribed.source`; the SSE route passes
+     * `"ws_token"`. Absent: the identity's own auth source.
+     */
+    readonly credential?: SubscribeCredential;
   }): Promise<{ readonly detach: () => void }>;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
@@ -867,6 +875,7 @@ export function createGguiSessionChannelServer(
         transport: "sse",
         ...(args.sinceSequence !== undefined ? { sinceSequence: args.sinceSequence } : {}),
         ...(args.fromSeq !== undefined ? { fromSeq: args.fromSeq } : {}),
+        ...(args.credential !== undefined ? { credential: args.credential } : {}),
       });
     },
     get subscriberCount() {

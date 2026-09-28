@@ -10,10 +10,10 @@
  *   - extract/read helpers handle present/absent/malformed headers
  *     without throwing
  */
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   mintWsToken,
-  mintSessionToken,
   verifyToken,
 } from '@ggui-ai/mcp-server-core';
 import {
@@ -93,12 +93,24 @@ describe('verifyDevtoolCookie — isolation', () => {
     expect(verifyDevtoolCookie(token, SECRET)).toBeNull();
   });
 
-  it('rejects session tokens minted with the same secret', () => {
-    const { token } = mintSessionToken(
-      { sessionId: 's1', appId: 'a1' },
-      SECRET,
-    );
-    expect(verifyDevtoolCookie(token, SECRET)).toBeNull();
+  it('rejects session tokens signed with the same secret (a kind no release mints since ggui#1488, still refused by kind)', () => {
+    // The envelope format, signed here as an earlier release's
+    // `mintSessionToken` did: same secret, only the kind differs.
+    const b64url = (b: Buffer): string =>
+      b.toString('base64').replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const signed = (kind: string): string => {
+      const now = Math.floor(Date.now() / 1000);
+      const payload = b64url(
+        Buffer.from(
+          JSON.stringify({ sessionId: 's1', appId: 'a1', kind, iat: now, exp: now + 3600, jti: 'j' }),
+          'utf8',
+        ),
+      );
+      return `${payload}.${b64url(createHmac('sha256', SECRET).update(payload).digest())}`;
+    };
+    expect(verifyDevtoolCookie(signed('session'), SECRET)).toBeNull();
+    // Control, same signer: the cookie's own kind verifies, so the refusal is by kind.
+    expect(verifyDevtoolCookie(signed('console-session'), SECRET)).toEqual({ sessionId: 's1', appId: 'a1' });
   });
 
   it('ws tokens do NOT verify when the cookie kind is requested', () => {

@@ -18,11 +18,12 @@
  *     and the caller must be admitted to the session before anything is
  *     minted (ggui#1496 part B).
  *
- *   - **Session token** — longer-TTL, reusable, minted by the live-
- *     channel server on the FIRST successful ws-token-authed subscribe
- *     and returned in `AckPayload.sessionToken`. The iframe uses it for
- *     live-channel reconnects (over the standard bearer path) so the
- *     original token source doesn't need to re-mint.
+ *   - **Console session token** — longer-TTL, reusable, issued by the
+ *     same-origin console cookie endpoint (see `mintDevtoolSessionToken`).
+ *
+ * There is no longer a reconnect "session token" (ggui#1488): the live
+ * channel stopped minting one into `AckPayload.sessionToken`, which no
+ * client read and no server verified.
  *
  * **Format.** Compact `<payload>.<sig>` where `payload` is
  * base64url-encoded JSON and `sig` is the base64url of
@@ -61,7 +62,11 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
  * token even with matching signature + payload.
  *
  *   - `'ws'`              — short-TTL, multi-use within TTL (G14), ggui_render → iframe.
- *   - `'session'`         — longer-TTL, reusable, reconnect credential.
+ *   - `'session'`         — minted by NO server at this release (ggui#1488).
+ *     Kept deliberately until the release that removes
+ *     `AckPayload.sessionToken`: `kind` is a claim inside tokens that
+ *     cross the wire, and a session token a previous release minted
+ *     must still verify as `'wrong_kind'`, not `'malformed_claims'`.
  *   - `'console-session'` — longer-TTL, reusable, issued by the
  *     same-origin console cookie endpoint. Scoped narrowly: only
  *     verified at the live-channel upgrade by console's cookie-auth
@@ -101,7 +106,6 @@ export interface WsTokenClaims {
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
 export const DEFAULT_WS_TOKEN_TTL_SEC = 180;
-export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
 /**
  * The default refresh window, as a multiple of the ws-token TTL (ggui#1496
  * part B). `GET /api/sessions/:id/state` renews a ws token for whoever holds
@@ -223,32 +227,9 @@ export function mintWsToken(
 }
 
 /**
- * Mint a longer-TTL reusable session token.
- *
- * Issued by the live-channel server on the FIRST successful
- * ws-token-authed subscribe and returned in `AckPayload.sessionToken`.
- * The iframe persists it (sessionStorage / equivalent) and uses it
- * on reconnects via the standard `Authorization: Bearer <...>` or
- * `?token=<...>` paths. Not single-use.
- */
-export function mintSessionToken(
-  input: MintTokenInput,
-  secret: string,
-): { token: string; claims: WsTokenClaims } {
-  return mintToken(
-    {
-      ...input,
-      kind: 'session',
-      defaultTtlSec: DEFAULT_SESSION_TOKEN_TTL_SEC,
-    },
-    secret,
-  );
-}
-
-/**
- * Mint an console session token — the same HMAC shape as
- * ws / session, but with `kind: 'console-session'` so it
- * NEVER verifies as a ws or session token. Consumed by
+ * Mint an console session token — the same HMAC shape as a ws
+ * token, but with `kind: 'console-session'` so it NEVER verifies as
+ * a ws token. Consumed by
  * console's same-origin cookie at live-channel upgrade.
  *
  * Reusable (not single-use). Default TTL is `DEFAULT_DEVTOOL_SESSION_TTL_SEC`

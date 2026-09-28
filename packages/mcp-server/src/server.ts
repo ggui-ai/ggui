@@ -76,7 +76,6 @@ import {
   isTokenRegisteringAuthAdapter,
   DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER,
   DEFAULT_WS_TOKEN_TTL_SEC,
-  mintSessionToken,
   mintWsToken,
   verifyWsTokenSignature,
   verifyToken,
@@ -2480,8 +2479,8 @@ export interface CreateGguiServerOptions {
    *      `initialize` capabilities (under `experimental`).
    *   4. Each `ggui_render` result carries the `ai.ggui/render` slice
    *      with wsUrl + short-TTL token + expiresAt. The render-channel
-   *      server accepts that token on `subscribe` and issues a
-   *      longer-TTL `sessionToken` in the ack for iframe reconnects.
+   *      server accepts that token on `subscribe`; a reconnect presents
+   *      a live token again (no reconnect credential is minted, ggui#1488).
    */
   readonly mcpApps?:
     | boolean
@@ -2581,7 +2580,7 @@ export interface CreateGguiServerOptions {
       };
 
   /**
-   * HMAC secret used to sign bootstrap + session tokens. When the MCP
+   * HMAC secret used to sign ws (bootstrap) tokens and console cookies. When the MCP
    * Apps outbound path is enabled and no secret is passed, the server
    * mints a random 32-byte secret at boot — fine for dev + a single
    * long-running process, wrong for multi-host deployments (each host
@@ -3930,8 +3929,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let wsTokenVerify:
     | ((envelope: string) => import("@ggui-ai/mcp-server-handlers/renders").WsEnvelopeVerdict)
     | undefined;
-  // Shared HMAC secret for server-minted creds (bootstrap tokens,
-  // session tokens, console cookies). Distinct `kind` claims
+  // Shared HMAC secret for server-minted creds (ws bootstrap tokens,
+  // console cookies). Distinct `kind` claims
   // prevent cross-kind confusion; sharing the secret keeps the
   // config surface small and means operators rotate ONE value.
   // Resolved here so both the MCP Apps block and the console
@@ -3995,10 +3994,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           return { ok: false, reason: "expired" };
         }
         return { ok: false, reason: "invalid" };
-      },
-      issueSessionToken: (sessionId, appId) => {
-        const { token } = mintSessionToken({ sessionId, appId }, secret);
-        return token;
       },
     };
     wsTokenVerify = (envelope) => {

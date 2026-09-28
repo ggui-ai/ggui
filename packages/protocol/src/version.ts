@@ -6,6 +6,14 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The subscribe ack stops carrying a reconnect `sessionToken` (2026-09-28,
+ * ggui#1488 / ggui#1496 part B slice 3: MINOR, same draft stamp). No server
+ * ever verified the token and no client read it, so the SHOULD that asked
+ * servers to mint one is withdrawn. `AckPayload.sessionToken` stays declared
+ * optional and `@deprecated` through this release and is removed in the
+ * next (VERSION-POLICY §3.6), so a client parsing an ack from either
+ * release accepts it.
+ * --------------------------------------------------------------------
  * The durable blueprint's build stamp is now EMITTED (2026-09-27, ggui#1280
  * emit step: no schema change, same draft stamp). A generation mint writes
  * `Blueprint.build` from the generation's `GenerationMetadata.build`: the
