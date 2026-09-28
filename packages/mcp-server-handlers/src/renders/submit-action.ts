@@ -290,6 +290,20 @@ type GateRead =
   | { readonly kind: 'read-failed' };
 
 /**
+ * A consumer exit younger than this (ms) means the agent is mid-loop
+ * (consume → act → consume), so a dispatch waits the long grace for its
+ * re-poll. Named so the active-consumer registry's exit retention can be
+ * held to it (ggui#1485).
+ */
+export const RECENT_CONSUMER_EXIT_MS = 10_000;
+
+/**
+ * With no consumer exit on record, a render younger than this (ms) waits
+ * the long grace: its first consume may still be racing the click.
+ */
+export const YOUNG_RENDER_MS = 60_000;
+
+/**
  * Read the dispatch's render row — for the app-scope gate (ggui#1479) and,
  * once that passes, the `actionSpec` gate (ggui#1358). A failed read is named
  * on one warn line.
@@ -559,30 +573,21 @@ export function createGguiSubmitActionHandler(
             let graceMs = deps.consumerGraceMs;
             if (graceMs === undefined) {
               const sinceExit = registry.msSinceLastExit(env.sessionId);
-              if (sinceExit !== undefined && sinceExit < 10_000) {
+              if (sinceExit !== undefined && sinceExit < RECENT_CONSUMER_EXIT_MS) {
                 graceMs = 2_000;
               } else if (sinceExit === undefined) {
-                let renderAgeMs: number | undefined;
-                if (deps.renderStore !== undefined) {
-                  try {
-                    const row = await deps.renderStore.get(env.sessionId);
-                    const createdAt = row?.render.createdAt;
-                    renderAgeMs =
-                      typeof createdAt === 'number'
-                        ? Math.max(0, Date.now() - createdAt)
-                        : undefined;
-                  } catch {
-                    // Best-effort age read — fall through to the
-                    // fast-answer arm on store hiccups.
-                  }
-                }
+                // The render's age comes off the row the app gate above
+                // already read (ggui#1485): no second store read.
+                const createdAt = stored?.render.createdAt;
+                const renderAgeMs =
+                  typeof createdAt === 'number' ? Math.max(0, Date.now() - createdAt) : undefined;
                 // 60s (was 20s): a live probe clicked 20.4s
                 // post-render — 400ms past the old threshold — and
                 // rang a duplicate doorbell while the first poll
                 // parked 462ms later. Waiting 2s on a genuinely dead
                 // card is cheap; a false ring is not.
                 graceMs =
-                  renderAgeMs !== undefined && renderAgeMs < 60_000
+                  renderAgeMs !== undefined && renderAgeMs < YOUNG_RENDER_MS
                     ? 2_000
                     : 150;
               } else {

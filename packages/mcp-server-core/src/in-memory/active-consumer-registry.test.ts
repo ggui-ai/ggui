@@ -10,8 +10,11 @@
  *   - `exit` without prior `enter` is harmless (no negative counts).
  */
 
-import { describe, expect, it } from 'vitest';
-import { InMemoryActiveConsumerRegistry } from './active-consumer-registry.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  ACTIVE_CONSUMER_EXIT_RETENTION_MS,
+  InMemoryActiveConsumerRegistry,
+} from './active-consumer-registry.js';
 
 describe('InMemoryActiveConsumerRegistry', () => {
   it('starts empty — hasActive returns false for any id', () => {
@@ -118,5 +121,36 @@ describe('InMemoryActiveConsumerRegistry', () => {
     const since = r.msSinceLastExit('render-1');
     expect(since).toBeDefined();
     expect(since!).toBeLessThan(1_000);
+  });
+});
+
+describe('InMemoryActiveConsumerRegistry — exits are forgotten past their retention (ggui#1485)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reads an exit inside the retention, and undefined past it', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const r = new InMemoryActiveConsumerRegistry();
+    r.enter('render-1');
+    r.exit('render-1');
+    vi.setSystemTime(ACTIVE_CONSUMER_EXIT_RETENTION_MS);
+    expect(r.msSinceLastExit('render-1')).toBe(ACTIVE_CONSUMER_EXIT_RETENTION_MS);
+    vi.setSystemTime(ACTIVE_CONSUMER_EXIT_RETENTION_MS + 1);
+    expect(r.msSinceLastExit('render-1')).toBeUndefined();
+  });
+
+  it('a repeat exit refreshes its session: its age counts from the latest exit', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const r = new InMemoryActiveConsumerRegistry();
+    r.enter('render-a');
+    r.exit('render-a');
+    vi.setSystemTime(50_000);
+    r.enter('render-a');
+    r.exit('render-a');
+    vi.setSystemTime(ACTIVE_CONSUMER_EXIT_RETENTION_MS + 1);
+    expect(r.msSinceLastExit('render-a')).toBe(ACTIVE_CONSUMER_EXIT_RETENTION_MS + 1 - 50_000);
   });
 });

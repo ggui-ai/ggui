@@ -16,7 +16,10 @@ export type { MockEmbeddingProviderOptions } from './embedding-provider.js';
 export { InMemoryGguiSessionStore } from './ggui-session-store.js';
 export type { InMemoryGguiSessionStoreOptions } from './ggui-session-store.js';
 export { InMemoryPendingEventConsumer } from './pending-event-consumer.js';
-export { InMemoryActiveConsumerRegistry } from './active-consumer-registry.js';
+export {
+  ACTIVE_CONSUMER_EXIT_RETENTION_MS,
+  InMemoryActiveConsumerRegistry,
+} from './active-consumer-registry.js';
 export { InMemoryThreadStore } from './thread-store.js';
 export type { InMemoryThreadStoreOptions } from './thread-store.js';
 export { InMemoryGguiSessionStreamBuffer } from './ggui-session-stream-buffer.js';

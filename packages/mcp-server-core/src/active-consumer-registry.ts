@@ -47,16 +47,17 @@
 export interface ActiveConsumerRegistry {
   /**
    * Increment the consumer count for `sessionId`. Called from
-   * `consume.ts` at the top of the handler (before the long-poll loop)
-   * so a concurrent `submit-action.ts` append sees `hasActive: true`
-   * even during the 1.5s sleep between consumeAndClear ticks.
+   * `consume.ts` once the caller is admitted to the session (never for a
+   * refused or missing one, ggui#1485) and before the long-poll loop, so
+   * a concurrent `submit-action.ts` append sees `hasActive: true` even
+   * during the 1.5s sleep between consumeAndClear ticks.
    */
   enter(sessionId: string): void;
 
   /**
    * Decrement the consumer count for `sessionId`. Called from
-   * `consume.ts`'s `finally` block so EVERY exit path (success, timeout,
-   * error) cleans up. When the count reaches zero the entry is removed.
+   * `consume.ts`'s `finally` block so every exit path after admission
+   * (success, timeout, error, abort) cleans up. When the count reaches zero the entry is removed.
    */
   exit(sessionId: string): void;
 
@@ -82,8 +83,10 @@ export interface ActiveConsumerRegistry {
 
   /**
    * Milliseconds since the LAST consumer for `sessionId` exited, or
-   * `undefined` when none has ever exited (no consume has completed
-   * for this render since process start).
+   * `undefined` when none has exited within the implementation's
+   * retention (at least 60 s; the in-memory implementation forgets an
+   * exit after `ACTIVE_CONSUMER_EXIT_RETENTION_MS`, ggui#1485), including
+   * when no consume has completed for this render since process start.
    *
    * Powers the ADAPTIVE grace window: a recent exit means the agent is
    * mid-loop (consume → act → consume) and a re-poll is likely — worth

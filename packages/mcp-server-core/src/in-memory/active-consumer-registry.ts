@@ -7,7 +7,8 @@
  * should wire a Redis-backed implementation against the same
  * interface.
  *
- * Operations are O(1) (Map.get / set / delete). Not thread-safe by
+ * Operations are O(1) (Map.get / set / delete); `exit` is amortized
+ * O(1), because its pruning deletes each stamp at most once. Not thread-safe by
  * design — Node's single-threaded event loop is the synchronization
  * primitive; concurrent `enter` / `exit` calls interleave only around
  * `await` boundaries, but each individual Map mutation is atomic.
@@ -16,10 +17,31 @@
  */
 
 import type { ActiveConsumerRegistry } from '../active-consumer-registry.js';
+import { RetainedStamps } from './retained-stamps.js';
+
+/**
+ * How long an exit stays readable through `msSinceLastExit`, in ms
+ * (ggui#1485). Past it the exit reads `undefined`, and each new exit prunes
+ * the ones past it, so the exit map holds the exits of the minute before
+ * the latest one instead of one entry per session that ever had a
+ * consumer.
+ *
+ * It is at least both windows `ggui_runtime_submit_action`'s grace compares
+ * against, and a test there holds it so: an exit younger than 10 s takes
+ * the long wait, and with no exit on record, a render younger than 60 s
+ * does; any other exit takes the short wait. So forgetting an exit changes
+ * no wait while the render's `createdAt` is older than the exit: the
+ * forgotten exit is over 60 s old, the render is older still, and both
+ * arms give the short wait. One case does change. A session re-rendered in
+ * place after its consumer exited, on a store that keeps the new render's
+ * `createdAt` (a `ggui_render` reuse), now takes the long wait for 60 s
+ * after the re-render, as a fresh render does, where it took the short one.
+ */
+export const ACTIVE_CONSUMER_EXIT_RETENTION_MS = 60_000;
 
 export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
   private readonly counts = new Map<string, number>();
-  private readonly lastExitAt = new Map<string, number>();
+  private readonly lastExitAt = new RetainedStamps(ACTIVE_CONSUMER_EXIT_RETENTION_MS);
   private readonly waiters = new Map<string, Set<() => void>>();
 
   enter(sessionId: string): void {
@@ -39,7 +61,7 @@ export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
     } else {
       this.counts.set(sessionId, next);
     }
-    this.lastExitAt.set(sessionId, Date.now());
+    this.lastExitAt.stamp(sessionId, Date.now());
   }
 
   hasActive(sessionId: string): boolean {
@@ -70,7 +92,6 @@ export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
   }
 
   msSinceLastExit(sessionId: string): number | undefined {
-    const at = this.lastExitAt.get(sessionId);
-    return at === undefined ? undefined : Math.max(0, Date.now() - at);
+    return this.lastExitAt.age(sessionId, Date.now());
   }
 }

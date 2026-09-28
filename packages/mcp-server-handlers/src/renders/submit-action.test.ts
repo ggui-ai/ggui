@@ -18,13 +18,18 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  ACTIVE_CONSUMER_EXIT_RETENTION_MS,
   InMemoryActiveConsumerRegistry,
   InMemoryGguiSessionStore,
   InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
-import { createGguiSubmitActionHandler } from './submit-action.js';
+import {
+  createGguiSubmitActionHandler,
+  RECENT_CONSUMER_EXIT_MS,
+  YOUNG_RENDER_MS,
+} from './submit-action.js';
 
 const baseEnv = {
   sessionId: 'sess_1',
@@ -683,5 +688,70 @@ describe('createGguiSubmitActionHandler', () => {
       const drained = await consumer.consumeAndClear(sessionId, 100);
       expect(drained.events.length).toBe(1);
     });
+  });
+});
+
+describe('the grace choice and the consumer registry\'s exit retention (ggui#1485)', () => {
+  async function seededStore(sessionId: string, createdAt: number): Promise<InMemoryGguiSessionStore> {
+    const store = new InMemoryGguiSessionStore();
+    const render: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt,
+      lastActivityAt: createdAt,
+      expiresAt: Date.UTC(2100, 0, 1),
+    };
+    await store.commit({ appId: 'app_1', render });
+    return store;
+  }
+
+  it('the registry retains an exit at least as long as either window the grace compares against', () => {
+    expect(ACTIVE_CONSUMER_EXIT_RETENTION_MS).toBeGreaterThanOrEqual(Math.max(RECENT_CONSUMER_EXIT_MS, YOUNG_RENDER_MS));
+  });
+
+  it('reads the render\'s age off the gate\'s own row: one store read per dispatch, and a young render still gets the long window', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    const sessionId = 'render-grace-young';
+    await consumer.markCreated(sessionId);
+    const store = await seededStore(sessionId, Date.now() - 1_000);
+    const get = vi.spyOn(store, 'get');
+    const registry = new InMemoryActiveConsumerRegistry();
+    const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, activeConsumerRegistry: registry, renderStore: store });
+    // A consume parking at 300 ms is inside the young-render window (2 s) and outside the idle one (150 ms).
+    const park = setTimeout(() => registry.enter(sessionId), 300);
+    try {
+      const out = await h.handler(
+        { ...baseEnv, sessionId, kind: 'dispatch', payload: { intent: 'submit', actionData: null, uiContext: {} } },
+        ctx,
+      );
+      expect(out).toEqual({ ok: true, consumerPresent: true });
+      expect(get).toHaveBeenCalledTimes(1);
+    } finally {
+      clearTimeout(park);
+    }
+  });
+
+  it('an old render with no exit on record gets the short window, from the same single read', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    const sessionId = 'render-grace-old';
+    await consumer.markCreated(sessionId);
+    const store = await seededStore(sessionId, Date.now() - 2 * YOUNG_RENDER_MS);
+    const get = vi.spyOn(store, 'get');
+    const h = createGguiSubmitActionHandler({
+      pendingEventConsumer: consumer,
+      activeConsumerRegistry: new InMemoryActiveConsumerRegistry(),
+      renderStore: store,
+    });
+    const started = Date.now();
+    const out = await h.handler(
+      { ...baseEnv, sessionId, kind: 'dispatch', payload: { intent: 'submit', actionData: null, uiContext: {} } },
+      ctx,
+    );
+    expect(out).toEqual({ ok: true, consumerPresent: false });
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });

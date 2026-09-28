@@ -560,12 +560,15 @@ describe('createGguiConsumeHandler', () => {
       expect(registry.hasActive('render-1')).toBe(false);
     });
 
-    it('exits the registry even when the handler throws (GguiSessionNotFoundError)', async () => {
-      // Tenancy mismatch surfaces as GguiSessionNotFoundError; enter MUST
-      // still pair with exit so a long-poll-with-bad-tenancy can't
-      // leave a sticky `hasActive: true` for that sessionId.
+    it('a refused consume never touches the registry: no enter, no exit, no lastExitAt stamp on the other app\'s session (ggui#1485)', async () => {
+      // The gate runs before `enter`. A consume of another app's session
+      // must not mark that session as having a consumer (which would keep
+      // its dispatches from ringing the doorbell) nor stamp its lastExitAt
+      // (which would put its next dispatch on the long grace).
       await seedRender('render-1', 'app-OWNER');
       const registry = new InMemoryActiveConsumerRegistry();
+      const enterSpy = vi.spyOn(registry, 'enter');
+      const exitSpy = vi.spyOn(registry, 'exit');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
@@ -577,7 +580,65 @@ describe('createGguiConsumeHandler', () => {
           { appId: 'app-INTRUDER', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
+      expect(enterSpy).not.toHaveBeenCalled();
+      expect(exitSpy).not.toHaveBeenCalled();
       expect(registry.hasActive('render-1')).toBe(false);
+      expect(registry.msSinceLastExit('render-1')).toBeUndefined();
+    });
+
+    it('a consume of a missing session never touches the registry either', async () => {
+      const registry = new InMemoryActiveConsumerRegistry();
+      const enterSpy = vi.spyOn(registry, 'enter');
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+        activeConsumerRegistry: registry,
+      });
+      await expect(
+        handler.handler({ sessionId: 'render-ghost', timeout: 0 }, { appId: 'app-1', requestId: 'r1' }),
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
+      expect(enterSpy).not.toHaveBeenCalled();
+      expect(registry.msSinceLastExit('render-ghost')).toBeUndefined();
+    });
+
+    it('enters only after the gate: while the store read is pending, the session has no consumer', async () => {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      class HeldReadStore extends InMemoryGguiSessionStore {
+        override async get(id: string) {
+          await gate;
+          return super.get(id);
+        }
+      }
+      const slowStore = new HeldReadStore();
+      const render: ComponentGguiSession = {
+        id: 'render-1',
+        appId: 'app-1',
+        type: 'component',
+        componentCode: '',
+        contentType: 'application/javascript+react',
+        eventSequence: 0,
+        createdAt: NOW_MS,
+        lastActivityAt: NOW_MS,
+        expiresAt: NOW_MS + 60_000,
+      };
+      await slowStore.commit({ render, appId: 'app-1' });
+      consumer.markCreated('render-1');
+      const registry = new InMemoryActiveConsumerRegistry();
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore: slowStore,
+        activeConsumerRegistry: registry,
+      });
+      const pending = handler.handler({ sessionId: 'render-1', timeout: 0 }, { appId: 'app-1', requestId: 'r1' });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(registry.hasActive('render-1')).toBe(false);
+      release();
+      await pending;
+      // Control: an admitted consume did enter and exit.
+      expect(registry.msSinceLastExit('render-1')).toBeDefined();
     });
 
     it('surfaces hasActive:true to a concurrent observer during the long-poll', async () => {

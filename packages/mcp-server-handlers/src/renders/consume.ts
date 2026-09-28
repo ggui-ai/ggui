@@ -159,8 +159,9 @@ export interface GguiConsumeHandlerDeps {
   readonly logger?: ConsumeLogger;
   /**
    * Optional active-consumer awareness seam. When bound, the handler
-   * calls `enter(sessionId)` at the top of the long-poll and
-   * `exit(sessionId)` in `finally` so a concurrent
+   * calls `enter(sessionId)` once the caller is admitted to the session
+   * (never for a refused or missing one) and `exit(sessionId)` in
+   * `finally` so a concurrent
    * `ggui_runtime_submit_action` append can query `hasActive` and
    * surface `consumerPresent: false` to the iframe when no long-poll
    * is registered for the targeted render — the iframe then emits
@@ -208,23 +209,31 @@ export function createGguiConsumeHandler(deps: GguiConsumeHandlerDeps) {
     ): Promise<ConsumeOutput | HandlerFailure<ConsumeOutput>> {
       const { sessionId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
-      // Register this long-poll on the active-consumer registry IMMEDIATELY
-      // — before the app-scope resolution awaits — so a concurrent
-      // `submit-action.ts` append observes `hasActive: true` for the
-      // earliest possible window. `exit` is paired in `finally` below so
-      // every termination path (success, timeout, error, app-scope reject)
-      // decrements the count exactly once.
+      // Resolve render FIRST (ggui#1485). Cross-app (appId) + cross-user +
+      // missing all surface uniformly as session_not_found (don't leak
+      // whether the id exists for another app / another user), and a
+      // refused call must leave no trace on the session it named. Entering
+      // the active-consumer registry before this gate let another app's
+      // consume count as the session's consumer while its store read ran
+      // (a dispatch in that moment reported a consumer present), and its
+      // `exit` stamped the session's lastExitAt, which changed the grace
+      // wait of that session's dispatches for the next minute.
+      const stored = await deps.renderStore.get(sessionId);
+      if (!isVisibleToCaller(stored, ctx)) {
+        // `stored` is narrowed to StoredGguiSession past this guard.
+        throw new GguiSessionNotFoundError(sessionId);
+      }
+      // Register this long-poll on the active-consumer registry once the
+      // caller is admitted, so a concurrent `submit-action.ts` append
+      // observes `hasActive: true`. A dispatch landing during the store
+      // read above waits its own grace (`waitForConsumer`), which this
+      // `enter` wakes; with the default policy that wait is at least
+      // 150 ms, far longer than one store read, while a deployment's
+      // `consumerGraceMs` sets its own. `exit` is paired in `finally` below
+      // so every termination path after admission (success, timeout,
+      // error, abort) decrements the count exactly once.
       deps.activeConsumerRegistry?.enter(sessionId);
       try {
-        // Resolve render. Cross-app (appId) + cross-user + missing
-        // all surface uniformly as session_not_found (don't leak whether
-        // the id exists for another app / another user).
-        const stored = await deps.renderStore.get(sessionId);
-        if (!isVisibleToCaller(stored, ctx)) {
-          // `stored` is narrowed to StoredGguiSession past this guard.
-          throw new GguiSessionNotFoundError(sessionId);
-        }
-
         // `timeout` is schema-bounded to [0, 25] (SPEC §7.3) —
         // out-of-range values rejected INVALID_PARAMS before this line.
         const deadline = Date.now() + timeout * 1000;
