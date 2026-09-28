@@ -10,14 +10,8 @@
  * bound to the data-plane tools that emit it.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import {
-  DOMAIN_ERROR_CODES,
-  DOMAIN_ERROR_RECOVERIES,
-  DOMAIN_ERROR_REGISTRY,
-  DOMAIN_ERROR_ROWS,
-  isDomainErrorCode,
-  type DomainErrorCode,
-} from '../domain-error-codes';
+import { DOMAIN_ERROR_CODES, isDomainErrorCode, type DomainErrorCode } from '../domain-error-code-names';
+import { DOMAIN_ERROR_RECOVERIES, DOMAIN_ERROR_REGISTRY, DOMAIN_ERROR_ROWS } from '../domain-error-codes';
 import { PRE_GENERATION_REFUSAL_CODES } from '../refusal-codes';
 
 /** The data-plane `tools/call` surfaces a Plane-2 slug may name. */

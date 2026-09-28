@@ -81,6 +81,7 @@ export * from "./types/llm";
 // so it rides the root barrel (unlike ./blueprint-key, which is
 // subpathed only because it pulls node:crypto).
 export * from "./types/refusal-codes";
+export * from "./types/domain-error-code-names";
 export * from "./types/domain-error-codes";
 export * from "./types/llm-route";
 export * from "./types/anthropic-model-rules";
@@ -116,6 +117,7 @@ export * from "./errors/unknown-permission-name";
 // non-mount outcome of a render-locator read.
 export * from "./errors/resource-read";
 export * from "./errors/domain-error";
+export * from "./errors/domain-error-text";
 export * from "./validation/contract-validator";
 export * from "./validation/cross-references";
 export * from "./validation/is-record";

@@ -26,6 +26,11 @@ export * from './validation/contract-validator';
 export * from './validation/reserved-channels';
 export * from './validation/hygiene-rules';
 export * from './errors/unknown-permission-name';
+// The Plane-2 reader (`<code>: <detail>`): a browser reads a tool's domain
+// error text through it. It carries the code NAMES only, never the registry
+// rows' prose.
+export * from './errors/domain-error-text';
+export * from './types/domain-error-code-names';
 export * from './envelopes/builders';
 export * from './schemas/invoke';
 export * from './schemas/interface-context';

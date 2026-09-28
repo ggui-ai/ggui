@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isDomainError, parseDomainErrorText } from '../errors/domain-error';
+import { isDomainError } from '../errors/domain-error';
+import { parseDomainErrorText } from '../errors/domain-error-text';
 import type { DataContract } from '../types/data-contract';
 import {
   ContractValidationError,

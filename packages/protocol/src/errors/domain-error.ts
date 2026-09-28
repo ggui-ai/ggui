@@ -26,7 +26,7 @@ import {
   DOMAIN_ERROR_CODES,
   isDomainErrorCode,
   type DomainErrorCode,
-} from '../types/domain-error-codes';
+} from '../types/domain-error-code-names';
 import { PRE_GENERATION_REFUSAL_CODES } from '../types/refusal-codes';
 
 /**
@@ -110,22 +110,3 @@ export function isDomainError(err: unknown): err is DomainError {
   );
 }
 
-/** A parsed Plane-2 wire text. */
-export interface ParsedDomainErrorText {
-  readonly code: DomainErrorCode;
-  readonly detail: string;
-}
-
-/**
- * The reader side of the grammar: `<code>: <detail>` for a REGISTERED code,
- * else `null` — a Plane-1 text (`MCP error -32602: …`), a tool-name prefix
- * (`ggui_render: …`) or an unregistered slug is not a domain error.
- */
-export function parseDomainErrorText(text: string): ParsedDomainErrorText | null {
-  const separator = text.indexOf(': ');
-  if (separator <= 0) return null;
-  const code = text.slice(0, separator);
-  const detail = text.slice(separator + 2);
-  if (!isDomainErrorCode(code) || detail.trim().length === 0) return null;
-  return { code, detail };
-}

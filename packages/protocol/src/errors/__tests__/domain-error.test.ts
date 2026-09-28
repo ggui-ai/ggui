@@ -15,8 +15,8 @@ import {
   DomainError,
   DomainErrorDetailCollisionError,
   isDomainError,
-  parseDomainErrorText,
 } from '../domain-error';
+import { parseDomainErrorText } from '../domain-error-text';
 
 class SessionGone extends DomainError<'session_not_found'> {
   constructor(readonly sessionId: string) {

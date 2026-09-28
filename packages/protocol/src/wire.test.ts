@@ -75,6 +75,25 @@ describe('@ggui-ai/protocol/wire — the browser entry reaches only what a brows
     expect(leaked, `reached ${reached.length} modules`).toEqual([]);
   });
 
+  // The domain-error reader parses by code NAME; the registry's rows carry
+  // every code's prose (tools, emitter, description), which a browser that
+  // parses a domain error never reads. The entry's static graph reaches the
+  // rows anyway (the contract validator's `DomainError`), and a bundler drops
+  // them when nothing calls that path, so the property to pin is the
+  // reader's OWN graph: it imports the names and nothing else, and a bundle
+  // that uses only the reader carries only the names.
+  it('carries the domain-error reader, whose own import graph is the code names alone', () => {
+    const rel = (f: string): string => f.slice(SRC.length + 1);
+    expect([...reachable(join(SRC, 'wire.ts'))].map(rel)).toContain('errors/domain-error-text.ts');
+    expect([...reachable(join(SRC, 'errors/domain-error-text.ts'))].map(rel).sort()).toEqual([
+      'errors/domain-error-text.ts',
+      'types/domain-error-code-names.ts',
+    ]);
+    expect([...reachable(join(SRC, 'types/domain-error-code-names.ts'))].map(rel)).toEqual([
+      'types/domain-error-code-names.ts',
+    ]);
+  });
+
   it('carries the runtime values the browser packages import from the barrel today', async () => {
     const wire = await import('./wire');
     for (const name of [
@@ -97,6 +116,9 @@ describe('@ggui-ai/protocol/wire — the browser entry reaches only what a brows
       'KNOWN_PERMISSION_NAMES',
       'UnknownPermissionNameError',
       'BRIDGE_EVENTS',
+      'parseDomainErrorText',
+      'isDomainErrorCode',
+      'DOMAIN_ERROR_CODES',
     ]) {
       expect((wire as Record<string, unknown>)[name], name).toBeDefined();
     }

@@ -1,5 +1,5 @@
 /**
- * The Plane-2 registry — the ONLY list of domain-error slugs (ggui#880).
+ * The Plane-2 registry rows (ggui#880): what each domain-error code means.
  *
  * SPEC §7.9 Plane 2: a recoverable, contract-level failure the caller can
  * fix — a missing session or handshake, props that do not satisfy the
@@ -7,14 +7,19 @@
  * to the agent as `{content: [{type: 'text', text: error.message}],
  * isError: true}` and nothing else, so the slug travels as the LEADING
  * token of that text — `<code>: <detail>` — composed by the `DomainError`
- * base in `../errors/domain-error` from a code in this registry. A reader
+ * base in `../errors/domain-error` from a registered code. A reader
  * branches on `text.startsWith(code + ': ')` for a registered code and on
  * nothing else.
  *
- * Same posture as the refusal registry in `./refusal-codes`: `code === key`
- * is forced at the definer, the code type is derived from the keys, and
- * the two registries are disjoint (pinned) — one code names one plane.
+ * The ONLY list of codes is `DOMAIN_ERROR_CODES` in
+ * `./domain-error-code-names`, kept apart so the wire grammar's reader can
+ * import the names without this prose. The rows below are typed
+ * exhaustively over it: `code === key` is forced at the definer, a name
+ * without a row or a row without a name does not compile, and the codes
+ * are disjoint from the refusal registry in `./refusal-codes` (pinned) —
+ * one code names one plane.
  */
+import type { DomainErrorCode } from './domain-error-code-names';
 
 /**
  * How a caller recovers from a Plane-2 failure.
@@ -52,13 +57,13 @@ interface DomainErrorRowBase {
 }
 
 /**
- * The registry is the ONLY list of domain-error codes: {@link DomainErrorCode}
- * is derived from the keys below, and this definer forces every row's
- * `code` to equal its key at the type level.
+ * The rows are typed exhaustively over `DOMAIN_ERROR_CODES`: this
+ * definer forces every row's `code` to equal its key, requires a row for
+ * every code, and refuses a key that is not a code.
  */
 function defineDomainErrorRegistry<
-  const T extends { readonly [K in keyof T]: DomainErrorRowBase & { readonly code: K } },
->(rows: T): T {
+  const T extends { readonly [K in DomainErrorCode]: DomainErrorRowBase & { readonly code: K } },
+>(rows: T & { readonly [K in Exclude<keyof T, DomainErrorCode>]: never }): T {
   return rows;
 }
 
@@ -204,9 +209,6 @@ export const DOMAIN_ERROR_ROWS = /* @__PURE__ */ defineDomainErrorRegistry({
   },
 });
 
-/** A domain-error code = a registry key. Derived; never a second list. */
-export type DomainErrorCode = keyof typeof DOMAIN_ERROR_ROWS;
-
 /** A registry row, as consumers read it. */
 export interface DomainErrorRow {
   readonly code: DomainErrorCode;
@@ -216,15 +218,6 @@ export interface DomainErrorRow {
   readonly description: string;
 }
 
-/** The registry consumers read. */
+/** The registry consumers read, one row per code in `DOMAIN_ERROR_CODES`. */
 export const DOMAIN_ERROR_REGISTRY: Readonly<Record<DomainErrorCode, DomainErrorRow>> =
   DOMAIN_ERROR_ROWS;
-
-/** Whether `value` is a registered domain-error code. */
-export function isDomainErrorCode(value: string): value is DomainErrorCode {
-  return Object.hasOwn(DOMAIN_ERROR_ROWS, value);
-}
-
-/** Every registered code, in registry order. */
-export const DOMAIN_ERROR_CODES: readonly DomainErrorCode[] =
-  Object.keys(DOMAIN_ERROR_ROWS).filter(isDomainErrorCode);
