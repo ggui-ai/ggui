@@ -267,6 +267,40 @@ describe('SSETransport — sequence cursor', () => {
     transport.start();
     expect(sources[1]!.url).toBe(`${SSE_URL}&sinceSequence=9`);
   });
+
+  it('reads a function initialSinceSequence when it connects, not when it is built (ggui#1496)', () => {
+    const { sources, factory } = makeFactory();
+    let cursor = 1;
+    transport = new SSETransport({
+      sse: { url: SSE_URL, initialSinceSequence: () => cursor },
+      handlers: new Map<string, ChannelHandler>(),
+      eventSourceFactory: factory,
+    });
+    cursor = 17;
+    transport.start();
+    expect(sources[0]!.url).toBe(`${SSE_URL}&sinceSequence=17`);
+  });
+
+  it('appends &fromSeq= from the stream cursor on every connect, recreates included, and omits it while undefined (ggui#1496)', () => {
+    const handlers = new Map<string, ChannelHandler>([
+      ['render_event', { type: 'render_event', onMessage: () => {} }],
+    ]);
+    const { sources, factory } = makeFactory();
+    let streamCursor: number | undefined = undefined;
+    transport = new SSETransport({
+      sse: { url: SSE_URL, initialSinceSequence: 5, fromSeq: () => streamCursor },
+      handlers,
+      eventSourceFactory: factory,
+    });
+    transport.start();
+    expect(sources[0]!.url).toBe(`${SSE_URL}&sinceSequence=5`);
+    sources[0]!.triggerOpen();
+    sources[0]!.triggerMessage({ type: 'render_event', payload: {} }, '9');
+    streamCursor = 4;
+    sources[0]!.triggerError(2);
+    transport.start();
+    expect(sources[1]!.url).toBe(`${SSE_URL}&sinceSequence=9&fromSeq=4`);
+  });
 });
 
 describe('SSETransport — failure policy', () => {

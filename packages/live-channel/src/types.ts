@@ -176,8 +176,20 @@ export interface RegistrySseOptions {
    * (which the server prefers over the query param) or, for manual
    * recreates, by the latest dispatched sequence the transport has
    * observed. Absent → no query cursor (live frames only).
+   *
+   * A function is read when the transport connects, not when the ladder
+   * is bound, so a rung built early resumes from where the view is when
+   * it opens (ggui#1496).
    */
-  readonly initialSinceSequence?: number;
+  readonly initialSinceSequence?: number | (() => number);
+  /**
+   * Stream-buffer resume cursor (`SubscribePayload.fromSeq`'s SSE
+   * counterpart, ggui#1496): read on EVERY connect, recreates included,
+   * and appended as `&fromSeq=<n>` so the server replays the stream
+   * envelopes after the last one the view applied. `undefined` → no
+   * query param.
+   */
+  readonly fromSeq?: () => number | undefined;
   /**
    * Cursor bridge. Fired once per dispatched frame that carries a
    * parseable `id:` (the server stamps SSE `id:` = event-ledger

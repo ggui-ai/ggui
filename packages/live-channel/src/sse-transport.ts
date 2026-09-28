@@ -25,7 +25,9 @@
  *       precedent).
  *
  * Resume cursors: the first connect appends `&sinceSequence=<n>` from
- * `RegistrySseOptions.initialSinceSequence`; browser-internal
+ * `RegistrySseOptions.initialSinceSequence` (a function is read at
+ * connect), and every connect appends `&fromSeq=<n>` from
+ * `RegistrySseOptions.fromSeq` when it reads defined; browser-internal
  * reconnects stamp the `Last-Event-ID` header (which the server
  * prefers over the query param); manual recreates re-seed the query
  * from the latest dispatched sequence so a recreate resumes instead
@@ -247,11 +249,17 @@ export class SSETransport implements SseTransportHandle {
    * this query param.
    */
   private composeUrl(): string {
-    const { url, initialSinceSequence } = this.opts.sse;
-    const cursor = this.lastSequence ?? initialSinceSequence;
-    if (cursor === undefined) return url;
+    const { url, initialSinceSequence, fromSeq } = this.opts.sse;
+    const seed = typeof initialSinceSequence === 'function' ? initialSinceSequence() : initialSinceSequence;
+    const cursor = this.lastSequence ?? seed;
+    const streamCursor = fromSeq?.();
+    const query = [
+      ...(cursor !== undefined ? [`sinceSequence=${cursor}`] : []),
+      ...(streamCursor !== undefined ? [`fromSeq=${streamCursor}`] : []),
+    ];
+    if (query.length === 0) return url;
     const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}sinceSequence=${cursor}`;
+    return `${url}${separator}${query.join('&')}`;
   }
 
   private armWatchdog(): void {
