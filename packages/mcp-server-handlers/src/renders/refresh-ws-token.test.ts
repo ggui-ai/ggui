@@ -29,7 +29,12 @@ const SECRET = "refresh-1496-secret";
 const verify: NonNullable<GguiRefreshWsTokenHandlerDeps["verify"]> = (envelope) => {
   const r = verifyWsTokenSignature(envelope, SECRET);
   return r.ok
-    ? { ok: true, sessionId: r.claims.sessionId, appId: r.claims.appId, iat: r.claims.iat }
+    ? {
+        ok: true,
+        sessionId: r.claims.sessionId,
+        appId: r.claims.appId,
+        rootIat: r.claims.rootIat ?? r.claims.iat,
+      }
     : { ok: false };
 };
 const mint: NonNullable<GguiRefreshWsTokenHandlerDeps["mint"]> = (sessionId, appId) => {
@@ -265,6 +270,22 @@ describe("ggui_runtime_refresh_ws_token is an authorized re-mint (ggui#1496 part
     );
     expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
       '[ggui] ws_token_refresh_refused {"reason":"not_found","source":null}',
+    ]);
+  });
+
+  it("S6: a chained envelope's rootAgeSec counts from its chain's root, not from its own iat (slice 2)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00Z"));
+    const store = await seeded({ id: "s1", appId: "A" });
+    const rootIat = Math.floor(Date.now() / 1000);
+    vi.setSystemTime(new Date("2026-09-01T00:05:00Z"));
+    // A `/state` renewal minted 5 minutes into the chain.
+    const chained = mintWsToken({ sessionId: "s1", appId: "A", rootIat }, SECRET).token;
+    vi.setSystemTime(new Date("2026-09-01T00:10:00Z"));
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await refresh({ renderStore: store, verify, mint }, chained, ctxOf("A"));
+    expect(info.mock.calls.map((c) => String(c[0]))).toEqual([
+      '[ggui] ws_token_refreshed {"sessionId":"s1","appId":"A","source":null,"rootAgeSec":600}',
     ]);
   });
 });

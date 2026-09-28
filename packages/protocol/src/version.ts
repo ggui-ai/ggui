@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `GET /api/sessions/:id/state` renewals are bounded (2026-09-28, ggui#1496
+ * part B, slice 2: MINOR, same draft stamp). The ws token gains an optional
+ * `rootIat` claim. A Path C renewal carries its chain's root forward (the
+ * presented token's `rootIat`, else its `iat`) and clamps its `exp` to
+ * `rootIat + refresh window`, with the window at least the TTL; every other
+ * door mints a root without it. So every token of a chain is past its `exp`
+ * by `rootIat + window`, and every gate refuses it in the same second, while
+ * the window has not shrunk since the chain's root was minted and every
+ * server sharing the secret uses the same window. A
+ * verifier that predates the claim ignores it, and a token without it is its
+ * own root (the N−1 token fixture is pinned in `@ggui-ai/mcp-server-core`).
+ * --------------------------------------------------------------------
  * `ggui_runtime_refresh_ws_token` is an AUTHORIZED re-mint (2026-09-28,
  * ggui#1496 part B, slice 1: MINOR, same draft stamp). It re-mints a view's
  * live credential, at any age, only for a caller the render read door's

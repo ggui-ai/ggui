@@ -74,6 +74,8 @@ import type {
 import {
   createDeterministicBlueprintSelector,
   isTokenRegisteringAuthAdapter,
+  DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER,
+  DEFAULT_WS_TOKEN_TTL_SEC,
   mintSessionToken,
   mintWsToken,
   verifyWsTokenSignature,
@@ -2591,6 +2593,32 @@ export interface CreateGguiServerOptions {
   readonly wsTokenSecret?: string;
 
   /**
+   * Lifetime, in seconds, of the ws tokens this server mints: the root a
+   * render, update, read-door or refresh answer carries, and each
+   * `GET /api/sessions/:id/state` renewal, which gets less when its chain's
+   * refresh window ends sooner. Defaults to `DEFAULT_WS_TOKEN_TTL_SEC` (180).
+   * A positive whole number.
+   */
+  readonly wsTokenTtlSec?: number;
+
+  /**
+   * The refresh window, in seconds (ggui#1496 part B). A
+   * `GET /api/sessions/:id/state` renewal carries its chain's root forward
+   * (the `rootIat` claim) and its `exp` never passes `rootIat + window`, so
+   * a chain of possession renewals ends `window` seconds after its root was
+   * minted; past it a new credential needs an authorized door, such as
+   * `ggui_runtime_refresh_ws_token`, which mints a new root for a caller
+   * admitted to the session. Defaults to
+   * `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER` × the TTL. A positive whole
+   * number, at least the TTL: with a shorter window a root would outlive its
+   * own chain, so the server refuses to start. Every server that shares
+   * `wsTokenSecret` should share this value too; a token minted under a
+   * longer window stays live on `/events`, `/stream` and the live channel
+   * until its own `exp`, even after `/state` refuses to renew it.
+   */
+  readonly wsTokenRefreshWindowSec?: number;
+
+  /**
    * Bind host `listen()` will use, declared up front so boot-time
    * wiring — the Origin/Host validation policy (ggui#438a) — sees the
    * address the server will actually bind. `listen(port, host)`
@@ -3588,6 +3616,40 @@ export interface GguiServer {
 }
 
 /**
+ * The ws-token TTL and refresh window a server mints with (ggui#1496 part
+ * B). Both are positive whole seconds, and the window is at least the TTL:
+ * then every token this server mints, root and renewal alike, is past its
+ * `exp` by `rootIat + window`, so every gate refuses it in the same second.
+ * (A token minted while the window was longer, or by a server sharing the
+ * secret with a longer window, can outlive that second on the other gates;
+ * only `/state` refuses it.)
+ */
+function resolveWsTokenLifetimes(opts: CreateGguiServerOptions): {
+  readonly ttlSec: number;
+  readonly windowSec: number;
+} {
+  const wholePositive = (v: number): boolean => Number.isInteger(v) && v > 0;
+  const ttlSec = opts.wsTokenTtlSec ?? DEFAULT_WS_TOKEN_TTL_SEC;
+  if (!wholePositive(ttlSec)) {
+    throw new Error(
+      `createGguiServer: wsTokenTtlSec must be a positive whole number of seconds (got ${String(ttlSec)}).`
+    );
+  }
+  const windowSec = opts.wsTokenRefreshWindowSec ?? DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttlSec;
+  if (!wholePositive(windowSec)) {
+    throw new Error(
+      `createGguiServer: wsTokenRefreshWindowSec must be a positive whole number of seconds (got ${String(windowSec)}).`
+    );
+  }
+  if (windowSec < ttlSec) {
+    throw new Error(
+      `createGguiServer: wsTokenRefreshWindowSec (${windowSec}) must be at least wsTokenTtlSec (${ttlSec}); a shorter window would let a root token outlive its own renewal chain.`
+    );
+  }
+  return { ttlSec, windowSec };
+}
+
+/**
  * Build a runnable OSS MCP server. Every option has a sensible default
  * so `createGguiServer()` with no arguments boots a working in-memory
  * server on demand.
@@ -3598,6 +3660,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       "createGguiServer: perAppRouting.perAppOnlySources lists credential sources that are valid only at their app's endpoint, but perAppRouting.authorize is not wired"
     );
   }
+  const { ttlSec: wsTokenTtlSec, windowSec: wsTokenRefreshWindowSec } = resolveWsTokenLifetimes(opts);
   const info: ServerInfo = { ...DEFAULT_INFO, ...opts.info };
   const logger = opts.logger ?? createConsoleLogger({ server: info.name });
   const bodyLimit = opts.bodyLimit ?? "4mb";
@@ -3851,6 +3914,16 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let mintBootstrap:
     | ((sessionId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
+  // `/state`'s one minter (ggui#1496 part B, slice 2): a possession renewal
+  // that carries its chain's root forward. Every other door mints a root
+  // through `mintBootstrap`.
+  let mintChainedBootstrap:
+    | ((
+        sessionId: string,
+        appId: string,
+        rootIat: number
+      ) => { wsUrl: string; token: string; expiresAt: string } | undefined)
+    | undefined;
   let channelBootstrap: import("./ggui-session-channel.js").GguiSessionChannelBootstrap | undefined;
   // The authorized refresh's envelope check (ggui#1496 part B): signature,
   // shape and kind at ANY age, over the same secret the minter signs with.
@@ -3879,7 +3952,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // from `@ggui-ai/mcp-server-core` for callers that need explicit
     // single-use semantics (one-time-link share, etc.).
     const syncMinter = (sessionId: string, appId: string) => {
-      const { token, claims } = mintWsToken({ sessionId, appId }, secret);
+      const { token, claims } = mintWsToken({ sessionId, appId, ttlSec: wsTokenTtlSec }, secret);
       return {
         wsUrl,
         token,
@@ -3887,6 +3960,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       };
     };
     mintBootstrap = syncMinter;
+    // The renewal's `exp` is capped at `rootIat + window` by the mint
+    // itself (`notAfter`), from the same clock read that stamps its `iat`.
+    // No second left means nothing to renew (`undefined`, answered as the
+    // ordinary expiry). That happens when the bound's second arrives between
+    // the route's expiry check and this mint (the route awaits the store in
+    // between), or for a token minted while the window was longer.
+    mintChainedBootstrap = (sessionId, appId, rootIat) => {
+      const { token, claims } = mintWsToken(
+        { sessionId, appId, ttlSec: wsTokenTtlSec, rootIat, notAfter: rootIat + wsTokenRefreshWindowSec },
+        secret
+      );
+      if (claims.exp <= claims.iat) return undefined;
+      return {
+        wsUrl,
+        token,
+        expiresAt: new Date(claims.exp * 1000).toISOString(),
+      };
+    };
     channelBootstrap = {
       verify: (token) => {
         const result = verifyToken(token, secret, "ws");
@@ -3913,7 +4004,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     wsTokenVerify = (envelope) => {
       const result = verifyWsTokenSignature(envelope, secret);
       return result.ok
-        ? { ok: true, sessionId: result.claims.sessionId, appId: result.claims.appId, iat: result.claims.iat }
+        ? {
+            ok: true,
+            sessionId: result.claims.sessionId,
+            appId: result.claims.appId,
+            rootIat: result.claims.rootIat ?? result.claims.iat,
+          }
         : { ok: false };
     };
   }
@@ -5208,9 +5304,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // R6 /state snapshot + R7 /events cursor-replay reads — see
   // `./api-renders-routes.ts` for the wsToken auth posture, binding +
   // app-scope gates, and response taxonomy. Mounted only when MCP Apps is on,
-  // a render store is resolved, and a token secret exists (the same
-  // preconditions the credential minter needs).
-  if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
+  // a render store is resolved, and a token secret exists. MCP Apps being on
+  // is also what assigns the two minters, so the last conjunct only narrows
+  // the type: it never keeps a deployment from mounting.
+  if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined && mintChainedBootstrap) {
     mountApiRendersRoutes({
       app,
       renderStore,
@@ -5228,7 +5325,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // composes (ggui#522) — session-API URLs keep the public origin.
       ...(opts.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
       ...(mintCodeModuleUrl !== undefined ? { mintCodeModuleUrl } : {}),
-      ...(mintBootstrap ? { mintBootstrap } : {}),
+      mintChainedBootstrap,
       resolveRuntimeUrl: resolveRuntimeUrlForResultMeta,
       logger,
     });

@@ -88,20 +88,29 @@ export interface WsTokenClaims {
    * TTL is the supported recovery posture).
    */
   readonly jti: string;
+  /**
+   * Issued-at of the chain's ROOT, epoch seconds (ggui#1496 part B, slice 2).
+   * Present only on a token minted by a possession renewal
+   * (`GET /api/sessions/:id/state`), which carries the presented token's
+   * root forward: its `rootIat`, or its `iat` when it is itself a root. A
+   * token without it is its own root. A renewal's `exp` never passes
+   * `rootIat + refresh window`, so the chain ends there.
+   */
+  readonly rootIat?: number;
 }
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
 export const DEFAULT_WS_TOKEN_TTL_SEC = 180;
 export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
 /**
- * Reserved for bounding possession-only ws-token renewals (ggui#1496 part B,
- * slice 2): such a renewal will stay within
- * `root iat + DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` seconds.
- * Nothing reads it at this release, and tokens carry no root-iat claim yet:
- * `GET /api/sessions/:id/state` still re-mints a fresh ws token for anyone
- * holding an unexpired one, with no bound. The authorized refresh
- * (`ggui_runtime_refresh_ws_token`) is not bounded by it either, because
- * each of its calls is authorized.
+ * The default refresh window, as a multiple of the ws-token TTL (ggui#1496
+ * part B). `GET /api/sessions/:id/state` renews a ws token for whoever holds
+ * an unexpired one; each renewal carries the chain's `rootIat` forward and
+ * its `exp` is clamped to `rootIat + window`, so a chain of possession
+ * renewals ends `window` seconds after its root was minted. A server's window
+ * defaults to this multiple of its TTL. The authorized refresh
+ * (`ggui_runtime_refresh_ws_token`) is not bounded by it, because each of its
+ * calls is authorized: it mints a new root.
  */
 export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 /**
@@ -118,6 +127,24 @@ export interface MintTokenInput {
   readonly appId: string;
   /** Token lifetime in seconds. Defaults per-kind. */
   readonly ttlSec?: number;
+}
+
+/** A ws mint's input: a root, or a possession renewal carrying its chain's root. */
+export interface MintWsTokenInput extends MintTokenInput {
+  /**
+   * The chain's root issued-at, for a possession renewal only
+   * ({@link WsTokenClaims.rootIat}). Omit it on every root mint.
+   */
+  readonly rootIat?: number;
+  /**
+   * An absolute cap on `exp`, epoch seconds: `exp = min(iat + ttl,
+   * notAfter)`, with `iat` from the SAME clock read, so a second boundary
+   * between the caller's arithmetic and the mint cannot push `exp` past it.
+   * A possession renewal passes `rootIat + refresh window`. A cap at or
+   * before `iat` yields a token whose `exp` equals its `iat`: already
+   * expired, and the caller's signal that the chain has no second left.
+   */
+  readonly notAfter?: number;
 }
 
 function base64url(bytes: Buffer): string {
@@ -142,18 +169,28 @@ function sign(payloadB64: string, secret: string): string {
 }
 
 function mintToken(
-  input: MintTokenInput & { kind: TokenKind; defaultTtlSec: number },
+  input: MintTokenInput & {
+    kind: TokenKind;
+    defaultTtlSec: number;
+    rootIat?: number;
+    notAfter?: number;
+  },
   secret: string,
 ): { token: string; claims: WsTokenClaims } {
   const now = Math.floor(Date.now() / 1000);
   const ttl = input.ttlSec ?? input.defaultTtlSec;
+  const exp =
+    input.notAfter === undefined
+      ? now + ttl
+      : Math.max(now, Math.min(now + ttl, input.notAfter));
   const claims: WsTokenClaims = {
     sessionId: input.sessionId,
     appId: input.appId,
     kind: input.kind,
     iat: now,
-    exp: now + ttl,
+    exp,
     jti: base64url(randomBytes(12)),
+    ...(input.rootIat !== undefined ? { rootIat: input.rootIat } : {}),
   };
   const payloadB64 = base64url(Buffer.from(JSON.stringify(claims), 'utf8'));
   const sig = sign(payloadB64, secret);
@@ -172,7 +209,7 @@ function mintToken(
  * session (ggui#1496 part B); see {@link verifyWsTokenSignature}.
  */
 export function mintWsToken(
-  input: MintTokenInput,
+  input: MintWsTokenInput,
   secret: string,
 ): { token: string; claims: WsTokenClaims } {
   return mintToken(
@@ -310,6 +347,7 @@ function verifySignedClaims(
       typeof raw.iat !== 'number' ||
       typeof raw.exp !== 'number' ||
       typeof raw.jti !== 'string' ||
+      (raw.rootIat !== undefined && typeof raw.rootIat !== 'number') ||
       (raw.kind !== 'ws' &&
         raw.kind !== 'session' &&
         raw.kind !== 'console-session')
@@ -323,6 +361,7 @@ function verifySignedClaims(
       iat: raw.iat,
       exp: raw.exp,
       jti: raw.jti,
+      ...(typeof raw.rootIat === 'number' ? { rootIat: raw.rootIat } : {}),
     };
   } catch {
     return { ok: false, reason: 'malformed_claims' };

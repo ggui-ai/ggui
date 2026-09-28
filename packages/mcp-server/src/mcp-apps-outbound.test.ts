@@ -7,7 +7,7 @@
  * real live-channel subscribe with the minted bootstrap token producing
  * an ack with a reconnect `sessionToken`.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket } from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -19,7 +19,7 @@ import {
   parseMcpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { isRecord } from '@ggui-ai/protocol';
-import { verifyToken } from '@ggui-ai/mcp-server-core';
+import { mintWsToken, verifyToken } from '@ggui-ai/mcp-server-core';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -833,6 +833,35 @@ async function bootOutboundServerWith(
   return { server, httpServer, httpBase, wsUrl };
 }
 
+describe('root doors mint with the configured wsTokenTtlSec (ggui#1496 part B, slice 2)', () => {
+  it('a render result and a refresh both carry a root that lives exactly wsTokenTtlSec, not the 180 s default', async () => {
+    const secret = 'test-secret-32bytes-for-hmac-1234';
+    const fx = await bootOutboundServerWith({ wsTokenTtlSec: 45 });
+    const client = await connectClient(fx.httpBase);
+    try {
+      const parsed = parseMcpAppAiGguiRenderMeta((await handshakeAndRender(client, 'ttl-test'))._meta);
+      const rendered = verifyToken(parsed.ok ? (parsed.meta?.wsToken ?? '') : '', secret, 'ws');
+      expect(rendered.ok).toBe(true);
+      if (!rendered.ok) return;
+      expect(rendered.claims.exp - rendered.claims.iat).toBe(45);
+      expect('rootIat' in rendered.claims).toBe(false);
+
+      const refreshed = (
+        await client.callTool({
+          name: 'ggui_runtime_refresh_ws_token',
+          arguments: { envelope: parsed.ok ? (parsed.meta?.wsToken ?? '') : '' },
+        })
+      ).structuredContent as { ok: boolean; envelope?: string };
+      const reRooted = verifyToken(refreshed.envelope ?? '', secret, 'ws');
+      expect(reRooted.ok).toBe(true);
+      expect(reRooted.ok && reRooted.claims.exp - reRooted.claims.iat).toBe(45);
+    } finally {
+      await client.close();
+      await fx.server.close();
+    }
+  });
+});
+
 describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
   let fx: Fixture;
   let client: Client;
@@ -887,6 +916,39 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     expect(verified.ok && verified.claims.sessionId).toBe(bootstrap.sessionId);
     expect(verified.ok && verified.claims.appId).toBe(bootstrap.appId);
     expect(out.envelope).not.toBe(bootstrap.token);
+  });
+
+  it('a root door mints without rootIat, and the refresh re-roots a CHAINED envelope: its answer carries no rootIat, and its log ages the chain from rootIat (ggui#1496 part B, slice 2)', async () => {
+    const secret = 'test-secret-32bytes-for-hmac-1234';
+    const bootstrap = await mintRenderBootstrap();
+    const rendered = verifyToken(bootstrap.token, secret, 'ws');
+    expect(rendered.ok).toBe(true);
+    expect(rendered.ok && 'rootIat' in rendered.claims).toBe(false);
+
+    // A `/state` renewal of that render, 300 s into its chain.
+    const rootIat = Math.floor(Date.now() / 1000) - 300;
+    const chained = mintWsToken(
+      { sessionId: bootstrap.sessionId, appId: bootstrap.appId, rootIat },
+      secret,
+    ).token;
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const result = await client.callTool({
+        name: 'ggui_runtime_refresh_ws_token',
+        arguments: { envelope: chained },
+      });
+      const out = result.structuredContent as { ok: boolean; envelope?: string };
+      expect(out.ok).toBe(true);
+      const reRooted = verifyToken(out.envelope ?? '', secret, 'ws');
+      expect(reRooted.ok).toBe(true);
+      expect(reRooted.ok && 'rootIat' in reRooted.claims).toBe(false);
+      const line = info.mock.calls.map((c) => String(c[0])).find((l) => l.includes('ws_token_refreshed'));
+      const logged = JSON.parse((line ?? '').replace('[ggui] ws_token_refreshed ', '')) as { rootAgeSec: number };
+      expect(logged.rootAgeSec).toBeGreaterThanOrEqual(300);
+      expect(logged.rootAgeSec).toBeLessThan(310);
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it('the wired refresh refuses a tampered envelope with BOOTSTRAP_INVALID (ggui#1496 part B)', async () => {

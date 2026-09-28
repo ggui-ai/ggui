@@ -32,7 +32,8 @@ export interface RenderReadRowView {
  * weaker and no stronger than the read door. Other doors mint under their
  * own gates (`ggui_render` creates the session; `ggui_update` and
  * `ggui_list_sessions` gate on the app, and the list on the user when set;
- * `/state` on possession of an unexpired token, bounded in slice 2).
+ * `/state` on possession of an unexpired token, a renewal bounded by its
+ * chain's `rootIat` + the refresh window).
  *
  * Rungs, in order (spec §3):
  *  1. Fail closed without a request context.

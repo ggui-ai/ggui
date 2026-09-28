@@ -13,7 +13,27 @@
  * wsToken-gated: same credential as the live-channel WS upgrade
  * (`?wsToken=<token>` on `/ws`). Drift-free with the WS surface —
  * the iframe-runtime already has the token from the bootstrap
- * envelope; no separate refresh path needed.
+ * envelope.
+ *
+ * Each read renews the token for its holder: a POSSESSION renewal
+ * (ggui#1496 part B, slice 2). The renewal carries its chain's root
+ * forward (`rootIat`: the presented token's, or its `iat` when it is
+ * itself a root) and its `exp` never passes `rootIat + refresh window`,
+ * so a chain of `/state` renewals ends one window after its root was
+ * minted, at the same second on every gate (for a token minted under the
+ * current window: one minted under a longer window, by an earlier config or
+ * another server sharing the secret, stays live on the other gates until
+ * its own `exp`). Past it, a new credential needs an authorized door, such
+ * as `ggui_runtime_refresh_ws_token`.
+ *
+ * Responses (/state):
+ *   - 200 — the slice envelope, with the renewed trio and the
+ *     token-bearing `pollingUrl` / `sseUrl`.
+ *   - 401 — wsToken missing / invalid / wrong-scope.
+ *   - 404 — sessionId does not resolve.
+ *   - 410 — `wsToken expired`: past its `exp`, or its chain has no second
+ *     left (the bound's second arrived after the expiry check, or the
+ *     token was minted under a longer window).
  *
  * Distinct from `/r/:shortCode` (JSON branch):
  *   - `/r/...` was shortCode-gated (bearer-by-obscurity; anyone with
@@ -99,11 +119,19 @@ interface MountOptions {
     readonly hash: string;
     readonly base: string;
   }) => string | undefined;
-  /** Live-mode credential minter — fresh trio on every /state read. */
-  readonly mintBootstrap?: (
+  /**
+   * `/state`'s one live-credential minter (ggui#1496 part B, slice 2): a
+   * possession renewal. It mints a ws token that carries the presented
+   * chain's `rootIat` forward, with its `exp` clamped to
+   * `rootIat + refresh window`, so a chain of `/state` renewals ends there.
+   * `undefined` means the chain has no second left, answered as the ordinary
+   * expiry.
+   */
+  readonly mintChainedBootstrap: (
     sessionId: string,
-    appId: string
-  ) => { wsUrl: string; token: string; expiresAt: string };
+    appId: string,
+    rootIat: number
+  ) => { wsUrl: string; token: string; expiresAt: string } | undefined;
   /** Per-request runtime-bundle URL resolver (tunnel/proxy aware). */
   readonly resolveRuntimeUrl: () => string;
   /** Structured logger for store-read failures. */
@@ -126,7 +154,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     codeStore,
     publicBaseUrl,
     codeBaseUrl,
-    mintBootstrap,
+    mintChainedBootstrap,
     resolveRuntimeUrl,
     logger,
   } = opts;
@@ -228,32 +256,39 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
         // Silent — wrappers calling getPublicEnv throw clearly.
       }
     }
-    // Live-mode credential trio. Always minted fresh on /state reads
-    // so the iframe-runtime gets a long-TTL token + the host learns
-    // `wsUrl` (the CSP-permitted WebSocket origin). Without this,
-    // any caller of /state — including the restore-bootstrap path in
-    // every host (claude.ai, ChatGPT, our sample-agent) — receives a
-    // render slice missing `wsUrl`. CSP `connect-src` then omits the
-    // `ws://` scheme, the browser blocks the upgrade, and props_update
-    // never reaches the iframe. The render-commit handler already
-    // stamps this trio on its resultMeta; mirroring here closes the
-    // drift.
-    const liveTrio = mintBootstrap ? mintBootstrap(stored.id, stored.appId) : undefined;
+    // Live-mode credential trio, renewed on every /state read so the
+    // iframe-runtime gets a live token + the host learns `wsUrl` (the
+    // CSP-permitted WebSocket origin). Without `wsUrl`, any caller of
+    // /state — including the restore-bootstrap path in every host
+    // (claude.ai, ChatGPT, our sample-agent) — gets a slice whose CSP
+    // `connect-src` omits the `ws://` scheme, the browser blocks the
+    // upgrade, and props_update never reaches the iframe. The
+    // render-commit handler stamps the same trio on its resultMeta.
+    //
+    // This read is a POSSESSION renewal (ggui#1496 part B, slice 2): the
+    // presented token is the only credential, so the renewal carries the
+    // chain's root forward (its `rootIat`, or its `iat` when it is itself
+    // a root) and never outlives `rootIat + refresh window`. A chain with
+    // no second left is the ordinary expiry: the same 410 and body as a
+    // token past its `exp`, whose documented action is the authorized
+    // refresh (`ggui_runtime_refresh_ws_token`).
+    const liveTrio = mintChainedBootstrap(
+      stored.id,
+      stored.appId,
+      verify.claims.rootIat ?? verify.claims.iat
+    );
+    if (liveTrio === undefined) {
+      res.status(410).type("text/plain").send("wsToken expired");
+      return;
+    }
     // Token-bearing session-API URL pair (pollingUrl → /events,
     // sseUrl → /stream), composed via the protocol's ONE composer so
     // this surface cannot drift from the render/update resultMeta
-    // stamping. Stamped ONLY when the live trio above was minted —
-    // both URLs embed the fresh long-TTL token, so a minter-less
-    // deployment honestly omits them (the old unconditional
-    // token-less `/state`-shaped pollingUrl could only 401 through
-    // the iframe-runtime's /events composer).
+    // stamping. Both embed the renewed token.
     const sessionApiBase = publicBaseUrl
       ? publicBaseUrl.replace(/\/$/, "")
       : `${req.protocol}://${req.get("host") ?? ""}`;
-    const sessionApiUrls =
-      liveTrio !== undefined
-        ? composeSessionApiUrls(sessionApiBase, stored.id, liveTrio.token)
-        : undefined;
+    const sessionApiUrls = composeSessionApiUrls(sessionApiBase, stored.id, liveTrio.token);
     // Static-component delivery via codeUrl (the same content-addressable
     // channel the code routes serve). Polling clients are render-capable
     // and need the URL to mount/refresh the static-component variant.
@@ -287,13 +322,8 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
         } catch {
           // Silent — the caller falls back to live-mode delivery, and
           // here that fallback is structural rather than hoped for:
-          // `mintBootstrap` is optional on the options type, but these
-          // routes mount only under `mcpAppsEnabled` + a render store
-          // + a token secret, which are the same preconditions that
-          // assign the minter. So a reader of THIS file cannot see the
-          // guarantee — it lives at the mount site, and it is what
-          // keeps the silence honest. Lose that pairing and this catch
-          // becomes a swallow.
+          // `mintChainedBootstrap` is required on the options type and
+          // this response always carries the live trio minted above.
         }
         try {
           const bundle = await deriveContractBundle(render);
@@ -318,16 +348,11 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       sessionId: stored.id,
       appId: stored.appId,
       runtimeUrl: resolveRuntimeUrl(),
-      ...(liveTrio !== undefined
-        ? {
-            wsUrl: liveTrio.wsUrl,
-            wsToken: liveTrio.token,
-            expiresAt: liveTrio.expiresAt,
-          }
-        : {}),
-      ...(sessionApiUrls !== undefined
-        ? { pollingUrl: sessionApiUrls.pollingUrl, sseUrl: sessionApiUrls.sseUrl }
-        : {}),
+      wsUrl: liveTrio.wsUrl,
+      wsToken: liveTrio.token,
+      expiresAt: liveTrio.expiresAt,
+      pollingUrl: sessionApiUrls.pollingUrl,
+      sseUrl: sessionApiUrls.sseUrl,
       ...(themeId !== undefined ? { themeId } : {}),
       ...(themeMode !== undefined ? { themeMode } : {}),
       ...(statePublicEnv !== undefined && Object.keys(statePublicEnv).length > 0

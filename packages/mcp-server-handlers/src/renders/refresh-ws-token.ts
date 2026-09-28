@@ -105,9 +105,13 @@ export interface RefreshRejected {
  */
 export type GguiRefreshWsTokenOutput = RefreshAccepted | RefreshRejected;
 
-/** A ws envelope's signature-and-kind verdict, at ANY age: the claims the refresh needs. */
+/**
+ * A ws envelope's signature-and-kind verdict, at ANY age: the claims the
+ * refresh needs. `rootIat` is the issued-at of the envelope's chain root: its
+ * `rootIat` claim when a `/state` renewal minted it, else its own `iat`.
+ */
 export type WsEnvelopeVerdict =
-  | { readonly ok: true; readonly sessionId: string; readonly appId: string; readonly iat: number }
+  | { readonly ok: true; readonly sessionId: string; readonly appId: string; readonly rootIat: number }
   | { readonly ok: false };
 
 export interface GguiRefreshWsTokenHandlerDeps {
@@ -196,7 +200,7 @@ export function createGguiRefreshWsTokenHandler(deps: GguiRefreshWsTokenHandlerD
         sessionId: stored.id,
         appId: stored.appId,
         source,
-        rootAgeSec: Math.max(0, Math.floor(Date.now() / 1000) - verdict.iat),
+        rootAgeSec: Math.max(0, Math.floor(Date.now() / 1000) - verdict.rootIat),
       });
       return { ok: true, envelope: minted.token, expiresAt: minted.expiresAt };
     },
