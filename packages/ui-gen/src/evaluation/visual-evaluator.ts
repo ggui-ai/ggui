@@ -1173,6 +1173,43 @@ type JudgedAnswer =
   | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
   | { readonly kind: 'unparsable'; readonly reason: string };
 
+/**
+ * ggui#1436 — the criteria are REPORT-ONLY, so they are never asked inside a call whose score binds. The K
+ * scoring calls go out exactly as they did before the block existed (the same user turn, byte for byte); when a
+ * block was selected, the criteria get ONE call of their own on the same frame, run beside them, and that call's
+ * score is discarded. Asked inside the scoring call, the block moved the score it sat beside — the first release
+ * that carried it into a served judge lowered first-attempt scores on the same kind of card (ggui#1436). One read,
+ * not K: the block binds on nothing, and a second K would double the judge's calls for it.
+ */
+async function judgeFrame(
+  judge: typeof callMultimodalLLM,
+  config: VisualEvalConfig,
+  model: string,
+  png: Buffer,
+  originalPrompt: string,
+  profileBlock: string,
+  canvas: CanvasClass,
+  k: number,
+  criteriaBlock: string,
+): Promise<{ readonly scoring: readonly JudgedAnswer[]; readonly criteria: JudgedAnswer | undefined }> {
+  const [scoring, criteria] = await Promise.all([
+    Promise.all(Array.from({ length: k }, () => judgeAndParse(judge, config, model, png, originalPrompt, profileBlock, canvas))),
+    criteriaBlock.length > 0 ? judgeAndParse(judge, config, model, png, originalPrompt, profileBlock, canvas, criteriaBlock) : undefined,
+  ]);
+  return { scoring, criteria };
+}
+
+/** The tokens a frame's calls spent — the scoring calls that parsed, and the criteria call when it parsed. */
+function frameTokens(parsed: readonly Extract<JudgedAnswer, { kind: 'ok' }>[], criteria: JudgedAnswer | undefined): { inputTokens: number; outputTokens: number } {
+  const all = criteria?.kind === 'ok' ? [...parsed, criteria] : parsed;
+  return { inputTokens: all.reduce((sum, a) => sum + a.inputTokens, 0), outputTokens: all.reduce((sum, a) => sum + a.outputTokens, 0) };
+}
+
+/** The criteria call's answers, as the one read the block resolves; none when it was not asked or did not parse. */
+function criteriaReads(criteria: JudgedAnswer | undefined): CriteriaAnswer[][] {
+  return criteria?.kind === 'ok' ? [criteria.result.criteriaAnswers ?? []] : [];
+}
+
 /** How many vision calls this canvas gets (ggui#1072): `judgeK` when the canvas is sampled, else 1. */
 function judgeCountFor(config: VisualEvalConfig, canvas: CanvasClass): number {
   const k = Math.max(1, Math.floor(config.judgeK ?? 1));
@@ -1298,10 +1335,8 @@ export async function runVisualEvaluationDetailed(
               ...(config.sampleProps !== undefined ? { propsJson: JSON.stringify(config.sampleProps) } : {}),
             })
           : '';
-      const answers = await Promise.all(
-        Array.from({ length: k }, () =>
-          judgeAndParse(judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas, criteriaBlock),
-        ),
+      const { scoring: answers, criteria: criteriaAnswer } = await judgeFrame(
+        judge, config, model, screenshot, context.originalPrompt, profileBlock, canvas, k, criteriaBlock,
       );
       const parsed = answers.filter((a): a is Extract<JudgedAnswer, { kind: 'ok' }> => a.kind === 'ok');
       if (parsed.length === 0) {
@@ -1314,8 +1349,9 @@ export async function runVisualEvaluationDetailed(
       const result = representative.result;
       result.finalScore = median;
       result.passed = median >= config.passThreshold;
-      result.inputTokens = parsed.reduce((sum, a) => sum + a.inputTokens, 0);
-      result.outputTokens = parsed.reduce((sum, a) => sum + a.outputTokens, 0);
+      const spent = frameTokens(parsed, criteriaAnswer);
+      result.inputTokens = spent.inputTokens;
+      result.outputTokens = spent.outputTokens;
       const response = { inputTokens: result.inputTokens, outputTokens: result.outputTokens };
       const judgeRecord: CanvasJudgeRecord = {
         k,
@@ -1344,14 +1380,14 @@ export async function runVisualEvaluationDetailed(
         result.passed = false;
       }
       const inkRatio = frame.ink?.ratio ?? null;
-      // ggui#1436 — the block: K-majority on the judge's criteria, the instruments' measurements, report-only.
+      // ggui#1436 — the block: the criteria call's read, the instruments' measurements, report-only.
       const criteria: CriteriaBlock | undefined =
         context.criteria !== undefined && criteriaContext !== undefined && criteriaSelected !== undefined
           ? resolveCriteriaBlock({
               bank: context.criteria.bank,
               context: criteriaContext,
               selected: criteriaSelected,
-              answers: parsed.map((a) => a.result.criteriaAnswers ?? []),
+              answers: criteriaReads(criteriaAnswer),
               measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
             })
           : undefined;
@@ -1556,8 +1592,9 @@ export type StoredCaptureOutcome =
   | { readonly kind: 'unavailable'; readonly reason: string };
 
 /**
- * Judge a STORED capture exactly as the per-canvas leg judges a fresh one — the same K calls on the same
- * frame, the same median, the same fit and blank verdicts, the same criteria block — without rendering.
+ * Judge a STORED capture exactly as the per-canvas leg judges a fresh one — the same K scoring calls on the
+ * same frame, the same median, the same fit and blank verdicts, the same report-only criteria call — without
+ * rendering.
  * This is the calibration's path (ggui#1438): the frame his eye marks is the frame the judge saw, and a
  * re-judge costs judge tokens only. Fit reads the capture's recorded `contentHeight`; ink is read off the
  * PNG inside the canvas's chrome, as at capture.
@@ -1585,9 +1622,7 @@ export async function judgeStoredCapture(
           ...(input.sampleProps !== undefined ? { propsJson: JSON.stringify(input.sampleProps) } : {}),
         })
       : '';
-  const answers = await Promise.all(
-    Array.from({ length: k }, () => judgeAndParse(judge, config, model, png, input.originalPrompt, profileBlock, canvas, criteriaBlock)),
-  );
+  const { scoring: answers, criteria: criteriaAnswer } = await judgeFrame(judge, config, model, png, input.originalPrompt, profileBlock, canvas, k, criteriaBlock);
   const parsed = answers.filter((a): a is Extract<JudgedAnswer, { kind: 'ok' }> => a.kind === 'ok');
   if (parsed.length === 0) {
     const first = answers.find((a): a is Extract<JudgedAnswer, { kind: 'unparsable' }> => a.kind === 'unparsable');
@@ -1615,10 +1650,11 @@ export async function judgeStoredCapture(
           bank: input.criteria.bank,
           context: criteriaContext,
           selected: criteriaSelected,
-          answers: parsed.map((a) => a.result.criteriaAnswers ?? []),
+          answers: criteriaReads(criteriaAnswer),
           measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
         })
       : undefined;
+  const spent = frameTokens(parsed, criteriaAnswer);
   return {
     kind: 'ok',
     verdict: {
@@ -1632,8 +1668,8 @@ export async function judgeStoredCapture(
       overflow,
       inkRatio,
       ...(criteria !== undefined ? { criteria } : {}),
-      inputTokens: parsed.reduce((sum, a) => sum + a.inputTokens, 0),
-      outputTokens: parsed.reduce((sum, a) => sum + a.outputTokens, 0),
+      inputTokens: spent.inputTokens,
+      outputTokens: spent.outputTokens,
     },
   };
 }
