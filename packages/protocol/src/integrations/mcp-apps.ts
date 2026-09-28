@@ -2032,7 +2032,8 @@ export interface GguiShellHtmlOptions {
    * A rolling deploy, a rollback or a replayed envelope can name a hash no
    * serving replica has. Every replica serves the unhashed name, `no-cache`. Any
    * other URL (unhashed, foreign, or an inlined runtime) gets no retry.
-   * Absent: the document is byte-identical to a shell built without it.
+   * Absent: no URL gets a retry. Either way, an external runtime that cannot
+   * load is reported once as `BUNDLE_FETCH_FAILED` (ggui#1503).
    */
   readonly runtimeBundlePlainName?: string;
 }
@@ -2098,21 +2099,41 @@ function inlineScriptJson(value: unknown): string {
 }
 
 /**
- * The self-contained shell's one-shot bundle fallback (ggui#1501). A classic
- * inline script, run before the module tag: a CAPTURE-phase `error` listener
- * (a script element's `error` does not bubble), which reacts only to the
- * element marked `data-ggui-runtime="src"`. It appends the twin once, marked
- * `fallback`, so the twin's own failure is never retried. A separate element
- * from the meta script, whose `;</script>` terminator two readers parse.
+ * The self-contained shell's bundle-failure script (ggui#1501, ggui#1503). A
+ * classic inline script, run before the module tag: a CAPTURE-phase `error`
+ * listener (a script element's `error` does not bubble), which reacts only to
+ * the runtime element (`data-ggui-runtime="src"`) and its twin
+ * (`"fallback"`).
+ *
+ * - With a twin (a content-hashed URL, ggui#1501): the runtime's first failure
+ *   appends the twin once, so the twin's own failure is never retried.
+ * - Once there is nothing left to try (the twin failed, the twin could not be
+ *   added, or there was none): posts ONE `ggui:bootstrap-failed` with
+ *   `BUNDLE_FETCH_FAILED` to the parent (SPEC §5.5.2), the same envelope the
+ *   thin shell posts. Adding the twin can throw, for example under a Trusted
+ *   Types policy that refuses a plain `src` string; that is reported at once,
+ *   as the thin shell's loader does.
+ * - An evaluation or parse error in a runtime that DID load is an `error`
+ *   targeted at `window`, not at the element, so it is never reported here as
+ *   a fetch failure.
+ *
+ * A separate element from the meta script, whose `;</script>` terminator two
+ * readers parse.
  */
-function runtimeBundleFallbackScript(twinUrl: string): string {
+function runtimeBundleFailureScript(twinUrl: string | undefined): string {
+  const twin = twinUrl === undefined ? 'null' : inlineScriptJson(twinUrl);
   return (
-    `<script>(function(){var t=${inlineScriptJson(twinUrl)},used=false;` +
+    `<script>(function(){var t=${twin},used=false,told=false;` +
     `window.addEventListener('error',function(e){var s=e&&e.target;` +
-    `if(used||!s||s.tagName!=='SCRIPT'||typeof s.getAttribute!=='function'||s.getAttribute('data-ggui-runtime')!=='src')return;` +
-    `used=true;try{console.warn('[ggui] runtime bundle failed to load; retrying its unhashed twin once');}catch(_){}` +
-    `var n=document.createElement('script');n.type='module';n.crossOrigin='anonymous';n.src=t;` +
-    `n.setAttribute('data-ggui-runtime','fallback');document.body.appendChild(n);},true);})();</script>`
+    `if(!s||s.tagName!=='SCRIPT'||typeof s.getAttribute!=='function')return;` +
+    `var k=s.getAttribute('data-ggui-runtime');if(k!=='src'&&k!=='fallback')return;var d='script error';` +
+    `if(k==='src'&&t&&!used){used=true;try{console.warn('[ggui] runtime bundle failed to load; retrying its unhashed twin once');}catch(_){}` +
+    `try{var n=document.createElement('script');n.type='module';n.crossOrigin='anonymous';n.src=t;` +
+    `n.setAttribute('data-ggui-runtime','fallback');document.body.appendChild(n);return;}` +
+    `catch(x){d='its twin could not be added: '+((x&&x.message)||x);}}` +
+    `if(told)return;told=true;` +
+    `try{window.parent.postMessage({type:'${MCP_APP_BOOTSTRAP_FAILED_TYPE}',reason:'BUNDLE_FETCH_FAILED',message:'Runtime bundle failed to load: '+d},'*');}catch(_){}` +
+    `},true);})();</script>`
   );
 }
 
@@ -2150,6 +2171,16 @@ export function escapeInlineScript(source: string): string {
  * populated before the bundle evaluates and the runtime mounts
  * without any postMessage round-trip.
  *
+ * For an external `runtimeUrl`, a second classic inline script runs
+ * before the module tag, which carries `data-ggui-runtime="src"`: a
+ * capture-phase `error` listener on `window` that reacts only to that
+ * element and its twin. When `runtimeBundlePlainName` yields a twin
+ * (ggui#1501) it appends the twin once. Once nothing is left to try, it
+ * posts ONE `{type:'ggui:bootstrap-failed', reason:'BUNDLE_FETCH_FAILED'}`
+ * to `window.parent` with targetOrigin `'*'` (SPEC §5.5.2, ggui#1503). An
+ * inlined runtime (`runtimeInlineSource`) gets neither the script nor the
+ * mark.
+ *
  * Pure function — no DOM access, no I/O, no randomness. Same inputs
  * always produce identical bytes.
  *
@@ -2160,6 +2191,8 @@ export function escapeInlineScript(source: string): string {
  *     escaped at the codepoint level.
  *   - The `runtimeUrl` is HTML-attribute-escaped for the `src`
  *     attribute.
+ *   - The twin URL is embedded in the failure script with the same
+ *     script-safe JSON escaping as the envelope.
  *
  * The module script carries `crossorigin="anonymous"`: without it,
  * cross-origin script errors are sanitized to a detail-free "script
@@ -2205,12 +2238,13 @@ export function gguiShellHtml(
     options?.runtimeInlineSource === undefined && options?.runtimeBundlePlainName !== undefined
       ? runtimeBundlePlainTwin(bootstrap.runtimeUrl, options.runtimeBundlePlainName)
       : undefined;
+  // Every external runtime URL gets the failure script (ggui#1503): a bundle
+  // that cannot load is reported, after its twin when it has one. An inlined
+  // runtime has nothing to fetch.
   const runtimeTag =
     options?.runtimeInlineSource !== undefined
       ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
-      : fallbackTwin !== undefined
-        ? `${runtimeBundleFallbackScript(fallbackTwin)}\n<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${safeRuntimeUrl}"></script>`
-        : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
+      : `${runtimeBundleFailureScript(fallbackTwin)}\n<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
 <html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;${background}">${loadingBlock}

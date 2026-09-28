@@ -6,6 +6,14 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The self-contained shell reports a runtime bundle that fails to load
+ * (2026-09-28, ggui#1503: MINOR, same draft stamp). It posts ONE
+ * `ggui:bootstrap-failed` with `BUNDLE_FETCH_FAILED` (SPEC §5.5.2), after the
+ * #1501 twin when it has one, at once otherwise, as the thin shell does. Every
+ * external runtime URL's shell now carries the capture-phase listener and a
+ * `data-ggui-runtime="src"` mark on its runtime element, so those shells'
+ * bytes change; an inlined runtime has nothing to fetch and is unchanged.
+ * --------------------------------------------------------------------
  * The subscribe ack stops carrying a reconnect `sessionToken` (2026-09-28,
  * ggui#1488 / ggui#1496 part B slice 3: MINOR, same draft stamp). No server
  * ever verified the token and no client read it, so the SHOULD that asked

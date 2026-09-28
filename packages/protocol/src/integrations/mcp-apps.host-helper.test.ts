@@ -174,7 +174,7 @@ describe('gguiShellHtml', () => {
   it('loads the runtime via a deferred ES-module script with CORS error reporting', () => {
     const html = gguiShellHtml(bootstrap);
     expect(html).toContain(
-      `<script type="module" crossorigin="anonymous" src="${LIVE_SLICE.runtimeUrl}"></script>`,
+      `<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${LIVE_SLICE.runtimeUrl}"></script>`,
     );
   });
 
