@@ -20,6 +20,7 @@ import {
   type RendererValidatorContext,
 } from '../validation.js';
 import type { StreamBus } from '../wire-config.js';
+import type { StreamSeqTracker } from '../stream-seq.js';
 
 export interface DataHandlerDeps {
   /**
@@ -30,6 +31,13 @@ export interface DataHandlerDeps {
   readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
+  /**
+   * The view's stream cursor (ggui#1496): a stamped envelope at or below
+   * the highest `seq` already applied is a redelivery and drops. Shared by
+   * every ladder the view binds, so a stream replayed on a new ladder is
+   * applied once.
+   */
+  readonly streamSeq: StreamSeqTracker;
 }
 
 export function createDataHandler(
@@ -45,6 +53,7 @@ export function createDataHandler(
       ) {
         return;
       }
+      if (!deps.streamSeq.admit(envelope.seq)) return;
 
       // Active render carries the streamSpec — mirrors
       // `GguiRender.handleServerMessage`.

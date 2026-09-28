@@ -64,6 +64,7 @@ import type {
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
 } from './types.js';
+import { createStreamSeqTracker, type StreamSeqTracker } from './stream-seq.js';
 import {
   BOOT_REFRESH_RETRIES,
   createCredentialController,
@@ -855,6 +856,12 @@ export interface RendererHandle {
    * `connectViaRegistry` and consumed during handshake resolution.
    */
   readonly channelRegistry: ChannelRegistry;
+  /**
+   * The view's stream cursor (ggui#1496): the highest stamped `data`
+   * envelope `seq` applied. The `data` handler dedupes on it, and a new
+   * subscribe resumes the stream from it (`fromSeq`).
+   */
+  readonly streamSeq: StreamSeqTracker;
   /**
    * 3rd-party gadget-package merge promise. `installGlobalRegistry`
    * seeds `__ggui__.gadgets` synchronously with the STDLIB namespace;
@@ -5307,11 +5314,13 @@ async function bootProduction(opts: {
           getChannelTransport: () => channelTransport,
         }),
       );
+      const streamSeq = createStreamSeqTracker();
       channelRegistry.register(
         createDataHandler({
           getCurrentGguiSession: () => currentRender,
           streamBus,
           validatorCtx,
+          streamSeq,
         }),
       );
       // Freeze latch (#483). This mount's own history epoch, read once
@@ -5362,6 +5371,7 @@ async function bootProduction(opts: {
         manager,
         channelTransport,
         channelRegistry,
+        streamSeq,
         composedGadgets,
       };
     },
