@@ -141,6 +141,7 @@ import {
 import type { BuiltWireConfig, WireConfig } from '@ggui-ai/wire';
 import {
   fromBootstrapFailure,
+  fromTransportFailure,
   type BootstrapFailureReason,
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
@@ -1545,6 +1546,24 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         'credential.refresh',
         `${source}:${outcome.kind === 'refused' ? `refused:${outcome.code}` : outcome.kind}`,
       );
+    },
+    // An honest end (R4, ggui#1496): a bridge pull confirmed the live
+    // channel cannot come back — the host refuses to relay it, or the
+    // session is gone. Every ladder is already disposed; a painted card
+    // stays, under a status that says so, with one typed error and one
+    // observability event naming the confirmation.
+    isConfirmedRelayRefusalCode: (code) => CONFIRMED_RELAY_REFUSAL_CODES.has(code),
+    onEnded: (end) => {
+      const why =
+        end.confirmation === 'relay-refusal'
+          ? `the host refused to relay the live channel (${end.code})`
+          : `the session is gone (session_not_found, ${
+              end.after === 'a-successful-pull' ? 'after a successful pull' : 'twice in a row'
+            })`;
+      telemetry?.record('live.ended', JSON.stringify(end));
+      setStatus(refs, `Live updates ended: ${why}.`, 'error');
+      onProtocolError?.(fromTransportFailure('DISCONNECTED', false, why));
+      onObserve?.({ kind: 'subscribe-failed', reason: 'live-channel-ended', message: why });
     },
     // Live-channel diagnostics tap — every channel_* event the
     // transports emit (failover swaps, polling budget exhaustion,

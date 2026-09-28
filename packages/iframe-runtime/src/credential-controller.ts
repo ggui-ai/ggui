@@ -23,9 +23,9 @@
  * from a refusal signal, never derived from a token's issue time: a
  * chained token can legitimately live less than a full TTL.
  */
-import { parseDomainErrorText } from "@ggui-ai/protocol/wire";
 import { withWsToken } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { unwrapCallToolResult } from "./call-tool-unwrap.js";
+import { domainErrorCodeOf, isErrorToolResult, toolResultText } from "./tool-result-error.js";
 import type { HeldCredential } from "./types.js";
 
 export type { HeldCredential };
@@ -150,25 +150,12 @@ export function createCredentialController(
   };
 }
 
-/** The text of a tool result's first text block, if it has one. */
-function firstText(result: unknown): string | undefined {
-  if (typeof result !== "object" || result === null) return undefined;
-  const content = Reflect.get(result, "content");
-  if (!Array.isArray(content) || content.length === 0) return undefined;
-  const first: unknown = content[0];
-  if (typeof first !== "object" || first === null) return undefined;
-  const text = Reflect.get(first, "text");
-  return typeof text === "string" ? text : undefined;
-}
-
 function readRefreshResult(from: HeldCredential, result: unknown): RefreshOutcome {
-  const isError =
-    typeof result === "object" && result !== null && Reflect.get(result, "isError") === true;
-  if (isError) {
+  if (isErrorToolResult(result)) {
     // A thrown server error reaches the view as an error result whose text is
     // a domain error, exactly as the pull's not-found does.
-    const text = firstText(result) ?? "";
-    if (parseDomainErrorText(text)?.code === "session_not_found") return { kind: "not-found" };
+    const text = toolResultText(result) ?? "";
+    if (domainErrorCodeOf(result) === "session_not_found") return { kind: "not-found" };
     return {
       kind: "relay-error",
       message: text.length > 0 ? text : "refresh answered an error with no text",

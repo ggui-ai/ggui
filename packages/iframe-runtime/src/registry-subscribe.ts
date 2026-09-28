@@ -206,6 +206,13 @@ export interface ConnectViaRegistryOptions {
    * behavior on console-less sandboxed hosts reaches the server.
    */
   readonly logger?: ChannelLogger;
+  /**
+   * The bound transport, as soon as `bind()` resolves (ggui#1496), before
+   * any ack or refusal settles the handshake. A caller that may need to
+   * dispose a ladder whose handshake never settles (a socket that never
+   * opens, demoting to its bridge) takes the handle here.
+   */
+  readonly onBound?: (handle: AnyTransportHandle) => void;
 }
 
 /**
@@ -567,6 +574,7 @@ export function connectViaRegistry(
         ...(opts.bridge !== undefined ? { bridge: opts.bridge } : {}),
       })
       .then((bound) => {
+        opts.onBound?.(bound);
         if (!hasTrio) {
           // Bridge-only bind — no subscribe handshake, no ack. The
           // polling facade reports 'open' immediately (mapped to

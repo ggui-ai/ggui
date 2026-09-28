@@ -11,7 +11,7 @@ import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createCredentialController } from '../credential-controller.js';
 import { createSequenceCursor } from '../events-polling.js';
-import { createLadderSet, type LadderSpec } from '../ladders.js';
+import { createLadderSet, type LadderSpec, type LiveChannelEnd } from '../ladders.js';
 import { connectViaRegistry } from '../registry-subscribe.js';
 import { createStreamSeqTracker } from '../stream-seq.js';
 import type { HeldCredential } from '../types.js';
@@ -96,12 +96,15 @@ interface Rig {
   readonly fetchCalls: string[];
   readonly cursor: ReturnType<typeof createSequenceCursor>;
   readonly streamSeq: ReturnType<typeof createStreamSeqTracker>;
+  readonly ends: LiveChannelEnd[];
 }
 
 function rig(options: {
   readonly initial?: HeldCredential;
   readonly refresh?: (envelope: string) => unknown;
   readonly bridgeBody?: () => unknown;
+  /** Replaces `bridgeBody`: the relay's whole answer, a result or a rejection. */
+  readonly bridgeAnswer?: () => Promise<unknown>;
   readonly fetchResponse?: (url: string) => Response;
 } = {}): Rig {
   const propsUpdates: unknown[] = [];
@@ -121,7 +124,10 @@ function rig(options: {
     sleep: async () => undefined,
     random: () => 0,
   });
-  const bridgeCalls = vi.fn(async (): Promise<unknown> => (options.bridgeBody ?? (() => eventsBody(0)))());
+  const bridgeCalls = vi.fn(
+    options.bridgeAnswer ?? (async (): Promise<unknown> => (options.bridgeBody ?? (() => eventsBody(0)))()),
+  );
+  const ends: LiveChannelEnd[] = [];
   const cursor = createSequenceCursor(0);
   const streamSeq = createStreamSeqTracker();
   const set = createLadderSet({
@@ -134,6 +140,8 @@ function rig(options: {
     bridgeCallTool: bridgeCalls,
     onStatus: (s) => void statuses.push(s),
     onAck: (a) => void acks.push(a),
+    isConfirmedRelayRefusalCode: (code) => code === -32601,
+    onEnded: (end) => void ends.push(end),
     fetchImpl: async (input) => {
       const url = String(input);
       fetchCalls.push(url);
@@ -141,7 +149,7 @@ function rig(options: {
     },
     now: () => Date.parse('2026-09-28T12:00:00.000Z'),
   });
-  return { set, propsUpdates, statuses, acks, refreshCalls, bridgeCalls, fetchCalls, cursor, streamSeq };
+  return { set, propsUpdates, statuses, acks, refreshCalls, bridgeCalls, fetchCalls, cursor, streamSeq, ends };
 }
 
 const WS_ONLY: LadderSpec = { credential: ROOT, sseUrl: undefined, pollingUrl: undefined };
@@ -311,5 +319,59 @@ describe('ladder set: entering the bridge past expiresAt (fact 8)', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(r.bridgeCalls).toHaveBeenCalled();
     expect(r.refreshCalls).toEqual([]);
+  });
+});
+
+describe('ladder set: an honest end (R4) — fed by the bridge pulls only', () => {
+  const FRESH: HeldCredential = { ...ROOT, expiresAt: FUTURE };
+  const notFound = (): unknown => ({
+    isError: true,
+    content: [{ type: 'text', text: 'session_not_found: no live session s1 for this caller' }],
+  });
+
+  async function onBridge(answers: ReadonlyArray<() => Promise<unknown>>): Promise<Rig> {
+    FakeWebSocket.opens = false;
+    let i = 0;
+    const r = rig({
+      initial: FRESH,
+      bridgeAnswer: () => (answers[Math.min(i++, answers.length - 1)] ?? (async () => eventsBody(0)))(),
+    });
+    void r.set.connectBoot({ ...WS_ONLY, credential: FRESH });
+    await vi.advanceTimersByTimeAsync(60_000);
+    return r;
+  }
+
+  it('a confirmed relay refusal (-32601) ends the live channel, and the bridge loop stops', async () => {
+    const r = await onBridge([
+      async () => {
+        throw Object.assign(new Error('Method not found'), { code: -32601 });
+      },
+    ]);
+    expect(r.ends).toEqual([{ confirmation: 'relay-refusal', code: -32601 }]);
+    expect(r.bridgeCalls).toHaveBeenCalledTimes(1);
+  });
+
+  it('a not-found after a successful pull ends it at once', async () => {
+    const r = await onBridge([async () => eventsBody(0), async () => notFound()]);
+    expect(r.ends).toEqual([{ confirmation: 'session-not-found', after: 'a-successful-pull' }]);
+    expect(r.bridgeCalls).toHaveBeenCalledTimes(2);
+  });
+
+  it('a first not-found is not enough on its own; a second one in a row ends it', async () => {
+    const r = await onBridge([async () => notFound(), async () => notFound()]);
+    expect(r.ends).toEqual([{ confirmation: 'session-not-found', after: 'a-second-not-found' }]);
+    expect(r.bridgeCalls).toHaveBeenCalledTimes(2);
+  });
+
+  it('anything else keeps its backoff: an unconfirmed relay error and an unrecognised error result end nothing', async () => {
+    const r = await onBridge([
+      async () => {
+        throw Object.assign(new Error('internal'), { code: -32603 });
+      },
+      async () => ({ isError: true, content: [{ type: 'text', text: 'store read failed' }] }),
+      async () => eventsBody(0),
+    ]);
+    expect(r.ends).toEqual([]);
+    expect(r.bridgeCalls.mock.calls.length).toBeGreaterThan(3);
   });
 });

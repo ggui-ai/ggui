@@ -28,6 +28,14 @@
  * A new ladder omits WS when the one it replaces left WS without ever
  * receiving a frame (the never-opened fail-fast): a jailed socket would
  * only fail again.
+ *
+ * **An honest end (R4).** The bridge pulls are the one place the view can
+ * learn that its live channel cannot come back, and they are the only
+ * input (a refused refresh is quiet). A pull the host's relay refuses with
+ * a confirmed code, or a `session_not_found` that is confirmed — the first
+ * after an earlier successful pull, or the second in a row — ends the live
+ * channel: every ladder is disposed, which stops the bridge loop, and the
+ * caller is told which confirmation fired. Anything else keeps its backoff.
  */
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import type {
@@ -57,6 +65,7 @@ import {
   type RegistrySubscribeHandle,
 } from './registry-subscribe.js';
 import type { StreamSeqTracker } from './stream-seq.js';
+import { domainErrorCodeOf, isErrorToolResult } from './tool-result-error.js';
 import type { HeldCredential } from './types.js';
 import type { ObservabilityEmitter } from './observability.js';
 import type { ProtocolErrorEmitter } from './protocol-error.js';
@@ -68,6 +77,14 @@ export interface LadderSpec {
   readonly sseUrl: string | undefined;
   readonly pollingUrl: string | undefined;
 }
+
+/** Why the live channel ended (R4): the confirmation that fired. */
+export type LiveChannelEnd =
+  | { readonly confirmation: 'relay-refusal'; readonly code: number }
+  | {
+      readonly confirmation: 'session-not-found';
+      readonly after: 'a-successful-pull' | 'a-second-not-found';
+    };
 
 export interface LadderSetOptions {
   /** The boot meta: identity (`sessionId`, `appId`) and the slice fields `connectFn` passes through. */
@@ -88,6 +105,10 @@ export interface LadderSetOptions {
   readonly onAck: (ack: AckPayload) => void;
   /** Each refresh a ladder asked for, and what it got. */
   readonly onRefresh?: (source: ExpirySource, outcome: RefreshOutcome) => void;
+  /** The runtime's registry of relay refusal codes that confirm the host cannot relay `tools/call`. */
+  readonly isConfirmedRelayRefusalCode: (code: number) => boolean;
+  /** The live channel ended (R4); every ladder is already disposed. */
+  readonly onEnded: (end: LiveChannelEnd) => void;
   readonly logger?: ChannelLogger;
   readonly onProtocolError?: ProtocolErrorEmitter;
   readonly onObserve?: ObservabilityEmitter;
@@ -127,6 +148,10 @@ interface LadderState {
   lastStatus: ConnectionStatus | undefined;
   /** The first refresh this ladder asked for, when it reported an expiry. */
   refresh: Promise<RefreshOutcome> | undefined;
+  /** A bridge pull on this ladder has succeeded. */
+  pulled: boolean;
+  /** Consecutive `session_not_found` answers to this ladder's pulls. */
+  notFoundStreak: number;
 }
 
 interface Ladder extends LadderState {
@@ -163,6 +188,39 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
   const baseFetch = opts.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   let nextId = 0;
   const built = new Map<LadderState, Ladder>();
+  let ended = false;
+
+  /** R4: dispose every ladder (the bridge loop stops with its ladder) and say why. */
+  const end = (why: LiveChannelEnd): void => {
+    if (ended) return;
+    ended = true;
+    for (const ladder of ladders) {
+      ladder.disposed = true;
+      if (ladder.handle !== undefined) void ladder.handle.dispose();
+    }
+    ladders = [];
+    opts.onEnded(why);
+  };
+
+  /** Read one bridge pull's answer for R4: a confirmed ending, or nothing (its backoff stands). */
+  const classifyPull = (ladder: LadderState, answer: { readonly result: unknown } | { readonly error: unknown }): void => {
+    if ('error' in answer) {
+      const error: unknown = answer.error;
+      const code = typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined;
+      if (typeof code === 'number' && opts.isConfirmedRelayRefusalCode(code)) end({ confirmation: 'relay-refusal', code });
+      return;
+    }
+    if (domainErrorCodeOf(answer.result) === 'session_not_found') {
+      ladder.notFoundStreak += 1;
+      if (ladder.pulled) end({ confirmation: 'session-not-found', after: 'a-successful-pull' });
+      else if (ladder.notFoundStreak >= 2) end({ confirmation: 'session-not-found', after: 'a-second-not-found' });
+      return;
+    }
+    if (!isErrorToolResult(answer.result)) {
+      ladder.pulled = true;
+      ladder.notFoundStreak = 0;
+    }
+  };
   let ladders: LadderState[] = [];
   let active: Ladder | undefined;
   let holder: LadderState | undefined;
@@ -202,7 +260,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
   const reportExpired = async (ladder: LadderState, source: ExpirySource): Promise<void> => {
     const credential = ladder.spec.credential;
     const controller = opts.controller;
-    if (controller === null || credential === undefined || ladder.disposed) return;
+    if (controller === null || credential === undefined || ladder.disposed || ended) return;
     const pending = controller.onExpired(credential, source);
     if (ladder.refresh === undefined) ladder.refresh = pending;
     const outcome = await pending;
@@ -224,6 +282,8 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
       polling410Seen: false,
       lastStatus: undefined,
       refresh: undefined,
+      pulled: false,
+      notFoundStreak: 0,
     };
     const classifyFrame: FrameClassifier = (frame) => {
       ladder.wsFrameSeen = true;
@@ -319,9 +379,17 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     const bridge: RegistryPollingOptions | undefined =
       callTool !== undefined && view !== undefined
         ? buildBridgePolling({
-            callTool: (name, args) => {
+            callTool: async (name, args) => {
               enterBridge(ladder);
-              return callTool(name, args);
+              let result: unknown;
+              try {
+                result = await callTool(name, args);
+              } catch (error) {
+                classifyPull(ladder, { error });
+                throw error;
+              }
+              classifyPull(ladder, { result });
+              return result;
             },
             sessionId: opts.meta.sessionId,
             cursor: view,
@@ -338,6 +406,10 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
         if (ladder === active) opts.onStatus(status);
       },
       onResubscribeAck: (ack) => onAck(ladder, ack),
+      onBound: (handle) => {
+        ladder.handle = handle;
+        if (ladder.disposed) void handle.dispose();
+      },
       ...(sse !== undefined ? { sse } : {}),
       ...(polling !== undefined ? { polling } : {}),
       ...(bridge !== undefined ? { bridge } : {}),
@@ -353,14 +425,20 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     if (expiresAt !== undefined && Date.parse(expiresAt) <= now()) void reportExpired(ladder, 'bridge');
   };
 
+  // The handle arrives through `onBound` as soon as the ladder is bound;
+  // the settled result carries the same one, for a `connectFn` that
+  // reports none earlier.
   const bind = async (ladder: Ladder): Promise<RegistrySubscribeHandle> => {
     const result = await opts.connectFn(connectOptions(ladder));
-    ladder.handle = result.handle;
-    if (ladder.disposed) void result.handle.dispose();
+    if (ladder.handle === undefined) {
+      ladder.handle = result.handle;
+      if (ladder.disposed) void result.handle.dispose();
+    }
     return result;
   };
 
   const rebind = (from: LadderState, credential: HeldCredential, source: ExpirySource): void => {
+    if (ended) return;
     // A jailed socket that never delivered a frame would only fail again.
     const omitWs = source !== 'ws' && from.hasWs && !from.wsFrameSeen;
     const ladder = build(
