@@ -735,9 +735,19 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     deps.register(sub);
     // From here the subscriber is registered, so the live pump and the
     // direct walks can write to it; the gate holds their frames until the
-    // ack and every replay frame below are written (ggui#1525). `finally`:
-    // a subscribe that throws past this point still releases them, and the
-    // subscriber stays live as it did before.
+    // ack and every replay frame below are written (ggui#1525), and the
+    // `finally` always releases them.
+    //
+    // A subscribe that throws past this point (a ledger read that fails)
+    // is not left registered (ggui#1528). The client may already hold the
+    // ack and would run on a partial replay with no signal, and on SSE
+    // nothing else would ever unregister it. So the subscriber is
+    // unregistered and its transport ended with `internal_error` (WS
+    // close 1011; the SSE stream ends), the client re-subscribes with a
+    // fresh replay, and the error still reaches the caller. Not
+    // `service_restart`: its 1012 invites an immediate reconnect, and a
+    // failure that repeats for one render (a row the store cannot read)
+    // would become a tight reconnect loop per open view.
     try {
       deps.logger.info("render_channel_subscribed", {
         sessionId: stored.id,
@@ -861,6 +871,10 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
           sink.write({ type: "data", payload: env });
         }
       }
+    } catch (err) {
+      deps.unregister(sub);
+      sink.end("internal_error");
+      throw err;
     } finally {
       gate.release();
     }

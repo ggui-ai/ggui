@@ -60,6 +60,7 @@ import {
   createGguiSessionChannelServer,
   type GguiSessionChannelOptions,
 } from './ggui-session-channel.js';
+import type { SubscriberSink } from './ggui-session-channel/internal-types.js';
 
 /**
  * Silent logger that records `logger.error` and `logger.warn` event
@@ -432,11 +433,20 @@ describe('completeSubscribe — the replay is on the wire before any live frame 
     ]);
   });
 
-  it('a ledger read that fails still leaves the subscriber pumped, as before: nothing is left counted and silent', async () => {
+  // ggui#1528 — a subscribe that fails past registration leaves nothing
+  // registered: the client already holds an ack, so it is told to come
+  // back (1012 on the WS, the stream ended on SSE) instead of running on a
+  // partial replay. 1011, not 1012: a failure that repeats must get the
+  // client's ordinary backoff, never an immediate reconnect.
+  it('a ledger read that fails unregisters the subscriber and closes the WS with 1011, so the client re-subscribes with its ordinary backoff (ggui#1528)', async () => {
     const store = new GatedLedgerStore(true);
     const booted = await bootGated(store);
     fx = booted.fx;
-    fx.ws.send(
+    const ws = fx.ws;
+    const closed = new Promise<number>((resolve) => {
+      ws.once('close', (code: number) => resolve(code));
+    });
+    ws.send(
       JSON.stringify({
         type: 'subscribe',
         payload: { sessionId: fx.sessionId, appId: APP_ID, sinceSequence: 0 },
@@ -445,11 +455,37 @@ describe('completeSubscribe — the replay is on the wire before any live frame 
     );
     await store.entered;
     store.open();
-    await fx.nextFrame('ack');
-    const live = await publishLive(booted.streamBuffer, booted.streamFanout, fx.sessionId, 1);
-    const frame = await fx.nextFrame('data');
-    expect((frame['payload'] as { seq: number }).seq).toBe(live);
-  });
+    expect(await closed).toBe(1011);
+    expect(fx.channel.subscriberCount).toBe(0);
+  }, 5_000);
+
+  it('an external (SSE) attach whose ledger read fails rejects, ends its sink with internal_error and leaves no subscriber (ggui#1528)', async () => {
+    const store = new GatedLedgerStore(true);
+    const booted = await bootGated(store);
+    fx = booted.fx;
+    const ended: string[] = [];
+    let open = true;
+    const sink: SubscriberSink = {
+      isOpen: () => open,
+      write: () => undefined,
+      end: (reason) => {
+        ended.push(reason);
+        open = false;
+      },
+    };
+    const attached = fx.channel.attachExternalSubscriber({
+      sessionId: fx.sessionId,
+      appId: APP_ID,
+      identity: { identity: { kind: 'builder' }, source: 'dev' },
+      sink,
+      sinceSequence: 0,
+    });
+    await store.entered;
+    store.open();
+    await expect(attached).rejects.toThrow('ledger read failed');
+    expect(ended).toEqual(['internal_error']);
+    expect(fx.channel.subscriberCount).toBe(0);
+  }, 5_000);
 });
 
 describe('handleInboundAction — server-side tool-hint derivation (consume-event build site)', () => {

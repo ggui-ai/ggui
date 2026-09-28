@@ -100,7 +100,7 @@ class SseSink implements SubscriberSink {
     }
   }
 
-  end(reason: "service_restart" | "session_expired"): void {
+  end(reason: "service_restart" | "session_expired" | "internal_error"): void {
     const teardown = this.onEnd;
     this.onEnd = undefined;
     teardown?.();
@@ -341,7 +341,10 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
       // Lost race with render eviction (the pre-gate passed moments
       // ago) or a store failure inside the subscribe tail. Headers are
       // out, so no status rewrite — end the stream; the reconnect gets
-      // the authoritative pre-gate verdict.
+      // the authoritative pre-gate verdict. A tail that failed after
+      // registering has already unregistered its subscriber and ended
+      // the sink with `internal_error` (ggui#1528); `teardown` has no
+      // handle to add, and a second `end` is a no-op.
       logger.warn("sse_attach_failed", { sessionId, error: String(err) });
       teardown();
       sink.end("service_restart");

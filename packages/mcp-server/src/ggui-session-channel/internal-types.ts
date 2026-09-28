@@ -30,12 +30,16 @@ export interface SubscriberSink {
   write(frame: WebSocketMessage, opts?: { readonly resumeId?: string }): void;
   /**
    * Terminate the transport. WS maps `service_restart` → close 1012
-   * (reconnect immediately — same server family is still up) and
+   * (reconnect immediately — same server family is still up),
    * `session_expired` → close 1008 (policy violation — do not blind-
-   * reconnect); SSE ends the response, letting `EventSource`
-   * auto-reconnect hit the HTTP pre-gate for the authoritative verdict.
+   * reconnect), and `internal_error` → close 1011 (the server could not
+   * complete the subscribe; a client reconnects with its ordinary
+   * backoff, since a failure that may repeat must not invite an
+   * immediate retry, ggui#1528). SSE ends the response for every reason,
+   * letting `EventSource` auto-reconnect hit the HTTP pre-gate for the
+   * authoritative verdict.
    */
-  end(reason: "service_restart" | "session_expired"): void;
+  end(reason: "service_restart" | "session_expired" | "internal_error"): void;
 }
 
 /**

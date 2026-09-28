@@ -93,7 +93,7 @@ export function createWsSink(ws: WebSocket, logger: Logger): SubscriberSink {
     },
     end: (reason) => {
       try {
-        ws.close(reason === "service_restart" ? 1012 : 1008, reason);
+        ws.close(reason === "service_restart" ? 1012 : reason === "internal_error" ? 1011 : 1008, reason);
       } catch {
         /* best-effort — socket may already be closing */
       }
