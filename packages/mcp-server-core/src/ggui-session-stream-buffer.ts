@@ -87,6 +87,21 @@ export interface BufferedStreamEnvelope {
    * See `PROTOCOL_SCHEMA_VERSION` on `@ggui-ai/protocol`.
    */
   readonly schemaVersion?: string;
+  /**
+   * The epoch `seq` counts in (ggui#1531; see
+   * {@link GguiSessionStreamBuffer} "Epochs"). Stamped at record time by
+   * an implementation that knows epochs; absent from one that predates
+   * them, and from an entry stored before it did.
+   */
+  readonly streamEpoch?: string;
+}
+
+/** A session's stream cursor, read at once: its latest `seq` and the epoch that `seq` counts in. */
+export interface StreamCursor {
+  /** Latest assigned seq, 0 when the session has recorded nothing. */
+  readonly seq: number;
+  /** The counter's epoch; absent when the session has no counter yet, or the implementation predates epochs. */
+  readonly epoch?: string;
 }
 
 /**
@@ -128,6 +143,11 @@ export interface ReplayResult {
    * the session has never recorded, this is 0.
    */
   readonly streamSeq: number;
+  /**
+   * The epoch `streamSeq` counts in (ggui#1531). Absent when the
+   * session has no counter yet, or the implementation predates epochs.
+   */
+  readonly streamEpoch?: string;
 }
 
 /**
@@ -143,6 +163,26 @@ export interface ReplayResult {
  * interleave at the byte/network level — replay correctness is
  * still guaranteed by atomic `INCR`-based seq assignment, so the
  * recorded order matches seq order even under concurrent writers.
+ *
+ * **Epochs (ggui#1531).** A session's `seq` counts within one counter.
+ * When the counter restarts (evicted, expired, or held in memory across a
+ * server restart while sessions persist), `seq` values repeat, and a
+ * client that dedupes by `seq` would drop every frame from then on. An
+ * implementation that knows epochs therefore:
+ *   - mints a fresh epoch, an opaque string of at most 32 characters with
+ *     at least 64 random bits, whenever it creates a session's counter;
+ *   - stamps it on every envelope `record` returns and stores;
+ *   - reports it on `replay` (`streamEpoch`) and on `currentCursor`;
+ *   - replays only envelopes of the current epoch. An entry stored with
+ *     no epoch (written before the implementation knew epochs) belongs
+ *     only to an epoch ADOPTED for that pre-epoch data, never to one
+ *     minted because the counter restarted: after a restart, surviving
+ *     unstamped entries are the old generation and are not replayed. So
+ *     an implementation that can meet unstamped data records which kind
+ *     of epoch it holds.
+ * A counter that restarts and keeps its epoch breaks every client that
+ * dedupes by `seq`. An implementation that predates epochs stamps none,
+ * and clients read that as unknown, never as a mismatch.
  */
 export interface GguiSessionStreamBuffer {
   /**
@@ -209,6 +249,14 @@ export interface GguiSessionStreamBuffer {
    * the live cursor without pulling history.
    */
   currentSeq(sessionId: string): Promise<number>;
+
+  /**
+   * The session's cursor, `seq` and epoch read at once (ggui#1531). An
+   * implementation that knows epochs provides it; the server reads it
+   * for a subscriber's snapshot, and falls back to {@link currentSeq}
+   * (no epoch) when it is absent.
+   */
+  currentCursor?(sessionId: string): Promise<StreamCursor>;
 
   /**
    * Drop all buffered state for a render. Invoked on render `delete`

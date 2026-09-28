@@ -12,7 +12,14 @@
  * is documented on the interface, not worked around. Adapters that
  * need durability ship as separate packages against the same
  * {@link GguiSessionStreamBuffer} interface.
+ *
+ * Epochs (ggui#1531): a session's bucket holds its counter and its stored
+ * envelopes together, so a new bucket is a new counter over no data. Its
+ * epoch is minted when the bucket is created: after `clear`, or in a new
+ * process, the next record starts a new epoch, and nothing of the old
+ * generation can be replayed.
  */
+import { randomUUID } from 'node:crypto';
 import { DEFAULT_STREAM_REPLAY_POLICY } from '@ggui-ai/protocol';
 import { resolveStreamChannel } from '@ggui-ai/protocol';
 import type { StreamSpec } from '@ggui-ai/protocol';
@@ -23,6 +30,7 @@ import {
   type BufferedStreamEnvelope,
   type RecordResult,
   type ReplayResult,
+  type StreamCursor,
   type GguiSessionStreamBuffer,
   type GguiSessionStreamBufferOptions,
   type StreamEnvelopeInput,
@@ -31,6 +39,8 @@ import {
 interface RenderBucket {
   /** Latest assigned seq for the session. 0 when never recorded. */
   seq: number;
+  /** The epoch `seq` counts in, minted with the bucket (ggui#1531). */
+  readonly epoch: string;
   /**
    * FIFO ring of envelopes for channels with replay: 'all'.
    * Oldest at index 0, newest at tail. Capped by `maxPerSession`.
@@ -80,6 +90,7 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     const stamped = makeStreamEnvelope({
       sessionId: input.sessionId,
       seq,
+      streamEpoch: bucket.epoch,
       channel: input.channel,
       mode: input.mode,
       payload: input.payload,
@@ -145,16 +156,17 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
   ): Promise<ReplayResult> {
     const bucket = this.buckets.get(sessionId);
     const streamSeq = bucket?.seq ?? 0;
+    const cursor = bucket !== undefined ? { streamSeq, streamEpoch: bucket.epoch } : { streamSeq };
 
     // Fresh subscribe (no fromSeq) never pulls history — return the
     // cursor only. This matches the "subscribe is not a replay
     // request" mental model; clients explicitly opt in to history.
     if (fromSeq === undefined) {
-      return { envelopes: [], truncated: false, streamSeq };
+      return { envelopes: [], truncated: false, ...cursor };
     }
 
     if (!bucket) {
-      return { envelopes: [], truncated: false, streamSeq };
+      return { envelopes: [], truncated: false, ...cursor };
     }
 
     // Walk every channel the live spec declares, decide per-channel
@@ -222,11 +234,16 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     // Stable-sort by seq ASC. `'latest'` single-slot entries mix
     // cleanly with `'all'` ring entries under the same seq order.
     collected.sort((a, b) => a.seq - b.seq);
-    return { envelopes: collected, truncated, streamSeq };
+    return { envelopes: collected, truncated, ...cursor };
   }
 
   async currentSeq(sessionId: string): Promise<number> {
     return this.buckets.get(sessionId)?.seq ?? 0;
+  }
+
+  async currentCursor(sessionId: string): Promise<StreamCursor> {
+    const bucket = this.buckets.get(sessionId);
+    return bucket !== undefined ? { seq: bucket.seq, epoch: bucket.epoch } : { seq: 0 };
   }
 
   async clear(sessionId: string): Promise<void> {
@@ -246,6 +263,8 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     if (!bucket) {
       bucket = {
         seq: 0,
+        // 32 hex characters, 122 random bits.
+        epoch: randomUUID().replace(/-/g, ''),
         ring: [],
         evictedAboveSeq: 0,
         latestByChannel: new Map(),

@@ -297,3 +297,44 @@ describe('InMemoryGguiSessionStreamBuffer — constructor guards', () => {
     expect(() => new InMemoryGguiSessionStreamBuffer({ maxPerSession: -5 })).toThrow();
   });
 });
+
+describe('InMemoryGguiSessionStreamBuffer — epochs (ggui#1531)', () => {
+  const feed = (n: number) => ({ sessionId: SESSION, channel: 'feed', mode: 'append' as const, payload: { n } });
+
+  it('has no epoch before the first record, then stamps one epoch on every record, the replay and the cursor', async () => {
+    const buf = new InMemoryGguiSessionStreamBuffer();
+    expect(await buf.currentCursor(SESSION)).toEqual({ seq: 0 });
+    const r1 = await buf.record(feed(1), MIXED_SPEC);
+    const r2 = await buf.record(feed(2), MIXED_SPEC);
+    const epoch = r1.envelope.streamEpoch;
+    expect(epoch).toMatch(/^[0-9a-f]{32}$/);
+    expect(r2.envelope.streamEpoch).toBe(epoch);
+    expect(await buf.currentCursor(SESSION)).toEqual({ seq: 2, epoch });
+    const replay = await buf.replay(SESSION, 0, MIXED_SPEC);
+    expect(replay).toMatchObject({ streamSeq: 2, streamEpoch: epoch });
+    expect(replay.envelopes.map((e) => e.streamEpoch)).toEqual([epoch, epoch]);
+  });
+
+  it('a restarted counter (a clear, or a new process) is a new epoch, and replays nothing of the old generation', async () => {
+    const buf = new InMemoryGguiSessionStreamBuffer();
+    const before = (await buf.record(feed(1), MIXED_SPEC)).envelope;
+    await buf.record(feed(2), MIXED_SPEC);
+    await buf.clear(SESSION);
+    const after = (await buf.record(feed(3), MIXED_SPEC)).envelope;
+    // The seq repeats; the epoch says so.
+    expect(after.seq).toBe(1);
+    expect(after.streamEpoch).not.toBe(before.streamEpoch);
+    const replay = await buf.replay(SESSION, 0, MIXED_SPEC);
+    expect(replay.envelopes.map((e) => [e.seq, e.streamEpoch])).toEqual([[1, after.streamEpoch]]);
+    // Another process holds another epoch for the same session.
+    const other = new InMemoryGguiSessionStreamBuffer();
+    expect((await other.record(feed(1), MIXED_SPEC)).envelope.streamEpoch).not.toBe(after.streamEpoch);
+  });
+
+  it('sessions hold their own epochs', async () => {
+    const buf = new InMemoryGguiSessionStreamBuffer();
+    const a = (await buf.record(feed(1), MIXED_SPEC)).envelope.streamEpoch;
+    const b = (await buf.record({ ...feed(1), sessionId: 'sess-2' }, MIXED_SPEC)).envelope.streamEpoch;
+    expect(a).not.toBe(b);
+  });
+});
