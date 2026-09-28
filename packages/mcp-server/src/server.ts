@@ -220,6 +220,11 @@ import {
 import { mountAdminOAuthProvidersTransport } from "./admin-oauth-providers-transport.js";
 import { DEFAULT_BUILDER_APP_ID, defaultAppIdFromIdentity } from "./auth.js";
 import type { BuildMcpServerOptions, ServerInfo } from "./build-mcp.js";
+import {
+  assertViewProofDeclarations,
+  createViewProofGate,
+  unverifiableViewProofTools,
+} from "./view-proof-gate.js";
 import { mountMcpEndpoints } from "./mcp-endpoint-routes.js";
 import type { ErrorMapperResult } from "./mcp-endpoint-routes.js";
 export type { ErrorMapperResult } from "./mcp-endpoint-routes.js";
@@ -4760,6 +4765,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     opts.mcpMounts
   );
 
+
   // Isolated MCP services — validated at compose time so misconfig
   // (malformed path, reserved-path collision, empty outputSchema,
   // audience-tag-on-service-handler, within-service tool-name
@@ -4767,6 +4773,28 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // construction instead of at first `tools/call`. The actual route
   // mounting happens below alongside the canonical routes.
   const mcpServices = validateMcpServices(opts.mcpServices);
+
+  // ggui#1415 — the view-origin proof's measuring gate, over every handler
+  // this server serves (the data and control planes, mounts, and isolated
+  // services). Every declared proof must be one a view can sign (refused at
+  // boot otherwise). The gate runs where views are keyed (MCP Apps on);
+  // without it, a declared call's line says `viewProofUnverifiable`, named
+  // once here.
+  const servedHandlers = [...handlers, ...mcpServices.flatMap((service) => service.handlers)];
+  assertViewProofDeclarations(servedHandlers);
+  const viewProofGate =
+    mcpAppsEnabled && sharedTokenSecret !== undefined
+      ? createViewProofGate({ secret: sharedTokenSecret, sessionStore: renderStore })
+      : undefined;
+  if (viewProofGate === undefined) {
+    const unverifiable = unverifiableViewProofTools(servedHandlers);
+    if (unverifiable.length > 0) {
+      logger.warn("view_proof_unverifiable", {
+        tools: unverifiable,
+        hint: "These tools declare a view proof. MCP Apps is off, so this server keys no view and does not verify proofs.",
+      });
+    }
+  }
 
   // The control plane — every `protocol`- and `ops`-tagged handler,
   // projected onto one anonymous-capable route with per-tool auth and
@@ -5055,6 +5083,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // endpoint family spreads a fresh copy per request.
   const buildMcpOptions: BuildMcpServerOptions = {
     mcpAppsOutbound: mcpAppsEnabled,
+    ...(viewProofGate !== undefined ? { viewProofGate } : {}),
     // Caller-provided `shellHtml` overrides the default (and the
     // inline-runtime shell); `installMcpAppsOutbound` falls back to
     // its baked `GGUI_RENDER_SHELL_HTML` constant when both are

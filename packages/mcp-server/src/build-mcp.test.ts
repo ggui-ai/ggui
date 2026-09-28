@@ -782,7 +782,9 @@ describe('buildMcpServer — ggui_runtime_pull logs its sessionId (#1377)', () =
  *      this server holds, never an unverified id — and `consumerPresent`;
  *      one that did not commit (`ok: false`) carries `ok: false` + `code`
  *      and NO `sessionId`; an audit kind (`openLink`, `requestDisplayMode`,
- *      an extension kind) touches no pipe and carries no session at all;
+ *      an extension kind) touches no pipe and carries no session at all
+ *      (this rig has no view-proof gate; on a server with one, a call whose
+ *      proof is not valid also carries its `claimedSessionId`, ggui#1415);
  *   3. a consume refused before any drain (unknown or cross-app session)
  *      logs `outcome: 'error'` with `errorClass` and `claimedSessionId` — a
  *      tag, named as the caller's claim, bounded to 128 chars;
@@ -917,9 +919,10 @@ describe('buildMcpServer — consume and submit_action log their session (#1395)
       });
       expect(consume).toMatchObject({ tool: 'ggui_consume', sessionId, eventCount: 1 });
       // ids, counts and flags only — the gesture the dispatch carried and
-      // the consume drained never reaches the line.
+      // the consume drained never reaches the line. This rig has no view-proof
+      // gate, so the declared tool's line says so (ggui#1415).
       expect(Object.keys(submit ?? {}).sort()).toEqual(
-        ['appId', 'consumerPresent', 'elapsedMs', 'outcome', 'sessionId', 'tool'],
+        ['appId', 'consumerPresent', 'elapsedMs', 'outcome', 'sessionId', 'tool', 'viewProofUnverifiable'],
       );
       for (const key of ['payload', 'intent', 'actionData', 'uiContext', 'events']) {
         expect(submit).not.toHaveProperty(key);

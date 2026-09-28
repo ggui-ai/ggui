@@ -26,6 +26,7 @@ import {
   installMcpAppsOutbound,
   type GguiRenderResourceTemplateOptions,
 } from './mcp-apps-outbound.js';
+import { runViewProofGate, type ViewProofGate } from './view-proof-gate.js';
 
 export interface ServerInfo {
   readonly name: string;
@@ -34,6 +35,15 @@ export interface ServerInfo {
 }
 
 export interface BuildMcpServerOptions {
+  /**
+   * The view-origin proof's measuring gate (ggui#1415), built once per
+   * server with the secret its ws envelopes are signed with. For a tool
+   * that declares a view proof, the gate verifies the call's proof before
+   * the handler runs, puts the verdict on the handler's context and names
+   * it on the `tool_invoked` line. It never refuses or fails a call.
+   * Absent: a declared call's line says `viewProofUnverifiable: true`.
+   */
+  readonly viewProofGate?: ViewProofGate;
   /**
    * When set, register the MCP Apps outbound wiring on every fresh
    * server instance — advertises the `io.modelcontextprotocol/ui`
@@ -328,6 +338,12 @@ function classifyFailurePayload(
  * request's signal is aborted by the time the line is written — a superset
  * of "cancelled mid-poll", read at log time, never a false negative. A
  * committed dispatch adds `consumerPresent`, the doorbell's gate.
+ *
+ * `ggui_runtime_sync_context` is not a session tool here: a refused sync's
+ * session is only claimed. Its line names a refusal (`ok: false` and the
+ * `code`) and nothing else from this function. A tool that declares a view
+ * proof (ggui#1415) also carries the measuring gate's fields and
+ * `authSource` on every one of its lines (`view-proof-gate.ts`).
  */
 const SESSION_TOOLS: ReadonlySet<string> = new Set([
   'ggui_runtime_pull',
@@ -359,6 +375,13 @@ function sessionFields(
   output: Record<string, unknown>,
   ctx: HandlerContext,
 ): SessionLogFields {
+  // ggui#1415: a sync names its refusal (`ok: false` and the code) so a
+  // refused call is countable. Its session is not logged as owned: a
+  // refused call's session is only claimed (the gate's `claimedSessionId`).
+  if (tool === 'ggui_runtime_sync_context') {
+    if (output['ok'] === true) return {};
+    return typeof output['code'] === 'string' ? { ok: false, code: output['code'] } : { ok: false };
+  }
   if (!SESSION_TOOLS.has(tool)) return {};
   const sessionId = OUTPUT_SESSION_TOOLS.has(tool) ? output['sessionId'] : input['sessionId'];
   if (typeof sessionId !== 'string' || sessionId === '') return {};
@@ -505,12 +528,24 @@ export function buildMcpServer(
       // an object, so narrow with the validating predicate and DROP
       // anything else rather than asserting.
       const requestMeta = extra?._meta;
-      const ctx: HandlerContext = {
+      const requestCtx: HandlerContext = {
         ...baseCtx,
         ...(isRecord(requestMeta) ? { requestMeta } : {}),
         ...(extra?.signal !== undefined ? { signal: extra.signal } : {}),
       };
       const start = Date.now();
+      // ggui#1415: the measuring gate. For a tool that declares a view
+      // proof it verifies the proof, puts the verdict (and the request's
+      // row-read memo) on the context and returns the line's proof fields.
+      // Total: it never throws and never changes the handler's answer.
+      const gated = await runViewProofGate(opts.viewProofGate, handler, input, requestCtx);
+      const ctx = gated.ctx;
+      const proofFields = {
+        ...gated.fields,
+        ...(ctx.authSource !== undefined && (handler.viewProof !== undefined || handler.name === 'ggui_runtime_declare_tool_catalog')
+          ? { authSource: ctx.authSource }
+          : {}),
+      };
       try {
         const data = await handler.handler(input, ctx);
         // First-class in-result failure channel. A handler that
@@ -533,6 +568,7 @@ export function buildMcpServer(
             // malformed-row refusal, ggui#839), so its session is owned and
             // the per-session fields apply (ggui#1395).
             ...sessionFields(handler.name, input, validated, ctx),
+            ...proofFields,
             elapsedMs: Date.now() - start,
           });
           return {
@@ -556,6 +592,7 @@ export function buildMcpServer(
           appId: ctx.appId,
           outcome: 'success',
           ...sessionFields(handler.name, input, validated, ctx),
+          ...proofFields,
           elapsedMs: Date.now() - start,
         });
         // When the handler's output carries a `nextStep`, lead the
@@ -634,6 +671,7 @@ export function buildMcpServer(
           outcome: 'error',
           errorClass: errorClassName(err),
           ...claimedSessionField(handler.name, input),
+          ...proofFields,
           elapsedMs: Date.now() - start,
         });
         throw err;
