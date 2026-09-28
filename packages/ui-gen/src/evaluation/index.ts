@@ -108,6 +108,8 @@ export {
   JUDGE_GROUND_MARGIN_PX,
   CONTENT_HEIGHT_EXPRESSION,
   CARD_HEIGHT_EXPRESSION,
+  HOST_COLOUR_PATTERN,
+  HOST_FRAME_BOUNDS,
   runVisualEval,
   summarizeVisualResult,
 } from './visual-evaluator.js';

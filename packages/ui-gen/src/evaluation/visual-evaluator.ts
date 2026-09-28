@@ -262,7 +262,17 @@ export interface CanvasHostPresentation {
   readonly ground?: string;
   readonly frame?: HostInlineFrame;
 }
-const HEX_COLOUR = /^#[0-9a-f]{6}$/;
+/**
+ * The bounds a host frame must meet to be drawn (ggui#1492), exported so a lane's reader applies exactly the frames
+ * this judge draws: an entry the reader accepts and the judge ignores would be echoed as applied while never drawn.
+ */
+export const HOST_COLOUR_PATTERN = /^#[0-9a-f]{6}$/;
+export const HOST_FRAME_BOUNDS = {
+  ringWidthPx: { min: 0, max: 8 },
+  ringAlpha: { min: 0, max: 1 },
+  radiusPx: { min: 0, max: 64 },
+  minHeightPx: { min: 0, max: 2560 },
+} as const;
 function usablePresentation(canvas: CanvasClass, p: CanvasHostPresentation | undefined): CanvasHostPresentation | undefined {
   if (p === undefined) return undefined;
   const bad = (why: string): undefined => {
@@ -270,14 +280,15 @@ function usablePresentation(canvas: CanvasClass, p: CanvasHostPresentation | und
     return undefined;
   };
   if (typeof p.label !== 'string' || p.label.length === 0) return bad('no label');
-  if (p.ground !== undefined && !HEX_COLOUR.test(p.ground)) return bad('ground is not #rrggbb');
+  if (p.ground !== undefined && !HOST_COLOUR_PATTERN.test(p.ground)) return bad('ground is not #rrggbb');
   const f = p.frame;
   if (f !== undefined) {
     if (canvasFitPolicy(canvas).capture !== 'natural') return bad('a frame on a canvas that is not the inline card');
-    if (![f.surface, f.ground, f.ring.color].every((c) => HEX_COLOUR.test(c))) return bad('a frame colour is not #rrggbb');
-    const inRange = (n: number, lo: number, hi: number): boolean => Number.isFinite(n) && n >= lo && n <= hi;
-    if (!inRange(f.ring.widthPx, 0, 8) || !inRange(f.ring.alpha, 0, 1) || !inRange(f.radiusPx, 0, 64)) return bad('a frame number out of range');
-    if (f.minHeightPx !== undefined && !inRange(f.minHeightPx, 0, 2560)) return bad('minHeightPx out of range');
+    if (![f.surface, f.ground, f.ring.color].every((c) => HOST_COLOUR_PATTERN.test(c))) return bad('a frame colour is not #rrggbb');
+    const B = HOST_FRAME_BOUNDS;
+    const inRange = (n: number, b: { readonly min: number; readonly max: number }): boolean => Number.isFinite(n) && n >= b.min && n <= b.max;
+    if (!inRange(f.ring.widthPx, B.ringWidthPx) || !inRange(f.ring.alpha, B.ringAlpha) || !inRange(f.radiusPx, B.radiusPx)) return bad('a frame number out of range');
+    if (f.minHeightPx !== undefined && !inRange(f.minHeightPx, B.minHeightPx)) return bad('minHeightPx out of range');
   }
   return p;
 }

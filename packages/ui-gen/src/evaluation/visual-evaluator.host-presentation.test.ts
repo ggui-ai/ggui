@@ -10,6 +10,8 @@ import type { LaunchOptions } from 'puppeteer-core';
 import { criteriaFrameLine } from './criteria/resolve.js';
 import {
   CARD_OVERFLOW_X_EXPRESSION,
+  HOST_COLOUR_PATTERN,
+  HOST_FRAME_BOUNDS,
   JUDGE_GROUND_MARGIN_PX,
   JUDGE_INLINE_FRAME_CLASS,
   JUDGE_PANEL_CLASS,
@@ -126,6 +128,35 @@ describe('ggui#1492 — a fill canvas on the host\'s ground', () => {
     // Everything but the ground is the page a canvas without a presentation gets.
     const scrimFree = (html: string): string => html.replace(/body \{[\s\S]*?color: var\(--ggui-color-neutral-900/, 'body {');
     expect(stable(scrimFree(page))).toBe(stable(scrimFree(plain.pages[0]!)));
+  });
+});
+
+describe('ggui#1492 — the bounds a frame must meet are exported, so a lane\'s reader applies exactly the frames this judge draws', () => {
+  it('a frame AT each bound is drawn; one step past any bound is ignored', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const at = (frame: NonNullable<CanvasHostPresentation['frame']>): Promise<string> => {
+      const d = deps(300);
+      return runVisualEvaluationDetailed(CONTEXT, { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'], hostPresentations: { 'xs-chat-card': { label: 'a host', frame } } }, d).then(() => d.pages[0]!);
+    };
+    const base = WIDGET.frame!;
+    const B = HOST_FRAME_BOUNDS;
+    for (const f of [
+      { ...base, ring: { ...base.ring, widthPx: B.ringWidthPx.max, alpha: B.ringAlpha.max }, radiusPx: B.radiusPx.max, minHeightPx: B.minHeightPx.max },
+      { ...base, ring: { ...base.ring, widthPx: B.ringWidthPx.min, alpha: B.ringAlpha.min }, radiusPx: B.radiusPx.min, minHeightPx: B.minHeightPx.min },
+    ]) {
+      expect(await at(f)).toContain(`border-radius: ${f.radiusPx}px`);
+    }
+    for (const f of [
+      { ...base, ring: { ...base.ring, widthPx: B.ringWidthPx.max + 1 } },
+      { ...base, ring: { ...base.ring, alpha: B.ringAlpha.max + 0.01 } },
+      { ...base, radiusPx: B.radiusPx.max + 1 },
+      { ...base, minHeightPx: B.minHeightPx.max + 1 },
+    ]) {
+      expect(await at(f)).toContain('background: var(--ggui-color-container)');
+    }
+    expect(HOST_COLOUR_PATTERN.test('#0e1014')).toBe(true);
+    expect(HOST_COLOUR_PATTERN.test('#0E1014')).toBe(false);
+    warn.mockRestore();
   });
 });
 
