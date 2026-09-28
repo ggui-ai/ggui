@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { parseCriteriaBank } from './criteria/bank.js';
 import type { CriteriaContextInput } from './criteria/context.js';
-import {
+import { CARD_OVERFLOW_X_EXPRESSION,
   VISUAL_EVAL_PROMPT,
   runVisualEvaluationDetailed,
   summarizeVisualResult,
@@ -44,7 +44,8 @@ function deps(texts: string[]): VisualEvalDeps & { asked: JudgeArgs[] } {
       setContent: async () => {},
       waitForNetworkIdle: async () => {},
       waitForSelector: async () => null,
-      evaluate: async () => 500,
+      // ggui#1475 — the inline card's horizontal overflow is its own measurement: this card fits its width.
+      evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : 500),
       screenshot: async () => new Uint8Array([1, 2, 3]),
     }),
     close: async () => {},

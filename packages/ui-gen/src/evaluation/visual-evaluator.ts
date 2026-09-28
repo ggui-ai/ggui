@@ -311,6 +311,25 @@ export function canvasOverflowIssue(
   };
 }
 
+/** ggui#1475 — the horizontal twin of {@link canvasOverflowIssue}: content wider than the card, which its frame clips out of the capture. */
+export function canvasOverflowXIssue(
+  canvas: CanvasClass,
+  viewport: CanvasViewport,
+  hiddenPx: number,
+  verdict: 'fail' | 'warn',
+): EvaluationIssue {
+  return {
+    dimension: 'canvas-overflow-x',
+    severity: verdict === 'fail' ? 'critical' : 'major',
+    description:
+      `Content runs ${hiddenPx}px past the ${canvas} card's ${viewport.width}px width — the card's frame clips it, ` +
+      'so a visitor sees a cut-off row or a sideways scroll.',
+    fix:
+      'Keep every row within the card: wrap long text (overflow-wrap: anywhere), let a wide table or code block scroll ' +
+      'inside its own container, and give no child a fixed width wider than the card.',
+  };
+}
+
 /** ggui#1120 — the deterministic blank: the capture is one flat colour, so the component mounted and painted nothing. */
 export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport): EvaluationIssue {
   const classBox = CANVAS_VIEWPORTS[canvas];
@@ -726,6 +745,8 @@ export interface ScreenshotAttempt {
   readonly reason?: string;
   /** The document's scroll height at the viewport (ggui#1027); `null` when unmeasurable. */
   readonly contentHeight: number | null;
+  /** ggui#1475 — a natural capture's horizontal overflow: how many px the card's content runs past its width; absent on every other capture. */
+  readonly overflowX?: number | null;
 }
 
 /** The expression the fit measurement evaluates in the page — the taller of the two scroll heights. */
@@ -744,6 +765,14 @@ export const CONTENT_HEIGHT_EXPRESSION =
 export const CARD_HEIGHT_EXPRESSION =
   "(() => { const el = document.documentElement; const prev = el.style.height; el.style.height = 'max-content'; " +
   `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * JUDGE_INLINE_PAD_PX}; })()`;
+
+/**
+ * ggui#1475 — the inline card's horizontal overflow: how far its content runs past the card's width. The host's
+ * frame (and the judge's stand-in) clips at the card's edge, so the capture cannot show it, while a visitor's frame
+ * scrolls it sideways: only a measurement carries it.
+ */
+export const CARD_OVERFLOW_X_EXPRESSION =
+  "(() => { const r = document.getElementById('root'); return r ? Math.max(0, Math.ceil(r.scrollWidth - r.clientWidth)) : null; })()";
 
 /**
  * The natural capture's region: the card on the host ground, the ground margin on every side, the
@@ -790,9 +819,10 @@ export async function captureScreenshotDetailed(
       if (capture === 'natural') {
         // ggui#1475 — the inline card at its natural height: the capture is the card's extent on the host ground.
         const cardHeightPx = await measureContentHeight(page, CARD_HEIGHT_EXPRESSION);
+        const overflowX = await measureContentHeight(page, CARD_OVERFLOW_X_EXPRESSION);
         const clip = naturalClip(viewport, cardHeightPx ?? viewport.height - 2 * JUDGE_INLINE_PAD_PX);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
-        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx };
+        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX };
       }
       const contentHeight = await measureContentHeight(page);
       const screenshot = await page.screenshot({ type: 'png', fullPage: capture === 'full-page' });
@@ -1020,6 +1050,17 @@ function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | 
   return canvasOverflowIssue(canvas, frame.viewport, contentHeight, frame.policy.overflow);
 }
 
+/**
+ * ggui#1475 — the deterministic horizontal verdict on a natural capture: the card's content runs past its width. It
+ * is judged by the canvas's own fit policy (the inline card: a critical that fails the canvas), in its own dimension,
+ * so the in-loop `[fit]` extension (vertical overflow) is unchanged.
+ */
+function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+  const px = frame.attempt.overflowX;
+  if (px === undefined || px === null || px <= 0 || frame.policy.overflow === 'none') return null;
+  return canvasOverflowXIssue(canvas, frame.viewport, px, frame.policy.overflow);
+}
+
 /** One judge call parsed, retried ONCE on a malformed answer (#1017); the FIRST reason is kept verbatim. */
 type JudgedAnswer =
   | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
@@ -1182,6 +1223,11 @@ export async function runVisualEvaluationDetailed(
       const fitIssue = fitVerdict(canvas, frame);
       if (fitIssue !== null) {
         result.issues.push(fitIssue);
+        if (policy.overflow === 'fail') result.passed = false;
+      }
+      const overflowXIssue = overflowXVerdict(canvas, frame);
+      if (overflowXIssue !== null) {
+        result.issues.push(overflowXIssue);
         if (policy.overflow === 'fail') result.passed = false;
       }
       // The blank verdict (ggui#1120): deterministic, critical on every canvas — a render that painted nothing fails.
@@ -1743,6 +1789,8 @@ export async function runVisualFit(
     const overflow = contentHeight !== null && contentHeight > frame.viewport.height;
     const verdict = fitVerdict(canvas, frame);
     if (verdict !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, verdict)));
+    const overflowXIssue = overflowXVerdict(canvas, frame);
+    if (overflowXIssue !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, overflowXIssue)));
     const blank = blankVerdict(canvas, frame);
     if (blank !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, blank)));
     const inkRatio = frame.ink?.ratio ?? null;

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { encodePng, flatPng } from './__fixtures__/png.js';
-import {
+import { CARD_OVERFLOW_X_EXPRESSION,
   CARD_HEIGHT_EXPRESSION,
   JUDGE_GROUND_MARGIN_PX,
   JUDGE_INLINE_INK_INSET_PX,
@@ -45,7 +45,7 @@ function inkDeps(paint: (window: Box, panelled: boolean) => Uint8Array, score = 
         // The inline card is measured from its mount (ggui#1475): a card exactly its box tall; any other
         // canvas from the document, which carries the panel's gap when one was drawn.
         evaluate: async (expression: string) =>
-          expression === CARD_HEIGHT_EXPRESSION ? (cardHeight ?? window.height - 2 * JUDGE_INLINE_PAD_PX) : window.height + (panelled ? 32 : 0),
+          expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : expression === CARD_HEIGHT_EXPRESSION ? (cardHeight ?? window.height - 2 * JUDGE_INLINE_PAD_PX) : window.height + (panelled ? 32 : 0),
         screenshot: async () => paint(window, panelled),
       }),
       close: async () => {},

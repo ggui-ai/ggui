@@ -5,7 +5,7 @@
 // the per-sample critique; an unparsable sample is dropped, never invented.
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { runVisualEvaluationDetailed, summarizeVisualResult, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
+import { CARD_OVERFLOW_X_EXPRESSION, runVisualEvaluationDetailed, summarizeVisualResult, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
 
 const COMPONENT = 'export default function C(){ return null; }';
 
@@ -17,7 +17,8 @@ function deps(answers: Array<number | null>): VisualEvalDeps & { calls: number }
       setContent: async () => {},
       waitForNetworkIdle: async () => {},
       waitForSelector: async () => null,
-      evaluate: async () => 500,
+      // ggui#1475 — the inline card's horizontal overflow is its own measurement: this card fits its width.
+      evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : 500),
       screenshot: async () => new Uint8Array([1, 2, 3]),
     }),
     close: async () => {},

@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
-import {
+import { CARD_OVERFLOW_X_EXPRESSION,
   JUDGE_INLINE_PAD_PX,
   canvasOverflowIssue,
   runVisualEvaluationDetailed,
@@ -47,7 +47,8 @@ function fitDeps(contentHeight: number, score = 85): VisualEvalDeps & { captures
         setContent: async () => {},
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
-        evaluate: async () => contentHeight,
+        // ggui#1475 — the inline card's horizontal overflow is its own measurement: this card fits its width.
+        evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : contentHeight),
         screenshot: async (opts: { fullPage: boolean; clip?: Clip }) => {
           captures.push({ width, height, fullPage: opts.fullPage, ...(opts.clip !== undefined ? { clip: opts.clip } : {}) });
           return new Uint8Array([1, 2, 3]);

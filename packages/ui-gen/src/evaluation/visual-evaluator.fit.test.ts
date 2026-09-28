@@ -14,6 +14,7 @@ import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
 import {
   CARD_HEIGHT_EXPRESSION,
+  CARD_OVERFLOW_X_EXPRESSION,
   CONTENT_HEIGHT_EXPRESSION,
   JUDGE_GROUND_CLASS,
   JUDGE_GROUND_MARGIN_PX,
@@ -26,6 +27,7 @@ import {
   naturalClip,
   canvasOverflowIssue,
   runVisualEvaluationDetailed,
+  runVisualFit,
   summarizeVisualResult,
   type ScreenshotBrowser,
   type VisualEvalDeps,
@@ -35,7 +37,7 @@ const COMPONENT = 'export default function C(){ return null; }';
 
 interface Capture { readonly width: number; readonly fullPage: boolean; readonly clip?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } }
 
-function fitDeps(contentHeight: number | (() => Promise<number>), score = 85): VisualEvalDeps & { captures: Capture[]; expressions: string[]; pages: string[] } {
+function fitDeps(contentHeight: number | (() => Promise<number>), score = 85, overflowX = 0): VisualEvalDeps & { captures: Capture[]; expressions: string[]; pages: string[] } {
   const captures: Capture[] = [];
   const expressions: string[] = [];
   const pages: string[] = [];
@@ -53,6 +55,7 @@ function fitDeps(contentHeight: number | (() => Promise<number>), score = 85): V
         waitForSelector: async () => null,
         evaluate: async (expression: string) => {
           expressions.push(expression);
+          if (expression === CARD_OVERFLOW_X_EXPRESSION) return overflowX;
           const card = typeof contentHeight === 'function' ? await contentHeight() : contentHeight;
           return card + (panelled ? 2 * EXPANDED_FRAME.insetPx : 0);
         },
@@ -131,7 +134,8 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
       { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
       deps,
     );
-    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION]);
+    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION]);
+    expect(result!.issues.some((i) => i.dimension === 'canvas-overflow-x')).toBe(false);
     expect(deps.captures).toEqual([{ width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 280 + 2 * M } }]);
     expect(deps.pages[0]).toContain(`class="${JUDGE_GROUND_CLASS}"`);
     // The generic stand-in for the host's frame: the card's container surface, a 1 px ring, a 16 px radius.
@@ -158,6 +162,25 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     const ring = decls.match(/border: 1px solid color-mix\(in srgb, var\(--ggui-color-onContainer\) (\d+)%, transparent\)/);
     expect(ring).not.toBeNull();
     expect(Number(ring![1])).toBeLessThanOrEqual(8);
+  });
+  it("content wider than the inline card is a deterministic overflow the frame's clip cannot hide: the canvas fails, with the numbers", async () => {
+    // The host's frame (and the stand-in) clips at the card's edge, so a 600 px child in the 400 px card is cut cleanly
+    // in the capture while a visitor's frame scrolls it sideways. Only a measurement can carry it.
+    const deps = fitDeps(280, 85, 200);
+    const { result } = await runVisualEvaluationDetailed(
+      { compiledCode: COMPONENT, originalPrompt: 'a greeting card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
+      deps,
+    );
+    const [xs] = result!.canvases!;
+    expect(xs).toMatchObject({ canvas: 'xs-chat-card', score: 85, overflow: false, passed: false });
+    const issue = result!.issues.find((i) => i.dimension === 'canvas-overflow-x');
+    expect(issue?.severity).toBe('critical');
+    expect(issue?.description).toContain('200px');
+    expect(issue?.description).toContain('400px');
+    // The fit-only path reaches the same verdict.
+    const fit = await runVisualFit({ compiledCode: COMPONENT, originalPrompt: 'a greeting card' }, { canvases: ['xs-chat-card'] }, fitDeps(280, 85, 200));
+    expect(fit.status === 'measured' && fit.issues.map((i) => [i.severity, i.subcategory])).toEqual([['critical', 'canvas-overflow-x']]);
   });
   it('a declared box (#1195) mounts the card at the declared width, on the ground', async () => {
     const deps = fitDeps(300);
@@ -190,7 +213,7 @@ describe('the fit measurement in the per-canvas round (ggui#1027)', () => {
     );
     expect(result).not.toBeNull();
     // The inline card is measured from its mount (ggui#1475); every other canvas from the document, as before.
-    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CONTENT_HEIGHT_EXPRESSION, CONTENT_HEIGHT_EXPRESSION]);
+    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, CONTENT_HEIGHT_EXPRESSION, CONTENT_HEIGHT_EXPRESSION]);
     expect(deps.captures).toEqual([
       // xs on the host ground, clipped to the card and capped at its box (ggui#1475).
       { width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 640 + 2 * M } },

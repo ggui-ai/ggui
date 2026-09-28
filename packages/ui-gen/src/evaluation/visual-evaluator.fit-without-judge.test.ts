@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { JUDGE_INLINE_PAD_PX, runVisualEvaluationDetailed, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
+import { CARD_OVERFLOW_X_EXPRESSION, JUDGE_INLINE_PAD_PX, runVisualEvaluationDetailed, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
 
 const COMPONENT = 'export default function C(){ return null; }';
 const CONTEXT = { compiledCode: COMPONENT, originalPrompt: 'a welcome card' };
@@ -31,7 +31,8 @@ function frameDeps(contentHeight: number): VisualEvalDeps & { captures: Capture[
         setContent: async () => {},
         waitForNetworkIdle: async () => {},
         waitForSelector: async () => null,
-        evaluate: async () => contentHeight,
+        // ggui#1475 — the inline card's horizontal overflow is its own measurement: this card fits its width.
+        evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : contentHeight),
         screenshot: async (opts: { fullPage: boolean; clip?: Clip }) => {
           captures.push({ width, height, fullPage: opts.fullPage, ...(opts.clip !== undefined ? { clip: opts.clip } : {}) });
           return new Uint8Array([1, 2, 3]);
