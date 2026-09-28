@@ -42,6 +42,7 @@ import {
   MCP_APP_RENDERER_READY_TYPE,
   parseMcpAppAiGguiRenderMeta,
   readGguiShellEnvelope,
+  GGUI_SHELL_META_MARKER,
   type McpAppAiGguiRenderMeta,
   type McpAppBootstrapFailedMessage,
   type McpAppRendererReadyMessage,
@@ -1077,6 +1078,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       resolved = viaDoor ?? (await toolResultPromise);
     }
   }
+  // Every reader of the inline envelope copies has run by now, and no card
+  // code has loaded yet (ggui#1415).
+  forgetInlineEnvelopes(doc);
   let parsed: McpAppAiGguiMetaParseResult =
     resolved !== null
       ? { ok: true, meta: resolved.meta }
@@ -1823,6 +1827,24 @@ export interface BootMeta {
  * slice's root to it, and it keeps the newest valid one.
  */
 const documentViewRoots: ViewRootHolder = createViewRootHolder();
+
+/**
+ * Remove the inline copies of the boot envelope the shell left behind
+ * (ggui#1415): the `__GGUI_META__` global, the pre-load tool-result buffer,
+ * and the self-contained shell's envelope `<script>`, whose text outlives
+ * the global. Called once the boot slice is resolved, after every reader and
+ * before any card code loads; the key root is already held in this module.
+ *
+ * Hygiene, not a boundary: card code runs in this realm and can still ask
+ * the host to read its own locator. This removes the free copies only.
+ */
+function forgetInlineEnvelopes(doc: Document): void {
+  Reflect.deleteProperty(globalThis, '__GGUI_META__');
+  Reflect.deleteProperty(globalThis, '__GGUI_PENDING_TOOL_RESULTS__');
+  for (const script of Array.from(doc.querySelectorAll('script:not([src])'))) {
+    if ((script.textContent ?? '').trimStart().startsWith(GGUI_SHELL_META_MARKER)) script.remove();
+  }
+}
 
 /**
  * A parse result as a boot slice: the ok arm, or an expired live-only
