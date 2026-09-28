@@ -233,6 +233,9 @@ export function deriveContextName(slotKey: string): string {
  */
 export const MCP_APP_AI_GGUI_RENDER_META_KEY = 'ai.ggui/render' as const;
 
+/** The shape of a slice's `viewKey`: 32 bytes, base64url, no padding (ggui#1415). */
+const VIEW_KEY_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
 /**
  * Single entry in the {@link McpAppAiGguiRenderMeta.gadgets} catalog.
  * One per registered gadget package — the iframe-runtime
@@ -354,6 +357,15 @@ export interface McpAppAiGguiRenderMeta {
   readonly wsUrl?: string;
   readonly wsToken?: string;
   readonly expiresAt?: string;
+  /**
+   * The view key (ggui#1415): `base64url(HMAC-SHA256(secret, "ai.ggui/view-key/v1"
+   * ‖ 0x00 ‖ P))`, where `P` is the payload segment of this slice's
+   * `wsToken`. A view proves its app-only runtime calls with it (see
+   * `view-proof.ts`). Issued only at the doors that deliver a view to an
+   * app-credentialed caller, never on a bearer door, and only beside the
+   * `wsToken` it is rooted in: a parser drops it when that pair is absent.
+   */
+  readonly viewKey?: string;
 
   // Polling fallback (server-stamped URL post-rename:
   // `/api/sessions/<sessionId>/events`)
@@ -690,6 +702,11 @@ export function parseMcpAppAiGguiRenderMeta(
     appId: s.appId,
     runtimeUrl: s.runtimeUrl,
     ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
+    // The view key is meaningless without the ws envelope it is rooted in,
+    // and a 43-character base64url string when present (ggui#1415).
+    ...(hasW && hasT && typeof s.viewKey === 'string' && VIEW_KEY_SHAPE.test(s.viewKey)
+      ? { viewKey: s.viewKey }
+      : {}),
     ...(ae !== undefined ? { expiresAt: ae as string } : {}),
     ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
     // Same tolerant scalar posture as pollingUrl; deliberately NO

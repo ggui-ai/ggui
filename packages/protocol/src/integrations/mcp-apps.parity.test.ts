@@ -27,6 +27,8 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://example.test/ws',
   wsToken: 'tok-1',
+  // ggui#1415 — the view key, rooted in the wsToken beside it.
+  viewKey: 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A',
   expiresAt: '2099-01-01T00:00:00.000Z',
   pollingUrl: 'https://example.test/api/sessions/r-1/events?wsToken=tok-1',
   sseUrl: 'https://example.test/api/sessions/r-1/stream?wsToken=tok-1',
@@ -131,5 +133,31 @@ describe('parseMcpAppAiGguiRenderMeta — codeModuleUrl pairing (ggui#522 slice 
       [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...FULL, codeModuleUrl: '' },
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('parseMcpAppAiGguiRenderMeta — viewKey (ggui#1415)', () => {
+  const key = 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A';
+  const base = { sessionId: 'r-1', appId: 'app-1', runtimeUrl: '/_ggui/iframe-runtime.js' };
+  const parse = (slice: object): McpAppAiGguiRenderMeta | undefined => {
+    const result = parseMcpAppAiGguiRenderMeta({ [MCP_APP_AI_GGUI_RENDER_META_KEY]: slice });
+    return result.ok ? result.meta : undefined;
+  };
+
+  it('keeps the view key beside the ws envelope it is rooted in', () => {
+    expect(parse({ ...base, wsUrl: 'wss://x/ws', wsToken: 'tok', viewKey: key })).toMatchObject({ viewKey: key });
+  });
+
+  it('drops a view key that arrives without its ws envelope, or in any other shape', () => {
+    for (const slice of [
+      { ...base, viewKey: key },
+      { ...base, wsUrl: 'wss://x/ws', wsToken: 'tok', viewKey: `${key}=` },
+      { ...base, wsUrl: 'wss://x/ws', wsToken: 'tok', viewKey: key.slice(1) },
+      { ...base, wsUrl: 'wss://x/ws', wsToken: 'tok', viewKey: 42 },
+    ]) {
+      const meta = parse(slice);
+      expect(meta, JSON.stringify(slice)).toBeDefined();
+      expect(meta).not.toHaveProperty('viewKey');
+    }
   });
 });
