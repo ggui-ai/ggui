@@ -67,7 +67,8 @@ import type {
   RenderIdentityStore,
   StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
-import { defineHandler, type HandlerContext } from '../types.js';
+import { VIEW_ORIGIN_UNPROVEN } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
@@ -104,12 +105,16 @@ const outputSchema = {
   // owns answers `SESSION_NOT_FOUND`). It stays declared for one release so
   // a host holding this release's `tools/list` still accepts it from a
   // previous-release server during a rolling deploy.
+  // `VIEW_ORIGIN_UNPROVEN` (ggui#1415, a sync that carried no valid view
+  // proof) is DECLARED, not emitted: the output reaches `tools/list` closed,
+  // so it names the code one release before any server answers with it.
   code: z
     .enum([
       'SESSION_NOT_FOUND',
       'TENANT_MISMATCH',
       'CONTEXT_SCHEMA_VIOLATION',
       'CONTEXT_TOO_LARGE',
+      VIEW_ORIGIN_UNPROVEN,
     ])
     .optional(),
   message: z.string().optional(),
@@ -124,7 +129,8 @@ type SyncContextRejected = {
     | 'SESSION_NOT_FOUND'
     | 'TENANT_MISMATCH'
     | 'CONTEXT_SCHEMA_VIOLATION'
-    | 'CONTEXT_TOO_LARGE';
+    | 'CONTEXT_TOO_LARGE'
+    | typeof VIEW_ORIGIN_UNPROVEN;
   readonly message: string;
 };
 type SyncContextOutput = SyncContextAccepted | SyncContextRejected;
@@ -177,6 +183,9 @@ export function createGguiSyncContextHandler(
     _meta: {
       ui: { visibility: ['app'] as const },
     },
+    // ggui#1415: a sync writes the snapshot rehydrate seeds from, so a view
+    // proof is required for it.
+    viewProof: 'required',
     async handler(input, ctx: HandlerContext): Promise<SyncContextOutput> {
       const parsed = z.object(inputSchema).safeParse(input);
       if (!parsed.success) {
@@ -210,9 +219,11 @@ export function createGguiSyncContextHandler(
       // written), and the answer carries no store-health signal a caller
       // could tell apart from not-found. The cause is named on the
       // ownership line.
+      // The read goes through the request's memo, so a proof gate that read
+      // the row for this call shares it (ggui#1415).
       let stored: StoredGguiSession | null;
       try {
-        stored = await deps.renderStore.get(sessionId);
+        stored = await readSessionRow(ctx, deps.renderStore, sessionId);
       } catch (err) {
         logOwnershipUnverified(
           'ggui_runtime_sync_context',

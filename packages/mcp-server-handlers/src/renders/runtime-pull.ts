@@ -157,6 +157,12 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
         visibility: ['app'] as const,
       },
     },
+    // ggui#1415: measured, never refused. Pull is a read-only, app-scoped
+    // mirror of the session's event ledger, which the view's own events feed
+    // already serves; refusing it would cut the last fallback of a view that
+    // cannot open a socket. Measuring it shows soonest whether a host
+    // forwards `_meta`.
+    viewProof: 'measured',
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,

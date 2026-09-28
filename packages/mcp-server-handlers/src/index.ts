@@ -19,9 +19,12 @@ export * from "./renders/index.js";
 export {
   AuthRequiredError,
   HANDLER_FAILURE_MARKER,
+  createSessionRowReads,
   defineHandler,
   handlerFailure,
   isHandlerFailure,
+  readSessionRow,
+  viewProofUseFor,
 } from "./types.js";
 export type {
   AudienceTag,
@@ -30,11 +33,14 @@ export type {
   HandlerContext,
   HandlerDefinition,
   HandlerFailure,
+  SessionRowReads,
   ShapeOutput,
   SharedHandler,
   SharedHandlerOutputBound,
   SharedHandlerOutputData,
   SharedHandlerResult,
+  ViewProofDeclaration,
+  ViewProofUse,
 } from "./types.js";
 // Persistent-chat handler family — thread storage and message
 // history MCP tools. Thin over @ggui-ai/mcp-server-core ThreadStore.

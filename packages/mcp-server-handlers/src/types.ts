@@ -16,7 +16,13 @@
  * await handler.handler({ query: 'weather' }, { appId: 'a', requestId: 'r' });
  * ```
  */
-import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
+import type {
+  AuthResult,
+  CredentialScope,
+  GguiSessionStore,
+  StoredGguiSession,
+  ViewProofVerdict,
+} from '@ggui-ai/mcp-server-core';
 import type { z, ZodRawShape, ZodType, ZodTypeAny } from 'zod';
 
 /**
@@ -183,6 +189,88 @@ export interface HandlerContext {
    * means "no cancellation channel," not "never cancel."
    */
   readonly signal?: AbortSignal;
+  /**
+   * The verdict on this call's view proof (ggui#1415), when the tool
+   * declares one ({@link SharedHandler.viewProof}) and the server wires a
+   * verifier. The transport verifies before the handler runs and puts the
+   * verdict here; it is `undefined` for a tool that declares no proof, on a
+   * server with no verifier, and for in-process invocations.
+   *
+   * At this release it is measured and never refused, and no handler acts
+   * on it. A `valid` verdict means the call carries a proof this server can
+   * verify for this session and app, and nothing about who holds the key.
+   */
+  readonly viewProof?: ViewProofVerdict;
+  /**
+   * A per-request memo of session-row reads (ggui#1415), shared by the
+   * transport's proof gate and the handler so the row is read once per
+   * request. Read it through {@link readSessionRow}, never directly.
+   * `undefined` when the transport provides none; the handler then reads
+   * its store.
+   */
+  readonly sessionRows?: SessionRowReads;
+}
+
+/**
+ * A per-request memo of session-row reads (ggui#1415). A read of one store
+ * for one session id is made once, and every later read of the same pair
+ * in the request shares its answer, a failure included. Reads of another
+ * store never share: the memo is keyed by the store as well as the id.
+ */
+export interface SessionRowReads {
+  read(store: GguiSessionStore, sessionId: string): Promise<StoredGguiSession | null>;
+}
+
+/** A fresh memo for one request. */
+export function createSessionRowReads(): SessionRowReads {
+  const reads = new Map<GguiSessionStore, Map<string, Promise<StoredGguiSession | null>>>();
+  return {
+    read(store, sessionId) {
+      let byId = reads.get(store);
+      if (byId === undefined) {
+        byId = new Map();
+        reads.set(store, byId);
+      }
+      let pending = byId.get(sessionId);
+      if (pending === undefined) {
+        // A store whose `get` throws synchronously answers as a rejected read.
+        pending = Promise.resolve().then(() => store.get(sessionId));
+        byId.set(sessionId, pending);
+      }
+      return pending;
+    },
+  };
+}
+
+/** Read a session row through the request's memo when there is one, else from the store. */
+export function readSessionRow(
+  ctx: HandlerContext,
+  store: GguiSessionStore,
+  sessionId: string,
+): Promise<StoredGguiSession | null> {
+  return ctx.sessionRows !== undefined ? ctx.sessionRows.read(store, sessionId) : store.get(sessionId);
+}
+
+/**
+ * What a tool's view proof is for (ggui#1415). `measured`: the transport
+ * verifies it and counts the verdict. `required`: the same at this
+ * release; a later release refuses a call without a valid proof under an
+ * `enforce` policy, and only for these calls.
+ */
+export type ViewProofUse = 'measured' | 'required';
+
+/**
+ * A tool's view-proof declaration ({@link SharedHandler.viewProof}): a
+ * {@link ViewProofUse}, or a function of the call's arguments.
+ */
+export type ViewProofDeclaration = ViewProofUse | ((input: Record<string, unknown>) => ViewProofUse);
+
+/** What a declaration says for one call; `undefined` when the tool takes no proof. */
+export function viewProofUseFor(
+  declaration: ViewProofDeclaration | undefined,
+  input: Record<string, unknown>,
+): ViewProofUse | undefined {
+  return typeof declaration === 'function' ? declaration(input) : declaration;
 }
 
 /**
@@ -443,6 +531,17 @@ export interface SharedHandler<
    * agent-runtime-callable).
    */
   readonly audience?: ReadonlyArray<'agent' | 'runtime' | 'protocol' | 'ops'>;
+  /**
+   * Whether calls to this tool carry a view proof at
+   * `params._meta["ai.ggui/view"]` (ggui#1415), and what it is for: a
+   * {@link ViewProofUse}, or a function of the call's arguments when it
+   * depends on them (`ggui_runtime_submit_action` requires one only for
+   * `kind: "dispatch"`). Only a tool the proof's bound-argument table
+   * names can be verified (`isViewProofTool` in `@ggui-ai/protocol`): the
+   * table is what a view signs. Absent: the tool takes no proof, and none
+   * is verified.
+   */
+  readonly viewProof?: ViewProofDeclaration;
   /** Request handler. Takes a generic record so transports can pass unvalidated input. */
   handler(
     input: Record<string, unknown>,

@@ -130,7 +130,15 @@ describe('createGguiSubmitActionHandler', () => {
       z.object({
         additionalProperties: z.literal(false),
         properties: z.object({
-          code: z.object({ enum: z.tuple([z.literal('INVALID_ACTION_KIND'), z.literal('PIPE_NOT_FOUND'), z.literal('CONTRACT_VIOLATION')]) }),
+          // ggui#1415 declares VIEW_ORIGIN_UNPROVEN the same way, one release ahead.
+          code: z.object({
+            enum: z.tuple([
+              z.literal('INVALID_ACTION_KIND'),
+              z.literal('PIPE_NOT_FOUND'),
+              z.literal('CONTRACT_VIOLATION'),
+              z.literal('VIEW_ORIGIN_UNPROVEN'),
+            ]),
+          }),
           violations: z.object({
             type: z.literal('array'),
             items: z.object({

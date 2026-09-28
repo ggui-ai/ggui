@@ -70,6 +70,7 @@ import {
 } from '@ggui-ai/protocol';
 import {
   SUBMIT_ACTION_KINDS,
+  VIEW_ORIGIN_UNPROVEN,
   isGguiSubmitActionInput,
   type GguiSubmitActionInput,
   isGguiSubmitDispatchInput,
@@ -80,7 +81,7 @@ import {
   type PendingEventAppendOutcome,
   type StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
-import { defineHandler, type HandlerContext } from '../types.js';
+import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 import { assertActionContract } from './assert-action-contract.js';
 import { recordCommittedOneShot } from './record-committed-one-shot.js';
@@ -138,8 +139,12 @@ const outputSchema = {
    *   - `'PIPE_NOT_FOUND'` — `kind:"dispatch"` envelope arrived for a
    *     sessionId whose pipe is closed/missing. iframe-runtime
    *     branches on this to fall through to `ui/message`.
+   *   - `'VIEW_ORIGIN_UNPROVEN'` — a dispatch that carried no valid view
+   *     proof (ggui#1415). DECLARED, not emitted: this output reaches
+   *     `tools/list` closed, so it names the code one release before any
+   *     server answers with it (ggui#1333), as `CONTRACT_VIOLATION` was.
    */
-  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION']).optional(),
+  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION', VIEW_ORIGIN_UNPROVEN]).optional(),
   /**
    * The contract findings behind a `CONTRACT_VIOLATION` answer — the same
    * facts the live channel's error frame carries (ggui#1358). The code and
@@ -184,7 +189,7 @@ type UserActionAccepted = {
 
 type UserActionRejected = {
   readonly ok: false;
-  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION';
+  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION' | typeof VIEW_ORIGIN_UNPROVEN;
   readonly message: string;
   /** Present only with `code: 'CONTRACT_VIOLATION'` (ggui#1358). */
   readonly violations?: ContractViolation[];
@@ -311,16 +316,18 @@ export const YOUNG_RENDER_MS = 60_000;
 /**
  * Read the dispatch's render row — for the app-scope gate (ggui#1479) and,
  * once that passes, the `actionSpec` gate (ggui#1358). A failed read is named
- * on one warn line.
+ * on one warn line. The read goes through the request's memo, so a proof
+ * gate that read the row for this call shares it (ggui#1415).
  */
 async function readStoredRenderForGate(
   deps: GguiSubmitActionHandlerDeps,
+  ctx: HandlerContext,
   sessionId: string,
 ): Promise<GateRead> {
   const store = deps.renderStore;
   if (store === undefined) return { kind: 'no-store' };
   try {
-    const stored = await store.get(sessionId);
+    const stored = await readSessionRow(ctx, store, sessionId);
     return stored === null ? { kind: 'missing' } : { kind: 'row', stored };
   } catch (err) {
     deps.logger?.warn?.('submit_action_gate_store_read_failed', {
@@ -398,6 +405,10 @@ export function createGguiSubmitActionHandler(
         visibility: ['app'] as const,
       },
     },
+    // ggui#1415: a dispatch commits the gesture (the pipe append, the ledger
+    // row, the spend), so it is the call a view proof is required for. The
+    // other kinds touch nothing and are measured only.
+    viewProof: (input) => (input.kind === 'dispatch' ? 'required' : 'measured'),
     async handler(input, ctx: HandlerContext): Promise<UserActionOutput> {
       // Two-tier validation: zod for top-level field presence + types,
       // then `isGguiSubmitActionInput` for per-kind payload narrowing
@@ -476,7 +487,7 @@ export function createGguiSubmitActionHandler(
         // honest gesture refused here falls through to `ui/message`, so it
         // degrades rather than being lost. Only a store-less server, which
         // keeps no per-app session rows, skips the check.
-        const read = await readStoredRenderForGate(deps, env.sessionId);
+        const read = await readStoredRenderForGate(deps, ctx, env.sessionId);
         if (read.kind === 'missing') return pipeNotFound(env.sessionId);
         if (read.kind === 'read-failed') {
           logOwnershipUnverified('ggui_runtime_submit_action', env.sessionId, ctx.appId, 'read-failed');

@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The view-origin proof v1 is declared (2026-09-29, additive, ggui#1415:
+ * MINOR, same draft stamp). Nothing sends a proof or refuses a call at this
+ * release. Three pieces reach the wire:
+ *   - the request key `params._meta["ai.ggui/view"]` and its v1 grammar
+ *     (`@ggui-ai/protocol/integrations/mcp-apps`, `view-proof.ts`), which
+ *     no runtime sends yet;
+ *   - a ws token minted by a key-issuing door carries two optional claims,
+ *     `kid` and `src` (`VIEW_ROOT_SRC`, a closed set widened only a release
+ *     ahead of use); a verifier from before this release ignores them, and
+ *     no door mints them yet;
+ *   - `ggui_runtime_submit_action` and `ggui_runtime_sync_context` declare
+ *     `VIEW_ORIGIN_UNPROVEN` on their closed outputs in `tools/list` (SPEC
+ *     §4.7, §7.9), one release before any server answers it.
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A fresh subscribe's reserved-channel replay is written into SPEC §12.2.1
  * (2026-09-28, ggui#1521: an erratum, same draft stamp; no byte on the wire
  * changes). A subscribe without `fromSeq` still replays no agent-declared
