@@ -64,8 +64,21 @@ export interface CredentialController {
   current(): HeldCredential;
   /** The credential was accepted on a token rung (a WS or SSE ack, or a polling `ok`). */
   markAccepted(credential: HeldCredential): void;
-  /** `credential` is the one the reporting ladder was built with. */
-  onExpired(credential: HeldCredential, source: ExpirySource): Promise<RefreshOutcome>;
+  /**
+   * `credential` is the one the reporting ladder was built with. `retry`
+   * re-sends the SAME request after a relay error, inside the one budgeted
+   * refresh; a definitive answer is never retried.
+   */
+  onExpired(
+    credential: HeldCredential,
+    source: ExpirySource,
+    retry?: RefreshRetry
+  ): Promise<RefreshOutcome>;
+}
+
+/** How many times a refresh is re-sent after a relay error. */
+export interface RefreshRetry {
+  readonly retries: number;
 }
 
 /**
@@ -74,6 +87,17 @@ export interface CredentialController {
  * host's relay. A boot refresh is not synchronised and does not wait.
  */
 export const REFRESH_JITTER_MAX_MS = 5_000;
+
+/**
+ * The boot refresh of a live-only slice is the view's only way to a live
+ * channel, so a relay error there (the host's relay failed, or the
+ * server's store read threw) is re-sent this many times before the boot
+ * reports `EXPIRED_BOOTSTRAP`, each after a uniform random wait between
+ * these bounds.
+ */
+export const BOOT_REFRESH_RETRIES = 2;
+export const REFRESH_RETRY_DELAY_MIN_MS = 1_000;
+export const REFRESH_RETRY_DELAY_MAX_MS = 3_000;
 
 const REFRESH_TOOL = "ggui_runtime_refresh_ws_token";
 
@@ -91,23 +115,32 @@ export function createCredentialController(
     !spent.has(credential.wsToken) &&
     !(credential.origin === "refreshed" && !accepted.has(credential.wsToken));
 
+  const requestRefresh = async (credential: HeldCredential): Promise<RefreshOutcome> => {
+    let result: unknown;
+    try {
+      result = await opts.callTool(REFRESH_TOOL, { envelope: credential.wsToken });
+    } catch (err) {
+      return { kind: "relay-error", message: err instanceof Error ? err.message : String(err) };
+    }
+    return readRefreshResult(credential, result);
+  };
+
   return {
     current: () => current,
     markAccepted(credential) {
       accepted.add(credential.wsToken);
     },
-    async onExpired(credential, source) {
+    async onExpired(credential, source, retry) {
       if (credential !== current) return { kind: "skipped", reason: "stale-ladder" };
       if (!mayRefresh(credential)) return { kind: "skipped", reason: "budget" };
       spent.add(credential.wsToken);
       if (source !== "boot") await sleep(Math.floor(random() * REFRESH_JITTER_MAX_MS));
-      let result: unknown;
-      try {
-        result = await opts.callTool(REFRESH_TOOL, { envelope: credential.wsToken });
-      } catch (err) {
-        return { kind: "relay-error", message: err instanceof Error ? err.message : String(err) };
+      let outcome = await requestRefresh(credential);
+      for (let left = retry?.retries ?? 0; left > 0 && outcome.kind === "relay-error"; left--) {
+        const spread = REFRESH_RETRY_DELAY_MAX_MS - REFRESH_RETRY_DELAY_MIN_MS;
+        await sleep(REFRESH_RETRY_DELAY_MIN_MS + Math.floor(random() * spread));
+        outcome = await requestRefresh(credential);
       }
-      const outcome = readRefreshResult(credential, result);
       if (outcome.kind === "adopted") {
         current = outcome.credential;
         opts.onAdopt?.(outcome.credential);

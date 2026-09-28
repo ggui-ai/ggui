@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BOOT_REFRESH_RETRIES,
   createCredentialController,
   type HeldCredential,
 } from '../credential-controller.js';
@@ -149,5 +150,70 @@ describe('credential controller: jitter', () => {
     const onBoot = createCredentialController({ initial: ROOT, callTool: okRelay(), sleep, random: () => 0.5 });
     await onBoot.onExpired(ROOT, 'boot');
     expect(waits).toEqual([2500]);
+  });
+});
+
+describe('credential controller: the boot refresh retries a relay error (F6)', () => {
+  /** A relay that fails `failures` times, then answers with a new envelope. */
+  function flakyRelay(failures: number) {
+    let calls = 0;
+    const fn = vi.fn(async (): Promise<unknown> => {
+      calls += 1;
+      if (calls <= failures) throw new Error(`relay down (${calls})`);
+      return { structuredContent: { ok: true, envelope: 'tok-new', expiresAt: '2026-09-28T01:00:00.000Z' } };
+    });
+    return fn;
+  }
+
+  it('retries a relay error twice, each after a uniform 1–3 s wait, inside the one budgeted request', async () => {
+    const waits: number[] = [];
+    const sleep = async (ms: number): Promise<void> => {
+      waits.push(ms);
+    };
+    const callTool = flakyRelay(2);
+    const c = createCredentialController({ initial: ROOT, callTool, sleep, random: () => 0.5 });
+    const outcome = await c.onExpired(ROOT, 'boot', { retries: BOOT_REFRESH_RETRIES });
+    expect(BOOT_REFRESH_RETRIES).toBe(2);
+    expect(outcome.kind).toBe('adopted');
+    expect(callTool).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([2000, 2000]);
+  });
+
+  it('bounds the wait between 1 s and 3 s', async () => {
+    const waits: number[] = [];
+    const sleep = async (ms: number): Promise<void> => {
+      waits.push(ms);
+    };
+    const low = createCredentialController({ initial: ROOT, callTool: flakyRelay(1), sleep, random: () => 0 });
+    await low.onExpired(ROOT, 'boot', { retries: 1 });
+    const high = createCredentialController({ initial: ROOT, callTool: flakyRelay(1), sleep, random: () => 0.999 });
+    await high.onExpired(ROOT, 'boot', { retries: 1 });
+    expect(waits[0]).toBe(1000);
+    expect(waits[1]).toBeGreaterThanOrEqual(2990);
+    expect(waits[1]).toBeLessThan(3000);
+  });
+
+  it('gives up after the retries with the last relay error, and the credential stays spent', async () => {
+    const callTool = flakyRelay(5);
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait });
+    expect(await c.onExpired(ROOT, 'boot', { retries: 2 })).toEqual({ kind: 'relay-error', message: 'relay down (3)' });
+    expect(callTool).toHaveBeenCalledTimes(3);
+    expect(await c.onExpired(ROOT, 'ws')).toEqual({ kind: 'skipped', reason: 'budget' });
+  });
+
+  it('never retries a definitive answer: a refusal or a not-found ends the request at once', async () => {
+    const refusing = vi.fn(async (): Promise<unknown> => ({
+      structuredContent: { ok: false, code: 'BOOTSTRAP_NOT_SUPPORTED', message: 'no refresh here' },
+    }));
+    const c = createCredentialController({ initial: ROOT, callTool: refusing, ...noWait });
+    expect(await c.onExpired(ROOT, 'boot', { retries: 2 })).toEqual({ kind: 'refused', code: 'BOOTSTRAP_NOT_SUPPORTED' });
+    expect(refusing).toHaveBeenCalledTimes(1);
+  });
+
+  it('without a retry option, a relay error ends the request at once (the post-drop triggers)', async () => {
+    const callTool = flakyRelay(1);
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait });
+    expect((await c.onExpired(ROOT, 'ws')).kind).toBe('relay-error');
+    expect(callTool).toHaveBeenCalledTimes(1);
   });
 });
