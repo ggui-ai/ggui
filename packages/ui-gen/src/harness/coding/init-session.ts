@@ -19,6 +19,7 @@ import type { AgentSpec, SingleComponentParams } from "../runtime.js";
 import type { ResolvedRunPolicy } from "../policy.js";
 import { DEFAULT_HARNESS_POLICY } from "../policy.js";
 import { createDupeBreakState, type DupeBreakState } from "./dupe-break.js";
+import { inLoopEvaluation } from "../in-loop-evaluation.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -165,10 +166,13 @@ export async function initSession(input: {
     "required",
   );
 
+  // ggui#1513 — the one rule for which evaluation legs run; a host reads the same export.
+  const { text: codeEvalEnabled, visual: visualEvalEnabled } = inLoopEvaluation(params);
+
   // ── Pre-warm eval (overlaps with coding turn 1) ──
   // Uses a separate agent instance so it doesn't disturb the coding cache.
   let preWarmPromise: Promise<PreWarmedEvalContext | null> | undefined;
-  if (params.evaluation?.enabled) {
+  if (codeEvalEnabled) {
     const evalSpec = agents.evaluation;
     preWarmPromise = import("../../evaluation/llm-evaluator.js")
       .then((mod) =>
@@ -202,8 +206,6 @@ export async function initSession(input: {
   // ── Eval gate + lazy-loaded modules ──
   const qualityConfig = params.qualityConfig;
   const qualityMode = qualityConfig?.quality ?? "fast";
-  const codeEvalEnabled = !!params.evaluation?.enabled;
-  const visualEvalEnabled = !!(params.visualEvaluation?.enabled || qualityConfig?.visualEval);
   const probeOnlyEnabled =
     harness.check.runtimeRender !== undefined && !codeEvalEnabled && !visualEvalEnabled;
   const maxEvalRounds =

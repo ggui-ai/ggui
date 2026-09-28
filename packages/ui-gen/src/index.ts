@@ -28,6 +28,11 @@ export type { GenerationResult, SameExchangeBreak } from './harness/result-types
 // either design mode — so a harness definition can carry both modes' digests
 // while a run's metadata carries only the mode that ran.
 export { generatorBuild } from './generator-build.js';
+// ggui#1513 — which in-loop evaluation legs a generation runs: the harness's
+// own gate, for a host that needs to know whether a generation's token
+// counts can include evaluation calls.
+export { inLoopEvaluation, runsInLoopEvaluation } from './harness/in-loop-evaluation.js';
+export type { InLoopEvaluationSwitches } from './harness/in-loop-evaluation.js';
 export type { UiGenBuild } from './generator-build.js';
 
 // Generator registry seam re-export. The interface + slug helpers live
