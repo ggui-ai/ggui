@@ -17,6 +17,7 @@ import type { DataContract } from '@ggui-ai/protocol';
 import { HOOK_NAME_RE, listContractGadgets } from '@ggui-ai/protocol';
 import { consumedTokenManifest } from '@ggui-ai/design/themes';
 import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
+import { taughtTokenManifest } from '../taught-tokens.js';
 import { validateAllContracts, type ContractIssue } from './contract-validation.js';
 import { typecheck } from './type-checker.js';
 import { lintReactHooks, type ReactLintDiagnostic } from './react-linter.js';
@@ -315,7 +316,9 @@ const RETIRED_TOKEN_SUCCESSORS: ReadonlyMap<string, string> = new Map([
  * (`--ggui-motion-duration-normal` → fast, base, slow); otherwise the names
  * sharing any of its segments of four letters or more
  * (`--ggui-duration-slow` → the motion durations). Empty when nothing is
- * near, so the hint falls back to the manifest's general shape.
+ * near, so the hint falls back to the manifest's general shape. A hint
+ * teaches, so it draws only on the names the model may be taught
+ * (`taughtTokenManifest`); the closed-set check above admits the full manifest.
  */
 export function suggestManifestTokens(name: string): readonly string[] {
   const successor = RETIRED_TOKEN_SUCCESSORS.get(name);
@@ -328,7 +331,7 @@ export function suggestManifestTokens(name: string): readonly string[] {
   const own = name.endsWith('-') ? segments.length : segments.length - 1;
   for (let n = own; n >= 2; n--) {
     const prefix = `--${segments.slice(0, n).join('-')}-`;
-    const family = consumedTokenManifest.filter((token) => token.startsWith(prefix));
+    const family = taughtTokenManifest.filter((token) => token.startsWith(prefix));
     if (family.length > 0) return wordHitsFirst(name, rolesFirst(family));
   }
   const words = new Set(
@@ -338,7 +341,7 @@ export function suggestManifestTokens(name: string): readonly string[] {
       .map((segment) => segment.toLowerCase()),
   );
   return rolesFirst(
-    consumedTokenManifest.filter((token) =>
+    taughtTokenManifest.filter((token) =>
       token.split('-').some((segment) => words.has(segment.toLowerCase())),
     ),
   );

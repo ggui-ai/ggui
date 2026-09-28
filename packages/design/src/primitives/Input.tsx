@@ -91,7 +91,7 @@ export function Input({
           border: `1px solid ${
             hasError
               ? 'var(--ggui-color-error-500, #ef4444)'
-              : 'var(--ggui-color-outline, #d4d4d8)'
+              : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))'
           }`,
           backgroundColor: disabled
             ? 'var(--ggui-color-sunken, #fafafa)'

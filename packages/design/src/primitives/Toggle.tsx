@@ -58,7 +58,7 @@ export function Toggle({
           width: config.width,
           height: config.height,
           borderRadius: '9999px',
-          backgroundColor: checked ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)',
+          backgroundColor: checked ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))',
           position: 'relative',
           transition: `background-color ${motionVar.duration.base} ${motionVar.easing.standard}, box-shadow ${motionVar.duration.base} ${motionVar.easing.standard}`,
           flexShrink: 0,

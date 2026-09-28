@@ -32,11 +32,11 @@ describe('Button outline label ink (ggui#1034)', () => {
     expect(contrast([98, 99, 103], [44, 41, 39])).toBeLessThan(4.5); // Loops, 2.41:1
   });
 
-  it('outline: label = the surface on-colour, border = the brand stop, background transparent', () => {
+  it('outline: label = the surface on-colour, border = the brand edge (ggui#1494: the stop that clears 3:1, the 600 stop beneath it), background transparent', () => {
     const html = renderToStaticMarkup(<Button variant="outline">Find funding options</Button>);
     expect(html).toContain('color:var(--ggui-color-onContainer, #18181b)');
     expect(html).not.toMatch(/;color:var\(--ggui-color-primary-/);
-    expect(html).toContain('border:1px solid var(--ggui-color-primary-600, #0284c7)');
+    expect(html).toContain('border:1px solid var(--ggui-color-controlAccentOutline, var(--ggui-color-primary-600, #0284c7))');
     expect(html).toContain('background-color:transparent');
   });
 

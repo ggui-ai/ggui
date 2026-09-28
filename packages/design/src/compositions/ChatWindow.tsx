@@ -172,7 +172,7 @@ export function ChatWindow({
           style={{
             flex: 1,
             padding: '10px 14px',
-            border: `1px solid var(--ggui-color-outline, #d1d5db)`,
+            border: `1px solid var(--ggui-color-controlOutline, var(--ggui-color-outline, #d1d5db))`,
             borderRadius: radius.full,
             fontSize: fontSize.sm,
             outline: 'none',

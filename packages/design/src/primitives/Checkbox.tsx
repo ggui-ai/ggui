@@ -61,7 +61,7 @@ export function Checkbox({
             width: '18px',
             height: '18px',
             borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
-            border: `2px solid ${checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
+            border: `2px solid ${checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))'}`,
             backgroundColor: checked || indeterminate ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-sunken, #ffffff)',
             display: 'flex',
             alignItems: 'center',

@@ -151,7 +151,7 @@ export function Hero({
                     fontWeight: fontWeight.semibold,
                     color: showOverlay ? '#ffffff' : 'var(--ggui-color-onContainer, #374151)',
                     backgroundColor: 'transparent',
-                    border: `1px solid ${showOverlay ? 'rgba(255,255,255,0.3)' : 'var(--ggui-color-outline, #d1d5db)'}`,
+                    border: `1px solid ${showOverlay ? 'rgba(255,255,255,0.3)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d1d5db))'}`,
                     borderRadius: '8px',
                     cursor: 'pointer',
                     transition: 'all 0.15s',

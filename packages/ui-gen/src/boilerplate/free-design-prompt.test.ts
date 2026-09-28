@@ -10,10 +10,12 @@ import { consumedTokenManifest } from '@ggui-ai/design/themes';
 import {
   colorVocabularyFromManifest,
   renderFreeColorRule,
+  renderTokenVocabulary,
   FREE_COLOR_RULE,
 } from './free-design-prompt.js';
 import { buildSystemPrompt as buildProductionPrompt } from '../harness/runtime.js';
 import { PIN_FIXTURES } from '../pin-fixtures.js';
+import { NOT_YET_TAUGHT_TOKENS, taughtTokenManifest } from '../taught-tokens.js';
 
 const manifest = new Set(consumedTokenManifest);
 /** Concrete `--ggui-*` mentions — a trailing `-` is a prefix pattern (`--ggui-color-*`), not a name. */
@@ -45,10 +47,20 @@ describe('renderFreeColorRule — ramps and roles come from the manifest', () =>
     expect(FREE_COLOR_RULE).toContain('A step not listed does not exist and renders unset');
   });
 
-  it('covers every semantic (non-ramp) color role the manifest carries', () => {
-    const { roles } = colorVocabularyFromManifest(consumedTokenManifest);
+  it('covers every semantic (non-ramp) color role the manifest carries, except a name held back from teaching', () => {
+    const { roles } = colorVocabularyFromManifest(taughtTokenManifest);
     expect(roles.length).toBeGreaterThan(0);
     for (const role of roles) expect(FREE_COLOR_RULE).toContain(`\`${role}\``);
+  });
+
+  it('a manifest name held back from teaching (ggui#1494) is in the manifest and absent from both renders', () => {
+    expect(NOT_YET_TAUGHT_TOKENS.size).toBeGreaterThan(0);
+    for (const token of NOT_YET_TAUGHT_TOKENS) {
+      expect(consumedTokenManifest).toContain(token);
+      const role = token.replace('--ggui-color-', '');
+      expect(FREE_COLOR_RULE).not.toContain(`\`${role}\``);
+      expect(renderTokenVocabulary()).not.toContain(`\`${token}\``);
+    }
   });
 
   it('follows a different manifest: absent groups drop out, present steps render as-is', () => {

@@ -18,7 +18,7 @@
 // for raw elements · the one-gesture-surface invariant restated for raw
 // elements · a regenerated quality checklist.
 
-import { consumedTokenManifest } from "@ggui-ai/design/themes";
+import { taughtTokenManifest } from "../taught-tokens.js";
 import { describeCanvas, type CanvasClass } from "../design-mode.js";
 import {
   ANTI_PATTERNS,
@@ -136,7 +136,7 @@ function renderRamp(r: ColorRamp): string {
  * every role the prose names exists on `:root`; nothing is implied by a
  * `50…800` range that the manifest does not carry step for step.
  */
-export function renderFreeColorRule(manifest: readonly string[] = consumedTokenManifest): string {
+export function renderFreeColorRule(manifest: readonly string[] = taughtTokenManifest): string {
   const { ramps, roles } = colorVocabularyFromManifest(manifest);
   const brand = ramps.filter((r) => r.family === "primary" || r.family === "neutral");
   const state = ramps.filter((r) => r.family !== "primary" && r.family !== "neutral");
@@ -260,7 +260,7 @@ const TOKEN_GROUPS: readonly TokenGroup[] = [
  * does not define. Grouped by prefix; anything outside the known
  * prefixes lands under "Other".
  */
-export function renderTokenVocabulary(manifest: readonly string[] = consumedTokenManifest): string {
+export function renderTokenVocabulary(manifest: readonly string[] = taughtTokenManifest): string {
   const sorted = [...manifest].sort();
   const claimed = new Set<string>();
   const lines: string[] = [

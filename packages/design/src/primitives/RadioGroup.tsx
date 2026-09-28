@@ -99,7 +99,7 @@ export function RadioGroup({
                     width: '18px',
                     height: '18px',
                     borderRadius: 'var(--ggui-shape-radius-full, 9999px)',
-                    border: `2px solid ${isSelected ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-outline, #d4d4d8)'}`,
+                    border: `2px solid ${isSelected ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))'}`,
                     backgroundColor: 'var(--ggui-color-sunken, #ffffff)',
                     display: 'flex',
                     alignItems: 'center',

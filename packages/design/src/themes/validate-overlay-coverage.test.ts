@@ -51,6 +51,8 @@ describe('validateOverlayCoverage', () => {
 // release never sent them; the door must not refuse what the renderer
 // completes.
 const DERIVED_AT_RENDER = [
+  '--ggui-color-controlAccentOutline', // ggui#1494
+  '--ggui-color-controlOutline', // ggui#1494
   '--ggui-color-errorContainer',
   '--ggui-color-heroGround',
   '--ggui-color-heroLink',
@@ -134,6 +136,9 @@ describe('N−1: the manifest grows only with a completion rule or a floor entry
     // The growth this fixture knows about. A new token is a DECISION: add it here AND give it a
     // completion rule (or a floor entry), or the next test names it as the N−1 break it is.
     expect(added).toEqual([
+      // ggui#1494 — the control edges: both complete from the overlay's own container pair.
+      '--ggui-color-controlAccentOutline',
+      '--ggui-color-controlOutline',
       '--ggui-motion-duration-base',
       '--ggui-motion-duration-fast',
       '--ggui-motion-duration-slow',

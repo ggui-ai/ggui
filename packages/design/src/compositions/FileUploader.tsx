@@ -78,7 +78,7 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         style={{
-          border: `2px dashed ${isDragOver ? 'var(--ggui-color-primary-400, #38bdf8)' : 'var(--ggui-color-outline, #d1d5db)'}`,
+          border: `2px dashed ${isDragOver ? 'var(--ggui-color-primary-400, #38bdf8)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d1d5db))'}`,
           borderRadius: radius.lg,
           padding: '32px',
           textAlign: 'center',

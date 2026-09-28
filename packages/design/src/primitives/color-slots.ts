@@ -268,7 +268,10 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, acc
     `--ggui-color-ground:${B};` +
     `--ggui-color-onGround:${I};` +
     // Accent text walks against THIS ground (ggui#1043), never the container's.
-    `--ggui-color-link:${accent}}` +
+    `--ggui-color-link:${accent};` +
+    // A brand-edged control inside the scope draws the accent walked against THIS ground (ggui#1494):
+    // it clears 4.5:1 there, so it clears the 3:1 a control's boundary needs — the page's edge would not.
+    `--ggui-color-controlAccentOutline:${accent}}` +
     '@supports (color: color-mix(in srgb, red, blue)){' +
     `.${cls}>*{` +
     // A nested `default` container inside the scope reads a whisper of ink over the scope ground (ggui#1051):
@@ -280,6 +283,8 @@ function surfaceScopeCss(cls: string, name: string, bg: string, ink: string, acc
     `--ggui-color-neutral-500:color-mix(in srgb, ${I} 62%, ${B});` +
     // The outline is DERIVED per theme to clear 3:1 on this ground (ggui#1051); the 32 % mix is the un-themed fallback.
     `--ggui-color-outline:${outlineOpen}color-mix(in srgb, ${I} 32%, ${B}));` +
+    // On a scoped ground the derived outline already clears 3:1, so a field's boundary is that outline (ggui#1494).
+    `--ggui-color-controlOutline:${outlineOpen}color-mix(in srgb, ${I} 32%, ${B}));` +
     `--ggui-color-outlineVariant:color-mix(in srgb, ${I} 18%, ${B})}}`
   );
 }

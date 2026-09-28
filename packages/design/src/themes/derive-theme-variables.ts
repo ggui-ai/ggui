@@ -386,11 +386,11 @@ function readableOutline(bg: string, ink: string): string {
  * mode (ggui#1043): a dark host's hero ground is the light ink pair, so its
  * accent walks toward the dark stops exactly as a light container's does.
  */
-function readableAccent(V: Readonly<Record<string, string>>, surface: string, ink: string): string {
+function readableAccent(V: Readonly<Record<string, string>>, surface: string, ink: string, floor = 4.5): string {
   const light = contrastRatio('#000000', surface) >= contrastRatio('#ffffff', surface);
   for (const stop of light ? ACCENT_WALK.light : ACCENT_WALK.dark) {
     const hex = V[`--ggui-color-primary-${stop}`];
-    if (hex !== undefined && contrastRatio(hex, surface) >= 4.5) return hex;
+    if (hex !== undefined && contrastRatio(hex, surface) >= floor) return hex;
   }
   return ink;
 }
@@ -497,6 +497,13 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   // The outline each scope draws on its own ground (ggui#1051) — ≥ 3:1 by derivation.
   V['--ggui-color-inverseOutline'] = readableOutline(onContainer, container);
   V['--ggui-color-heroOutline'] = readableOutline(V['--ggui-color-heroGround']!, V['--ggui-color-onHeroGround']!);
+  // ggui#1494 — the boundary an interactive control draws (a text field, a select, a checkbox or radio, a chip that
+  // is a button) identifies the control, so WCAG 1.4.11 asks it ≥ 3:1 against the surface it sits on — derived per
+  // theme like the scoped outlines. `controlOutline` is the neutral edge; `controlAccentOutline` the brand's, the
+  // first primary stop ≥ 3:1 on the container (the accent walk at the non-text floor). `outline` / `outlineVariant`
+  // stay the decorative hairlines. New keys, so a stored projection lacks them and completion fills them at read.
+  V['--ggui-color-controlOutline'] = readableOutline(container, onContainer);
+  V['--ggui-color-controlAccentOutline'] = readableAccent(V, container, onContainer, 3);
 
   // Typography.
   const family = doc.font.family;
@@ -714,5 +721,8 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
   put('onInverted', container);
   put('inverseOutline', readableOutline(onContainer, container));
   if (heroGround !== undefined && onHeroGround !== undefined) put('heroOutline', readableOutline(heroGround, onHeroGround));
+  // ggui#1494 — a stored projection predates the control boundaries: fill them here, so every saved theme reads them.
+  put('controlOutline', readableOutline(container, onContainer));
+  put('controlAccentOutline', readableAccent(V, container, onContainer, 3));
   return V;
 }

@@ -97,11 +97,14 @@ describe('ggui#1495 — a near-neutral anchor takes the host\'s temperature', ()
       'guuey-brand-v1/light': 'd13384d05e11ee3a',
       'guuey-brand-v1/dark': '46cbd49635b8a0b0',
     };
+    // Keys added AFTER these digests were taken are left out, so the pin keeps its question — did any
+    // key that existed then move? — and each new key carries its own pin (ggui#1494: control-outline.test.ts).
+    const ADDED_SINCE = new Set(['--ggui-color-controlOutline', '--ggui-color-controlAccentOutline']);
     const now: Record<string, string> = {};
     for (const id of getThemeIds()) {
       for (const mode of ['light', 'dark'] as const) {
         const v = deriveThemeVariables(getRawTheme(id)!, mode);
-        const canon = JSON.stringify(Object.keys(v).sort().map((k) => [k, v[k]]));
+        const canon = JSON.stringify(Object.keys(v).filter((k) => !ADDED_SINCE.has(k)).sort().map((k) => [k, v[k]]));
         now[`${id}/${mode}`] = createHash('sha256').update(canon).digest('hex').slice(0, 16);
       }
     }

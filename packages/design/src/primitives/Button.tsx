@@ -46,9 +46,10 @@ const variantStyles: Record<string, CSSProperties> = {
     // label is the surface's own on-colour, never a brand-ladder stop
     // (ggui#1034): `primary-600` as the label read mid-grey on a monochrome
     // dark theme's ground — 2.41:1 / 3.5:1 on served reply chips. The brand
-    // stays on the border, where contrast is decorative.
+    // stays on the border, and the border identifies the control, so it is the
+    // first brand stop that clears 3:1 on the container (ggui#1494).
     color: 'var(--ggui-color-onContainer, #18181b)',
-    border: '1px solid var(--ggui-color-primary-600, #0284c7)',
+    border: '1px solid var(--ggui-color-controlAccentOutline, var(--ggui-color-primary-600, #0284c7))',
   },
   ghost: {
     backgroundColor: 'transparent',

@@ -88,7 +88,7 @@ export function SearchField({
             paddingLeft: '36px',
             fontSize: size === 'lg' ? '16px' : '14px',
             borderRadius: '6px',
-            border: `1px solid var(--ggui-color-outline, #d1d5db)`,
+            border: `1px solid var(--ggui-color-controlOutline, var(--ggui-color-outline, #d1d5db))`,
             backgroundColor: disabled ? 'var(--ggui-color-sunken, #f9fafb)' : 'var(--ggui-color-container, #ffffff)',
             color: 'var(--ggui-color-onContainer, #111827)',
             outline: 'none',

@@ -2,6 +2,8 @@
   "version": 2,
   "tokens": [
     "--ggui-color-container",
+    "--ggui-color-controlAccentOutline",
+    "--ggui-color-controlOutline",
     "--ggui-color-elevated",
     "--ggui-color-error",
     "--ggui-color-error-100",
