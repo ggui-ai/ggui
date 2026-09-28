@@ -18,8 +18,8 @@
  * emit step: no schema change, same draft stamp). A generation mint writes
  * `Blueprint.build` from the generation's `GenerationMetadata.build`: the
  * `ggui_render` cold-generation registration and `ggui_ops_generate_blueprint`
- * (its durable row, and its cache mirror's durable write-through where one is
- * bound). Operator-registered, installed and seed-imported rows
+ * (its durable row, and, under the same id, the row its cache mirror writes
+ * through to a separate durable store; ggui#1497). Operator-registered, installed and seed-imported rows
  * carry none, and a dedup keeps the row's MINTING build. One admission rule
  * (`admitGeneratorBuild`, mcp-server-handlers) keeps a stamp only on
  * `llm`-sourced code and only when it passes `generatorBuildSchema`;

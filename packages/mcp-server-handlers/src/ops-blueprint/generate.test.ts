@@ -261,7 +261,7 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     digests: { promptTemplateSha256: "a".repeat(64), boilerplateTemplateSha256: "b".repeat(64) },
   };
 
-  it("stamps the persisted row and the cache mirror with the build the engine reported (ggui#1280)", async () => {
+  it("stamps the persisted row, and a mirror writing through to a SEPARATE durable store stamps the row it writes there under the same id (ggui#1280, ggui#1497)", async () => {
     const cacheRegistry = {
       embedding: new MockEmbeddingProvider(),
       vectorStore: new InMemoryVectorStore(),
@@ -276,9 +276,48 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
     expect((await deps.blueprintStore.get(result.blueprintId))?.build).toEqual(BUILD);
     const mirrored = await durableMirror.list("app-1", blueprintKey(emptyContract()));
-    expect(mirrored).toHaveLength(1);
+    expect(mirrored.map((b) => b.blueprintId)).toEqual([result.blueprintId]);
     expect(mirrored[0]?.build).toEqual(BUILD);
+    const served = await findBlueprintExact(cacheRegistry, "app-1", "template", blueprintKey(emptyContract()), variantKey({}));
+    expect(served?.id).toBe(result.blueprintId);
   });
+
+  for (const shape of ["pod", "separate", "shared"] as const) {
+    it(`one id per generation (${shape}): the cache serves the returned id, and the store a re-mint reads holds its row and body (ggui#1497)`, async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const writerStore = new InMemoryBlueprintStore();
+        const remintStore = shape === "separate" ? new InMemoryBlueprintStore() : writerStore;
+        const codeStore = new InMemoryCodeStore();
+        const cacheRegistry = {
+          embedding: new MockEmbeddingProvider(),
+          vectorStore: new InMemoryVectorStore(),
+          index: new InMemoryBlueprintIndex(),
+          durability: shape === "pod" ? { codeStore } : { blueprintStore: remintStore, codeStore },
+        };
+        const base = defaultDeps({ blueprintStore: writerStore });
+        const deps = {
+          ...base,
+          putCode: (codeHash: string, body: string) => {
+            if (shape === "pod") void codeStore.put(codeHash, body);
+            else writerStore.putCode(codeHash, body);
+          },
+          cacheRegistry,
+        };
+        const handler = createGguiOpsGenerateBlueprintHandler(deps);
+        const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+        const served = await findBlueprintExact(cacheRegistry, "app-1", "template", blueprintKey(emptyContract()), variantKey({}));
+        expect(served?.id).toBe(result.blueprintId);
+        const row = await remintStore.get(result.blueprintId);
+        expect(row?.codeHash).toBeDefined();
+        expect(await codeStore.get(row?.codeHash ?? "")).not.toBeNull();
+        expect((await writerStore.listAllForApp("app-1")).map((b) => b.blueprintId)).toEqual([result.blueprintId]);
+        expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("blueprint_durable_write_failed"))).toEqual([]);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  }
 
   it("on a cache mirror with no durable store, stamps only the persisted row: the mirror's vector row carries none (ggui#1280)", async () => {
     const cacheRegistry = {

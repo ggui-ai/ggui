@@ -54,6 +54,9 @@ import type {
 } from "@ggui-ai/protocol";
 import type { McpAppAiGguiRenderMeta } from "@ggui-ai/protocol/integrations/mcp-apps";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
+import { createGguiOpsRegisterBlueprintHandler } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
+import { findBlueprintExact } from "@ggui-ai/mcp-server-handlers/renders";
+import { blueprintKey, variantKey } from "@ggui-ai/protocol/blueprint-key";
 import { registerGguiRenderResourceTemplate } from "./mcp-apps-outbound.js";
 
 // Wire values are pinned as literals on purpose (slice convention:
@@ -1146,4 +1149,53 @@ describe("resource read — blueprint-registry lookup is post-gate only", () => 
       await f.close();
     }
   });
+});
+
+describe("resource read — a card served from an ops-registered cache row re-mints (ggui#1497)", () => {
+  // `createGguiServer` hands the ops path the render path's registry bundle,
+  // whose durability is `durableBlueprints` (what a re-mint reads), while the
+  // ops writer's own store is `opts.blueprintStore`: separate by default,
+  // the same instance when a deployment passes one store to both.
+  for (const shape of ["separate", "shared"] as const) {
+    it(`${shape} writer store: the served id's row and body are where the re-mint reads, and the locator mounts the registered code`, async () => {
+      const f = await boot();
+      try {
+        const writerStore = shape === "separate" ? new InMemoryBlueprintStore() : f.blueprintStore;
+        const cacheRegistry = {
+          embedding: new MockEmbeddingProvider(),
+          vectorStore: f.vectorStore,
+          index: f.index,
+          durability: { blueprintStore: f.blueprintStore, codeStore: f.durableCodeStore },
+        };
+        const register = createGguiOpsRegisterBlueprintHandler({
+          blueprintStore: writerStore,
+          putCode: (codeHash, body) => {
+            writerStore.putCode(codeHash, body);
+          },
+          cacheRegistry,
+        });
+        const out = (await register.handler(
+          { contract: CONTRACT, componentCode: DURABLE_CODE },
+          { appId: RECORD_APP_ID, requestId: "req-ops" },
+        )) as { blueprintId: string };
+        const contractKey = blueprintKey(CONTRACT);
+        const served = await findBlueprintExact(cacheRegistry, RECORD_APP_ID, "template", contractKey, variantKey({}));
+        expect(served?.id).toBe(out.blueprintId);
+
+        // A render served from that row records the SERVED id; its row is then evicted.
+        const sessionId = randomUUID();
+        await seedRecord(f.identityStore, sessionId, {
+          blueprintId: served?.id ?? "",
+          contractKey,
+          variantKey: variantKey({}),
+        });
+        const read = await f.client.readResource({ uri: `${RESOURCE_URI}/${sessionId}/${contractKey}` });
+        expectMountable(shellText(read.contents));
+        const committed = await f.renderStore.get(sessionId);
+        expect((committed?.render as ComponentGguiSession).componentCode).toBe(DURABLE_CODE);
+      } finally {
+        await f.close();
+      }
+    });
+  }
 });

@@ -72,10 +72,10 @@ import { assertContractNoRetiredFields } from "../renders/assert-contract-no-ret
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import {
   admitGeneratorBuild,
-  registerBlueprint,
   type BlueprintRegistryDeps,
   type GenerationCredentials,
 } from "../renders/index.js";
+import { mirrorIntoCache } from "./cache-mirror.js";
 import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import {
@@ -435,10 +435,10 @@ export function createGguiOpsGenerateBlueprintHandler(
         model: result.metadata.model,
       } as const;
       // ggui#1280 — the minting engine's build, through the registry's one
-      // admission rule. The durable row below carries it; the cache mirror's
-      // registration receives the same value, which lands only on that
-      // registry's durable write-through when one is bound — never on its
-      // vector-store row.
+      // admission rule. The durable row below carries it. The cache mirror's
+      // registration receives the same value: it lands on the row the mirror
+      // writes through to a separate durable store, under this same id
+      // (ggui#1497, see `mirrorIntoCache`), and never on its vector-store row.
       const build = admitGeneratorBuild(source, result.metadata.build);
 
       const blueprintId = mintBlueprintId();
@@ -480,33 +480,41 @@ export function createGguiOpsGenerateBlueprintHandler(
             parsed.seedPrompt ??
             normalizedPersona ??
             `operator-authored blueprint (${blueprintId})`;
-          await registerBlueprint(deps.cacheRegistry, appId, {
-            kind: "template",
-            contract,
-            intent: intentForCache,
-            // ggui#1275 — an explicit intent or a seed prompt states the
-            // UI's task; a persona or the placeholder is a stand-in the
-            // matcher's judge never sees.
-            intentSource:
-              parsed.intent !== undefined || parsed.seedPrompt !== undefined
-                ? "authored"
-                : "fallback",
-            componentCode,
-            // The cache row MUST carry the same variance as the MVB
-            // row: `registerBlueprint` keys the exact-lookup on
-            // `variantKey(variance)`, so omitting it here filed every
-            // operator-authored variant under the default-variant
-            // sentinel — invisible to any request that asks for the
-            // persona it was minted for.
-            variance: blueprint.variance,
-            // Operator-DISPATCHED but engine-GENERATED: the code came
-            // out of `generator.generate(...)`, so provenance is the
-            // llm arm — the same `source` stamped on the MVB row above.
-            // The two axes disagree here on purpose, which is exactly
-            // why `createdBy` cannot be derived from `source`.
-            source,
-            ...(build !== undefined ? { build } : {}),
-            createdBy: "operator",
+          // ggui#1497 — ONE id per generation: the cache row serves the
+          // durable row's id (see `mirrorIntoCache` for what else it writes).
+          await mirrorIntoCache({
+            cacheRegistry: deps.cacheRegistry,
+            writerStore: deps.blueprintStore,
+            appId,
+            blueprintId,
+            input: {
+              kind: "template",
+              contract,
+              intent: intentForCache,
+              // ggui#1275 — an explicit intent or a seed prompt states the
+              // UI's task; a persona or the placeholder is a stand-in the
+              // matcher's judge never sees.
+              intentSource:
+                parsed.intent !== undefined || parsed.seedPrompt !== undefined
+                  ? "authored"
+                  : "fallback",
+              componentCode,
+              // The cache row MUST carry the same variance as the MVB
+              // row: `registerBlueprint` keys the exact-lookup on
+              // `variantKey(variance)`, so omitting it here filed every
+              // operator-authored variant under the default-variant
+              // sentinel — invisible to any request that asks for the
+              // persona it was minted for.
+              variance: blueprint.variance,
+              // Operator-DISPATCHED but engine-GENERATED: the code came
+              // out of `generator.generate(...)`, so provenance is the
+              // llm arm — the same `source` stamped on the MVB row above.
+              // The two axes disagree here on purpose, which is exactly
+              // why `createdBy` cannot be derived from `source`.
+              source,
+              ...(build !== undefined ? { build } : {}),
+              createdBy: "operator",
+            },
           });
         } catch (err) {
           try {

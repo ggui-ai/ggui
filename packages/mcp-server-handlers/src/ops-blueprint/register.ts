@@ -57,7 +57,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
-import { registerBlueprint, type BlueprintRegistryDeps } from "../renders/index.js";
+import type { BlueprintRegistryDeps } from "../renders/index.js";
+import { mirrorIntoCache } from "./cache-mirror.js";
 import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import type { PutCodeHook } from "./generate.js";
@@ -295,42 +296,50 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
           parsed.seedPrompt ??
           normalizedPersona ??
           `operator-registered blueprint (${blueprintId})`;
-        await registerBlueprint(deps.cacheRegistry, appId, {
-          kind: "template",
-          contract,
-          intent: intentForCache,
-          // ggui#1275 — an explicit intent or a seed prompt states the
-          // UI's task. A persona describes the agent and the placeholder
-          // describes nothing: both are stand-ins the matcher's judge
-          // never sees.
-          intentSource:
-            parsed.intent !== undefined || parsed.seedPrompt !== undefined
-              ? "authored"
-              : "fallback",
-          // ggui#1427 — the fit facts `fits()` reads before the judge
-          // ranks this row. Absent inputs write nothing (not-evaluated).
-          ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
-          ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
-          ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
-          ...(parsed.directionDigest !== undefined && parsed.directionScope !== undefined
-            ? { directionScope: parsed.directionScope }
-            : {}),
-          componentCode,
-          // ggui#1493 — the authored form of `componentCode`, when the
-          // caller has one (the in-process generated-bytes path only).
-          // The registry persists its hash and body only when a code
-          // store is bound and the pair is not byte-identical.
-          ...(provenance.sourceCode !== undefined ? { sourceCode: provenance.sourceCode } : {}),
-          // Same provenance as the MVB row above — one call, one
-          // provenance claim across both stores.
-          source: provenance.source,
-          // The cache row MUST carry the same variance as the MVB row —
-          // its exact key is `variantKey(variance)`.
-          variance,
-          // An operator invoked this tool. Without it the durable
-          // record would claim the standard agent flow minted a row
-          // that is retained permanently.
-          createdBy: "operator",
+        // ggui#1497 — ONE id per registration: the cache row serves the
+        // durable row's id (see `mirrorIntoCache` for what else it writes).
+        await mirrorIntoCache({
+          cacheRegistry: deps.cacheRegistry,
+          writerStore: deps.blueprintStore,
+          appId,
+          blueprintId,
+          input: {
+            kind: "template",
+            contract,
+            intent: intentForCache,
+            // ggui#1275 — an explicit intent or a seed prompt states the
+            // UI's task. A persona describes the agent and the placeholder
+            // describes nothing: both are stand-ins the matcher's judge
+            // never sees.
+            intentSource:
+              parsed.intent !== undefined || parsed.seedPrompt !== undefined
+                ? "authored"
+                : "fallback",
+            // ggui#1427 — the fit facts `fits()` reads before the judge
+            // ranks this row. Absent inputs write nothing (not-evaluated).
+            ...(parsed.judgedCanvases !== undefined ? { judgedCanvases: parsed.judgedCanvases } : {}),
+            ...(parsed.aestheticPreset !== undefined ? { aestheticPreset: parsed.aestheticPreset } : {}),
+            ...(parsed.directionDigest !== undefined ? { directionDigest: parsed.directionDigest } : {}),
+            ...(parsed.directionDigest !== undefined && parsed.directionScope !== undefined
+              ? { directionScope: parsed.directionScope }
+              : {}),
+            componentCode,
+            // ggui#1493 — the authored form of `componentCode`, when the
+            // caller has one (the in-process generated-bytes path only).
+            // The registry persists its hash and body only when a code
+            // store is bound and the pair is not byte-identical.
+            ...(provenance.sourceCode !== undefined ? { sourceCode: provenance.sourceCode } : {}),
+            // Same provenance as the MVB row above — one call, one
+            // provenance claim across both stores.
+            source: provenance.source,
+            // The cache row MUST carry the same variance as the MVB row —
+            // its exact key is `variantKey(variance)`.
+            variance,
+            // An operator invoked this tool. Without it the durable
+            // record would claim the standard agent flow minted a row
+            // that is retained permanently.
+            createdBy: "operator",
+          },
         });
       } catch (err) {
         try {
