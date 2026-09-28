@@ -67,7 +67,7 @@ export interface InMemoryGguiSessionStoreOptions {
   idGenerator?: () => string;
   /**
    * Default render TTL in ms. Defaults to "effectively infinite"
-   * (`Number.MAX_SAFE_INTEGER` ms ≈ 285k years) — renders persist
+   * (`EFFECTIVELY_INFINITE_TTL_MS`, 9e12 ms, about 285 years) — renders persist
    * indefinitely unless the operator opts into a finite TTL. Chat
    * conversations on hosted clients (Claude.ai, ChatGPT) routinely
    * span weeks of inactivity; reaping a render because the agent

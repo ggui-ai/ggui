@@ -151,6 +151,13 @@ export interface PendingEventConsumer {
    * WS dedup requires the client-minted `actionId` on the wire
    * envelope (ggui#599 leg 2).
    *
+   * The dedupe window is the pipe's lifetime. An adapter that evicts the
+   * pipe (reaping it by TTL, tearing it down, or losing it on a process
+   * restart, as the in-memory adapter does) starts a fresh seen set, and a
+   * retry that straddles the eviction is appended again (ggui#1415). The
+   * in-repo stores never evict a pipe by time: a TTL only marks the pipe,
+   * and its render, expired.
+   *
    * OUTCOME (ggui#1517): resolve `'appended'` when THIS call stored the
    * row, and `'duplicate'` when `(sessionId, event.id)` was already
    * recorded in the pipe's lifetime, drained or not. The caller needs it

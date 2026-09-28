@@ -103,7 +103,7 @@ export interface SqliteGguiSessionStoreOptions {
   idGenerator?: () => string;
   /**
    * Default render TTL in ms. Defaults to "effectively infinite"
-   * (`Number.MAX_SAFE_INTEGER` ms ≈ 285k years) — matches the
+   * (`EFFECTIVELY_INFINITE_TTL_MS`, 9e12 ms, about 285 years) — matches the
    * in-memory reference.
    */
   defaultTtlMs?: number;

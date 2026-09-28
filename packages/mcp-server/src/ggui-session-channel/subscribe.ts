@@ -242,9 +242,12 @@ function isBootstrapPendingIdentity(identity: AuthResult): boolean {
  * write to it. Held here, their frames reach the wire after the replay,
  * which is the order the ack promises: ack → replay → live.
  *
- * One writer stays outside, by design: a `channel_error` answering the
- * client's own `channel_subscribe` goes straight to the socket. It carries
- * no stream state and replies to a request the client just sent.
+ * One writer stays outside, by design: `channel_error` goes straight to
+ * the socket, both when it answers the client's own `channel_subscribe`
+ * and when a source poll reports `POLL_FAILED`. It carries no stream
+ * state, and neither can precede the release: a poll exists only after a
+ * processed `channel_subscribe`, which the per-socket inbound chain
+ * handles after the subscribe resolves.
  *
  * A read that stalls holds these frames for as long as it stalls; the
  * store's own read timeout is what bounds it.
