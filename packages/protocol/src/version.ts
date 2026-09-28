@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A fresh subscribe's reserved-channel replay is written into SPEC §12.2.1
+ * (2026-09-28, ggui#1521: an erratum, same draft stamp; no byte on the wire
+ * changes). A subscribe without `fromSeq` still replays no agent-declared
+ * channel. The server SHOULD send known-reserved channels' retained envelopes
+ * after the ack, at `seq <= streamSeq`, which both reference servers have
+ * done since before the old text said "the server MUST NOT replay history".
+ * New client obligation: apply those frames, and dedupe against the highest
+ * `seq` applied, never against `streamSeq`.
+ * --------------------------------------------------------------------
  * The self-contained shell reports a runtime bundle that fails to load
  * (2026-09-28, ggui#1503: MINOR, same draft stamp). It posts ONE
  * `ggui:bootstrap-failed` with `BUNDLE_FETCH_FAILED` (SPEC §5.5.2), after the

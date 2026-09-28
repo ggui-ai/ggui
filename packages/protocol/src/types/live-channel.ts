@@ -57,8 +57,11 @@ export interface SubscribePayload {
    * live tail.
    *
    * Semantics:
-   *   - Omitted → fresh subscribe. No replay; client only sees live
-   *     tail from the current cursor onward.
+   *   - Omitted → fresh subscribe. No agent-declared channel is
+   *     replayed: the ack carries the initial state. Known-reserved
+   *     channels (`_ggui:*`) SHOULD still replay their retained
+   *     envelopes after the ack, at `seq <= streamSeq`, and a client
+   *     applies them (SPEC §12.2.1).
    *   - `0` → replay everything the server still retains, subject to
    *     policy and bounded buffer retention (may flag
    *     `replayTruncated` on the ack).
@@ -173,10 +176,12 @@ export interface AckPayload {
   /**
    * Current outbound-stream cursor snapshot at the moment the ack is
    * sent. Distinct from `sequence` (which counts INBOUND events like
-   * `user.submitted`). Clients use `streamSeq` to:
-   *   - know the point beyond which the live tail begins;
-   *   - seed their `lastSeenSeq` if they didn't pass `fromSeq` on
-   *     subscribe.
+   * `user.submitted`). It marks the point beyond which the live tail
+   * begins. It is NOT a dedupe floor: after a fresh subscribe,
+   * known-reserved channels' retained envelopes arrive after the ack
+   * at `seq <= streamSeq`, and a client MUST apply them (SPEC §12.2.1,
+   * invariant 3). A client tracks `lastSeenSeq` as the highest `seq`
+   * it has applied, never as `streamSeq`.
    *
    * Absent on implementations without a `GguiSessionStreamBuffer`.
    * 0 means the render has recorded no outbound envelopes yet.
@@ -283,9 +288,10 @@ export interface StreamEnvelope {
    * GguiSession-scoped monotonic outbound sequence. Server-assigned;
    * clients MUST NOT populate it on producer-side inputs. Gap-free
    * within a single render, starting at 1. Used by the client to:
-   *   - track `lastSeenSeq` for reconnect (pass it back as
-   *     `SubscribePayload.fromSeq`);
-   *   - dedupe deliveries (at-least-once semantics).
+   *   - track `lastSeenSeq`, the highest `seq` it has applied, for
+   *     reconnect (pass it back as `SubscribePayload.fromSeq`);
+   *   - dedupe deliveries against it (at-least-once semantics), never
+   *     against the ack's `streamSeq` (SPEC §12.2.1, invariant 3).
    *
    * OPTIONAL because stamping is best-effort on two levels: the buffer
    * seam itself is optional, and even a bound buffer only stamps on

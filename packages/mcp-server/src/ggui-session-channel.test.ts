@@ -48,6 +48,7 @@ import { isRecord } from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
+  InMemoryGguiSessionStreamBuffer,
   InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiConsumeHandler } from '@ggui-ai/mcp-server-handlers/renders';
@@ -118,6 +119,7 @@ type BootChannelExtras = Pick<
   | 'bootstrap'
   | 'cookieAuth'
   | 'pendingEventConsumer'
+  | 'streamBuffer'
 > &
   Partial<Pick<GguiSessionChannelOptions, 'logger'>>;
 
@@ -272,6 +274,49 @@ async function persistedPayload(fx: Fixture): Promise<ActionEventValue> {
   expect(envelope.type).toBe('data:submit');
   return envelope.payload as ActionEventValue;
 }
+
+describe('handleSubscribe — a fresh subscribe replays known-reserved channels after the ack, and no agent-declared channel (SPEC §12.2.1, ggui#1521)', () => {
+  let fx: Fixture | undefined;
+  afterEach(async () => {
+    await fx?.close();
+    fx = undefined;
+  });
+
+  const subscribeFrame = (sessionId: string): string =>
+    JSON.stringify({ type: 'subscribe', payload: { sessionId, appId: APP_ID }, requestId: randomUUID() });
+
+  it('sends the retained reserved envelope after the ack at seq <= streamSeq, and replays nothing on a declared channel, even one declared replay: all', async () => {
+    const streamBuffer = new InMemoryGguiSessionStreamBuffer();
+    fx = await bootChannel({}, () => ({ streamBuffer }));
+    const streamSpec = { feed: { mode: 'replace' as const, replay: 'all' as const, schema: { type: 'object' as const } } };
+    const stored = await fx.store.get(fx.sessionId);
+    if (stored === null || stored.render.type !== 'component') throw new Error('the fixture commits a component render');
+    await fx.store.commit({ appId: APP_ID, render: { ...stored.render, streamSpec } });
+    // Server-pushed state that landed before the viewer attached, and an
+    // agent-declared update that did too.
+    await streamBuffer.record({ sessionId: fx.sessionId, channel: '_ggui:preview', mode: 'replace', payload: { skeleton: true } });
+    await streamBuffer.record({ sessionId: fx.sessionId, channel: 'feed', mode: 'replace', payload: { n: 1 } }, streamSpec);
+
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    const ack = await fx.nextFrame('ack');
+    const streamSeq = (ack['payload'] as { streamSeq: number }).streamSeq;
+    expect(streamSeq).toBe(2);
+    const data = await fx.nextFrame('data');
+    expect(data['payload']).toMatchObject({ channel: '_ggui:preview', seq: 1, payload: { skeleton: true } });
+    // At or below the ack's cursor: a client that dedupes against
+    // `streamSeq` would drop it, which is what SPEC §12.2.1 now forbids.
+    expect((data['payload'] as { seq: number }).seq).toBeLessThanOrEqual(streamSeq);
+    // The declared channel is not replayed on a fresh subscribe.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fx.frames.filter((f) => f['type'] === 'data')).toEqual([]);
+
+    // Control: the declared envelope WAS retained, so its absence above is
+    // the fresh subscribe's policy, not a missing record. A resume from 0
+    // over the render's spec returns it.
+    const resumed = await streamBuffer.replay(fx.sessionId, 0, streamSpec);
+    expect(resumed.envelopes.map((e) => e.channel).sort()).toEqual(['_ggui:preview', 'feed']);
+  });
+});
 
 describe('handleInboundAction — server-side tool-hint derivation (consume-event build site)', () => {
   let fx: Fixture | null = null;
