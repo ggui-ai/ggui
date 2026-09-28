@@ -31,7 +31,11 @@ const VISUAL_MODEL = 'claude-sonnet-5';
 const LEG: VisualLegTokens = { inputTokens: 1800, outputTokens: 420, criteria: { inputTokens: 3600, outputTokens: 2200 } };
 const cleanProbe: RuntimeRenderCheck = { id: 'fake-runtime-render', run: () => Promise.resolve({ status: 'ran', issues: [] }) };
 
-async function buildCtx(visualOutcome: VisualEvalOutcome | null, costTracker: CostTracker): Promise<{ ctx: EvalRoundContext; input: EvalRoundInput }> {
+async function buildCtx(
+  visualOutcome: VisualEvalOutcome | null,
+  costTracker: CostTracker,
+  textCache: { cacheReadTokens?: number; cacheCreationTokens?: number } = {},
+): Promise<{ ctx: EvalRoundContext; input: EvalRoundInput }> {
   const classification = { ...classifyAxes({ contract: {}, prompt: 'a chat window' }), riskTier: 'medium' as const };
   const base = createHarness({ classification, contract: {}, prompt: 'a chat window' });
   const harness = { ...base, check: { ...base.check, runtimeRender: cleanProbe } };
@@ -42,7 +46,7 @@ async function buildCtx(visualOutcome: VisualEvalOutcome | null, costTracker: Co
   const visualEvalAgent: AgentSpec = { provider: 'anthropic', model: VISUAL_MODEL };
   const fakeLlmEvalMod: typeof realLlmEvaluator = {
     ...realLlmEvaluator,
-    runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], inputTokens: 500, outputTokens: 100 }),
+    runLLMEvaluation: () => Promise.resolve({ issues: [], pass: [], inputTokens: 500, outputTokens: 100, ...textCache }),
   };
   const fakeVisualMod: typeof realVisualEvaluator | null =
     visualOutcome === null ? null : { ...realVisualEvaluator, runVisualEval: () => Promise.resolve(visualOutcome) };
@@ -123,5 +127,24 @@ describe('the in-loop visual judge’s spend reaches the round (ggui#1522)', () 
     expect(telemetry.inLoopVisualTokens).toEqual({ inputTokens: 2000, outputTokens: 500, criteria: { inputTokens: 3600, outputTokens: 2200 } });
     expect(telemetry.totalIn).toBe(0);
     expect(telemetry.totalOut).toBe(0);
+  });
+});
+
+describe('the text evaluator’s prompt-cache spend reaches the cap (ggui#1524)', () => {
+  beforeEach(() => {
+    mockRunCheck.mockReset();
+    mockRunCheck.mockResolvedValue({ issues: [] });
+  });
+
+  it('a round whose text evaluator read and wrote the cache records both, at the evaluator’s cache rates', async () => {
+    const tracker = new CostTracker(null);
+    const { ctx, input } = await buildCtx(null, tracker, { cacheReadTokens: 40_000, cacheCreationTokens: 8000 });
+    await runEvalRound(ctx, input);
+    const expected = new CostTracker(null);
+    expected.record(TEXT_MODEL, 500, 100, { read: 40_000, write: 8000 });
+    const uncachedOnly = new CostTracker(null);
+    uncachedOnly.record(TEXT_MODEL, 500, 100);
+    expect(tracker.getTotal()).toBeCloseTo(expected.getTotal(), 12);
+    expect(tracker.getTotal()).toBeGreaterThan(uncachedOnly.getTotal()); // the RED: before, the tracker held only this
   });
 });

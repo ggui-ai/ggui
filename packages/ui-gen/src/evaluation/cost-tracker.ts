@@ -31,15 +31,54 @@ function resolveRegistryId(model: string): ModelId | null {
   return keys.find((id) => id.endsWith(`/${undated}`)) ?? null;
 }
 
-/** Fallback when a model has no registry entry — Sonnet-class rates. */
-const FALLBACK_PER_1K = { input: 0.003, output: 0.015 };
+/**
+ * ggui#1524 — the largest cache-WRITE premium any registry model states (`cacheWritePer1M / inputPer1M`), never
+ * below 1. A cost CAP errs toward over-counting, so a model that states no write rate is priced at this bound
+ * times its input rate: a write costs a premium over input wherever one is charged, and pricing it at the bare
+ * input rate would slip that premium under the cap. Derived from the registry, so it moves with it.
+ */
+export const CACHE_WRITE_PREMIUM_BOUND: number = Math.max(
+  1,
+  ...Object.values(MODEL_REGISTRY).flatMap(({ costs }) =>
+    costs.cacheWritePer1M !== undefined && costs.inputPer1M > 0 ? [costs.cacheWritePer1M / costs.inputPer1M] : [],
+  ),
+);
 
-/** Per-1K input/output USD for a bare wire model id. */
-export function pricePer1k(model: string): { input: number; output: number } {
+/** Per-1K USD for each kind of token a call can spend. */
+export interface PricePer1k {
+  readonly input: number;
+  readonly output: number;
+  /** Cache reads: the model's stated rate, else its input rate — over-counts a read, the safe side for a cap. */
+  readonly cacheRead: number;
+  /** Cache writes: the model's stated rate, else its input rate × {@link CACHE_WRITE_PREMIUM_BOUND}. */
+  readonly cacheWrite: number;
+}
+
+/** Fallback when a model has no registry entry — Sonnet-class rates. */
+const FALLBACK_PER_1K: PricePer1k = {
+  input: 0.003,
+  output: 0.015,
+  cacheRead: 0.003,
+  cacheWrite: 0.003 * CACHE_WRITE_PREMIUM_BOUND,
+};
+
+/** Per-1K USD for a bare wire model id: input, output, and the two cache kinds. */
+export function pricePer1k(model: string): PricePer1k {
   const id = resolveRegistryId(model);
   if (id === null) return FALLBACK_PER_1K;
   const { costs } = MODEL_REGISTRY[id];
-  return { input: costs.inputPer1M / 1000, output: costs.outputPer1M / 1000 };
+  return {
+    input: costs.inputPer1M / 1000,
+    output: costs.outputPer1M / 1000,
+    cacheRead: (costs.cacheReadPer1M ?? costs.inputPer1M) / 1000,
+    cacheWrite: (costs.cacheWritePer1M ?? costs.inputPer1M * CACHE_WRITE_PREMIUM_BOUND) / 1000,
+  };
+}
+
+/** ggui#1524 — the cache tokens a call spent, as its provider reported them; absent = unreported. */
+export interface CacheSpend {
+  readonly read?: number;
+  readonly write?: number;
 }
 
 export class CostTracker {
@@ -47,9 +86,18 @@ export class CostTracker {
 
   constructor(private maxBudget: number | null) {}
 
-  record(model: string, inputTokens: number, outputTokens: number): number {
+  /**
+   * Record one call. `inputTokens` is the provider's UNCACHED input; a call that read or wrote the prompt cache
+   * passes those counts in `cache` (ggui#1524), priced at the cache rates — until then a turn with a long cached
+   * prefix cost the cap almost nothing while the provider billed its reads and writes.
+   */
+  record(model: string, inputTokens: number, outputTokens: number, cache: CacheSpend = {}): number {
     const prices = pricePer1k(model);
-    const cost = (inputTokens / 1000) * prices.input + (outputTokens / 1000) * prices.output;
+    const cost =
+      (inputTokens / 1000) * prices.input +
+      (outputTokens / 1000) * prices.output +
+      ((cache.read ?? 0) / 1000) * prices.cacheRead +
+      ((cache.write ?? 0) / 1000) * prices.cacheWrite;
     this.totalCost += cost;
     return cost;
   }

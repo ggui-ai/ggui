@@ -544,7 +544,11 @@ ${closingInstruction}`;
   );
   const llmMs = Date.now() - llmStart;
   if (costTracker) {
-    costTracker.record(codingModel, response.inputTokens, response.outputTokens);
+    // ggui#1524 — the cache counts reach the cap: a cached prefix is billed, so it is spend.
+    costTracker.record(codingModel, response.inputTokens, response.outputTokens, {
+      ...(response.cacheReadTokens !== undefined ? { read: response.cacheReadTokens } : {}),
+      ...(response.cacheCreationTokens !== undefined ? { write: response.cacheCreationTokens } : {}),
+    });
   }
 
   const tokens = { input: response.inputTokens, output: response.outputTokens };

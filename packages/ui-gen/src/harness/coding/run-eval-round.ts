@@ -952,7 +952,11 @@ export async function runEvalRound(
 
     // Track costs from LLM eval calls
     if (llmResult) {
-      costTracker.record(evaluationAgent.model, llmResult.inputTokens, llmResult.outputTokens);
+      // ggui#1524 — the text evaluator's cache counts reach the cap too.
+      costTracker.record(evaluationAgent.model, llmResult.inputTokens, llmResult.outputTokens, {
+        ...(llmResult.cacheReadTokens !== undefined ? { read: llmResult.cacheReadTokens } : {}),
+        ...(llmResult.cacheCreationTokens !== undefined ? { write: llmResult.cacheCreationTokens } : {}),
+      });
       evalTokens = {
         input: llmResult.inputTokens,
         output: llmResult.outputTokens,
