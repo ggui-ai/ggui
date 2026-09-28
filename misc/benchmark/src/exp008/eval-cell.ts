@@ -18,6 +18,7 @@ import { DEFAULT_GENERATOR_SLUG, REPORT_SCHEMA_VERSION } from '../multi-sdk/type
 import { runContractBehaviorCheck } from '../multi-sdk/contract-behavior.js';
 import { deriveRuntimeProbeVerdict, type RuntimeProbeVerdict } from '../multi-sdk/runtime-probe.js';
 import { persistCanvasScreenshots, type CanvasClass, type CanvasScreenshot, type VisualCanvasArtefact } from '../multi-sdk/canvas.js';
+import { readCanvasPresentations, type CanvasPresentation, type PresentationRead } from './presentation.js';
 import { evaluateAestheticsPanel, selectPanelPrompt, type PanelEvalResult, type PanelPrompt } from '../multi-sdk/post-eval.js';
 import { mapRunResult } from '../multi-sdk/reporter.js';
 import { calculateCost, judgePanelCostUsd, resolveCostModelId, resolveJudgeCostModelId, runPostGeneration } from '../multi-sdk/runner.js';
@@ -123,6 +124,8 @@ export interface BootstrapJudgeInput {
   readonly criteria?: JudgeInputCriteria;
   /** Why a present `criteria` member was not read — named on the row, never silently dropped (N−1: a newer writer's shape). */
   readonly criteriaDropped?: string;
+  /** ggui#1492 — the host's presentation per judged canvas, as read (applied + malformed); absent when the writer sent none. */
+  readonly presentation?: PresentationRead;
 }
 
 /**
@@ -236,6 +239,12 @@ export interface CellInputs {
   /** ggui#1436 — the criteria set from judge-input.json, and why a present one was not read. */
   readonly criteria?: JudgeInputCriteria;
   readonly criteriaDropped?: string;
+  /**
+   * ggui#1492 — the host's presentation per judged canvas from judge-input.json, as this reader read it (a
+   * pre-check: malformed entries drop here and are noted). NOT echoed as "applied": the report's echo comes from
+   * the judge's own result, once the judge reports what it drew.
+   */
+  readonly presentation?: PresentationRead;
   readonly contract: DataContract;
   readonly contractKey?: string;
   readonly compiledCode: string;
@@ -332,6 +341,10 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
       }
     }
   }
+  // ggui#1492 — the host's presentation per judged canvas: tolerant like criteria and never silent — a malformed
+  // entry drops only its own canvas and is named in the echo. This cell judges every canvas class.
+  const presentation =
+    raw.canvasPresentations !== undefined ? readCanvasPresentations(raw.canvasPresentations, CANVAS_CLASSES, canvasViewport?.canvas) : undefined;
   return {
     prompt: raw.prompt,
     ...(raw.sampleProps !== undefined ? { sampleProps: raw.sampleProps } : {}),
@@ -343,6 +356,7 @@ export function readJudgeInput(dir: string): BootstrapJudgeInput {
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
     ...(criteria !== undefined ? { criteria } : {}),
     ...(criteriaDropped !== undefined ? { criteriaDropped } : {}),
+    ...(presentation !== undefined ? { presentation } : {}),
   };
 }
 
@@ -410,6 +424,7 @@ export function readCellInputs(dir: string): CellInputs {
   let canvasViewport: DeclaredCanvasViewport | undefined;
   let criteria: JudgeInputCriteria | undefined;
   let criteriaDropped: string | undefined;
+  let presentation: PresentationRead | undefined;
   if (ref === null) {
     const judge = readJudgeInput(dir);
     commit = bootstrapCommit(judge, contractJson.contract);
@@ -421,6 +436,7 @@ export function readCellInputs(dir: string): CellInputs {
     canvasViewport = judge.canvasViewport;
     criteria = judge.criteria;
     criteriaDropped = judge.criteriaDropped;
+    presentation = judge.presentation;
   } else {
     commit = commitForRef(ref);
     profile = undefined;
@@ -454,6 +470,7 @@ export function readCellInputs(dir: string): CellInputs {
     ...(canvasViewport !== undefined ? { canvasViewport } : {}),
     ...(criteria !== undefined ? { criteria } : {}),
     ...(criteriaDropped !== undefined ? { criteriaDropped } : {}),
+    ...(presentation !== undefined ? { presentation } : {}),
     contract: contractJson.contract,
     ...(contractJson.contractKey !== undefined ? { contractKey: contractJson.contractKey } : {}),
     compiledCode,
@@ -542,6 +559,8 @@ export type VisualJudge = (ctx: {
   canvasViewport?: DeclaredCanvasViewport;
   /** ggui#1436 — the criteria bank and the card's context: the judge adds the typed block beside the score (report-only). */
   criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
+  /** ggui#1492 — the host presentations that APPLIED (boxes → `canvasViewports`, label/ground/frame → `hostPresentations`); absent = none. */
+  presentations?: readonly CanvasPresentation[];
 }) => Promise<VisualOutcome | VisualUnavailable | null>;
 
 /**
@@ -719,6 +738,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   if (inputs.profileStripped !== undefined && inputs.profileStripped.length > 0) notes.push(profileMembersStrippedNote(inputs.profileStripped));
   if (inputs.themeStripped !== undefined && inputs.themeStripped.length > 0) notes.push(themeMembersStrippedNote(inputs.themeStripped));
   if (inputs.criteriaDropped !== undefined) notes.push(`criteria dropped — ${inputs.criteriaDropped}`);
+  for (const m of inputs.presentation?.malformed ?? []) notes.push(`presentation dropped — ${m.canvas}: ${m.reason}`);
   if (inputs.criteria !== undefined && inputs.criteria.digest !== inputs.criteria.digestComputed) {
     notes.push(`criteria digest mismatch — judge-input names ${inputs.criteria.digest}, the set as read hashes to ${inputs.criteria.digestComputed}`);
   }
@@ -763,6 +783,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
       contract: inputs.contract,
       ...(inputs.sampleProps !== undefined ? { sampleProps: inputs.sampleProps } : {}),
       ...(inputs.canvasViewport !== undefined ? { canvasViewport: inputs.canvasViewport } : {}),
+      ...(inputs.presentation !== undefined && inputs.presentation.applied.length > 0 ? { presentations: inputs.presentation.applied } : {}),
       ...(inputs.criteria !== undefined
         ? {
             criteria: {

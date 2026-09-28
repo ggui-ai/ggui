@@ -21,6 +21,7 @@ import { join, dirname } from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { loadPlaywright } from './lib/load-playwright.mjs';
 import { parseJudgeKEnv, parseCellLocator, readCellInputs, evaluateCell, toVisualOutcome, readEvalImageEnv, judgedCssTokens } from '../src/exp008/eval-cell.ts';
+import { canvasViewportsFor, hostPresentationsFor } from '../src/exp008/presentation.ts';
 
 function getArg(names, fallback) {
   const i = process.argv.findIndex((a) => names.includes(a));
@@ -124,9 +125,13 @@ async function main() {
   // it (report.meta.visualUnavailableReason) — never a silent pass, never a
   // bare null when a reason exists.
   const visual = visualEnabled
-    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, themeId, canvasViewport, criteria }) => {
+    ? async ({ compiledCode, originalPrompt, sampleProps, profile, theme, themeId, canvasViewport, criteria, presentations }) => {
         const { runVisualEvaluationDetailed, CANVAS_CLASSES, cssTokensForAppTheme } = await import('@ggui-ai/ui-gen/evaluation');
         try {
+          // ggui#1492 — the host's presentation as data: the declared box plus each applied presentation's box, and each
+          // applied label / ground / frame; with neither, both are absent and the config is today's.
+          const canvasViewports = canvasViewportsFor(canvasViewport, presentations ?? []);
+          const hostPresentations = hostPresentationsFor(presentations ?? []);
           const d = await runVisualEvaluationDetailed(
             // theme / themeId → the ONE theme→CSS composer the iframe runtime uses, composed as the mint
             // composes (judgedCssTokens, #1023); neither = the design defaults (no cssTokens key)
@@ -140,7 +145,8 @@ async function main() {
               ...(sampleProps ? { sampleProps } : {}),
               canvases: CANVAS_CLASSES,
               // ggui#1195 — the order's declared box for its canvas (from judge-input.json): the judge captures that canvas at it.
-              ...(canvasViewport ? { canvasViewports: { [canvasViewport.canvas]: { width: canvasViewport.width, height: canvasViewport.height } } } : {}),
+              ...(canvasViewports !== undefined ? { canvasViewports } : {}),
+              ...(hostPresentations !== undefined ? { hostPresentations } : {}),
             },
           );
           if (d.result !== null) return toVisualOutcome(d.result);

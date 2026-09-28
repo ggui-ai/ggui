@@ -1,0 +1,1130 @@
+{
+  "$comment": "Per-canvas presentation vectors for judge-input.json `canvasPresentations`: each row is an input and the read it must produce (applied, and malformed with its reason). A malformed entry drops only its own canvas; duplicates drop every entry for that canvas. Both the writer's reader and the judge's reader pin to this table, byte for byte.",
+  "version": 1,
+  "reasons": [
+    "not_an_object",
+    "unknown_canvas",
+    "canvas_not_judged",
+    "duplicate_canvas",
+    "label_missing",
+    "box_out_of_bounds",
+    "box_on_declared_primary",
+    "color_not_hex",
+    "frame_off_inline",
+    "frame_malformed"
+  ],
+  "rows": [
+    {
+      "name": "absent: the key is missing, nothing applies, nothing drops",
+      "judged": ["xs-chat-card", "md"],
+      "expect": {
+        "applied": [],
+        "malformed": []
+      }
+    },
+    {
+      "name": "well-formed: an inline frame and a pane box + ground both apply",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        },
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          },
+          {
+            "canvas": "md",
+            "label": "host, pane, reference viewport",
+            "box": {
+              "width": 816,
+              "height": 736
+            },
+            "ground": "#eeece4"
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "the field is not an array",
+      "judged": ["xs-chat-card", "md"],
+      "input": {
+        "canvas": "md"
+      },
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "*",
+            "reason": "not_an_object"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an entry that is not an object drops alone",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        "md",
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "md",
+            "label": "host, pane, reference viewport",
+            "box": {
+              "width": 816,
+              "height": 736
+            },
+            "ground": "#eeece4"
+          }
+        ],
+        "malformed": [
+          {
+            "canvas": "?",
+            "reason": "not_an_object"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an unknown canvas drops alone",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "phone",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        },
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": [
+          {
+            "canvas": "phone",
+            "reason": "unknown_canvas"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a canvas the item does not judge drops alone",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "lg",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        },
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": [
+          {
+            "canvas": "lg",
+            "reason": "canvas_not_judged"
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicates: both entries drop, one row each; a valid entry for another canvas still applies",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        },
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#000000"
+        },
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "duplicate_canvas"
+          },
+          {
+            "canvas": "md",
+            "reason": "duplicate_canvas"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a blank label drops",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "   ",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "label_missing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a missing label drops",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "label_missing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "box width 199 is below the bound",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 199,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "box_out_of_bounds"
+          }
+        ]
+      }
+    },
+    {
+      "name": "box width 200 is the lower bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 200,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "md",
+            "label": "host, pane, reference viewport",
+            "box": {
+              "width": 200,
+              "height": 736
+            },
+            "ground": "#eeece4"
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "box height 2560 is the upper bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 2560
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "md",
+            "label": "host, pane, reference viewport",
+            "box": {
+              "width": 816,
+              "height": 2560
+            },
+            "ground": "#eeece4"
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "box height 2561 is above the bound",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 2561
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "box_out_of_bounds"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a fractional box is not integer px",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816.5,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "box_out_of_bounds"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a box on the declared primary drops (one box per canvas)",
+      "judged": ["xs-chat-card", "md"],
+      "declaredPrimary": "md",
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "box_on_declared_primary"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a frame on the declared primary applies (framing is not re-boxing)",
+      "judged": ["xs-chat-card", "md"],
+      "declaredPrimary": "xs-chat-card",
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "an uppercase hex ground is not the contract's lowercase hex",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#EEECE4"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "color_not_hex"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a css colour function is not hex",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "rgb(238,236,228)"
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "color_not_hex"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a frame on a non-inline canvas drops",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "host, pane, reference viewport",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "md",
+            "reason": "frame_off_inline"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a frame colour that is not hex drops the inline entry",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "white",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "color_not_hex"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a ring alpha above 1 is a malformed frame",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 2
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "frame_malformed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a frame without its ring is malformed",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "frame_malformed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a frame without the optional floor applies",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a padded label applies trimmed (the label reaches the digest)",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "md",
+          "label": "  host, pane, reference viewport  ",
+          "box": {
+            "width": 816,
+            "height": 736
+          },
+          "ground": "#eeece4"
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "md",
+            "label": "host, pane, reference viewport",
+            "box": {
+              "width": 816,
+              "height": 736
+            },
+            "ground": "#eeece4"
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a floor of 0 px is a valid length",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 0
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 0
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a ring alpha of exactly 0 is the lower bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a ring alpha of exactly 1 is the upper bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 1
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 1
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a ring width of 8 px is the judge's upper bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 8,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 8,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a ring width of 9 px is past the judge's bound: the judge would not draw it, so it drops",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 9,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "frame_malformed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a radius of 64 px is the judge's upper bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 64,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 64,
+              "minHeightPx": 256
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a radius of 65 px is past the judge's bound, dropped",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 65,
+            "minHeightPx": 256
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "frame_malformed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a floor of 2560 px is the judge's upper bound, applied",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 2560
+          }
+        }
+      ],
+      "expect": {
+        "applied": [
+          {
+            "canvas": "xs-chat-card",
+            "label": "host, inline card",
+            "frame": {
+              "surface": "#ffffff",
+              "ground": "#f6f5ee",
+              "ring": {
+                "widthPx": 1,
+                "color": "#1c1b18",
+                "alpha": 0.08
+              },
+              "radiusPx": 18,
+              "minHeightPx": 2560
+            }
+          }
+        ],
+        "malformed": []
+      }
+    },
+    {
+      "name": "a floor of 2561 px is past the judge's bound, dropped",
+      "judged": ["xs-chat-card", "md"],
+      "input": [
+        {
+          "canvas": "xs-chat-card",
+          "label": "host, inline card",
+          "frame": {
+            "surface": "#ffffff",
+            "ground": "#f6f5ee",
+            "ring": {
+              "widthPx": 1,
+              "color": "#1c1b18",
+              "alpha": 0.08
+            },
+            "radiusPx": 18,
+            "minHeightPx": 2561
+          }
+        }
+      ],
+      "expect": {
+        "applied": [],
+        "malformed": [
+          {
+            "canvas": "xs-chat-card",
+            "reason": "frame_malformed"
+          }
+        ]
+      }
+    }
+  ]
+}
