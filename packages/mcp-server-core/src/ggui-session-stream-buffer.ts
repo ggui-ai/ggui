@@ -174,12 +174,14 @@ export interface ReplayResult {
  *   - stamps it on every envelope `record` returns and stores;
  *   - reports it on `replay` (`streamEpoch`) and on `currentCursor`;
  *   - replays only envelopes of the current epoch. An entry stored with
- *     no epoch (written before the implementation knew epochs) belongs
- *     only to an epoch ADOPTED for that pre-epoch data, never to one
- *     minted because the counter restarted: after a restart, surviving
- *     unstamped entries are the old generation and are not replayed. So
- *     an implementation that can meet unstamped data records which kind
- *     of epoch it holds.
+ *     no epoch (written by a replica from before epochs) is replayed
+ *     under the current epoch unless that epoch was minted over an
+ *     earlier generation's surviving data: then the unstamped entries
+ *     are that old generation and are not replayed. An epoch adopted for
+ *     pre-epoch data, or minted for a new session (or over data that had
+ *     all expired), has no earlier generation to confuse, and unstamped
+ *     entries written during a roll belong to it. So an implementation
+ *     that can meet unstamped data records which kind of epoch it holds.
  * A counter that restarts and keeps its epoch breaks every client that
  * dedupes by `seq`. An implementation that predates epochs stamps none,
  * and clients read that as unknown, never as a mismatch.
