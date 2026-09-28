@@ -51,6 +51,7 @@
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/wire": "workspace:*",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
+    "@noble/hashes": "^1.6.0",
     "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

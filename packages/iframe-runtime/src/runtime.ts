@@ -66,7 +66,9 @@ import type {
   McpAppAiGguiMetaParseResult,
   ViewRoot,
 } from './types.js';
-import { createViewRootHolder, type ViewRootHolder } from './view-root.js';
+import type { ViewRootHolder } from './view-root.js';
+import { documentViewRoots, userActivationIsActive, withViewProof } from './view-origin.js';
+import type { ViewProofOptions } from './view-proof-signer.js';
 import { createStreamSeqTracker, type StreamSeqTracker } from './stream-seq.js';
 import { createLadderSet } from './ladders.js';
 import {
@@ -1528,10 +1530,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     streamSeq: renderer?.streamSeq,
     controller: credentialController,
     connectFn,
-    bridgeCallTool:
-      bridgeApp !== null
-        ? (name, args) => bridgeApp.callServerTool({ name, arguments: args })
-        : undefined,
+    bridgeCallTool: bridgeApp !== null ? bridgeCallToolVia(bridgeApp) : undefined,
     onStatus: (status) => {
       telemetry?.record(`status.${status}`);
       setStatus(
@@ -1822,11 +1821,16 @@ export interface BootMeta {
 }
 
 /**
- * The document's view key root (ggui#1415). One per document, like the
- * mount it proves for: the boot and every later tool result offer their
- * slice's root to it, and it keeps the newest valid one.
+ * The bridge rung's `tools/call` over the host relay (ggui#1415): every
+ * `ggui_runtime_pull` it sends goes through {@link withViewProof}.
+ *
+ * @internal — exported for unit tests + production reuse.
  */
-const documentViewRoots: ViewRootHolder = createViewRootHolder();
+export function bridgeCallToolVia(
+  app: App,
+): (name: string, args: Record<string, unknown>) => ReturnType<App['callServerTool']> {
+  return (name, args) => app.callServerTool(withViewProof(name, args));
+}
 
 /**
  * Remove the inline copies of the boot envelope the shell left behind
@@ -2432,7 +2436,8 @@ function callAppRequestDisplayMode(
  *     migrated to `app.callServerTool` — see emitAudit for the same
  *     posture).
  */
-const productionContextSnapshotPoster: ContextSnapshotPoster = {
+/** @internal — exported for unit tests. */
+export const productionContextSnapshotPoster: ContextSnapshotPoster = {
   postUpdateModelContext: (params) => {
     callAppUpdateModelContext(params);
   },
@@ -2441,14 +2446,11 @@ const productionContextSnapshotPoster: ContextSnapshotPoster = {
       jsonrpc: '2.0',
       id: Math.floor(Math.random() * 1e9),
       method: 'tools/call',
-      params: {
-        name: 'ggui_runtime_sync_context',
-        arguments: {
-          sessionId: params.sessionId,
-          appId: params.appId,
-          snapshot: params.snapshot,
-        },
-      },
+      params: withViewProof('ggui_runtime_sync_context', {
+        sessionId: params.sessionId,
+        appId: params.appId,
+        snapshot: params.snapshot,
+      }),
     });
   },
 };
@@ -2474,6 +2476,7 @@ const productionContextSnapshotPoster: ContextSnapshotPoster = {
 async function callServerToolSpec(
   toolName: string,
   args: Record<string, unknown>,
+  proof?: ViewProofOptions,
 ): Promise<JsonRpcResponse> {
   const app = getCurrentApp();
   if (app === null) {
@@ -2484,10 +2487,7 @@ async function callServerToolSpec(
     };
   }
   try {
-    const result = await app.callServerTool({
-      name: toolName,
-      arguments: args,
-    });
+    const result = await app.callServerTool(withViewProof(toolName, args, proof));
     return { jsonrpc: '2.0', result: result as unknown };
   } catch (err) {
     // Preserve the JSON-RPC error code when the SDK throw carries one
@@ -2586,17 +2586,14 @@ export function emitAudit(args: {
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
     method: 'tools/call',
-    params: {
-      name: args.toolName,
-      arguments: {
-        kind: args.kind,
-        payload: args.payload,
-        sessionId: args.sessionId,
-        appId: args.appId,
-        actionId: args.actionId,
-        firedAt: args.firedAt,
-      },
-    },
+    params: withViewProof(args.toolName, {
+      kind: args.kind,
+      payload: args.payload,
+      sessionId: args.sessionId,
+      appId: args.appId,
+      actionId: args.actionId,
+      firedAt: args.firedAt,
+    }),
   });
 }
 
@@ -3878,6 +3875,9 @@ export function dispatchSubmitAction(args: {
     return;
   }
   const { toolName, intent, data, sessionId, appId, label } = args;
+  // Read at entry, inside the gesture's own task (ggui#1415): the dispatch
+  // signs it as the proof's user-activation flag, measured, never enforced.
+  const userActivation = userActivationIsActive();
   // Gesture-path telemetry — the click's own autopsy trail. #471
   // round 12 hit a frame whose channels + beacons were fully healthy
   // while clicks produced NOTHING observable; without a record at the
@@ -3960,18 +3960,22 @@ export function dispatchSubmitAction(args: {
   void (async () => {
     let resp: JsonRpcResponse | null = null;
     try {
-      resp = await callServerToolSpec(toolName, {
-        kind: 'dispatch',
-        payload: {
-          intent,
-          actionData: data ?? null,
-          uiContext,
+      resp = await callServerToolSpec(
+        toolName,
+        {
+          kind: 'dispatch',
+          payload: {
+            intent,
+            actionData: data ?? null,
+            uiContext,
+          },
+          sessionId,
+          appId,
+          actionId,
+          firedAt,
         },
-        sessionId,
-        appId,
-        actionId,
-        firedAt,
-      });
+        { userActivation },
+      );
     } catch {
       showActionToast(GESTURE_COPY.transportError(label), 'error');
       resp = null;

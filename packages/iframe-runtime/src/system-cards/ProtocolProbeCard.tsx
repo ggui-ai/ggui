@@ -57,6 +57,7 @@ import {
   Button,
   Badge,
 } from '@ggui-ai/design/primitives';
+import { withViewProof } from '../view-origin.js';
 
 /**
  * One canonical View→Host method the spec defines (apps.mdx:963-1102).
@@ -221,8 +222,10 @@ function useNotificationLog(): readonly LogEntry[] {
  * Build a default param payload for each canonical method. The shapes
  * mirror the spec examples (apps.mdx:963-1102) exactly so any host
  * with a strict validator accepts them.
+ *
+ * @internal — exported for unit tests.
  */
-function defaultParams(method: ProbeMethod): unknown {
+export function defaultParams(method: ProbeMethod): unknown {
   switch (method) {
     case 'ui/message':
       // Empirical 2026-05-03: claude.ai's validator wants `content`
@@ -262,20 +265,20 @@ function defaultParams(method: ProbeMethod): unknown {
       // The probe uses `kind: 'dispatch'` so the chained 3-message
       // follow-up (`ui/update-model-context` + `ui/message`)
       // semantically matches a real submit-action click.
-      return {
-        name: 'ggui_runtime_submit_action',
-        arguments: {
-          kind: 'dispatch',
-          payload: {
-            intent: 'probe-click',
-            data: { note: 'hello from the protocol probe' },
-          },
-          sessionId: 'probe-render',
-          appId: 'probe-app',
-          actionId: '00000000', // overwritten in onClick with real FNV-1a
-          firedAt: new Date().toISOString(),
+      // Through the one wrapper, like every call of the three runtime tools
+      // (ggui#1415). The probe's fixed session is keyed by no door, so it
+      // carries a proof only if a root for it were ever held.
+      return withViewProof('ggui_runtime_submit_action', {
+        kind: 'dispatch',
+        payload: {
+          intent: 'probe-click',
+          data: { note: 'hello from the protocol probe' },
         },
-      };
+        sessionId: 'probe-render',
+        appId: 'probe-app',
+        actionId: '00000000',
+        firedAt: new Date().toISOString(),
+      });
   }
 }
 
