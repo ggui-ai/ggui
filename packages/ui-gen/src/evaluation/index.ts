@@ -129,6 +129,9 @@ export type {
   ScreenshotBrowser,
   ScreenshotPage,
   ScreenshotClip,
+  NaturalCaptureOptions,
+  CanvasHostPresentation,
+  HostInlineFrame,
   ChromiumProvider,
 } from './visual-evaluator.js';
 

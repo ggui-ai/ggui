@@ -90,6 +90,8 @@ export interface CriteriaJudgeFrame {
   readonly canvas: CriteriaContext['canvas'];
   readonly width: number;
   readonly height: number;
+  /** ggui#1492 — the host whose presentation framed this canvas (e.g. "a chat widget, inline, reference theme"); absent ⇒ the judge's own stand-in. */
+  readonly hostLabel?: string;
 }
 
 /** What the block carries besides the selected rows: the frame's box, and the props the card was rendered with. */
@@ -113,9 +115,14 @@ export const CRITERIA_PROPS_MAX_CHARS = 2000;
  */
 export function criteriaFrameLine(frame: CriteriaJudgeFrame): string {
   const box = `${frame.width}×${frame.height}`;
-  return frame.canvas === 'xs-chat-card'
-    ? `This frame is an inline chat card captured at its natural height (at most ${box}, the host's ceiling), inside a generic stand-in for the host's frame — the card's surface with a thin ring and rounded corners, on the page ground: the host sizes the card to its content and draws that frame, so judge composition and space within the card's own extent, and read the frame and the ground round it as the host's, not the card's.`
-    : `This frame is ${box}, a fixed full-screen box the card fills: judge composition and space against the whole box, edge to edge.`;
+  if (frame.canvas === 'xs-chat-card') {
+    const framedBy =
+      frame.hostLabel !== undefined
+        ? `inside the host's own frame (${frame.hostLabel}), on the host's ground`
+        : "inside a generic stand-in for the host's frame — the card's surface with a thin ring and rounded corners, on the page ground";
+    return `This frame is an inline chat card captured at its natural height (at most ${box}, the host's ceiling), ${framedBy}: the host sizes the card to its content and draws that frame, so judge composition and space within the card's own extent, and read the frame and the ground round it as the host's, not the card's.`;
+  }
+  return `This frame is ${box}, a fixed full-screen box the card fills${frame.hostLabel !== undefined ? ` (${frame.hostLabel})` : ''}: judge composition and space against the whole box, edge to edge.`;
 }
 
 /**

@@ -78,6 +78,14 @@ export interface VisualEvalConfig {
    */
   canvasViewports?: Partial<Readonly<Record<CanvasClass, CanvasViewport>>>;
   /**
+   * ggui#1492 — how a host presents each canvas, as data the caller supplies (a lane that knows its host). Keyed by
+   * canvas; a canvas without an entry is judged exactly as before (the generic stand-in round the inline card, the
+   * scrim under a panel). The box stays in {@link canvasViewports}. An entry this judge cannot use (a colour that is
+   * not `#rrggbb`, a number out of range, a frame on a canvas that is not the inline card) is ignored for its canvas,
+   * said once in the log, never partly applied.
+   */
+  hostPresentations?: Partial<Readonly<Record<CanvasClass, CanvasHostPresentation>>>;
+  /**
    * Optional provider-routing override — see
    * `AgentConfig.routeOverride`. Threaded onto the agent this
    * evaluator constructs so its multimodal call never falls back to
@@ -235,6 +243,55 @@ export const JUDGE_INLINE_FRAME_RADIUS_PX = 16;
 export const JUDGE_INLINE_PAD_PX = JUDGE_GROUND_MARGIN_PX + JUDGE_INLINE_FRAME_BORDER_PX;
 /** How far in the inline card's ink is read: past the margin, the frame's ring and its rounded corner, so the host's frame never counts as paint. */
 export const JUDGE_INLINE_INK_INSET_PX = JUDGE_INLINE_PAD_PX + JUDGE_INLINE_FRAME_RADIUS_PX;
+
+/** ggui#1492 — a host's frame round the inline card, as data. Colours are `#rrggbb`; the ring's `alpha` is 0..1. */
+export interface HostInlineFrame {
+  /** The frame's surface — what shows behind a transparent card, and under the floor's residual. */
+  readonly surface: string;
+  /** The room the frame sits in (the page ground round it). */
+  readonly ground: string;
+  readonly ring: { readonly widthPx: number; readonly color: string; readonly alpha: number };
+  readonly radiusPx: number;
+  /** The host's minimum frame height: a card shorter than it sits in a frame this tall, and the visitor sees the rest as void. */
+  readonly minHeightPx?: number;
+}
+/** ggui#1492 — how a host presents one canvas: the label the judge is told, the page ground, and (the inline card only) its frame. */
+export interface CanvasHostPresentation {
+  readonly label: string;
+  /** The page ground under a fill canvas's panel; the inline card's ground lives on its {@link HostInlineFrame}. */
+  readonly ground?: string;
+  readonly frame?: HostInlineFrame;
+}
+const HEX_COLOUR = /^#[0-9a-f]{6}$/;
+function usablePresentation(canvas: CanvasClass, p: CanvasHostPresentation | undefined): CanvasHostPresentation | undefined {
+  if (p === undefined) return undefined;
+  const bad = (why: string): undefined => {
+    console.warn(`[visual-eval] host presentation for ${canvas} ignored: ${why}`);
+    return undefined;
+  };
+  if (typeof p.label !== 'string' || p.label.length === 0) return bad('no label');
+  if (p.ground !== undefined && !HEX_COLOUR.test(p.ground)) return bad('ground is not #rrggbb');
+  const f = p.frame;
+  if (f !== undefined) {
+    if (canvasFitPolicy(canvas).capture !== 'natural') return bad('a frame on a canvas that is not the inline card');
+    if (![f.surface, f.ground, f.ring.color].every((c) => HEX_COLOUR.test(c))) return bad('a frame colour is not #rrggbb');
+    const inRange = (n: number, lo: number, hi: number): boolean => Number.isFinite(n) && n >= lo && n <= hi;
+    if (!inRange(f.ring.widthPx, 0, 8) || !inRange(f.ring.alpha, 0, 1) || !inRange(f.radiusPx, 0, 64)) return bad('a frame number out of range');
+    if (f.minHeightPx !== undefined && !inRange(f.minHeightPx, 0, 2560)) return bad('minHeightPx out of range');
+  }
+  return p;
+}
+/** What the inline card's page adds per side, where its ink is read from, and the host's floor — from the host frame when given, else the stand-in's. */
+interface InlineGeometry {
+  readonly padPx: number;
+  readonly inkInsetPx: number;
+  readonly floorPx: number | undefined;
+}
+function inlineGeometry(frame: HostInlineFrame | undefined): InlineGeometry {
+  if (frame === undefined) return { padPx: JUDGE_INLINE_PAD_PX, inkInsetPx: JUDGE_INLINE_INK_INSET_PX, floorPx: undefined };
+  const padPx = JUDGE_GROUND_MARGIN_PX + frame.ring.widthPx;
+  return { padPx, inkInsetPx: padPx + frame.radiusPx, floorPx: frame.minHeightPx };
+}
 /**
  * The host stand-in round a fill canvas (ggui#1083 cut 3, ggui#1067 §5): the embedding shell floats
  * the card in a panel on its scrim — a hairline, the theme's `xl` radius, `shadow-sm`, a 16 px gap —
@@ -250,9 +307,9 @@ export function canvasChrome(canvas: CanvasClass): CanvasChrome {
   return canvasFit(canvas) === 'fill' && canvas !== 'mobile-fullscreen-small' ? 'panel' : undefined;
 }
 /** The browser window for a canvas: the canvas box, plus the chrome's gap on every side when the judge draws one (the panel's, or the host ground's). */
-export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome): CanvasViewport {
+export function judgeWindow(viewport: CanvasViewport, chrome: CanvasChrome, inlinePadPx: number = JUDGE_INLINE_PAD_PX): CanvasViewport {
   if (chrome === undefined) return viewport;
-  const gap = 2 * (chrome === 'ground' ? JUDGE_INLINE_PAD_PX : EXPANDED_FRAME.insetPx);
+  const gap = 2 * (chrome === 'ground' ? inlinePadPx : EXPANDED_FRAME.insetPx);
   return { width: viewport.width + gap, height: viewport.height + gap };
 }
 /**
@@ -577,11 +634,21 @@ try {
   }
 }
 
+/** The inline card's frame: the host's, as data, when given; else the generic stand-in built from the card's own tokens. */
+function inlineFrameDecls(frame: HostInlineFrame | undefined): string {
+  if (frame === undefined) {
+    return `background: var(--ggui-color-container); border: ${JUDGE_INLINE_FRAME_BORDER_PX}px solid color-mix(in srgb, var(--ggui-color-onContainer) 8%, transparent); border-radius: ${JUDGE_INLINE_FRAME_RADIUS_PX}px; overflow: hidden;`;
+  }
+  const alphaPct = Math.round(frame.ring.alpha * 1000) / 10;
+  return `background: ${frame.surface}; border: ${frame.ring.widthPx}px solid color-mix(in srgb, ${frame.ring.color} ${alphaPct}%, transparent); border-radius: ${frame.radiusPx}px; overflow: hidden;`;
+}
+
 function buildRenderHTML(
   bundledCode: string,
   cssTokens?: string,
   fit?: 'fill',
   chrome?: CanvasChrome,
+  presentation?: CanvasHostPresentation,
 ): string {
   if (chrome === 'panel' && fit !== 'fill') throw new Error("the judge's panel frames a fill canvas only (ggui#1083 cut 3)");
   if (chrome === 'ground' && fit === 'fill') throw new Error("the host ground frames an inline card only — a fill canvas has no natural height (ggui#1475)");
@@ -606,12 +673,12 @@ function buildRenderHTML(
       /* ggui#1083 — the host stand-in (neutral-50) under the theme's scrim (its tint at
          its opacity): the ground a frosted host puts under the card, so the judge scores
          the card where the visitor sees it. */
-      ${expandedFrameScrimDecls()}
+      ${presentation?.frame !== undefined ? `background: ${presentation.frame.ground};` : presentation?.ground !== undefined ? `background: ${presentation.ground};` : expandedFrameScrimDecls()}
       color: var(--ggui-color-neutral-900, #111827);
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
     ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
-    ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { background: var(--ggui-color-container); border: ${JUDGE_INLINE_FRAME_BORDER_PX}px solid color-mix(in srgb, var(--ggui-color-onContainer) 8%, transparent); border-radius: ${JUDGE_INLINE_FRAME_RADIUS_PX}px; overflow: hidden; }` : ''}
+    ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { ${inlineFrameDecls(presentation?.frame)} }` : ''}
   </style>
 </head>
 <body>
@@ -762,9 +829,14 @@ export const CONTENT_HEIGHT_EXPRESSION =
  * could not be used: it is floored at the viewport by definition, so it sees an overflow but never
  * a card shorter than its box.
  */
-export const CARD_HEIGHT_EXPRESSION =
-  "(() => { const el = document.documentElement; const prev = el.style.height; el.style.height = 'max-content'; " +
-  `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * JUDGE_INLINE_PAD_PX}; })()`;
+export function cardHeightExpression(padPx: number): string {
+  return (
+    "(() => { const el = document.documentElement; const prev = el.style.height; el.style.height = 'max-content'; " +
+    `const h = Math.ceil(el.getBoundingClientRect().height); el.style.height = prev; return h - ${2 * padPx}; })()`
+  );
+}
+/** The stand-in page's card height ({@link cardHeightExpression} at the stand-in's pad). */
+export const CARD_HEIGHT_EXPRESSION = cardHeightExpression(JUDGE_INLINE_PAD_PX);
 
 /**
  * ggui#1475 — the inline card's horizontal overflow: how far its content runs past the card's width. The host's
@@ -782,8 +854,8 @@ export const CARD_OVERFLOW_X_EXPRESSION =
  * one row of card is kept, so a card that painted nothing is still read — as a blank, never as an
  * unreadable capture.
  */
-export function naturalClip(window: { width: number; height: number }, cardHeightPx: number): ScreenshotClip {
-  const m = JUDGE_INLINE_PAD_PX;
+export function naturalClip(window: { width: number; height: number }, cardHeightPx: number, padPx: number = JUDGE_INLINE_PAD_PX): ScreenshotClip {
+  const m = padPx;
   const box = window.height - 2 * m;
   return { x: 0, y: 0, width: window.width, height: Math.max(1, Math.min(Math.ceil(cardHeightPx), box)) + 2 * m };
 }
@@ -799,11 +871,18 @@ async function measureContentHeight(page: ScreenshotPage, expression: string = C
   }
 }
 
+/** ggui#1492 — a natural capture's geometry: the page's pad per side, and the host's floor when it has one. */
+export interface NaturalCaptureOptions {
+  readonly padPx: number;
+  readonly floorPx?: number;
+}
+
 export async function captureScreenshotDetailed(
   html: string,
   viewport: { width: number; height: number } = DEFAULT_SCREENSHOT_VIEWPORT,
   deps: ScreenshotDeps = {},
   capture: CaptureMode = 'full-page',
+  natural: NaturalCaptureOptions = { padPx: JUDGE_INLINE_PAD_PX },
 ): Promise<ScreenshotAttempt> {
   try {
     const launchOptions = await resolveLaunchOptions(viewport, deps);
@@ -820,9 +899,16 @@ export async function captureScreenshotDetailed(
       await new Promise((r) => setTimeout(r, deps.settleMs ?? 1000));
       if (capture === 'natural') {
         // ggui#1475 — the inline card at its natural height: the capture is the card's extent on the host ground.
-        const cardHeightPx = await measureContentHeight(page, CARD_HEIGHT_EXPRESSION);
+        const cardHeightPx = await measureContentHeight(page, natural.padPx === JUDGE_INLINE_PAD_PX ? CARD_HEIGHT_EXPRESSION : cardHeightExpression(natural.padPx));
         const overflowX = await measureContentHeight(page, CARD_OVERFLOW_X_EXPRESSION);
-        const clip = naturalClip(viewport, cardHeightPx ?? viewport.height - 2 * JUDGE_INLINE_PAD_PX);
+        // ggui#1492 — the host's floor: measured AFTER the card (its height stays the card's own), then applied to the
+        // frame so the capture shows what a visitor sees under a short card — the frame's surface, as void.
+        const floorPx = natural.floorPx;
+        if (floorPx !== undefined && cardHeightPx !== null && cardHeightPx < floorPx) {
+          await page.evaluate(`(() => { const f = document.querySelector('.${JUDGE_INLINE_FRAME_CLASS}'); if (f) f.style.minHeight = '${floorPx}px'; })()`);
+        }
+        const framed = cardHeightPx === null ? viewport.height - 2 * natural.padPx : floorPx !== undefined ? Math.max(cardHeightPx, floorPx) : cardHeightPx;
+        const clip = naturalClip(viewport, framed, natural.padPx);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
         return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX };
       }
@@ -1000,11 +1086,13 @@ interface CanvasFrame {
   readonly attempt: ScreenshotAttempt;
   /** The capture's ink extent (ggui#1120); `null` when there is no capture or it could not be read. */
   readonly ink: InkExtent | null;
+  /** ggui#1492 — the host presentation this canvas was framed under, when the caller supplied a usable one. */
+  readonly presentation?: CanvasHostPresentation;
 }
 /** The capture's ink extent (ggui#1120), read inside a drawn panel's chrome; an unreadable capture is reported, never blank. */
-function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass): InkExtent | null {
+function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass, inlineInkInsetPx: number = JUDGE_INLINE_INK_INSET_PX): InkExtent | null {
   if (png === null) return null;
-  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : chrome === 'ground' ? JUDGE_INLINE_INK_INSET_PX : 0);
+  const ink = readInkExtent(png, chrome === 'panel' ? JUDGE_INK_INSET_PX : chrome === 'ground' ? inlineInkInsetPx : 0);
   if ('reason' in ink) {
     console.warn(`[visual-eval] ink extent unreadable at canvas ${canvas}: ${ink.reason}`);
     return null;
@@ -1028,17 +1116,28 @@ async function frameCanvas(
   canvas: CanvasClass,
   canvasViewports: VisualEvalConfig['canvasViewports'],
   deps: ScreenshotDeps,
+  hostPresentations?: VisualEvalConfig['hostPresentations'],
 ): Promise<CanvasFrame> {
   const declaredBox = canvasViewports?.[canvas];
   const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
   const policy = canvasFitPolicy(canvas);
   const fit = canvasFit(canvas);
   const chrome = canvasChrome(canvas);
-  const canvasHtml = fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome) : html;
-  const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome), deps, policy.capture);
+  const presentation = usablePresentation(canvas, hostPresentations?.[canvas]);
+  const geometry = inlineGeometry(presentation?.frame);
+  const canvasHtml =
+    fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation) : html;
+  const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, policy.capture, {
+    padPx: geometry.padPx,
+    ...(geometry.floorPx !== undefined ? { floorPx: geometry.floorPx } : {}),
+  });
   // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
   const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };
-  return { viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt, ink: readInk(captured.png, chrome, canvas) };
+  return {
+    viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt,
+    ink: readInk(captured.png, chrome, canvas, geometry.inkInsetPx),
+    ...(presentation !== undefined ? { presentation } : {}),
+  };
 }
 
 /**
@@ -1172,7 +1271,7 @@ export async function runVisualEvaluationDetailed(
     const perCanvas: CanvasVisualResult[] = [];
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
-      const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps);
+      const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps, config.hostPresentations);
       const { viewport, policy, fit, attempt } = frame;
       const screenshot = attempt.png;
       if (!screenshot) {
@@ -1191,7 +1290,7 @@ export async function runVisualEvaluationDetailed(
       const criteriaBlock =
         context.criteria !== undefined && criteriaSelected !== undefined
           ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, {
-              frame: { canvas, width: viewport.width, height: viewport.height },
+              frame: { canvas, width: viewport.width, height: viewport.height, ...(frame.presentation !== undefined ? { hostLabel: frame.presentation.label } : {}) },
               ...(config.sampleProps !== undefined ? { propsJson: JSON.stringify(config.sampleProps) } : {}),
             })
           : '';
@@ -1730,7 +1829,7 @@ function toEvalIssue(issue: EvaluationIssue): EvalIssue {
 // ---------------------------------------------------------------------------
 
 /** What the fit half reads — the frame's inputs; nothing about a judge. */
-export type VisualFitConfig = Pick<VisualEvalConfig, 'sampleProps' | 'canvases' | 'canvasViewports' | 'designSrcDir'>;
+export type VisualFitConfig = Pick<VisualEvalConfig, 'sampleProps' | 'canvases' | 'canvasViewports' | 'hostPresentations' | 'designSrcDir'>;
 
 /** One canvas's fit reading: the box, the measure, whether it overflowed — no score. */
 export interface CanvasFitReading {
@@ -1785,7 +1884,7 @@ export async function runVisualFit(
   const issues: EvalIssue[] = [];
   const readings: CanvasFitReading[] = [];
   for (const canvas of config.canvases) {
-    const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps);
+    const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps, config.hostPresentations);
     if (!frame.attempt.png) {
       return { status: 'unavailable', reason: `${frame.attempt.reason ?? 'no browser available'} at canvas ${canvas}` };
     }
