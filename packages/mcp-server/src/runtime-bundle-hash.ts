@@ -24,6 +24,16 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { RUNTIME_BUNDLE_FILE, RUNTIME_BUNDLE_URL_PATH } from "@ggui-ai/iframe-runtime/server";
 
+/**
+ * The runtime bundle's PLAIN filename (`iframe-runtime.js`): the name every
+ * server mounts `no-cache`, and the name the content hash is inserted into.
+ * The shells' one-shot fallback (ggui#1501) retries this name when a hashed
+ * URL fails.
+ */
+export const RUNTIME_BUNDLE_PLAIN_NAME: string = RUNTIME_BUNDLE_URL_PATH.slice(
+  RUNTIME_BUNDLE_URL_PATH.lastIndexOf("/") + 1
+);
+
 /** Truncated content hash used in the bundle's immutable URL name. */
 export function computeRuntimeBundleHash(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
@@ -71,10 +81,7 @@ export function resolveHashedRuntimeBundleUrl(
     // Bundle not built / not shipped — mint the plain revalidated name.
     return plainUrl;
   }
-  const plainName = RUNTIME_BUNDLE_URL_PATH.slice(
-    RUNTIME_BUNDLE_URL_PATH.lastIndexOf("/") + 1
-  );
-  return insertRuntimeBundleHash(plainUrl, computeRuntimeBundleHash(bytes), plainName);
+  return insertRuntimeBundleHash(plainUrl, computeRuntimeBundleHash(bytes), RUNTIME_BUNDLE_PLAIN_NAME);
 }
 
 /**

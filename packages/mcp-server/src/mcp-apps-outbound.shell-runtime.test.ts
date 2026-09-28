@@ -14,7 +14,9 @@
 import vm from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCP_APP_BOOTSTRAP_FAILED_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { runtimeBundlePlainTwin } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { GGUI_RENDER_SHELL_HTML } from './mcp-apps-outbound.js';
+import { RUNTIME_BUNDLE_PLAIN_NAME } from './runtime-bundle-hash.js';
 
 interface Posted {
   readonly jsonrpc?: string;
@@ -168,3 +170,86 @@ describe('the thin shell never waits silently (ggui#1302)', () => {
     expect(shell.failures().map((f) => f.reason)).toEqual(['UI_INITIALIZE_FAILED']);
   });
 });
+
+describe('the thin shell retries a hashed runtime bundle once through its unhashed twin (ggui#1501)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const HASHED = 'https://assets.example.test/_ggui/iframe-runtime.0123456789ab.js';
+  const TWIN = 'https://assets.example.test/_ggui/iframe-runtime.js';
+
+  async function mountWith(runtimeUrl: string) {
+    const shell = bootShell();
+    await completeInit(shell);
+    shell.deliver({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-result',
+      params: { _meta: { 'ai.ggui/render': { runtimeUrl } } },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    return shell;
+  }
+
+  it('a hashed URL that fails loads the twin on the same origin, and posts no failure yet', async () => {
+    const shell = await mountWith(HASHED);
+    expect(shell.appended.map((s) => s.src)).toEqual([HASHED]);
+    shell.appended[0]?.onerror?.();
+    expect(shell.appended.map((s) => s.src)).toEqual([HASHED, TWIN]);
+    expect(shell.appended[1]?.type).toBe('module');
+    expect(shell.appended[1]?.crossOrigin).toBe('anonymous');
+    expect(shell.failures()).toEqual([]);
+  });
+
+  it('when the twin fails too, exactly one BUNDLE_FETCH_FAILED, and no third load', async () => {
+    const shell = await mountWith(HASHED);
+    shell.appended[0]?.onerror?.();
+    shell.appended[1]?.onerror?.();
+    expect(shell.appended).toHaveLength(2);
+    expect(shell.failures().map((f) => f.reason)).toEqual(['BUNDLE_FETCH_FAILED']);
+  });
+
+  it('an unhashed URL that fails is a failure at once, with no retry — control', async () => {
+    const shell = await mountWith(TWIN);
+    shell.appended[0]?.onerror?.();
+    expect(shell.appended).toHaveLength(1);
+    expect(shell.failures().map((f) => f.reason)).toEqual(['BUNDLE_FETCH_FAILED']);
+  });
+
+  it('a foreign bundle that carries its own content hash gets no retry', async () => {
+    const shell = await mountWith('https://cdn.example.test/app.0123456789ab.js');
+    shell.appended[0]?.onerror?.();
+    expect(shell.appended).toHaveLength(1);
+    expect(shell.failures().map((f) => f.reason)).toEqual(['BUNDLE_FETCH_FAILED']);
+  });
+});
+
+describe("the thin shell's in-frame twin is the protocol's (ggui#1501)", () => {
+  it('agrees with runtimeBundlePlainTwin on every case, positive and negative', () => {
+    const m = shellScript().match(/var RT_HASHED=[^\n]*\nvar RT_BASE=[^\n]*\nfunction plainRuntimeTwin\(u\)\{[^\n]*\}/);
+    expect(m, 'the shell embeds the twin function').not.toBeNull();
+    const ctx = vm.createContext({});
+    vm.runInContext(`${m?.[0] ?? ''}\nglobalThis.twin = plainRuntimeTwin;`, ctx);
+    const twin = ctx['twin'] as (u: string) => string | null;
+    const cases = [
+      '/_ggui/iframe-runtime.0123456789ab.js',
+      'https://a.example.test/_ggui/iframe-runtime.0123456789ab.js?v=1#f',
+      'https://a.example.test/_ggui/iframe-runtime.js',
+      'https://cdn.example.test/app.0123456789ab.js',
+      '/_ggui/iframe-runtime.0123456789AB.js',
+      '/_ggui/iframe-runtime.0123456789a.js',
+      '/_ggui/iframe-runtimeXjs.0123456789ab',
+    ];
+    for (const u of cases) {
+      expect(twin(u) ?? undefined, u).toBe(runtimeBundlePlainTwin(u, RUNTIME_BUNDLE_PLAIN_NAME));
+    }
+    expect(cases.filter((u) => twin(u) !== null), 'the table carries positives').toHaveLength(2);
+    // Literal guards, independent of the shared source: the escaping holds in the frame too.
+    expect(twin('/_ggui/iframe-runtime.0123456789ab.js')).toBe('/_ggui/iframe-runtime.js');
+    expect(twin('/_ggui/iframe-runtime.0123456789abXjs')).toBeNull();
+  });
+});
+

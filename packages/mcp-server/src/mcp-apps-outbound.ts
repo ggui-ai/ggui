@@ -85,6 +85,7 @@ import {
   escapeInlineScript,
   gguiShellHtml,
   parseEpochUri,
+  runtimeBundleHashedNameSource,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
   type SessionApiUrls,
@@ -96,6 +97,7 @@ import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
 import { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
+import { RUNTIME_BUNDLE_PLAIN_NAME } from "./runtime-bundle-hash.js";
 
 /**
  * Thin-shell body served from `ui://ggui/render` (C8 pivot).
@@ -209,6 +211,12 @@ var rootEl=document.getElementById('ggui-root');
 rootEl.style.cssText='display:flex;flex-direction:column;height:100%;min-height:300px;margin:0';
 var mounted=false;
 var lastEnvelope=null;
+// ggui#1501: a content-hashed runtime URL -> its unhashed twin (same origin,
+// same path, only the hash removed). Every server replica serves the twin no-cache, so
+// a hash no serving replica has (rolling deploy, rollback, replay) retries it once.
+var RT_HASHED=new RegExp(${JSON.stringify(runtimeBundleHashedNameSource(RUNTIME_BUNDLE_PLAIN_NAME))});
+var RT_BASE=${JSON.stringify(RUNTIME_BUNDLE_PLAIN_NAME.slice(0, RUNTIME_BUNDLE_PLAIN_NAME.lastIndexOf(".")))};
+function plainRuntimeTwin(u){var m=RT_HASHED.exec(u);return m?m[1]+RT_BASE+m[2]+m[3]:null;}
 // Text color pairs with the shell surface: themed var when the runtime
 // injected theme CSS, else the scheme-scoped pre-theme ink the shell's
 // own scheme <style> defines (#662) — legible on whichever neutral
@@ -318,6 +326,10 @@ async function mountFromMeta(envelope){
   // bundle responds with the right CORS headers (the iframe-runtime
   // mount sets them). The self-contained shell already uses this
   // pattern; legacy postMessage shell now matches it.
+  rootEl.innerHTML='';
+  loadRuntime(runtimeUrl,false);
+}
+function loadRuntime(url,isTwin){
   try{
     var s=document.createElement('script');
     s.type='module';
@@ -329,14 +341,21 @@ async function mountFromMeta(envelope){
     // console -- the bundle ships ACAO=* so credentialed mode is
     // unnecessary.
     s.crossOrigin='anonymous';
-    s.src=runtimeUrl;
+    s.src=url;
     s.onload=function(){mounted=true;};
     s.onerror=function(e){
+      // ggui#1501: a hashed URL gets ONE retry through its unhashed twin;
+      // the twin, or any other URL, fails as before.
+      var twin=isTwin?null:plainRuntimeTwin(url);
+      if(twin){
+        try{console.warn('[ggui] runtime bundle failed to load; retrying its unhashed twin once');}catch(_){}
+        loadRuntime(twin,true);
+        return;
+      }
       var msg='Runtime bundle failed to load: '+(e&&e.message||'script error');
       showFailure('This view could not load','BUNDLE_FETCH_FAILED: '+msg,function(){mountFromMeta(lastEnvelope);});
       postBootstrapFailed('BUNDLE_FETCH_FAILED',msg);
     };
-    rootEl.innerHTML='';
     document.body.appendChild(s);
   }catch(e){
     var msg='Runtime bundle failed to load: '+(e&&e.message||e);
@@ -1440,7 +1459,11 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // the only layer that can detect a compositing host at runtime —
   // drops the backdrop to transparent itself where that is right,
   // and every other context keeps the per-browser-consistent paint.
-  return gguiShellHtml(bootstrap, { background: "surface" });
+  // ggui#1501: a hashed runtime URL that 404s (a hash no serving replica has,
+  // during a rolling deploy, after a rollback, or on a replay) retries its
+  // unhashed twin once. A custom `runtime.path` with another filename, or a
+  // foreign URL, is not the hashed default name and gets no retry.
+  return gguiShellHtml(bootstrap, { background: "surface", runtimeBundlePlainName: RUNTIME_BUNDLE_PLAIN_NAME });
 }
 
 /**

@@ -6,6 +6,23 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A shell retries a content-hashed runtime bundle ONCE through its unhashed
+ * twin (2026-09-28, additive, ggui#1501: MINOR, same draft stamp); the thin
+ * shell then reports `BUNDLE_FETCH_FAILED` as before, and the self-contained
+ * shell still reports no bundle failure (a known §5.5.2 gap, ggui#1503). New exports `runtimeBundleHashedNameSource` and
+ * `runtimeBundlePlainTwin` define the twin: the failed URL with only
+ * `.<12 hex>` removed (same origin, same path; the inverse of the server's
+ * hash insertion), and nothing for any other URL. `GguiShellHtmlOptions`
+ * gains `runtimeBundlePlainName?`. When it is set and the URL is hashed, the
+ * self-contained shell adds a capture-phase `error` listener script and
+ * marks its runtime tag `data-ggui-runtime="src"`. Without it, the document
+ * is byte-identical. The thin postMessage shell resolves the same pattern in
+ * the frame. Why: a rolling deploy, a rollback or a replayed envelope can
+ * name a hash no serving replica has, and every replica serves the unhashed
+ * name. N−1: a slice is unchanged. A retried card runs the replica's current
+ * runtime against its envelope, which is the N−1 direction the runtime
+ * already owes.
+ * --------------------------------------------------------------------
  * The render result declares `effort?` (2026-09-27, additive, ggui#1459
  * declare step: MINOR, same draft stamp). `renderOutputSchema.effort` is the
  * named level (`APP_GENERATION_PROFILE_EFFORTS`) the generation that produced

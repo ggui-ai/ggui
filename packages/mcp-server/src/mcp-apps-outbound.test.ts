@@ -1054,3 +1054,73 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     ws.close();
   });
 });
+
+describe('the plain runtime name counts its serves while the hashed twin is mounted (ggui#1501)', () => {
+  let fx: Fixture | null = null;
+  let dist: string | null = null;
+  afterEach(async () => {
+    await fx?.server.close();
+    fx = null;
+    if (dist) fs.rmSync(dist, { recursive: true, force: true });
+    dist = null;
+  });
+
+  function collecting() {
+    const lines: Array<{ event: string; fields: Record<string, unknown> }> = [];
+    const logger = {
+      ...silentLogger,
+      info: (event: string, fields?: Record<string, unknown>) => {
+        lines.push({ event, fields: fields ?? {} });
+      },
+      child: () => logger,
+    };
+    return { lines, logger };
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 25));
+  }
+
+  it('a 200 and a 304 revalidation are both counted, with their status; the hashed name is not', async () => {
+    dist = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-1501-plain-'));
+    const source = 'globalThis.__plain_1501 = 1;';
+    fs.writeFileSync(path.join(dist, 'iframe-runtime.js'), source, 'utf8');
+    const hash = createHash('sha256').update(source).digest('hex').slice(0, 12);
+    const { lines, logger } = collecting();
+    fx = await bootOutboundServerWith({ runtime: { distDir: dist }, logger });
+
+    const first = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`);
+    expect(first.status).toBe(200);
+    await first.text();
+    const etag = first.headers.get('etag');
+    expect(etag, 'the plain name carries an ETag a CDN revalidates against').toBeTruthy();
+    // A CDN revalidation, as an edge cache sends it. The explicit Cache-Control
+    // stops fetch() appending its own `no-cache` to a conditional request
+    // (the Fetch spec does that in default cache mode), which would defeat
+    // the 304 a CDN gets.
+    const second = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`, {
+      headers: { 'if-none-match': etag ?? '', 'cache-control': 'max-age=0' },
+    });
+    expect(second.status).toBe(304);
+    const hashed = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.${hash}.js`);
+    expect(hashed.status).toBe(200);
+    await hashed.text();
+    await settle();
+
+    const served = lines.filter((l) => l.event === 'runtime_bundle_plain_served').map((l) => l.fields);
+    expect(served).toEqual([{ status: 200 }, { status: 304 }]);
+  });
+
+  it('with no hashed twin mounted, the plain name is the stamped name and is not counted — control', async () => {
+    dist = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-1501-nohash-'));
+    fs.writeFileSync(path.join(dist, 'iframe-runtime.js'), 'globalThis.__plain_1501b = 1;', 'utf8');
+    const { lines, logger } = collecting();
+    fx = await bootOutboundServerWith({ runtime: { distDir: dist, hashedUrl: false }, logger });
+    const resp = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`);
+    expect(resp.status).toBe(200);
+    await resp.text();
+    await settle();
+    expect(lines.filter((l) => l.event === 'runtime_bundle_plain_served')).toEqual([]);
+  });
+});
+

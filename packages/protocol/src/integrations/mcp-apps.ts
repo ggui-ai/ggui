@@ -1986,6 +1986,102 @@ export interface GguiShellHtmlOptions {
    * (the default carries it).
    */
   readonly loadingIndicator?: string | null;
+  /**
+   * The runtime bundle's PLAIN filename (for example `iframe-runtime.js`),
+   * which turns on the one-shot bundle fallback (ggui#1501).
+   *
+   * When set, and the bootstrap's `runtimeUrl` is that name with its
+   * content hash inserted (`iframe-runtime.<12 hex>.js`, see
+   * {@link runtimeBundlePlainTwin}), the shell retries the bundle's
+   * unhashed twin ONCE if the hashed URL fails to load. The twin is
+   * derived from the failed URL (same origin, same path), never from
+   * configuration.
+   *
+   * A rolling deploy, a rollback or a replayed envelope can name a hash no
+   * serving replica has. Every replica serves the unhashed name, `no-cache`. Any
+   * other URL (unhashed, foreign, or an inlined runtime) gets no retry.
+   * Absent: the document is byte-identical to a shell built without it.
+   */
+  readonly runtimeBundlePlainName?: string;
+}
+
+/**
+ * The regular-expression source that matches `plainName` with a
+ * runtime-bundle content hash inserted before its extension: the name the
+ * server stamps (`iframe-runtime.js` → `iframe-runtime.<12 hex>.js`).
+ *
+ * Capture groups: 1 = everything up to the filename (origin and path,
+ * possibly empty); 2 = the extension; 3 = a query and/or fragment, possibly
+ * empty. Only lowercase hex, exactly 12 characters, matches: that is the
+ * scheme's truncated sha256. ONE source for both shells (ggui#1501): the
+ * self-contained shell resolves the twin at build time through
+ * {@link runtimeBundlePlainTwin}, and the thin postMessage shell embeds this
+ * source and resolves it in the frame.
+ *
+ * @public
+ */
+export function runtimeBundleHashedNameSource(plainName: string): string {
+  const dot = plainName.lastIndexOf('.');
+  const base = dot === -1 ? plainName : plainName.slice(0, dot);
+  const ext = dot === -1 ? '' : plainName.slice(dot);
+  return `^((?:.*/)?)${escapeRegExpLiteral(base)}\\.[0-9a-f]{12}(${escapeRegExpLiteral(ext)})((?:[?#].*)?)$`;
+}
+
+/**
+ * The unhashed twin of a content-hashed runtime-bundle URL, or `undefined`
+ * when `url` is not `plainName` with a content hash inserted (ggui#1501).
+ *
+ * The twin keeps the failed URL's origin, path, query and fragment, and
+ * drops only `.<12 hex>`. The inverse of the server's hash insertion
+ * (`insertRuntimeBundleHash` in `@ggui-ai/mcp-server`), pinned against it
+ * there.
+ *
+ * @public
+ */
+export function runtimeBundlePlainTwin(url: string, plainName: string): string | undefined {
+  const m = new RegExp(runtimeBundleHashedNameSource(plainName)).exec(url);
+  if (m === null) return undefined;
+  const dot = plainName.lastIndexOf('.');
+  const base = dot === -1 ? plainName : plainName.slice(0, dot);
+  return `${m[1] ?? ''}${base}${m[2] ?? ''}${m[3] ?? ''}`;
+}
+
+function escapeRegExpLiteral(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+}
+
+/**
+ * A value as JSON that is safe to embed in an inline `<script>`.
+ * `JSON.stringify` produces valid JS, but `<` / `>` / `&` / `U+2028` /
+ * `U+2029` can break HTML or JS parsers when embedded inline. Escaping `<`
+ * also neutralizes `</script>` and `<!--` sequences inside strings.
+ */
+function inlineScriptJson(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * The self-contained shell's one-shot bundle fallback (ggui#1501). A classic
+ * inline script, run before the module tag: a CAPTURE-phase `error` listener
+ * (a script element's `error` does not bubble), which reacts only to the
+ * element marked `data-ggui-runtime="src"`. It appends the twin once, marked
+ * `fallback`, so the twin's own failure is never retried. A separate element
+ * from the meta script, whose `;</script>` terminator two readers parse.
+ */
+function runtimeBundleFallbackScript(twinUrl: string): string {
+  return (
+    `<script>(function(){var t=${inlineScriptJson(twinUrl)},used=false;` +
+    `window.addEventListener('error',function(e){var s=e&&e.target;` +
+    `if(used||!s||s.tagName!=='SCRIPT'||typeof s.getAttribute!=='function'||s.getAttribute('data-ggui-runtime')!=='src')return;` +
+    `used=true;try{console.warn('[ggui] runtime bundle failed to load; retrying its unhashed twin once');}catch(_){}` +
+    `var n=document.createElement('script');n.type='module';n.crossOrigin='anonymous';n.src=t;` +
+    `n.setAttribute('data-ggui-runtime','fallback');document.body.appendChild(n);},true);})();</script>`
+  );
 }
 
 /**
@@ -2046,18 +2142,9 @@ export function gguiShellHtml(
   bootstrap: GguiRenderBootstrap,
   options?: GguiShellHtmlOptions,
 ): string {
-  // `JSON.stringify` produces valid JS, but `<` / `>` / `&` /
-  // `U+2028` / `U+2029` can break HTML or JS parsers when embedded
-  // inline. Escaping `<` also neutralizes `</script>` and `<!--`
-  // sequences inside slice strings.
-  const json = JSON.stringify({
+  const json = inlineScriptJson({
     [MCP_APP_AI_GGUI_RENDER_META_KEY]: bootstrap.slice,
-  })
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+  });
 
   const safeRuntimeUrl = bootstrap.runtimeUrl
     .replace(/&/g, '&amp;')
@@ -2080,10 +2167,18 @@ export function gguiShellHtml(
     options?.loadingIndicator === null
       ? ''
       : (options?.loadingIndicator ?? GGUI_SHELL_LOADING_INDICATOR_HTML);
+  // One-shot bundle fallback (ggui#1501): only for an external, hashed
+  // runtime URL, and only when the caller names the plain filename.
+  const fallbackTwin =
+    options?.runtimeInlineSource === undefined && options?.runtimeBundlePlainName !== undefined
+      ? runtimeBundlePlainTwin(bootstrap.runtimeUrl, options.runtimeBundlePlainName)
+      : undefined;
   const runtimeTag =
     options?.runtimeInlineSource !== undefined
       ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
-      : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
+      : fallbackTwin !== undefined
+        ? `${runtimeBundleFallbackScript(fallbackTwin)}\n<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${safeRuntimeUrl}"></script>`
+        : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
 <html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;${background}">${loadingBlock}

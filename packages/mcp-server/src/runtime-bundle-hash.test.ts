@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runtimeBundlePlainTwin } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
+  RUNTIME_BUNDLE_PLAIN_NAME,
   computeRuntimeBundleHash,
   insertRuntimeBundleHash,
   resolveHashedRuntimeBundleUrl,
@@ -80,5 +82,28 @@ describe('resolveHashedRuntimeBundleUrl', () => {
         '/nonexistent/dist/iframe-runtime.js',
       ),
     ).toBe('https://assets.example.com/_ggui/iframe-runtime.js');
+  });
+});
+
+describe('the shells\' fallback twin is the exact inverse of the hash insertion (ggui#1501)', () => {
+  const hash = computeRuntimeBundleHash(Buffer.from('ggui#1501'));
+
+  it.each(['/_ggui/iframe-runtime.js', 'https://assets.example.test/_ggui/iframe-runtime.js', 'iframe-runtime.js'])(
+    'twin(insert(%s)) is the original',
+    (url) => {
+      const hashed = insertRuntimeBundleHash(url, hash, RUNTIME_BUNDLE_PLAIN_NAME);
+      expect(hashed, 'the insertion changed the URL').not.toBe(url);
+      expect(runtimeBundlePlainTwin(hashed, RUNTIME_BUNDLE_PLAIN_NAME)).toBe(url);
+    },
+  );
+
+  it('a URL the insertion leaves untouched (a foreign copy) has no twin — control', () => {
+    const foreign = 'https://cdn.example.test/copies/renderer.js';
+    expect(insertRuntimeBundleHash(foreign, hash, RUNTIME_BUNDLE_PLAIN_NAME)).toBe(foreign);
+    expect(runtimeBundlePlainTwin(foreign, RUNTIME_BUNDLE_PLAIN_NAME)).toBeUndefined();
+  });
+
+  it('the plain name is the default mount path\'s filename', () => {
+    expect(RUNTIME_BUNDLE_PLAIN_NAME).toBe('iframe-runtime.js');
   });
 });

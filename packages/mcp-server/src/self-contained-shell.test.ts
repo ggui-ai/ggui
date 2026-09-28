@@ -283,3 +283,19 @@ describe('buildSelfContainedShell — every view field the shared spread emits r
     expect(carried).toEqual(VIEW_SPREAD);
   });
 });
+
+describe('buildSelfContainedShell turns on the one-shot runtime-bundle fallback (ggui#1501)', () => {
+  const base = { sessionId: 'sess_1501', appId: 'app_1501', codeUrl: 'https://assets.example.test/code/x.js', codeHash: 'x' };
+
+  it('a hashed default runtime URL carries the marked tag and the twin on its own origin', () => {
+    const html = buildSelfContainedShell({ ...base, runtimeUrl: 'https://assets.example.test/_ggui/iframe-runtime.0123456789ab.js' });
+    expect(html).toContain('data-ggui-runtime="src" src="https://assets.example.test/_ggui/iframe-runtime.0123456789ab.js"');
+    expect(html).toContain('"https://assets.example.test/_ggui/iframe-runtime.js"');
+  });
+
+  it('an unhashed runtime URL gets no fallback — control', () => {
+    const html = buildSelfContainedShell({ ...base, runtimeUrl: 'https://assets.example.test/_ggui/iframe-runtime.js' });
+    expect(html).not.toContain('data-ggui-runtime="src"');
+    expect(html).not.toContain("addEventListener('error'");
+  });
+});

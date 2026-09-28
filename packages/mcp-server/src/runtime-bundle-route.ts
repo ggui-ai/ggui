@@ -85,6 +85,21 @@ export function mountRuntimeBundleRoute(opts: MountOptions): void {
   }
   if (existsSync(runtimeBundleFile)) {
     app.get(runtimePath, (_req, res) => {
+      // ggui#1501: with the hashed twin mounted, every STAMPED runtime URL
+      // is hashed, so a load of the plain name is a shell's one-shot
+      // fallback (a hash no serving replica has: rolling deploy, rollback,
+      // replay), or a probe; a probe reads the same, and that is the
+      // count's stated gap. Counted on the response's finish, whatever its
+      // status: the name is `no-cache`, so a CDN revalidates it with a
+      // conditional GET on viewer loads, which keeps the count per load
+      // (a CDN's minimum TTL can coalesce a burst within it), and a 304 is
+      // a fallback as much as a 200 is. No user-agent field: behind a CDN
+      // the origin sees the CDN's own.
+      if (opts.hashed !== undefined) {
+        res.on("finish", () => {
+          logger.info("runtime_bundle_plain_served", { status: res.statusCode });
+        });
+      }
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
       // Short cache — operators iterating on the renderer want fresh
       // copies after rebuild. Production long-term caching lives on
