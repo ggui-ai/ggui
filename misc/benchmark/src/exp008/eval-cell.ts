@@ -492,8 +492,10 @@ export interface VisualOutcome {
   readonly score: number;
   readonly passed: boolean;
   readonly canvases?: readonly CanvasScreenshot[];
-  /** The judge's own token use (all canvas calls), priced into `estimatedCostUsd`. */
+  /** The judge's own token use (all canvas SCORING calls), priced into `estimatedCostUsd`. */
   readonly tokens?: { readonly input: number; readonly output: number };
+  /** ggui#1436 — the report-only criteria calls' token use, priced into `criteriaEstimatedCostUsd`, never `estimatedCostUsd`. */
+  readonly criteriaTokens?: { readonly input: number; readonly output: number };
   /** The design tree the judge bundled against — `design@judge` (ggui#1042); absent from a judge before it. */
   readonly design?: NonNullable<VisualEvaluationResult['design']>;
   /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
@@ -513,6 +515,7 @@ export function toVisualOutcome(r: VisualEvaluationResult | null): VisualOutcome
     passed: r.passed,
     ...(r.canvases !== undefined ? { canvases: r.canvases } : {}),
     ...(r.inputTokens !== undefined && r.outputTokens !== undefined ? { tokens: { input: r.inputTokens, output: r.outputTokens } } : {}),
+    ...(r.criteriaTokens !== undefined ? { criteriaTokens: { input: r.criteriaTokens.inputTokens, output: r.criteriaTokens.outputTokens } } : {}),
     ...(r.design !== undefined ? { design: r.design } : {}),
     ...(r.themeMode !== undefined ? { themeMode: r.themeMode } : {}),
   };
@@ -627,6 +630,12 @@ export function visualJudgeCostUsd(judge: VisualJudgeIdentity, outcome: VisualOu
   return calculateCost(resolveJudgeCostModelId(judge.model), { input: outcome.tokens.input, output: outcome.tokens.output });
 }
 
+/** ggui#1436 — the report-only criteria calls' cost, priced like the visual judge; undefined when none ran. */
+export function criteriaJudgeCostUsd(judge: VisualJudgeIdentity, outcome: VisualOutcome | null): number | undefined {
+  if (!outcome?.criteriaTokens) return undefined;
+  return calculateCost(resolveJudgeCostModelId(judge.model), { input: outcome.criteriaTokens.input, output: outcome.criteriaTokens.output });
+}
+
 /**
  * The MINT leg's receipt for this cell, handed to the eval task by the driver from
  * its run manifest (ECS forgets stopped tasks within the hour; the operator role
@@ -688,6 +697,12 @@ export interface CellReport extends BenchmarkRunResultDisplay {
    * digests THIS echo, never the writer's input. Absent when judge-input.json carried no `canvasPresentations`.
    */
   readonly presentation?: PresentationEcho;
+  /**
+   * ggui#1436 — what the report-only criteria calls cost, USD. NOT part of `estimatedCostUsd`, which stays what the
+   * scoring judgement cost (the figure a binder meters): the criteria block is a measurement beside the score, and
+   * its price is recorded apart. Absent when no criteria call ran.
+   */
+  readonly criteriaEstimatedCostUsd?: number;
   /** The published-report shape the row mirrors. */
   readonly reportSchemaVersion: typeof REPORT_SCHEMA_VERSION;
   readonly meta: {
@@ -871,6 +886,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
   if (visualOutcome !== null && visualOutcome.design === undefined) notes.push(VISUAL_DESIGN_UNSTAMPED_NOTE);
   if (deps.visual && visualOutcome !== null && visualOutcome.tokens === undefined) notes.push('visual judge reported no token counts (visual cost 0 recorded)');
   const estimatedCostUsd = codingUsd + panelUsd + visualUsd;
+  const criteriaEstimatedCostUsd = deps.visualJudge ? criteriaJudgeCostUsd(deps.visualJudge, visualOutcome) : undefined;
 
   const result: BenchmarkRunResult = {
     variant: inputs.variant,
@@ -892,6 +908,7 @@ export async function evaluateCell(inputs: CellInputs, deps: EvalCellDeps): Prom
     schemaVersion: EXP008_CELL_REPORT_VERSION,
     reportSchemaVersion: REPORT_SCHEMA_VERSION,
     ...(presentation !== undefined ? { presentation } : {}),
+    ...(criteriaEstimatedCostUsd !== undefined ? { criteriaEstimatedCostUsd } : {}),
     meta: {
       cellId: mint.cellId,
       runId: mint.runId,

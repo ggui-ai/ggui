@@ -118,6 +118,15 @@ export interface VisualEvalConfig {
   onRetry?: AgentConfig['onRetry'];
 }
 
+/**
+ * ggui#1436 — what the report-only criteria call spent. Kept APART from the scoring calls' `inputTokens` /
+ * `outputTokens`: those price the judgement a caller may meter, and the criteria call is a measurement beside it.
+ */
+export interface CriteriaCallTokens {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
 /** One canvas's verdict — screenshot + judge score at that class's viewport. */
 export interface CanvasVisualResult {
   canvas: CanvasClass;
@@ -150,6 +159,8 @@ export interface CanvasVisualResult {
   declared?: true;
   /** ggui#1436 — the typed criteria block, when a bank was configured. */
   criteria?: CriteriaBlock;
+  /** ggui#1436 — the criteria call's own spend, when one was asked and answered; never inside the canvas's scoring tokens. */
+  criteriaTokens?: CriteriaCallTokens;
   /** ggui#1492 — what the judge did with this canvas's host presentation (drawn, or ignored and why), when one was supplied. */
   presentation?: CanvasPresentationOutcome;
 }
@@ -414,6 +425,11 @@ export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport):
  */
 export interface VisualEvaluationResult extends EvaluationResult {
   canvases?: CanvasVisualResult[];
+  /**
+   * ggui#1436 — the criteria calls' spend across canvases, when any was asked and answered. `inputTokens` /
+   * `outputTokens` stay the SCORING calls' alone, so a cost read off them never includes the report-only block.
+   */
+  criteriaTokens?: CriteriaCallTokens;
   /** The design tree the judge painted with (ggui#1042) — present on every per-canvas judgement. */
   design?: JudgeDesignIdentity;
   /** The mode `cssTokens` were composed in, when the caller said (ggui#1076). */
@@ -1177,9 +1193,10 @@ type JudgedAnswer =
  * ggui#1436 — the criteria are REPORT-ONLY, so they are never asked inside a call whose score binds. The K
  * scoring calls go out exactly as they did before the block existed (the same user turn, byte for byte); when a
  * block was selected, the criteria get ONE call of their own on the same frame, run beside them, and that call's
- * score is discarded. Asked inside the scoring call, the block moved the score it sat beside — the first release
- * that carried it into a served judge lowered first-attempt scores on the same kind of card (ggui#1436). One read,
- * not K: the block binds on nothing, and a second K would double the judge's calls for it.
+ * score is discarded. Its spend is reported apart (`criteriaTokens`), never inside the scoring calls' tokens, so a
+ * cost read off the judgement is the judgement's alone. Asked inside the scoring call, the block moved the score it
+ * sat beside — the first release that carried it into a served judge lowered first-attempt scores on the same kind
+ * of card (ggui#1436). One read, not K: the block binds on nothing, and a second K would double its calls.
  */
 async function judgeFrame(
   judge: typeof callMultimodalLLM,
@@ -1199,10 +1216,9 @@ async function judgeFrame(
   return { scoring, criteria };
 }
 
-/** The tokens a frame's calls spent — the scoring calls that parsed, and the criteria call when it parsed. */
-function frameTokens(parsed: readonly Extract<JudgedAnswer, { kind: 'ok' }>[], criteria: JudgedAnswer | undefined): { inputTokens: number; outputTokens: number } {
-  const all = criteria?.kind === 'ok' ? [...parsed, criteria] : parsed;
-  return { inputTokens: all.reduce((sum, a) => sum + a.inputTokens, 0), outputTokens: all.reduce((sum, a) => sum + a.outputTokens, 0) };
+/** What the frame's criteria call spent, when it was asked and answered — reported apart from the scoring calls. */
+function criteriaCallTokens(criteria: JudgedAnswer | undefined): CriteriaCallTokens | undefined {
+  return criteria?.kind === 'ok' ? { inputTokens: criteria.inputTokens, outputTokens: criteria.outputTokens } : undefined;
 }
 
 /** The criteria call's answers, as the one read the block resolves; none when it was not asked or did not parse. */
@@ -1349,10 +1365,10 @@ export async function runVisualEvaluationDetailed(
       const result = representative.result;
       result.finalScore = median;
       result.passed = median >= config.passThreshold;
-      const spent = frameTokens(parsed, criteriaAnswer);
-      result.inputTokens = spent.inputTokens;
-      result.outputTokens = spent.outputTokens;
+      result.inputTokens = parsed.reduce((sum, a) => sum + a.inputTokens, 0);
+      result.outputTokens = parsed.reduce((sum, a) => sum + a.outputTokens, 0);
       const response = { inputTokens: result.inputTokens, outputTokens: result.outputTokens };
+      const criteriaTokens = criteriaCallTokens(criteriaAnswer);
       const judgeRecord: CanvasJudgeRecord = {
         k,
         rule: 'median',
@@ -1405,13 +1421,15 @@ export async function runVisualEvaluationDetailed(
         ...(fit !== undefined ? { fit } : {}),
         ...(frame.declared ? { declared: true as const } : {}),
         ...(criteria !== undefined ? { criteria } : {}),
+        ...(criteriaTokens !== undefined ? { criteriaTokens } : {}),
         ...(frame.presentation !== undefined ? { presentation: frame.presentation } : {}),
       });
       console.log(
         `[visual-eval] canvas=${canvas} ${viewport.width}×${viewport.height} score=${result.finalScore}${k > 1 ? ` (median of ${judgeRecord.samples.length}/${k}: ${judgeRecord.samples.join(',')} σ=${judgeRecord.sigma})` : ''} ` +
           `${result.passed ? 'pass' : 'FAIL'} | content=${contentHeight ?? '?'}px${overflow ? ` OVERFLOW (${policy.overflow})` : ''} ` +
           `ink=${inkRatio ?? '?'}${blankIssue !== null ? ' BLANK' : ''} ` +
-          `| in=${response.inputTokens} out=${response.outputTokens}`,
+          `| in=${response.inputTokens} out=${response.outputTokens}` +
+          (criteriaTokens !== undefined ? ` | criteria in=${criteriaTokens.inputTokens} out=${criteriaTokens.outputTokens}` : ''),
       );
     }
     const aggregate = aggregateCanvasResults(perCanvas, perCanvasResults);
@@ -1492,6 +1510,7 @@ function aggregateCanvasResults(
     inputTokens += r.inputTokens ?? 0;
     outputTokens += r.outputTokens ?? 0;
   });
+  const criteriaSpent = perCanvas.flatMap((c) => (c.criteriaTokens !== undefined ? [c.criteriaTokens] : []));
   return {
     passed: perCanvas.every((c) => c.passed),
     finalScore: mean((r) => r.finalScore),
@@ -1500,6 +1519,14 @@ function aggregateCanvasResults(
     ...(critiques.length > 0 ? { critique: critiques.join('\n') } : {}),
     inputTokens,
     outputTokens,
+    ...(criteriaSpent.length > 0
+      ? {
+          criteriaTokens: {
+            inputTokens: criteriaSpent.reduce((sum, t) => sum + t.inputTokens, 0),
+            outputTokens: criteriaSpent.reduce((sum, t) => sum + t.outputTokens, 0),
+          },
+        }
+      : {}),
     canvases: [...perCanvas],
   };
 }
@@ -1583,8 +1610,11 @@ export interface StoredCaptureVerdict {
   readonly overflow: boolean;
   readonly inkRatio: number | null;
   readonly criteria?: CriteriaBlock;
+  /** The scoring calls' spend. */
   readonly inputTokens: number;
   readonly outputTokens: number;
+  /** ggui#1436 — the report-only criteria call's spend, apart from the scoring calls'; absent when none was asked or answered. */
+  readonly criteriaTokens?: CriteriaCallTokens;
 }
 
 export type StoredCaptureOutcome =
@@ -1654,7 +1684,7 @@ export async function judgeStoredCapture(
           measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
         })
       : undefined;
-  const spent = frameTokens(parsed, criteriaAnswer);
+  const criteriaTokens = criteriaCallTokens(criteriaAnswer);
   return {
     kind: 'ok',
     verdict: {
@@ -1668,8 +1698,9 @@ export async function judgeStoredCapture(
       overflow,
       inkRatio,
       ...(criteria !== undefined ? { criteria } : {}),
-      inputTokens: spent.inputTokens,
-      outputTokens: spent.outputTokens,
+      inputTokens: parsed.reduce((sum, a) => sum + a.inputTokens, 0),
+      outputTokens: parsed.reduce((sum, a) => sum + a.outputTokens, 0),
+      ...(criteriaTokens !== undefined ? { criteriaTokens } : {}),
     },
   };
 }

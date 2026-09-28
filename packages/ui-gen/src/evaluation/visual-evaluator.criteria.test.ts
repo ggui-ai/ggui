@@ -155,16 +155,24 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     expect(out.result!.canvases![0]!.criteria!.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
   });
 
-  it('the criteria call is paid for: its tokens join the frame\'s spend', async () => {
+  it('the criteria call\'s spend is reported APART: the scoring tokens are the K scoring calls\' alone, so a cost read off them never includes the block', async () => {
     const out = await runVisualEvaluationDetailed(
       { compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } },
       { ...config, judgeK: 3 },
       deps([answer(80)], answer(80, [{ id: 'task.copy', verdict: 'pass', evidence: 'g' }])),
     );
     const c = out.result!.canvases![0]!;
-    expect(out.result!.inputTokens).toBe(3 * 10 + 100);
-    expect(out.result!.outputTokens).toBe(3 * 5 + 50);
+    expect(out.result!.inputTokens).toBe(3 * 10);
+    expect(out.result!.outputTokens).toBe(3 * 5);
+    expect(c.criteriaTokens).toEqual({ inputTokens: 100, outputTokens: 50 });
+    expect(out.result!.criteriaTokens).toEqual({ inputTokens: 100, outputTokens: 50 });
     expect(c.score).toBe(80);
+  });
+
+  it('no bank → no criteria spend reported anywhere', async () => {
+    const out = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card' }, config, deps([answer(80)]));
+    expect('criteriaTokens' in out.result!).toBe(false);
+    expect('criteriaTokens' in out.result!.canvases![0]!).toBe(false);
   });
 
   it('a canvas outside the bank\'s `applies` gets a block with an empty selection, no verdicts, and no criteria call', async () => {

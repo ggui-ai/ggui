@@ -128,6 +128,7 @@ export type {
   VisualEvalDetailed,
   ScreenshotAttempt,
   CanvasVisualResult,
+  CriteriaCallTokens,
   CanvasFitPolicy,
   CaptureMode,
   ScreenshotDeps,

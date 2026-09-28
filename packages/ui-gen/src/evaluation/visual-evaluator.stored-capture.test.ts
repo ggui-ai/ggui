@@ -65,7 +65,8 @@ describe('judgeStoredCapture (ggui#1438)', () => {
     expect(by['task.copy']).toMatchObject({ verdict: 'pass', evidence: 'the greeting names the app', severity: 'must', method: 'judge' });
     expect(by['comp.fit']).toMatchObject({ verdict: 'pass', evidence: 'content 600px against a 640px box' });
     expect(v.criteria!.context).toEqual({ ...context, canvas: 'xs-chat-card' });
-    expect(v.inputTokens).toBe(40); // three scoring calls + the criteria call
+    expect(v.inputTokens).toBe(30); // the three scoring calls alone
+    expect(v.criteriaTokens).toEqual({ inputTokens: 10, outputTokens: 5 }); // the criteria call, reported apart
   });
   it('the recorded content height drives the fit verdict as at capture: overflow on the inline card fails the canvas and the comp.fit row', async () => {
     const j = judgeOf([answer(85, 'pass')]);

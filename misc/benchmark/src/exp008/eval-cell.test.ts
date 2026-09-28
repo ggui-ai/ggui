@@ -181,6 +181,11 @@ describe('toVisualOutcome — typed against ui-gen\'s VisualEvaluationResult (th
     const o = toVisualOutcome(real);
     expect(o).toMatchObject({ score: 81, passed: true, tokens: { input: 3000, output: 200 } });
     expect(o?.canvases?.[0]?.canvas).toBe('xl');
+    expect(o !== null && 'criteriaTokens' in o).toBe(false);
+  });
+  it('ggui#1436 — maps the criteria calls\' spend apart from the scoring tokens', () => {
+    const o = toVisualOutcome({ ...real, criteriaTokens: { inputTokens: 900, outputTokens: 60 } });
+    expect(o).toMatchObject({ tokens: { input: 3000, output: 200 }, criteriaTokens: { input: 900, output: 60 } });
   });
   it('prices the visual judge like a panel judge (registry resolution by suffix) and 0 without tokens', () => {
     const judge = { provider: 'claude' as const, model: 'claude-sonnet-5', passThreshold: 60 };
@@ -203,6 +208,23 @@ describe('estimatedCostUsd on the cell row = coding (resolved model) + panel + v
     expect(report.meta.costs).toEqual({ codingUsd: coding, panelUsd: 0, visualUsd: visual });
     expect(report.estimatedCostUsd).toBeCloseTo(coding + visual, 10);
     expect(report.postGeneration?.compiledCodeBytes).toBe(Buffer.byteLength('export default function C(){return null}'));
+    expect('criteriaEstimatedCostUsd' in report).toBe(false); // no criteria call ran
+  });
+
+  it('ggui#1436 — the report-only criteria call is priced APART: `criteriaEstimatedCostUsd`, never inside `estimatedCostUsd` (the metered figure)', async () => {
+    const dir = cellDir({ evalJson: true });
+    const judge = { provider: 'claude' as const, model: 'claude-sonnet-5', passThreshold: 60 };
+    const report = await evaluateCell(readCellInputs(dir), {
+      dir, playwright: neverLaunch, panel, visualJudge: judge,
+      visual: async () => ({ score: 70, passed: true, tokens: { input: 3000, output: 200 }, criteriaTokens: { input: 2500, output: 150 } }),
+    });
+    const coding = calculateCost(resolveCostModelId(undefined, 'openai/gpt-6-astra'), { input: 1000, output: 500 });
+    const visual = calculateCost(resolveJudgeCostModelId('claude-sonnet-5'), { input: 3000, output: 200 });
+    const criteria = calculateCost(resolveJudgeCostModelId('claude-sonnet-5'), { input: 2500, output: 150 });
+    expect(criteria).toBeGreaterThan(0);
+    expect(report.meta.costs).toEqual({ codingUsd: coding, panelUsd: 0, visualUsd: visual });
+    expect(report.estimatedCostUsd).toBeCloseTo(coding + visual, 10);
+    expect(report.criteriaEstimatedCostUsd).toBe(criteria);
   });
 });
 
