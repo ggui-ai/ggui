@@ -17,7 +17,7 @@
  * `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` flips skip → hard-fail.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import type { Locator } from 'playwright-core';
+import type { FrameLocator, Locator } from 'playwright-core';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
@@ -57,25 +57,51 @@ import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matri
  * model that over-guards only book/pay-shaped repeatables passes here
  * clean. This is a regression tripwire, never the acceptance criterion
  * for a prompt change.
+ *
+ * Pending is not guarding (ggui#1398). A control that dispatches an action
+ * shows it is working until the agent's answer repaints the card, or until
+ * the runtime's pending bound passes: it is `disabled`, `aria-busy`, and
+ * often relabelled ("Saving…", which `/save/i` does not match). Nothing
+ * answers the gesture in this scenario, so the pending state lasts the
+ * whole bound. The check therefore asks two things: right after the
+ * gesture the control is still there (a visible `/save/i` control, or a
+ * pending `aria-busy` one), and within the bound it comes back as an
+ * enabled `/save/i` control. A guarded control never comes back.
  */
-async function expectSaveStillRepeatable(controls: Locator): Promise<void> {
+/** `DEFAULT_ACTION_PENDING_BOUND_MS` in `@ggui-ai/wire`'s wire-config, plus margin. */
+const PENDING_CLEARS_WITHIN_MS = 20_000 + 10_000;
+
+async function expectSaveStillRepeatable(appFrame: FrameLocator, controls: Locator): Promise<void> {
   const visible = controls.filter({ visible: true });
+  const pending = appFrame.locator('button[aria-busy="true"]').filter({ visible: true });
   expect(
-    await visible.count(),
+    (await visible.count()) + (await pending.count()),
     'repeatable action `save` lost its control after firing — no visible /save/i ' +
-      'control remains. `save` is not in ui-gen TERMINAL_WORDS and SHARED_INTENT ' +
-      'declares the click fires it immediately, so the control must survive its ' +
-      'own gesture.',
+      'control and no pending (aria-busy) control remains. `save` is not in ui-gen ' +
+      'TERMINAL_WORDS and SHARED_INTENT declares the click fires it immediately, so ' +
+      'the control must survive its own gesture.',
   ).toBeGreaterThan(0);
 
-  const first = visible.first();
-  const label = (await first.innerText({ timeout: 1_000 }).catch(() => '')).trim();
+  const enabledAgain = await expect
+    .poll(async () => (await visible.count()) > 0 && (await visible.first().isEnabled()), {
+      timeout: PENDING_CLEARS_WITHIN_MS,
+      interval: 500,
+    })
+    .toBe(true)
+    .then(
+      () => true,
+      () => false,
+    );
+  const label = (
+    await (enabledAgain ? visible : pending).first().innerText({ timeout: 1_000 }).catch(() => '')
+  ).trim();
   expect(
-    await first.isEnabled({ timeout: 1_000 }),
-    `repeatable action \`save\` was guarded after firing — the control now reads ` +
-      `"${label}" and is disabled. \`save\` is not in ui-gen TERMINAL_WORDS and ` +
-      `SHARED_INTENT declares the click fires it immediately, so it must still ` +
-      `accept a second interaction.`,
+    enabledAgain,
+    `repeatable action \`save\` was guarded after firing — ${PENDING_CLEARS_WITHIN_MS} ms ` +
+      `later the control reads "${label}" and is still not an enabled /save/i control. ` +
+      `A pending state clears within the runtime's bound; this one did not. \`save\` is ` +
+      `not in ui-gen TERMINAL_WORDS and SHARED_INTENT declares the click fires it ` +
+      `immediately, so it must accept a second interaction.`,
   ).toBe(true);
 }
 
@@ -144,7 +170,7 @@ for (const provider of PROVIDERS) {
             await page.waitForTimeout(300);
             // First gesture only: the loop's remaining iterations are the
             // drive path, not the assertion.
-            if (i === 0) await expectSaveStillRepeatable(buttons);
+            if (i === 0) await expectSaveStillRepeatable(appFrame, buttons);
           }
 
           const consumed = unwrapStructured<{
