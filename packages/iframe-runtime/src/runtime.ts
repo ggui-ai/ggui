@@ -60,9 +60,15 @@ import {
   READ_DOOR_REPORTERS,
 } from './meta-parse.js';
 import type {
+  HeldCredential,
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
 } from './types.js';
+import {
+  BOOT_REFRESH_RETRIES,
+  createCredentialController,
+  type CredentialController,
+} from './credential-controller.js';
 import { projectHostContext } from '@ggui-ai/protocol/wire';
 import { installDismissIntentListener } from './dismiss-intent.js';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
@@ -706,8 +712,10 @@ export interface BootSequenceOptions {
    * canonical async toolresult) are skipped. The App handshake still
    * runs — spec mandates `ui/initialize` regardless of how slice meta
    * arrives, and `hostContext` is captured from `app.getHostContext()`.
+   * The slice's held credential, when it has one, is refreshed exactly
+   * as a slice this boot resolved itself (ggui#1496).
    */
-  readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
+  readonly preResolved?: BootMeta;
   /**
    * Autostart-layer pre-resolution of the read-plane door (ggui#537):
    * a tool result that arrived before `bootSequence` ran carried the
@@ -716,9 +724,17 @@ export interface BootSequenceOptions {
    * before the App is connected, so the locator is threaded here and
    * resolved via {@link resolveMetaViaReadDoor} right after the
    * handshake, ahead of the Tier 2 tool-result wait. Ignored when
-   * `preResolvedMeta` is set.
+   * `preResolved` is set.
    */
   readonly preResolvedLocator?: string;
+  /**
+   * Test seam for the boot refresh's waits (ggui#1496): the retry delay's
+   * `sleep` and `random`. Defaults to a `setTimeout` wait and `Math.random`.
+   */
+  readonly credentialTiming?: {
+    readonly sleep?: (ms: number) => Promise<void>;
+    readonly random?: () => number;
+  };
   /**
    * How long to wait for the spec-canonical `ui/notifications/tool-result`
    * notification (Tier 2 of the resolver chain) before failing with
@@ -754,6 +770,12 @@ export interface RendererHooks {
    */
   setup(params: {
     readonly meta: McpAppAiGguiRenderMeta;
+    /**
+     * The view's live token as of NOW (ggui#1496): a subscribe frame reads
+     * it when the frame is built, never `meta.wsToken`, so a credential the
+     * view adopted reaches the next subscribe payload.
+     */
+    readonly currentWsToken: () => string | undefined;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
@@ -936,11 +958,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // App handshake settles — whichever yields first wins; the listener
   // is removed on resolve.
   //
-  // Skipped entirely when `preResolvedMeta` is set (autostart caught
+  // Skipped entirely when `preResolved` is set (autostart caught
   // the toolresult or read the global early) — no listener installed,
   // no race to run.
-  const toolResultPromise: Promise<McpAppAiGguiRenderMeta | null> =
-    opts.preResolvedMeta !== undefined
+  const toolResultPromise: Promise<BootMeta | null> =
+    opts.preResolved !== undefined
       ? Promise.resolve(null)
       : awaitToolResultMetaFromApp(app, toolResultTimeoutMs);
 
@@ -1003,7 +1025,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Reading-B (retired Phase 1.19b.3 with the App-class swap; the
   // McpUiInitializeResult schema doesn't define `toolOutput`).
   //
-  //   Tier 0  preResolvedMeta — autostart-layer pre-resolution. When
+  //   Tier 0  preResolved — autostart-layer pre-resolution. When
   //           the autostart's own toolresult race or inline `__GGUI_META__`
   //           parse caught the meta before bootSequence ran, it threads
   //           the parsed slice meta here so we don't re-await the same
@@ -1027,13 +1049,17 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // When both tiers fail, we surface the Tier 2 timeout/failure reason
   // (`MISSING_META_GGUI_BOOTSTRAP`) — it's the spec-canonical channel
   // and its absence is the diagnostic worth showing.
-  let parsed: McpAppAiGguiMetaParseResult;
-  if (opts.preResolvedMeta !== undefined) {
-    parsed = { ok: true, meta: opts.preResolvedMeta };
+  //
+  // Every tier resolves a {@link BootMeta}: a slice whose live credential
+  // expired still boots, holding that credential for the one boot refresh
+  // below (ggui#1496 R1), instead of reading as no slice at all.
+  let resolved: BootMeta | null;
+  if (opts.preResolved !== undefined) {
+    resolved = opts.preResolved;
   } else {
-    const inline = parseMetaFromGlobal();
-    if (inline.ok) {
-      parsed = inline;
+    const inline = readSelfContainedMeta();
+    if (inline !== null) {
+      resolved = inline;
     } else {
       // Tier 1.5 — the read-plane door (ggui#537). A pre-boot tool
       // result named the view but carried no material; now that the
@@ -1045,17 +1071,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         opts.preResolvedLocator !== undefined
           ? await resolveMetaViaReadDoor(app, opts.preResolvedLocator)
           : null;
-      const fromToolResult = viaDoor ?? (await toolResultPromise);
-      if (fromToolResult !== null) {
-        parsed = { ok: true, meta: fromToolResult };
-      } else {
-        parsed = {
-          ok: false,
-          reason: 'MISSING_META_GGUI_BOOTSTRAP',
-        };
-      }
+      resolved = viaDoor ?? (await toolResultPromise);
     }
   }
+  let parsed: McpAppAiGguiMetaParseResult =
+    resolved !== null
+      ? { ok: true, meta: resolved.meta }
+      : { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+  const held = resolved?.held;
 
   // hostContext is captured opportunistically from
   // `app.getHostContext()` — populated by App's `ui/initialize`
@@ -1109,6 +1132,25 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // elsewhere.
   const pinnedSessionId: string = meta.sessionId;
 
+  // The view's live credential (ggui#1496). One controller owns it and its
+  // one-refresh budget, over the same host `tools/call` relay the bridge
+  // rung uses; it exists when the view holds a credential and has that
+  // relay. Every subscribe frame reads the CURRENT token when it is built,
+  // so an adopted credential reaches the next subscribe payload (F5).
+  const credentialApp = getCurrentApp();
+  const initialCredential: HeldCredential | undefined = held ?? heldCredentialOf(meta);
+  const credentialController: CredentialController | null =
+    credentialApp !== null && initialCredential !== undefined
+      ? createCredentialController({
+          initial: initialCredential,
+          callTool: (name, args) => credentialApp.callServerTool({ name, arguments: args }),
+          ...(opts.credentialTiming?.sleep !== undefined ? { sleep: opts.credentialTiming.sleep } : {}),
+          ...(opts.credentialTiming?.random !== undefined ? { random: opts.credentialTiming.random } : {}),
+        })
+      : null;
+  let liveMeta: McpAppAiGguiRenderMeta = meta;
+  const currentWsToken = (): string | undefined => liveMeta.wsToken;
+
   // Renderer wiring — when supplied, the handler routes frames through
   // the single-render mount surface + WireConfig + StreamBus. When
   // absent, the placeholder path runs (boot.test.ts relies on the
@@ -1120,6 +1162,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     rendererHooks !== undefined
       ? rendererHooks.setup({
           meta,
+          currentWsToken,
           renderInto: refs.renderRoot,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -1165,6 +1208,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     renderer === null
       ? createPlaceholderRegistry({
           meta,
+          currentWsToken,
           statusRefs: refs,
           pinnedSessionId,
         })
@@ -1264,11 +1308,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // A bootstrap with NEITHER has nothing to show and nowhere to
   // subscribe.
   const hasStaticContent = hasStaticContentMeta(meta);
-  const hasLiveTrio =
-    typeof meta.wsUrl === 'string' &&
-    meta.wsUrl.length > 0 &&
-    typeof meta.wsToken === 'string' &&
-    meta.wsToken.length > 0;
+  // A held credential counts as a pending live trio on a bridge-capable
+  // boot: the boot refresh below may make it one (ggui#1496 F7).
+  const liveTrioPending = hasLiveTrio(meta) || (held !== undefined && credentialController !== null);
 
   // Transport-telemetry sink — the iframe's self-report channel (see
   // runtime-telemetry.ts). Created for EVERY boot with an App bridge;
@@ -1291,10 +1333,16 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     'boot.path',
     JSON.stringify({
       hasStaticContent,
-      hasLiveTrio,
+      hasLiveTrio: hasLiveTrio(meta),
+      heldCredential: held !== undefined,
       bridgeCapable: telemetryApp !== null,
     }),
   );
+
+  // Set when the static fetch failed while a live trio was pending: if no
+  // live channel comes of it, the boot ends on this failure as it would
+  // have with no trio at all.
+  let staticMountFailure: string | undefined;
 
   // ── Static seed mount — zero-round-trip paint, no WS required. ──────
   // The ONLY mount path for spec-compliant MCP-Apps hosts that expose no
@@ -1316,12 +1364,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       seed = await buildGguiSessionSeedInput(meta);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!hasLiveTrio) {
+      if (!liveTrioPending) {
         // No WS fallback — a failed static fetch is terminal.
         setStatus(refs, `static mount failed: ${message}`, 'error');
         emitBootFailure('UI_INITIALIZE_FAILED', message);
         return { ok: false, mountedRender };
       }
+      staticMountFailure = message;
       // A live trio is present — the WS ack will deliver the render.
       // The seed was best-effort; fall through to subscribe. Warn so a
       // degraded boot (slower first paint, ack-only delivery) is visible
@@ -1352,8 +1401,40 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // ladder at its tail). Gating the terminal rung behind the WS
   // trio's presence disabled it on precisely the host class it was
   // built for.
-  const staticOnlyNoBridge = !hasLiveTrio && getCurrentApp() === null;
-  if (!hasLiveTrio && mountedRender === null) {
+  // ── The boot refresh (ggui#1496 R1). ─────────────────────────────────
+  // A slice whose live credential expired, on either shape, refreshes it
+  // once, now, through the host, before any ladder binds; an adopted
+  // credential makes this a live boot. A live-only slice has no other way
+  // to a live channel, so a relay error there is re-sent (F6); a slice with
+  // static content goes on with whatever the refresh answered.
+  if (held !== undefined && credentialController !== null) {
+    const outcome = await credentialController.onExpired(
+      held,
+      'boot',
+      hasStaticContent ? undefined : { retries: BOOT_REFRESH_RETRIES },
+    );
+    telemetry?.record(
+      'boot.credential_refresh',
+      outcome.kind === 'refused' ? `refused:${outcome.code}` : outcome.kind,
+    );
+    if (outcome.kind === 'adopted') liveMeta = withLiveCredential(meta, outcome.credential);
+  }
+  const live = hasLiveTrio(liveMeta);
+
+  const staticOnlyNoBridge = !live && getCurrentApp() === null;
+  if (!live && mountedRender === null) {
+    if (staticMountFailure !== undefined) {
+      setStatus(refs, `static mount failed: ${staticMountFailure}`, 'error');
+      emitBootFailure('UI_INITIALIZE_FAILED', staticMountFailure);
+      return { ok: false, mountedRender };
+    }
+    if (held !== undefined) {
+      const message = 'the live credential expired and was not refreshed';
+      setStatus(refs, message, 'error');
+      retireShellLoadingIndicator(doc);
+      emitBootFailure('EXPIRED_BOOTSTRAP', message);
+      return { ok: false, mountedRender };
+    }
     const message =
       'bootstrap carries neither static content (codeUrl/codeB64/kind) nor a live trio (wsUrl/wsToken)';
     setStatus(refs, message, 'error');
@@ -1392,12 +1473,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // SAME cursor model as the WS `sinceSequence` replay and polling
   // ticks — switching rungs does not lose events.
   const sseUrl =
-    typeof meta.sseUrl === 'string' && meta.sseUrl.length > 0
-      ? meta.sseUrl
+    typeof liveMeta.sseUrl === 'string' && liveMeta.sseUrl.length > 0
+      ? liveMeta.sseUrl
       : undefined;
   const pollingBaseUrl =
-    typeof meta.pollingUrl === 'string' && meta.pollingUrl.length > 0
-      ? meta.pollingUrl
+    typeof liveMeta.pollingUrl === 'string' && liveMeta.pollingUrl.length > 0
+      ? liveMeta.pollingUrl
       : undefined;
   // One shared cursor for the whole ladder — SSE deliveries advance it
   // (via onSequence), the polling + bridge descriptors read it per
@@ -1415,7 +1496,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
-      meta,
+      meta: liveMeta,
       registry: activeRegistry,
       // Live-channel diagnostics tap — every channel_* event the
       // transports emit (failover swaps, polling budget exhaustion,
@@ -1599,21 +1680,24 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
  */
 function createPlaceholderRegistry(params: {
   readonly meta: McpAppAiGguiRenderMeta;
+  /** See {@link RendererHooks.setup}'s `currentWsToken`. */
+  readonly currentWsToken: () => string | undefined;
   readonly statusRefs: StatusRefs;
   /** Pin — render frames with a different sessionId drop with a warning. */
   readonly pinnedSessionId: string;
 }): ChannelRegistry {
   const registry = new ChannelRegistry({
-    subscribeFrameBuilder: () => ({
-      type: 'subscribe',
-      payload: {
-        sessionId: params.meta.sessionId,
-        appId: params.meta.appId,
-        ...(params.meta.wsToken !== undefined
-          ? { wsToken: params.meta.wsToken }
-          : {}),
-      },
-    }),
+    subscribeFrameBuilder: () => {
+      const wsToken = params.currentWsToken();
+      return {
+        type: 'subscribe',
+        payload: {
+          sessionId: params.meta.sessionId,
+          appId: params.meta.appId,
+          ...(wsToken !== undefined ? { wsToken } : {}),
+        },
+      };
+    },
     classifyFrame: classifyChannelFrame,
   });
   registry.register(
@@ -1708,19 +1792,40 @@ function shouldAutostart(): boolean {
 // =============================================================================
 
 /**
+ * A resolved boot slice (ggui#1496): the meta to mount, and the expired
+ * live credential the parse held back from it, when there was one. Every
+ * boot resolver returns this, so the held credential survives every path
+ * to {@link bootSequence}, which refreshes it once through the host.
+ */
+export interface BootMeta {
+  readonly meta: McpAppAiGguiRenderMeta;
+  readonly held?: HeldCredential;
+}
+
+/**
+ * A parse result as a boot slice: the ok arm, or an expired live-only
+ * slice with its held credential (the boot refresh may still make it
+ * live); `null` for every other failure.
+ */
+function bootMetaOf(result: McpAppAiGguiMetaParseResult): BootMeta | null {
+  if (result.ok) {
+    return result.held !== undefined ? { meta: result.meta, held: result.held } : { meta: result.meta };
+  }
+  if (result.reason === 'EXPIRED_BOOTSTRAP') return { meta: result.meta, held: result.held };
+  return null;
+}
+
+/**
  * Read `globalThis.__GGUI_META__` synchronously, validate against
- * the unified slice-meta shape, and return the typed meta (or null
+ * the unified slice-meta shape, and return the boot slice (or null
  * on absence / malformation).
  *
- * Thin wrapper around {@link parseMetaFromGlobal}; preserved for
- * back-compat (downstream consumers + tests). Returns `null` instead
- * of {@link McpAppAiGguiMetaParseResult} to match the historical
- * reader contract — the autostart resolver only needs the "valid
- * meta or fall through" signal.
+ * Thin wrapper around {@link parseMetaFromGlobal}. Returns `null`
+ * instead of {@link McpAppAiGguiMetaParseResult} because the autostart
+ * resolver only needs the "a slice to boot, or fall through" signal.
  */
-export function readSelfContainedMeta(): McpAppAiGguiRenderMeta | null {
-  const result = parseMetaFromGlobal();
-  return result.ok ? result.meta : null;
+export function readSelfContainedMeta(): BootMeta | null {
+  return bootMetaOf(parseMetaFromGlobal());
 }
 
 /**
@@ -1853,6 +1958,50 @@ export function hasStaticContentMeta(meta: McpAppAiGguiRenderMeta): boolean {
   );
 }
 
+/** Whether the meta carries a live trio a ladder can subscribe with (`wsUrl` + `wsToken`). */
+function hasLiveTrio(meta: McpAppAiGguiRenderMeta): boolean {
+  return (
+    typeof meta.wsUrl === 'string' &&
+    meta.wsUrl.length > 0 &&
+    typeof meta.wsToken === 'string' &&
+    meta.wsToken.length > 0
+  );
+}
+
+/** The live credential a meta's trio carries, as the view holds it (ggui#1496); `undefined` without a trio. */
+function heldCredentialOf(meta: McpAppAiGguiRenderMeta): HeldCredential | undefined {
+  if (!hasLiveTrio(meta) || meta.wsUrl === undefined || meta.wsToken === undefined) return undefined;
+  return {
+    wsToken: meta.wsToken,
+    wsUrl: meta.wsUrl,
+    ...(meta.expiresAt !== undefined ? { expiresAt: meta.expiresAt } : {}),
+    ...(meta.sseUrl !== undefined ? { sseUrl: meta.sseUrl } : {}),
+    ...(meta.pollingUrl !== undefined ? { pollingUrl: meta.pollingUrl } : {}),
+    origin: 'root',
+  };
+}
+
+/**
+ * The meta a ladder binds with once a credential is adopted (ggui#1496):
+ * the boot meta with its live trio replaced by the credential's. A URL the
+ * credential does not carry (its token could not be re-derived) is left
+ * off, so that rung is not armed with a dead token.
+ */
+function withLiveCredential(
+  meta: McpAppAiGguiRenderMeta,
+  credential: HeldCredential,
+): McpAppAiGguiRenderMeta {
+  const { sseUrl: _sse, pollingUrl: _polling, ...rest } = meta;
+  return {
+    ...rest,
+    wsUrl: credential.wsUrl,
+    wsToken: credential.wsToken,
+    ...(credential.expiresAt !== undefined ? { expiresAt: credential.expiresAt } : {}),
+    ...(credential.sseUrl !== undefined ? { sseUrl: credential.sseUrl } : {}),
+    ...(credential.pollingUrl !== undefined ? { pollingUrl: credential.pollingUrl } : {}),
+  };
+}
+
 /**
  * Decode a `codeB64` slice field to UTF-8 component source. `atob`
  * yields a byte string; routing through `TextDecoder` restores
@@ -1892,9 +2041,8 @@ function decodeCodeB64(codeB64: string): string {
  */
 export function extractMetaFromToolResult(
   params: unknown,
-): McpAppAiGguiRenderMeta | null {
-  const result = parseMetaFromToolResult(params);
-  return result.ok ? result.meta : null;
+): BootMeta | null {
+  return bootMetaOf(parseMetaFromToolResult(params));
 }
 
 /**
@@ -1915,15 +2063,15 @@ export function extractMetaFromToolResult(
  * notifications, in arrival order (shells cap it newest-biased). The
  * runtime reads it once at autostart.
  */
-export function readPendingToolResults(): McpAppAiGguiRenderMeta | null {
+export function readPendingToolResults(): BootMeta | null {
   if (typeof window === 'undefined') return null;
   const raw = (window as unknown as {
     __GGUI_PENDING_TOOL_RESULTS__?: unknown;
   }).__GGUI_PENDING_TOOL_RESULTS__;
   if (!Array.isArray(raw) || raw.length === 0) return null;
   for (let i = raw.length - 1; i >= 0; i--) {
-    const meta = extractMetaFromToolResult(raw[i]);
-    if (meta !== null) return meta;
+    const boot = extractMetaFromToolResult(raw[i]);
+    if (boot !== null) return boot;
   }
   return null;
 }
@@ -1963,10 +2111,10 @@ export function readPendingToolResultLocator(): string | null {
 function awaitToolResultMetaFromApp(
   app: App,
   timeoutMs: number,
-): Promise<McpAppAiGguiRenderMeta | null> {
+): Promise<BootMeta | null> {
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (value: McpAppAiGguiRenderMeta | null): void => {
+    const settle = (value: BootMeta | null): void => {
       if (settled) return;
       settled = true;
       app.removeEventListener('toolresult', handler);
@@ -1975,9 +2123,9 @@ function awaitToolResultMetaFromApp(
     };
     const handler = (params: CallToolResult): void => {
       if (settled) return;
-      const meta = extractMetaFromToolResult(params);
-      if (meta !== null) {
-        settle(meta);
+      const boot = extractMetaFromToolResult(params);
+      if (boot !== null) {
+        settle(boot);
         return;
       }
       // Read-plane door (ggui#537): identity-only result → resolve the
@@ -2012,7 +2160,7 @@ function awaitToolResultMetaFromApp(
 export async function resolveMetaViaReadDoor(
   app: App,
   locator: string,
-): Promise<McpAppAiGguiRenderMeta | null> {
+): Promise<BootMeta | null> {
   let text: string | undefined;
   try {
     const res = await app.readServerResource({ uri: locator });
@@ -2030,8 +2178,7 @@ export async function resolveMetaViaReadDoor(
   if (envelope === undefined) return null;
   const parsed = parseMcpAppAiGguiRenderMeta(envelope, READ_DOOR_REPORTERS);
   if (!parsed.ok || parsed.meta === undefined) return null;
-  const validated = validateMeta(parsed.meta);
-  return validated.ok ? validated.meta : null;
+  return bootMetaOf(validateMeta(parsed.meta));
 }
 
 /**
@@ -2050,7 +2197,7 @@ export async function resolveMetaViaReadDoor(
  * timeout.
  */
 type PreBootToolResult =
-  | { readonly kind: 'meta'; readonly meta: McpAppAiGguiRenderMeta }
+  | { readonly kind: 'meta'; readonly boot: BootMeta }
   | { readonly kind: 'locator'; readonly locator: string };
 
 function awaitToolResultMeta(
@@ -2079,9 +2226,9 @@ function awaitToolResultMeta(
       ) {
         return;
       }
-      const meta = extractMetaFromToolResult(m.params);
-      if (meta !== null) {
-        settle({ kind: 'meta', meta });
+      const boot = extractMetaFromToolResult(m.params);
+      if (boot !== null) {
+        settle({ kind: 'meta', boot });
         return;
       }
       // Identity-only result (ggui#537): settle NOW with the locator so
@@ -4378,8 +4525,10 @@ function installPersistentToolResultListener(app: App): void {
   persistentToolResultListenerApps.add(app);
   let lastMetaKey: string | null = null;
   app.addEventListener('toolresult', (params) => {
-    const meta = extractMetaFromToolResult(params);
-    if (meta === null) return;
+    // A re-mount re-applies the static seed only; the one live channel is
+    // the boot's, so a credential held here has nothing to refresh.
+    const meta = extractMetaFromToolResult(params)?.meta;
+    if (meta === undefined) return;
     // Cheap dedupe — the host may emit the same tool-result more
     // than once (claude.ai re-broadcasts on iframe re-attach).
     // Re-mounting the same slice meta would flicker without changing
@@ -4499,7 +4648,7 @@ function readLiveBootstrapShape(): boolean {
  * fallback share one call site — keeps the WS-driven boot semantics
  * single-sourced.
  *
- * `preResolvedMeta` is threaded in from the autostart resolver when
+ * `preResolved` is threaded in from the autostart resolver when
  * it has already discovered slice meta — via inline `__GGUI_META__`
  * global, a buffered `__GGUI_PENDING_TOOL_RESULTS__` entry, or an
  * early `ui/notifications/tool-result` postMessage. Threading skips
@@ -4508,7 +4657,7 @@ function readLiveBootstrapShape(): boolean {
  * up to the 30s postMessage timeout for spec-strict hosts.
  */
 function runBootProduction(
-  preResolvedMeta?: McpAppAiGguiRenderMeta,
+  preResolved?: BootMeta,
   preResolvedLocator?: string,
 ): void {
   const { app, transport } = createDefaultApp();
@@ -4525,7 +4674,7 @@ function runBootProduction(
     },
     onObserve: postObservabilityToParent,
     onLifecycle: postLifecycleToParent,
-    ...(preResolvedMeta !== undefined ? { preResolvedMeta } : {}),
+    ...(preResolved !== undefined ? { preResolved } : {}),
     ...(preResolvedLocator !== undefined ? { preResolvedLocator } : {}),
   });
 }
@@ -4546,7 +4695,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
   //   3. Live `ui/notifications/tool-result` postMessage — the
   //      spec-canonical channel for spec-strict hosts (`<AppRenderer>`,
   //      ChatGPT, claude.ai). Caught meta threads through as
-  //      `preResolvedMeta` so `bootSequence` doesn't re-await it.
+  //      `preResolved` so `bootSequence` doesn't re-await it.
   //
   // `readLiveBootstrapShape` still short-circuits the 30s tool-result
   // wait when a live-channel envelope is already inlined — OSS embedded
@@ -4569,7 +4718,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
     } else {
       void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then((pre) => {
         if (pre === null) runBootProduction();
-        else if (pre.kind === 'meta') runBootProduction(pre.meta);
+        else if (pre.kind === 'meta') runBootProduction(pre.boot);
         else runBootProduction(undefined, pre.locator);
       });
     }
@@ -4621,11 +4770,11 @@ async function bootProduction(opts: {
   readonly onObserve?: ObservabilityEmitter;
   readonly onLifecycle?: LifecycleEmitter;
   /**
-   * Pre-resolved slice meta from the autostart layer. When set,
+   * Pre-resolved boot slice from the autostart layer. When set,
    * threaded through `bootSequence` so the resolver skips the inline
    * + spec-canonical toolresult tiers.
    */
-  readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
+  readonly preResolved?: BootMeta;
   /** Pre-resolved LOCATOR from the autostart layer (read-plane door, ggui#537). */
   readonly preResolvedLocator?: string;
 }): Promise<void> {
@@ -4654,7 +4803,7 @@ async function bootProduction(opts: {
   // Renderer wiring hook — constructs buses + single-render mount surface
   // + wire config on demand inside bootSequence.
   const renderer: RendererHooks = {
-    setup: ({ meta, renderInto, statusRefs, onObserve }) => {
+    setup: ({ meta, currentWsToken, renderInto, statusRefs, onObserve }) => {
       // Post-Phase-B `meta` is the flat render slice — `sessionId` /
       // `appId` / `runtimeUrl` / `wsUrl` / `wsToken` / `themeId` /
       // `gadgets` / `publicEnv` / `contextSlots` /
@@ -5137,16 +5286,17 @@ async function bootProduction(opts: {
       // CLIENT_SUPPORTED_VERSIONS handshake is enforced inside
       // `connectViaRegistry`'s ack-handler closure (NOT here).
       const channelRegistry = new ChannelRegistry({
-        subscribeFrameBuilder: () => ({
-          type: 'subscribe',
-          payload: {
-            sessionId: meta.sessionId,
-            appId: meta.appId,
-            ...(meta.wsToken !== undefined
-              ? { wsToken: meta.wsToken }
-              : {}),
-          },
-        }),
+        subscribeFrameBuilder: () => {
+          const wsToken = currentWsToken();
+          return {
+            type: 'subscribe',
+            payload: {
+              sessionId: meta.sessionId,
+              appId: meta.appId,
+              ...(wsToken !== undefined ? { wsToken } : {}),
+            },
+          };
+        },
         classifyFrame: classifyChannelFrame,
       });
       channelRegistry.register(
@@ -5243,9 +5393,7 @@ async function bootProduction(opts: {
     renderer,
     ...(opts.onObserve !== undefined ? { onObserve: opts.onObserve } : {}),
     ...(opts.onLifecycle !== undefined ? { onLifecycle: opts.onLifecycle } : {}),
-    ...(opts.preResolvedMeta !== undefined
-      ? { preResolvedMeta: opts.preResolvedMeta }
-      : {}),
+    ...(opts.preResolved !== undefined ? { preResolved: opts.preResolved } : {}),
     ...(opts.preResolvedLocator !== undefined
       ? { preResolvedLocator: opts.preResolvedLocator }
       : {}),

@@ -52,7 +52,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
         runtimeUrl: SAMPLE_RUNTIME_URL,
         codeUrl: SAMPLE_CODE_URL,
       }),
-    );
+    )?.meta ?? null;
     expect(result).not.toBeNull();
     if (result === null || result.kind !== undefined) {
       throw new Error('expected component variant');
@@ -131,7 +131,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
         runtimeUrl: SAMPLE_RUNTIME_URL,
         kind: 'connect-claude',
       }),
-    );
+    )?.meta ?? null;
     expect(result).not.toBeNull();
     if (result === null || result.kind === undefined) {
       throw new Error('expected system variant');
@@ -158,7 +158,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
     });
-    const bs = readSelfContainedMeta();
+    const bs = readSelfContainedMeta()?.meta ?? null;
     expect(bs).not.toBeNull();
     if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
@@ -184,7 +184,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
       themeId: 'claudic',
       themeMode: 'dark',
     });
-    const bs = readSelfContainedMeta();
+    const bs = readSelfContainedMeta()?.meta ?? null;
     expect(bs).not.toBeNull();
     if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
@@ -202,7 +202,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
       themeId: 'claudic',
       themeMode: 'dark',
     });
-    const bs = readSelfContainedMeta();
+    const bs = readSelfContainedMeta()?.meta ?? null;
     expect(bs).not.toBeNull();
     if (bs === null || bs.kind === undefined) {
       throw new Error('expected system variant');
@@ -219,7 +219,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
       // not in the closed 'light' | 'dark' set
       themeMode: 'twilight' as unknown as 'light' | 'dark',
     });
-    const bs = readSelfContainedMeta();
+    const bs = readSelfContainedMeta()?.meta ?? null;
     expect(bs).not.toBeNull();
     if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
@@ -234,7 +234,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
     });
-    const bs = readSelfContainedMeta();
+    const bs = readSelfContainedMeta()?.meta ?? null;
     expect(bs).not.toBeNull();
     if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');

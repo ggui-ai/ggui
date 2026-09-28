@@ -214,14 +214,14 @@ describe('bootSequence — happy path', () => {
   });
 });
 
-describe('bootSequence — preResolvedMeta short-circuit', () => {
+describe('bootSequence — preResolved short-circuit', () => {
   /**
-   * `preResolvedMeta` short-circuits every resolver tier — the
+   * `preResolved` short-circuits every resolver tier — the
    * autostart layer already caught a postMessage / inline global and
    * parsed it. bootSequence still calls `app.connect()` (spec lifecycle
    * + hostContext) but never waits on the toolresult listener.
    */
-  it('skips all resolver tiers when preResolvedMeta is supplied', async () => {
+  it('skips all resolver tiers when preResolved is supplied', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     const { app, transport, pushToolResult } = buildBootHarness();
@@ -233,11 +233,11 @@ describe('bootSequence — preResolvedMeta short-circuit', () => {
       transport,
       connectFn,
       notifyParent: vi.fn(),
-      preResolvedMeta: VALID_META,
+      preResolved: { meta: VALID_META },
       toolResultTimeoutMs: 50,
     });
     // Push a HOSTILE toolresult — should be ignored entirely since
-    // preResolvedMeta short-circuits the resolver chain.
+    // preResolved short-circuits the resolver chain.
     await tick();
     pushToolResult({ ...VALID_META, sessionId: 'render_hostile' });
 
@@ -259,7 +259,7 @@ describe('bootSequence — persistent toolresult listener timing (ggui#586)', ()
    * dropped on the most common boot path. The persistent listener must
    * register BEFORE `connect()` on EVERY boot path.
    */
-  it('registers a toolresult listener BEFORE connect() even when preResolvedMeta skips Tier 2', async () => {
+  it('registers a toolresult listener BEFORE connect() even when preResolved skips Tier 2', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const { app, transport } = buildBootHarness();
     const { connectFn } = buildMockConnect(makeRender('render_001', 'pre-resolved'));
@@ -282,7 +282,7 @@ describe('bootSequence — persistent toolresult listener timing (ggui#586)', ()
       transport,
       connectFn,
       notifyParent: vi.fn(),
-      preResolvedMeta: VALID_META,
+      preResolved: { meta: VALID_META },
       toolResultTimeoutMs: 50,
     });
     expect(result.ok).toBe(true);

@@ -335,7 +335,7 @@ describe('readPendingToolResults — buffered-tool-result supersede order', () =
       toolResult('{"n":1}'),
       toolResult('{"n":2}'),
     ];
-    expect(readPendingToolResults()?.propsJson).toBe('{"n":2}');
+    expect(readPendingToolResults()?.meta.propsJson).toBe('{"n":2}');
   });
 
   it('skips invalid newest entries and falls back to the newest VALID one', () => {
@@ -344,7 +344,7 @@ describe('readPendingToolResults — buffered-tool-result supersede order', () =
       toolResult('{"n":1}'),
       { content: [], _meta: {} },
     ];
-    expect(readPendingToolResults()?.propsJson).toBe('{"n":1}');
+    expect(readPendingToolResults()?.meta.propsJson).toBe('{"n":1}');
   });
 
   it('returns null for an absent or empty buffer', () => {
