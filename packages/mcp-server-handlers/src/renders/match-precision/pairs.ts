@@ -22,15 +22,16 @@
  * - `tier: 'gated'` pairs count toward pass/fail metrics.
  *   `tier: 'debated'` pairs are genuinely ambiguous — they are scored
  *   for judge STABILITY (repeat agreement) only, never correctness.
- *   Promoting a debated pair to gated requires a recorded ruling in
- *   the experiment ledger, not an edit here.
+ *   Promoting a debated pair to gated requires a recorded ruling —
+ *   the evidence that settled the pair, stated in the change that
+ *   promotes it — not a bare edit here.
  * - The judge philosophy these labels encode is the CURRENT prompt
  *   (similarity-only, coverage-blind): MATCH = same intended user
  *   task AND same broad UI shape; added/omitted fields, paraphrase,
  *   and visual style never block; NO-MATCH = different task, different
  *   UI shape, or a conflicting load-bearing fixed value. If that
- *   prompt changes, these labels must be re-adjudicated — record the
- *   sweep in the experiment ledger.
+ *   prompt changes, these labels must be re-adjudicated, with the
+ *   sweep recorded in the change that re-labels them.
  *
  * The match-precision instrument (ggui#556).
  */
