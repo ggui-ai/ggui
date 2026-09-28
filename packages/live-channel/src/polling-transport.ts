@@ -314,6 +314,12 @@ export class PollingTransport implements PollingTransportHandle {
         });
       }
     }
+    // The body paces the chain's next tick (`nextDelayMs`) whatever the
+    // parser made of it. Falling off the end here handed the pacing
+    // `undefined` after every tick whose parser returned frames — the
+    // bridge's, on every successful pull — so its subscription mode never
+    // re-pulled hot and idled instead.
+    return body;
   }
 
   /**

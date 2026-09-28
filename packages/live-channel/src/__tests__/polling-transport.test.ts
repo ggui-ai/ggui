@@ -644,6 +644,39 @@ describe('PollingTransport — nextDelayMs subscription chain', () => {
     await transport.dispose();
   });
 
+  it('paces on the body even when the parser returned frames (the bridge parser returns `{}` on an empty page, frames on a full one)', async () => {
+    const bodies: unknown[] = [];
+    let calls = 0;
+    let parsed = 0;
+    const fetchBody = vi.fn(async () => {
+      calls += 1;
+      return { n: calls };
+    });
+    const transport = new PollingTransport({
+      handlers: new Map([['props_update', { type: 'props_update', onMessage: () => {} }]]),
+      polling: {
+        intervalMs: 1000,
+        fetchBody,
+        // Non-null: an empty page, then pages with a frame to dispatch.
+        parseSnapshot: (): Record<string, ChannelFrame> | null => {
+          parsed += 1;
+          return parsed === 1 ? {} : { props_update: { type: 'props_update', payload: {} } };
+        },
+        nextDelayMs: (body: unknown): number => {
+          bodies.push(body);
+          return bodies.length < 3 ? 0 : 15_000;
+        },
+      },
+    });
+    transport.start();
+    for (let i = 0; i < 6; i += 1) {
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    expect(bodies).toEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
+    expect(fetchBody).toHaveBeenCalledTimes(3);
+    await transport.dispose();
+  });
+
   it('serializes ticks — a held call outliving the nominal interval never overlaps', async () => {
     let inFlight = 0;
     let maxInFlight = 0;
