@@ -283,7 +283,7 @@ describe('externalBroadcast — a counter that restarts under a connected subscr
       expect(send).not.toHaveBeenCalled();
       outbound.externalBroadcast(sessionId, frame(1, 'epoch-two'));
       expect(send).toHaveBeenCalledTimes(1);
-      expect(sub.replayCursor).toEqual({ seq: 0, epoch: 'epoch-two' });
+      expect(sub.replayCursor).toEqual({ seq: 0, epoch: 'epoch-two', retired: ['epoch-one'] });
       expect(lines.filter(([event]) => event === 'stream_epoch_changed')).toEqual([
         ['stream_epoch_changed', { sessionId, from: 'epoch-one', to: 'epoch-two', transport: 'ws' }],
       ]);

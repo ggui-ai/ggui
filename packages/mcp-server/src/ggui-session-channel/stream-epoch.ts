@@ -23,7 +23,17 @@
 export interface StreamReplayCursor {
   seq: number;
   epoch: string | undefined;
+  /**
+   * The epochs this cursor has moved away from, newest last, at most
+   * {@link RETIRED_EPOCHS_KEPT}. A late frame of one of them (a
+   * cross-replica frame published just before the restart) is dropped, so
+   * it cannot move the cursor back and empty its boundary again.
+   */
+  retired?: string[];
 }
+
+/** How many epochs a cursor remembers having left. */
+export const RETIRED_EPOCHS_KEPT = 4;
 
 /** What to do with one live data frame for one subscriber. */
 export interface LiveAdmission {
@@ -36,6 +46,7 @@ export interface LiveAdmission {
  * Decide whether a live data frame reaches a subscriber, and move its
  * cursor when the frame's epoch differs:
  *   - an unstamped frame (no `seq`) was never buffered and always passes;
+ *   - a late frame of an epoch the cursor has left is dropped;
  *   - a frame of another epoch than the cursor's is delivered, and the
  *     cursor moves to that epoch with an empty boundary (a restart);
  *   - the first epoch a cursor without one sees is adopted, and its seq
@@ -50,10 +61,12 @@ export function admitLiveEnvelope(
 ): LiveAdmission {
   if (envelope.seq === undefined) return { deliver: true };
   const epoch = envelope.streamEpoch;
+  if (epoch !== undefined && cursor.retired?.includes(epoch) === true) return { deliver: false };
   if (epoch !== undefined && epoch !== cursor.epoch) {
     const from = cursor.epoch;
     cursor.epoch = epoch;
     if (from !== undefined) {
+      cursor.retired = [...(cursor.retired ?? []), from].slice(-RETIRED_EPOCHS_KEPT);
       cursor.seq = 0;
       return { deliver: true, epochChanged: { from, to: epoch } };
     }
