@@ -10,15 +10,21 @@
  * being idempotent inbound action delivery, which lives on
  * GguiSessionStore's inbound-event log).
  *
- * Intentionally narrow:
+ * Implementations:
  *
- *   - In-memory only. No SQLite / Postgres / Dynamo adapter. The OSS
- *     server uses this directly; hosted cloud has its own durability
- *     model and is OUT of scope for this slice.
- *   - Bounded, NOT persistent. Server restart drops all buffered
- *     envelopes — documented on the interface. Consumers that need
- *     persistence layer a different `GguiSessionStreamBuffer`
- *     implementation behind this interface.
+ *   - `InMemoryGguiSessionStreamBuffer`: bounded, not persistent. A
+ *     restart drops the buffered envelopes and restarts every counter
+ *     in a new epoch. `createGguiServer`'s default when given none.
+ *   - `SqliteGguiSessionStreamBuffer` (`@ggui-ai/mcp-server-core/sqlite`,
+ *     ggui#1534): the counter, its epoch and the retained envelopes in
+ *     SQLite, so a session that outlives the process keeps its `seq`.
+ *     `resolveStorageFromConfig` and `ggui serve` wire it wherever they
+ *     store the sessions in SQLite; a caller composing `createGguiServer`
+ *     itself passes it as `streamBuffer`.
+ *
+ * Any other backend implements this interface and proves it with the
+ * shared conformance suite (`runGguiSessionStreamBufferConformance`,
+ * `@ggui-ai/mcp-server-core/contract-tests`).
  *   - Replay policy applied at RECORD time (memory-optimal). `'none'`
  *     channels don't store; `'latest'` channels keep a single slot;
  *     `'all'` channels append to the ring with FIFO eviction.

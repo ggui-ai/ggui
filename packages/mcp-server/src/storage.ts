@@ -41,9 +41,9 @@
  * who want storage from config write:
  *
  * ```ts
- * const { renderStore, vectors } =
+ * const { renderStore, vectors, streamBuffer } =
  *   await resolveStorageFromConfig(manifest.storage, { baseDir: projectRoot });
- * const server = createGguiServer({ renderStore, vectors });
+ * const server = createGguiServer({ renderStore, vectors, streamBuffer });
  * ```
  *
  * Explicit instances passed to `createGguiServer` still win — this
@@ -53,6 +53,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type {
   GguiSessionStore,
+  GguiSessionStreamBuffer,
   ThreadStore,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
@@ -115,6 +116,14 @@ export interface ResolvedStorageStores {
    * `/ggui/health` advertisement matches the active store.
    */
   readonly threadDurability?: 'durable' | 'ephemeral';
+  /**
+   * The live channel's stream buffer, present iff `renders` declares
+   * sqlite: a `SqliteGguiSessionStreamBuffer` on the same database file,
+   * so a session that survives a restart also keeps its stream `seq`, its
+   * epoch and its retained envelopes (ggui#1534). Absent otherwise, and
+   * `createGguiServer` keeps its in-memory buffer.
+   */
+  readonly streamBuffer?: GguiSessionStreamBuffer;
 }
 
 /**
@@ -168,6 +177,7 @@ export async function resolveStorageFromConfig(
     vectors?: VectorStore;
     threadStore?: ThreadStore;
     threadDurability?: 'durable' | 'ephemeral';
+    streamBuffer?: GguiSessionStreamBuffer;
   } = {};
 
   // Handle the memory-threads branch BEFORE the sqlite dynamic import
@@ -183,13 +193,14 @@ export async function resolveStorageFromConfig(
   // Single dynamic import serves every sqlite adapter — better-sqlite3's
   // N-API binding loads once even if the import lands twice; the
   // subpath barrel is cached by Node's module loader.
-  const { SqliteGguiSessionStore, SqliteVectorStore, SqliteThreadStore } =
+  const { SqliteGguiSessionStore, SqliteGguiSessionStreamBuffer, SqliteVectorStore, SqliteThreadStore } =
     await import('@ggui-ai/mcp-server-core/sqlite');
 
   if (config.renders && config.renders.driver === 'sqlite') {
     const filename = resolveStoragePath(config.renders.path, opts.baseDir);
     ensureParentDir(filename);
     result.renderStore = new SqliteGguiSessionStore({ filename });
+    result.streamBuffer = new SqliteGguiSessionStreamBuffer({ filename });
   }
   if (config.vectors && config.vectors.driver === 'sqlite') {
     const filename = resolveStoragePath(config.vectors.path, opts.baseDir);

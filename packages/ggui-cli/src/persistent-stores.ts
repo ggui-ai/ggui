@@ -18,19 +18,60 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   GguiSessionStore,
+  GguiSessionStreamBuffer,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
+import type { ResolvedStorageStores } from '@ggui-ai/mcp-server';
 
-export async function createPersistentGguiSessionStore(
+/** The persistent session store and the live channel's stream buffer, opened together. */
+export interface PersistentSessionStores {
+  readonly renderStore: GguiSessionStore;
+  readonly streamBuffer: GguiSessionStreamBuffer;
+}
+
+/**
+ * The persistent sessions and, in the same `sessions.sqlite`, the live
+ * channel's stream buffer (ggui#1534), so a session that survives a restart
+ * also keeps its stream `seq`, its epoch and its retained envelopes, and a
+ * reconnect replays what it missed.
+ *
+ * Both or neither, by construction: an in-memory store with a persistent
+ * buffer would keep counters for sessions that no longer exist, and a
+ * persistent store with an in-memory buffer is the gap this closes. If the
+ * buffer cannot open, the store it opened first is closed and the error
+ * propagates.
+ */
+export async function createPersistentSessionStores(
   persistentDir: string,
-): Promise<GguiSessionStore> {
+): Promise<PersistentSessionStores> {
   mkdirSync(persistentDir, { recursive: true });
-  const { SqliteGguiSessionStore } = await import(
+  const { SqliteGguiSessionStore, SqliteGguiSessionStreamBuffer } = await import(
     '@ggui-ai/mcp-server-core/sqlite'
   );
-  return new SqliteGguiSessionStore({
-    filename: join(persistentDir, 'sessions.sqlite'),
-  });
+  const filename = join(persistentDir, 'sessions.sqlite');
+  const renderStore = new SqliteGguiSessionStore({ filename });
+  try {
+    return { renderStore, streamBuffer: new SqliteGguiSessionStreamBuffer({ filename }) };
+  } catch (err) {
+    renderStore.close();
+    throw err;
+  }
+}
+
+/**
+ * `ggui serve`'s persistent layer for sessions: when nothing resolved a
+ * render store (no `ggui.json#storage.renders`), add the persistent session
+ * store and its stream buffer, together (ggui#1534). A bundle that already
+ * has a render store is returned untouched. Throws when SQLite is
+ * unavailable; the caller falls back to the in-memory defaults.
+ */
+export async function layerPersistentSessionStores(
+  storage: ResolvedStorageStores,
+  persistentDir: string,
+): Promise<ResolvedStorageStores> {
+  if (storage.renderStore !== undefined) return storage;
+  const { renderStore, streamBuffer } = await createPersistentSessionStores(persistentDir);
+  return { ...storage, renderStore, streamBuffer };
 }
 
 export async function createPersistentVectorStore(

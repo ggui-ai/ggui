@@ -56,6 +56,10 @@ export { scopedFileStoreContract } from './scoped-file-store.js';
 // invariants (event monotonicity, close surface). Plug into adapter
 // test suites alongside the basic contract to widen the drift net.
 export { runGguiSessionStoreConformance } from './ggui-session-store.conformance.js';
+// ggui#1534 — the stream buffer port's conformance suite: every buffer, in-memory or
+// persistent, holds the same sequencing, replay-policy, truncation and epoch behaviour.
+export { runGguiSessionStreamBufferConformance } from './ggui-session-stream-buffer.conformance.js';
+export type { GguiSessionStreamBufferConformanceFactory } from './ggui-session-stream-buffer.conformance.js';
 export type { GguiSessionStoreConformanceFactory } from './ggui-session-store.conformance.js';
 export { runPendingEventConsumerConformance,
   runPendingEventStoreBoundaryConformance,

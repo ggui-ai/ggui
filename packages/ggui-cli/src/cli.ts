@@ -75,8 +75,8 @@ import { createThemeWriter } from './theme-writer.js';
 import { createThemeFileUploader } from './theme-file-uploader.js';
 import { getPersistentDir } from './paths.js';
 import {
-  createPersistentGguiSessionStore,
   createPersistentVectorStore,
+  layerPersistentSessionStores,
 } from './persistent-stores.js';
 import {
   parseServeFlags,
@@ -380,8 +380,8 @@ async function runServeCommand(args: string[]): Promise<number> {
       // resolved above) — the operator asked for it by name.
       if (!manifestDeclaresRenders && storage.renderStore === undefined) {
         try {
-          const renderStore = await createPersistentGguiSessionStore(persistentDir);
-          storage = { ...storage, renderStore };
+          // The sessions and their stream buffer, both or neither (ggui#1534).
+          storage = await layerPersistentSessionStores(storage, persistentDir);
         } catch (err) {
           process.stderr.write(
             `ggui serve: persistent render store unavailable — using in-memory `

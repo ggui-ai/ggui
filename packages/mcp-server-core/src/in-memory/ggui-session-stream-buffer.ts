@@ -9,9 +9,11 @@
  * to a shared ring with FIFO eviction when the per-session cap is hit.
  *
  * Not persistent. Server restart drops all buffered envelopes — this
- * is documented on the interface, not worked around. Adapters that
- * need durability ship as separate packages against the same
- * {@link GguiSessionStreamBuffer} interface.
+ * is documented on the interface, not worked around. The persistent
+ * implementation is `SqliteGguiSessionStreamBuffer`
+ * (`@ggui-ai/mcp-server-core/sqlite`, ggui#1534); any other runs the
+ * same conformance suite against the {@link GguiSessionStreamBuffer}
+ * interface.
  *
  * Epochs (ggui#1531): a session's bucket holds its counter and its stored
  * envelopes together, so a new bucket is a new counter over no data. Its

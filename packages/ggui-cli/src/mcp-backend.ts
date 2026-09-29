@@ -853,6 +853,8 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     ...(opts.publicBaseUrl ? { publicBaseUrl: opts.publicBaseUrl } : {}),
     ...(rateLimiter ? { rateLimiter } : {}),
     ...(storage.renderStore ? { renderStore: storage.renderStore } : {}),
+    // The live channel's buffer, persistent when the sessions are (ggui#1534).
+    ...(storage.streamBuffer ? { streamBuffer: storage.streamBuffer } : {}),
     // Always pass the materialized vectorStore so the install bridge
     // and the matcher share state. Passing only `storage.vectors`
     // (set when the manifest declares sqlite) would, on an absent

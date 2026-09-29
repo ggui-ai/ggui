@@ -33,6 +33,7 @@ import {
 } from '@ggui-ai/mcp-server';
 import type { UiManifest } from '@ggui-ai/project-config';
 import { z, type ZodRawShape } from 'zod';
+import { InMemoryGguiSessionStreamBuffer } from '@ggui-ai/mcp-server-core/in-memory';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
 import type { ServeBackend } from './serve-command.js';
 
@@ -802,6 +803,47 @@ describe('buildMcpServerBackend', () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  it('hands storage.streamBuffer to the live channel, so a subscribe reads the persistent buffer (ggui#1534)', async () => {
+    // A recording buffer stands in for the SQLite one: the pin is that the
+    // CLI passes the storage bundle's buffer through, not which kind it is.
+    const cursorReads: string[] = [];
+    class RecordingBuffer extends InMemoryGguiSessionStreamBuffer {
+      override async currentCursor(sessionId: string) {
+        cursorReads.push(sessionId);
+        return super.currentCursor(sessionId);
+      }
+    }
+    const port = await pickFreePort();
+    backend = buildMcpServerBackend({
+      cliVersion: 'test-0.0.0',
+      host: '127.0.0.1',
+      port,
+      devAllowAll: true,
+      storage: { streamBuffer: new RecordingBuffer() },
+    });
+    boundPort = await backend.listen(port, '127.0.0.1');
+    const sessionId = `sess-1534-${port}`;
+    // Node's WebSocket sends no headers; the channel reads a bearer from `?token=`.
+    const ws = new WebSocket(`ws://127.0.0.1:${boundPort}/ws?token=any-bearer`);
+    const answer = await new Promise<{ type?: unknown }>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('no subscribe answer')), 5000);
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify({ type: 'subscribe', payload: { sessionId }, requestId: 'r-1534' }));
+      });
+      ws.addEventListener('message', (ev) => {
+        const frame: unknown = JSON.parse(String(ev.data));
+        if (typeof frame === 'object' && frame !== null && 'type' in frame && (frame.type === 'ack' || frame.type === 'error')) {
+          clearTimeout(timer);
+          resolve(frame);
+        }
+      });
+      ws.addEventListener('error', () => reject(new Error('websocket error')));
+    });
+    ws.close();
+    expect(answer.type).toBe('ack');
+    expect(cursorReads).toContain(sessionId);
   });
 
   it('accepts an empty installedBlueprints entries array without wiring a provider (Slice 5 M1)', async () => {

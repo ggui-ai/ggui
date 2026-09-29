@@ -2309,9 +2309,13 @@ export interface CreateGguiServerOptions {
 
   /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
-   * to a fresh `InMemoryGguiSessionStreamBuffer` — fine for OSS zero-config
-   * / dev. Operators who need durability layer a different
-   * `GguiSessionStreamBuffer` implementation behind this seam.
+   * to a fresh `InMemoryGguiSessionStreamBuffer`, whose `seq` counters live
+   * in process memory. Over a render store that keeps sessions across a
+   * restart, pass `SqliteGguiSessionStreamBuffer`
+   * (`@ggui-ai/mcp-server-core/sqlite`) on the same database, so a session
+   * keeps its `seq` and epoch across the restart (ggui#1534);
+   * `resolveStorageFromConfig` and `ggui serve` do this whenever sessions
+   * are stored in SQLite.
    *
    * Only used when `renderChannel` is enabled. Ignored otherwise.
    */

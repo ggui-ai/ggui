@@ -5,6 +5,7 @@
  *
  * Scope:
  *   - {@link SqliteGguiSessionStore}   — persistent renders + event history.
+ *   - {@link SqliteGguiSessionStreamBuffer} — persistent live-channel stream seq, epoch + replay.
  *   - {@link SqliteVectorStore}   — persistent RAG vector index.
  *   - {@link SqliteThreadStore}   — persistent chat threads + messages.
  *
@@ -16,6 +17,10 @@
 
 export { SqliteGguiSessionStore } from './ggui-session-store.js';
 export type { SqliteGguiSessionStoreOptions } from './ggui-session-store.js';
+// ggui#1534 — the live channel's stream buffer, persistent: a session's seq,
+// epoch and retained envelopes survive a restart, beside the sessions themselves.
+export { SqliteGguiSessionStreamBuffer } from './ggui-session-stream-buffer.js';
+export type { SqliteGguiSessionStreamBufferOptions } from './ggui-session-stream-buffer.js';
 export { SqlitePendingEventConsumer } from './pending-event-consumer.js';
 export type { SqlitePendingEventConsumerOptions } from './pending-event-consumer.js';
 export { SqliteShortCodeIndex } from './short-code-index.js';

@@ -103,6 +103,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
 
     // Clean up the opened handles so the tmpdir rm at afterAll succeeds.
     closeIfPossible(result.renderStore);
+    closeIfPossible(result.streamBuffer);
     closeIfPossible(result.vectors);
   });
 
@@ -117,6 +118,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
     expect(result.renderStore).toBeDefined();
     expect(result.vectors).toBeUndefined();
     closeIfPossible(result.renderStore);
+    closeIfPossible(result.streamBuffer);
 
     const path2 = join(tmpRoot, 'vectors-only');
     const result2 = await resolveStorageFromConfig({
@@ -128,6 +130,41 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
     expect(result2.renderStore).toBeUndefined();
     expect(result2.vectors).toBeDefined();
     closeIfPossible(result2.vectors);
+  });
+
+  it("a sqlite renders surface also gets a sqlite stream buffer on the same file, so a session's seq survives a restart (ggui#1534)", async () => {
+    const rendersPath = join(tmpRoot, 'stream-buffer', 'ggui-sessions.sqlite');
+    const spec = { feed: { schema: { type: 'object' as const }, replay: 'all' as const } };
+    const envelope = (n: number) => ({ sessionId: 's-1', channel: 'feed', mode: 'append' as const, payload: { n } });
+
+    const first = await resolveStorageFromConfig({ renders: { driver: 'sqlite', path: rendersPath } });
+    expect(first.streamBuffer).toBeDefined();
+    const before = (await first.streamBuffer?.record(envelope(1), spec))?.envelope;
+    closeIfPossible(first.streamBuffer);
+    closeIfPossible(first.renderStore);
+
+    // The buffer's data is in the declared renders file itself.
+    const { SqliteGguiSessionStreamBuffer } = await import('@ggui-ai/mcp-server-core/sqlite');
+    const onRendersFile = new SqliteGguiSessionStreamBuffer({ filename: rendersPath });
+    expect(await onRendersFile.currentCursor('s-1')).toEqual({ seq: 1, epoch: before?.streamEpoch });
+    onRendersFile.close();
+
+    // A restart: the same declaration resolved again.
+    const second = await resolveStorageFromConfig({ renders: { driver: 'sqlite', path: rendersPath } });
+    const after = (await second.streamBuffer?.record(envelope(2), spec))?.envelope;
+    expect(after?.seq).toBe(2);
+    expect(after?.streamEpoch).toBe(before?.streamEpoch);
+    expect((await second.streamBuffer?.replay('s-1', 0, spec))?.envelopes.map((e) => e.seq)).toEqual([1, 2]);
+    closeIfPossible(second.streamBuffer);
+    closeIfPossible(second.renderStore);
+
+    // No sqlite renders surface, no stream buffer: the server keeps its in-memory default.
+    expect((await resolveStorageFromConfig({ renders: { driver: 'memory' } })).streamBuffer).toBeUndefined();
+    const vectorsOnly = await resolveStorageFromConfig({
+      vectors: { driver: 'sqlite', path: join(tmpRoot, 'stream-buffer', 'ggui-vectors.sqlite') },
+    });
+    expect(vectorsOnly.streamBuffer).toBeUndefined();
+    closeIfPossible(vectorsOnly.vectors);
   });
 
   it('honors mixed drivers — sqlite for one surface, memory for the other', async () => {
@@ -205,6 +242,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     );
     expect(result.renderStore).toBeDefined();
     closeIfPossible(result.renderStore);
+    closeIfPossible(result.streamBuffer);
   });
 
   it('passes absolute paths through unchanged', async () => {
@@ -222,6 +260,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     // resolver and writing + reading through both.
     expect(result.renderStore).toBeDefined();
     closeIfPossible(result.renderStore);
+    closeIfPossible(result.streamBuffer);
   });
 
   it('passes :memory: through as a power-user escape hatch', async () => {
@@ -234,6 +273,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     });
     expect(result.renderStore).toBeDefined();
     closeIfPossible(result.renderStore);
+    closeIfPossible(result.streamBuffer);
   });
 });
 
@@ -288,6 +328,7 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     // Don't bother actually booting a server here — the resolver's
     // output IS what we wire. Just close the handles.
     closeIfPossible(round1.renderStore);
+    closeIfPossible(round1.streamBuffer);
     closeIfPossible(round1.vectors);
 
     // Round 2 — re-resolve against the SAME config → we must see the
@@ -316,6 +357,8 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     await server.close();
 
     closeIfPossible(round2.renderStore);
+
+    closeIfPossible(round2.streamBuffer);
     closeIfPossible(round2.vectors);
   });
 });
