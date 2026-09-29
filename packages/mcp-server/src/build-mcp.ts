@@ -452,12 +452,17 @@ export function buildMcpServer(
   logger: Logger,
   opts: BuildMcpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({
-    name: info.name,
-    version: info.version,
-    ...(info.description ? { description: info.description } : {}),
-    ...(opts.instructions ? { instructions: opts.instructions } : {}),
-  });
+  // `instructions` is a ServerOptions field (the SECOND argument): the
+  // SDK sends it in the `initialize` result. In the first argument (the
+  // Implementation) it was dropped, and no host ever received it (ggui#1579).
+  const server = new McpServer(
+    {
+      name: info.name,
+      version: info.version,
+      ...(info.description ? { description: info.description } : {}),
+    },
+    opts.instructions ? { instructions: opts.instructions } : undefined,
+  );
 
   // Content-addressed shell URI (stale-shell bust) — when MCP Apps
   // outbound wiring registers the shell, declarations advertising the

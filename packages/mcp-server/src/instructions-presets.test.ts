@@ -8,13 +8,12 @@ import {
 } from './instructions-presets.js';
 
 describe('resolveMcpInstructions', () => {
-  it('returns the DEFAULT preset when called with undefined (no-preset fallback)', () => {
-    // Presets explain protocol mechanics now (vs nudging tool-use),
-    // so the previous "aggressive as no-preset default" rationale no
-    // longer applies — `'default'` is the appropriate baseline.
-    expect(resolveMcpInstructions(undefined)).toBe(
-      MCP_INSTRUCTIONS_PRESETS.default,
-    );
+  it('sends nothing when unset: the no-flag default is off (ggui#1579)', () => {
+    // Until ggui#1579 no server's instructions reached a host (they rode the
+    // wrong SDK argument), so the behaviour every host knows is "none". The
+    // fix keeps that for an operator who set nothing; a preset is opt-in.
+    expect(resolveMcpInstructions(undefined)).toBeUndefined();
+    expect(resolveMcpInstructions(undefined)).toBe(resolveMcpInstructions('off'));
   });
 
   it('returns the named preset string for each enum value', () => {

@@ -352,8 +352,8 @@ export interface BuildMcpServerBackendOptions {
   /**
    * Server-level MCP instructions preset. Threaded straight through
    * to `createGguiServer({mcpInstructions})`. Falls back to the
-   * `GGUI_MCP_INSTRUCTIONS` env var when absent. Both absent =
-   * `createGguiServer`'s no-preset default (`'aggressive'`).
+   * `GGUI_MCP_INSTRUCTIONS` env var when absent. Both absent = no
+   * instructions are sent (`createGguiServer`'s default is `'off'`).
    *
    * Surface = `--mcp-instructions <preset>` CLI flag or
    * `GGUI_MCP_INSTRUCTIONS` env var (CLI flag wins).
@@ -658,7 +658,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     opts.withholdResultMeta === true || (opts.withholdResultMeta === undefined && (envWithhold === "1" || envWithhold === "true"));
   // Resolve mcpInstructions: CLI flag wins over env var. Validated
   // env-var values pass through to createGguiServer; invalid values
-  // fall through to the no-preset default with a one-line warning.
+  // fall through to the default (no instructions) with a one-line warning.
   const envInstructions = process.env.GGUI_MCP_INSTRUCTIONS?.trim();
   let resolvedMcpInstructions: "default" | "aggressive" | "always" | "minimal" | "off" | undefined =
     opts.mcpInstructions;
@@ -674,7 +674,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     } else {
       // eslint-disable-next-line no-console -- one-shot boot warning
       console.warn(
-        `[ggui-cli] GGUI_MCP_INSTRUCTIONS='${envInstructions}' not recognized; falling back to default preset.`
+        `[ggui-cli] GGUI_MCP_INSTRUCTIONS='${envInstructions}' not recognized; sending no instructions (the default).`
       );
     }
   }

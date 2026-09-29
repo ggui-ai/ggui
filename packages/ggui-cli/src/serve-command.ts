@@ -163,10 +163,10 @@ export interface ParsedServeFlags {
    * advisory level for tool-use posture:
    *
    *   - `default`    — gentle "ggui first when UI fits, prose otherwise"
-   *   - `aggressive` — render anything with structure (no-preset default)
+   *   - `aggressive` — render anything with structure
    *   - `always`     — every response renders via ggui_render
    *   - `minimal`    — server identity only, no behavioral nudge
-   *   - `off`        — omit the field entirely
+   *   - `off`        — omit the field entirely (also what an unset flag does)
    *
    * Surface = `--mcp-instructions <preset>` or
    * `GGUI_MCP_INSTRUCTIONS=<preset>` env var (CLI flag wins).

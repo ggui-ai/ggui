@@ -86,6 +86,33 @@ function recordRegistrations(): { names: string[] } {
   return { names: captured };
 }
 
+describe('buildMcpServer — server instructions reach initialize (ggui#1579)', () => {
+  // The SDK takes `instructions` in the SECOND constructor argument
+  // (ServerOptions). Spread into the first (the Implementation), it is
+  // dropped, and a host's initialize result carries no instructions.
+  const info = { name: 'test', version: '0.0.1' };
+  async function instructionsSeen(instructions?: string): Promise<string | undefined> {
+    const server = buildMcpServer(info, [], () => baseCtx, silentLogger, instructions !== undefined ? { instructions } : {});
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'instructions-test', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      return client.getInstructions();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  }
+
+  it('the initialize result carries the configured instructions', async () => {
+    expect(await instructionsSeen('Render UI with ggui_render.')).toBe('Render UI with ggui_render.');
+  });
+
+  it('without instructions, initialize carries none', async () => {
+    expect(await instructionsSeen()).toBeUndefined();
+  });
+});
+
 describe('buildMcpServer — allowedKinds filter', () => {
   const info = { name: 'test', version: '0.0.1' };
 

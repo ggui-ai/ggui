@@ -212,7 +212,7 @@ export type McpInstructionsPreset = keyof typeof MCP_INSTRUCTIONS_PRESETS;
  *
  *   - One of the preset names: `'default' | 'aggressive' | 'always' | 'minimal' | 'off'`.
  *   - An arbitrary string — used verbatim as the `instructions` field.
- *   - `undefined` — falls through to the no-preset default (`'default'`).
+ *   - `undefined` — nothing is sent: the no-flag default is `'off'` (ggui#1579).
  *
  * @public
  */
@@ -223,21 +223,19 @@ export type McpInstructionsValue = McpInstructionsPreset | string;
  * server should send. Returns `undefined` when the result is empty
  * (the constructor should omit the field).
  *
- * **No-preset default = `'default'`.** All behavior-text presets
- * explain the protocol now (vs nudging tool-use), so the previous
- * "aggressive as no-preset default" rationale no longer applies —
- * `'default'` is the appropriate baseline. Operators who want fuller
- * protocol detail opt into `'aggressive'` or `'always'`. To turn
- * instructions off entirely, pass `'off'`.
+ * **No-flag default = `'off'`: nothing is sent.** Until ggui#1579 no
+ * server's instructions reached a host (they were passed where the MCP
+ * SDK does not read them), so "none" is the behaviour every host knows.
+ * The fix keeps it for an operator who sets nothing: a preset or a
+ * custom string is opt-in, and is then delivered in the `initialize`
+ * result.
  *
  * @public
  */
 export function resolveMcpInstructions(
   value: McpInstructionsValue | undefined,
 ): string | undefined {
-  if (value === undefined) {
-    return MCP_INSTRUCTIONS_PRESETS.default;
-  }
+  if (value === undefined) return undefined;
   if (value in MCP_INSTRUCTIONS_PRESETS) {
     const resolved =
       MCP_INSTRUCTIONS_PRESETS[value as McpInstructionsPreset];

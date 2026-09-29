@@ -5020,10 +5020,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // pass a stable `csrfSecret` so tokens survive a restart.
   app.use(createSecurityHeadersMiddleware());
   // Resolved once at boot — every per-request `buildMcpServer` call
-  // receives the same string, so `tools/list` + `initialize` stay
-  // consistent across the lifetime of the process. Operators tune
-  // via `mcpInstructions: 'default' | 'aggressive' | 'minimal' | 'off'`
-  // or a custom string. See `instructions-presets.ts` for full copy.
+  // receives the same string, so every `initialize` result carries the
+  // same instructions for the life of the process. Operators opt in via
+  // `mcpInstructions: 'default' | 'aggressive' | 'always' | 'minimal'` or
+  // a custom string; unset or `'off'` sends none (ggui#1579). The boot
+  // line says what is SENT, so it can never again name text no host got.
+  // See `instructions-presets.ts` for the copy.
   const resolvedInstructions = resolveMcpInstructions(opts.mcpInstructions);
   if (resolvedInstructions) {
     logger.info("mcp_instructions_set", {
@@ -5035,14 +5037,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           opts.mcpInstructions === "minimal" ||
           opts.mcpInstructions === "off")
           ? opts.mcpInstructions
-          : opts.mcpInstructions === undefined
-            ? "default (no-preset fallback)"
-            : "custom",
+          : "custom",
       length: resolvedInstructions.length,
+      sentInInitialize: true,
     });
   } else {
     logger.info("mcp_instructions_off", {
-      reason: opts.mcpInstructions === "off" ? "preset=off" : "empty custom string",
+      reason:
+        opts.mcpInstructions === undefined
+          ? "unset (the default is off)"
+          : opts.mcpInstructions === "off"
+            ? "preset=off"
+            : "empty custom string",
+      sentInInitialize: false,
     });
   }
   const csrfSecret =
