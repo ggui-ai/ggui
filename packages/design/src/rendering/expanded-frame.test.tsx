@@ -9,6 +9,7 @@
  * - The frame's INSET is guuey's `panelGap` default, 16 px — a cross-fleet constant.
  * - The fill rule gives the fill surface that inset, makes a first-level surface concentric with
  *   the panel's corner, and lets a bleeding element take the inset back. Only under `fit: 'fill'`.
+ *   A bleed moves the element's ground to the panel's edge, never its content (ggui#1556).
  * - What bleeds (the founder's pick (B)): an element that declares `bleed`, and a `surface="hero"`
  *   band that OPENS the card, so a card served before `bleed` existed keeps its band edge to edge.
  * - Card and Box mark themselves (`data-ggui-surface`, `data-ggui-bleed`) so the rule can see them.
@@ -83,10 +84,36 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
       `> [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     );
     expect(rule).toContain(
-      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -16px !important; margin-right: -16px !important; border-radius: 0 !important; }`,
+      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -16px !important; margin-right: -16px !important; border-left: 16px solid transparent !important; border-right: 16px solid transparent !important; background-origin: border-box !important; border-radius: 0 !important; }`,
     );
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -16px !important; }`);
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -16px !important; }`);
+  });
+
+  // ggui#1556 — a bleed moved the band's content out with its ground: an opening hero band's
+  // heading sat at x 16 while the body and chips beside it kept the inset (x 32), on every
+  // pane-width canvas. The ground still meets the edge; the content gets the inset back.
+  it('a bleed moves the ground, never the content: on each inline side the transparent border hands back exactly the inset the margin takes', () => {
+    const line = rule.split('\n').find((l) => l.includes(`> :is(${EXPANDED_FRAME_BLEEDS}) {`));
+    expect(line).toBeDefined();
+    const decl = (prop: string): string | undefined =>
+      new RegExp(`(?:^|[{;]\\s*)${prop}: ([^;!]+) !important`).exec(line ?? '')?.[1]?.trim();
+    for (const side of ['left', 'right'] as const) {
+      const margin = decl(`margin-${side}`);
+      const border = decl(`border-${side}`);
+      expect(margin).toBe(`-${EXPANDED_FRAME.insetPx}px`);
+      expect(border).toBe(`${EXPANDED_FRAME.insetPx}px solid transparent`);
+    }
+    // The block axis is unchanged: no edge is shared there, and a served band keeps its rhythm.
+    expect(line).not.toMatch(/border-(top|bottom):/);
+  });
+
+  // A band's ground is often a gradient, set inline (`style={{ background: 'linear-gradient(…)' }}`): the
+  // shorthand resets `background-origin` to the padding box, so without an !important origin the image is
+  // positioned inside the strips and repeats into them, a hard seam `inset` px wide at both edges.
+  it('a gradient or image ground spans the whole band, strips included: its origin is the border box, and it beats an inline shorthand', () => {
+    const line = rule.split('\n').find((l) => l.includes(`> :is(${EXPANDED_FRAME_BLEEDS}) {`));
+    expect(line).toContain('background-origin: border-box !important');
   });
 
   it('an inline (non-fill) composition carries none of it', () => {

@@ -470,6 +470,16 @@ export function fillFitRule(scopeClass: string): string {
     // says so (`bleed`), or when it is a hero band that OPENS the card (`EXPANDED_FRAME_BLEEDS`):
     // the founder's pick (B), so the cards already served, which open on a hero band and cannot
     // learn a new prop, keep that band edge to edge.
+    // ggui#1556 — a bleed moves the band's GROUND, never its content: the inset the margin takes
+    // back along the inline axis is handed to the content as a transparent border of the same
+    // width, which the band's own ground paints under (`background-clip` defaults to the border
+    // box). So every content x in the frame is the chat card's plus the inset, whatever padding
+    // the card set: a heading in an opening band keeps the edge of the body and chips beside it
+    // (without it, heading at 16 and chips at 32 on a pane-width canvas). A gradient or image ground
+    // is POSITIONED in the padding box by default and repeats, so it would tile a seam into the two
+    // strips; `background-origin: border-box` positions it over the whole element, which is exactly
+    // the box it painted before the border existed. The block axis is left as it was: no edge is
+    // shared there.
     ...fillSurfaces(s).map((f) => `${f} { padding: ${inset} !important; }`),
     ...fillSurfaces(s).map(
       (f) =>
@@ -477,7 +487,7 @@ export function fillFitRule(scopeClass: string): string {
     ),
     ...fillSurfaces(s).map(
       (f) =>
-        `${f} > :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -${inset} !important; margin-right: -${inset} !important; border-radius: 0 !important; }`,
+        `${f} > :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -${inset} !important; margin-right: -${inset} !important; border-left: ${inset} solid transparent !important; border-right: ${inset} solid transparent !important; background-origin: border-box !important; border-radius: 0 !important; }`,
     ),
     ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -${inset} !important; }`),
     ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -${inset} !important; }`),
