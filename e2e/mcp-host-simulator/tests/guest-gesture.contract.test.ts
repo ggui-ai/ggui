@@ -34,8 +34,9 @@
  * {submit-action,consume}.ts`):
  *
  *   - dispatch onto a sessionId whose pipe never opened →
- *     `{ok:false, code:'PIPE_NOT_FOUND', message}` (iframe-runtime
- *     falls through to the `ui/message` chat-shortcut);
+ *     `{ok:false, code:'PIPE_NOT_FOUND', message}` (the iframe-runtime
+ *     shows the user an error toast; no `ui/message` fires, SPEC §4.7
+ *     "Failure-soft client posture");
  *   - dispatch with no in-flight `ggui_consume` long-poll →
  *     `{ok:true, consumerPresent:false}` AND the gesture HELD on the
  *     pipe (queued-doorbell semantics: the iframe rings the
@@ -282,8 +283,8 @@ describe('guest-gesture transcript (Layer-B, ggui-authored)', () => {
 
     // A real render supplies a well-formed bootstrap; the ghost meta
     // retargets the gesture at a sessionId that never rendered — the
-    // closed/never-opened-pipe arm the iframe-runtime branches on to
-    // fall through to `ui/message`.
+    // closed/never-opened-pipe arm, on which the iframe-runtime shows the
+    // user an error toast and fires no `ui/message` (SPEC §4.7).
     const bootstrap = await openGuestSession(host);
     const ghostMeta: McpAppAiGguiRenderMeta = {
       ...bootstrap,
