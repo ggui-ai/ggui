@@ -151,6 +151,54 @@ describe('stream cursor: the stream epoch (ggui#1531)', () => {
   });
 });
 
+// ggui#1531 — never move back to an epoch the view has left. A late frame of
+// the old generation (a cross-replica frame published just before the
+// restart) would otherwise move the cursor back with nothing applied, and the
+// next frame of the new generation would move it forward again with an empty
+// floor, so an at-least-once duplicate within the new generation would pass.
+// The server keeps the same rule (stream-epoch.ts, RETIRED_EPOCHS_KEPT).
+describe('stream cursor: an epoch the view has left (ggui#1531)', () => {
+  it('drops a late frame of a left epoch and moves nothing, so a duplicate in the current epoch still drops', () => {
+    const t = createStreamSeqTracker();
+    t.admit(9, 'A');
+    expect(t.admit(1, 'B')).toBe(true);
+    expect(t.admit(2, 'B')).toBe(true);
+    expect(t.admit(10, 'A')).toBe(false);
+    expect(t.epoch()).toBe('B');
+    expect(t.last()).toBe(2);
+    expect(t.admit(2, 'B')).toBe(false);
+  });
+
+  it('ignores an ack naming a left epoch entirely: no reset, and no seq fallback', () => {
+    const t = createStreamSeqTracker();
+    t.admit(9, 'A');
+    expect(t.observeAck(0, 'B')).toBe(true);
+    t.admit(3, 'B');
+    expect(t.observeAck(20, 'A')).toBe(false);
+    expect(t.observeAck(1, 'A')).toBe(false);
+    expect(t.epoch()).toBe('B');
+    expect(t.last()).toBe(3);
+  });
+
+  it('remembers the last four epochs it left, as the server does, and no more', () => {
+    const t = createStreamSeqTracker();
+    for (const epoch of ['A', 'B', 'C', 'D', 'E', 'F']) t.admit(1, epoch);
+    for (const left of ['B', 'C', 'D', 'E']) expect(t.admit(5, left), left).toBe(false);
+    expect(t.epoch()).toBe('F');
+    // The fifth epoch back is forgotten: its frame reads as a new generation.
+    expect(t.admit(5, 'A')).toBe(true);
+    expect(t.epoch()).toBe('A');
+  });
+
+  it('an unstamped frame still always passes', () => {
+    const t = createStreamSeqTracker();
+    t.admit(9, 'A');
+    t.admit(1, 'B');
+    expect(t.admit(undefined, 'A')).toBe(true);
+    expect(t.epoch()).toBe('B');
+  });
+});
+
 describe('data handler: the envelope epoch reaches the tracker (ggui#1531)', () => {
   it('an envelope from a new epoch is applied although its seq is below the cursor', () => {
     const { h, emit, streamSeq } = handler();

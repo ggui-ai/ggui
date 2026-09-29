@@ -24,6 +24,14 @@
  * missing epoch (a server, or an envelope, from before epochs) is
  * unknown, never a mismatch: the `seq` rule alone decides, and a first
  * epoch after unknown history is adopted without a reset.
+ *
+ * The cursor never moves back to an epoch it has left: it remembers the
+ * last {@link LEFT_EPOCHS_KEPT}, and drops their frames and ignores their
+ * acks. Otherwise a late frame of the old generation (a cross-replica frame
+ * published just before the restart) would move it back with nothing
+ * applied, and the next frame of the new one would move it forward again
+ * with an empty floor, letting a duplicate through. The server keeps the
+ * same rule (SPEC §12.2.1 invariant 4).
  */
 export interface StreamSeqTracker {
   /**
@@ -44,21 +52,31 @@ export interface StreamSeqTracker {
   observeAck(streamSeq: number | undefined, streamEpoch: string | undefined): boolean;
 }
 
+/** How many epochs the cursor remembers having left; the server keeps as many. */
+export const LEFT_EPOCHS_KEPT = 4;
+
 export function createStreamSeqTracker(): StreamSeqTracker {
   let highest: number | undefined;
   let current: string | undefined;
+  let left: string[] = [];
+  const hasLeft = (epoch: string | undefined): boolean => epoch !== undefined && left.includes(epoch);
   /** Adopt `epoch`; a different known epoch resets the cursor. Returns whether it reset. */
   const meetEpoch = (epoch: string | undefined): boolean => {
     if (epoch === undefined) return false;
-    const changed = current !== undefined && epoch !== current;
+    const from = current;
+    const changed = from !== undefined && epoch !== from;
     current = epoch;
-    if (changed) highest = undefined;
+    if (changed) {
+      left = [...left, from].slice(-LEFT_EPOCHS_KEPT);
+      highest = undefined;
+    }
     return changed;
   };
   return {
     admit(seq, epoch) {
-      meetEpoch(epoch);
       if (seq === undefined) return true;
+      if (hasLeft(epoch)) return false;
+      meetEpoch(epoch);
       if (highest !== undefined && seq <= highest) return false;
       highest = seq;
       return true;
@@ -66,6 +84,7 @@ export function createStreamSeqTracker(): StreamSeqTracker {
     last: () => highest,
     epoch: () => current,
     observeAck(streamSeq, streamEpoch) {
+      if (hasLeft(streamEpoch)) return false;
       if (meetEpoch(streamEpoch)) return true;
       if (streamSeq === undefined || highest === undefined || streamSeq >= highest) return false;
       highest = undefined;
