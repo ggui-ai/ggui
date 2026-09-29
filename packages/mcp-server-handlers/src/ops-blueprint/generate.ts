@@ -89,7 +89,6 @@ const opsInputSchema = opsGenerateBlueprintInputSchema.shape;
 const opsOutputSchema = z.object({
   blueprintId: z.string().min(1),
   codeHash: z.string().optional(),
-  validatorScore: z.number().min(0).max(1).optional(),
   source: z
     .object({
       kind: z.literal("llm"),
@@ -213,23 +212,6 @@ export interface GguiOpsGenerateBlueprintDeps {
    * fails closed with `CrossAppCurationUnavailableError`.
    */
   readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
-}
-
-/**
- * Read the optional `validatorScore` carried on
- * {@link GenerationMetadata} by the advanced generator, which does
- * not yet have an explicit field on the canonical interface. Until
- * that lands the score arrives as a structural pass-through on
- * `metadata` — the read is type-guarded here so the cast is
- * confined to one place and the call sites stay clean.
- */
-function readValidatorScore(metadata: unknown): number | undefined {
-  if (!metadata || typeof metadata !== "object") return undefined;
-  const candidate = (metadata as { validatorScore?: unknown }).validatorScore;
-  if (typeof candidate !== "number") return undefined;
-  if (!Number.isFinite(candidate)) return undefined;
-  if (candidate < 0 || candidate > 1) return undefined;
-  return candidate;
 }
 
 /**
@@ -418,13 +400,6 @@ export function createGguiOpsGenerateBlueprintHandler(
       // conforming code store.
       const codeHash = createHash("sha256").update(componentCode).digest("hex");
 
-      // The advanced generator tunnels `validatorScore` through
-      // `metadata` until the UiGenerator interface widens to carry
-      // it explicitly. Read it via the typed helper so the default
-      // generator (which never sets it) and the advanced generator
-      // (which does) both round-trip cleanly.
-      const validatorScore = readValidatorScore(result.metadata);
-
       // Engine-GENERATED code: provenance is the llm arm, stamped from
       // the engine's own metadata claim — the SAME values the cache-
       // registry mirror below records, so the two stores can never
@@ -457,7 +432,6 @@ export function createGguiOpsGenerateBlueprintHandler(
         createdAt: now(),
         createdBy: "operator",
         contract,
-        ...(validatorScore !== undefined ? { validatorScore } : {}),
         ...(build !== undefined ? { build } : {}),
       };
 
@@ -566,7 +540,6 @@ export function createGguiOpsGenerateBlueprintHandler(
         blueprintId,
         codeHash,
         source,
-        ...(validatorScore !== undefined ? { validatorScore } : {}),
       };
       return output;
     },

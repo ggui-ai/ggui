@@ -132,14 +132,6 @@ export const opsGenerateBlueprintOutputSchema = z
       .describe(
         'Content hash of the generated code body. Absent when the generator returned a non-`ok` result and persistence skipped — the failure mode is surfaced through generator-level error reporting elsewhere.',
       ),
-    validatorScore: z
-      .number()
-      .min(0)
-      .max(1)
-      .optional()
-      .describe(
-        "Advanced generator's iterative-loop validator score (0-1). Absent for default-generator output.",
-      ),
     source: llmBlueprintSourceSchema.describe(
       'Provenance stamped on the persisted `Blueprint.source` — always the `llm` arm on this path: `generator` is the engine slug the dispatch resolved to (stamped from the engine\'s own metadata claim); `model` is the LLM model id the engine called.',
     ),
@@ -168,9 +160,6 @@ export const opsGenerateBlueprintOutputSchema = z
  * `source: {kind: 'user'}` on the persisted Blueprint (operator-
  * supplied bytes carry no engine claim, and fabricating one is
  * banned), so the input carries no provenance field at all.
- * `validatorScore` is never populated (no validator ran); operators
- * wanting validator metadata should round-trip through `*_generate_*`
- * instead.
  */
 export const opsRegisterBlueprintInputSchema = z
   .object({
@@ -260,9 +249,9 @@ export const opsRegisterBlueprintInputSchema = z
   .strict();
 
 /**
- * `ggui_ops_register_blueprint` output. Same shape as
- * `*_generate_*` minus `validatorScore` (no validator runs on the
- * register path).
+ * `ggui_ops_register_blueprint` output. The same fields as
+ * `*_generate_*` (`blueprintId`, `codeHash`, `source`); `source` is the
+ * `user` arm here, and `codeHash` is always present.
  */
 export const opsRegisterBlueprintOutputSchema = z
   .object({

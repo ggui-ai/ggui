@@ -13,6 +13,7 @@ import {
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { Blueprint, DataContract, GeneratorBuild, UIGenerationResponse } from "@ggui-ai/protocol";
 import type { GeneratorId } from '@ggui-ai/protocol';
+import { opsGenerateBlueprintOutputSchema } from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   InMemoryBlueprintIndex,
@@ -43,7 +44,6 @@ function makeMockGenerator(
   opts: {
     slug?: GeneratorId;
     componentCode?: string;
-    validatorScore?: number;
     /** ggui#1280 — the build the engine reports (`metadata.build`). */
     build?: GeneratorBuild;
     fail?: boolean;
@@ -80,7 +80,6 @@ function makeMockGenerator(
         outputTokens: 200,
         latencyMs: 50,
         cacheHit: false,
-        ...(opts.validatorScore !== undefined ? { validatorScore: opts.validatorScore } : {}),
         ...(opts.build !== undefined ? { build: opts.build } : {}),
       };
       return { ok: true, response, metadata };
@@ -183,7 +182,6 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const advancedGen = makeMockGenerator({
       slug: "ui-gen-advanced",
       componentCode: "export default function Bar() { return null; }",
-      validatorScore: 0.92,
     });
     const registry = createInMemoryGeneratorRegistry({
       default: makeMockGenerator(),
@@ -203,7 +201,20 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
       generator: "ui-gen-advanced",
       model: "anthropic/claude-haiku-4-5",
     });
-    expect(result.validatorScore).toBe(0.92);
+  });
+
+  it("declares and returns no validatorScore: no generator produces one (ggui#1579)", async () => {
+    // The field rode an undeclared cast off the generator's metadata that no
+    // UiGenerator ever set, so it was never populated. Both output schemas
+    // (the published one and the handler's registered one) drop it.
+    expect(Object.keys(opsGenerateBlueprintOutputSchema.shape)).not.toContain("validatorScore");
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    expect(Object.keys(handler.outputSchema ?? {})).not.toContain("validatorScore");
+    const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+    expect(result).not.toHaveProperty("validatorScore");
+    const persisted = await deps.blueprintStore.get(result.blueprintId);
+    expect(persisted).not.toHaveProperty("validatorScore");
   });
 
   it('persists the blueprint with createdBy="operator"', async () => {
