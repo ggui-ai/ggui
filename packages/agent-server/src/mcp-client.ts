@@ -554,3 +554,105 @@ export async function listModelVisibleTools(server: {
   const tools = await callMcpToolsList(server);
   return new Set(tools.filter((tool) => toolVisibleToModel(tool.visibility)).map((tool) => tool.name));
 }
+
+/**
+ * Where one tool stands for a view's call, as the relay last read it
+ * (ggui#1415). `listed` carries the tool's declared `_meta.ui.visibility`
+ * (absent: none declared, the spec default). `unlisted`: the server's list
+ * does not name it, so the server answers the call itself.
+ * `unavailable`: the relay has never seen the name and cannot read the list
+ * now, so it cannot tell whether the tool is model-only.
+ */
+export type ToolVisibilityLookup =
+  | { readonly kind: 'listed'; readonly visibility?: readonly McpAppsToolVisibility[] }
+  | { readonly kind: 'unlisted' }
+  | { readonly kind: 'unavailable'; readonly error: string };
+
+export interface ToolVisibilityCache {
+  lookup(serverKey: string, server: { readonly url: string; readonly bearer: string }, name: string): Promise<ToolVisibilityLookup>;
+}
+
+export interface ToolVisibilityCacheOptions {
+  /** Epoch milliseconds. Defaults to `Date.now`. */
+  readonly now?: () => number;
+  /** How long a read list is used before it is read again. Default 5 minutes. */
+  readonly ttlMs?: number;
+  /** The least time between reads prompted by a name the list does not have. Default 30 s. */
+  readonly refreshMinMs?: number;
+  /** Reads one server's tools. Defaults to {@link callMcpToolsList}. */
+  readonly listTools?: (server: { readonly url: string; readonly bearer: string }) => Promise<McpListedTool[]>;
+  /** Called when a list older than its TTL answers because a re-read failed. */
+  readonly onStale?: (info: { readonly server: string; readonly ageSec: number }) => void;
+}
+
+/**
+ * Each server's tool visibility, read from `tools/list` and kept for a TTL
+ * (ggui#1415), so a relay can refuse a view's call to a model-only tool
+ * without reading the list on every call.
+ *
+ * Stale-while-error: when a re-read fails, the last good list keeps
+ * answering, and `onStale` names its age, so a flaky catalog never costs
+ * the gesture path while a tool once seen as model-only stays refused. Only
+ * a name the relay has never seen, while the list cannot be read, is
+ * `unavailable`. A name the current list lacks prompts one re-read, at most
+ * every `refreshMinMs`, for a tool deployed since.
+ */
+export function createToolVisibilityCache(opts: ToolVisibilityCacheOptions = {}): ToolVisibilityCache {
+  const now = opts.now ?? Date.now;
+  const ttlMs = opts.ttlMs ?? 5 * 60_000;
+  const refreshMinMs = opts.refreshMinMs ?? 30_000;
+  const listTools = opts.listTools ?? callMcpToolsList;
+  interface Entry {
+    readonly tools: ReadonlyMap<string, readonly McpAppsToolVisibility[] | undefined>;
+    readonly readAt: number;
+  }
+  const entries = new Map<string, Entry>();
+  const inflight = new Map<string, Promise<Entry | string>>();
+
+  /** Read the list again: the new entry, or the read's error text. */
+  const reread = (serverKey: string, server: { readonly url: string; readonly bearer: string }): Promise<Entry | string> => {
+    const pending = inflight.get(serverKey);
+    if (pending !== undefined) return pending;
+    const read = listTools(server)
+      .then((tools): Entry => {
+        const entry: Entry = { tools: new Map(tools.map((t) => [t.name, t.visibility])), readAt: now() };
+        entries.set(serverKey, entry);
+        return entry;
+      })
+      .catch((err: unknown): string => (err instanceof Error ? err.message : String(err)))
+      .finally(() => inflight.delete(serverKey));
+    inflight.set(serverKey, read);
+    return read;
+  };
+
+  const answer = (entry: Entry, name: string): ToolVisibilityLookup | undefined => {
+    if (!entry.tools.has(name)) return undefined;
+    const visibility = entry.tools.get(name);
+    return visibility !== undefined ? { kind: 'listed', visibility } : { kind: 'listed' };
+  };
+
+  return {
+    async lookup(serverKey, server, name) {
+      let entry = entries.get(serverKey);
+      if (entry === undefined || now() - entry.readAt >= ttlMs) {
+        const read = await reread(serverKey, server);
+        if (typeof read !== 'string') {
+          entry = read;
+        } else if (entry === undefined) {
+          return { kind: 'unavailable', error: read };
+        } else {
+          const stale = answer(entry, name);
+          if (stale === undefined) return { kind: 'unavailable', error: read };
+          opts.onStale?.({ server: serverKey, ageSec: Math.round((now() - entry.readAt) / 1000) });
+          return stale;
+        }
+      }
+      const known = answer(entry, name);
+      if (known !== undefined) return known;
+      if (now() - entry.readAt < refreshMinMs) return { kind: 'unlisted' };
+      const read = await reread(serverKey, server);
+      if (typeof read === 'string') return { kind: 'unavailable', error: read };
+      return answer(read, name) ?? { kind: 'unlisted' };
+    },
+  };
+}

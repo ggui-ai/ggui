@@ -50,10 +50,12 @@
  */
 
 import {
+  MCP_APP_AI_GGUI_VIEW_META_KEY,
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
   MCP_APP_LIFECYCLE_TYPE,
   MCP_APP_OBSERVE_TYPE,
   toMcpAppEnvelope,
+  toolVisibleToApp,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
@@ -64,6 +66,7 @@ import {
 import type {
   McpAppIframeDimensions,
   McpAppIframeProps,
+  McpAppViewCallMeta,
 } from './types.js';
 
 export interface HostBridgeRequest {
@@ -91,7 +94,16 @@ export interface HostBridgeContext {
   readonly containerDimensions: McpAppIframeDimensions;
   readonly openLink: (url: string) => Promise<void> | void;
   readonly onToolCall?: McpAppIframeProps['onToolCall'];
+  readonly toolVisibility?: McpAppIframeProps['toolVisibility'];
   readonly onUpdateModelContext?: McpAppIframeProps['onUpdateModelContext'];
+}
+
+/** The view's proof from a request's `_meta` (ggui#1415): its `ai.ggui/view` string, else nothing. */
+function viewCallMetaOf(params: Record<string, unknown> | undefined): McpAppViewCallMeta | undefined {
+  const meta = params?.['_meta'];
+  if (meta === null || typeof meta !== 'object' || !(MCP_APP_AI_GGUI_VIEW_META_KEY in meta)) return undefined;
+  const proof = meta[MCP_APP_AI_GGUI_VIEW_META_KEY];
+  return typeof proof === 'string' ? { [MCP_APP_AI_GGUI_VIEW_META_KEY]: proof } : undefined;
 }
 
 function isJsonRpcRequest(value: unknown): value is HostBridgeRequest {
@@ -225,9 +237,20 @@ export async function dispatchHostBridgeRequest(
           error: { code: -32602, message: 'tools/call requires params.name' },
         };
       }
+      // SEP-1865: a view may call only a tool visible to apps. A tool the
+      // host says is model-only is unknown to the view (ggui#1415).
+      if (ctx.toolVisibility !== undefined && !toolVisibleToApp(ctx.toolVisibility(tool))) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32602, message: `Unknown tool: ${tool}` },
+        };
+      }
       const args = paramObject(req.params, 'arguments');
+      const meta = viewCallMetaOf(req.params);
       try {
-        const result: unknown = await ctx.onToolCall(tool, args);
+        const result: unknown =
+          meta !== undefined ? await ctx.onToolCall(tool, args, meta) : await ctx.onToolCall(tool, args);
         const wrapped: Record<string, unknown> =
           result !== null && typeof result === 'object' && !Array.isArray(result)
             ? (result as Record<string, unknown>)

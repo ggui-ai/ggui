@@ -590,6 +590,10 @@ function ResourceFrame({
             kind: 'tool-call',
             name: params.name,
             arguments: params.arguments ?? {},
+            // The view's request _meta, as received: the backend forwards
+            // its view proof and refuses calls to model-only tools, so this
+            // shell stays protocol-agnostic (ggui#1415).
+            ...(params._meta !== undefined ? { meta: params._meta } : {}),
           }),
         });
         if (!resp.ok) {

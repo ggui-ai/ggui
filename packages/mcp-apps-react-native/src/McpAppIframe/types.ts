@@ -24,9 +24,20 @@ import type {
   ProtocolError,
 } from '@ggui-ai/iframe-runtime';
 import type {
+  MCP_APP_AI_GGUI_VIEW_META_KEY,
   McpAppAiGguiRenderMeta,
   McpAppLifecycleEvent,
+  McpAppsToolVisibility,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+
+/**
+ * What a relay forwards from a view's request `_meta` with its call
+ * (ggui#1415): the view's proof, `ai.ggui/view`, and nothing else. A host
+ * passes it to its MCP client verbatim as the call's `_meta`.
+ */
+export interface McpAppViewCallMeta {
+  readonly [MCP_APP_AI_GGUI_VIEW_META_KEY]?: string;
+}
 
 /**
  * Container-dimensions hint forwarded verbatim to the iframe via
@@ -167,11 +178,29 @@ export interface McpAppIframeProps {
    * resolved value becomes the JSON-RPC `result`, rejections become
    * `-32000` errors. Absent handler = every `tools/call` is rejected
    * with an in-band `-32601` naming `tools/call` (was `no-tool-handler`; ggui#599 cycle-2).
+   *
+   * `meta` (ggui#1415) is present when the view sent a proof: forward it
+   * verbatim as the relayed call's `_meta`, so the server can tell a call
+   * its delivered view made from one anyone else made with the session's
+   * ids. It carries only the proof.
    */
   readonly onToolCall?: (
     toolName: string,
     args: Record<string, unknown>,
+    meta?: McpAppViewCallMeta,
   ) => Promise<unknown>;
+
+  /**
+   * The tool's declared `_meta.ui.visibility`, from the host's own
+   * `tools/list` (ggui#1415). When it returns a list without `'app'`, the
+   * view's call is answered as an unknown tool (`-32602`) and
+   * `onToolCall` is never called: SEP-1865 has a host reject a view's call
+   * to a tool not visible to apps, and `ggui_render` / `ggui_update` return
+   * a fresh render slice, view key included, for any session id named.
+   * `undefined` for a tool is the spec's default (callable). Absent: the
+   * helper refuses nothing and the host's handler decides.
+   */
+  readonly toolVisibility?: (toolName: string) => readonly McpAppsToolVisibility[] | undefined;
 
   /**
    * Surfaced on every ProtocolError the host classifies from the

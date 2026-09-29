@@ -384,6 +384,44 @@ describe("POST /agent { kind:'chat' }", () => {
   });
 });
 
+/**
+ * A fake MCP over `fetch` that answers by method: `tools/list` with the
+ * given tools (their visibility on `_meta.ui`), `tools/call` with a relayed
+ * result. Every request's method and params are recorded.
+ */
+function fakeMcp(
+  tools: ReadonlyArray<{ readonly name: string; readonly visibility?: ReadonlyArray<'model' | 'app'> }>,
+  opts: { readonly listFails?: boolean } = {},
+): {
+  fetchMock: ReturnType<typeof vi.fn>;
+  calls: Array<{ method: string; params: { name?: string; _meta?: Record<string, unknown> } }>;
+} {
+  const calls: Array<{ method: string; params: { name?: string; _meta?: Record<string, unknown> } }> = [];
+  const json = (body: object): Response =>
+    new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const req = JSON.parse(String(init.body)) as { id: number; method: string; params: { name?: string } };
+    calls.push({ method: req.method, params: req.params });
+    if (req.method === 'tools/list') {
+      if (opts.listFails === true) return json({ jsonrpc: '2.0', id: req.id, error: { code: -32603, message: 'catalog down' } });
+      return json({
+        jsonrpc: '2.0',
+        id: req.id,
+        result: {
+          tools: tools.map((t) => ({
+            name: t.name,
+            inputSchema: { type: 'object' },
+            ...(t.visibility !== undefined ? { _meta: { ui: { visibility: t.visibility } } } : {}),
+          })),
+        },
+      });
+    }
+    return json({ jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: 'relayed' }] } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, calls };
+}
+
 describe("POST /agent { kind:'tool-call' }", () => {
   it('returns 401 with no bearer', async () => {
     const { app } = buildApp();
@@ -412,17 +450,7 @@ describe("POST /agent { kind:'tool-call' }", () => {
   it('relays the tools/call to the MCP and returns the JSON-RPC result as JSON', async () => {
     const { app } = buildApp();
     const { guestToken } = await mintGuestBearer(app);
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          result: { content: [{ type: 'text', text: 'relayed' }] },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
-    vi.stubGlobal('fetch', fetchMock);
+    const { fetchMock, calls } = fakeMcp([{ name: 'ggui_runtime_submit_action', visibility: ['app'] }]);
     try {
       const res = await app.request('http://localhost/agent', {
         method: 'POST',
@@ -445,10 +473,12 @@ describe("POST /agent { kind:'tool-call' }", () => {
         result?: { content?: Array<{ text?: string }> };
       };
       expect(body.result?.content?.[0]?.text).toBe('relayed');
-      // The relay POSTed to the configured ggui MCP URL.
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('http://localhost:9999/mcp');
+      // The relay read the tool's visibility, then POSTed the call, both to
+      // the configured ggui MCP URL.
+      expect(calls.map((c) => c.method)).toEqual(['tools/list', 'tools/call']);
+      for (const [url] of fetchMock.mock.calls as Array<[string, RequestInit]>) {
+        expect(url).toBe('http://localhost:9999/mcp');
+      }
     } finally {
       vi.restoreAllMocks();
     }
@@ -793,5 +823,111 @@ describe('chat row materializes at allocation (ggui#405)', () => {
     const body = (await get.json()) as { chatId: string; messages: unknown[] };
     expect(body.chatId).toBe('chat_dies');
     expect(body.messages).toEqual([]);
+  });
+});
+
+// ggui#1415 landing item 7 — the relay carries a view's proof and refuses a
+// view's call to a model-only tool. `meta` is the view's request `_meta` as the
+// host received it; only `ai.ggui/view` is forwarded, as a string, verbatim.
+// A tool whose declared visibility lacks "app" (ggui_render, ggui_update: each
+// returns a fresh slice, view key included, for any session it names) is
+// answered as an unknown tool and never relayed.
+describe("POST /agent { kind:'tool-call' } — the view proof and the model-only refusal (ggui#1415)", () => {
+  const CATALOG = [
+    { name: 'ggui_update', visibility: ['model'] as const },
+    { name: 'ggui_runtime_submit_action', visibility: ['app'] as const },
+    { name: 'acme_search' },
+  ];
+  async function relay(
+    app: ReturnType<typeof createAgentApp>,
+    bearer: string,
+    body: Record<string, unknown>,
+  ): Promise<{ status: number; body: { result?: unknown; error?: { code?: number; message?: string } } }> {
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` },
+      body: JSON.stringify({ kind: 'tool-call', arguments: {}, ...body }),
+    });
+    return { status: res.status, body: (await res.json()) as { result?: unknown; error?: { code?: number; message?: string } } };
+  }
+
+  it('forwards only ai.ggui/view from the view\'s _meta, verbatim', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const { calls } = fakeMcp(CATALOG);
+    try {
+      const { status } = await relay(app, guestToken, {
+        name: 'ggui_runtime_submit_action',
+        meta: { 'ai.ggui/view': 'v1.proof-as-sent', progressToken: 7, other: 'x' },
+      });
+      expect(status).toBe(200);
+      const call = calls.find((c) => c.method === 'tools/call');
+      expect(call?.params._meta).toEqual({ 'ai.ggui/view': 'v1.proof-as-sent' });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('sends no _meta when the view sent no proof, or one that is not a string', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const { calls } = fakeMcp(CATALOG);
+    try {
+      await relay(app, guestToken, { name: 'ggui_runtime_submit_action' });
+      await relay(app, guestToken, { name: 'ggui_runtime_submit_action', meta: { 'ai.ggui/view': 42, progressToken: 1 } });
+      const sent = calls.filter((c) => c.method === 'tools/call');
+      expect(sent).toHaveLength(2);
+      for (const call of sent) expect(call.params).not.toHaveProperty('_meta');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('answers a view\'s call to a model-only tool as an unknown tool (-32602) and never relays it', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const { calls } = fakeMcp(CATALOG);
+    try {
+      const { status, body } = await relay(app, guestToken, { name: 'ggui_update', meta: { 'ai.ggui/view': 'v1.x' } });
+      expect(status).toBe(200);
+      expect(body.error).toEqual({ code: -32602, message: 'Unknown tool: ggui_update' });
+      expect(body.result).toBeUndefined();
+      expect(calls.map((c) => c.method)).toEqual(['tools/list']);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('relays an app-visible tool, a tool that declares no visibility, and one the list does not name', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const { calls } = fakeMcp(CATALOG);
+    try {
+      for (const name of ['ggui_runtime_submit_action', 'acme_search', 'not_in_the_list']) {
+        const { body } = await relay(app, guestToken, { name });
+        expect(body.error, name).toBeUndefined();
+      }
+      expect(calls.filter((c) => c.method === 'tools/call').map((c) => c.params.name)).toEqual([
+        'ggui_runtime_submit_action',
+        'acme_search',
+        'not_in_the_list',
+      ]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('refuses (-32603) and relays nothing when it has never read the list and cannot now', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const { calls } = fakeMcp(CATALOG, { listFails: true });
+    try {
+      const { status, body } = await relay(app, guestToken, { name: 'ggui_runtime_submit_action' });
+      expect(status).toBe(200);
+      expect(body.error).toEqual({ code: -32603, message: 'tool visibility unavailable' });
+      expect(calls.map((c) => c.method)).toEqual(['tools/list']);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

@@ -11,5 +11,6 @@ export type {
   McpAppIframeDimensions,
   McpAppIframePermissions,
   McpAppIframeProps,
+  McpAppViewCallMeta,
   McpAppIframeRef,
 } from './types.js';

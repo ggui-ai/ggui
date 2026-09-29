@@ -62,7 +62,8 @@ import {
   type AuthAdapter,
   type Principal,
 } from './auth.js';
-import { buildAgentCatalog, callMcpToolsCall } from './mcp-client.js';
+import { MCP_APP_AI_GGUI_VIEW_META_KEY, toolVisibleToApp } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { buildAgentCatalog, callMcpToolsCall, createToolVisibilityCache } from './mcp-client.js';
 import { declareToolCatalog } from './declare-tool-catalog.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import { mintChatId, type ChatStore } from './chat-store.js';
@@ -141,6 +142,11 @@ export function createAgentApp(
   const { adapter, chatStore, mcpServers, sandboxProxyUrl, auth } = deps;
   const crossFramework = deps.crossFramework ?? false;
   const log = deps.log ?? ((): void => {});
+  // Each MCP server's tool visibility (ggui#1415), so the relay refuses a
+  // view's call to a model-only tool without reading tools/list per call.
+  const toolVisibility = createToolVisibilityCache({
+    onStale: (info) => log(`[agent-server] relay_tool_visibility_stale ${JSON.stringify(info)}`),
+  });
 
   // Canonical agent-tool catalog, built ONCE from the live MCP
   // connection (`initialize` + `tools/list`) and memoized for the
@@ -350,20 +356,40 @@ export function createAgentApp(
       if (typeof body.name !== 'string' || body.name.length === 0) {
         return c.json({ error: 'name required' }, 400);
       }
-      const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
-      if (!primary) {
+      const primaryKey = mcpServers.ggui !== undefined ? 'ggui' : Object.keys(mcpServers)[0];
+      const primary = primaryKey !== undefined ? mcpServers[primaryKey] : undefined;
+      if (primaryKey === undefined || !primary) {
         return c.json({ error: 'no MCP server configured' }, 500);
       }
       try {
+        // The model-only refusal (ggui#1415, SEP-1865's tools/call rule): a
+        // view may call only a tool whose declared visibility includes
+        // "app". Any other tool is answered as unknown to the view and never
+        // relayed: ggui_render and ggui_update each return a fresh slice,
+        // view key included, for any session id the caller names.
+        const seen = await toolVisibility.lookup(primaryKey, primary, body.name);
+        if (seen.kind === 'unavailable') {
+          log(`[agent-server] relay_refused ${JSON.stringify({ tool: body.name, reason: 'visibility_unavailable', error: seen.error })}`);
+          return c.json({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'tool visibility unavailable' } }, 200);
+        }
+        if (seen.kind === 'listed' && !toolVisibleToApp(seen.visibility)) {
+          log(`[agent-server] relay_refused ${JSON.stringify({ tool: body.name, reason: 'model_only' })}`);
+          return c.json({ jsonrpc: '2.0', id: null, error: { code: -32602, message: `Unknown tool: ${body.name}` } }, 200);
+        }
         const args =
           body.arguments && typeof body.arguments === 'object'
             ? body.arguments
             : {};
+        // The view's proof (ggui#1415) rides the relayed call verbatim, and
+        // it is the only key of the view's _meta that does: this relay's
+        // tools/call is its own request, so the view's progressToken is not.
+        const proof = viewProofOf(body.meta);
         const rpc = await callMcpToolsCall({
           url: primary.url,
           bearer: primary.bearer,
           name: body.name,
           arguments: args,
+          ...(proof !== undefined ? { meta: { [MCP_APP_AI_GGUI_VIEW_META_KEY]: proof } } : {}),
         });
         return c.json(rpc, 200);
       } catch (err) {
@@ -537,8 +563,11 @@ export function createAgentApp(
  *
  *   kind:'tool-call' — relay an iframe-issued `tools/call` to the MCP
  *                      server. `name` + `arguments` are forwarded
- *                      verbatim. Generic MCP forwarding; not
- *                      ggui-specific.
+ *                      verbatim, with the view's proof from `meta`
+ *                      (`ai.ggui/view`, the only key forwarded). A call
+ *                      to a tool whose declared visibility lacks "app"
+ *                      is answered `-32602` and never relayed
+ *                      (ggui#1415).
  *
  * Fields are typed `unknown` because this is the untrusted wire
  * boundary — handlers narrow each before use.
@@ -559,7 +588,19 @@ type PostAgentBody =
       readonly chatId?: unknown;
       readonly name?: unknown;
       readonly arguments?: Record<string, unknown>;
+      /**
+       * The view's request `_meta`, as the host received it (ggui#1415).
+       * Only its `ai.ggui/view` string is forwarded.
+       */
+      readonly meta?: unknown;
     };
+
+/** The view's proof in a relayed call's `meta`: its `ai.ggui/view` string, else nothing. */
+function viewProofOf(meta: unknown): string | undefined {
+  if (meta === null || typeof meta !== 'object' || !(MCP_APP_AI_GGUI_VIEW_META_KEY in meta)) return undefined;
+  const proof = meta[MCP_APP_AI_GGUI_VIEW_META_KEY];
+  return typeof proof === 'string' ? proof : undefined;
+}
 
 /**
  * SSE event the server always writes first on a fresh `/agent` POST

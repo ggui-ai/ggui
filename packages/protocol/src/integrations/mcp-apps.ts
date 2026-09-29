@@ -123,6 +123,21 @@ export function toolVisibleToModel(
 }
 
 /**
+ * Whether a view may call a tool (SEP-1865's `tools/call` rule): its
+ * `_meta.ui.visibility` is absent (the spec's default) or includes `'app'`.
+ * A relay answers a view's call to any other tool as an unknown tool
+ * (`-32602`) and never relays it (ggui#1415): `ggui_render` and
+ * `ggui_update` are model-only because each returns a fresh render slice,
+ * view key included, for any session id its caller names. The twin of
+ * {@link toolVisibleToModel}; an explicit empty list is read literally.
+ */
+export function toolVisibleToApp(
+  visibility: readonly McpAppsToolVisibility[] | undefined,
+): boolean {
+  return visibility === undefined || visibility.includes('app');
+}
+
+/**
  * Phase B render-identity collapse — the previously two-slice wire
  * (`ai.ggui/session` + `ai.ggui/stack-item`) is merged into ONE slice
  * (`ai.ggui/render`). Consumers parse with {@link parseMcpAppAiGguiRenderMeta}

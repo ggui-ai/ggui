@@ -16,7 +16,9 @@ import {
   buildAgentCatalog,
   callMcpInitialize,
   callMcpToolsList,
+  createToolVisibilityCache,
   listModelVisibleTools,
+  type McpListedTool,
 } from './mcp-client.js';
 
 describe('CLIENT_INFO version parity', () => {
@@ -408,5 +410,86 @@ describe('tool visibility (ggui#1416)', () => {
     stubServer();
     const names = await listModelVisibleTools({ url: 'http://localhost:9999/mcp', bearer: 'dev' });
     expect([...names].sort()).toEqual(['ggui_render', 'todo_add']);
+  });
+});
+
+// ggui#1415 — the relay's view of each tool's declared visibility, read from
+// `tools/list` and kept per server. Stale-while-error: a refresh that fails
+// keeps the last good map in use (and says so); only a name the relay has
+// never seen, while the list cannot be read, is `unavailable`.
+describe('createToolVisibilityCache (ggui#1415)', () => {
+  const SERVER = { url: 'http://localhost:9999/mcp', bearer: 'dev' };
+  const tool = (name: string, visibility?: Array<'model' | 'app'>): McpListedTool => ({
+    name,
+    inputSchema: { type: 'object' },
+    ...(visibility !== undefined ? { visibility } : {}),
+  });
+
+  function harness(lists: Array<McpListedTool[] | Error>) {
+    let t = 1_000_000;
+    const calls: number[] = [];
+    const stale: Array<{ server: string; ageSec: number }> = [];
+    const cache = createToolVisibilityCache({
+      now: () => t,
+      listTools: async () => {
+        calls.push(t);
+        const next = lists.shift();
+        if (next === undefined) throw new Error('no more lists');
+        if (next instanceof Error) throw next;
+        return next;
+      },
+      onStale: (info) => stale.push(info),
+    });
+    return { cache, calls, stale, advance: (ms: number) => (t += ms) };
+  }
+
+  it('reads tools/list once per TTL and answers each name with its declared visibility', async () => {
+    const h = harness([[tool('ggui_update', ['model']), tool('ggui_runtime_pull', ['app']), tool('acme')], [tool('ggui_update', ['model'])]]);
+    expect(await h.cache.lookup('ggui', SERVER, 'ggui_update')).toEqual({ kind: 'listed', visibility: ['model'] });
+    expect(await h.cache.lookup('ggui', SERVER, 'ggui_runtime_pull')).toEqual({ kind: 'listed', visibility: ['app'] });
+    expect(await h.cache.lookup('ggui', SERVER, 'acme')).toEqual({ kind: 'listed' });
+    expect(h.calls).toHaveLength(1);
+    h.advance(5 * 60_000);
+    await h.cache.lookup('ggui', SERVER, 'ggui_update');
+    expect(h.calls).toHaveLength(2);
+  });
+
+  it('refreshes once for a name it has not seen, at most every 30 s, then answers unlisted', async () => {
+    const h = harness([[tool('a')], [tool('a')], [tool('a'), tool('b', ['app'])]]);
+    await h.cache.lookup('ggui', SERVER, 'a');
+    h.advance(10_000);
+    expect(await h.cache.lookup('ggui', SERVER, 'zzz')).toEqual({ kind: 'unlisted' });
+    expect(h.calls).toHaveLength(1);
+    h.advance(30_000);
+    expect(await h.cache.lookup('ggui', SERVER, 'zzz')).toEqual({ kind: 'unlisted' });
+    expect(h.calls).toHaveLength(2);
+    h.advance(30_000);
+    expect(await h.cache.lookup('ggui', SERVER, 'b')).toEqual({ kind: 'listed', visibility: ['app'] });
+    expect(h.calls).toHaveLength(3);
+  });
+
+  it('stale-while-error: a failed refresh keeps the last good map, and says how old it is', async () => {
+    const h = harness([[tool('ggui_update', ['model'])], new Error('catalog down')]);
+    await h.cache.lookup('ggui', SERVER, 'ggui_update');
+    h.advance(6 * 60_000);
+    expect(await h.cache.lookup('ggui', SERVER, 'ggui_update')).toEqual({ kind: 'listed', visibility: ['model'] });
+    expect(h.stale).toEqual([{ server: 'ggui', ageSec: 360 }]);
+  });
+
+  it('a name never seen while the list cannot be read is unavailable, with or without an earlier map', async () => {
+    const never = harness([new Error('catalog down')]);
+    expect(await never.cache.lookup('ggui', SERVER, 'ggui_runtime_pull')).toMatchObject({ kind: 'unavailable' });
+
+    const h = harness([[tool('a')], new Error('catalog down')]);
+    await h.cache.lookup('ggui', SERVER, 'a');
+    h.advance(31_000);
+    expect(await h.cache.lookup('ggui', SERVER, 'unseen')).toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('concurrent lookups share one tools/list', async () => {
+    const h = harness([[tool('a', ['app'])]]);
+    const answers = await Promise.all([1, 2, 3].map(() => h.cache.lookup('ggui', SERVER, 'a')));
+    expect(answers.every((a) => a.kind === 'listed')).toBe(true);
+    expect(h.calls).toHaveLength(1);
   });
 });

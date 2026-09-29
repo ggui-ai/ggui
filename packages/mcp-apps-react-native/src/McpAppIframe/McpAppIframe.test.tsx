@@ -289,6 +289,54 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
   });
 });
 
+// ggui#1415 landing item 7 — the RN helper is a relay. It hands the host
+// the view's proof (only `ai.ggui/view`, as a string) as onToolCall's third
+// argument, and, when the host says what a tool's visibility is, answers a
+// view's call to a model-only tool as an unknown tool without calling it.
+describe('dispatchHostBridgeRequest — the view proof and the model-only refusal (ggui#1415)', () => {
+  const call = (name: string, meta?: Record<string, unknown>) =>
+    ({
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'tools/call',
+      params: { name, arguments: { x: 1 }, ...(meta !== undefined ? { _meta: meta } : {}) },
+    }) as const;
+
+  it("hands the host the view's proof, and only it, as the third argument", async () => {
+    const onToolCall = vi.fn(async () => ({ ok: true }));
+    await dispatchHostBridgeRequest(call('submit', { 'ai.ggui/view': 'v1.proof', progressToken: 3, other: 'x' }), makeCtx({ onToolCall }));
+    expect(onToolCall).toHaveBeenCalledWith('submit', { x: 1 }, { 'ai.ggui/view': 'v1.proof' });
+  });
+
+  it('calls with two arguments when the view sent no proof, or one that is not a string', async () => {
+    const onToolCall = vi.fn(async () => ({ ok: true }));
+    await dispatchHostBridgeRequest(call('submit'), makeCtx({ onToolCall }));
+    await dispatchHostBridgeRequest(call('submit', { 'ai.ggui/view': 7, progressToken: 1 }), makeCtx({ onToolCall }));
+    expect(onToolCall.mock.calls).toEqual([
+      ['submit', { x: 1 }],
+      ['submit', { x: 1 }],
+    ]);
+  });
+
+  it('answers a call to a tool the host says is model-only as an unknown tool (-32602), and never calls it', async () => {
+    const onToolCall = vi.fn(async () => ({ ok: true }));
+    const toolVisibility = vi.fn((name: string) => (name === 'ggui_update' ? (['model'] as const) : undefined));
+    const res = await dispatchHostBridgeRequest(call('ggui_update', { 'ai.ggui/view': 'v1.p' }), makeCtx({ onToolCall, toolVisibility }));
+    expect(res?.error).toEqual({ code: -32602, message: 'Unknown tool: ggui_update' });
+    expect(onToolCall).not.toHaveBeenCalled();
+  });
+
+  it("forwards a tool the host says is app-visible, or whose visibility it doesn't know", async () => {
+    const onToolCall = vi.fn(async () => ({ ok: true }));
+    const toolVisibility = (name: string) => (name === 'ggui_runtime_pull' ? (['app'] as const) : undefined);
+    for (const name of ['ggui_runtime_pull', 'acme_search']) {
+      const res = await dispatchHostBridgeRequest(call(name), makeCtx({ onToolCall, toolVisibility }));
+      expect(res?.error, name).toBeUndefined();
+    }
+    expect(onToolCall).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('buildToolResultNotification (RN spec-canonical wire shape)', () => {
   it('builds a JSON-RPC notification with method=ui/notifications/tool-result', () => {
     const notif = buildToolResultNotification(SAMPLE_META);

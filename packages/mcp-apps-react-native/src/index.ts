@@ -122,6 +122,7 @@ export type {
   McpAppIframeRef,
   McpAppIframeDimensions,
   McpAppIframePermissions,
+  McpAppViewCallMeta,
 } from './McpAppIframe/index';
 
 // Error Boundary

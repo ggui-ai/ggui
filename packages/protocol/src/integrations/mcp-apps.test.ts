@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   toolVisibleToModel,
+  toolVisibleToApp,
   MCP_APPS_UI_CAPABILITY,
   GGUI_RENDER_RESOURCE_URI,
   GGUI_RENDER_RESOURCE_MIME,
@@ -1064,5 +1065,24 @@ describe('toolVisibleToModel — the host-side visibility predicate (ggui#1414)'
   it("withholds a tool whose visibility lacks 'model' — the six ggui_runtime_* app-only tools", () => {
     expect(toolVisibleToModel(['app'])).toBe(false);
     expect(toolVisibleToModel([])).toBe(false);
+  });
+});
+
+/**
+ * `toolVisibleToApp` — the app-side twin (ggui#1415): a view may call a tool
+ * iff its `_meta.ui.visibility` is absent (the spec's default) or includes
+ * `'app'`. A relay answers a view's call to any other tool as an unknown tool
+ * and never relays it; the host-helper kit grades a relay against this.
+ */
+describe('toolVisibleToApp — the relay-side visibility predicate (ggui#1415)', () => {
+  it("admits a tool with no visibility (the spec default) and one that names 'app'", () => {
+    expect(toolVisibleToApp(undefined)).toBe(true);
+    expect(toolVisibleToApp(['app'])).toBe(true);
+    expect(toolVisibleToApp(['model', 'app'])).toBe(true);
+  });
+
+  it("refuses a tool whose visibility lacks 'app' — ggui_render and ggui_update — and reads an empty list literally", () => {
+    expect(toolVisibleToApp(['model'])).toBe(false);
+    expect(toolVisibleToApp([])).toBe(false);
   });
 });
