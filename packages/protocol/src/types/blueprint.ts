@@ -258,9 +258,12 @@ export interface Blueprint {
    * report no build; absence means the minting build is unknown, and a
    * reader reports it as such rather than failing the row (the first such
    * reader is the serve trace's `mintedBy`, ggui#1280 read side). Written
-   * by a generation mint only — a cold-generated render's registration and
-   * an operator-invoked generation; an operator-registered, installed or
-   * seed-imported row never carries it, and a stamp that fails
+   * by a generation mint only — a cold-generated render's registration, an
+   * operator-invoked generation, and a row registered through the operator
+   * door with `generated` provenance from a generation mint (a deployment's
+   * bootstrap lane), which carries its mint's build; a row registered
+   * without generation provenance, installed or seed-imported never
+   * carries it, and a stamp that fails
    * {@link generatorBuildSchema} is dropped at registration rather than
    * stored. Declared one release before any writer emitted it, because the
    * previous release's `ggui_ops_list_blueprints` output validation parses
