@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A copied blueprint row can say it is a copy (2026-09-29, additive,
+ * ggui#1570 declare step: MINOR, same draft stamp). `Blueprint.clonedFrom?`
+ * names the row whose code bytes the row copies; the copy's `source`,
+ * `build` and `codeHash` stay its original's. Nothing that serves reads it.
+ * `blueprintSchema` (strict) and so `ggui_ops_list_blueprints`' output
+ * declare it; no writer emits it until this release serves everywhere,
+ * because the previous release's strict schema would refuse such a row. The
+ * portable form does not carry it. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A retried `ggui_runtime_submit_action` dispatch is one gesture
  * (2026-09-29, additive, ggui#1519: MINOR, same draft stamp). SPEC §11.1
  * promises it as a SHOULD this release and a MUST from the next: a repeat of

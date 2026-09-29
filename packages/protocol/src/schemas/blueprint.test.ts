@@ -109,3 +109,35 @@ describe('generatorBuildSchema + Blueprint.build (ggui#1280, declare step)', () 
     expect(blueprintSchema.safeParse({ ...baseRow, build: { digests: { k: 'nope' } } }).success).toBe(false);
   });
 });
+
+// ggui#1570 — a row that copies another row's bytes says so on itself, in
+// `clonedFrom`; its `source` and `build` stay the bytes' (the original's).
+describe('Blueprint.clonedFrom — provenance about the row (ggui#1570, declare step)', () => {
+  // The row the previous release writes: stamped, and no `clonedFrom`.
+  const PREVIOUS_RELEASE_ROW = {
+    ...baseRow,
+    codeHash: 'b'.repeat(64),
+    build: { version: '0.25.0', mode: 'free', digests: { promptTemplateSha256: DIGEST } },
+  };
+  it("parses the previous release's row unchanged: no clonedFrom, and none is filled in (N−1)", () => {
+    const r = blueprintSchema.safeParse(PREVIOUS_RELEASE_ROW);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.clonedFrom).toBeUndefined();
+      expect(r.data).toEqual(PREVIOUS_RELEASE_ROW);
+    }
+  });
+  it('keeps a clonedFrom naming the row whose bytes this row copies', () => {
+    const r = blueprintSchema.safeParse({ ...PREVIOUS_RELEASE_ROW, blueprintId: 'bp-clone', clonedFrom: 'bp-1' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.clonedFrom).toBe('bp-1');
+  });
+  it('refuses an empty or non-string clonedFrom', () => {
+    expect(blueprintSchema.safeParse({ ...baseRow, clonedFrom: '' }).success).toBe(false);
+    expect(blueprintSchema.safeParse({ ...baseRow, clonedFrom: 7 }).success).toBe(false);
+    expect(blueprintSchema.safeParse({ ...baseRow, clonedFrom: null }).success).toBe(false);
+  });
+  it('ships declared before any writer emits it: the strict schema refuses a key it does not name, as the previous release refuses clonedFrom', () => {
+    expect(blueprintSchema.safeParse({ ...baseRow, notAField: 'x' }).success).toBe(false);
+  });
+});

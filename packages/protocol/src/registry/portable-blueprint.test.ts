@@ -170,3 +170,18 @@ describe('build stamp on the portable record (ggui#1280)', () => {
     if (!bad.ok) expect(bad.reason).toContain('build');
   });
 });
+
+// ggui#1570 — `clonedFrom` names a row in the store that holds it, so it does
+// not travel: an exported copy carries no pointer, and an import never takes
+// one. The imported row is a new row in another store.
+describe('clonedFrom does not travel on the portable record (ggui#1570)', () => {
+  it('toPortableBlueprint of a copied row carries no clonedFrom', () => {
+    const copied: PortableBlueprintSource & { readonly clonedFrom: string } = { ...src, clonedFrom: 'bp-original' };
+    expect('clonedFrom' in toPortableBlueprint(copied)).toBe(false);
+  });
+  it('fromPortableBlueprint ignores a clonedFrom an artifact carries', () => {
+    const result = fromPortableBlueprint({ ...toPortableBlueprint(src), clonedFrom: 'bp-elsewhere' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.record).not.toHaveProperty('clonedFrom');
+  });
+});

@@ -163,6 +163,7 @@ const EXPECTED_PASSING = [
   // the read door's tolerance of a later release's top-level member.
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
+  'n1-compat/forward-ops-list-blueprints-cloned',
   'n1-compat/forward-ops-list-blueprints-stamped',
   'n1-compat/forward-render-meta-unknown-member',
   'n1-compat/forward-view-proof-later-version',

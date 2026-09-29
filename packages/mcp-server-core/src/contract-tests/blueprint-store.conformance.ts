@@ -28,6 +28,7 @@
  * the DDB+S3 adapter additionally asserts the code body in S3 is
  * cleaned up on delete when no other row references the hash).
  * - the minting build stamp (`Blueprint.build`, ggui#1280): persisted when given, absent when not
+ * - the copied-row mark (`Blueprint.clonedFrom`, ggui#1570): persisted verbatim when given, absent when not
  */
 
 import type { Blueprint, DataContract } from "@ggui-ai/protocol";
@@ -93,6 +94,7 @@ function makeBlueprint(overrides: Partial<Blueprint> & { blueprintId: string }):
     createdBy: overrides.createdBy ?? "agent",
     contract: overrides.contract ?? { propsSpec: { properties: {} } },
     ...(overrides.build !== undefined ? { build: overrides.build } : {}),
+    ...(overrides.clonedFrom !== undefined ? { clonedFrom: overrides.clonedFrom } : {}),
   };
 }
 
@@ -167,6 +169,16 @@ export function runBlueprintStoreConformance(
           await store.put(makeBlueprint({ blueprintId: "bp-bare" }));
           expect((await store.get("bp-stamped"))?.build).toEqual(build);
           expect((await store.get("bp-bare"))?.build).toBeUndefined();
+        });
+      });
+      it("preserves a copied row's clonedFrom verbatim when given, and leaves it absent when not (ggui#1570)", async () => {
+        await withStore(async (store) => {
+          await store.put(makeBlueprint({ blueprintId: "bp-original" }));
+          await store.put(makeBlueprint({ blueprintId: "bp-copy", clonedFrom: "bp-original" }));
+          expect((await store.get("bp-copy"))?.clonedFrom).toBe("bp-original");
+          expect((await store.get("bp-original"))?.clonedFrom).toBeUndefined();
+          const listed = await store.list("app-1", "hash-1");
+          expect(listed.find((b) => b.blueprintId === "bp-copy")?.clonedFrom).toBe("bp-original");
         });
       });
       it("returns null for unknown id", async () => {

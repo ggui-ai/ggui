@@ -36,6 +36,7 @@ import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-memb
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
 import forwardOpsListBlueprintsStamped from './cases/forward-ops-list-blueprints-stamped.json' with { type: 'json' };
+import forwardOpsListBlueprintsCloned from './cases/forward-ops-list-blueprints-cloned.json' with { type: 'json' };
 import forwardViewProofLaterVersion from './cases/forward-view-proof-later-version.json' with { type: 'json' };
 import forwardViewProofRootLaterClaim from './cases/forward-view-proof-root-later-claim.json' with { type: 'json' };
 
@@ -134,6 +135,7 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   forwardAppThemeCarryUnknownMember,
   forwardRenderMetaUnknownMember,
   forwardOpsListBlueprintsStamped,
+  forwardOpsListBlueprintsCloned,
   forwardViewProofLaterVersion,
   forwardViewProofRootLaterClaim,
 ].map(n1CompatCase);
@@ -248,6 +250,8 @@ function gradeRenderResult(payload: unknown): { pass: boolean; detail: string } 
 // ggui#1280 — the blueprint rows the served release lists must keep parsing once
 // rows carry the minting build, and a row that carries none must not gain one:
 // absence is the unknown-build category, never a value a reader fills in.
+// ggui#1570 — the same for a copied row's `clonedFrom`: kept verbatim on the
+// copy, and never filled in on a row that is not one.
 function gradeOpsListBlueprints(payload: unknown): { pass: boolean; detail: string } {
   const r = opsListBlueprintsOutputSchema.safeParse(payload);
   if (!r.success) {
@@ -260,8 +264,12 @@ function gradeOpsListBlueprints(payload: unknown): { pass: boolean; detail: stri
     if (canonicalJson(row.build) !== canonicalJson(sentBuild)) {
       return { pass: false, detail: `row ${i}'s build changed across the parse (sent ${canonicalJson(sentBuild)}, parsed ${canonicalJson(row.build)})` };
     }
+    const sentClonedFrom = isRecord(sentRow) ? sentRow['clonedFrom'] : undefined;
+    if (canonicalJson(row.clonedFrom) !== canonicalJson(sentClonedFrom)) {
+      return { pass: false, detail: `row ${i}'s clonedFrom changed across the parse (sent ${canonicalJson(sentClonedFrom)}, parsed ${canonicalJson(row.clonedFrom)})` };
+    }
   }
-  return { pass: true, detail: `opsListBlueprintsOutputSchema: accepted, ${r.data.blueprints.length} row(s), build kept as sent` };
+  return { pass: true, detail: `opsListBlueprintsOutputSchema: accepted, ${r.data.blueprints.length} row(s), build and clonedFrom kept as sent` };
 }
 
 /** The keys of a root's JSON payload, decoded without trusting it; `undefined` when it is not a JSON object. */

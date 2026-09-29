@@ -274,4 +274,34 @@ export interface Blueprint {
    * `BlueprintStore` conformance kit).
    */
   readonly build?: GeneratorBuild;
+  /**
+   * The `blueprintId` of the row whose code bytes this row copies (ggui#1570):
+   * provenance about the ROW. A copy keeps its original's `codeHash`,
+   * `source` and `build`, which stay true about the bytes; this field is what
+   * says the row itself is not a production. It names the row copied (a copy
+   * of a copy names its parent, not the root), in the same app.
+   *
+   * - **Nothing that serves reads it.** Matching, the handshake decision,
+   *   serving and variance ignore it; a copy is served exactly as its own row.
+   *   The open packages pin that by reach (`cloned-from-reach.pin.test.ts` in
+   *   `@ggui-ai/mcp-server-handlers`).
+   * - **Absence does not mean "produced in this store".** An installed or
+   *   imported row carries its `source` verbatim and no `clonedFrom` (the
+   *   portable form does not carry it: the id would name a row in another
+   *   store). So rows are not a ledger of generations; a reader that counts
+   *   generations from rows SHOULD exclude rows carrying this field, and still
+   *   over-counts imports.
+   * - **Removing a copy is a row delete, never a content takedown.** A copy
+   *   shares its original's body by construction, so a takedown aimed at a
+   *   copy takes down the original's content. The reverse holds as for any
+   *   row: taking down the original's content takes the copy's too.
+   * - The original may be deleted later, so the id may name no row; that is a
+   *   copy of a row since removed, never a malformed row.
+   *
+   * Declared one release before any writer emits it, as `build` was: the
+   * previous release's strict `blueprintSchema` would refuse a row carrying
+   * it. A store MUST persist it verbatim (graded by the `BlueprintStore`
+   * conformance kit).
+   */
+  readonly clonedFrom?: string;
 }

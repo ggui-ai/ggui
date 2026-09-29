@@ -21,6 +21,7 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
       'forward-app-theme-carry-unknown-member',
       'forward-render-meta-unknown-member',
       'forward-ops-list-blueprints-stamped',
+      'forward-ops-list-blueprints-cloned',
       'forward-view-proof-later-version',
       'forward-view-proof-root-later-claim',
     ]);
@@ -36,6 +37,7 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
       ['forward-app-theme-carry-unknown-member', 'app-theme-carry'],
       ['forward-render-meta-unknown-member', 'render-meta'],
       ['forward-ops-list-blueprints-stamped', 'ops-list-blueprints'],
+      ['forward-ops-list-blueprints-cloned', 'ops-list-blueprints'],
       ['forward-view-proof-later-version', 'view-proof'],
       ['forward-view-proof-root-later-claim', 'view-proof'],
     ]);
@@ -48,9 +50,9 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
 
   it('is on the package surface — root barrel and its own exports subpath', () => {
     expect(typeof root.runN1CompatConformance).toBe('function');
-    expect(root.N1_COMPAT_CASES.length).toBe(13);
+    expect(root.N1_COMPAT_CASES.length).toBe(14);
     expect(root.N1_COMPAT_DIRECTIONS).toEqual(['backward', 'forward']);
-    expect(runN1CompatConformance().map((r) => r.direction)).toEqual(['backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward']);
+    expect(runN1CompatConformance().map((r) => r.direction)).toEqual(['backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward']);
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string; default?: string }>;
     };

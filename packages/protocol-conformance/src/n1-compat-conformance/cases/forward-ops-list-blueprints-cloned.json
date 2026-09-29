@@ -1,0 +1,88 @@
+{
+  "name": "forward-ops-list-blueprints-cloned",
+  "description": "FORWARD (ggui#1570 emit, VERSION-POLICY §3.6): the ggui_ops_list_blueprints result the release after the declare step writes once a copied row marks itself — synthetic by construction, so it carries no landed sha. Two rows built on the stamped forward case's first row: the original, with no `clonedFrom`, and its copy, which carries the SAME bytes, `source` and `build` (true about the bytes) under its own id and variance, and `clonedFrom` naming the original. The reader MUST accept the result, keep `clonedFrom` VERBATIM on the copy and leave the original without one. A reader that dropped or rewrote the mark — the declare step's reader declares it, and a later change to `opsListBlueprintsOutputSchema` must not lose it — fails here, and so would a copy that reads as a second production of its generation.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): the stamped served row, and its copy",
+    "sha": "synthetic"
+  },
+  "wire": "ops-list-blueprints",
+  "payload": {
+    "blueprints": [
+      {
+        "blueprintId": "bp_00000000-0000-4000-8000-000000001280",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "openai/gpt-6-luna"
+        },
+        "variance": {},
+        "createdAt": "2026-09-27T16:40:27.386Z",
+        "createdBy": "agent",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        },
+        "build": {
+          "version": "0.25.0",
+          "mode": "constrained",
+          "digests": {
+            "promptTemplateSha256": "fdf5de0bdc977b698772e337d552dbe27cbc984382e6c0f68b0f5a7d8a953f00",
+            "boilerplateTemplateSha256": "9b4393cd686244d9e06d480f477dc85aa5b4469d45dfb103b76b873e22e65c24"
+          }
+        }
+      },
+      {
+        "blueprintId": "bp_00000000-0000-4000-8000-000000001570",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "openai/gpt-6-luna"
+        },
+        "variance": {
+          "persona": "control"
+        },
+        "createdAt": "2026-09-30T09:00:00.000Z",
+        "createdBy": "operator",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        },
+        "build": {
+          "version": "0.25.0",
+          "mode": "constrained",
+          "digests": {
+            "promptTemplateSha256": "fdf5de0bdc977b698772e337d552dbe27cbc984382e6c0f68b0f5a7d8a953f00",
+            "boilerplateTemplateSha256": "9b4393cd686244d9e06d480f477dc85aa5b4469d45dfb103b76b873e22e65c24"
+          }
+        },
+        "clonedFrom": "bp_00000000-0000-4000-8000-000000001280"
+      }
+    ]
+  },
+  "expect": "accepted"
+}

@@ -182,6 +182,7 @@ const EXPECTED_PASSING = [
   // root claim against today's proof parser (ggui#1415).
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
+  'n1-compat/forward-ops-list-blueprints-cloned',
   'n1-compat/forward-ops-list-blueprints-stamped',
   'n1-compat/forward-render-meta-unknown-member',
   'n1-compat/forward-view-proof-later-version',

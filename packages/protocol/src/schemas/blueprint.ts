@@ -160,6 +160,8 @@ export const blueprintSchema: z.ZodType<Blueprint> = z
     contractEmbedding: z.array(z.number()).optional(),
     // ggui#1280 — the minting engine's build; absent = `mintedBy: unknown`.
     build: generatorBuildSchema.optional(),
+    // ggui#1570 — the row this row copies; provenance about the row only.
+    clonedFrom: z.string().min(1).optional(),
   })
   .strict() as z.ZodType<Blueprint>;
 
