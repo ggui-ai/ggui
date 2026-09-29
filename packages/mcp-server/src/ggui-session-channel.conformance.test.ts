@@ -177,12 +177,15 @@ const EXPECTED_PASSING = [
   'registry-completeness/surfaces-non-empty',
   // The `n1-compat` catalog (ggui#1014 §3.6): previous-release payloads against
   // today's protocol parsers — graded on every run, no input, never skipped;
-  // plus the FORWARD case (ggui#1093 belt): a later release's top-level member
-  // against today's read door.
+  // plus the FORWARD cases: a later release's top-level member against
+  // today's read door (ggui#1093 belt), and a later view-proof version or
+  // root claim against today's proof parser (ggui#1415).
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
   'n1-compat/forward-ops-list-blueprints-stamped',
   'n1-compat/forward-render-meta-unknown-member',
+  'n1-compat/forward-view-proof-later-version',
+  'n1-compat/forward-view-proof-root-later-claim',
   'n1-compat/release-2-app-theme-v2',
   'n1-compat/release-2-generation-profile',
   'n1-compat/release-2-ops-generate-blueprint',

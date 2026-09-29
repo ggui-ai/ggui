@@ -1,0 +1,14 @@
+{
+  "name": "forward-view-proof-later-version",
+  "description": "FORWARD tolerance for the view-origin proof (ggui#1415, SPEC §4.7, VERSION-POLICY §3.6): a LATER release's runtime may send a proof of a later version (`v2.`, with more fields). SPEC §4.7 fixes the door shape for every version at 1 to 1024 characters of `[A-Za-z0-9._-]`, and a v1 proof is at most 901, so the room above 901 is the later versions'. This proof is longer than any v1 proof can be. It must still fit `VIEW_PROOF_RELAY_SHAPE`, so a relay that checks the shape keeps forwarding it (a relay capped at v1's maximum would fail this case), and today's parser must read it as `version_unknown`, never `malformed`: an unknown version is a runtime newer than the server, which is a different finding from a mangled proof, and at this release the call is accepted either way. Synthetic by construction: no landed release sends `v2`.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): a view proof of version 2",
+    "sha": "synthetic"
+  },
+  "wire": "view-proof",
+  "payload": {
+    "proof": "v2.eyJzZXNzaW9uSWQiOiJyZW5kZXJfbjEtdmlldy1wcm9vZiIsImFwcElkIjoiYXBwLTEiLCJraW5kIjoid3MiLCJpYXQiOjE3OTAwMDAwMDAsImV4cCI6MTc5MDAwMDE4MCwianRpIjoiai1uMS0xIiwia2lkIjoiYWJjZGVmZ2giLCJzcmMiOiJyZWFkIiwibGFuZSI6Mn0.Gxax31OLoS3D-X7buFyqcA.1790000000000.1.ypeBEsobvcr6wjGzmiPcTaeG7_gUfE5yuYB3ha_uSLs.Ln0sA6lQeuJl7PW1NWiFpTOTogKdJBOUmXJloaJa78Y.jPPrvazd_d1vE2c_lF9SPMmBPfL83ypCCiMNKDvfSno.JApCN0-oHSRQhjgoKkFsRrL_fR3FKYcecVHl7v_XexM.BbtfBFC9euhD7PCwpZaY_ZPYOjkwaG63z88z-7Ju3eQ.lqYQruNzWtZm16QKDwMEmLa4sm6jJApzCHI7Yad5Soc._jcik6xvyHZ9JIJ46c6su1OqV96NOzDvIIE5M5NdEzI.XkpFATZZBLlION0kvopTmR0WA6WUpj4WT8Dqs2HTJbU.OQV6gjuSVFmNqGnYyvwUltb3GXuhpgFqY390evoeb4k.rgEOb9-vL-iVxaOqeHwaQElHhJZDe1VWZ8QPISDTbHs.vbY9a3w12K0d4TugPWHEJlgTw7stAPR9rQXp0c4epHQ.p03as9nh6E5xhKe3G_i1kDlCEJMtJobtPXmTLy8kgJo.5XGKXuUJv0IF1IylJHO7pxtTM4xrnNFttSC71C71-dQ.KgBoV_T71GnQmivxHXAsRS30ih8q9bQ-XzytF87sQIg.0bt43PDDGf_ogPbxCfmYB_J9YxSp9aI63NLia26OY7I.M4QsAgRfWyfexpO2gj1vLHeC-aKxkMLa-4vhGDdKldM.E8RjxoojvGM2N7YT5j4AJeLUmM9S73aHeubtNHX0q6Y"
+  },
+  "expect": "accepted"
+}

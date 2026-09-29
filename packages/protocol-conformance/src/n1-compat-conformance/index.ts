@@ -3,10 +3,12 @@
  *
  * Every BACKWARD case is the PREVIOUS release's payload for a protocol-owned
  * wire, tagged with that release's sha, and passes iff today's parser accepts
- * it. Every FORWARD case (ggui#1093 belt) is a LATER release's payload —
- * today's shape plus a top-level member today does not name, synthetic by
- * construction — and passes iff today's READ door keeps it, overlays intact,
- * stripping and naming the member. A case that starts failing is a receiver
+ * it. Every FORWARD case is a LATER release's payload, synthetic by
+ * construction, and passes iff today's READ side keeps it: a top-level
+ * member today does not name is stripped and named, overlays intact
+ * (ggui#1093 belt), and a view proof of a later version, or over a root
+ * claim today does not name, is recognised rather than refused as
+ * malformed (ggui#1415). A case that starts failing is a receiver
  * that broke N−1 across a rolling release — the fix is the receiver, never
  * the fixture; a fixture changes only when the pairing of record moves
  * (`docs/protocol/VERSION-POLICY.md` §3.6).
@@ -18,6 +20,9 @@ import { appGenerationProfileSchema, appThemeGetResponseSchema, appThemeSchema, 
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   parseMcpAppAiGguiRenderMeta,
+  parseViewProof,
+  VIEW_PROOF_RELAY_SHAPE,
+  VIEW_PROOF_V1_MAX_CHARS,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 import release2AppThemeV2 from './cases/release-2-app-theme-v2.json' with { type: 'json' };
@@ -31,9 +36,11 @@ import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-memb
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
 import forwardOpsListBlueprintsStamped from './cases/forward-ops-list-blueprints-stamped.json' with { type: 'json' };
+import forwardViewProofLaterVersion from './cases/forward-view-proof-later-version.json' with { type: 'json' };
+import forwardViewProofRootLaterClaim from './cases/forward-view-proof-root-later-claim.json' with { type: 'json' };
 
 /** The protocol-owned wires the catalog can grade. */
-export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint', 'handshake-suggestion', 'render-result', 'ops-list-blueprints'] as const;
+export const N1_COMPAT_WIRES = ['app-theme', 'app-theme-read', 'app-theme-carry', 'render-meta', 'generation-profile', 'ops-generate-blueprint', 'handshake-suggestion', 'render-result', 'ops-list-blueprints', 'view-proof'] as const;
 
 /** `backward`: the previous release's payload against today's parser. `forward`: a later release's payload against today's READ door. */
 export const N1_COMPAT_DIRECTIONS = ['backward', 'forward'] as const;
@@ -127,6 +134,8 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   forwardAppThemeCarryUnknownMember,
   forwardRenderMetaUnknownMember,
   forwardOpsListBlueprintsStamped,
+  forwardViewProofLaterVersion,
+  forwardViewProofRootLaterClaim,
 ].map(n1CompatCase);
 
 function gradeAppTheme(payload: unknown): { pass: boolean; detail: string } {
@@ -255,6 +264,46 @@ function gradeOpsListBlueprints(payload: unknown): { pass: boolean; detail: stri
   return { pass: true, detail: `opsListBlueprintsOutputSchema: accepted, ${r.data.blueprints.length} row(s), build kept as sent` };
 }
 
+/** The keys of a root's JSON payload, decoded without trusting it; `undefined` when it is not a JSON object. */
+function rootKeys(root: string): readonly string[] | undefined {
+  try {
+    const padded = root.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((root.length + 3) % 4);
+    const json: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))));
+    return isRecord(json) ? Object.keys(json) : undefined;
+  } catch {
+    // Not base64url JSON: the case's own root is broken, reported by the caller.
+    return undefined;
+  }
+}
+
+// ggui#1415 — a later release's view proof (SPEC §4.7). The door shape is fixed
+// for every version, so a relay that checks it must keep forwarding the proof,
+// including one longer than any v1 proof. A later version reads
+// `version_unknown`, never `malformed`; a v1 proof whose root carries a claim
+// this release does not name still parses.
+function gradeViewProof(payload: unknown): { pass: boolean; detail: string } {
+  const proof = isRecord(payload) ? payload['proof'] : undefined;
+  if (typeof proof !== 'string') return { pass: false, detail: 'the case must carry a proof string' };
+  if (!VIEW_PROOF_RELAY_SHAPE.test(proof)) {
+    return { pass: false, detail: "the later release's proof is off the relay door shape, so a relay that checks it would drop it" };
+  }
+  const parsed = parseViewProof(proof);
+  if (!proof.startsWith('v1.')) {
+    if (proof.length <= VIEW_PROOF_V1_MAX_CHARS) {
+      return { pass: false, detail: `the case must use the room the door keeps for later versions: its proof is ${proof.length} characters, within v1's ${VIEW_PROOF_V1_MAX_CHARS}` };
+    }
+    return !parsed.ok && parsed.reason === 'version_unknown'
+      ? { pass: true, detail: `parseViewProof: a later version of ${proof.length} characters reads version_unknown, and the relay shape holds` }
+      : { pass: false, detail: `parseViewProof read a later version as ${parsed.ok ? 'a v1 proof' : parsed.reason}, not version_unknown` };
+  }
+  if (!parsed.ok) return { pass: false, detail: `parseViewProof refused a v1 proof over a later root claim: ${parsed.reason}` };
+  const named = new Set(Object.keys(parsed.proof.claims));
+  const unnamed = (rootKeys(parsed.proof.root) ?? []).filter((k) => !named.has(k));
+  return unnamed.length > 0
+    ? { pass: true, detail: `parseViewProof: a v1 proof whose root carries [${unnamed.join(', ')}] still parses` }
+    : { pass: false, detail: 'the case must root its proof in claims this release does not name' };
+}
+
 /**
  * One grader per wire, exhaustively: a wire added to {@link N1_COMPAT_WIRES}
  * without an arm here does not compile, rather than falling through to
@@ -280,6 +329,8 @@ function gradeWire(wire: N1CompatWire, payload: unknown): { pass: boolean; detai
       return gradeRenderResult(payload);
     case 'ops-list-blueprints':
       return gradeOpsListBlueprints(payload);
+    case 'view-proof':
+      return gradeViewProof(payload);
     default: {
       const unhandled: never = wire;
       return { pass: false, detail: `no grader for wire ${String(unhandled)}` };

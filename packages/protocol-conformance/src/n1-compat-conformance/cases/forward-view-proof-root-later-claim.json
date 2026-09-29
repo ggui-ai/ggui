@@ -1,0 +1,14 @@
+{
+  "name": "forward-view-proof-root-later-claim",
+  "description": "FORWARD tolerance for the view-origin proof's root (ggui#1415, SPEC §4.7, VERSION-POLICY §3.6): a LATER release's server may stamp its ws token's payload with a claim this release does not name (`lane`). SPEC §4.7: a reader decodes the root claims it names and ignores any others, so a v1 proof rooted in that token must still parse. A new value of the closed `src` set is deliberately NOT a forward case: §4.7 names `src` as the exception, and VERSION-POLICY §3.6 widens that set one release before any door stamps the value. Synthetic by construction.",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): a v1 proof whose root carries an unnamed claim",
+    "sha": "synthetic"
+  },
+  "wire": "view-proof",
+  "payload": {
+    "proof": "v1.eyJzZXNzaW9uSWQiOiJyZW5kZXJfbjEtdmlldy1wcm9vZiIsImFwcElkIjoiYXBwLTEiLCJraW5kIjoid3MiLCJpYXQiOjE3OTAwMDAwMDAsImV4cCI6MTc5MDAwMDE4MCwianRpIjoiai1uMS0xIiwia2lkIjoiYWJjZGVmZ2giLCJzcmMiOiJyZWFkIiwibGFuZSI6Mn0.Gxax31OLoS3D-X7buFyqcA.1790000000000.1.ypeBEsobvcr6wjGzmiPcTaeG7_gUfE5yuYB3ha_uSLs.Ln0sA6lQeuJl7PW1NWiFpTOTogKdJBOUmXJloaJa78Y"
+  },
+  "expect": "accepted"
+}
