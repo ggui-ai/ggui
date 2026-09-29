@@ -1166,7 +1166,7 @@ Agent runtime:
 Persistent storage (default-on; opt-out via --ephemeral):
   By default \`ggui serve\` writes a small bundle under .ggui/persistent/
   (project-local if a ggui.json was resolved, else ~/.ggui/persistent/)
-  so cached MCP Apps tokens, signed render URLs, shortCodes, renders,
+  so cached MCP Apps tokens, shortCodes, renders,
   vectors, and paired bearers survive a restart — claude.ai chat-history
   revisits keep working.
 
@@ -1174,7 +1174,6 @@ Persistent storage (default-on; opt-out via --ephemeral):
 
     .ggui/persistent/
       ├── ws-token-secret.hex       (HMAC, 0600)
-      ├── render-signer-secret.hex  (HMAC, 0600)
       ├── short-codes.sqlite        (signed render-URL resolution)
       ├── sessions.sqlite            (GguiSessionStore — renders + event history)
       ├── vectors.sqlite            (RAG corpus)

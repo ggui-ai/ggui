@@ -59,6 +59,7 @@ import {
   type OperatorConfig,
   type ResolvedStorageStores,
   type ShortCodeIndex,
+  type ThemeFileUploader,
   type ThemeWriter,
 } from "@ggui-ai/mcp-server";
 import {
@@ -166,6 +167,15 @@ export interface BuildMcpServerBackendOptions {
    * is on disk.
    */
   readonly themeWriter?: ThemeWriter;
+  /**
+   * Theme file uploader for the admin-gated `/ggui/console/theme/upload`
+   * POST, which writes an uploaded theme document next to `ggui.json`.
+   * The route is enabled only when BOTH this and {@link themeWriter} are
+   * present; otherwise it answers 501. The CLI builds it from the same
+   * manifest path via `createThemeFileUploader` (ggui#1579: it was built
+   * and never forwarded, so `ggui serve` never enabled uploads).
+   */
+  readonly themeFileUploader?: ThemeFileUploader;
   /**
    * Live theme getter — when set, supersedes the static `theme`
    * resolution for every `ggui_render` bootstrap envelope. The CLI
@@ -631,20 +641,16 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     emailSender = fallback.sender;
     emailFromAddress = process.env.GGUI_EMAIL_FROM?.trim() || defaultFromAddress;
   }
-  // Resolve cross-restart HMAC secrets. When the caller declared a
-  // persistent dir, read-or-mint `ws-token-secret.hex` +
-  // `render-signer-secret.hex` (32 bytes / 64 hex chars, 0600). Both
-  // get threaded into `createGguiServer` below so the server stops
-  // minting fresh process-local secrets every boot — the precondition
-  // for any cached `_meta["ai.ggui/render"].wsToken` surviving a
-  // restart. Absent dir = legacy ephemeral behavior.
+  // Resolve the cross-restart HMAC secret. When the caller declared a
+  // persistent dir, read-or-mint `ws-token-secret.hex` (32 bytes / 64 hex
+  // chars, 0600) and thread it into `createGguiServer` below, so the server
+  // stops minting a fresh process-local secret every boot: the precondition
+  // for any cached `_meta["ai.ggui/render"].wsToken` surviving a restart.
+  // Absent dir = ephemeral behavior. (No render-signer secret: the server's
+  // render-signing layer was removed with the /r/ viewer, ggui#1579.)
   let persistedWsTokenSecret: string | undefined;
-  let persistedRenderSignerSecret: string | undefined;
   if (opts.persistentDir !== undefined) {
     persistedWsTokenSecret = readOrMintHexSecret(join(opts.persistentDir, "ws-token-secret.hex"));
-    persistedRenderSignerSecret = readOrMintHexSecret(
-      join(opts.persistentDir, "render-signer-secret.hex")
-    );
   }
   // Resolve withholdResultMeta: CLI flag wins over env var.
   const envWithhold = process.env.GGUI_WITHHOLD_RESULT_META?.trim();
@@ -829,16 +835,10 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // Co-binding with `appMetadataStore` mounts `ggui_list_themes` on
     // the agent route.
     themes: () => listThemes(),
-    // Cross-restart HMAC secrets. Present iff the caller declared a
-    // persistent dir. Both threaded so the next restart can verify
-    // tokens minted by the previous run instead of regenerating per
-    // process. render-signer.secret rides on the `renderSigning`
-    // discriminated union (the `false` shape disables the layer
-    // entirely; we always want it on here, so build the object form).
+    // Cross-restart HMAC secret. Present iff the caller declared a
+    // persistent dir, so the next restart verifies tokens the previous run
+    // minted instead of regenerating per process.
     ...(persistedWsTokenSecret !== undefined ? { wsTokenSecret: persistedWsTokenSecret } : {}),
-    ...(persistedRenderSignerSecret !== undefined
-      ? { renderSigning: { secret: persistedRenderSignerSecret } }
-      : {}),
     ...(resolvedMcpInstructions !== undefined ? { mcpInstructions: resolvedMcpInstructions } : {}),
     ...(resolvedWithhold ? { withholdResultMeta: true } : {}),
     // `--multi-user` flips the `/ggui/console/llm-keys` gate from
@@ -989,6 +989,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // read-only banner + POST returns 501. CLI sets this when
     // `plan.projectRoot` resolved to a manifest path on disk.
     ...(opts.themeWriter ? { themeWriter: opts.themeWriter } : {}),
+    ...(opts.themeFileUploader ? { themeFileUploader: opts.themeFileUploader } : {}),
     // Live-theme wiring — `themeProvider` reads from a shared cell
     // that `onThemeConfigChange` writes to on every console save,
     // so the picker's "Save to ggui.json" reaches the next render's

@@ -20,7 +20,7 @@
  */
 import { normalizeThemeDocument, parseThemeDocument } from '@ggui-ai/project-config/node';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -296,6 +296,41 @@ describe('buildMcpServerBackend', () => {
     // the channel block. Absent = channel wire regressed.
     expect(body.channel).toBeDefined();
     expect(body.channel?.path).toBe('/ws');
+  });
+
+  it('forwards the theme file uploader, so `ggui serve` enables theme uploads (#1579)', async () => {
+    // The CLI builds both the writer and the uploader; the backend used to
+    // forward only the writer, so the upload route always answered 501.
+    const port = await pickFreePort();
+    backend = buildMcpServerBackend({
+      cliVersion: 'test-0.0.0',
+      host: '127.0.0.1',
+      port,
+      themeWriter: async () => {},
+      themeFileUploader: async () => {},
+    });
+    boundPort = await backend.listen(port, '127.0.0.1');
+    const res = await fetch(`http://127.0.0.1:${boundPort}/ggui/console/theme`, {
+      headers: { authorization: `Bearer ${backend.adminToken}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { writerEnabled: boolean; uploadEnabled: boolean };
+    expect(body.writerEnabled).toBe(true);
+    expect(body.uploadEnabled).toBe(true);
+  });
+
+  it('persists only the secrets the server reads: the ws-token secret, and no render-signer secret (#1579)', async () => {
+    // Render signing left the server with the /r/ retirement; a persisted
+    // signer secret was minted on every boot and read by nothing.
+    const dir = mkdtempSync(join(tmpdir(), 'ggui-backend-secrets-'));
+    try {
+      const port = await pickFreePort();
+      backend = buildMcpServerBackend({ cliVersion: 'test-0.0.0', host: '127.0.0.1', port, persistentDir: dir });
+      expect(existsSync(join(dir, 'ws-token-secret.hex'))).toBe(true);
+      expect(existsSync(join(dir, 'render-signer-secret.hex'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('echoes the passed cliVersion on the backend handle', () => {
