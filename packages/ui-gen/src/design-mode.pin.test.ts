@@ -208,10 +208,20 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // INVARIANT 1 holds: the 17 changed catalog lines are byte-identical in both arms' dumps. Receipt: with
 // the catalog swapped back to the previous generation against the rebuilt design dist, all four digests
 // returned to their constants.
+// Re-recorded 2026-09-29 for ggui#1556 A (the reading column holds the whole reading flow): FRAME_SIZING's
+// width bullet — a HARD section both arms share — now says the card has ONE column, so a heading, its
+// text and the chips or buttons that answer it each sit in a `<Container>` of the same `maxWidth` and
+// keep one left edge; before, it taught a centred column for the TEXT, and a card whose chips stayed
+// outside it split its edge on a pane-width canvas. The chat shell hint says the same, and the four
+// width-capping layout scaffolds' comments carry it too, so BOTH prompt digests and the CONSTRAINED
+// boilerplate digest move; the free boilerplate (base-free carries no layout comment) is byte-stable.
+// Constrained prompt a35119f0… → 51d355ee…, constrained boilerplate 63fe2f81… → 1a1346a2…, free prompt
+// 2b96db36… → 40623f56…. Receipt: with the six edited files put back to their previous text against the
+// same design build, all four digests returned to their constants.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "a35119f0db7f5ff9821806d6c3c8b4868877eac593c03b4dc9442f397c04a7d6";
+  "51d355eeba013b0485eac97660dec4256ee6d9acd4df51ed8a815179d042707e";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  '63fe2f8140cb95c254231ceff79296d187060bc5c0093c2d127ce0d1957db10c';
+  '1a1346a2f1886b72a066cec3b299115fdaffff6a2935c61a5f91d708b7a42e60';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
 // item's own identity — the field that names it when there is no id, never the map index; the prompt now
 // says what the self-check refuses). A HARD section shared by both arms, so BOTH prompt digests move
@@ -266,8 +276,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-24 for ggui#1083 cut 2 part B — see the constrained note (the shared FRAME_SIZING bullet).
 // Re-recorded 2026-09-24 for ggui#1083 cut 2's (B) — see the constrained note (the opening hero band).
 // Re-recorded 2026-09-29 for ggui#1566 — see the constrained note (the catalog's text colours).
+// Re-recorded 2026-09-29 for ggui#1556 A — see the constrained note (the one reading column).
 export const FREE_PROMPT_SHA256 =
-  "2b96db362b65a328e2950e4ec39434c4467d243ba70635c191f6722ed53c1e09";
+  "40623f5657bf119008e47671800fa5a56567f75f2f398406af999250b422b99c";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =

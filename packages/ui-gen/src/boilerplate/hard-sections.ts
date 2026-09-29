@@ -257,7 +257,7 @@ The width works the same way, and the mistake is the mirror image: **your outerm
 
 - Never put \`maxWidth\` (or a \`max-w-*\` class) on the element you return at the top. On a wide canvas that turns your card into a narrow strip with the frame's ground on either side of it, and on a narrow one it does nothing — the same composition reading differently at two sizes.
 - DO cap the reading measure inside: a column of prose is easiest to read at 60–70 characters, so wrap the TEXT in a \`<Container maxWidth="sm">\` (or your own \`max-width\`) and leave the root filling. A hero band, a toolbar, a table or an image then still uses the whole width, which is what makes a wide card look composed rather than padded.
-- Centre that inner column with the container's own centring, not by shrinking the root.
+- Centre that inner column with the container's own centring, not by shrinking the root — and give the card ONE column: every block of the reading flow (a heading, its text, and the chips or buttons that answer it) sits in a \`<Container>\` of the same \`maxWidth\`, so their left edges line up even where a full-width band runs between them.
 - **They are two different elements.** Even when the whole card is one column of text, the root still fills and the column sits INSIDE it — \`<Box padding="lg"><Container maxWidth="sm">…</Container></Box>\`, never a root that is itself the container. A centred card is centring inside a filled frame, not a shrunken frame.`;
 
 /** Helper-component structure guidance (JSX depth 3–5, helpers above `Component`). Identical in both modes. */
