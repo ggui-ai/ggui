@@ -1,0 +1,29 @@
+{
+  "prompt": "greet the visitor",
+  "canvasPresentations": [
+    {
+      "canvas": "xs-chat-card",
+      "label": "host chat widget, inline, the app's theme (round)",
+      "frame": {
+        "surface": "#ffffff",
+        "ground": "#f6f5ee",
+        "ring": {
+          "widthPx": 1,
+          "color": "#1c1b18",
+          "alpha": 0.08
+        },
+        "radiusPx": 18,
+        "minHeightPx": 256
+      }
+    },
+    {
+      "canvas": "md",
+      "label": "host chat widget, pane, 1280×800 embedded",
+      "box": {
+        "width": 816,
+        "height": 736
+      },
+      "ground": "#eeece4"
+    }
+  ]
+}

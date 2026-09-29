@@ -3,7 +3,7 @@
 // `presentation` (which the binder digests) is what the JUDGE DREW — built from its per-canvas outcome, never
 // from this reader's prediction. Absent ⇒ today: no key, nothing handed to the judge.
 
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -81,6 +81,22 @@ describe('ggui#1492 — the host presentation rides judge-input.json to the judg
     expect(seen).toBe(false);
     expect(readFileSync(join(dir, 'report.json'), 'utf8')).not.toContain('"presentation"');
     expect(report.meta.notes.filter((n) => n.startsWith('presentation'))).toEqual([]);
+  });
+
+  // The with-field fixture is the WRITER's serializer output, byte for byte (a themed app: the inline card's frame
+  // and the pane's box on its ground), never hand-written here: two parallel judge-input definitions meet only in a
+  // fixture, so a hand-written one would pin this reader against its author's belief, not against the writer. It is
+  // a copy of the fixture the writer's own test pins to its serializer; a change on the writer's side means a new copy.
+  it("the writer's own serializer output reads through the real reader with nothing dropped, and reaches the judge as written", async () => {
+    const dir = bootstrapCell({ prompt: 'placeholder' });
+    copyFileSync(new URL('./__fixtures__/judge-input-presentations.json', import.meta.url), join(dir, 'judge-input.json'));
+    const written = JSON.parse(readFileSync(join(dir, 'judge-input.json'), 'utf8')) as { canvasPresentations: CanvasPresentation[] };
+    expect(written.canvasPresentations.map((p) => p.canvas)).toEqual(['xs-chat-card', 'md']);
+    const inputs = readCellInputs(dir);
+    expect(inputs.presentation).toEqual({ applied: written.canvasPresentations, malformed: [] });
+    let seen: unknown = 'not called';
+    await evaluateCell(inputs, { dir, playwright: neverLaunch, panel, visual: async (ctx) => { seen = ctx.presentations; return null; } });
+    expect(seen).toEqual(written.canvasPresentations);
   });
 
   it('all entries malformed ⇒ nothing is handed to the judge, and the drop is still named on the row', async () => {
