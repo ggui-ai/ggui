@@ -47,6 +47,7 @@ import {
   type Blueprint,
   type BlueprintSource,
   type DataContract,
+  type GeneratorBuild,
   type LlmBlueprintSource,
   type OpsRegisterBlueprintInput,
   type OpsRegisterBlueprintOutput,
@@ -57,7 +58,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
-import type { BlueprintRegistryDeps } from "../renders/index.js";
+import { admitGeneratorBuild, type BlueprintRegistryDeps } from "../renders/index.js";
 import { mirrorIntoCache } from "./cache-mirror.js";
 import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
@@ -161,6 +162,12 @@ interface RegistrationProvenance {
    * ({@link createRegisterGeneratedBlueprint}). Never on the wire.
    */
   readonly sourceCode?: string;
+  /**
+   * ggui#1280 — the build that minted the bytes, already admitted
+   * (`admitGeneratorBuild`: llm-sourced and schema-valid). Only the
+   * in-process generated-bytes path supplies it. Never on the wire.
+   */
+  readonly build?: GeneratorBuild;
 }
 
 /**
@@ -270,6 +277,8 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
       // row here, cache mirror below): the user arm for operator-
       // supplied bytes, the llm arm for engine-generated ones.
       source: provenance.source,
+      // ggui#1280 — the minting build, on a generation mint's bytes only.
+      ...(provenance.build !== undefined ? { build: provenance.build } : {}),
       variance,
       createdAt: now(),
       createdBy: "operator",
@@ -332,6 +341,9 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
             // Same provenance as the MVB row above — one call, one
             // provenance claim across both stores.
             source: provenance.source,
+            // ggui#1280 — the same stamp, onto the durable row a mirror
+            // writes through to (never onto its vector-store row).
+            ...(provenance.build !== undefined ? { build: provenance.build } : {}),
             // The cache row MUST carry the same variance as the MVB row —
             // its exact key is `variantKey(variance)`.
             variance,
@@ -442,6 +454,14 @@ export interface GeneratedBlueprintBytes {
    * claim nobody made. Validated against the protocol's schema.
    */
   readonly source: LlmBlueprintSource;
+  /**
+   * ggui#1280 — the build the generation reported (`metadata.build`),
+   * verbatim. Admitted by the registry's one rule (`admitGeneratorBuild`):
+   * a stamp that fails the protocol's `generatorBuildSchema` is dropped
+   * with a `blueprint_build_stamp_dropped` line and the row registers
+   * unstamped, so a bad stamp never refuses a registration.
+   */
+  readonly build?: GeneratorBuild;
 }
 
 /** What {@link createRegisterGeneratedBlueprint}'s entry returns. */
@@ -468,10 +488,12 @@ export type RegisterGeneratedBlueprint = (
  * with the authored source they were compiled from, in-process.
  *
  * Same body as `ggui_ops_register_blueprint` (one durable row, one cache
- * mirror, the same gates and variance), with two differences: provenance
- * is the generation's `llm` arm, and the authored source reaches the
- * cache registry, so a render that reuses the registration serves it
- * (`ggui_get_render_source`, save-to-library). It is NOT an MCP tool and
+ * mirror, the same gates and variance), with three differences: provenance
+ * is the generation's `llm` arm; the authored source reaches the cache
+ * registry, so a render that reuses the registration serves it
+ * (`ggui_get_render_source`, save-to-library); and the generation's build,
+ * when the caller passes one, is stamped on the durable rows (ggui#1280).
+ * It is NOT an MCP tool and
  * is on no wire: the public operator door stays source-free, because it
  * cannot verify that supplied source compiles to the supplied code.
  *
@@ -490,9 +512,11 @@ export function createRegisterGeneratedBlueprint(
         "registerGeneratedBlueprint: sourceCode must be the non-empty authored source componentCode was compiled from"
       );
     }
+    const build = admitGeneratorBuild(source, generated.build);
     const { blueprintId, codeHash } = await registerVariant(parsed, ctx, {
       source,
       sourceCode: generated.sourceCode,
+      ...(build !== undefined ? { build } : {}),
     });
     return { blueprintId, codeHash, source };
   };

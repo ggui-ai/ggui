@@ -259,9 +259,11 @@ export interface Blueprint {
    * reader reports it as such rather than failing the row (the first such
    * reader is the serve trace's `mintedBy`, ggui#1280 read side). Written
    * by a generation mint only — a cold-generated render's registration, an
-   * operator-invoked generation, and a row registered through the operator
-   * door with `generated` provenance from a generation mint (a deployment's
-   * bootstrap lane), which carries its mint's build; a row registered
+   * operator-invoked generation, and a generation mint's bytes registered
+   * in-process with their generation's provenance
+   * (`createRegisterGeneratedBlueprint`, a deployment's bootstrap lane)
+   * when its caller passes the mint's build. The operator door
+   * (`ggui_ops_register_blueprint`) takes no build; a row registered
    * without generation provenance, installed or seed-imported never
    * carries it, and a stamp that fails
    * {@link generatorBuildSchema} is dropped at registration rather than
