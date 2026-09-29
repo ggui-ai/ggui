@@ -2058,7 +2058,9 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).toMatch(/`failed` adds `error` and CONSUMES the handshake/);
     expect(d).toMatch(/carries only `refusal`/);
     expect(d).toMatch(/handshake is INTACT/);
-    expect(d).toMatch(/an `after-fix` refusal is yours to retry only when its `fixBy` is `caller`/);
+    // `fixBy` never travels on a refusal (ggui#1579), so the rule is stated from what does.
+    expect(d).toContain('an `after-fix` refusal: retry only once you have performed `refusal.fix` yourself');
+    expect(d).not.toContain('fixBy');
   });
 
   it('no longer frames blueprintId as provisional/minted-at-handshake', () => {

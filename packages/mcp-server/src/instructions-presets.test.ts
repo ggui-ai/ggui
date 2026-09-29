@@ -131,7 +131,9 @@ describe('resolveMcpInstructions', () => {
       // The refused arm's three load-bearing facts.
       expect(text).toMatch(/only `refusal`/);
       expect(text).toMatch(/handshake is NOT consumed/);
-      expect(text).toMatch(/`fixBy` is `caller`/);
+      // `fixBy` never travels on a refusal, so no preset may tell the agent to read it.
+      expect(text).toContain('retry only once you have performed `refusal.fix` yourself');
+      expect(text).not.toContain('fixBy');
     }
   });
 
@@ -185,3 +187,37 @@ describe('instructions presets cite no monorepo-only docs/ path (ggui#1149)', ()
     }
   });
 });
+
+// ggui#1579 — the presets had never reached a host (the wiring dropped them),
+// so nothing had exercised them, and an accuracy review found claims the
+// shipped surface contradicts. Each false phrasing is pinned out; the true
+// statement that replaced it is pinned in.
+describe('the protocol presets state only what the shipped surface does (ggui#1579 accuracy review)', () => {
+  const PROTOCOL_PRESETS = ['default', 'aggressive', 'always'] as const;
+  it.each(PROTOCOL_PRESETS)('the %s preset carries none of the corrected claims', (name) => {
+    const text = MCP_INSTRUCTIONS_PRESETS[name];
+    for (const stale of [
+      'actionData.nextStep', // the event carries `intent` + `actionData` (the payload); no nextStep on it
+      'loop back to step 1 to render the response', // a gesture repaints the same card via ggui_amend
+      'renderer URL', // render output carries sessionId + resourceUri; there is no URL to show
+      'host-synthesized', // the card itself posts the doorbell message
+      'cross_reference_unresolved', // no shipped path answers this code
+      'Push sends', // there is no Push tool; ggui_render sends props
+      "contractHash: '<hex>'", // not on the handshake response
+      'silently never reach the agent', // an unconsumed gesture stays queued and the doorbell rings
+      'fixBy', // never travels on a refusal
+    ]) {
+      expect(text, stale).not.toContain(stale);
+    }
+  });
+  it.each(PROTOCOL_PRESETS)('the %s preset states the corrected facts', (name) => {
+    const text = MCP_INSTRUCTIONS_PRESETS[name];
+    expect(text).toContain('`intent` names the action');
+    expect(text).toContain('show the result on the SAME card with `ggui_amend`');
+    expect(text).toContain('(handshake → render → consume → amend)');
+    expect(text).toContain('the `ai.ggui/userAction` doorbell');
+    expect(text).toContain('there is no URL to show the user, so never invent one');
+    expect(text).toContain('ggui_list_sessions, on servers that offer it');
+  });
+});
+

@@ -76,8 +76,10 @@ const PRESET_FACTS: ReadonlyArray<PresetFact> = [
       'carries only `refusal`',
       // T3 — the refusal is five keys; `handshake: 'intact'` is REQUIRED
       "{code, message, fix, retry, handshake: 'intact'}",
-      // T4 — the retry rule is by `retry` class; `fixBy` scopes only `after-fix`
-      'an `after-fix` refusal is yours to retry only when its `fixBy` is `caller`',
+      // T4 — the retry rule is by `retry` class. `fixBy` never travels on a
+      // refusal (it is a registry attribute read by code), so the rule an
+      // agent can follow is stated from what does travel: `refusal.fix`.
+      'an `after-fix` refusal: retry only once you have performed `refusal.fix` yourself',
       'a `later` refusal retries after the delay it names',
       // T2 — missing vs unknown handshakeId; since #880 the slug LEADS the wire
       // text (`HandshakeNotFoundError` is a `DomainError`), so the literal is
