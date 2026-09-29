@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T11:38:07.910Z",
+  "generatedAt": "2026-09-29T08:53:25.562Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -220,6 +220,7 @@
     "function.prototype.name",
     "happy-dom",
     "hono",
+    "ip-address",
     "isomorphic-git",
     "jose",
     "js-yaml",
@@ -563,6 +564,7 @@
     "function.prototype.name",
     "happy-dom",
     "hono@^4",
+    "ip-address",
     "isomorphic-git",
     "jose@^5",
     "jose@^6",
