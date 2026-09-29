@@ -49,6 +49,7 @@ import {
   InMemoryKeyValueStore,
   InMemoryRenderIdentityStore,
   InMemoryGguiSessionStore,
+  InMemoryPendingEventConsumer,
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
@@ -323,10 +324,13 @@ function buildHandler(opts: {
   readonly cacheDurability?: NonNullable<
     NonNullable<GguiRenderHandlerDeps['generation']>['cache']
   >['durability'];
+  /** ggui#1571 — the pending-event pipe the render opens for its session. */
+  readonly pendingEventConsumer?: GguiRenderHandlerDeps['pendingEventConsumer'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
     renderStore: opts.renderStore,
+    ...(opts.pendingEventConsumer ? { pendingEventConsumer: opts.pendingEventConsumer } : {}),
     ...(opts.checkRenderContracts
       ? { checkRenderContracts: opts.checkRenderContracts }
       : {}),
@@ -591,6 +595,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly cacheDurability?: NonNullable<
     NonNullable<GguiRenderHandlerDeps['generation']>['cache']
   >['durability'];
+  /** The pending-event pipe — see {@link buildHandler}'s `pendingEventConsumer`. */
+  readonly pendingEventConsumer?: GguiRenderHandlerDeps['pendingEventConsumer'];
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -641,12 +647,39 @@ async function buildColdGenHarness(extraOpts: {
     ...(extraOpts.cacheDurability
       ? { cacheDurability: extraOpts.cacheDurability }
       : {}),
+    ...(extraOpts.pendingEventConsumer
+      ? { pendingEventConsumer: extraOpts.pendingEventConsumer }
+      : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
     handshakeId,
   };
 }
+
+// ggui#1571 — a pipe that fails to open is not a render failure, and it is
+// not silent either. A gesture on that session is refused PIPE_NOT_FOUND by
+// `ggui_runtime_submit_action`, which the view shows as an error toast; the
+// render's own line is what tells an operator why.
+describe('createGguiRenderHandler — a pipe that fails to open is named, never swallowed (ggui#1571)', () => {
+  it('the render succeeds, and the failure is one warn line carrying its reason', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    vi.spyOn(consumer, 'markCreated').mockImplementation(() => {
+      throw new Error('pipe store down');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({ pendingEventConsumer: consumer });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const lines = warn.mock.calls.filter((call) => call[0] === '[ggui_render.pipe_open_failed]');
+      expect(lines).toHaveLength(1);
+      expect(String(lines[0]?.[1])).toContain('pipe store down');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
 
 // ggui#1484 — a negotiator's `target.sessionId` is reused only when that
 // session is visible to the caller (same app, and same subject when the row

@@ -301,7 +301,7 @@ function pipeNotFound(sessionId: string): UserActionRejected {
   return {
     ok: false,
     code: 'PIPE_NOT_FOUND',
-    message: `submit_action: no pending-events pipe for sessionId "${sessionId}". The GguiSession may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
+    message: `submit_action: no pending-events pipe for sessionId "${sessionId}". The GguiSession may have been closed, or the pipe never opened. The gesture was not enqueued.`,
   };
 }
 
@@ -414,7 +414,7 @@ export function createGguiSubmitActionHandler(
     title: '[runtime] Submit Action',
     audience: ['runtime'],
     description:
-      'Receives a user-action envelope from the rendered ggui UI (iframe → host relay → MCP server). Validates the discriminated `{kind, payload, …}` envelope; for `kind:"dispatch"` appends the action envelope onto the sessionId-keyed pending-events pipe so the agent\'s `ggui_consume` long-poll unblocks mid-turn — when the pipe is closed/missing, returns `{ok:false, code:"PIPE_NOT_FOUND"}` so the iframe-runtime can fall through to `ui/message` chat-shortcut. For `kind:"openLink"` / `kind:"requestDisplayMode"`, pure audit — the user-visible host effect has already fired iframe-side. Never invoked by the model directly — `_meta.ui.visibility: [\'app\']` restricts callers to MCP Apps views per spec §401; the iframe holds no auth credential so the host is the relay party.',
+      'Receives a user-action envelope from the rendered ggui UI (iframe → host relay → MCP server). Validates the discriminated `{kind, payload, …}` envelope; for `kind:"dispatch"` appends the action envelope onto the sessionId-keyed pending-events pipe so the agent\'s `ggui_consume` long-poll unblocks mid-turn — when the pipe is closed/missing, returns `{ok:false, code:"PIPE_NOT_FOUND"}` and nothing is enqueued. For `kind:"openLink"` / `kind:"requestDisplayMode"`, pure audit — the user-visible host effect has already fired iframe-side. Never invoked by the model directly — `_meta.ui.visibility: [\'app\']` restricts callers to MCP Apps views per spec §401; the iframe holds no auth credential so the host is the relay party.',
     inputSchema,
     outputSchema,
     _meta: {
@@ -474,7 +474,7 @@ export function createGguiSubmitActionHandler(
           return {
             ok: false,
             code: 'PIPE_NOT_FOUND',
-            message: `submit_action: no pending-events consumer wired on this server. Operator must configure \`consume.pendingEventConsumer\` (defaults to in-memory when render is bound). Iframe should fall through to ui/message.`,
+            message: `submit_action: no pending-events consumer wired on this server. Operator must configure \`consume.pendingEventConsumer\` (defaults to in-memory when render is bound). The gesture was not enqueued.`,
           };
         }
         // Dispatch payload is `{intent, actionData, uiContext}` post-2026-05-14.

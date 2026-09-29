@@ -1838,9 +1838,18 @@ export function createGguiRenderHandler(
     if (deps.pendingEventConsumer) {
       try {
         deps.pendingEventConsumer.markCreated?.(sessionId);
-      } catch {
-        // Pipe open failures are non-fatal — `ui/message` fallback
-        // on the host still routes gestures on the next chat turn.
+      } catch (err) {
+        // A pipe that fails to open does not fail the render, but nothing
+        // routes this session's gestures either: each one is refused
+        // PIPE_NOT_FOUND by `ggui_runtime_submit_action`, and the view shows
+        // the user an error toast (it sends no `ui/message`, SPEC §4.7). So
+        // the failure is named here (ggui#1571), one-shot, the handler
+        // having no logger dep today.
+        // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
+        console.warn(
+          '[ggui_render.pipe_open_failed]',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     }
 

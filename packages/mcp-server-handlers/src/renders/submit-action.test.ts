@@ -179,14 +179,14 @@ describe('createGguiSubmitActionHandler', () => {
 
   describe('PIPE_NOT_FOUND fail-loud cases (2026-05-13 silent-drop fix)', () => {
     // Pre-fix: every one of these returned `ok:true` without appending.
-    // The iframe-runtime's dispatch closure saw success and skipped the
-    // `ui/message` fallback. The agent's `ggui_consume` long-poll waited
-    // for events that would never arrive, and claude.ai eventually
-    // canceled the request with a generic transport error. The user
-    // saw "Error occurred during tool execution" with no recovery path.
-    // Surfacing PIPE_NOT_FOUND here lets the iframe-runtime observe a
-    // non-success outcome and post `ui/message` so the gesture reaches
-    // the chat surface on the next turn.
+    // The iframe-runtime's dispatch closure saw success, the agent's
+    // `ggui_consume` long-poll waited for events that would never arrive,
+    // and claude.ai eventually canceled the request with a generic
+    // transport error. The user saw "Error occurred during tool execution"
+    // with no recovery path. Surfacing PIPE_NOT_FOUND here lets the
+    // iframe-runtime observe the failure and show the user an error toast
+    // (it sends no `ui/message`: nothing reached the pipe for a doorbell
+    // to point at), so the user sees the gesture did not go through.
 
     it('rejects kind:dispatch when no pendingEventConsumer is wired — surfaces PIPE_NOT_FOUND', async () => {
       const h = createGguiSubmitActionHandler();
@@ -222,6 +222,26 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out.ok).toBe(false);
       if (out.ok) throw new Error('expected ok:false');
       expect(out.code).toBe('PIPE_NOT_FOUND');
+    });
+
+    it('no wire text says the view falls back to ui/message: on ok:false it shows an error toast and sends none (ggui#1571)', async () => {
+      const dispatch = {
+        ...baseEnv,
+        kind: 'dispatch' as const,
+        payload: { intent: 'submit', actionData: null, uiContext: {} },
+      };
+      const noConsumer = createGguiSubmitActionHandler();
+      const noPipe = createGguiSubmitActionHandler({ pendingEventConsumer: new InMemoryPendingEventConsumer() });
+      const a = await noConsumer.handler(dispatch, ctx);
+      const b = await noPipe.handler({ ...dispatch, sessionId: 'orphan-render' }, ctx);
+      if (a.ok || b.ok) throw new Error('expected both refused');
+      // Control: these are the texts that carry the refusal.
+      expect(noConsumer.description).toContain('PIPE_NOT_FOUND');
+      expect(a.message).toMatch(/no pending-events consumer/);
+      expect(b.message).toMatch(/no pending-events pipe/);
+      for (const text of [noConsumer.description, a.message, b.message]) {
+        expect(text).not.toMatch(/ui\/message|chat-shortcut/);
+      }
     });
 
     it('openLink + requestDisplayMode still pass without a pipe (no pipe-append for those kinds)', async () => {

@@ -2928,17 +2928,21 @@ function hideToast(el: HTMLElement): void {
 const ACTION_TOAST_ID = '__ggui-action-toast__';
 
 /**
- * Lightweight toast UX surface for dispatched actions. Renders a
- * fixed-position element at the bottom of the iframe so the user
- * gets immediate visual feedback that their gesture was registered
- * — "→ Sending action: archive" → "✓ Queued — agent will react"
- * (or "💬 Sent to chat" on ui/message fallback).
+ * The drawn toast for a dispatched action: a fixed-position element at
+ * the bottom of the iframe, drawn only when the visitor has to know or do
+ * something (the copy is {@link GESTURE_COPY}). Two kinds reach it:
+ *   - `'error'` — the gesture did not go through: the relay refused it or
+ *     could not be reached, or the card's own contract refused it. Nothing
+ *     reached the pipe, so no `ui/message` doorbell fires (SPEC §4.7
+ *     "Failure-soft client posture");
+ *   - `'action_required'` — the gesture is queued but no consumer is
+ *     listening and this host cannot take (or refused) the wake-up, so the
+ *     visitor must send a message to continue.
+ * A tap that went through, or a wake-up the host took, is spoken, never
+ * drawn.
  *
- * Without this, the iframe is silent during dispatch. User clicks
- * and waits, with no way to distinguish "click was received but the
- * agent is busy" from "click was lost". Especially load-bearing in
- * the consume-pipe vs ui/message dual-path era — the toast tells
- * the user which path the gesture actually took.
+ * Without it, a failed gesture would be silent: the visitor could not tell
+ * "the agent is busy" from "the tap was lost".
  *
  * Direct DOM (not React-managed) because:
  *  - Works during boot before React mounts.
