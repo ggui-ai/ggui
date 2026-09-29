@@ -93,7 +93,7 @@ export function Checkbox({
               style={{
                 fontSize: 'var(--ggui-font-size-sm, 14px)',
                 fontWeight: 'var(--ggui-font-weight-medium, 500)' as CSSProperties['fontWeight'],
-                color: 'var(--ggui-color-onSunken, #52525b)',
+                color: 'var(--ggui-color-onContainer, #18181b)',
               }}
             >
               {label}

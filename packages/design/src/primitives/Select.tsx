@@ -65,7 +65,14 @@ export function Select({
           borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
           border: `1px solid ${hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))'}`,
           backgroundColor: disabled ? 'var(--ggui-color-sunken, #fafafa)' : 'var(--ggui-color-sunken, #ffffff)',
-          color: value ? 'var(--ggui-color-onContainer, #18181b)' : 'var(--ggui-color-onSunken, #52525b)',
+          // Muted only while the placeholder is what shows: a placeholder option
+          // exists and the shown value, controlled or default, is the empty choice.
+          // With no value at all the browser shows the first real option (the
+          // placeholder option is disabled), so that text reads (ggui#1566).
+          color:
+            placeholder && (value ?? rest.defaultValue) === ''
+              ? 'var(--ggui-color-onSunken, #52525b)'
+              : 'var(--ggui-color-onContainer, #18181b)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           appearance: 'none',
           backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,

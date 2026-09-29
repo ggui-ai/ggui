@@ -40,10 +40,11 @@ describe('Button outline label ink (ggui#1034)', () => {
     expect(html).toContain('background-color:transparent');
   });
 
-  it('the filled variants keep their on-pairs; ghost keeps the sunken ink', () => {
+  it('the filled variants keep their on-pairs; ghost and secondary labels read in the surface on-colour (ggui#1566)', () => {
     expect(renderToStaticMarkup(<Button variant="primary">x</Button>)).toContain('color:var(--ggui-color-onPrimary, #ffffff)');
     expect(renderToStaticMarkup(<Button variant="danger">x</Button>)).toContain('color:var(--ggui-color-onError, #ffffff)');
-    expect(renderToStaticMarkup(<Button variant="ghost">x</Button>)).toContain('color:var(--ggui-color-onSunken, #52525b)');
-    expect(renderToStaticMarkup(<Button variant="secondary">x</Button>)).toContain('color:var(--ggui-color-onSunken, #52525b)');
+    // The muted tier on a label reads as disabled; the rank is the missing chrome (ghost) and the chip (secondary).
+    expect(renderToStaticMarkup(<Button variant="ghost">x</Button>)).toContain('color:var(--ggui-color-onContainer, #18181b)');
+    expect(renderToStaticMarkup(<Button variant="secondary">x</Button>)).toContain('color:var(--ggui-color-onContainer, #18181b)');
   });
 });

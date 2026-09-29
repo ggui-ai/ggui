@@ -113,7 +113,7 @@ export function ChatWindow({
                     padding: '10px 14px',
                     borderRadius: radius.lg,
                     backgroundColor: isOwn ? 'var(--ggui-color-primary-600, #0284c7)' : 'var(--ggui-color-sunken, #f3f4f6)',
-                    color: isOwn ? 'var(--ggui-color-onPrimary, #ffffff)' : 'var(--ggui-color-onSunken, #111827)',
+                    color: isOwn ? 'var(--ggui-color-onPrimary, #ffffff)' : 'var(--ggui-color-onContainer, #111827)',
                   }}
                 >
                   <p style={{ margin: 0, fontSize: fontSize.sm }}>{message.content}</p>
@@ -124,7 +124,10 @@ export function ChatWindow({
                       gap: '4px',
                       marginTop: '4px',
                       fontSize: fontSize.xs,
-                      opacity: 0.7,
+                      // Own messages derive the muted line from onPrimary; the other
+                      // party's message now reads at onContainer, so its timestamp
+                      // takes the muted tier itself (ggui#1566).
+                      ...(isOwn ? { opacity: 0.7 } : { color: 'var(--ggui-color-onSunken, #52525b)' }),
                     }}
                   >
                     <span>{timestamp}</span>

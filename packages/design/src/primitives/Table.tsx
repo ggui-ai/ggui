@@ -79,7 +79,9 @@ export function Table<T extends Record<string, unknown> = Record<string, unknown
           width: '100%',
           borderCollapse: 'collapse',
           fontSize: 'var(--ggui-font-size-sm, 14px)',
-          color: 'var(--ggui-color-onSunken, #52525b)',
+          // Body cells are the data and inherit this (ggui#1566); the header and
+          // caption set the muted tier themselves.
+          color: 'var(--ggui-color-onContainer, #18181b)',
         }}
       >
         {caption && (

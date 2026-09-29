@@ -142,7 +142,7 @@ export function Accordion({
                   style={{
                     padding: '0 var(--ggui-spacing-4, 16px) var(--ggui-spacing-4, 16px)',
                     fontSize: 'var(--ggui-font-size-sm, 14px)',
-                    color: 'var(--ggui-color-onSunken, #52525b)',
+                    color: 'var(--ggui-color-onContainer, #18181b)',
                     lineHeight: 'var(--ggui-font-lineHeight-normal, 1.5)',
                   }}
                 >

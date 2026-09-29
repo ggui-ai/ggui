@@ -37,7 +37,8 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   secondary: {
     backgroundColor: 'var(--ggui-color-sunken, #f4f4f5)',
-    color: 'var(--ggui-color-onSunken, #52525b)',
+    // The label reads at full strength; the chip marks the rank (ggui#1566).
+    color: 'var(--ggui-color-onContainer, #18181b)',
     border: 'none',
   },
   outline: {
@@ -53,7 +54,8 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   ghost: {
     backgroundColor: 'transparent',
-    color: 'var(--ggui-color-onSunken, #52525b)',
+    // A dimmed label reads as disabled; ghost's rank is its missing chrome (ggui#1566).
+    color: 'var(--ggui-color-onContainer, #18181b)',
     border: 'none',
   },
   danger: {

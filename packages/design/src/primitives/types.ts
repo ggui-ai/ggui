@@ -765,10 +765,11 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
   /**
    * Visual style. Maps to CSS variables:
    * - `'primary'` -- `var(--ggui-color-primary-600)` background, white text, no border
-   * - `'secondary'` -- `var(--ggui-color-sunken)` background, `var(--ggui-color-onSunken)` text, no border
+   * - `'secondary'` -- `var(--ggui-color-sunken)` background, `var(--ggui-color-onContainer)` text, no border
    * - `'outline'` -- transparent background, `1px solid var(--ggui-color-primary-600)` border, label in the surface's
    *   on-colour (`onContainer`) so it reads on any ground — the brand shows on the border, never as label ink on a dark theme
-   * - `'ghost'` -- transparent background, `var(--ggui-color-onSunken)` text, no border
+   * - `'ghost'` -- transparent background, `var(--ggui-color-onContainer)` text, no border (its rank is the missing
+   *   chrome, not a dimmer label, which would read as disabled)
    * - `'danger'` -- `var(--ggui-color-error-600)` background, white text, no border
    * @default 'primary'
    */
@@ -1023,8 +1024,9 @@ export interface SelectOption {
  *   `var(--ggui-color-error-500)` (error)
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
- * - Text: `var(--ggui-color-onContainer)` when a value is selected,
- *   `var(--ggui-color-onSunken)` when showing placeholder
+ * - Text: `var(--ggui-color-onContainer)` for the displayed option,
+ *   `var(--ggui-color-onSunken)` only while the placeholder shows (a
+ *   `placeholder` with `value=""` or `defaultValue=""`)
  * - Border radius: `var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - Cursor: `pointer` (normal), `not-allowed` (disabled)
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
@@ -1122,7 +1124,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
  * - Check/dash icon: white SVG, 12x12px
  * - Box radius: `var(--ggui-shape-radius-sm)`
  * - Transition: all 0.2s
- * - Label: `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`
+ * - Label: `var(--ggui-font-size-sm)`, `var(--ggui-font-weight-medium)`, `var(--ggui-color-onContainer)`
  * - Description: `var(--ggui-font-size-xs)`, `var(--ggui-color-onSunken)`
  * - Disabled: `opacity: 0.5`, `cursor: not-allowed`
  * - Gap between box and text: `var(--ggui-spacing-2)`
@@ -1141,7 +1143,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
 export interface CheckboxProps extends BaseProps {
   /**
    * Primary label text rendered beside the checkbox box.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onContainer)`.
    */
   label?: string;
   /** Controlled checked state. */
@@ -1200,7 +1202,7 @@ export interface ToggleProps extends BaseProps {
   /**
    * Label text rendered to the right of the toggle track.
    * Also used as `aria-label` on the switch element.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onContainer)`.
    */
   label?: string;
   /** Controlled checked (on/off) state. */
@@ -1239,7 +1241,7 @@ export interface RadioOption {
   value: string;
   /**
    * Display text for this option.
-   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onSunken)`.
+   * Styled with `var(--ggui-font-size-sm)` and `var(--ggui-color-onContainer)`.
    */
   label: string;
   /**
@@ -2232,7 +2234,7 @@ export interface AccordionItem {
   title: ReactNode;
   /**
    * Panel content rendered below the header when expanded. Styled with
-   * `var(--ggui-font-size-sm)`, `var(--ggui-color-onSunken)`,
+   * `var(--ggui-font-size-sm)`, `var(--ggui-color-onContainer)`,
    * `line-height: var(--ggui-font-lineHeight-normal)`.
    * Padding: `0 var(--ggui-spacing-4) var(--ggui-spacing-4)`.
    */

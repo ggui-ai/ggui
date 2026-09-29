@@ -349,7 +349,10 @@ const gguiDark: DtcgTheme = {
     ground: { $value: '#1f1f1f', $type: 'color' }, // surface above ink base
     onGround: { $value: '#f4f3ed', $type: 'color' }, // paper
     sunken: { $value: '#292929', $type: 'color' }, // ink
-    onSunken: { $value: '#d9d9d9', $type: 'color' }, // chrome
+    // Muted text, and text on sunken grounds (ggui#1566): the kit's dark muted
+    // value, 6.57:1 on container and 5.80:1 on sunken. Light's onSunken is ink-3,
+    // the same tier, so dark now reads as light already does.
+    onSunken: { $value: '#a3a3a9', $type: 'color' },
     container: { $value: '#1f1f1f', $type: 'color' }, // ink
     onContainer: { $value: '#f4f3ed', $type: 'color' }, // paper
     outline: { $value: '#3d3d3d', $type: 'color' }, // ink-2
