@@ -18,7 +18,7 @@ import satori from "satori";
 const svg = await satori(
   renderSocialCard({
     surface: "DOCS", // the badge beside the mark; omit it for no badge
-    title: "Agents describe. Interfaces appear.",
+    title: "Agents describe.\nInterfaces appear.", // you place the break, where the sentence breaks
     footer: { url: "docs.ggui.ai", fact: "OPEN PROTOCOL" },
   }),
   { ...SOCIAL_CARD_SIZE, fonts: socialCardFonts() }
