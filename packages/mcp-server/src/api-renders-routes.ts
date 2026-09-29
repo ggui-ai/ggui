@@ -65,7 +65,7 @@
  */
 
 import type { AppMetadataStore, CodeStore, GguiSessionStore } from "@ggui-ai/mcp-server-core";
-import { verifyToken } from "@ggui-ai/mcp-server-core";
+import { verifyToken, verifyWsTokenSignature } from "@ggui-ai/mcp-server-core";
 import {
   deriveContractBundle,
   derivePublicEnvProjection,
@@ -134,7 +134,10 @@ interface MountOptions {
   ) => { wsUrl: string; token: string; expiresAt: string } | undefined;
   /** Per-request runtime-bundle URL resolver (tunnel/proxy aware). */
   readonly resolveRuntimeUrl: () => string;
-  /** Structured logger for store-read failures. */
+  /**
+   * Structured logger for store-read failures, and for the `/state`
+   * renewals refused because a chain expired (`state_chain_expired`).
+   */
   readonly logger: Logger;
 }
 
@@ -164,6 +167,27 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
   const staticBase = codeBaseUrl ?? publicBaseUrl;
 
   // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
+  /**
+   * One line per `/state` renewal refused because its chain expired
+   * (ggui#1496 S6, ggui#1540): the presented token is past its `exp`, or
+   * its chain has no second left. Its signature is checked at any age, so
+   * only a token this server signed is counted, and the line carries ids
+   * only: the session and how old the chain's root is. A chain ends at its
+   * bound (the last renewal's `exp` is clamped to `rootIat + window`), so a
+   * `rootAgeSec` at or past the refresh window is a chain that reached it,
+   * and a smaller one a token that went unrenewed. Both answer the same 410,
+   * whose documented action is the authorized refresh.
+   */
+  function logStateChainExpired(token: string): void {
+    const signed = verifyWsTokenSignature(token, secret);
+    if (!signed.ok) return;
+    const rootIat = signed.claims.rootIat ?? signed.claims.iat;
+    logger.info("state_chain_expired", {
+      sessionId: signed.claims.sessionId,
+      rootAgeSec: Math.max(0, Math.floor(Date.now() / 1000) - rootIat),
+    });
+  }
+
   app.options("/api/sessions/:sessionId/state", createPublicReadPreflight());
   app.get("/api/sessions/:sessionId/state", async (req, res) => {
     // CORS on EVERY response, gates included: cross-origin frames can
@@ -190,6 +214,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       // surface a refresh-vs-rehandshake prompt instead of treating
       // it as a hostile request.
       if (verify.reason === "expired") {
+        logStateChainExpired(wsToken);
         res.status(410).type("text/plain").send("wsToken expired");
         return;
       }
@@ -278,6 +303,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       verify.claims.rootIat ?? verify.claims.iat
     );
     if (liveTrio === undefined) {
+      logStateChainExpired(wsToken);
       res.status(410).type("text/plain").send("wsToken expired");
       return;
     }

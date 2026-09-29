@@ -47,6 +47,7 @@ import {
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { mountApiRendersRoutes } from './api-renders-routes.js';
+import type { Logger } from './logger.js';
 import { createGguiServer, type GguiServer } from './server.js';
 
 const silentLogger = {
@@ -78,6 +79,8 @@ async function bootWithRender(opts?: {
   /** The server's ws-token lifetime and refresh window (ggui#1496 part B, slice 2). */
   readonly wsTokenTtlSec?: number;
   readonly wsTokenRefreshWindowSec?: number;
+  /** A logger to read the route's lines from (ggui#1540). */
+  readonly logger?: Logger;
 }): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-state-test' });
@@ -101,7 +104,7 @@ async function bootWithRender(opts?: {
   }
   const shortCodeIndex = new InMemoryShortCodeIndex();
   const server = createGguiServer({
-    logger: silentLogger,
+    logger: opts?.logger ?? silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     renderChannel: true,
@@ -499,6 +502,63 @@ describe('/state renewals chain from their root, and the chain ends at rootIat +
     expect((await fetch(`${fx.url}/api/sessions/${fx.sessionId}/events${q}&sinceSequence=0`)).status).toBe(410);
     expect((await fetch(`${fx.url}/api/sessions/${fx.sessionId}/stream${q}`)).status).toBe(410);
     expect(await wsSubscribeAnswer(fx, c3)).toBe('BOOTSTRAP_EXPIRED');
+  });
+
+  it('logs each /state renewal refused for expiry as state_chain_expired {sessionId, rootAgeSec}; a token it never signed is not counted (ggui#1540)', async () => {
+    const lines: Array<{ event: string; fields: Record<string, unknown> }> = [];
+    const logger: Logger = {
+      info: (event, fields) => void lines.push({ event, fields: fields ?? {} }),
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      child: () => logger,
+    };
+    const expired = () => lines.filter((l) => l.event === 'state_chain_expired').map((l) => l.fields);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    at(0);
+    fx = await bootWithRender({ withRender: true, wsTokenTtlSec: 60, wsTokenRefreshWindowSec: 150, logger });
+    const root = mintWsToken({ sessionId: fx.sessionId, appId: fx.appId, ttlSec: 60 }, SECRET);
+
+    // A chain that reached its bound: the last renewal's exp is rootIat + window.
+    at(50);
+    const c1 = (await stateRead(fx, root.token)).meta?.wsToken ?? '';
+    at(100);
+    const c2 = (await stateRead(fx, c1)).meta?.wsToken ?? '';
+    expect(expired()).toEqual([]);
+    at(150);
+    expect((await stateRead(fx, c2)).status).toBe(410);
+    expect(expired()).toEqual([{ sessionId: fx.sessionId, rootAgeSec: 150 }]);
+
+    // A root that went unrenewed past its TTL.
+    const fresh = mintWsToken({ sessionId: fx.sessionId, appId: fx.appId, ttlSec: 60 }, SECRET);
+    at(150 + 61);
+    expect((await stateRead(fx, fresh.token)).status).toBe(410);
+    expect(expired()[1]).toEqual({ sessionId: fx.sessionId, rootAgeSec: 61 });
+
+    // Control: a token this server never signed is a 401, and no line.
+    const forged = `${fresh.token.slice(0, -1)}${fresh.token.endsWith('A') ? 'B' : 'A'}`;
+    expect((await stateRead(fx, forged)).status).toBe(401);
+    expect(expired()).toHaveLength(2);
+  });
+
+  it('logs a chain with no second left the same way, while its token still verifies (ggui#1540)', async () => {
+    const lines: Array<{ event: string; fields: Record<string, unknown> }> = [];
+    const logger: Logger = {
+      info: (event, fields) => void lines.push({ event, fields: fields ?? {} }),
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+      child: () => logger,
+    };
+    vi.useFakeTimers({ toFake: ['Date'] });
+    at(0);
+    fx = await bootWithRender({ withRender: true, wsTokenTtlSec: 60, wsTokenRefreshWindowSec: 120, logger });
+    const longLived = mintWsToken({ sessionId: fx.sessionId, appId: fx.appId, ttlSec: 600 }, SECRET);
+    at(120);
+    expect((await stateRead(fx, longLived.token)).status).toBe(410);
+    expect(lines.filter((l) => l.event === 'state_chain_expired').map((l) => l.fields)).toEqual([
+      { sessionId: fx.sessionId, rootAgeSec: 120 },
+    ]);
   });
 
   it('the window defaults to DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER × the TTL', async () => {
