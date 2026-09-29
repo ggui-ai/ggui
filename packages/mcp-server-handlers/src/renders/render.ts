@@ -2356,7 +2356,8 @@ export function createGguiRenderHandler(
               // Without it the exempt set is empty and any reused
               // blueprint whose nextStep is a domain (non-ggui_*) tool
               // fails "tool not registered". Symmetric with the cold-gen
-              // path (runGenerationIntoGguiSession's render build).
+              // path (runGenerationIntoGguiSession's check input). It goes
+              // to the check beside the session, never onto it (ggui#1579).
               ...(blueprintHit.contract.agentCapabilities
                 ? { agentCapabilities: blueprintHit.contract.agentCapabilities }
                 : {}),
@@ -3701,9 +3702,6 @@ async function runGenerationIntoGguiSession(
     ...(responseContracts?.contextSpec
       ? { contextSpec: responseContracts.contextSpec }
       : {}),
-    ...(responseContracts?.agentCapabilities
-      ? { agentCapabilities: responseContracts.agentCapabilities }
-      : {}),
     ...(responseContracts?.clientCapabilities
       ? { clientCapabilities: responseContracts.clientCapabilities }
       : {}),
@@ -3712,10 +3710,20 @@ async function runGenerationIntoGguiSession(
       : {}),
     ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
-  // Schema-compat check (DEFENSIVE backstop).
+  // Schema-compat check (DEFENSIVE backstop). The contract's tool catalog
+  // goes to the check BESIDE the session, never onto it (ggui#1579): the
+  // check's cross-MCP escape hatch needs it, and `ComponentGguiSession`
+  // declares no catalog, so spreading it onto the row only smuggled it past
+  // the type into the store.
   if (checkRenderContracts) {
     try {
-      checkRenderContracts(componentRender);
+      checkRenderContracts({
+        ...(componentRender.actionSpec ? { actionSpec: componentRender.actionSpec } : {}),
+        ...(componentRender.streamSpec ? { streamSpec: componentRender.streamSpec } : {}),
+        ...(responseContracts?.agentCapabilities
+          ? { agentCapabilities: responseContracts.agentCapabilities }
+          : {}),
+      });
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,
@@ -4075,9 +4083,6 @@ async function commitCachedGguiSession(
     ...(args.cacheHit.contextSpec
       ? { contextSpec: args.cacheHit.contextSpec }
       : {}),
-    ...(args.cacheHit.agentCapabilities
-      ? { agentCapabilities: args.cacheHit.agentCapabilities }
-      : {}),
     ...(args.cacheHit.clientCapabilities
       ? { clientCapabilities: args.cacheHit.clientCapabilities }
       : {}),
@@ -4086,9 +4091,17 @@ async function commitCachedGguiSession(
       : {}),
     ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
+  // The matched blueprint's tool catalog goes to the check beside the
+  // session, never onto it (ggui#1579), as on the cold path.
   if (checkRenderContracts) {
     try {
-      checkRenderContracts(componentRender);
+      checkRenderContracts({
+        ...(componentRender.actionSpec ? { actionSpec: componentRender.actionSpec } : {}),
+        ...(componentRender.streamSpec ? { streamSpec: componentRender.streamSpec } : {}),
+        ...(args.cacheHit.agentCapabilities
+          ? { agentCapabilities: args.cacheHit.agentCapabilities }
+          : {}),
+      });
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,

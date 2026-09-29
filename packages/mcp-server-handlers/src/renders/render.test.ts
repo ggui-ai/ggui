@@ -183,6 +183,7 @@ function fakeGenerator(
   effort?: AppGenerationProfileEffort,
   build?: GeneratorBuild,
   tokens?: ColdTokens,
+  contract?: DataContract,
 ) {
   return async (
     input: { request: { sessionId: string } },
@@ -192,6 +193,7 @@ function fakeGenerator(
       sessionId: input.request.sessionId,
       componentCode,
       ...(sourceCode !== undefined ? { sourceCode } : {}),
+      ...(contract !== undefined ? { contract } : {}),
     },
     metadata: {
       provider: 'anthropic',
@@ -216,8 +218,8 @@ function fakeGenerator(
  * (`@ggui-ai/mcp-server/schema-compat.ts`): a `nextStep` declared in
  * `agentCapabilities.tools` is exempt from the ggui-registry check; an
  * undeclared one throws the live `schema_mismatch_error`. Used to prove
- * the cache path lands `agentCapabilities` so the `declared` set is
- * populated (vs. empty → false-positive throw).
+ * the cache path hands the check `agentCapabilities`, so the `declared`
+ * set is populated (vs. empty → false-positive throw).
  */
 function makeSchemaCompatStub(): NonNullable<
   GguiRenderHandlerDeps['checkRenderContracts']
@@ -251,6 +253,8 @@ function buildHandler(opts: {
   readonly coldCode: string;
   /** ggui#1459 — the level the fake generator reports it applied (`metadata.effort`). */
   readonly coldEffort?: AppGenerationProfileEffort;
+  /** ggui#1579 — the contract the fake generator's response carries (`response.contract`). */
+  readonly coldContract?: DataContract;
   /** ggui#1280 — the build the fake generator reports (`metadata.build`). */
   readonly coldBuild?: GeneratorBuild;
   /** ggui#1513 — the token counts the fake generator reports. */
@@ -352,7 +356,7 @@ function buildHandler(opts: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
         model: 'anthropic/claude-haiku-4-5',
-        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens),
+        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens, opts.coldContract),
       },
       resolveLlm: () => null,
       blueprints: { get: async () => null, list: async () => [] },
@@ -363,7 +367,7 @@ function buildHandler(opts: {
         ...(opts.cacheDurability ? { durability: opts.cacheDurability } : {}),
       },
     },
-    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens),
+    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode, opts.coldEffort, opts.coldBuild, opts.coldTokens, opts.coldContract),
   });
 }
 
@@ -570,6 +574,10 @@ async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   /** ggui#1459 — see {@link buildHandler}'s `coldEffort`. */
   readonly coldEffort?: AppGenerationProfileEffort;
+  /** ggui#1579 — see {@link buildHandler}'s `coldContract`. */
+  readonly coldContract?: DataContract;
+  /** The schema-compat seam — see {@link buildHandler}'s `checkRenderContracts`. */
+  readonly checkRenderContracts?: GguiRenderHandlerDeps['checkRenderContracts'];
   /** ggui#1280 — see {@link buildHandler}'s `coldBuild`. */
   readonly coldBuild?: GeneratorBuild;
   /** ggui#1513 — see {@link buildHandler}'s `coldTokens`. */
@@ -624,6 +632,8 @@ async function buildColdGenHarness(extraOpts: {
     index,
     coldCode: COLD_CODE,
     ...(extraOpts.coldEffort !== undefined ? { coldEffort: extraOpts.coldEffort } : {}),
+    ...(extraOpts.coldContract !== undefined ? { coldContract: extraOpts.coldContract } : {}),
+    ...(extraOpts.checkRenderContracts ? { checkRenderContracts: extraOpts.checkRenderContracts } : {}),
     ...(extraOpts.coldBuild !== undefined ? { coldBuild: extraOpts.coldBuild } : {}),
     ...(extraOpts.coldTokens !== undefined ? { coldTokens: extraOpts.coldTokens } : {}),
     ...(extraOpts.postSuccessHook
@@ -1586,22 +1596,22 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     expect(render?.componentCode).not.toBe(COLD_CODE);
   });
 
-  it('seed-pool ACCEPT reuse preserves agentCapabilities on the committed render (tool-bearing blueprint)', async () => {
+  it('seed-pool ACCEPT reuse hands the check the blueprint\'s agentCapabilities (tool-bearing blueprint), and the committed session carries none', async () => {
     // This test guards the "capability-agnostic reuse" seam for blueprints
     // that live ONLY in a seed pool. Historically the §6 cache-hit
     // projection dropped `agentCapabilities` from the `cacheHit` arg passed
     // to `commitCachedGguiSession`, leaving the committed ComponentGguiSession without
-    // a capability catalog. Downstream consumers (schema-compat escape hatch,
-    // iframe bootstrap-meta derivation) reading `agentCapabilities` from the
-    // committed render would see an empty set, silently breaking cross-MCP
-    // nextStep resolution and tool-list projection.
+    // a capability catalog, so the schema-compat escape hatch (the one
+    // reader of the catalog at commit) saw an empty set and broke cross-MCP
+    // nextStep resolution.
     //
     // The fix (render.ts, the `...(blueprintHit.contract.agentCapabilities …)`
     // spread) projects the seed blueprint's capability catalog into cacheHit
-    // before it reaches `commitCachedGguiSession`. `commitCachedGguiSession` then
-    // projects `cacheHit.agentCapabilities` onto the ComponentGguiSession it
-    // passes to `checkRenderContracts`. We capture what the hook receives
-    // (the OUTPUT of the reuse projection) and assert the catalog is intact.
+    // before it reaches `commitCachedGguiSession`, which hands
+    // `cacheHit.agentCapabilities` to `checkRenderContracts` beside the
+    // committed session's specs (ggui#1579: beside the session, not on it —
+    // the session type declares no catalog). We capture what the hook
+    // receives and assert the catalog is intact.
     //
     // Non-tautological confirmation: if the projection spread were removed,
     // `capturedCaps` would be `undefined` and the `toEqual` assertion below
@@ -1719,6 +1729,11 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     // we need; the hook's type uses Record<string,unknown> for tools values,
     // so member-level assertions belong in the toEqual comparison).
     expect(capturedCaps).toEqual(SEED_CONTRACT.agentCapabilities);
+    // ggui#1579 — the catalog reaches the check, never the committed row:
+    // `ComponentGguiSession` declares no `agentCapabilities`.
+    const row = await renderStore.get(out.sessionId);
+    expect(row?.render).toBeDefined();
+    expect(row?.render).not.toHaveProperty('agentCapabilities');
   });
 
   it('per-app store WINS over a seed pool with the same id (per-app-first ordering)', async () => {
@@ -3306,5 +3321,30 @@ describe('ggui_render nextStep — gated on the host declaring ui-message-turn (
   it('an unknown capability alone changes nothing — only the named token omits the hint', async () => {
     const out = await render({ ...CTX, hostCapabilities: ['some-later-capability'] });
     expect(out.nextStep?.tool).toBe('ggui_consume');
+  });
+});
+
+
+// ggui#1579 — the contract's tool catalog is an input to the schema-compat
+// check, not a session field: `ComponentGguiSession` declares no
+// `agentCapabilities`, and nothing reads one off a committed row. The check
+// still gets it (the cross-MCP escape hatch needs it); the row does not.
+describe('createGguiRenderHandler — the tool catalog reaches the check, not the committed session (ggui#1579)', () => {
+  it('cold generation: the check receives the contract catalog, and the committed session carries none', async () => {
+    let captured: Parameters<NonNullable<GguiRenderHandlerDeps['checkRenderContracts']>>[0] | undefined;
+    const { harness, handshakeId } = await buildColdGenHarness({
+      contract: AGENT_TOOL_CONTRACT,
+      coldContract: AGENT_TOOL_CONTRACT,
+      checkRenderContracts: (shape) => {
+        captured = shape;
+      },
+    });
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(captured?.agentCapabilities).toEqual(AGENT_TOOL_CONTRACT.agentCapabilities);
+    expect(captured?.actionSpec).toEqual(AGENT_TOOL_CONTRACT.actionSpec);
+    const row = await harness.renderStore.get(out.sessionId);
+    expect(row?.render).toBeDefined();
+    expect(row?.render).not.toHaveProperty('agentCapabilities');
   });
 });
