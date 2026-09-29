@@ -184,6 +184,7 @@ export {
   RENDER_READ_APP_TRUST_OVER_SUBJECT,
   renderReadAllowed,
   renderReadVerdict,
+  type RenderReadCaller,
   type RenderReadRowView,
   type RenderReadRung,
   type RenderReadVerdict,

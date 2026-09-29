@@ -23,17 +23,41 @@ export interface RenderReadRowView {
 }
 
 /**
+ * The two caller fields the read gate consults: the app the credential
+ * names and the end user it carries, when it carries one. A door with a
+ * full `HandlerContext` passes it as is; the live channel's bearer
+ * subscribe (ggui#1483) has no handler context and passes the two fields
+ * it resolved.
+ */
+export type RenderReadCaller = Pick<HandlerContext, 'appId' | 'userId'>;
+
+/**
  * Per-session render-resource read gate (rehydration access control).
  *
- * ONE predicate for the two doors that re-issue a live credential for an
- * EXISTING session by locator: the read door (`resources/read` of
- * `ui://ggui/render/...`) and the authorized refresh
+ * The predicate of the doors that admit a caller to an EXISTING session by
+ * id with app trust: the read door (`resources/read` of
+ * `ui://ggui/render/...`); the authorized refresh
  * (`ggui_runtime_refresh_ws_token`, ggui#1496 part B), which re-mints no
- * weaker and no stronger than the read door. Other doors mint under their
- * own gates (`ggui_render` creates the session; `ggui_update` and
- * `ggui_list_sessions` gate on the app, and the list on the user when set;
- * `/state` on possession of an unexpired token, a renewal bounded by its
- * chain's `rootIat` + the refresh window).
+ * weaker and no stronger than the read door; the live channel's bearer
+ * subscribe (ggui#1483), which attaches to the session's events and
+ * actions no weaker than the read door reads them; and the session tools
+ * whose row in the cross-subject contract suite's `NO_END_USER` table reads
+ * `admitted` (ggui#1483). The suite enumerates every tool with a `sessionId`
+ * from the registry, so a new one is classified there, not here. The other
+ * session tools refuse a caller with no end-user identity on a
+ * subject-bound row too, through `isVisibleToCaller`; which rule the two
+ * families should share is ggui#1553.
+ *
+ * NOT held to it: the channel's token subscribe. A `wsToken` is a bearer
+ * capability bound to one session (SPEC §5.5.1.1): holding it is the
+ * authorization that subscribe checks, and its synthesized identity names
+ * the session, not a person (ggui#446). The doors that mint one each run
+ * their own gate: `ggui_render` creates the session with the caller as its
+ * subject; `ggui_update` and the read door run this predicate;
+ * `ggui_list_sessions` gates on the app, and on the user when set; `/state`
+ * renews on possession of an unexpired token, a renewal bounded by its
+ * chain's `rootIat` + the refresh window; the console's session routes mint
+ * behind a cookie issued on possession of the session's shortCode.
  *
  * Rungs, in order (spec §3):
  *  1. Fail closed without a request context.
@@ -56,12 +80,13 @@ export interface RenderReadRowView {
  * resource handler discharges it by collapsing a refusal to "absent"
  * and letting every downstream branch run as it would for a locator
  * that never existed, so both arrive at the same typed failure with the
- * same bytes.
+ * same bytes. The live channel's subscribe cannot discharge it: an
+ * unknown id there is provisioned, not refused (SPEC §12.2.3), so its
+ * refusal is `SESSION_NOT_FOUND` with a fixed message — it tells a
+ * caller only that the id exists and is not theirs, as the channel's
+ * app-scope refusal already does.
  */
-export function renderReadAllowed(
-  row: RenderReadRowView,
-  ctx: HandlerContext | undefined
-): boolean {
+export function renderReadAllowed(row: RenderReadRowView, ctx: RenderReadCaller | undefined): boolean {
   return renderReadVerdict(row, ctx).allowed;
 }
 
@@ -86,7 +111,7 @@ export interface RenderReadVerdict {
 /** The read gate's answer and the rung that gave it; see {@link renderReadAllowed} for the rungs. */
 export function renderReadVerdict(
   row: RenderReadRowView,
-  ctx: HandlerContext | undefined
+  ctx: RenderReadCaller | undefined
 ): RenderReadVerdict {
   if (ctx === undefined) return { allowed: false, rung: 'no-context', appTrustOverSubject: false };
   if (ctx.appId !== row.appId) return { allowed: false, rung: 'app', appTrustOverSubject: false };

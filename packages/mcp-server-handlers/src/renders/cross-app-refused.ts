@@ -11,6 +11,18 @@ export function logCrossAppRefused(tool: string, sessionId: string, callerAppId:
 }
 
 /**
+ * ggui#1483 — the one line a refused cross-SUBJECT call leaves: a caller
+ * holding an end-user identity named a session of its own app bound to a
+ * different end-user. The tool, the session and the app — never either
+ * user's id, which the line has no need to carry, and never the payload.
+ * The caller's answer is the tool's ordinary not-found.
+ */
+export function logCrossSubjectRefused(tool: string, sessionId: string, appId: string): void {
+  // eslint-disable-next-line no-console -- operator-visible structured refusal line; handlers carry no logger
+  console.warn(`[ggui] runtime_cross_subject_refused ${JSON.stringify({ tool, sessionId, appId })}`);
+}
+
+/**
  * ggui#1479 — the line a refusal leaves when a session's ownership could not
  * be read at all (the store threw): the tool, the session, the caller's app
  * and why. The call fails closed; this line is how an outage reads apart

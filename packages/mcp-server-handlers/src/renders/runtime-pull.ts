@@ -90,6 +90,8 @@ import {
 } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
+import { logCrossSubjectRefused } from './cross-app-refused.js';
+import { renderReadAllowed } from './render-read-gate.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
@@ -191,6 +193,13 @@ export function createGguiRuntimePullHandler(deps: GguiRuntimePullHandlerDeps) {
       // proved identity on this carrier).
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
+        throw new GguiSessionNotFoundError(sessionId);
+      }
+      // Subject gate (ggui#1483): a view's call is admitted by the rule that
+      // admitted its read — the render read door's predicate, so an end-user
+      // caller pulls only its own sessions' events (ggui#1553).
+      if (!renderReadAllowed(stored, ctx)) {
+        logCrossSubjectRefused('ggui_runtime_pull', sessionId, ctx.appId);
         throw new GguiSessionNotFoundError(sessionId);
       }
 

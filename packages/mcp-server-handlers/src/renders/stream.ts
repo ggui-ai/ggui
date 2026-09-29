@@ -25,6 +25,8 @@ import type {
 } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
+import { logCrossSubjectRefused } from './cross-app-refused.js';
+import { renderReadAllowed } from './render-read-gate.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import {
   handleStream,
@@ -92,6 +94,12 @@ export function createGguiEmitHandler(
       // GguiSessionNotFoundError so cross-app existence isn't leaked.
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
+        throw new GguiSessionNotFoundError(sessionId);
+      }
+      // Subject gate (ggui#1483): an end-user caller emits only into its own
+      // sessions — the render read door's predicate (ggui#1553).
+      if (!renderReadAllowed(stored, ctx)) {
+        logCrossSubjectRefused('ggui_emit', sessionId, ctx.appId);
         throw new GguiSessionNotFoundError(sessionId);
       }
 

@@ -19,6 +19,7 @@ import type {
 import type { AckPayload, SubscribePayload } from "@ggui-ai/protocol";
 import { PROTOCOL_SCHEMA_VERSION, UPGRADE_REQUIRED } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
+import { renderReadAllowed } from "@ggui-ai/mcp-server-handlers/renders";
 import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import {
@@ -621,6 +622,35 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
           ws,
           "APP_MISMATCH",
           `GguiSession ${payload.sessionId} belongs to a different app`,
+          message.requestId
+        );
+        return;
+      }
+      // A bearer that carries an end-user identity attaches only to its
+      // own sessions (ggui#1483, SPEC §12.2): the render read door's
+      // predicate, the app and then the subject, on the stored row —
+      // before anything registers, acks or replays, since an accepted
+      // subscribe both reads the session and carries `action` frames
+      // into it. The token path is exempt, not forgotten: a `wsToken` is a
+      // bearer capability bound to one session (SPEC §5.5.1.1), holding it
+      // is the authorization, and its synthesized identity names the
+      // session, not a person (ggui#446). A refusal answers
+      // SESSION_NOT_FOUND (§7.9.1's one code for a session this caller
+      // cannot use) with a fixed message naming no one. Because an unknown
+      // id is provisioned here rather than refused, the refusal tells the
+      // caller the id exists and is not theirs (ggui#1554).
+      const endUserId =
+        effectiveIdentity.identity.kind === "user" ? effectiveIdentity.identity.userId : undefined;
+      if (!viaWsToken && !renderReadAllowed(stored, { appId: effectiveAppId, userId: endUserId })) {
+        deps.logger.warn("render_channel_subject_refused", {
+          sessionId: payload.sessionId,
+          appId: effectiveAppId,
+          source: effectiveIdentity.source,
+        });
+        deps.sendError(
+          ws,
+          "SESSION_NOT_FOUND",
+          "No GguiSession with this id is usable by this credential",
           message.requestId
         );
         return;

@@ -18,6 +18,8 @@ import {
 import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import { GGUI_RENDER_UI_META } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { HandlerContext } from '../types.js';
+import { logCrossSubjectRefused } from './cross-app-refused.js';
+import { renderReadAllowed } from './render-read-gate.js';
 import { refreshRenderIdentity } from './render-identity.js';
 import {
   applyGguiSessionPatch,
@@ -205,6 +207,13 @@ export async function runPropsMutation(
       // GguiSessionNotFoundError so cross-app existence is not leaked.
       const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
+        throw new GguiSessionNotFoundError(sessionId);
+      }
+      // Subject gate (ggui#1483): within the app, an end-user caller acts
+      // only on its own sessions — the render read door's predicate, which
+      // admits a caller with no end-user identity as app trust (ggui#1553).
+      if (!renderReadAllowed(stored, ctx)) {
+        logCrossSubjectRefused(tool, sessionId, ctx.appId);
         throw new GguiSessionNotFoundError(sessionId);
       }
 

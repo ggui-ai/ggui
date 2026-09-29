@@ -87,7 +87,8 @@ import {
   type StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
-import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
+import { logCrossAppRefused, logCrossSubjectRefused, logOwnershipUnverified } from './cross-app-refused.js';
+import { renderReadAllowed } from './render-read-gate.js';
 import { assertActionContract } from './assert-action-contract.js';
 import { recordCommittedOneShot, type CommittedOneShotResult } from './record-committed-one-shot.js';
 
@@ -593,6 +594,15 @@ export function createGguiSubmitActionHandler(
         }
         if (read.kind === 'row' && read.stored.appId !== ctx.appId) {
           logCrossAppRefused('ggui_runtime_submit_action', env.sessionId, ctx.appId, read.stored.appId);
+          return pipeNotFound(env.sessionId);
+        }
+        // Subject gate (ggui#1483): within the app, an end-user's gesture
+        // reaches only its own sessions — the render read door's predicate,
+        // the rule that admitted the view to its read (ggui#1553). Refused
+        // before the contract gate, the append, the ledger write and the
+        // spend, with the same answer as a session with no pipe.
+        if (read.kind === 'row' && !renderReadAllowed(read.stored, ctx)) {
+          logCrossSubjectRefused('ggui_runtime_submit_action', env.sessionId, ctx.appId);
           return pipeNotFound(env.sessionId);
         }
         const stored = read.kind === 'row' ? read.stored : undefined;

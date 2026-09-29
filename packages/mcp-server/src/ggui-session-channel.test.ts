@@ -125,7 +125,7 @@ type BootChannelExtras = Pick<
   | 'streamBuffer'
   | 'streamFanout'
 > &
-  Partial<Pick<GguiSessionChannelOptions, 'logger'>>;
+  Partial<Pick<GguiSessionChannelOptions, 'logger' | 'auth'>>;
 
 /**
  * Boot a channel server over a bare http server, commit a component
@@ -1165,6 +1165,163 @@ describe('handleSubscribe — a per-app-only source is authorized on every subsc
         perAppOnlySources: ['dev'],
       }),
     ).toThrow(/perAppOnlySources/);
+  });
+});
+
+describe('handleSubscribe — a bearer end-user reaches only its own sessions (ggui#1483)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  const GO_SPEC: ActionSpec = {
+    go: {
+      label: 'Go',
+      nextStep: 'go_next',
+      schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    },
+  };
+
+  /** The socket's bearer (`bootChannel` always sends `channel-test-token`) resolved to an end-user of the fixture's app. */
+  function endUser(userId: string): BootChannelExtras {
+    return {
+      auth: new InMemoryAuthAdapter({
+        seedTokens: [
+          {
+            token: 'channel-test-token',
+            result: { identity: { kind: 'user', userId, appId: APP_ID, roles: [] }, source: 'oidc' },
+          },
+        ],
+      }),
+    };
+  }
+
+  /** Bind the fixture's row to a subject the way the agent's commit does (the stores fill it if-not-exists). */
+  async function bindSubject(f: Fixture, userId: string): Promise<void> {
+    const row = await f.store.get(f.sessionId);
+    if (!row) throw new Error('fixture row missing');
+    await f.store.commit({ appId: APP_ID, userId, render: row.render });
+    expect((await f.store.get(f.sessionId))?.userId).toBe(userId);
+  }
+
+  function subscribeFrame(sessionId: string, extra?: Record<string, unknown>): string {
+    return JSON.stringify({
+      type: 'subscribe',
+      payload: { sessionId, appId: APP_ID, ...(extra ?? {}) },
+      requestId: randomUUID(),
+    });
+  }
+
+  function goFrame(sessionId: string): string {
+    return JSON.stringify({
+      type: 'action',
+      payload: { sessionId, type: 'data:submit', payload: { action: 'go', data: { id: 'x1' } } },
+      requestId: randomUUID(),
+    });
+  }
+
+  it("refuses another end-user's session SESSION_NOT_FOUND, with no ack, a message that names no one, and a log line that names no one", async () => {
+    const warned: Array<{ event: string; fields: string }> = [];
+    const fieldLogger: Logger = {
+      info: () => undefined,
+      warn: (event: string, fields?: Record<string, unknown>) => {
+        warned.push({ event, fields: JSON.stringify(fields ?? {}) });
+      },
+      error: () => undefined,
+      debug: () => undefined,
+      child: () => fieldLogger,
+    };
+    fx = await bootChannel({}, () => ({ ...endUser('user-a'), logger: fieldLogger }));
+    await bindSubject(fx, 'user-b');
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    const err = await fx.nextFrame('error');
+    const payload = err['payload'] as { code: string; message: string };
+    expect(payload.code).toBe('SESSION_NOT_FOUND');
+    expect(payload.message).not.toContain('user-a');
+    expect(payload.message).not.toContain('user-b');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+    const refusals = warned.filter((w) => w.event === 'render_channel_subject_refused');
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]!.fields).toContain(fx.sessionId);
+    expect(refusals[0]!.fields).not.toContain('user-a');
+    expect(refusals[0]!.fields).not.toContain('user-b');
+  });
+
+  it("refuses it the same way when the per-app authorization passes the caller's app — the hosted wiring (per-app-only oidc)", async () => {
+    const authorized: string[] = [];
+    fx = await bootChannel({}, () => ({
+      ...endUser('user-a'),
+      perAppOnlySources: ['oidc'],
+      authorizeApp: async (appId: string) => {
+        authorized.push(appId);
+      },
+    }));
+    await bindSubject(fx, 'user-b');
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('SESSION_NOT_FOUND');
+    expect(authorized).toEqual([APP_ID]);
+  });
+
+  it('lets no action frame reach the refused session — the socket never became its subscriber', async () => {
+    fx = await bootChannel(GO_SPEC, () => endUser('user-a'));
+    await bindSubject(fx, 'user-b');
+    const before = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('error');
+    fx.ws.send(goFrame(fx.sessionId));
+    const second = await fx.nextFrame('error');
+    expect((second['payload'] as { code: string }).code).toBe('NOT_SUBSCRIBED');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+    const after = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    expect(after?.events.length).toBe(before?.events.length);
+  });
+
+  it('subscribes the end-user the session belongs to, and its action lands — control', async () => {
+    fx = await bootChannel(GO_SPEC, () => endUser('user-b'));
+    await bindSubject(fx, 'user-b');
+    const before = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+    fx.ws.send(goFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+    const after = await fx.store.listEventsSince(fx.sessionId, 0, 50);
+    expect(after?.events.length).toBe((before?.events.length ?? 0) + 1);
+  });
+
+  it('subscribes an end-user to a session that has no subject yet, as the read door does — control', async () => {
+    fx = await bootChannel({}, () => endUser('user-a'));
+    expect((await fx.store.get(fx.sessionId))?.userId).toBeUndefined();
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+  });
+
+  it("subscribes a bearer that carries no end-user identity to a subject-bound session (the app's own trust) — control", async () => {
+    fx = await bootChannel({});
+    await bindSubject(fx, 'user-b');
+    fx.ws.send(subscribeFrame(fx.sessionId));
+    await fx.nextFrame('ack');
+  });
+
+  it("a wsToken subscribe is not held to its synthesized identity: the token's session acks whoever its subject is (ggui#446) — control", async () => {
+    // The wsToken path synthesizes `userId = sessionId` (a render-scoped
+    // credential, not a person). Held to the subject rung it would refuse
+    // every subject-bound view. The socket's bearer here is user-a, so a
+    // rung that ran on the upgrade identity would refuse too.
+    fx = await bootChannel({}, (sessionId) => ({
+      ...endUser('user-a'),
+      bootstrap: {
+        verify: (token) =>
+          token === 'tok-valid' ? { ok: true, sessionId, appId: APP_ID } : { ok: false, reason: 'invalid' },
+      },
+    }));
+    await bindSubject(fx, 'user-b');
+    fx.ws.send(subscribeFrame(fx.sessionId, { wsToken: 'tok-valid' }));
+    await fx.nextFrame('ack');
+    expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
   });
 });
 

@@ -34,7 +34,7 @@
  * (ggui#1496); and `ggui_render`, whose session id arrives through the
  * handshake record, not its input (ggui#1484).
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryAppMetadataStore,
   InMemoryGguiSessionStore,
@@ -172,7 +172,8 @@ async function answerOf(run: () => Promise<unknown>): Promise<string> {
   }
 }
 
-async function seededWorld() {
+/** A session under app B, holding one queued gesture — bound to `subject` (its row's `userId`) when one is given. */
+async function seededWorld(subject?: string) {
   const renderStore = new InMemoryGguiSessionStore();
   const pendingEventConsumer = new InMemoryPendingEventConsumer();
   const created = await renderStore.create({ appId: APP_B });
@@ -180,6 +181,7 @@ async function seededWorld() {
     appId: APP_B,
     render: card(created.id, APP_B),
     sourceCode: 'export default function Card() { return null; }',
+    ...(subject !== undefined ? { userId: subject } : {}),
   });
   pendingEventConsumer.markCreated(created.id);
   // One queued gesture: a drain empties it, an append grows it.
@@ -260,6 +262,200 @@ describe('every sessionId handler refuses another app\'s session exactly as a mi
         }
       });
     }
+  }
+});
+
+/**
+ * ggui#1483 — the cross-SUBJECT twin of the suite above, over the same
+ * registry enumeration and the same table. Within one app, a session bound
+ * to an end-user (its row's `userId`, written at commit) is called by a
+ * DIFFERENT end-user of that app (`ctx.userId`, set for a `kind: 'user'`
+ * identity: on a federated deployment, every end-user of an app shares its
+ * `appId`). The call must answer exactly as a missing session and change
+ * nothing; the owner's own call is the control. A handler that gains a
+ * `sessionId` input is covered by construction, as above.
+ *
+ * `NO_END_USER` pins the one case the two visibility predicates decide
+ * differently — a caller with NO end-user identity (an app or builder
+ * credential) against a subject-bound row. `isVisibleToCaller` refuses it
+ * (`ggui_consume`, `ggui_get_session`, `ggui_get_render_source`);
+ * `renderReadAllowed` admits it as app trust. The handlers ggui#1483 gated
+ * take `renderReadAllowed`: for the runtime tools it is the predicate of the
+ * read door that issued the view its session, so a view is admitted to its
+ * calls by the rule that admitted it to its read; for `ggui_update`,
+ * `ggui_amend` and `ggui_emit` it adds the cross-subject refusal and leaves
+ * the no-identity case as it was. Which way the two should converge is
+ * ggui#1553; until it is decided, a change to any row of this table is a
+ * decision, not drift.
+ */
+const OWNER = 'provider-x:owner-subject';
+const OTHER = 'provider-x:other-subject';
+
+const NO_END_USER: Record<string, 'admitted' | 'as-missing'> = {
+  ggui_amend: 'admitted',
+  ggui_update: 'admitted',
+  ggui_consume: 'as-missing',
+  ggui_emit: 'admitted',
+  ggui_get_render_source: 'as-missing',
+  ggui_get_session: 'as-missing',
+  ggui_runtime_pull: 'admitted',
+  ggui_runtime_submit_action: 'admitted',
+  ggui_runtime_sync_context: 'admitted',
+};
+
+/** The handlers whose subject gate is `renderReadAllowed` and leaves `runtime_cross_subject_refused`. */
+const LOGS_SUBJECT_REFUSAL: ReadonlySet<string> = new Set(
+  Object.entries(NO_END_USER)
+    .filter(([, expected]) => expected === 'admitted')
+    .map(([name]) => name),
+);
+
+const endUserCtx = (userId: string): HandlerContext => ({ appId: APP_B, requestId: `req-${userId}`, userId });
+
+describe("every sessionId handler refuses another end-user's session of the same app exactly as a missing one (ggui#1483)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  for (const [name, spec] of Object.entries(CLASSIFIED)) {
+    it(`${name}: another end-user ≡ missing; nothing changes the owner's row, events or pipe; the owner's own call takes its path`, async () => {
+      const world = await seededWorld(OWNER);
+      expect((await world.renderStore.get(world.sessionId))?.userId).toBe(OWNER);
+      const handler = world.handlers.find((h) => h.name === name);
+      expect(handler, `${name} is registered`).toBeDefined();
+      if (!handler) return;
+      const before = {
+        row: JSON.stringify(await world.renderStore.get(world.sessionId)),
+        events: JSON.stringify(await world.renderStore.listEventsSince(world.sessionId, 0, 500)),
+      };
+
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const foreign = await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), endUserCtx(OTHER)));
+      const foreignLines = warn.mock.calls.map((c) => c.map(String).join(' '));
+      warn.mockClear();
+      const emptyConsumer = new InMemoryPendingEventConsumer();
+      emptyConsumer.markCreated(world.sessionId);
+      const emptyHandler = build(new InMemoryGguiSessionStore(), emptyConsumer).find((h) => h.name === name);
+      expect(emptyHandler, `${name} is registered on the empty store`).toBeDefined();
+      if (!emptyHandler) return;
+      const missing = await answerOf(() =>
+        emptyHandler.handler(spec.input(world.sessionId, APP_B), endUserCtx(OTHER)),
+      );
+      const missingLines = warn.mock.calls.map((c) => c.map(String).join(' '));
+      warn.mockClear();
+
+      expect(foreign).toBe(missing);
+      // The operator's line: one per refusal, naming the tool and the session,
+      // never either end-user; a session that never existed leaves none. The
+      // handlers that refuse through `isVisibleToCaller` log nothing, as before.
+      const refusals = foreignLines.filter((l) => l.includes('runtime_cross_subject_refused'));
+      if (LOGS_SUBJECT_REFUSAL.has(name)) {
+        expect(refusals).toHaveLength(1);
+        expect(refusals[0]).toContain(`"tool":"${name}"`);
+        expect(refusals[0]).toContain(world.sessionId);
+        expect(refusals[0]).not.toContain(OWNER);
+        expect(refusals[0]).not.toContain(OTHER);
+      } else {
+        expect(refusals).toEqual([]);
+      }
+      expect(missingLines.filter((l) => l.includes('runtime_cross_subject_refused'))).toEqual([]);
+      expect(JSON.stringify(await world.renderStore.get(world.sessionId))).toBe(before.row);
+      expect(JSON.stringify(await world.renderStore.listEventsSince(world.sessionId, 0, 500))).toBe(before.events);
+      expect(world.pendingEventConsumer.pendingCount(world.sessionId)).toBe(1);
+
+      const owner = await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), endUserCtx(OWNER)));
+      const ownerLines = warn.mock.calls.map((c) => c.map(String).join(' '));
+      warn.mockRestore();
+      expect(ownerLines.filter((l) => l.includes('runtime_cross_subject_refused'))).toEqual([]);
+      expect(owner).not.toContain('"threw"');
+      expect(owner).not.toContain('"ok":false');
+      if (spec.kind === 'not-found') {
+        expect(owner).not.toBe(missing);
+      } else {
+        expect(owner).toBe(missing);
+      }
+    });
+  }
+
+  it('every not-found handler is classified for a caller with no end-user identity, and the table names nothing else', () => {
+    const notFound = Object.entries(CLASSIFIED)
+      .filter(([, spec]) => spec.kind === 'not-found')
+      .map(([name]) => name)
+      .sort();
+    expect(Object.keys(NO_END_USER).sort()).toEqual(notFound);
+  });
+
+  for (const [name, expected] of Object.entries(NO_END_USER)) {
+    it(`${name}: a caller with no end-user identity on a subject-bound session is ${expected === 'admitted' ? 'admitted (app trust, renderReadAllowed)' : 'answered as missing (isVisibleToCaller)'} — ggui#1553`, async () => {
+      const spec = CLASSIFIED[name];
+      expect(spec, `${name} is classified`).toBeDefined();
+      if (!spec) return;
+      const world = await seededWorld(OWNER);
+      const handler = world.handlers.find((h) => h.name === name);
+      if (!handler) throw new Error(`${name} is not registered`);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const appCaller = await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), ctxOf(APP_B)));
+      const appCallerLines = warn.mock.calls.map((c) => c.map(String).join(' '));
+      warn.mockRestore();
+      expect(appCallerLines.filter((l) => l.includes('runtime_cross_subject_refused'))).toEqual([]);
+      const emptyConsumer = new InMemoryPendingEventConsumer();
+      emptyConsumer.markCreated(world.sessionId);
+      const emptyHandler = build(new InMemoryGguiSessionStore(), emptyConsumer).find((h) => h.name === name);
+      if (!emptyHandler) throw new Error(`${name} is not registered on the empty store`);
+      const missing = await answerOf(() => emptyHandler.handler(spec.input(world.sessionId, APP_B), ctxOf(APP_B)));
+      if (expected === 'admitted') {
+        expect(appCaller).not.toContain('"threw"');
+        expect(appCaller).not.toContain('"ok":false');
+      } else {
+        expect(appCaller).toBe(missing);
+      }
+    });
+  }
+
+  // A session with no subject is outside the rule (SPEC §7.9.1): any end-user of its app may use it, as the read door admits.
+  for (const [name, spec] of Object.entries(CLASSIFIED)) {
+    if (spec.kind !== 'not-found') continue;
+    it(`${name}: an end-user on a session with no subject takes its path — control`, async () => {
+      const world = await seededWorld();
+      expect((await world.renderStore.get(world.sessionId))?.userId).toBeUndefined();
+      const handler = world.handlers.find((h) => h.name === name);
+      if (!handler) throw new Error(`${name} is not registered`);
+      const answer = await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), endUserCtx(OTHER)));
+      expect(answer).not.toContain('"threw"');
+      expect(answer).not.toContain('"ok":false');
+    });
+  }
+
+  // The gate runs before per-card validation: an INVALID call from another
+  // end-user answers exactly as the same call on a missing session, so a
+  // validation error can never describe the owner's card (its declared
+  // channels, its context slots).
+  const INVALID_FOREIGN: Record<string, Input> = {
+    ggui_emit: (sessionId) => ({ sessionId, channel: 'not-declared', payload: { n: 1 } }),
+    ggui_runtime_sync_context: (sessionId, declaredAppId) => ({
+      sessionId,
+      appId: declaredAppId,
+      snapshot: { 'not-declared': 'x' },
+    }),
+  };
+  for (const [name, input] of Object.entries(INVALID_FOREIGN)) {
+    it(`${name}: another end-user's INVALID call ≡ the same call on a missing session (the gate runs before validation)`, async () => {
+      const world = await seededWorld(OWNER);
+      const handler = world.handlers.find((h) => h.name === name);
+      if (!handler) throw new Error(`${name} is not registered`);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const foreign = await answerOf(() => handler.handler(input(world.sessionId, APP_B), endUserCtx(OTHER)));
+      const emptyConsumer = new InMemoryPendingEventConsumer();
+      emptyConsumer.markCreated(world.sessionId);
+      const emptyHandler = build(new InMemoryGguiSessionStore(), emptyConsumer).find((h) => h.name === name);
+      if (!emptyHandler) throw new Error(`${name} is not registered on the empty store`);
+      const missing = await answerOf(() => emptyHandler.handler(input(world.sessionId, APP_B), endUserCtx(OTHER)));
+      // Control: the owner's same invalid call is a validation answer, not the missing one.
+      const owner = await answerOf(() => handler.handler(input(world.sessionId, APP_B), endUserCtx(OWNER)));
+      warn.mockRestore();
+      expect(foreign).toBe(missing);
+      expect(owner).not.toBe(missing);
+    });
   }
 });
 

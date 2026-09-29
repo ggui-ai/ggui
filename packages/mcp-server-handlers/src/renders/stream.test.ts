@@ -149,6 +149,36 @@ describe('createGguiEmitHandler', () => {
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
       expect(sent).toHaveLength(0);
     });
+
+    it("another end-user of the app is refused before delivery, on a declared channel and on an undeclared one alike (ggui#1483)", async () => {
+      // Declared channel: a gate placed after `handleStream` would deliver
+      // first. Undeclared channel: it would answer ChannelNotDeclaredError,
+      // naming the owner's declared channels, instead of not-found.
+      const { sessionId } = await seedRender(renderStore, {
+        streamSpec: { updates: { mode: 'append', schema: { type: 'object' } } },
+      });
+      const row = await renderStore.get(sessionId);
+      if (!row) throw new Error('seeded row missing');
+      await renderStore.commit({ render: row.render, appId: 'app-1', userId: 'owner-subject' });
+      const sent: unknown[] = [];
+      const handler = createGguiEmitHandler({
+        renderStore,
+        sendEnvelope: async (e) => {
+          sent.push(e);
+          return {};
+        },
+      });
+      const other = { appId: 'app-1', requestId: 'r1', userId: 'other-subject' };
+      for (const channel of ['updates', 'not-declared']) {
+        await expect(handler.handler({ sessionId, channel, payload: {} }, other)).rejects.toBeInstanceOf(
+          GguiSessionNotFoundError,
+        );
+      }
+      expect(sent).toHaveLength(0);
+      // Control: the owner's own emit on the declared channel is delivered.
+      await handler.handler({ sessionId, channel: 'updates', payload: {} }, { ...other, userId: 'owner-subject' });
+      expect(sent).toHaveLength(1);
+    });
   });
 
   describe('observer notifier seam', () => {

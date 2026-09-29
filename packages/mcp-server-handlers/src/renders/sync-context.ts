@@ -69,7 +69,8 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import { VIEW_ORIGIN_UNPROVEN } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
-import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
+import { logCrossAppRefused, logCrossSubjectRefused, logOwnershipUnverified } from './cross-app-refused.js';
+import { renderReadAllowed } from './render-read-gate.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
@@ -241,6 +242,13 @@ export function createGguiSyncContextHandler(
       // and the refusal is named on one line (ids only, no payload).
       if (!stored || stored.appId !== ctx.appId) {
         if (stored) logCrossAppRefused('ggui_runtime_sync_context', sessionId, ctx.appId, stored.appId);
+        return sessionNotFound(sessionId);
+      }
+      // Subject gate (ggui#1483): within the app, an end-user writes context
+      // only for its own sessions — the render read door's predicate
+      // (ggui#1553), with the same answer as a session that does not exist.
+      if (!renderReadAllowed(stored, ctx)) {
+        logCrossSubjectRefused('ggui_runtime_sync_context', sessionId, ctx.appId);
         return sessionNotFound(sessionId);
       }
       // mcpApps locator renders have no contextSpec — they're
