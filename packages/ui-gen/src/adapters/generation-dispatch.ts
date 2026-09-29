@@ -126,6 +126,8 @@ export interface GenerationDispatchParams {
     /** ggui#1436 — see `SingleComponentParams.visualEvaluation.criteriaBank`. */
     criteriaBank?: CriteriaBank;
     criteriaKind?: string;
+    /** ggui#1542 — see `SingleComponentParams.visualEvaluation.actOn`. */
+    actOn?: "critical" | "major";
   };
   /** Quality config controlling eval tiers and improvement behavior */
   qualityConfig?: QualityConfig;

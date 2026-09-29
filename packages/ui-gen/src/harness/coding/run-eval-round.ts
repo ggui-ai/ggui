@@ -1025,12 +1025,22 @@ export async function runEvalRound(
     );
 
     // ── Decide whether to continue the loop ──
-    // In fast mode: only fails trigger another iteration.
+    // In fast mode: only fails trigger another iteration, plus (ggui#1542) the visual JUDGE's major findings when
+    // `visualEvaluation.actOn` is 'major'. They are taken from the visual outcome itself, never by category over the
+    // merged list, because the text evaluator has a tier-2 `visual` criterion of its own. The fit measurement's own
+    // warn-level overflow (`canvas-overflow*`, also `major`) is excluded: fit is deterministic and runs with or
+    // without a judge, so acting on it here would switch a second feedback source on with the judge's.
     // In auto-improve / high-quality: fails + warns trigger iterations.
     const blocking = evalResult.issues.filter((i) => i.result === "fail");
+    const visualMajorsActed =
+      visualEvaluation?.actOn === "major"
+        ? (visualIssues ?? []).filter(
+            (i) => i.result === "warn" && i.severity === "major" && i.subcategory?.startsWith("canvas-overflow") !== true,
+          )
+        : [];
     const shouldContinue =
       qualityMode === "fast"
-        ? blocking.length > 0
+        ? blocking.length > 0 || visualMajorsActed.length > 0
         : blocking.length > 0 || warns.length > 0;
 
     // Compute current round's fail fingerprints — used by the stuck-loop
@@ -1451,6 +1461,14 @@ export async function runEvalRound(
     console.log(
       `[simple] eval round ${evalRoundsUsed}: ${allActionable.length} issues (${blocking.length} fail, ${warns.length} warn) → feeding back to coding loop`,
     );
+    // ggui#1542 — WHY this round continued, for a caller that set `actOn`: the manipulation check of an experiment on
+    // the setting reads this line. `visual majors acted` counts the judge's majors only (fit's are never acted on).
+    if (visualEvaluation?.actOn !== undefined) {
+      console.log(
+        `[simple] eval round ${evalRoundsUsed}: continuing: fails=${blocking.length}, visual majors acted=${visualMajorsActed.length} ` +
+          `(actOn=${visualEvaluation.actOn})`,
+      );
+    }
 
     return {
       control: "feedback",

@@ -108,6 +108,15 @@ export interface SingleComponentParams {
     criteriaBank?: CriteriaBank;
     /** ggui#1436 — the caller's item kind for the selector (a bootstrap mint's `hello`); absent = not gated by kind. */
     criteriaKind?: string;
+    /**
+     * ggui#1542 — which of the VISUAL leg's own findings may start another eval round when the quality mode is `fast`.
+     * `'critical'` (the default, today's behaviour): only a critical finding, which the harness makes a blocking fail.
+     * `'major'`: the visual JUDGE's major findings (tier-2 warns) too. The fit measurement's own warn-level overflow is
+     * not among them (fit runs with or without a judge, so it is its own feedback source), and neither are the text
+     * evaluator's warns. The other quality modes already act on every warn, so the setting changes nothing there. The
+     * fix turn is fed as any continuing round is (fails first, then warns).
+     */
+    actOn?: "critical" | "major";
   };
   onProgress?: (event: unknown) => void;
   onInitialResult?: (result: {
