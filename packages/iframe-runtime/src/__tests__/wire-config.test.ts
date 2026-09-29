@@ -416,3 +416,83 @@ describe('buildRootWireConfig — the card’s persisted spent oneShots (ggui#12
     expect(dispatchOnce(render)).toHaveLength(0);
   });
 });
+
+// ggui#1536 — a dispatch the outbound contract check refuses was console-only:
+// no host event, no visitor feedback. The adapter now names it to the
+// embedding host as `action-refused` (field paths and schema keywords, never
+// values), capped per render, and tells the renderer which action it was.
+describe('buildRootWireConfig — a refused dispatch is named (ggui#1536)', () => {
+  const SPEC: ActionSpec = {
+    submit: {
+      label: 'Submit',
+      schema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+    },
+  };
+  beforeEach(() => {
+    posted.length = 0;
+  });
+  function refusedEvents(): Array<Record<string, unknown>> {
+    return posted.filter(
+      (e): e is Record<string, unknown> =>
+        typeof e === 'object' && e !== null && 'kind' in e && e.kind === 'action-refused',
+    );
+  }
+  function harness(render: GguiSession = makeRender('render_refused', { actionSpec: SPEC })) {
+    const { send, messages } = makeFakeManager();
+    const refusedActions: string[] = [];
+    let current = render;
+    const cfg = buildRootWireConfig({
+      sessionId: 'render_refused',
+      appId: 'app_x',
+      getCurrentGguiSession: () => current,
+      manager: { send },
+      streamBus: new StreamBus(),
+      onContractViolation: () => {},
+      onDispatchRefused: (actionName) => refusedActions.push(actionName),
+    });
+    return { cfg, messages, refusedActions, swap: (next: GguiSession) => (current = next) };
+  }
+
+  it('posts one action-refused naming the render, the action, and each violation by field and keyword only', () => {
+    const { cfg, messages, refusedActions } = harness();
+    cfg.dispatch('submit', { email: 12345, secret: 'visitor-typed-this' });
+
+    expect(messages).toHaveLength(0);
+    expect(refusedActions).toEqual(['submit']);
+    const [event, ...rest] = refusedEvents();
+    expect(rest).toEqual([]);
+    expect(event).toMatchObject({ kind: 'action-refused', renderId: 'render_refused', actionName: 'submit' });
+    const violations = event?.['violations'] as Array<Record<string, unknown>>;
+    expect(violations.length).toBeGreaterThan(0);
+    for (const v of violations) {
+      expect(Object.keys(v).every((k) => k === 'field' || k === 'keyword')).toBe(true);
+      expect(typeof v['field']).toBe('string');
+    }
+    expect(JSON.stringify(event)).not.toContain('visitor-typed-this');
+    expect(JSON.stringify(event)).not.toContain('12345');
+    expect(event).not.toHaveProperty('capped');
+  });
+
+  it('an admitted dispatch is never named refused', () => {
+    const { cfg, messages, refusedActions } = harness();
+    cfg.dispatch('submit', { email: 'a@b.c' });
+    expect(messages).toHaveLength(1);
+    expect(refusedActions).toEqual([]);
+    expect(refusedEvents()).toEqual([]);
+  });
+
+  it('posts at most ten per render, says so on the tenth, and a new render starts again', () => {
+    const { cfg, refusedActions, swap } = harness();
+    for (let i = 0; i < 12; i++) cfg.dispatch('submit', { email: i });
+    expect(refusedActions).toHaveLength(12);
+    const events = refusedEvents();
+    expect(events).toHaveLength(10);
+    expect(events.slice(0, 9).every((e) => !('capped' in e))).toBe(true);
+    expect(events[9]).toMatchObject({ capped: true });
+
+    swap(makeRender('render_next', { actionSpec: SPEC }));
+    cfg.dispatch('submit', { email: 0 });
+    expect(refusedEvents()).toHaveLength(11);
+    expect(refusedEvents()[10]).toMatchObject({ renderId: 'render_next' });
+  });
+});

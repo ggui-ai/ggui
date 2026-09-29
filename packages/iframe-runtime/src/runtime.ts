@@ -2969,7 +2969,21 @@ const GESTURE_COPY = {
     `💬 ${named(label, 'agent not listening. Send a message to continue.', 'Agent not listening. Send a message to continue.')}`,
   chatRefused: (label?: string): string =>
     `💬 ${named(label, 'the chat did not take the message. Send a message to continue.', 'The chat did not take the message. Send a message to continue.')}`,
+  // ggui#1536 — the card's own action contract refused what the tap would
+  // send, so nothing left the card. The visitor cannot fix that, but a tap
+  // that visibly failed is better than a dead one.
+  refused: (label?: string): string => `⚠ ${named(label, 'could not be sent', 'Could not be sent')}`,
 } as const;
+
+/**
+ * The toast for a tap the outbound contract check refused (ggui#1536): the
+ * ordinary error toast, named by the action's declared label.
+ *
+ * @internal — exported for unit tests + production reuse.
+ */
+export function showRefusedDispatchToast(label: string | undefined): void {
+  showActionToast(GESTURE_COPY.refused(label), 'error');
+}
 
 type ToastKind =
   | 'pending'
@@ -5016,6 +5030,9 @@ async function bootProduction(opts: {
         sessionId: meta.sessionId,
         appId: meta.appId,
         getCurrentGguiSession: () => currentRender,
+        // ggui#1536 — the adapter posted `action-refused` to the host; the
+        // visitor sees the tap failed, named by its declared label.
+        onDispatchRefused: (actionName) => showRefusedDispatchToast(declaredActionLabel(currentRender, actionName)),
         renderChanges: onRenderChange,
         manager,
         streamBus,

@@ -213,6 +213,15 @@ export interface BuildWireConfigOptions {
    */
   readonly onViolation: (err: ClientContractViolationError) => void;
   /**
+   * Called when this config's `dispatch` refuses an action envelope the
+   * active action spec does not admit (ggui#1536), right after
+   * {@link BuildWireConfigOptions.onViolation}, with the action's name.
+   * Nothing was emitted and nothing is pending. For a renderer that names
+   * the dead tap to its host and its visitor; the violations are the
+   * validator's own and may carry the visitor's input.
+   */
+  readonly onDispatchRefused?: (info: DispatchRefusedInfo) => void;
+  /**
    * Transport seam — receives the VALIDATED envelope. The iframe
    * runtime routes via the MCP-Apps host `tools/call` relay (spec
    * §401); `<GguiRender>` sends the live-channel WS `action` frame.
@@ -285,6 +294,14 @@ export type BuiltWireConfig = WireConfig & {
  */
 /** How long a dispatched action reads as pending when no frame lands (ggui#1398). */
 const DEFAULT_ACTION_PENDING_BOUND_MS = 20_000;
+
+/** Payload for {@link BuildWireConfigOptions.onDispatchRefused} (ggui#1536). */
+export interface DispatchRefusedInfo {
+  /** The action the card dispatched. */
+  readonly actionName: string;
+  /** Why the outbound check refused its envelope. May carry the visitor's input. */
+  readonly violations: ValidationResult['violations'];
+}
 
 export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
   let internalSeq = 0;
@@ -420,6 +437,7 @@ export function buildWireConfig(opts: BuildWireConfigOptions): BuiltWireConfig {
         opts.onViolation(
           new ClientContractViolationError('outbound-action', result.violations),
         );
+        opts.onDispatchRefused?.({ actionName, violations: result.violations });
         return;
       }
       // Spend only on a committed fire — the marker records that the agent

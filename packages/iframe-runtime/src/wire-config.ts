@@ -23,6 +23,7 @@ import {
   buildWireConfig,
   StreamBus,
   type BuiltWireConfig,
+  type DispatchRefusedInfo,
 } from '@ggui-ai/wire';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { validateOutboundActionEnvelope } from './validation.js';
@@ -140,7 +141,20 @@ export interface BuildRootWireConfigOptions {
    * relay (see iframe-runtime's `routeDispatch`).
    */
   readonly onDispatchEnvelope?: (envelope: ActionEnvelope) => void;
+  /**
+   * Called with the action's name when the outbound check refuses a
+   * dispatch (ggui#1536), after the refusal is posted to the embedding
+   * host. The renderer tells the visitor the tap did nothing.
+   */
+  readonly onDispatchRefused?: (actionName: string) => void;
 }
+
+/**
+ * The most `action-refused` events one render posts (ggui#1536). A tap is a
+ * person; a card that re-dispatches in a loop is code, and the host needs to
+ * know it happened, not every time. The last one says it is the last.
+ */
+const REFUSED_EVENTS_PER_RENDER = 10;
 
 /**
  * Build the per-render `WireConfig` for the iframe runtime.
@@ -203,8 +217,36 @@ export function buildRootWireConfig(
     postObservabilityToParent({ kind: 'one-shot-unenforceable', renderId: currentRender.id, actionName });
   };
 
+  // ggui#1536 — a dispatch the outbound contract check refuses sent nothing
+  // and said so only on this iframe's console. Name it where the runtime names
+  // its other degradations: the `action-refused` event to the embedding host,
+  // carrying field paths and schema keywords only, because a violation's
+  // `received` and `message` can carry the visitor's input. Then the renderer
+  // tells the visitor.
+  let refusedFor: string | null = null;
+  let refusedPosted = 0;
+  const nameRefused = ({ actionName, violations }: DispatchRefusedInfo): void => {
+    const renderId = opts.getCurrentGguiSession()?.id ?? opts.sessionId;
+    if (refusedFor !== renderId) {
+      refusedFor = renderId;
+      refusedPosted = 0;
+    }
+    if (refusedPosted < REFUSED_EVENTS_PER_RENDER) {
+      refusedPosted += 1;
+      postObservabilityToParent({
+        kind: 'action-refused',
+        renderId,
+        actionName,
+        violations: violations.map((v) => ({ field: v.field, ...(v.keyword !== undefined ? { keyword: v.keyword } : {}) })),
+        ...(refusedPosted === REFUSED_EVENTS_PER_RENDER ? { capped: true } : {}),
+      });
+    }
+    opts.onDispatchRefused?.(actionName);
+  };
+
   return buildWireConfig({
     app: { appId: opts.appId, appName: opts.appId },
+    onDispatchRefused: nameRefused,
     // `isConnected` here is the static config field; `useRender()`
     // reads the LIVE value from wire's document connection store,
     // which the runtime writes at the relay latch's edges (ggui#670).

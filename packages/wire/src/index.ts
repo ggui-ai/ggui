@@ -32,4 +32,5 @@ export {
   buildWireConfig,
   type BuildWireConfigOptions,
   type BuiltWireConfig,
+  type DispatchRefusedInfo,
 } from './wire-config';

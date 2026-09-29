@@ -42,6 +42,7 @@ export type ObservabilityEvent =
   | ActionSpecInvalidEvent
   | ActionSpecMemberStrippedEvent
   | OneShotUnenforceableEvent
+  | ActionRefusedEvent
   | SpentOneShotsInvalidEvent
   | ThemeReinjectFailedEvent
   | SubscribeFailedEvent
@@ -448,6 +449,25 @@ export interface OneShotUnenforceableEvent {
   readonly kind: 'one-shot-unenforceable';
   readonly renderId: string;
   readonly actionName: string;
+}
+
+/**
+ * A dispatch the card's own action spec refused (ggui#1536): the outbound
+ * contract check found the envelope outside the contract, so nothing was
+ * sent and the visitor's tap did nothing. `violations` name each failure by
+ * its field path and, when a schema keyword produced it, that keyword, never
+ * by value: the data is the visitor's input. Posted per refused dispatch, at
+ * most ten per render; the tenth carries `capped: true` and later ones are
+ * not posted.
+ *
+ * @public
+ */
+export interface ActionRefusedEvent {
+  readonly kind: 'action-refused';
+  readonly renderId: string;
+  readonly actionName: string;
+  readonly violations: ReadonlyArray<{ readonly field: string; readonly keyword?: string }>;
+  readonly capped?: true;
 }
 
 /**
