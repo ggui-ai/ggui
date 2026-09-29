@@ -79,6 +79,8 @@ export {
 // exact bytes a view signs. Re-exported here, the package's MCP-Apps
 // surface; the seam itself lives in view-proof.ts.
 export * from './view-proof.js';
+// ggui#1519 — the canonical bytes of a dispatch's gesture, for its retry-safety digest.
+export * from './dispatch-gesture.js';
 
 /**
  * The single `_meta.ui.resourceUri` value ggui uses across every MCP Apps

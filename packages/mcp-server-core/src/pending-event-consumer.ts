@@ -66,9 +66,22 @@ import {
 /**
  * What one {@link PendingEventConsumer.append} did (ggui#1517): `'appended'`
  * when that call stored the row, `'duplicate'` when its `(sessionId, id)`
- * was already recorded in the pipe's lifetime and nothing was stored.
+ * was already recorded in the pipe's lifetime and nothing was stored, and
+ * `'conflict'` (ggui#1519) when that id was recorded for a DIFFERENT
+ * gesture (both digests known and unequal) and nothing was stored.
  */
-export type PendingEventAppendOutcome = 'appended' | 'duplicate';
+export type PendingEventAppendOutcome = 'appended' | 'duplicate' | 'conflict';
+
+/** Options for {@link PendingEventConsumer.append}. */
+export interface PendingEventAppendOptions {
+  /**
+   * The gesture's digest (ggui#1519): an opaque string the caller derives
+   * from what the event MEANS, so a reused id carrying a different gesture
+   * can be told from a retry of the same one. The store keeps it beside
+   * the seen id and compares by equality; it never interprets it.
+   */
+  readonly gestureDigest?: string;
+}
 
 export interface PendingEventConsumeResult {
   readonly events: ReadonlyArray<PendingEvent>;
@@ -169,9 +182,25 @@ export interface PendingEventConsumer {
    * that predates the outcome, and never as a reason to skip an effect.
    * The published conformance suite pins the outcome.
    *
+   * CONFLICT (ggui#1519): when the caller passes `opts.gestureDigest`, the
+   * store records it beside the seen id, in the same write. A later
+   * append of that id resolves `'conflict'` only when BOTH the recorded
+   * digest and the new one are present and unequal: the id was reused for
+   * a different gesture. It stores nothing, and the first gesture stands.
+   * A seen id with no recorded digest, or an append that passes none,
+   * resolves `'duplicate'`, because a difference cannot be proved; so
+   * does an adapter that never reports `'conflict'`, which is the
+   * behaviour that predates it. The seen-id-and-digest write is atomic
+   * per `(sessionId, id)`: of two appends of one id in flight together,
+   * exactly one resolves `'appended'`.
+   *
    * @throws when the pipe row doesn't exist.
    */
-  append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome | void>;
+  append(
+    sessionId: string,
+    event: PendingEvent,
+    opts?: PendingEventAppendOptions,
+  ): Promise<PendingEventAppendOutcome | void>;
 
   /**
    * Open a pipe for `sessionId` so subsequent `append` /

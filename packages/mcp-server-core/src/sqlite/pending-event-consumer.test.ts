@@ -3,6 +3,10 @@
  * variant. Mirrors the InMemory test suite to prove both impls
  * satisfy the same `PendingEventConsumer` contract.
  */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SqlitePendingEventConsumer } from './pending-event-consumer.js';
 import { PendingPipeNotFoundError } from '../pending-event-consumer.js';
@@ -178,7 +182,6 @@ describe('append idempotency (ggui#405)', () => {
 
 // ── ggui#839 — the drained row is the protocol's PendingEvent; malformed rows refuse at the store boundary
 
-import Database from 'better-sqlite3';
 import { expectTypeOf } from 'vitest';
 import { PendingEventMalformedError } from '../pending-event-consumer.js';
 
@@ -259,5 +262,31 @@ describe('the store boundary (ggui#839)', () => {
       issues: [{ path: [], message: expect.stringContaining('not JSON') }],
     });
     db.close();
+  });
+});
+
+describe('SqlitePendingEventConsumer — a database from the release before gesture digests (ggui#1519)', () => {
+  it('gains the digest column on open, and an id seen before it reads as a duplicate, never a conflict', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ggui-pending-seen-'));
+    const filename = join(dir, 'pending.sqlite');
+    try {
+      // The previous release's shape: the seen ledger without `gesture_digest`.
+      const before = new SqlitePendingEventConsumer({ filename });
+      before.markCreated('render-1');
+      expect(await before.append('render-1', row('legacy'))).toBe('appended');
+      before.close();
+      const raw = new Database(filename);
+      raw.exec('ALTER TABLE pending_event_seen DROP COLUMN gesture_digest');
+      expect(raw.prepare('PRAGMA table_info(pending_event_seen)').all()).toHaveLength(2);
+      raw.close();
+
+      const after = new SqlitePendingEventConsumer({ filename });
+      expect(await after.append('render-1', row('legacy'), { gestureDigest: 'AAAAAAAAAAAAAAAAAAAAAA' })).toBe('duplicate');
+      expect(await after.append('render-1', row('fresh'), { gestureDigest: 'AAAAAAAAAAAAAAAAAAAAAA' })).toBe('appended');
+      expect(await after.append('render-1', row('fresh'), { gestureDigest: 'BBBBBBBBBBBBBBBBBBBBBB' })).toBe('conflict');
+      after.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

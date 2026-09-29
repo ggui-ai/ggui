@@ -2470,8 +2470,8 @@ export const productionContextSnapshotPoster: ContextSnapshotPoster = {
  * `CallToolResult` in `{result: ...}`.
  *
  * Drops with an error envelope when no App is bound — the dispatch
- * pipeline classifies that as a transport error and routes to the
- * `ui/message` fallback.
+ * pipeline classifies that as a non-success outcome and drops the
+ * gesture with local feedback (a toast); no `ui/message` fires.
  */
 async function callServerToolSpec(
   toolName: string,

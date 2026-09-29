@@ -91,6 +91,11 @@
       "import": "./dist/domain-error-conformance/index.js",
       "default": "./dist/domain-error-conformance/index.js"
     },
+    "./dispatch-idempotency-conformance": {
+      "types": "./dist/dispatch-idempotency-conformance/index.d.ts",
+      "import": "./dist/dispatch-idempotency-conformance/index.js",
+      "default": "./dist/dispatch-idempotency-conformance/index.js"
+    },
     "./registry-completeness": {
       "types": "./dist/registry-completeness/index.d.ts",
       "import": "./dist/registry-completeness/index.js",

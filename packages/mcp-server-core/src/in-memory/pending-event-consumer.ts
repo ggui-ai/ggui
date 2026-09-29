@@ -23,6 +23,7 @@
 
 import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
+  type PendingEventAppendOptions,
   type PendingEventAppendOutcome,
   type PendingEventConsumeResult,
   type PendingEventConsumer,
@@ -40,9 +41,11 @@ interface PipeEntry {
    * pipe's lifetime. A duplicate id is a silent no-op even after the
    * original drained (transport retries must never double-fire a
    * gesture). Bounded in practice: pipes are per-render, TTL'd, and
-   * ids arrive at user-gesture rate.
+   * ids arrive at user-gesture rate. Each id maps to the gesture digest
+   * its first append carried, or `undefined` when it carried none
+   * (ggui#1519).
    */
-  seenEventIds: Set<string>;
+  seenEventIds: Map<string, string | undefined>;
 }
 
 export class InMemoryPendingEventConsumer implements PendingEventConsumer {
@@ -68,7 +71,11 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
     });
   }
 
-  async append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome> {
+  async append(
+    sessionId: string,
+    event: PendingEvent,
+    opts?: PendingEventAppendOptions,
+  ): Promise<PendingEventAppendOutcome> {
     // Validated before it is stored (ggui#839) — the struct then holds only
     // rows that passed, which is why the drain parses nothing.
     parsePendingEventRow(sessionId, event);
@@ -79,8 +86,13 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
       }
       // Per-id idempotency (ggui#405) and its outcome (ggui#1517) — see the
       // interface contract.
-      if (entry.seenEventIds.has(event.id)) return 'duplicate';
-      entry.seenEventIds.add(event.id);
+      if (entry.seenEventIds.has(event.id)) {
+        // ggui#1519 — a conflict needs both digests known and unequal.
+        const recorded = entry.seenEventIds.get(event.id);
+        const incoming = opts?.gestureDigest;
+        return recorded !== undefined && incoming !== undefined && recorded !== incoming ? 'conflict' : 'duplicate';
+      }
+      entry.seenEventIds.set(event.id, opts?.gestureDigest);
       entry.events.push(event);
       entry.lastActivityAt = Date.now();
       return 'appended';
@@ -98,7 +110,7 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
       status: 'active',
       lastActivityAt: now,
       expiresAt: now + ttlMs,
-      seenEventIds: new Set(),
+      seenEventIds: new Map(),
     });
   }
 

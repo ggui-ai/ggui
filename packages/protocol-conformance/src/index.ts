@@ -331,6 +331,20 @@ export type {
   ToolCallScenario,
 } from './domain-error-conformance/index.js';
 
+// ── dispatch-idempotency (SPEC §11.1 "A retried dispatch is one gesture", ggui#1519; SHOULD level) ──
+export {
+  DISPATCH_IDEMPOTENCY_ACTION,
+  DISPATCH_IDEMPOTENCY_ACTION_SPEC,
+  runDispatchIdempotencyConformance,
+} from './dispatch-idempotency-conformance/index.js';
+export type {
+  DispatchIdempotencyCaseName,
+  DispatchIdempotencyCaseResult,
+  DispatchIdempotencyHost,
+  DispatchIdempotencyResult,
+  DispatchIdempotencySession,
+} from './dispatch-idempotency-conformance/index.js';
+
 // ── theme binding (ggui#987 — the theming wave's arbiter; guuey 1.3 judges against it) ──
 export {
   APP_THEME_CASES,

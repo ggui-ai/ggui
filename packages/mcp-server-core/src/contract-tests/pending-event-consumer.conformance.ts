@@ -52,6 +52,15 @@ export interface PendingEventConsumerConformanceFactory {
     readonly seed: (sessionId: string) => void | Promise<void>;
   }>;
   readonly cleanup?: (consumer: PendingEventConsumer) => Promise<void> | void;
+  /**
+   * Whether the store reports `'conflict'` for an id reused with a different
+   * gesture digest (ggui#1519). A SHOULD this release, as SPEC §11.1's
+   * promise is: a store written against the earlier port answers
+   * `'duplicate'` there, which keeps the first gesture too. The three cases
+   * that need a reported conflict run only when this is `true`; every other
+   * case runs for every store. It becomes required with the MUST.
+   */
+  readonly reportsConflict?: boolean;
 }
 
 export function runPendingEventConsumerConformance(
@@ -185,6 +194,83 @@ export function runPendingEventConsumerConformance(
           await seed('render-B');
           expect(await consumer.append('render-A', row('shared'))).toBe('appended');
           expect(await consumer.append('render-B', row('shared'))).toBe('appended');
+        });
+      });
+    });
+
+    describe("a reused id carrying a different gesture is a conflict, and two in-flight duplicates are one append (ggui#1519)", () => {
+      // The conflict cases need a store that reports it (a SHOULD this
+      // release). A store that does not opt in has its conflict behaviour
+      // UNTESTED, not tested-and-absent, so each skipped case names the store
+      // in its own title: a run shows which store is unverified, not a count.
+      const conflictVerified = factory.reportsConflict === true;
+      const itConflict = conflictVerified ? it : it.skip;
+      const conflictTitle = (title: string): string =>
+        conflictVerified ? title : `${title} — UNVERIFIED for ${label}: its factory does not set reportsConflict`;
+      const A = 'AAAAAAAAAAAAAAAAAAAAAA';
+      const B = 'BBBBBBBBBBBBBBBBBBBBBB';
+
+      it("the same id with the same gesture digest reports 'duplicate'", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          expect(await consumer.append('render-1', row('g'), { gestureDigest: A })).toBe('appended');
+          expect(await consumer.append('render-1', row('g'), { gestureDigest: A })).toBe('duplicate');
+        });
+      });
+
+      itConflict(conflictTitle("the same id with a different gesture digest reports 'conflict', stores nothing, and the first gesture stands"), async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          expect(await consumer.append('render-1', row('g'), { gestureDigest: A })).toBe('appended');
+          expect(await consumer.append('render-1', row('g'), { gestureDigest: B })).toBe('conflict');
+          expect((await consumer.consumeAndClear('render-1', 1000)).events.map((e) => e.id)).toEqual(['g']);
+        });
+      });
+
+      itConflict(conflictTitle("the conflict outlives a drain, as the seen id does"), async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          await consumer.append('render-1', row('g'), { gestureDigest: A });
+          await consumer.consumeAndClear('render-1', 1000);
+          expect(await consumer.append('render-1', row('g'), { gestureDigest: B })).toBe('conflict');
+          expect((await consumer.consumeAndClear('render-1', 1000)).events).toEqual([]);
+        });
+      });
+
+      it("a difference is only a conflict when BOTH digests are known: a missing one on either side reads 'duplicate'", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          // Seen with no digest (a row from before digests, or a caller that sends none).
+          expect(await consumer.append('render-1', row('legacy'))).toBe('appended');
+          expect(await consumer.append('render-1', row('legacy'), { gestureDigest: A })).toBe('duplicate');
+          // Seen with a digest, repeated with none.
+          expect(await consumer.append('render-1', row('known'), { gestureDigest: A })).toBe('appended');
+          expect(await consumer.append('render-1', row('known'))).toBe('duplicate');
+        });
+      });
+
+      it("two appends of one id in flight together: exactly one 'appended', and one event delivered", async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          const outcomes = await Promise.all([
+            consumer.append('render-1', row('race'), { gestureDigest: A }),
+            consumer.append('render-1', row('race'), { gestureDigest: A }),
+          ]);
+          expect(outcomes.filter((o) => o === 'appended')).toHaveLength(1);
+          expect(outcomes.filter((o) => o === 'duplicate')).toHaveLength(1);
+          expect((await consumer.consumeAndClear('render-1', 1000)).events.map((e) => e.id)).toEqual(['race']);
+        });
+      });
+
+      itConflict(conflictTitle("two different gestures under one id in flight together: one 'appended', one 'conflict'"), async () => {
+        await withConsumer(async ({ consumer, seed }) => {
+          await seed('render-1');
+          const outcomes = await Promise.all([
+            consumer.append('render-1', row('race2'), { gestureDigest: A }),
+            consumer.append('render-1', row('race2'), { gestureDigest: B }),
+          ]);
+          expect([...outcomes].sort()).toEqual(['appended', 'conflict']);
+          expect((await consumer.consumeAndClear('render-1', 1000)).events).toHaveLength(1);
         });
       });
     });

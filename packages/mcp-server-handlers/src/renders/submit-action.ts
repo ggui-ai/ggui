@@ -40,9 +40,10 @@
  *     render-keyed pending-events pipe so the agent's
  *     `ggui_consume` long-poll unblocks mid-turn. If the pipe is
  *     closed/missing (render closed, never opened) the handler
- *     returns `{ok:false, code:'PIPE_NOT_FOUND'}` so the
- *     iframe-runtime can fall through to `ui/message` chat-shortcut
- *     postMessage (the gesture reaches the agent on its next turn).
+ *     returns `{ok:false, code:'PIPE_NOT_FOUND'}`; the iframe-runtime
+ *     shows the user an error toast and sends no `ui/message` (SPEC
+ *     §4.7 "Failure-soft client posture"), so the user sees the gesture
+ *     did not go through.
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit. The
  *     user-visible host effect (ui/open-link, ui/request-display-mode)
  *     already fired iframe-side; the server just records the gesture
@@ -50,27 +51,31 @@
  *
  * **Failure modes:**
  *   - Malformed envelope → `{ok:false, code:'INVALID_ACTION_KIND',
- *     message}`. The iframe-runtime SHOULD log and fall through to
- *     `ui/message` (same as PIPE_NOT_FOUND) so the gesture isn't
- *     silently lost.
+ *     message}`.
  *   - Pipe missing for a `dispatch` → `{ok:false,
- *     code:'PIPE_NOT_FOUND'}`. Iframe-runtime falls through to
- *     `ui/message`.
+ *     code:'PIPE_NOT_FOUND'}`.
+ *   On either, the iframe-runtime drops the gesture with an error toast
+ *   and sends no `ui/message`: nothing reached the pipe, so there is no
+ *   event for a doorbell to point at.
  *
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `{sessionId, stackItemId, appId, ...}` input → `{sessionId, appId,
  * ...}` input. Every render IS the addressable scope.
  */
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   ContractViolationError,
   contractViolationSchema,
   type ConsumeEventEntry,
   type ContractViolation,
+  type JsonValue,
 } from '@ggui-ai/protocol';
 import {
+  ACTION_ID_REUSED,
   SUBMIT_ACTION_KINDS,
   VIEW_ORIGIN_UNPROVEN,
+  dispatchGestureBytes,
   isGguiSubmitActionInput,
   type GguiSubmitActionInput,
   isGguiSubmitDispatchInput,
@@ -137,14 +142,18 @@ const outputSchema = {
    *   - `'INVALID_ACTION_KIND'` — top-level field validation failed
    *     OR per-kind payload shape mismatch.
    *   - `'PIPE_NOT_FOUND'` — `kind:"dispatch"` envelope arrived for a
-   *     sessionId whose pipe is closed/missing. iframe-runtime
-   *     branches on this to fall through to `ui/message`.
+   *     sessionId whose pipe is closed/missing. The iframe-runtime shows
+   *     an error toast on it, as on any `ok:false`.
    *   - `'VIEW_ORIGIN_UNPROVEN'` — a dispatch that carried no valid view
    *     proof (ggui#1415). DECLARED, not emitted: this output reaches
    *     `tools/list` closed, so it names the code one release before any
    *     server answers with it (ggui#1333), as `CONTRACT_VIOLATION` was.
+   *   - `'ACTION_ID_REUSED'` — the dispatch's `actionId` was already
+   *     recorded for a different gesture in this session (ggui#1519). The
+   *     first stands. DECLARED, not emitted, for the same reason: until
+   *     the release that emits it, such a dispatch answers as a duplicate.
    */
-  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION', VIEW_ORIGIN_UNPROVEN]).optional(),
+  code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND', 'CONTRACT_VIOLATION', VIEW_ORIGIN_UNPROVEN, ACTION_ID_REUSED]).optional(),
   /**
    * The contract findings behind a `CONTRACT_VIOLATION` answer — the same
    * facts the live channel's error frame carries (ggui#1358). The code and
@@ -189,7 +198,7 @@ type UserActionAccepted = {
 
 type UserActionRejected = {
   readonly ok: false;
-  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION' | typeof VIEW_ORIGIN_UNPROVEN;
+  readonly code: 'INVALID_ACTION_KIND' | 'PIPE_NOT_FOUND' | 'CONTRACT_VIOLATION' | typeof VIEW_ORIGIN_UNPROVEN | typeof ACTION_ID_REUSED;
   readonly message: string;
   /** Present only with `code: 'CONTRACT_VIOLATION'` (ggui#1358). */
   readonly violations?: ContractViolation[];
@@ -278,6 +287,16 @@ export interface GguiSubmitActionHandlerDeps {
  * one whose ownership is not proven: one shape for every case, so the
  * refusal reveals neither that the session exists nor who owns it.
  */
+/**
+ * A dispatch's gesture digest (ggui#1519): the first 16 bytes of the SHA-256
+ * of its canonical gesture bytes, base64url, 22 characters. Stored beside
+ * the seen `actionId` so a reuse of the id for a different gesture is told
+ * from a retry of the same one; 128 bits is ample within one session.
+ */
+function gestureDigest(intent: string, actionData: JsonValue | null | undefined): string {
+  return createHash('sha256').update(dispatchGestureBytes(intent, actionData)).digest().subarray(0, 16).toString('base64url');
+}
+
 function pipeNotFound(sessionId: string): UserActionRejected {
   return {
     ok: false,
@@ -445,10 +464,11 @@ export function createGguiSubmitActionHandler(
       // / `requestDisplayMode` are host effects and don't need pipe
       // append (no agent-side react step).
       //
-      // Every dispatch failure mode below surfaces as
-      // `{ok:false, code:'PIPE_NOT_FOUND'}` so the iframe-runtime's
-      // dispatch closure observes a non-success outcome and falls
-      // through to `ui/message` — the consent-gated chat-shortcut.
+      // A dispatch that cannot be enqueued below answers `ok:false`
+      // (mostly `PIPE_NOT_FOUND`), so the iframe-runtime's dispatch
+      // closure observes the failure and shows the user an error toast.
+      // It sends no `ui/message` on a failure (SPEC §4.7 "Failure-soft
+      // client posture").
       if (isGguiSubmitDispatchInput(env)) {
         if (!deps.pendingEventConsumer) {
           return {
@@ -484,8 +504,9 @@ export function createGguiSubmitActionHandler(
         // a missing row or a store that could not be read answers exactly as
         // a session with no pipe, as does a row another app owns — before
         // the contract gate, the append, the ledger write and the spend. An
-        // honest gesture refused here falls through to `ui/message`, so it
-        // degrades rather than being lost. Only a store-less server, which
+        // honest gesture refused here is not enqueued, and the view shows
+        // the user an error toast, so the loss is visible rather than
+        // silent. Only a store-less server, which
         // keeps no per-app session rows, skips the check.
         const read = await readStoredRenderForGate(deps, ctx, env.sessionId);
         if (read.kind === 'missing') return pipeNotFound(env.sessionId);
@@ -537,22 +558,52 @@ export function createGguiSubmitActionHandler(
           // The ledger is best-effort audit: its failure is logged and never
           // fails the dispatch. When the append itself fails, the gesture
           // still happened, so the ledger records it before the refusal.
+          // ggui#1519 — what the gesture MEANS, so the pipe can tell a retry
+          // of it from the id reused for a different one. Computed before the
+          // append's `try`: a gesture JCS cannot encode is not an append
+          // failure. Such a gesture is appended without a digest (deduped by
+          // its id alone, as before this change) and named on one line.
+          let digest: string | undefined;
+          try {
+            digest = gestureDigest(dispatchPayload.intent, dispatchPayload.actionData);
+          } catch (err) {
+            deps.logger?.warn?.('submit_action_gesture_digest_failed', {
+              sessionId: env.sessionId,
+              actionId: env.actionId,
+              reason: err instanceof Error ? err.message : String(err),
+            });
+          }
           let appended: PendingEventAppendOutcome | void;
           try {
-            appended = await deps.pendingEventConsumer.append(env.sessionId, {
-              // Use the iframe-supplied `actionId` as the pipe entry's
-              // stable id so consume's drain_ack frame carries the SAME
-              // id the iframe-runtime's toast resolution is keyed on.
-              id: env.actionId,
-              envelope: actionEnvelope,
-              createdAt: env.firedAt,
-            });
+            appended = await deps.pendingEventConsumer.append(
+              env.sessionId,
+              {
+                // Use the iframe-supplied `actionId` as the pipe entry's
+                // stable id so consume's drain_ack frame carries the SAME
+                // id the iframe-runtime's toast resolution is keyed on.
+                id: env.actionId,
+                envelope: actionEnvelope,
+                createdAt: env.firedAt,
+              },
+              digest !== undefined ? { gestureDigest: digest } : {},
+            );
           } catch (err) {
             await writeDispatchLedger(deps, actionEnvelope);
             throw err;
           }
           if (appended === 'duplicate') {
             deps.logger?.warn?.('submit_action_duplicate_dispatch', {
+              sessionId: env.sessionId,
+              actionId: env.actionId,
+            });
+          } else if (appended === 'conflict') {
+            // ggui#1519 — the id was recorded for a different gesture. The
+            // first stands and nothing of this one was stored. Its code,
+            // ACTION_ID_REUSED, is declared this release and emitted from the
+            // next, when the view shows the user an error toast; until then it
+            // answers as a duplicate does (the view shows success), named here
+            // so the reuse is counted rather than silent.
+            deps.logger?.warn?.('submit_action_action_id_reused', {
               sessionId: env.sessionId,
               actionId: env.actionId,
             });
@@ -567,7 +618,12 @@ export function createGguiSubmitActionHandler(
           // `{epoch, action}` (the session-store conformance suite pins a
           // repeat as a no-op), and re-applying it closes the window where
           // the original appended and failed before it could spend.
-          await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored);
+          // Not on a conflict (ggui#1519): that gesture was never stored, so
+          // its action must not be used up. A duplicate IS the stored gesture,
+          // and re-applying its spend is the ggui#1517 close above.
+          if (appended !== 'conflict') {
+            await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored);
+          }
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight
           // `ggui_consume` long-poll will drain this event soon. When

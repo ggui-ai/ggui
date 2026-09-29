@@ -24,6 +24,7 @@ runPendingEventConsumerConformance('InMemoryPendingEventConsumer', {
       seed: (sessionId: string) => consumer.markCreated(sessionId),
     };
   },
+  reportsConflict: true,
 });
 
 runPendingEventConsumerConformance('SqlitePendingEventConsumer', {
@@ -34,6 +35,7 @@ runPendingEventConsumerConformance('SqlitePendingEventConsumer', {
       seed: (sessionId: string) => consumer.markCreated(sessionId),
     };
   },
+  reportsConflict: true,
 });
 
 

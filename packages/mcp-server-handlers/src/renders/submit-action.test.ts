@@ -15,6 +15,7 @@
  * (claude.ai, Claude Desktop) because the rejection round-trip is
  * fail-soft client-side.
  */
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -25,6 +26,7 @@ import {
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { GguiSessionStore, PendingEventConsumer } from '@ggui-ai/mcp-server-core';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
+import { ACTION_ID_REUSED, dispatchGestureBytes } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   createGguiSubmitActionHandler,
   RECENT_CONSUMER_EXIT_MS,
@@ -130,13 +132,15 @@ describe('createGguiSubmitActionHandler', () => {
       z.object({
         additionalProperties: z.literal(false),
         properties: z.object({
-          // ggui#1415 declares VIEW_ORIGIN_UNPROVEN the same way, one release ahead.
+          // ggui#1415 declares VIEW_ORIGIN_UNPROVEN the same way, one release
+          // ahead, and ggui#1519 ACTION_ID_REUSED.
           code: z.object({
             enum: z.tuple([
               z.literal('INVALID_ACTION_KIND'),
               z.literal('PIPE_NOT_FOUND'),
               z.literal('CONTRACT_VIOLATION'),
               z.literal('VIEW_ORIGIN_UNPROVEN'),
+              z.literal('ACTION_ID_REUSED'),
             ]),
           }),
           violations: z.object({
@@ -804,6 +808,121 @@ describe('createGguiSubmitActionHandler', () => {
       expect(await ledgerRows(store)).toBe(2);
       expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['submit'] });
       expect(warnings).toEqual([]);
+    });
+  });
+
+  // ggui#1519 — the same actionId reused for a DIFFERENT gesture. The pipe
+  // records the gesture's digest beside the seen id; a reuse with a different
+  // digest is a conflict. `ACTION_ID_REUSED` is declared this release and not
+  // emitted: a conflict answers as a duplicate does, and is named in the log.
+  describe('the same actionId reused for a different gesture (ggui#1519)', () => {
+    const sessionId = 'render-reuse-1';
+    const card: ComponentGguiSession = {
+      type: 'component',
+      id: sessionId,
+      appId: 'app_1',
+      componentCode: '/* card */',
+      eventSequence: 0,
+      createdAt: 0,
+      lastActivityAt: 0,
+      expiresAt: 0,
+      epoch: 1,
+      actionSpec: { pick: { label: 'Pick' } },
+    };
+    const dispatchOf = (actionData: { choice: string }, uiContext: Record<string, string> = {}) => ({
+      ...baseEnv,
+      sessionId,
+      kind: 'dispatch' as const,
+      payload: { intent: 'pick', actionData, uiContext },
+    });
+    const digestOf = (intent: string, actionData: { choice: string }): string =>
+      createHash('sha256').update(dispatchGestureBytes(intent, actionData)).digest().subarray(0, 16).toString('base64url');
+
+    async function world() {
+      const consumer = new InMemoryPendingEventConsumer();
+      consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({ appId: 'app_1', render: card });
+      const warnings: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+      const seenDigests: Array<string | undefined> = [];
+      const recording: PendingEventConsumer = {
+        consumeAndClear: (id, ttl) => consumer.consumeAndClear(id, ttl),
+        append: (id, event, opts) => {
+          seenDigests.push(opts?.gestureDigest);
+          return consumer.append(id, event, opts);
+        },
+      };
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: recording,
+        renderStore: store,
+        logger: { warn: (msg, data) => warnings.push({ msg, data }) },
+      });
+      const ledgerRows = async () =>
+        ((await store.listEventsSince(sessionId, 0, 100))?.events ?? []).filter((e) => e.type === 'user.submitted').length;
+      return { consumer, h, warnings, seenDigests, ledgerRows };
+    }
+
+    it("passes the gesture's digest to the pipe: 22 base64url characters of sha256(dispatchGestureBytes(intent, actionData))", async () => {
+      const w = await world();
+      await w.h.handler(dispatchOf({ choice: 'a' }), ctx);
+      expect(w.seenDigests).toEqual([digestOf('pick', { choice: 'a' })]);
+      expect(w.seenDigests[0]).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    });
+
+    it('a different gesture under the same actionId answers as a duplicate this release, keeps the first, and is named submit_action_action_id_reused', async () => {
+      const w = await world();
+      expect(await w.h.handler(dispatchOf({ choice: 'a' }), ctx)).toEqual({ ok: true });
+      expect(await w.h.handler(dispatchOf({ choice: 'b' }), ctx)).toEqual({ ok: true });
+      const drained = (await w.consumer.consumeAndClear(sessionId, 100)).events;
+      expect(drained.map((e) => e.envelope.actionData)).toEqual([{ choice: 'a' }]);
+      expect(await w.ledgerRows()).toBe(1);
+      expect(w.warnings).toEqual([
+        { msg: 'submit_action_action_id_reused', data: { sessionId, actionId: baseEnv.actionId } },
+      ]);
+    });
+
+    it('the same gesture with a different uiContext is the same gesture: a duplicate, not a reuse', async () => {
+      const w = await world();
+      await w.h.handler(dispatchOf({ choice: 'a' }, { draft: 'one' }), ctx);
+      await w.h.handler(dispatchOf({ choice: 'a' }, { draft: 'two' }), ctx);
+      expect(w.warnings.map((x) => x.msg)).toEqual(['submit_action_duplicate_dispatch']);
+    });
+
+    it("a reuse naming a DIFFERENT oneShot action spends nothing: the second gesture was never stored, so its action is not used up", async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      consumer.markCreated(sessionId);
+      const store = new InMemoryGguiSessionStore();
+      await store.commit({
+        appId: 'app_1',
+        render: { ...card, actionSpec: { pick: { label: 'Pick' }, buy: { label: 'Buy', oneShot: true } } },
+      });
+      const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: store, logger: { warn: () => undefined } });
+      await h.handler(dispatchOf({ choice: 'a' }), ctx);
+      const reuse = { ...dispatchOf({ choice: 'a' }), payload: { intent: 'buy', actionData: null, uiContext: {} } };
+      expect(await h.handler(reuse, ctx)).toEqual({ ok: true });
+      const got = await store.get(sessionId);
+      const spent = got?.render.type === 'component' ? got.render.spentOneShots : undefined;
+      expect(spent?.actions ?? []).not.toContain('buy');
+      expect((await consumer.consumeAndClear(sessionId, 100)).events.map((e) => e.envelope.intent)).toEqual(['pick']);
+    });
+
+    it("a gesture whose digest cannot be computed is named on its own line, not as an append failure; the pipe's row check still decides it", async () => {
+      const w = await world();
+      // JCS refuses a non-finite number (an in-process caller can pass one).
+      // The pipe's own row schema refuses it too, so the answer is the
+      // pipe's; what the digest step owes is its own line and no throw.
+      const odd = { ...dispatchOf({ choice: 'a' }), payload: { intent: 'pick', actionData: { n: Number.NaN }, uiContext: {} } };
+      const answer = await w.h.handler(odd, ctx);
+      expect(answer).toMatchObject({ ok: false, code: 'PIPE_NOT_FOUND' });
+      expect(JSON.stringify(answer)).toContain('pendingEventSchema');
+      expect(w.seenDigests).toEqual([undefined]);
+      expect(w.warnings.map((x) => x.msg)).toContain('submit_action_gesture_digest_failed');
+    });
+
+    it('declares ACTION_ID_REUSED in the output schema a release before any dispatch emits it', () => {
+      const w = createGguiSubmitActionHandler({});
+      expect(() => z.object(w.outputSchema).parse({ ok: false, code: ACTION_ID_REUSED, message: 'x' })).not.toThrow();
+      expect(ACTION_ID_REUSED).toBe('ACTION_ID_REUSED');
     });
   });
 });

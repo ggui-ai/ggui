@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A retried `ggui_runtime_submit_action` dispatch is one gesture
+ * (2026-09-29, additive, ggui#1519: MINOR, same draft stamp). SPEC §11.1
+ * promises it as a SHOULD this release and a MUST from the next: a repeat of
+ * an earlier committed `(sessionId, actionId)` is answered as the first was,
+ * with no second pending event, `user.submitted` row or spend, even in
+ * flight at once. An `actionId` reused for a different gesture (its
+ * `intent` and `actionData`, compared by a digest of
+ * `dispatchGestureBytes`) keeps the first. `ggui_runtime_submit_action`
+ * declares `ACTION_ID_REUSED` on its closed output in `tools/list`, one
+ * release before any server answers it; until then a reuse is answered as
+ * a duplicate, and logged. New exports `dispatchGestureBytes`,
+ * `DISPATCH_GESTURE_LABEL_V1` and `ACTION_ID_REUSED`
+ * (`@ggui-ai/protocol/integrations/mcp-apps`).
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A session's stream counter carries a generation, `streamEpoch`
  * (2026-09-29, additive, ggui#1531: MINOR, same draft stamp). Three
  * optional fields: `StreamEnvelope.streamEpoch` beside every `seq`,

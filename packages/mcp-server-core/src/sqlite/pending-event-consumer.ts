@@ -49,8 +49,10 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
+import { isRecord } from '@ggui-ai/protocol';
 import type { GguiSessionStatus, PendingEvent } from '@ggui-ai/protocol';
 import {
+  type PendingEventAppendOptions,
   type PendingEventAppendOutcome,
   type PendingEventConsumeResult,
   type PendingEventConsumer,
@@ -106,6 +108,7 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     insertEvent: SqliteStatement<unknown[]>;
     nextSeq: SqliteStatement<unknown[], { next_seq: number }>;
     markEventSeen: SqliteStatement<unknown[]>;
+    seenDigest: SqliteStatement<unknown[]>;
   };
 
   constructor(opts: SqlitePendingEventConsumerOptions = {}) {
@@ -127,6 +130,14 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     // WAL keeps long-poll readers from blocking writers.
     this.db.pragma('journal_mode = WAL');
     this.db.exec(SCHEMA_SQL);
+    // ggui#1519 — a database written by an earlier release has the seen
+    // ledger without its digest column; add it. Its rows read NULL, which
+    // the append treats as "no digest recorded" ('duplicate', never
+    // 'conflict').
+    const seenColumns = this.db.prepare('PRAGMA table_info(pending_event_seen)').all();
+    if (!seenColumns.some((c) => isRecord(c) && c['name'] === 'gesture_digest')) {
+      this.db.exec('ALTER TABLE pending_event_seen ADD COLUMN gesture_digest TEXT');
+    }
     this.stmts = {
       getPipe: this.db.prepare<unknown[], PipeRow>(
         `SELECT * FROM pending_event_pipes WHERE render_id = ?`,
@@ -159,8 +170,13 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
       // ggui#405 — INSERT OR IGNORE; `changes === 0` means the id was
       // already seen and the append is a silent no-op.
       markEventSeen: this.db.prepare<unknown[]>(
-        `INSERT OR IGNORE INTO pending_event_seen (render_id, event_id)
-         VALUES (?, ?)`,
+        `INSERT OR IGNORE INTO pending_event_seen (render_id, event_id, gesture_digest)
+         VALUES (?, ?, ?)`,
+      ),
+      // ggui#1519 — the digest the id's first append recorded, if any.
+      seenDigest: this.db.prepare<unknown[]>(
+        `SELECT gesture_digest FROM pending_event_seen
+         WHERE render_id = ? AND event_id = ?`,
       ),
     };
   }
@@ -191,7 +207,11 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     return txn();
   }
 
-  async append(sessionId: string, event: PendingEvent): Promise<PendingEventAppendOutcome> {
+  async append(
+    sessionId: string,
+    event: PendingEvent,
+    opts?: PendingEventAppendOptions,
+  ): Promise<PendingEventAppendOutcome> {
     // The producer's row is validated before anything is stored (ggui#839):
     // the type erases `.min(1)`, so an empty `id` compiles — it must not land.
     parsePendingEventRow(sessionId, event);
@@ -203,8 +223,15 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
       // Per-id idempotency (ggui#405) — the seen-ledger insert and the
       // event insert share this transaction, so a duplicate can never
       // slip between the check and the write. Its outcome is ggui#1517's.
-      const marked = this.stmts.markEventSeen.run(sessionId, event.id);
-      if (marked.changes === 0) return 'duplicate'; // nothing stored
+      const incoming = opts?.gestureDigest ?? null;
+      const marked = this.stmts.markEventSeen.run(sessionId, event.id, incoming);
+      if (marked.changes === 0) {
+        // Nothing stored. A conflict needs both digests known and unequal
+        // (ggui#1519); read in the same transaction as the insert attempt.
+        const seen = this.stmts.seenDigest.get(sessionId, event.id);
+        const recorded = isRecord(seen) && typeof seen['gesture_digest'] === 'string' ? seen['gesture_digest'] : null;
+        return recorded !== null && incoming !== null && recorded !== incoming ? 'conflict' : 'duplicate';
+      }
       const seqRow = this.stmts.nextSeq.get(sessionId);
       const seq = seqRow?.next_seq ?? 1;
       const t = this.now();
@@ -284,6 +311,8 @@ CREATE INDEX IF NOT EXISTS idx_pending_events_pipe
 CREATE TABLE IF NOT EXISTS pending_event_seen (
   render_id TEXT NOT NULL,
   event_id TEXT NOT NULL,
+  -- ggui#1519: the gesture digest of the id's first append; NULL when it carried none.
+  gesture_digest TEXT,
   PRIMARY KEY (render_id, event_id),
   FOREIGN KEY (render_id) REFERENCES pending_event_pipes(render_id)
     ON DELETE CASCADE
