@@ -1,0 +1,30 @@
+{
+  "name": "fresh-subscribe-replays-reserved-preview",
+  "description": "A SHOULD (SPEC §12.2.1, the ggui#1521 erratum): a fresh subscribe (no `fromSeq`) replays a known-reserved channel's retained envelopes after the ack, at `seq ≤ streamSeq`, so a view that attaches after a lifecycle envelope was sent still sees it. The server emits an A2UI `createSurface` on `_ggui:preview` (a known-reserved channel) BEFORE the runner opens the socket and subscribes; the runner-owned fresh subscribe IS the probe (the inputEnvelope is descriptive, not dispatched), and nothing is emitted after it, so a matching `data` frame can only be the replay. Expected: a `data` frame on `_ggui:preview` carrying the emitted body, after the subscribe's `ack` and at a `seq` at or below its `streamSeq` (`replayAfterAck`); a frame above `streamSeq` would be a live emission, not the replay. One emission is graded, so the case does not tell a full replay of every retained envelope from a latest-only one. A server that does not replay is graded a WARNING, never a failure: agent-declared channels replay nothing on a fresh subscribe (invariant 1), and a server may decline the SHOULD.",
+  "level": "should",
+  "skipReason": null,
+  "setup": [
+    { "type": "create-session", "sessionId": "ck-reserved-replay-1" },
+    {
+      "type": "emit-envelope",
+      "channel": "_ggui:preview",
+      "payload": {
+        "version": "v0.9",
+        "createSurface": { "surfaceId": "ck-preview-1", "catalogId": "ggui.preview.v1" }
+      }
+    }
+  ],
+  "inputEnvelope": {
+    "type": "handshake",
+    "sessionId": "ck-reserved-replay-1"
+  },
+  "expectedBehavior": {
+    "kind": "stream-update",
+    "channel": "_ggui:preview",
+    "replayAfterAck": true,
+    "value": {
+      "version": "v0.9",
+      "createSurface": { "surfaceId": "ck-preview-1", "catalogId": "ggui.preview.v1" }
+    }
+  }
+}

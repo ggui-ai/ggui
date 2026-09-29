@@ -404,6 +404,14 @@ export interface StreamUpdateBehavior {
    * wrongly rejecting a correct server over a random id.
    */
   readonly valueMatch?: 'exact' | 'subset';
+  /**
+   * Grade the frame as a REPLAY (SPEC §12.2.1, ggui#1526): the matching
+   * `data` frame must arrive after the subscribe's `ack` and carry a
+   * `seq` at or below that ack's `streamSeq`. A frame at a higher `seq`
+   * is a live emission, not the replay, and a frame or ack without the
+   * number cannot show the placement. Absent: placement is not graded.
+   */
+  readonly replayAfterAck?: true;
 }
 
 /**
@@ -607,6 +615,15 @@ export interface TestCase {
 
   /** Human-readable description of what this fixture proves. */
   readonly description: string;
+
+  /**
+   * The strength of the obligation this fixture grades. Absent: a MUST,
+   * and an unmet expectation is a failure. `'should'`: a SHOULD, and an
+   * unmet expectation is a WARNING (`ConformanceResult.warned`), which
+   * never fails a run. A skip stays a skip, and a runner-side error
+   * (an unreachable transport) is still a failure at either level.
+   */
+  readonly level?: 'should';
 
   /**
    * If non-null, the runner SKIPS this fixture and prints the reason.

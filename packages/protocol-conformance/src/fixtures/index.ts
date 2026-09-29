@@ -20,7 +20,7 @@
  *
  * ## Current coverage
  *
- * Six WebSocket sub-modules with content (12 fixtures). Additional sub-modules
+ * Seven WebSocket sub-modules with content (13 fixtures). Additional sub-modules
  * (`data-contract`, `tool-name-uniqueness`)
  * are reserved for additive fixture expansion and not yet
  * materialized — adding fixtures there is a kit minor version.
@@ -90,8 +90,8 @@
  * false fail: the runner dispatches every setup directive BEFORE it
  * opens the WebSocket and subscribes, and `emit-envelope` fans out to
  * live subscribers only — a fresh, `fromSeq`-less subscribe replays
- * nothing on declared channels (SPEC §12.2.1 invariant 1: "`fromSeq`
- * absent always means empty replay"), so the setup-time emission is
+ * nothing on declared channels (SPEC §12.2.1 invariant 1: a fresh
+ * subscribe replays no agent-declared channel), so the setup-time emission is
  * gone before the runner can observe it. The fixture's
  * `inputEnvelope` cannot carry the emission either: an input envelope
  * is by contract a Client→Server wire frame the runner sends on the
@@ -102,12 +102,30 @@
  * driver bound to `tools/call`. The `resources/read` driver above is
  * NOT that driver. Declared here rather than papered over with a
  * fixture that fails conformant servers on sequencing alone.
+ *
+ * A KNOWN-RESERVED channel is different, and that case IS authored
+ * (`reserved-channel-replay`, ggui#1526): a fresh subscribe SHOULD
+ * replay its retained envelopes after the ack (SPEC §12.2.1, the
+ * ggui#1521 erratum), so the setup-time emission is observable as that
+ * replay. It is graded at `level: 'should'`: a server that declines it
+ * is warned, never failed.
+ *
+ * ## What is NOT here — the client side of invariant 3
+ *
+ * SPEC §12.2.1 invariant 3 is a CLIENT obligation: after a fresh ack,
+ * apply every frame, including those at `seq ≤ streamSeq`, and dedupe
+ * against the highest `seq` applied, never against `streamSeq`. The kit
+ * has no driver for a live-channel CLIENT (the runner IS the client
+ * here, and the host-helper kit grades MCP Apps host helpers, not a
+ * view's channel), so it cannot grade that obligation. Declared as a
+ * gap, not implied as covered.
  */
 
 export { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
 export { consumeBufferFixtures } from './consume-buffer/index.js';
 export { hostContextFixtures } from './host-context/index.js';
 export { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
+export { reservedChannelReplayFixtures } from './reserved-channel-replay/index.js';
 export { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
 export { subscribeAppScopeFixtures } from './subscribe-app-scope/index.js';
 
@@ -116,6 +134,7 @@ import { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
 import { consumeBufferFixtures } from './consume-buffer/index.js';
 import { hostContextFixtures } from './host-context/index.js';
 import { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
+import { reservedChannelReplayFixtures } from './reserved-channel-replay/index.js';
 import { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
 import { subscribeAppScopeFixtures } from './subscribe-app-scope/index.js';
 
@@ -130,6 +149,7 @@ export type ContractSlug =
   | 'consume-buffer'
   | 'host-context'
   | 'reserved-channel-authority'
+  | 'reserved-channel-replay'
   | 'schema-version-handshake'
   | 'subscribe-app-scope'
   | (string & {});
@@ -147,6 +167,7 @@ export const fixturesByContract: Readonly<Record<ContractSlug, readonly TestCase
   'consume-buffer': consumeBufferFixtures,
   'host-context': hostContextFixtures,
   'reserved-channel-authority': reservedChannelAuthorityFixtures,
+  'reserved-channel-replay': reservedChannelReplayFixtures,
   'schema-version-handshake': schemaVersionHandshakeFixtures,
   'subscribe-app-scope': subscribeAppScopeFixtures,
 };

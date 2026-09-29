@@ -141,22 +141,16 @@ export function createReferenceConformanceHost({
             serverInstance.renders.get(sessionId)?.versionOverride ??
             serverInstance.advertisedVersion,
         });
-        const fanned = serverInstance.renders.injectFrame(sessionId, {
+        // `injectFrame` reaches no one when no subscriber is attached. The
+        // kit dispatches every setup directive before it subscribes, and
+        // this server keeps no retained stream, so a later fresh subscribe
+        // replays nothing. That is the SHOULD the kit grades as a warning
+        // (`fresh-subscribe-replays-reserved-preview`), not a directive
+        // failure, so the result is not checked here.
+        serverInstance.renders.injectFrame(sessionId, {
           type: 'data',
           payload: envelope,
         });
-        if (!fanned) {
-          // No subscribers attached — the directive's emission is
-          // unobservable. Surface for fixture-authoring debuggability
-          // (the canonical sequence is create-session → subscribe →
-          // emit-envelope; fixtures that swap order silently lose the
-          // injection). Not a throw — the directive itself succeeded;
-          // the unobservability is a fixture concern.
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[@ggui-ai/protocol-reference-server] emit-envelope on render '${sessionId}' channel '${step.channel}' had no subscribers — frame dropped`,
-          );
-        }
         return;
       }
       if (step.kind === 'renderer-url-override') {

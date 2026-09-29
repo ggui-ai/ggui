@@ -78,6 +78,7 @@ export {
   consumeBufferFixtures,
   hostContextFixtures,
   reservedChannelAuthorityFixtures,
+  reservedChannelReplayFixtures,
   schemaVersionHandshakeFixtures,
   subscribeAppScopeFixtures,
 } from './fixtures/index.js';
@@ -305,6 +306,7 @@ export {
   formatScorecard,
   formatSummary,
   formatFailures,
+  formatWarnings,
   formatSkips,
 } from './reporter.js';
 export type { DefaultReporterOptions } from './reporter.js';

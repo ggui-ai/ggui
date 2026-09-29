@@ -200,6 +200,13 @@ export type PureFunctionCatalogSlug = (typeof PURE_FUNCTION_CATALOG_SLUGS)[numbe
 export interface ConformanceResult {
   readonly passed: readonly string[];
   readonly failed: readonly ConformanceFailure[];
+  /**
+   * SHOULD fixtures (`TestCase.level: 'should'`) whose expectation was
+   * not met, with the same evidence a failure carries. A warning never
+   * fails a run: a SHOULD is a recommendation the implementation may
+   * decline, and the kit reports it so the declining is visible.
+   */
+  readonly warned: readonly ConformanceFailure[];
   readonly skipped: readonly SkippedFixture[];
   readonly totalMs: number;
 }
@@ -221,6 +228,8 @@ export interface ConformanceReporter {
   onStart?(totalFixtures: number): void;
   onFixturePass?(name: string, elapsedMs: number): void;
   onFixtureFail?(failure: ConformanceFailure): void;
+  /** A SHOULD fixture's expectation was not met (see `ConformanceResult.warned`). */
+  onFixtureWarn?(warning: ConformanceFailure): void;
   onFixtureSkip?(name: string, reason: string): void;
   /**
    * Invoked when a teardown step throws. Non-fatal — the fixture's
@@ -245,6 +254,7 @@ export async function runConformance(
 
   const passed: string[] = [];
   const failed: ConformanceFailure[] = [];
+  const warned: ConformanceFailure[] = [];
   const skipped: SkippedFixture[] = [];
 
   for (const fixture of fixtures) {
@@ -267,6 +277,10 @@ export async function runConformance(
         failed.push(outcome.failure);
         reporter.onFixtureFail?.(outcome.failure);
         break;
+      case 'warn':
+        warned.push(outcome.warning);
+        reporter.onFixtureWarn?.(outcome.warning);
+        break;
       case 'skip':
         skipped.push({ name: fixture.name, reason: outcome.reason });
         reporter.onFixtureSkip?.(fixture.name, outcome.reason);
@@ -279,6 +293,7 @@ export async function runConformance(
   const result: ConformanceResult = {
     passed,
     failed,
+    warned,
     skipped,
     totalMs: Date.now() - started,
   };
@@ -481,10 +496,41 @@ async function runPureFunctionCatalogs(
 // Per-fixture dispatch
 // =============================================================================
 
-type FixtureOutcome =
+/**
+ * One fixture's verdict. Exported for unit tests; not part of the
+ * package's public API.
+ */
+export type FixtureOutcome =
   | { readonly kind: 'pass'; readonly elapsedMs: number }
   | { readonly kind: 'fail'; readonly failure: ConformanceFailure }
+  | { readonly kind: 'warn'; readonly warning: ConformanceFailure }
   | { readonly kind: 'skip'; readonly reason: string };
+
+/**
+ * Turn an observed match into a fixture's verdict (ggui#1526). An unmet
+ * expectation is a failure for a MUST fixture and a warning for a
+ * SHOULD one (`TestCase.level: 'should'`), carrying the same evidence
+ * either way; what the transport cannot observe is a skip at either
+ * level.
+ *
+ * Exported for unit tests; not part of the package's public API.
+ */
+export function gradeFixtureMatch(
+  fixture: Pick<TestCase, 'name' | 'level'>,
+  match: MatchResult,
+  elapsedMs: number,
+): FixtureOutcome {
+  if (match.kind === 'pass') return { kind: 'pass', elapsedMs };
+  if (match.kind === 'unmatchable-on-ws') return { kind: 'skip', reason: match.reason };
+  const unmet: ConformanceFailure = {
+    name: fixture.name,
+    criterion: criterionForFixture(fixture.name),
+    expected: match.expected,
+    received: match.received,
+    message: match.message,
+  };
+  return fixture.level === 'should' ? { kind: 'warn', warning: unmet } : { kind: 'fail', failure: unmet };
+}
 
 async function runOneFixture(
   fixture: TestCase,
@@ -598,23 +644,7 @@ async function runOneFixture(
       }
     }
 
-    if (match.kind === 'pass') {
-      return { kind: 'pass', elapsedMs: Date.now() - fixtureStarted };
-    }
-    if (match.kind === 'fail') {
-      return {
-        kind: 'fail',
-        failure: {
-          name: fixture.name,
-          criterion: criterionForFixture(fixture.name),
-          expected: match.expected,
-          received: match.received,
-          message: match.message,
-        },
-      };
-    }
-    // match.kind === 'unmatchable-on-ws'
-    return { kind: 'skip', reason: match.reason };
+    return gradeFixtureMatch(fixture, match, Date.now() - fixtureStarted);
   } catch (err) {
     return {
       kind: 'fail',
@@ -1160,6 +1190,8 @@ function slugToCriterion(slug: string): string {
       return 'Host-context persistence — host_context_observed MUST persist onto GguiSession.hostContext';
     case 'reserved-channel-authority':
       return 'SPEC §4.4 reserved-channel authority';
+    case 'reserved-channel-replay':
+      return 'SPEC §12.2.1 — a fresh subscribe SHOULD replay known-reserved channels after the ack (ggui#1521)';
     case 'schema-version-handshake':
       return 'Protocol #3 version negotiation';
     case 'subscribe-app-scope':

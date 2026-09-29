@@ -62,10 +62,13 @@ import {
   PRE_GENERATION_REFUSAL_CODES,
   type ActionSpec,
   type JsonValue,
+  type StreamSpec,
 } from '@ggui-ai/protocol';
+import type { ReplayResult } from '@ggui-ai/mcp-server-core';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
+  InMemoryGguiSessionStreamBuffer,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -157,6 +160,11 @@ const EXPECTED_PASSING = [
   'action-payload-schema-violation',
   'app-mismatch',
   'bootstrap-success',
+  // ggui#1526 — a SHOULD (SPEC §12.2.1): the fresh subscribe replays the
+  // known-reserved `_ggui:preview` envelope emitted before it, after the
+  // ack and within its streamSeq. This first-party server meets it, so it
+  // is pinned here as a pass.
+  'fresh-subscribe-replays-reserved-preview',
   'host-context-observed-persists',
   // The four `registry-completeness` pins (ggui#786). Not WS
   // obligations — the runner folds the pure-function catalogs in, and
@@ -278,10 +286,13 @@ interface FirstPartyHarness {
  * `InMemoryAuthAdapter({devAllowAll: true})` accepts the kit's bearer
  * token on the upgrade request.
  */
-async function bootFirstPartyServer(): Promise<FirstPartyHarness> {
+async function bootFirstPartyServer(
+  opts: { readonly streamBuffer?: InMemoryGguiSessionStreamBuffer } = {},
+): Promise<FirstPartyHarness> {
   const store = new InMemoryGguiSessionStore();
   const channel = createGguiSessionChannelServer({
     renderStore: store,
+    ...(opts.streamBuffer !== undefined ? { streamBuffer: opts.streamBuffer } : {}),
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     // Deployment identity → appId mapping (the same seam `createGguiServer`
     // threads from its own `appIdFromIdentity` option). The conformance
@@ -560,6 +571,8 @@ describe('first-party @ggui-ai/mcp-server passes @ggui-ai/protocol-conformance',
       `passed (${result.passed.length}): ${result.passed.join(', ')}`,
       `failed (${result.failed.length}):`,
       ...result.failed.map((f) => `  - ${f.name}: ${f.message}`),
+      `warned (${result.warned.length}):`,
+      ...result.warned.map((w) => `  - ${w.name}: ${w.message}`),
       `skipped (${result.skipped.length}):`,
       ...result.skipped.map((s) => `  - ${s.name}: ${s.reason}`),
     ].join('\n');
@@ -569,6 +582,10 @@ describe('first-party @ggui-ai/mcp-server passes @ggui-ai/protocol-conformance',
     // protocol obligation. Both are bugs at source, never re-pinned
     // here as "known failures".
     expect(result.failed, diagnostic).toEqual([]);
+
+    // No warnings either: this first-party server meets every SHOULD the
+    // kit grades (ggui#1526), so a warning here is a regression.
+    expect(result.warned, diagnostic).toEqual([]);
 
     // Pass set is EXACT: a fixture leaving it is a regression; a
     // fixture entering it must be pinned deliberately.
@@ -586,5 +603,50 @@ describe('first-party @ggui-ai/mcp-server passes @ggui-ai/protocol-conformance',
         `fixture '${skip.name}' skipped for an unexpected reason:\n${diagnostic}`,
       ).toContain(EXPECTED_SKIPPED[skip.name]);
     }
+  }, 30_000);
+});
+
+/**
+ * A stream buffer that records and counts as usual but replays nothing:
+ * a server that declines the SHOULD to replay known-reserved channels
+ * on a fresh subscribe.
+ */
+class NoReplayStreamBuffer extends InMemoryGguiSessionStreamBuffer {
+  override async replay(sessionId: string, fromSeq: number | undefined, spec?: StreamSpec): Promise<ReplayResult> {
+    const replayed = await super.replay(sessionId, fromSeq, spec);
+    return { ...replayed, envelopes: [] };
+  }
+}
+
+describe('a server that declines a SHOULD is warned, never failed (ggui#1526)', () => {
+  let harness: FirstPartyHarness;
+
+  beforeAll(async () => {
+    harness = await bootFirstPartyServer({ streamBuffer: new NoReplayStreamBuffer() });
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  it('with no reserved-channel replay, the fresh-subscribe case lands in `warned` with its evidence, and nothing fails', async () => {
+    const result = await runConformance({
+      serverUrl: harness.serverUrl,
+      auth: { kind: 'bearer', token: 'first-party-conformance' },
+      host: createFirstPartyConformanceHost(harness),
+      only: ['fresh-subscribe-replays-reserved-preview'],
+      observationTimeoutMs: 1500,
+    });
+    expect(result.failed).toEqual([]);
+    expect(result.passed).toEqual([]);
+    expect(result.warned.map((w) => w.name)).toEqual(['fresh-subscribe-replays-reserved-preview']);
+    const warning = result.warned[0];
+    expect(warning?.criterion).toContain('SPEC §12.2.1');
+    // The warning is for the missing replay, not for anything else that
+    // can go wrong on the way: the subscribe acked, and no matching frame
+    // arrived at all.
+    expect(warning?.message).toMatch(/none matched/);
+    expect(warning?.expected).toMatchObject({ type: 'data', payload: { channel: '_ggui:preview' } });
+    expect(warning?.received).toEqual([]);
   }, 30_000);
 });

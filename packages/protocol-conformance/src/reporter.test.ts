@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createDefaultReporter,
   formatFailures,
+  formatWarnings,
   formatScorecard,
   formatSkips,
   formatSummary,
@@ -17,6 +18,7 @@ import type { ConformanceResult } from './run-conformance.js';
 const EMPTY_RESULT: ConformanceResult = {
   passed: [],
   failed: [],
+  warned: [],
   skipped: [],
   totalMs: 0,
 };
@@ -47,6 +49,7 @@ describe('createDefaultReporter', () => {
           message: 'subscribe failed',
         },
       ],
+      warned: [],
       skipped: [{ name: 'fixture-c', reason: 'no host provided' }],
       totalMs: 42,
     });
@@ -102,6 +105,7 @@ describe('formatScorecard', () => {
     const result: ConformanceResult = {
       passed: ['bootstrap-success'],
       failed: [],
+      warned: [],
       skipped: [],
       totalMs: 10,
     };
@@ -124,6 +128,7 @@ describe('formatSummary', () => {
           message: 'x',
         },
       ],
+      warned: [],
       skipped: [{ name: 'd', reason: 'x' }],
       totalMs: 123,
     });
@@ -167,5 +172,41 @@ describe('formatSkips', () => {
     const output = formatSkips([{ name: 'fixture-a', reason: 'no host provided' }]);
     expect(output).toContain('fixture-a');
     expect(output).toContain('no host provided');
+  });
+});
+
+describe('warnings — a SHOULD fixture declined (ggui#1526)', () => {
+  const WARNING = {
+    name: 'fresh-subscribe-replays-reserved-preview',
+    criterion: 'SPEC §12.2.1',
+    expected: 'a replayed frame',
+    received: 'none',
+    message: 'no data frame on _ggui:preview',
+  };
+
+  it('streams a WARN line for a declined SHOULD, with its criterion and message', () => {
+    const lines: string[] = [];
+    const reporter = createDefaultReporter({ write: (line) => void lines.push(line) });
+    reporter.onFixtureWarn?.(WARNING);
+    expect(lines.join('\n')).toMatch(/WARN\s+fresh-subscribe-replays-reserved-preview\s+SPEC §12\.2\.1/);
+    expect(lines.join('\n')).toContain('no data frame on _ggui:preview');
+  });
+
+  it('counts a warning in its contract row and in the summary, never as a failure', () => {
+    const result: ConformanceResult = { ...EMPTY_RESULT, warned: [WARNING], totalMs: 5 };
+    expect(formatScorecard(result)).toMatch(/reserved-channel-replay\s+0\/1 pass · 1 warn/);
+    expect(formatScorecard(result)).not.toContain('fail');
+    const summary = formatSummary(result);
+    expect(summary).toContain('Warned:     1');
+    expect(summary).toContain('Failed:     0');
+    expect(summary).toContain('Total:      1');
+  });
+
+  it('formats each warning with its expected and received evidence, and nothing when there are none', () => {
+    expect(formatWarnings([])).toBe('');
+    const out = formatWarnings([WARNING]);
+    expect(out).toContain('Warnings (SHOULD):');
+    expect(out).toContain('expected: "a replayed frame"');
+    expect(out).toContain('received: "none"');
   });
 });

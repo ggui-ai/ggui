@@ -598,3 +598,60 @@ describe('matchBehavior — Path-B and unknown kinds skip', () => {
     expect(result.reason).toContain('made-up-future-behavior');
   });
 });
+
+describe('matchBehavior — stream-update with replayAfterAck grades the replay placement (ggui#1526)', () => {
+  const behavior: StreamUpdateBehavior = {
+    kind: 'stream-update',
+    channel: '_ggui:preview',
+    value: { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: 'ggui.preview.v1' } },
+    replayAfterAck: true,
+  };
+  const ack = (streamSeq: number | undefined): ObservedFrame =>
+    frame({
+      type: 'ack',
+      payload: { serverVersion: PROTOCOL_SCHEMA_VERSION, ...(streamSeq !== undefined ? { streamSeq } : {}) },
+      requestId: 'conformance-subscribe-fixture',
+    });
+  const replayed = (seq: number | undefined): ObservedFrame =>
+    frame({
+      type: 'data',
+      payload: {
+        sessionId: 'ck-reserved-replay-1',
+        channel: '_ggui:preview',
+        mode: 'replace',
+        payload: behavior.value,
+        ...(seq !== undefined ? { seq } : {}),
+      },
+    });
+
+  it('passes on a matching frame after the ack at a seq at or below its streamSeq', () => {
+    expect(matchBehavior(behavior, [ack(1), replayed(1)]).kind).toBe('pass');
+  });
+
+  it('fails a matching frame that arrives before the ack, naming the placement', () => {
+    const result = matchBehavior(behavior, [replayed(1), ack(1)]);
+    expect(result.kind).toBe('fail');
+    expect(result.kind === 'fail' ? result.message : '').toMatch(/before the subscribe's `ack`/);
+  });
+
+  it('fails a matching frame after the ack whose seq is above streamSeq: a live emission, not the replay', () => {
+    const result = matchBehavior(behavior, [ack(1), replayed(2)]);
+    expect(result.kind).toBe('fail');
+    expect(result.kind === 'fail' ? result.message : '').toMatch(/above the ack's `streamSeq` \(1\)/);
+  });
+
+  it('fails a matching frame with no seq, and an ack with no streamSeq: the placement cannot be shown', () => {
+    expect(matchBehavior(behavior, [ack(1), replayed(undefined)]).kind).toBe('fail');
+    expect(matchBehavior(behavior, [ack(undefined), replayed(1)]).kind).toBe('fail');
+  });
+
+  it('fails when no ack was observed at all', () => {
+    const result = matchBehavior(behavior, [replayed(1)]);
+    expect(result.kind === 'fail' ? result.message : '').toMatch(/no subscribe `ack`/);
+  });
+
+  it('without replayAfterAck, placement is not graded (the existing stream-update contract) — control', () => {
+    const { replayAfterAck: _omit, ...plain } = behavior;
+    expect(matchBehavior(plain, [replayed(1), ack(1)]).kind).toBe('pass');
+  });
+});

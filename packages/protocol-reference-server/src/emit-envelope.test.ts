@@ -155,14 +155,16 @@ describe('emit-envelope ConformanceHost directive', () => {
     ).rejects.toThrow(/before create-session/);
   });
 
-  it('no-ops (warns) when the render has no subscribers — directive resolves, no throw', async () => {
+  it('resolves silently when the render has no subscribers: the kit emits before it subscribes, and this server retains nothing to replay (ggui#1526)', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-subs' });
 
     const warnSpy = jestLikeWarnSpy();
     try {
-      // Directive should resolve without throwing — the unobservability
-      // of the injection is a fixture concern, not a host failure.
+      // The kit dispatches every setup directive before it subscribes, so
+      // an emission with no subscriber is the ordinary case, not a fixture
+      // bug. Its replay is a SHOULD this server declines (graded a warning
+      // by the kit), not a directive failure.
       await host.dispatchSetup({
         kind: 'emit-envelope',
         channel: 'demo:counter',
@@ -172,8 +174,7 @@ describe('emit-envelope ConformanceHost directive', () => {
       warnSpy.restore();
     }
 
-    expect(warnSpy.calls.length).toBe(1);
-    expect(warnSpy.calls[0]).toMatch(/no subscribers/);
+    expect(warnSpy.calls).toEqual([]);
   });
 });
 

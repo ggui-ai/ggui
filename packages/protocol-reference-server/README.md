@@ -49,9 +49,10 @@ Prints `READY ws://127.0.0.1:3100/ws` when bound. Ctrl-C to stop.
 ## CI proof
 
 `src/conformance.test.ts` boots this server and runs `@ggui-ai/protocol-conformance`
-against it through a `ConformanceHost` adapter. Every drivable conformance fixture must
+against it through a `ConformanceHost` adapter. Every drivable MUST fixture must
 pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected,
 action-payload-schema-violation, version-match, version-mismatch, app-mismatch,
 absent-appid-defaults, host-context-observed-persists); directives outside this server's scope
 (renderer-url-override, ui-initialize-response-override, and similar) skip cleanly per
-the kit's design.
+the kit's design. The one SHOULD it declines, `fresh-subscribe-replays-reserved-preview` (this server keeps no
+retained stream, so a fresh subscribe replays nothing), is graded a warning and pinned as the exact warned set.

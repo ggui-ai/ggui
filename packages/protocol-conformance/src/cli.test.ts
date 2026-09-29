@@ -19,7 +19,7 @@ import { runTransportRefusalConformance } from './transport-refusal-conformance/
 import type { ConformanceFailure, ConformanceResult } from './run-conformance.js';
 
 function result(overrides: Partial<ConformanceResult>): ConformanceResult {
-  return { passed: [], failed: [], skipped: [], totalMs: 1, ...overrides };
+  return { passed: [], failed: [], warned: [], skipped: [], totalMs: 1, ...overrides };
 }
 
 const FAILURE: ConformanceFailure = {
@@ -40,6 +40,20 @@ describe('exitCodeForResult', () => {
         }),
       ),
     ).toBe(0);
+  });
+
+  it('a warning never fails a run: a declined SHOULD beside a pass exits 0 (ggui#1526)', () => {
+    expect(exitCodeForResult(result({ passed: ['bootstrap-success'], warned: [FAILURE] }))).toBe(0);
+  });
+
+  it('a run whose only executed fixture warned still executed something: it exits 0, not 2 (ggui#1526)', () => {
+    expect(
+      exitCodeForResult(result({ warned: [FAILURE], skipped: [{ name: 'bootstrap-success', reason: 'no host provided' }] })),
+    ).toBe(0);
+  });
+
+  it('a failure beside a warning still exits 1 (ggui#1526)', () => {
+    expect(exitCodeForResult(result({ failed: [FAILURE], warned: [FAILURE] }))).toBe(1);
   });
 
   it('returns 1 when any fixture failed', () => {

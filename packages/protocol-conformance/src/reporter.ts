@@ -72,6 +72,11 @@ export function createDefaultReporter(
       write(`  ${MARK_FAIL}  ${padRight(failure.name, 48)}  ${failure.criterion}`);
       write(`        → ${failure.message}`);
     },
+    onFixtureWarn(warning: ConformanceFailure): void {
+      if (!streaming) return;
+      write(`  ${MARK_WARN}  ${padRight(warning.name, 48)}  ${warning.criterion}`);
+      write(`        → ${warning.message}`);
+    },
     onFixtureSkip(name: string, reason: string): void {
       if (!streaming) return;
       const shortReason = reason.length > 80 ? `${reason.slice(0, 77)}…` : reason;
@@ -123,25 +128,29 @@ function scorecardRow(
 ): string[] {
   const passedCount = result.passed.filter(belongs).length;
   const failedCount = result.failed.filter((f) => belongs(f.name)).length;
+  const warnedCount = result.warned.filter((w) => belongs(w.name)).length;
   const skippedCount = result.skipped.filter((s) => belongs(s.name)).length;
-  const total = passedCount + failedCount + skippedCount;
+  const total = passedCount + failedCount + warnedCount + skippedCount;
   if (total === 0) return [];
-  const tone = failedCount > 0 ? MARK_FAIL : passedCount > 0 ? MARK_PASS : MARK_SKIP;
+  const tone =
+    failedCount > 0 ? MARK_FAIL : warnedCount > 0 ? MARK_WARN : passedCount > 0 ? MARK_PASS : MARK_SKIP;
   return [
     `  ${tone}  ${padRight(slug, 38)}  ${passedCount}/${total} pass${
       failedCount > 0 ? ` · ${failedCount} fail` : ''
-    }${skippedCount > 0 ? ` · ${skippedCount} skip` : ''}`,
+    }${warnedCount > 0 ? ` · ${warnedCount} warn` : ''}${skippedCount > 0 ? ` · ${skippedCount} skip` : ''}`,
   ];
 }
 
 export function formatSummary(result: ConformanceResult): string {
   const passed = result.passed.length;
   const failed = result.failed.length;
+  const warned = result.warned.length;
   const skipped = result.skipped.length;
-  const total = passed + failed + skipped;
+  const total = passed + failed + warned + skipped;
   return [
     `  Passed:   ${String(passed).padStart(3)}`,
     `  Failed:   ${String(failed).padStart(3)}`,
+    `  Warned:   ${String(warned).padStart(3)}   (SHOULD, never fails a run)`,
     `  Skipped:  ${String(skipped).padStart(3)}`,
     `  Total:    ${String(total).padStart(3)}   (${result.totalMs}ms)`,
   ].join('\n');
@@ -159,6 +168,23 @@ export function formatFailures(failures: readonly ConformanceFailure[]): string 
     lines.push(`   ${failure.message}`);
     lines.push(`   expected: ${safeStringify(failure.expected)}`);
     lines.push(`   received: ${safeStringify(failure.received)}`);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Emit the full set of warnings (ggui#1526): SHOULD fixtures whose
+ * expectation was not met, with the same evidence a failure carries.
+ */
+export function formatWarnings(warnings: readonly ConformanceFailure[]): string {
+  if (warnings.length === 0) return '';
+  const lines = ['', 'Warnings (SHOULD):', ''];
+  for (const warning of warnings) {
+    lines.push(`${MARK_WARN} ${warning.name}  (${warning.criterion})`);
+    lines.push(`   ${warning.message}`);
+    lines.push(`   expected: ${safeStringify(warning.expected)}`);
+    lines.push(`   received: ${safeStringify(warning.received)}`);
     lines.push('');
   }
   return lines.join('\n');

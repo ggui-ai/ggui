@@ -22,12 +22,13 @@ import {
   hostContextFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
+  reservedChannelReplayFixtures,
   subscribeAppScopeFixtures,
 } from './index.js';
 
 describe('fixtures catalog', () => {
-  it('ships 12 fixtures across six materialized sub-modules', () => {
-    expect(allFixtures.length).toBe(12);
+  it('ships 13 fixtures across seven materialized sub-modules', () => {
+    expect(allFixtures.length).toBe(13);
     // Sanity: confirm the retired wired-dispatch / refresh /
     // observability fixtures are not in the catalog under their old
     // names — the synchronous wired-action path has exactly zero
@@ -57,12 +58,13 @@ describe('fixtures catalog', () => {
     expect(names.size).toBe(allFixtures.length);
   });
 
-  it('materializes the six expected sub-modules', () => {
+  it('materializes the seven expected sub-modules', () => {
     expect(Object.keys(fixturesByContract).sort()).toEqual([
       'bootstrap-protocol',
       'consume-buffer',
       'host-context',
       'reserved-channel-authority',
+      'reserved-channel-replay',
       'schema-version-handshake',
       'subscribe-app-scope',
     ]);
@@ -73,6 +75,7 @@ describe('fixtures catalog', () => {
     expect(consumeBufferFixtures.length).toBe(3);
     expect(hostContextFixtures.length).toBe(1);
     expect(reservedChannelAuthorityFixtures.length).toBe(1);
+    expect(reservedChannelReplayFixtures.length).toBe(1);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
     expect(subscribeAppScopeFixtures.length).toBe(2);
   });
@@ -119,6 +122,7 @@ describe('fixtures catalog', () => {
       'bootstrap-bundle-fetch-failed',
       'bootstrap-meta-missing',
       'bootstrap-success',
+      'fresh-subscribe-replays-reserved-preview',
       'host-context-observed-persists',
       'props-update-roundtrip',
       'undeclared-action-rejected',

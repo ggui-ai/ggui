@@ -25,6 +25,7 @@ import type { ConformanceHost } from './conformance-host.js';
 import { allFixtures } from './fixtures/index.js';
 import {
   deriveWsUrl,
+  gradeFixtureMatch,
   matchSessionState,
   parseInputEnvelope,
   parseSetupStep,
@@ -450,5 +451,55 @@ describe('deriveWsUrl — bare origins get /ws, explicit paths are used as given
 
   it('assumes ws:// for a scheme-less origin', () => {
     expect(deriveWsUrl('localhost:3000')).toBe('ws://localhost:3000/ws');
+  });
+});
+
+describe('gradeFixtureMatch — a SHOULD fixture warns where a MUST fixture fails (ggui#1526)', () => {
+  const unmet = { kind: 'fail' as const, expected: 'a frame', received: 'none', message: 'no frame' };
+
+  it('a MUST fixture whose expectation is unmet is a failure', () => {
+    const outcome = gradeFixtureMatch({ name: 'subscribe-app-mismatch' }, unmet, 5);
+    expect(outcome.kind).toBe('fail');
+  });
+
+  it('a SHOULD fixture whose expectation is unmet is a warning, carrying the same evidence, never a failure', () => {
+    const outcome = gradeFixtureMatch({ name: 'fresh-subscribe-replays-reserved-preview', level: 'should' }, unmet, 5);
+    expect(outcome).toEqual({
+      kind: 'warn',
+      warning: {
+        name: 'fresh-subscribe-replays-reserved-preview',
+        criterion: expect.any(String),
+        expected: 'a frame',
+        received: 'none',
+        message: 'no frame',
+      },
+    });
+  });
+
+  it('a SHOULD fixture whose expectation holds passes', () => {
+    expect(gradeFixtureMatch({ name: 'x', level: 'should' }, { kind: 'pass' }, 7)).toEqual({ kind: 'pass', elapsedMs: 7 });
+  });
+
+  it('a SHOULD fixture the transport cannot observe stays a skip', () => {
+    const outcome = gradeFixtureMatch({ name: 'x', level: 'should' }, { kind: 'unmatchable-on-ws', reason: 'Path-B' }, 7);
+    expect(outcome).toEqual({ kind: 'skip', reason: 'Path-B' });
+  });
+});
+
+describe('the shipped catalog declares only the levels the runner grades (ggui#1526)', () => {
+  it("every fixture's level is absent (MUST) or 'should'", () => {
+    for (const fixture of allFixtures) {
+      expect([undefined, 'should'], fixture.name).toContain(fixture.level);
+    }
+  });
+
+  it('the fresh-subscribe reserved-replay case is a SHOULD', () => {
+    const fixture = allFixtures.find((f) => f.name === 'fresh-subscribe-replays-reserved-preview');
+    expect(fixture?.level).toBe('should');
+  });
+
+  it('the fresh-subscribe case grades the replay placement, not presence alone (replayAfterAck)', () => {
+    const fixture = allFixtures.find((f) => f.name === 'fresh-subscribe-replays-reserved-preview');
+    expect(fixture?.expectedBehavior).toMatchObject({ kind: 'stream-update', channel: '_ggui:preview', replayAfterAck: true });
   });
 });

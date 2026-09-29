@@ -266,6 +266,18 @@ const EXPECTED_SKIPPED = [
 ];
 
 /**
+ * SHOULD fixtures this server declines, graded as warnings (ggui#1526).
+ * Pinned EXACTLY, like the pass and skip sets: a warning that appears
+ * or disappears unnoticed would make the kit's SHOULD grade invisible.
+ *
+ *   - `fresh-subscribe-replays-reserved-preview` (SPEC §12.2.1, the
+ *     ggui#1521 erratum): this server keeps no retained stream, so a
+ *     fresh subscribe replays nothing, reserved channels included. It
+ *     implements the MUSTs; the replay is a SHOULD it may decline.
+ */
+const EXPECTED_WARNED = ['fresh-subscribe-replays-reserved-preview'];
+
+/**
  * Fixtures that fail on today's reference server for reasons tracked
  * as Protocol #6 findings. Currently empty: every Path-A fixture
  * passes and every skip is in {@link EXPECTED_SKIPPED}. Re-populate
@@ -309,9 +321,15 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       `passed (${result.passed.length}): ${result.passed.join(', ')}`,
       `failed (${result.failed.length}):`,
       ...result.failed.map((f) => `  - ${f.name}: ${f.message}`),
+      `warned (${result.warned.length}):`,
+      ...result.warned.map((w) => `  - ${w.name}: ${w.message}`),
       `skipped (${result.skipped.length}):`,
       ...result.skipped.map((s) => `  - ${s.name}: ${s.reason}`),
     ].join('\n');
+
+    // The warned set is exact (ggui#1526): a SHOULD this server
+    // declines is pinned, never silently absorbed.
+    expect(result.warned.map((w) => w.name).sort(), diagnostic).toEqual(EXPECTED_WARNED);
 
     // Every expected-passing fixture must be in the passed list.
     for (const name of EXPECTED_PASSING) {

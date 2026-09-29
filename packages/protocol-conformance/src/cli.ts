@@ -36,8 +36,8 @@
  * design. To get real pass/fail signal against an implementation,
  * consumers call `runConformance({ host: myImpl })` programmatically
  * and apply the same guard:
- * `result.failed.length > 0 || result.passed.length === 0` is a red
- * build. The CLI remains the lowest-friction wire-level smoke check
+ * `result.failed.length > 0 || result.passed.length + result.warned.length === 0`
+ * is a red build (a warned fixture executed, and never fails a run). The CLI remains the lowest-friction wire-level smoke check
  * for setups where the server under test is provisioned out-of-band
  * rather than through a `ConformanceHost` injection.
  */
@@ -58,7 +58,7 @@ import {
   type RawToolCallResult,
   type ToolCallScenario,
 } from './domain-error-conformance/index.js';
-import { createDefaultReporter, formatFailures, formatSkips } from './reporter.js';
+import { createDefaultReporter, formatFailures, formatSkips, formatWarnings } from './reporter.js';
 import {
   runConformance,
   type ConformanceResult,
@@ -452,7 +452,7 @@ Options:
                            performs ONE tools/call and returns the raw result
                            (null = tool not bound). Grades the domain-error
                            catalog — SPEC §7.9 Plane 2 on the wire (ggui#880).
-  --verbose, -v            Print failure details + skip reasons at the end.
+  --verbose, -v            Print failure details, warnings + skip reasons at the end.
   --help, -h               Show this help.
 
 Pure-function catalogs (refusal-envelope, registry-completeness, transport-refusal):
@@ -534,6 +534,8 @@ async function main(argv: readonly string[]): Promise<number> {
   if (parsed.verbose) {
     const failures = formatFailures(result.failed);
     if (failures.length > 0) process.stdout.write(`${failures}\n`);
+    const warnings = formatWarnings(result.warned);
+    if (warnings.length > 0) process.stdout.write(`${warnings}\n`);
     const skips = formatSkips(result.skipped);
     if (skips.length > 0) process.stdout.write(`${skips}\n`);
   }
@@ -541,7 +543,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const code = exitCodeForResult(result);
   if (code === 2) {
     process.stderr.write(
-      `error: conformance run executed ZERO fixtures (0 passed, ${result.failed.length} failed, ${result.skipped.length} skipped) — an all-skip run proves nothing and must not read as success; exiting 2. Run with --verbose for skip reasons.\n`,
+      `error: conformance run executed ZERO fixtures (0 passed, ${result.failed.length} failed, 0 warned, ${result.skipped.length} skipped) — an all-skip run proves nothing and must not read as success; exiting 2. Run with --verbose for skip reasons.\n`,
     );
   }
   return code;
@@ -549,15 +551,17 @@ async function main(argv: readonly string[]): Promise<number> {
 
 /**
  * Map a {@link ConformanceResult} to the CLI exit code:
- *   - `1` — at least one fixture failed.
- *   - `2` — zero fixtures executed (every fixture skipped). A run
+ *   - `1` — at least one fixture failed. A warning (a SHOULD fixture
+ *     whose expectation was not met) never does.
+ *   - `2` — zero fixtures executed (every fixture skipped). A warned
+ *     fixture executed. A run
  *     that graded nothing carries no conformance signal and must not
  *     read as success in CI.
  *   - `0` — at least one fixture executed and none failed.
  */
 function exitCodeForResult(result: ConformanceResult): 0 | 1 | 2 {
   if (result.failed.length > 0) return 1;
-  if (result.passed.length === 0) return 2;
+  if (result.passed.length === 0 && result.warned.length === 0) return 2;
   return 0;
 }
 

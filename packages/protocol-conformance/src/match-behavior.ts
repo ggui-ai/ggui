@@ -420,21 +420,23 @@ function matchStreamUpdate(
   behavior: StreamUpdateBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
-  const envelopes: readonly StreamEnvelope[] = frames.flatMap((f) => {
-    if (f.kind !== 'frame' || f.parsed['type'] !== 'data') return [];
-    const body = f.parsed['payload'];
-    return isStreamEnvelope(body) ? [body] : [];
-  });
   // `valueMatch: 'subset'` relaxes the value comparison to "every
   // declared key is present + matching; extra observed keys ignored".
   // Default ('exact' / absent) is the exact deep-equal.
   const subset = behavior.valueMatch === 'subset';
   const valueMatches = (observed: unknown): boolean =>
     subset ? deepMatchSubset(behavior.value, observed) : deepEqual(observed, behavior.value);
-  const match = envelopes.find(
-    (envelope) => envelope.channel === behavior.channel && valueMatches(envelope.payload),
+  // Every matching envelope, with where it arrived among the frames.
+  const matches: readonly { readonly index: number; readonly envelope: StreamEnvelope }[] = frames.flatMap(
+    (f, index) => {
+      if (f.kind !== 'frame' || f.parsed['type'] !== 'data') return [];
+      const body = f.parsed['payload'];
+      return isStreamEnvelope(body) && body.channel === behavior.channel && valueMatches(body.payload)
+        ? [{ index, envelope: body }]
+        : [];
+    },
   );
-  if (match === undefined) {
+  if (matches.length === 0) {
     return {
       kind: 'fail',
       expected: {
@@ -447,6 +449,49 @@ function matchStreamUpdate(
         .map((f) => (f.kind === 'frame' ? f.parsed : f)),
       message: `expected a \`data\` frame whose StreamEnvelope names channel '${behavior.channel}' and carries the declared value as its payload (${subset ? 'subset match — every declared key present + matching' : 'exact match'}); none matched.`,
     };
+  }
+  if (behavior.replayAfterAck !== true) return { kind: 'pass' };
+  return matchReplayPlacement(behavior.channel, frames, matches);
+}
+
+/**
+ * The replay placement a `stream-update` with `replayAfterAck` grades
+ * (SPEC §12.2.1, ggui#1526): a matching frame that arrives after the
+ * subscribe's `ack` and carries a `seq` at or below that ack's
+ * `streamSeq`. The first placement failure found names what is wrong.
+ */
+function matchReplayPlacement(
+  channel: string,
+  frames: readonly ObservedFrame[],
+  matches: readonly { readonly index: number; readonly envelope: StreamEnvelope }[],
+): MatchResult {
+  const ackIndex = frames.findIndex((f) => f.kind === 'frame' && f.parsed['type'] === 'ack');
+  const expected = { type: 'data', channel, after: 'the subscribe ack', seq: '<= ack.payload.streamSeq' };
+  const fail = (message: string): MatchResult => ({
+    kind: 'fail',
+    expected,
+    received: frames.filter((f) => f.kind === 'frame').map((f) => (f.kind === 'frame' ? f.parsed : f)),
+    message,
+  });
+  if (ackIndex === -1) {
+    return fail(`a matching frame on '${channel}' was observed, but no subscribe \`ack\` was, so it cannot be shown to be the replay.`);
+  }
+  const ackFrame = frames[ackIndex];
+  const ackPayload = ackFrame !== undefined && ackFrame.kind === 'frame' ? ackFrame.parsed['payload'] : undefined;
+  const streamSeq = isRecord(ackPayload) ? ackPayload['streamSeq'] : undefined;
+  if (typeof streamSeq !== 'number') {
+    return fail(`the subscribe \`ack\` carries no numeric \`streamSeq\`, so a frame on '${channel}' cannot be shown to be at or below it.`);
+  }
+  const afterAck = matches.filter((m) => m.index > ackIndex);
+  if (afterAck.length === 0) {
+    return fail(`the only matching frames on '${channel}' arrived before the subscribe's \`ack\`; the replay belongs after it.`);
+  }
+  const replayed = afterAck.find((m) => typeof m.envelope.seq === 'number' && m.envelope.seq <= streamSeq);
+  if (replayed === undefined) {
+    const seqs = afterAck.map((m) => (typeof m.envelope.seq === 'number' ? m.envelope.seq : 'none')).join(', ');
+    return fail(
+      `the matching frames on '${channel}' after the \`ack\` carry seq ${seqs}, none at or below the ack's \`streamSeq\` (${streamSeq}): each is above the ack's \`streamSeq\` (${streamSeq}) or unnumbered, so none is the replay.`,
+    );
   }
   return { kind: 'pass' };
 }
