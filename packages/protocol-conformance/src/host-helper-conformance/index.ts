@@ -69,6 +69,27 @@
  *   view-issued and a model-issued call are indistinguishable on the wire
  *   — so the kit is where a host proves it. Absent ⇒ `skip`.
  *
+ * - `V1-view-material-withheld` — OPTIONAL (ggui#1415, SPEC §4.7): the
+ *   host keeps view-delivered material out of the model's context. The
+ *   kit feeds the host's own context rules a render result and a render
+ *   read body whose `_meta["ai.ggui/render"]` slice carries a unique
+ *   marker in every string value, and requires none of them (raw,
+ *   JSON-escaped, percent-encoded, or inside a base64 / base64url run) in
+ *   what the model sees, while the
+ *   model still sees the result's model-visible marker; and the host's
+ *   model-facing resource list, when it has one, must withhold
+ *   `ui://ggui/render/*` while keeping an ordinary resource. Absent ⇒
+ *   `skip`.
+ * - `L1-view-locator-binding` — OPTIONAL (ggui#1415, SPEC §4.7): the host
+ *   binds a view's calls and reads to its own locator. The kit feeds the
+ *   host's own relay decision a view mounted for one session, and reads
+ *   (every locator form) and every session-naming call a view may make,
+ *   for that session (relay) and another (refuse). Absent ⇒ `skip`.
+ *
+ * The three host-rule grades (M1, V1, L1) grade the host's RULE, fed
+ * fixtures: they prove the rule is right, not that a running host applies
+ * it (self-certification; the V1 and L1 pass details say so).
+ *
  * A helper that refuses the relay honestly is graded **tier
  * `read-only`** — a LEGAL grade, with the R cases skipped, never
  * failed. `nonconforming` means a dishonesty case failed.
@@ -213,6 +234,277 @@ export const MODEL_TOOL_SET_FIXTURE: readonly ServedToolDeclaration[] = [
   { name: 'ggui_runtime_declare_tool_catalog', _meta: { ui: { visibility: ['app'] } } },
 ];
 
+/** A tool result as a host receives it: what the model may see, and the `_meta` the view gets. */
+export interface ToolResultFixture {
+  readonly structuredContent?: Readonly<Record<string, unknown>>;
+  readonly content: readonly { readonly type: 'text'; readonly text: string }[];
+  readonly _meta: Readonly<Record<string, unknown>>;
+}
+
+/** A resource or resource template as a host sees it on the server's lists. */
+export interface ServedResourceDeclaration {
+  readonly name: string;
+  readonly uri?: string;
+  readonly uriTemplate?: string;
+}
+
+/** The V1 grade's input: the host's own rules for what the model sees. */
+export interface ModelContextOptions {
+  /** What the host places in the MODEL's context for one tool result, in any shape, sync or async. */
+  readonly modelContextOf: (result: ToolResultFixture) => unknown;
+  /**
+   * What the host places in the MODEL's context for one `resources/read`
+   * result of a render locator (a view's read, or one the host made), in any
+   * shape, sync or async. A host that never shows the model a read body
+   * returns nothing.
+   */
+  readonly modelContextOfRead: (read: ReadResultFixture) => unknown;
+  /**
+   * The resource URIs or templates the host offers the model to read.
+   * Absent: the host offers the model no resource reads at all, which
+   * meets the obligation by construction.
+   */
+  readonly resourcesOfferedToModel?: (served: readonly ServedResourceDeclaration[]) => readonly string[];
+}
+
+/** A `resources/read` result as a host receives it. */
+export interface ReadResultFixture {
+  readonly contents: readonly { readonly uri: string; readonly mimeType: string; readonly text: string }[];
+}
+
+/** The view a request comes from: the locator it mounted and its session. */
+export interface MountedView {
+  readonly locator: string;
+  readonly sessionId: string;
+}
+
+/** One request a view makes through its host. */
+export type ViewRequestFixture =
+  | { readonly kind: 'resources/read'; readonly uri: string }
+  | { readonly kind: 'tools/call'; readonly name: string; readonly arguments: Readonly<Record<string, unknown>> };
+
+/** The L1 grade's input: the host's own decision for one request a view makes. */
+export interface ViewBindingOptions {
+  readonly decide: (mounted: MountedView, request: ViewRequestFixture) => 'relay' | 'refuse';
+}
+
+/**
+ * The render result V1 feeds a host's context builder (ggui#1415). Every
+ * string value in the `_meta["ai.ggui/render"]` slice is a unique marker
+ * ({@link VIEW_MATERIAL_CANARIES}); the model-visible parts carry values of
+ * their own, so a host that shows them cannot trip a canary, and one marker
+ * ({@link VIEW_MATERIAL_VISIBLE_MARKER}) the model must still see.
+ */
+export const VIEW_MATERIAL_RESULT_FIXTURE: ToolResultFixture = {
+  structuredContent: { sessionId: 'vmx-visible-session-2a7d', status: 'rendered', note: 'vmx-visible-marker-5e1b' },
+  content: [{ type: 'text', text: 'Rendered the card (vmx-visible-marker-5e1b).' }],
+  _meta: {
+    'ai.ggui/render': {
+      sessionId: 'vmx-slice-session-3f9a1c',
+      appId: 'vmx-slice-app-8b2e',
+      runtimeUrl: 'https://vmx-slice-runtime.invalid/iframe-runtime.js',
+      wsUrl: 'wss://vmx-slice-wsurl-4c2d.invalid/ws',
+      wsToken: 'vmx-slice-wstoken-6d41e0a7',
+      viewKey: 'vmx-slice-viewkey-Q2FuYXJ5S2V5',
+      expiresAt: '2099-07-07T07:07:07.707Z',
+      propsJson: '{"vmxSliceProp":"vmx-slice-props-91c2"}',
+    },
+  },
+};
+
+/**
+ * The marker V1 requires in the model's context: the result itself is not
+ * withheld. Both model-visible parts carry it, so a host that shows either
+ * one passes.
+ */
+export const VIEW_MATERIAL_VISIBLE_MARKER = 'vmx-visible-marker-5e1b';
+
+/**
+ * Every string a value holds, walked deep: object values and keys, arrays,
+ * Map entries, Set members, and byte views read as UTF-8 text. Cycles are
+ * walked once.
+ */
+function stringValuesIn(value: unknown, out: string[] = [], seen: Set<object> = new Set()): string[] {
+  if (typeof value === 'string') {
+    out.push(value);
+    return out;
+  }
+  if (typeof value !== 'object' || value === null || seen.has(value)) return out;
+  seen.add(value);
+  if (ArrayBuffer.isView(value)) {
+    out.push(new TextDecoder().decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)));
+  } else if (value instanceof ArrayBuffer) {
+    out.push(new TextDecoder().decode(new Uint8Array(value)));
+  } else if (value instanceof Map) {
+    for (const [k, v] of value) {
+      stringValuesIn(k, out, seen);
+      stringValuesIn(v, out, seen);
+    }
+  } else if (value instanceof Set || Array.isArray(value)) {
+    for (const item of value) stringValuesIn(item, out, seen);
+  } else {
+    for (const [k, v] of Object.entries(value)) {
+      out.push(k);
+      stringValuesIn(v, out, seen);
+    }
+  }
+  return out;
+}
+
+/**
+ * One canary per string value of the fixture's `ai.ggui/render` slice: the
+ * value's unique `vmx-slice-…` mark, which survives JSON escaping and
+ * encoding, or the whole value when it carries none. None may reach the model.
+ */
+export const VIEW_MATERIAL_CANARIES: readonly string[] = Object.values(
+  VIEW_MATERIAL_RESULT_FIXTURE._meta['ai.ggui/render'] as Readonly<Record<string, unknown>>,
+)
+  .filter((value): value is string => typeof value === 'string')
+  .map((value) => /vmx-slice-[A-Za-z0-9-]+/.exec(value)?.[0] ?? value);
+
+/** The resources V1 feeds a host's model-facing resource list: the render template and one ordinary resource. */
+export const MODEL_RESOURCE_FIXTURE: readonly ServedResourceDeclaration[] = [
+  { name: 'ggui render', uriTemplate: 'ui://ggui/render/{sessionId}' },
+  { name: 'notes', uri: 'file:///vmx-notes.md' },
+];
+
+/**
+ * A render locator's `resources/read` result as a server answers it: the
+ * self-contained shell, with the view's slice inlined, canaries included.
+ */
+export const VIEW_MATERIAL_READ_FIXTURE: ReadResultFixture = {
+  contents: [
+    {
+      uri: 'ui://ggui/render/vmx-slice-session-3f9a1c',
+      mimeType: 'text/html;profile=mcp-app',
+      text: `<!doctype html><html><body><script>globalThis.__GGUI_META__ = ${JSON.stringify(VIEW_MATERIAL_RESULT_FIXTURE._meta)};</script></body></html>`,
+    },
+  ],
+};
+
+/** The view L1's requests come from. */
+export const VIEW_BINDING_MOUNT: MountedView = { locator: 'ui://ggui/render/vmx-s1/bk-vmx1', sessionId: 'vmx-s1' };
+
+const OTHER_SESSION = 'vmx-s2';
+
+/**
+ * Every tool a view may call (no `model`-only marker) that names a session in
+ * its arguments, with arguments its input schema accepts. Left out:
+ * `ggui_runtime_declare_tool_catalog` (app-scoped, names none),
+ * `ggui_runtime_refresh_ws_token` (its session is inside the envelope, and
+ * the server admits the caller to it), `ggui_handshake` and
+ * `ggui_list_sessions` (name none), and `ggui_render` / `ggui_update`
+ * (model-only).
+ */
+export const VIEW_SESSION_BOUND_CALLS: readonly { readonly name: string; readonly args: (sessionId: string) => Readonly<Record<string, unknown>> }[] = [
+  {
+    name: 'ggui_runtime_submit_action',
+    args: (sessionId) => ({
+      kind: 'dispatch',
+      payload: { intent: 'confirm', actionData: null, uiContext: {} },
+      sessionId,
+      appId: 'vmx-app',
+      actionId: 'a3f2b1d4',
+      firedAt: '2026-09-29T00:00:00.000Z',
+    }),
+  },
+  { name: 'ggui_runtime_sync_context', args: (sessionId) => ({ sessionId, appId: 'vmx-app', snapshot: {} }) },
+  { name: 'ggui_runtime_pull', args: (sessionId) => ({ sessionId }) },
+  { name: 'ggui_runtime_telemetry', args: (sessionId) => ({ sessionId, events: [{ at: 0, kind: 'boot.path' }] }) },
+  { name: 'ggui_consume', args: (sessionId) => ({ sessionId }) },
+  { name: 'ggui_amend', args: (sessionId) => ({ sessionId, kind: 'merge', patch: { count: 1 } }) },
+  { name: 'ggui_emit', args: (sessionId) => ({ sessionId, channel: 'status', payload: { text: 'hi' } }) },
+  { name: 'ggui_get_session', args: (sessionId) => ({ sessionId }) },
+  { name: 'ggui_get_render_source', args: (sessionId) => ({ sessionId }) },
+];
+
+/**
+ * L1's requests and the decision each must get (ggui#1415). A view's own
+ * session relays and another's refuses, for a read of either locator form
+ * (`{sessionId}`, `{sessionId}/{blueprintKey}`, and an epoch pin `#N`) and
+ * for every call in {@link VIEW_SESSION_BOUND_CALLS}.
+ */
+export const VIEW_BINDING_CASES: readonly { readonly request: ViewRequestFixture; readonly expect: 'relay' | 'refuse' }[] = [
+  { request: { kind: 'resources/read', uri: VIEW_BINDING_MOUNT.locator }, expect: 'relay' },
+  { request: { kind: 'resources/read', uri: `ui://ggui/render/${VIEW_BINDING_MOUNT.sessionId}` }, expect: 'relay' },
+  { request: { kind: 'resources/read', uri: `ui://ggui/render/${VIEW_BINDING_MOUNT.sessionId}#2` }, expect: 'relay' },
+  { request: { kind: 'resources/read', uri: `ui://ggui/render/${OTHER_SESSION}` }, expect: 'refuse' },
+  { request: { kind: 'resources/read', uri: `ui://ggui/render/${OTHER_SESSION}/bk-vmx2` }, expect: 'refuse' },
+  { request: { kind: 'resources/read', uri: `ui://ggui/render/${OTHER_SESSION}/bk-vmx2#1` }, expect: 'refuse' },
+  ...VIEW_SESSION_BOUND_CALLS.flatMap((call) => [
+    { request: { kind: 'tools/call' as const, name: call.name, arguments: call.args(VIEW_BINDING_MOUNT.sessionId) }, expect: 'relay' as const },
+    { request: { kind: 'tools/call' as const, name: call.name, arguments: call.args(OTHER_SESSION) }, expect: 'refuse' as const },
+  ]),
+];
+
+/** The base64 / base64url runs inside a string, decoded; a run that does not decode yields nothing. */
+function decodedBase64Runs(text: string): string[] {
+  const runs = text.match(/[A-Za-z0-9+/_-]{16,}={0,2}/g) ?? [];
+  // A blob can start anywhere in a run (after a URL path, say), and base64
+  // decodes in 4-character groups, so each run is decoded from all four
+  // offsets: one of them lines up with the blob.
+  return runs.flatMap((run) =>
+    [0, 1, 2, 3].flatMap((offset) => {
+      const normal = run.slice(offset).replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+      const usable = normal.slice(0, normal.length - (normal.length % 4 === 1 ? 1 : 0));
+      try {
+        const binary = atob(usable + '==='.slice((usable.length + 3) % 4));
+        return [new TextDecoder().decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)))];
+      } catch {
+        // Not base64 from this offset: the run is searched raw already.
+        return [];
+      }
+    }),
+  );
+}
+
+/**
+ * A string with its `%XX` escapes decoded, where it carries any: the form
+ * state takes in a URL's query string. A malformed escape is left as is,
+ * one escape at a time, so a stray `%` never hides the rest.
+ */
+function percentDecoded(text: string): string[] {
+  if (!/%[0-9A-Fa-f]{2}/.test(text)) return [];
+  try {
+    return [decodeURIComponent(text)];
+  } catch {
+    // A malformed escape somewhere: decode the well-formed ones in place.
+    return [text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        // Bytes that are not UTF-8 stay escaped; the rest still decode.
+        return run;
+      }
+    })];
+  }
+}
+
+/**
+ * Which canaries appear in a model context: raw (JSON-escaped values
+ * included, since every mark is escape-free), or inside a percent-encoded
+ * string or a base64 / base64url run, decoded (the first match per canary).
+ */
+function leakedCanaries(context: unknown): { readonly raw: readonly string[]; readonly encoded: readonly string[] } {
+  const strings = stringValuesIn(context);
+  const unescaped = strings.flatMap(percentDecoded);
+  const decoded = [...unescaped, ...[...strings, ...unescaped].flatMap(decodedBase64Runs)];
+  const raw = VIEW_MATERIAL_CANARIES.filter((c) => strings.some((s) => s.includes(c)));
+  const encoded = VIEW_MATERIAL_CANARIES.filter((c) => !raw.includes(c) && decoded.some((s) => s.includes(c)));
+  return { raw, encoded };
+}
+
+/** The slice field a canary is the value of, for a failure detail. */
+function canaryField(canary: string): string {
+  const slice = VIEW_MATERIAL_RESULT_FIXTURE._meta['ai.ggui/render'];
+  const entry =
+    typeof slice === 'object' && slice !== null
+      ? Object.entries(slice).find(([, v]) => typeof v === 'string' && /vmx-slice-[A-Za-z0-9-]+/.exec(v)?.[0] === canary) ??
+        Object.entries(slice).find(([, v]) => v === canary)
+      : undefined;
+  return entry !== undefined ? entry[0] : canary;
+}
+
 export interface HostHelperConformanceOptions {
   /**
    * How long a refusal may take before it counts as a hang (H4 /
@@ -223,7 +515,7 @@ export interface HostHelperConformanceOptions {
   /**
    * Chrome audit for the C-grades. Absent ⇒ C cases report `skip`
    * (self-certification pending) — the tier is decided by H/R and by
-   * whichever optional grades (C1, T1, M1) were supplied.
+   * whichever optional grades (C1, T1, M1, V1, L1) were supplied.
    */
   readonly chromeAudit?: ChromeAudit;
   /**
@@ -238,6 +530,16 @@ export interface HostHelperConformanceOptions {
    * it is just not graded here.
    */
   readonly modelToolSet?: ModelToolSetOptions;
+  /**
+   * The host's rules for what the model sees, for the V1 grade (ggui#1415).
+   * Absent ⇒ V1 reports `skip`.
+   */
+  readonly modelContext?: ModelContextOptions;
+  /**
+   * The host's relay decision for a view's requests, for the L1 grade
+   * (ggui#1415). Absent ⇒ L1 reports `skip`.
+   */
+  readonly viewBinding?: ViewBindingOptions;
 }
 
 export type HostHelperCaseOutcome = 'pass' | 'fail' | 'skip' | 'warn';
@@ -749,6 +1051,83 @@ export async function runHostHelperConformance(
         detail: parts.join('; '),
       });
     }
+  }
+
+  // ── V1: view-delivered material stays out of the model's context ──
+  if (options.modelContext === undefined) {
+    cases.push({
+      id: 'V1-view-material-withheld',
+      outcome: 'skip',
+      detail: "no model-context rule supplied: keeping view material from the model is still the host's obligation (SPEC §4.7), just not graded here (supply modelContext to grade)",
+    });
+  } else {
+    const rules = options.modelContext;
+    try {
+      const context: unknown = await rules.modelContextOf(VIEW_MATERIAL_RESULT_FIXTURE);
+      const readContext: unknown = await rules.modelContextOfRead(VIEW_MATERIAL_READ_FIXTURE);
+      const fromResult = leakedCanaries(context);
+      const fromRead = leakedCanaries(readContext);
+      const seesResult = stringValuesIn(context).some((s) => s.includes(VIEW_MATERIAL_VISIBLE_MARKER));
+      const offered = rules.resourcesOfferedToModel?.(MODEL_RESOURCE_FIXTURE);
+      const offersRender = (offered ?? []).filter((u) => u.startsWith('ui://ggui/render'));
+      const keepsOrdinary = offered === undefined || offered.includes('file:///vmx-notes.md');
+      const parts = [
+        fromResult.raw.length > 0 ? `view material from a tool result in the model's context: ${fromResult.raw.map(canaryField).join(', ')}` : undefined,
+        fromResult.encoded.length > 0 ? `view material from a tool result inside a percent-encoded or base64 run: ${fromResult.encoded.map(canaryField).join(', ')}` : undefined,
+        fromRead.raw.length > 0 ? `a render read body in the model's context: ${fromRead.raw.map(canaryField).join(', ')}` : undefined,
+        fromRead.encoded.length > 0 ? `a render read body inside a percent-encoded or base64 run: ${fromRead.encoded.map(canaryField).join(', ')}` : undefined,
+        seesResult ? undefined : `the model does not see the result's own marker ${VIEW_MATERIAL_VISIBLE_MARKER}: withholding the result is not withholding the view material`,
+        offersRender.length > 0 ? `a render read offered to the model: ${offersRender.join(', ')}` : undefined,
+        keepsOrdinary ? undefined : 'the ordinary resource was not offered: a list that hides everything is not a rule (omit resourcesOfferedToModel when the model reads no resources)',
+      ].filter((part): part is string => part !== undefined);
+      cases.push(
+        parts.length === 0
+          ? {
+              id: 'V1-view-material-withheld',
+              outcome: 'pass',
+              detail: `none of the slice's ${VIEW_MATERIAL_CANARIES.length} values reaches the model from a tool result or a render read body, raw, JSON-escaped, percent-encoded, base64 or base64url; the result itself does; ${offered === undefined ? 'the host offers the model no resource reads' : 'no render read is offered'} (the host's rule, self-certified)`,
+            }
+          : { id: 'V1-view-material-withheld', outcome: 'fail', detail: parts.join('; ') },
+      );
+    } catch (err) {
+      cases.push({ id: 'V1-view-material-withheld', outcome: 'fail', detail: `the host's rule threw: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  // ── L1: a view's calls and reads are bound to its own locator ─────
+  if (options.viewBinding === undefined) {
+    cases.push({
+      id: 'L1-view-locator-binding',
+      outcome: 'skip',
+      detail: "no view-binding rule supplied: binding a view to its own locator is still the host's obligation (SPEC §4.7), just not graded here (supply viewBinding to grade)",
+    });
+  } else {
+    const describe = (r: ViewRequestFixture): string =>
+      r.kind === 'resources/read' ? `resources/read ${r.uri}` : `${r.name} for session ${String(r.arguments['sessionId'])}`;
+    const decide = options.viewBinding.decide;
+    const decided = VIEW_BINDING_CASES.map((c) => {
+      try {
+        return { ...c, got: decide(VIEW_BINDING_MOUNT, c.request) };
+      } catch (err) {
+        // A rule that throws decides nothing: the request is neither relayed nor refused, and the case says so.
+        return { ...c, got: `threw: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    });
+    const relayedForeign = decided.filter((c) => c.expect === 'refuse' && c.got !== 'refuse').map((c) => describe(c.request));
+    const refusedOwn = decided.filter((c) => c.expect === 'relay' && c.got !== 'relay').map((c) => describe(c.request));
+    const parts = [
+      relayedForeign.length > 0 ? `relayed another view's request (${relayedForeign.length}): ${relayedForeign.join('; ')}` : undefined,
+      refusedOwn.length > 0 ? `refused its own view's request (${refusedOwn.length}): ${refusedOwn.join('; ')}` : undefined,
+    ].filter((part): part is string => part !== undefined);
+    cases.push(
+      parts.length === 0
+        ? {
+            id: 'L1-view-locator-binding',
+            outcome: 'pass',
+            detail: `the view's own reads and session-bound calls relay and another session's refuse, ${VIEW_BINDING_CASES.length} requests (the host's rule, self-certified)`,
+          }
+        : { id: 'L1-view-locator-binding', outcome: 'fail', detail: parts.join('; ') },
+    );
   }
 
   const failures = cases
