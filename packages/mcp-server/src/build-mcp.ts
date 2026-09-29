@@ -45,6 +45,12 @@ export interface BuildMcpServerOptions {
    */
   readonly viewProofGate?: ViewProofGate;
   /**
+   * Whether this mount's read door (`resources/read` of a render
+   * locator) may issue a view key (ggui#1415). Set only for the data
+   * plane, the mount that delivers a view to an app-credentialed caller.
+   */
+  readonly issueViewKeys?: boolean;
+  /**
    * When set, register the MCP Apps outbound wiring on every fresh
    * server instance — advertises the `io.modelcontextprotocol/ui`
    * capability and serves `ui://ggui/render` via `resources/read`.
@@ -470,7 +476,14 @@ export function buildMcpServer(
       // per-session resource handler's render-read gate sees the
       // caller (`renderReadAllowed`, @ggui-ai/mcp-server-handlers/renders).
       ...(opts.selfContained !== undefined
-        ? { selfContained: { ...opts.selfContained, getContext, logger } }
+        ? {
+            selfContained: {
+              ...opts.selfContained,
+              getContext,
+              logger,
+              ...(opts.issueViewKeys === true ? { issueViewKeys: true } : {}),
+            },
+          }
         : {}),
       ...(opts.publicBaseUrl !== undefined
         ? { publicBaseUrl: opts.publicBaseUrl }

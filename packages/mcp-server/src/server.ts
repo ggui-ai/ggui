@@ -76,10 +76,22 @@ import {
   isTokenRegisteringAuthAdapter,
   DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER,
   DEFAULT_WS_TOKEN_TTL_SEC,
+  mintViewRoot,
   mintWsToken,
   verifyWsTokenSignature,
   verifyToken,
 } from "@ggui-ai/mcp-server-core";
+import type { ViewRootSrc } from "@ggui-ai/protocol/integrations/mcp-apps";
+
+/**
+ * A key-issuing door's minter (ggui#1415): the live credential, minted as a
+ * view root, and the view key rooted in it (`undefined` when the root is
+ * too long to carry one).
+ */
+type ViewRootMinter = (
+  sessionId: string,
+  appId: string
+) => { wsUrl: string; token: string; expiresAt: string; viewKey: string | undefined };
 import {
   createInMemoryBlueprintSearch,
   createInMemoryGeneratorRegistry,
@@ -740,6 +752,18 @@ export function defaultHandlers(deps: {
       appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
     /**
+     * The key-issuing minter for this tool's result (ggui#1415): the same
+     * live credential as {@link mintBootstrap}, minted as a view root, with
+     * the view key rooted in it (`undefined` when the root is too long to
+     * carry one). When present, the result's slice carries `viewKey`; when
+     * absent, the result mints through `mintBootstrap` and issues no key.
+     * The refresh, `ggui_list_sessions` and every bearer door never use it.
+     */
+    readonly mintViewRoot?: (
+      sessionId: string,
+      appId: string
+    ) => { wsUrl: string; token: string; expiresAt: string; viewKey: string | undefined };
+    /**
      * URL of the renderer bundle the thin-shell HTML should fetch
      * (C8 — plan §C8). Padded onto
      * {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time.
@@ -985,6 +1009,18 @@ export function defaultHandlers(deps: {
       sessionId: string,
       appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
+    /**
+     * The key-issuing minter for this tool's result (ggui#1415): the same
+     * live credential as {@link mintBootstrap}, minted as a view root, with
+     * the view key rooted in it (`undefined` when the root is too long to
+     * carry one). When present, the result's slice carries `viewKey`; when
+     * absent, the result mints through `mintBootstrap` and issues no key.
+     * The refresh, `ggui_list_sessions` and every bearer door never use it.
+     */
+    readonly mintViewRoot?: (
+      sessionId: string,
+      appId: string
+    ) => { wsUrl: string; token: string; expiresAt: string; viewKey: string | undefined };
     /** Iframe-runtime bundle URL forwarded onto the
      *  `ai.ggui/render.runtimeUrl` slice field.
      *  Function form mirrors the `render` deps' `runtimeUrl`. */
@@ -1342,7 +1378,13 @@ export function defaultHandlers(deps: {
         // Bootstrap-emission deps mirror render so MCP Apps hosts that
         // forward `ui/notifications/tool-result` via postMessage can
         // re-apply patched props on the live mount without a WS round-trip.
-        ...(deps.update.mintBootstrap ? { mintWsToken: deps.update.mintBootstrap } : {}),
+        // The result door issues a view key when a key-issuing minter is
+        // wired (ggui#1415); otherwise it mints the live credential alone.
+        ...(deps.update.mintViewRoot
+          ? { mintWsToken: deps.update.mintViewRoot }
+          : deps.update.mintBootstrap
+            ? { mintWsToken: deps.update.mintBootstrap }
+            : {}),
         ...(deps.update.runtimeUrl !== undefined ? { runtimeUrl: deps.update.runtimeUrl } : {}),
         ...(deps.update.sessionApiBaseUrl !== undefined
           ? { sessionApiBaseUrl: deps.update.sessionApiBaseUrl }
@@ -1544,7 +1586,13 @@ export function defaultHandlers(deps: {
         ...(deps.render.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.render.streamWebSocketLocalTools }
           : {}),
-        ...(deps.render.mintBootstrap ? { mintWsToken: deps.render.mintBootstrap } : {}),
+        // The result door issues a view key when a key-issuing minter is
+        // wired (ggui#1415); otherwise it mints the live credential alone.
+        ...(deps.render.mintViewRoot
+          ? { mintWsToken: deps.render.mintViewRoot }
+          : deps.render.mintBootstrap
+            ? { mintWsToken: deps.render.mintBootstrap }
+            : {}),
         ...(deps.render.runtimeUrl !== undefined ? { runtimeUrl: deps.render.runtimeUrl } : {}),
         ...(deps.render.sessionApiBaseUrl !== undefined
           ? { sessionApiBaseUrl: deps.render.sessionApiBaseUrl }
@@ -2628,6 +2676,29 @@ export interface CreateGguiServerOptions {
   readonly wsTokenRefreshWindowSec?: number;
 
   /**
+   * The view-origin proof (ggui#1415). At this release the server measures
+   * proofs and refuses no call: for each runtime tool that declares one, it
+   * verifies the proof a view sent at `params._meta["ai.ggui/view"]` and
+   * names the verdict on the `tool_invoked` line.
+   *
+   * `keyedSince` (epoch milliseconds) is the moment from which every door
+   * of this deployment that delivers a view issues view keys. A call
+   * without a valid proof on a session created at or after it reads
+   * `current` on the line; on one created before it, or on any session
+   * while it is unset, `legacy`. Set it no earlier than the moment the last
+   * such door that issues no key has stopped serving: a session it
+   * delivered carries no key and must read `legacy`. Running this release
+   * is not enough on its own. The factory's `ggui_render` and `ggui_update`
+   * and the data-plane read door issue keys, but render or update handlers
+   * a composer supplies in `handlers` issue one only when they mint through
+   * a view-root minter (`mintViewRoot` in `@ggui-ai/mcp-server-core`, with
+   * `src: 'result'`). A finite, non-negative number.
+   */
+  readonly viewProof?: {
+    readonly keyedSince?: number;
+  };
+
+  /**
    * Bind host `listen()` will use, declared up front so boot-time
    * wiring — the Origin/Host validation policy (ggui#438a) — sees the
    * address the server will actually bind. `listen(port, host)`
@@ -3670,6 +3741,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     );
   }
   const { ttlSec: wsTokenTtlSec, windowSec: wsTokenRefreshWindowSec } = resolveWsTokenLifetimes(opts);
+  const keyedSince = opts.viewProof?.keyedSince;
+  if (keyedSince !== undefined && (!Number.isFinite(keyedSince) || keyedSince < 0)) {
+    throw new Error(
+      `createGguiServer: viewProof.keyedSince must be a finite, non-negative epoch in milliseconds (got ${String(keyedSince)}).`
+    );
+  }
   const info: ServerInfo = { ...DEFAULT_INFO, ...opts.info };
   const logger = opts.logger ?? createConsoleLogger({ server: info.name });
   const bodyLimit = opts.bodyLimit ?? "4mb";
@@ -3923,6 +4000,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let mintBootstrap:
     | ((sessionId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
+  // The key-issuing doors' minters (ggui#1415): a root ws token stamped
+  // with the secret's key id and the door, and the view key rooted in it.
+  // Only the render/update results (`result`) and the data-plane read door
+  // (`read`), on a read that issues the key, use them; every bearer door,
+  // and every read that issues no key, mints through `mintBootstrap`.
+  let mintResultViewRoot: ViewRootMinter | undefined;
+  let mintReadViewRoot: ViewRootMinter | undefined;
   // `/state`'s one minter (ggui#1496 part B, slice 2): a possession renewal
   // that carries its chain's root forward. Every other door mints a root
   // through `mintBootstrap`.
@@ -3969,6 +4053,22 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       };
     };
     mintBootstrap = syncMinter;
+    const viewRootMinter =
+      (src: ViewRootSrc): ViewRootMinter =>
+      (sessionId, appId) => {
+        const minted = mintViewRoot({ sessionId, appId, ttlSec: wsTokenTtlSec, src }, secret);
+        if (minted.viewKeyNotIssued !== undefined) {
+          logger.info("view_key_not_issued", { sessionId, src, reason: minted.viewKeyNotIssued });
+        }
+        return {
+          wsUrl,
+          token: minted.token,
+          expiresAt: new Date(minted.claims.exp * 1000).toISOString(),
+          viewKey: minted.viewKey,
+        };
+      };
+    mintResultViewRoot = viewRootMinter("result");
+    mintReadViewRoot = viewRootMinter("read");
     // The renewal's `exp` is capped at `rootIat + window` by the mint
     // itself (`notAfter`), from the same clock read that stamps its `iat`.
     // No second left means nothing to renew (`undefined`, answered as the
@@ -4432,6 +4532,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { postFailureHook: opts.renderPostFailureHook }
                 : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
+              ...(mintResultViewRoot ? { mintViewRoot: mintResultViewRoot } : {}),
               // The authorized refresh's envelope check (ggui#1496 part B),
               // over the same secret as `mintBootstrap`. Absent when MCP
               // Apps isn't enabled; the tool isn't registered then.
@@ -4658,6 +4759,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // resolvers keeps the two transports byte-identical at the
               // bootstrap-projection boundary.
               ...(mintBootstrap ? { mintBootstrap } : {}),
+              ...(mintResultViewRoot ? { mintViewRoot: mintResultViewRoot } : {}),
               // Function form: matches render so ggui_update emits the
               // same absolute URL when the server sits behind a tunnel
               // / reverse proxy.
@@ -4789,7 +4891,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   assertViewProofDeclarations(servedHandlers);
   const viewProofGate =
     mcpAppsEnabled && sharedTokenSecret !== undefined
-      ? createViewProofGate({ secret: sharedTokenSecret, sessionStore: renderStore })
+      ? createViewProofGate({
+          secret: sharedTokenSecret,
+          sessionStore: renderStore,
+          ...(keyedSince !== undefined ? { keyedSince } : {}),
+        })
       : undefined;
   if (viewProofGate === undefined) {
     const unverifiable = unverifiableViewProofTools(servedHandlers);
@@ -5261,6 +5367,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // Mirrors the per-tool `mintBootstrap` plumbed into
             // the handler factory above.
             ...(mintBootstrap ? { mintWsToken: mintBootstrap } : {}),
+            // The data-plane read door issues a view key (ggui#1415); every
+            // other mount, and an anonymous caller, mints through
+            // `mintBootstrap` alone.
+            ...(mintReadViewRoot ? { mintViewRoot: mintReadViewRoot } : {}),
           },
         }
       : {}),

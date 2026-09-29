@@ -1469,3 +1469,40 @@ describe('composeContentSecurityPolicy — the stored theme is an input (ggui#10
     expect(meta.contentSecurityPolicy).toContain('https://img.acme.example');
   });
 });
+
+describe('assembleRenderSliceBase — the view key (ggui#1415)', () => {
+  const CALL_1415 = { sessionId: 'sess-1', appId: 'app-1', sessionThemeMode: undefined };
+  it('projects a key-issuing minter’s view key beside the wsToken it is rooted in', () => {
+    const base = assembleRenderSliceBase(
+      {
+        mintWsToken: (sessionId) => ({
+          wsUrl: 'wss://x/ws',
+          token: `tok-${sessionId}`,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          viewKey: 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A',
+        }),
+      },
+      CALL_1415,
+    );
+    expect(base.authFields).toEqual({
+      wsUrl: 'wss://x/ws',
+      wsToken: 'tok-sess-1',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      viewKey: 'K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A',
+    });
+  });
+
+  it('carries no view key from a live-credential minter (which also stands for a root too long to carry one)', () => {
+    const base = assembleRenderSliceBase(
+      {
+        mintWsToken: (sessionId) => ({
+          wsUrl: 'wss://x/ws',
+          token: `tok-${sessionId}`,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      },
+      CALL_1415,
+    );
+    expect(base.authFields).not.toHaveProperty('viewKey');
+  });
+});

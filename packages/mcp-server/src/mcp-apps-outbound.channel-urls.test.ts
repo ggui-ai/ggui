@@ -271,3 +271,71 @@ describe("serveMount — pollingUrl + sseUrl stamping on the self-contained shel
     }
   });
 });
+
+describe("serveMount — the view key (ggui#1415)", () => {
+  /** A view root: told apart from the live credential by its token's prefix. */
+  const KEYED: NonNullable<GguiRenderResourceTemplateOptions["mintViewRoot"]> = (sessionId) => ({
+    wsUrl: WS_URL,
+    token: `root-${sessionId}`,
+    expiresAt: "2030-01-01T00:00:00.000Z",
+    viewKey: "K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A",
+  });
+
+  async function sliceFor(options: Partial<GguiRenderResourceTemplateOptions>): Promise<Record<string, unknown>> {
+    const f = await boot({ mintWsToken: MINT, mintViewRoot: KEYED, ...options });
+    try {
+      const sessionId = (await f.renderStore.create({ appId: APP_ID })).id;
+      await seedLiveRow(f, sessionId);
+      return (await readShell(f, `${GGUI_RENDER_RESOURCE_URI}/${sessionId}`)).slice;
+    } finally {
+      await f.close();
+    }
+  }
+
+  it("a key-issuing mount inlines the view key beside the wsToken for a caller with a proved identity", async () => {
+    const slice = await sliceFor({ issueViewKeys: true });
+    expect(slice["wsToken"]).toMatch(/^root-/);
+    expect(slice["viewKey"]).toBe("K-7dUBMeCtprxv4DED-VUuAjEBHGqoaWA-hHgh5t12A");
+  });
+
+  it("issues no view key on a mount that does not opt in, to an anonymous caller, or to a caller with no auth source, and mints the live credential alone, never a view root", async () => {
+    const cases: Array<[string, Partial<GguiRenderResourceTemplateOptions>]> = [
+      ["not a view mount", {}],
+      ["anonymous", { issueViewKeys: true, getContext: () => ({ ...ownerCtx, authSource: "anonymous" }) }],
+      ["no auth source", { issueViewKeys: true, getContext: () => ({ appId: APP_ID, requestId: "r" }) }],
+    ];
+    const reasons: Record<string, string> = {
+      "not a view mount": "not_a_view_mount",
+      anonymous: "anonymous_mount",
+      "no auth source": "anonymous_mount",
+    };
+    for (const [label, options] of cases) {
+      const lines: Array<[string, unknown]> = [];
+      const logger = { ...silentLogger, info: (event: string, fields?: unknown) => void lines.push([event, fields]) };
+      const slice = await sliceFor({ ...options, logger });
+      expect(slice["wsToken"], label).toMatch(/^tok-/);
+      expect(slice, label).not.toHaveProperty("viewKey");
+      // The door says why, once, with the session and never the key.
+      const withheld = lines.filter(([event]) => event === "view_key_not_issued");
+      expect(withheld, label).toEqual([
+        ["view_key_not_issued", { sessionId: expect.any(String), src: "read", reason: reasons[label] }],
+      ]);
+    }
+  });
+
+  it("with no key-issuing minter wired, a key-issuing mount mints the live credential and has nothing to withhold", async () => {
+    const lines: Array<[string, unknown]> = [];
+    const logger = { ...silentLogger, info: (event: string, fields?: unknown) => void lines.push([event, fields]) };
+    const f = await boot({ mintWsToken: MINT, issueViewKeys: true, logger });
+    try {
+      const sessionId = (await f.renderStore.create({ appId: APP_ID })).id;
+      await seedLiveRow(f, sessionId);
+      const slice = (await readShell(f, `${GGUI_RENDER_RESOURCE_URI}/${sessionId}`)).slice;
+      expect(slice["wsToken"]).toMatch(/^tok-/);
+      expect(slice).not.toHaveProperty("viewKey");
+      expect(lines.filter(([event]) => event === "view_key_not_issued")).toEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+});

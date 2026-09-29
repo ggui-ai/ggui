@@ -1140,7 +1140,18 @@ export interface RenderSliceMetaDeps {
   readonly mintWsToken?: (
     sessionId: string,
     appId: string,
-  ) => { wsUrl: string; token: string; expiresAt: string };
+  ) => {
+    wsUrl: string;
+    token: string;
+    expiresAt: string;
+    /**
+     * The view key rooted in `token` (ggui#1415), from a key-issuing door's
+     * minter (the render and update results). Absent from a live-credential
+     * minter, and when the root was too long to carry a key. Projected onto
+     * the slice as `viewKey` beside the `wsToken` it is rooted in.
+     */
+    viewKey?: string;
+  };
   /**
    * URL of the renderer bundle the thin shell should fetch, emitted
    * as {@link McpAppAiGguiRenderMeta.runtimeUrl}. Separate dep (not a
@@ -1251,7 +1262,7 @@ export interface RenderSliceBase {
    * the minter's legacy `token`). Empty object when no minter wired.
    */
   readonly authFields: Partial<
-    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt' | 'viewKey'>
   >;
   /**
    * Token-bearing HTTP fallback URLs (`pollingUrl` + `sseUrl`),
@@ -1387,12 +1398,13 @@ export function assembleRenderSliceBase(
     ? deps.mintWsToken(call.sessionId, call.appId)
     : undefined;
   const authFields: Partial<
-    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt' | 'viewKey'>
   > = mintedTrio
     ? {
         wsUrl: mintedTrio.wsUrl,
         wsToken: mintedTrio.token,
         expiresAt: mintedTrio.expiresAt,
+        ...(mintedTrio.viewKey !== undefined ? { viewKey: mintedTrio.viewKey } : {}),
       }
     : {};
 

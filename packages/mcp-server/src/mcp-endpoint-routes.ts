@@ -273,6 +273,12 @@ export function mountMcpEndpoints(opts: MountOptions): void {
          * ignores a trailing slash). Defaults to the universal path.
          */
         readonly mountPath?: string;
+        /**
+         * Whether this mount's read door issues view keys (ggui#1415):
+         * only the data plane, which delivers a view to an
+         * app-credentialed caller.
+         */
+        readonly issueViewKeys?: boolean;
       }
     ) =>
     async (req: Request, res: Response): Promise<void> => {
@@ -534,6 +540,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
 
       const mcp = buildMcpServer(info, routeHandlers, () => als.getStore() ?? ctx, reqLogger, {
         ...buildMcpOptions,
+        ...(handlerOpts?.issueViewKeys === true ? { issueViewKeys: true } : {}),
       });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
@@ -598,7 +605,9 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   // default to ['agent'], so every untagged handler is agent-callable.
   const agentRouteHandlers = filterHandlersByAudience(handlers, DATA_PLANE_AUDIENCES);
 
-  const agentMcpHandler = makeMcpHandler(agentRouteHandlers);
+  // The data plane delivers views to app-credentialed callers, so its read
+  // door is the one that issues view keys (ggui#1415).
+  const agentMcpHandler = makeMcpHandler(agentRouteHandlers, { issueViewKeys: true });
   // Control plane — anonymous-capable (design-time tools answer
   // bearer-less) with each ops tool re-imposing auth for itself.
   const controlMcpHandler = makeMcpHandler(controlHandlers, {

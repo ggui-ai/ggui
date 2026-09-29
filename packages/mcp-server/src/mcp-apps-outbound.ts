@@ -1256,6 +1256,12 @@ export interface SelfContainedShellInputs {
    */
   readonly token?: string;
   /**
+   * The view key rooted in {@link token} (ggui#1415), inlined as the
+   * slice's `viewKey` beside `wsToken`. Only a key-issuing mount sets it;
+   * it is dropped without a token.
+   */
+  readonly viewKey?: string;
+  /**
    * ISO-8601 expiry of {@link token}. Past-due envelopes degrade to
    * static-only mode at parse time; the static UI still mounts, but
    * live updates silently no-op until a fresh push refreshes creds.
@@ -1389,6 +1395,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // input is renamed to `wsToken` on the slice for wire-field parity.
     ...(opts.wsUrl !== undefined ? { wsUrl: opts.wsUrl } : {}),
     ...(opts.token !== undefined ? { wsToken: opts.token } : {}),
+    ...(opts.token !== undefined && opts.viewKey !== undefined ? { viewKey: opts.viewKey } : {}),
     ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
     // Polling fallback URL — lights up `@ggui-ai/live-channel`'s
     // events-polling transport when WS is unavailable. Absent ⇒
@@ -1833,6 +1840,42 @@ export interface GguiRenderResourceTemplateOptions {
     readonly expiresAt: string;
   };
   /**
+   * The key-issuing minter (ggui#1415): the same live credential as
+   * {@link mintWsToken}, minted as a view root, with the view key rooted in
+   * it (`undefined` when the root is too long to key). The read door mints
+   * through it only when it issues the key (see {@link issueViewKeys});
+   * every other read mints through {@link mintWsToken}, so a token that
+   * carries `kid` and `src` always had a key issued with it. Ignored
+   * without {@link mintWsToken}.
+   */
+  readonly mintViewRoot?: (
+    sessionId: string,
+    appId: string,
+  ) => {
+    readonly wsUrl: string;
+    readonly token: string;
+    readonly expiresAt: string;
+    readonly viewKey: string | undefined;
+  };
+  /**
+   * Whether this mount's read door may issue a view key (ggui#1415). Only
+   * the data plane, which delivers a view to an app-credentialed caller,
+   * sets it; `/control` and the isolated services never do. Even there no
+   * key is issued when the caller's `authSource` is `anonymous` or absent:
+   * such a caller resolves to the builder app and would pass the read gate
+   * on every builder-app row. A read that issues no key mints the live
+   * credential alone and says why (`view_key_not_issued`).
+   *
+   * An auth adapter that admits every caller as one identity (the
+   * development `InMemoryAuthAdapter({ devAllowAll: true })`, source `dev`)
+   * is not an anonymous mount: its callers are keyed, so the view runs its
+   * proof end to end in development. There every caller holds the same
+   * identity, so a `valid` verdict says the plumbing works and nothing
+   * about who signed; the gate's line carries `authSource`, which keeps
+   * those verdicts apart from a credentialed deployment's.
+   */
+  readonly issueViewKeys?: boolean;
+  /**
    * Per-request handler-context accessor — the SAME AsyncLocalStorage
    * read the tool path uses. The per-session resource handler gates
    * reads on it (`renderReadAllowed`, in @ggui-ai/mcp-server-handlers/renders). Absent ⇒ the handler fails
@@ -1997,6 +2040,20 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  *
  * @public
  */
+/**
+ * Why the read door issues no view key on this read (ggui#1415), or
+ * `undefined` when it issues one: the mount does not opt in, or the caller
+ * is anonymous (or carries no auth source).
+ */
+function viewKeyWithheldAtReadDoor(
+  opts: Pick<GguiRenderResourceTemplateOptions, "issueViewKeys" | "getContext">,
+): "not_a_view_mount" | "anonymous_mount" | undefined {
+  if (opts.issueViewKeys !== true) return "not_a_view_mount";
+  const authSource = opts.getContext?.()?.authSource;
+  if (authSource === undefined || authSource === "anonymous") return "anonymous_mount";
+  return undefined;
+}
+
 export function registerGguiRenderResourceTemplate(
   server: McpServer,
   opts: GguiRenderResourceTemplateOptions
@@ -2617,9 +2674,24 @@ export function registerGguiRenderResourceTemplate(
     let wsUrl: string | undefined;
     let wsToken: string | undefined;
     let wsExpiresAt: string | undefined;
+    let wsViewKey: string | undefined;
     if (opts.mintWsToken) {
       try {
-        const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+        // ggui#1415: a view root, and its key, only on a key-issuing mount
+        // and for a caller that is not anonymous; any other read mints the
+        // live credential alone.
+        const withheld = viewKeyWithheldAtReadDoor(opts);
+        let minted: { readonly wsUrl: string; readonly token: string; readonly expiresAt: string };
+        if (opts.mintViewRoot !== undefined && withheld === undefined) {
+          const root = opts.mintViewRoot(sessionId, accessibleStored.appId);
+          wsViewKey = root.viewKey;
+          minted = root;
+        } else {
+          minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+          if (opts.mintViewRoot !== undefined && withheld !== undefined) {
+            opts.logger?.info("view_key_not_issued", { sessionId, src: "read", reason: withheld });
+          }
+        }
         wsUrl = minted.wsUrl;
         wsToken = minted.token;
         // Forward the token TTL so the iframe-runtime can degrade to
@@ -2703,6 +2775,7 @@ export function registerGguiRenderResourceTemplate(
             wsUrl,
             token: wsToken,
             ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
+            ...(wsViewKey !== undefined ? { viewKey: wsViewKey } : {}),
           }
         : {}),
       // Layered theme — the SAME resolver the tool-result slice uses
