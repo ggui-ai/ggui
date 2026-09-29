@@ -407,11 +407,13 @@ export type OpsBlueprintBundle = {
    */
   readonly appMetadataStore?: AppMetadataStore;
   /**
-   * Cache-registry mirror for `ggui_ops_generate_blueprint`. When
-   * bound, operator-authored blueprints are dual-written to the
-   * cache vectorStore via `registerBlueprint` so the agent-facing
-   * matchBlueprint exact-key probe (handshake + render) finds them.
-   * Same bundle the render handler reads/writes.
+   * Cache-registry mirror for `ggui_ops_generate_blueprint` and
+   * `ggui_ops_register_blueprint`. When bound, operator-authored
+   * blueprints are dual-written to the cache vectorStore via
+   * `registerBlueprint` so the agent-facing matchBlueprint exact-key
+   * probe (handshake + render) finds them, and `ggui_ops_delete_blueprint`
+   * removes them from it again (ggui#1541). Same bundle the render handler
+   * reads/writes.
    */
   readonly cacheRegistry?: BlueprintRegistryDeps;
   /**
@@ -592,6 +594,9 @@ export function buildOpsBlueprintHandlers(input: {
   handlers.push(
     createGguiOpsDeleteBlueprintHandler({
       blueprintStore: bundle.blueprintStore,
+      // ggui#1541 — the registry generate and register mirror into, so a
+      // delete takes the blueprint out of the handshake's reuse too.
+      ...(bundle.cacheRegistry ? { cacheRegistry: bundle.cacheRegistry } : {}),
       authorizeAppAccess: bundle.authorizeAppAccess,
     })
   );

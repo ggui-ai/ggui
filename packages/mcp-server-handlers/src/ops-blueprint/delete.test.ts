@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Blueprint, DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
-import { InMemoryBlueprintStore } from '@ggui-ai/mcp-server-core/in-memory';
+import {
+  InMemoryBlueprintIndex,
+  InMemoryBlueprintStore,
+  InMemoryVectorStore,
+  MockEmbeddingProvider,
+} from '@ggui-ai/mcp-server-core/in-memory';
 import type { HandlerContext } from '../types.js';
+import { findBlueprintExact, listBlueprints } from '../renders/blueprint-registry.js';
 import { createGguiOpsDeleteBlueprintHandler } from './delete.js';
+import { createGguiOpsRegisterBlueprintHandler } from './register.js';
 
 function makeCtx(appId: string): HandlerContext {
   return { appId, requestId: 'req-1' };
@@ -179,5 +186,74 @@ describe('createGguiOpsDeleteBlueprintHandler — appId input + authorizer', () 
     await expect(
       handler.handler({ blueprintId: 'bp_never_existed', appId: 'other-app' }, makeCtx('app-1')),
     ).rejects.toThrow(/not curatable/);
+  });
+});
+
+// ggui#1541 — a delete takes the blueprint out of reuse. Register dual-writes
+// (the durable row, and the cache registry the handshake's exact-key probe
+// matches from), so delete removes it from BOTH. Before, only the durable row
+// went, and the next handshake on the same contract reused the deleted id.
+describe('createGguiOpsDeleteBlueprintHandler — the cache registry (ggui#1541)', () => {
+  const CONTRACT: DataContract = {
+    propsSpec: {
+      description: 'delete-test contract',
+      properties: { title: { schema: { type: 'string' }, required: false, description: 'optional title' } },
+    },
+  };
+  const CODE = 'export default function Card(){ return null; }';
+
+  async function registered(appId = 'app-1') {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const register = createGguiOpsRegisterBlueprintHandler({ blueprintStore, cacheRegistry });
+    const { blueprintId } = (await register.handler({ contract: CONTRACT, componentCode: CODE }, makeCtx(appId))) as {
+      blueprintId: string;
+    };
+    const exact = () => findBlueprintExact(cacheRegistry, appId, 'template', blueprintKey(CONTRACT));
+    expect(await exact(), 'the registration is reusable before the delete').not.toBeNull();
+    return { blueprintStore, cacheRegistry, blueprintId, exact };
+  }
+
+  it('register, then delete: the exact-key probe no longer matches, and neither store holds it', async () => {
+    const { blueprintStore, cacheRegistry, blueprintId, exact } = await registered();
+    const del = createGguiOpsDeleteBlueprintHandler({ blueprintStore, cacheRegistry });
+    expect(await del.handler({ blueprintId }, makeCtx('app-1'))).toEqual({ deleted: true });
+    expect(await exact()).toBeNull();
+    expect(await listBlueprints(cacheRegistry, 'app-1')).toEqual([]);
+    expect(await blueprintStore.get(blueprintId)).toBeNull();
+  });
+
+  it("re-running a delete clears a cache row an earlier delete left behind (the durable row already gone)", async () => {
+    const { blueprintStore, cacheRegistry, blueprintId, exact } = await registered();
+    // What a delete did before this fix: the durable row only.
+    await blueprintStore.delete(blueprintId);
+    expect(await exact(), 'the orphan still matches').not.toBeNull();
+    const del = createGguiOpsDeleteBlueprintHandler({ blueprintStore, cacheRegistry });
+    expect(await del.handler({ blueprintId }, makeCtx('app-1'))).toEqual({ deleted: true });
+    expect(await exact()).toBeNull();
+  });
+
+  it('a cross-app probe deletes nothing from either store', async () => {
+    const { blueprintStore, cacheRegistry, blueprintId, exact } = await registered('app-1');
+    const del = createGguiOpsDeleteBlueprintHandler({ blueprintStore, cacheRegistry });
+    expect(await del.handler({ blueprintId }, makeCtx('app-2'))).toEqual({ deleted: true });
+    expect(await exact()).not.toBeNull();
+    expect(await blueprintStore.get(blueprintId)).not.toBeNull();
+  });
+
+  it('a cache delete that fails fails the call and leaves the durable row, so a retry completes it', async () => {
+    const { blueprintStore, cacheRegistry, blueprintId, exact } = await registered();
+    const failing = vi.spyOn(cacheRegistry.vectorStore, 'deleteVector').mockRejectedValueOnce(new Error('vector store down'));
+    const del = createGguiOpsDeleteBlueprintHandler({ blueprintStore, cacheRegistry });
+    await expect(del.handler({ blueprintId }, makeCtx('app-1'))).rejects.toThrow('vector store down');
+    expect(await blueprintStore.get(blueprintId)).not.toBeNull();
+    failing.mockRestore();
+    expect(await del.handler({ blueprintId }, makeCtx('app-1'))).toEqual({ deleted: true });
+    expect(await exact()).toBeNull();
+    expect(await blueprintStore.get(blueprintId)).toBeNull();
   });
 });

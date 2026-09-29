@@ -18,6 +18,16 @@
  * a foreign `appId` input the authorizer denies surfaces the denial
  * error before the row lookup ever runs.
  *
+ * ## Out of reuse (ggui#1541)
+ *
+ * `ggui_ops_register_blueprint` and `ggui_ops_generate_blueprint` write a
+ * blueprint twice: the durable row, and a mirror in the cache registry, the
+ * store the handshake's exact-key probe matches from. So a delete removes
+ * both, the cache row first: a cache delete that fails fails the call
+ * before the durable row goes, and a retry completes it. An id whose
+ * durable row is already gone still has its cache row cleared in the
+ * caller's own app scope, which heals a row an earlier delete left behind.
+ *
  * ## Audience
  *
  * `['ops']` — served on `/control`. NOT visible to agents on `/mcp`.
@@ -30,6 +40,7 @@ import {
   type OpsDeleteBlueprintOutput,
 } from '@ggui-ai/protocol';
 import type { BlueprintStore } from '@ggui-ai/mcp-server-core';
+import { deleteBlueprint, type BlueprintRegistryDeps } from '../renders/blueprint-registry.js';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 
@@ -58,6 +69,13 @@ export interface GguiOpsDeleteBlueprintDeps {
    * the target row belongs to a different app (no existence leak).
    */
   readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
+  /**
+   * The cache registry the writers mirror into (ggui#1541): the SAME one
+   * `ggui_ops_register_blueprint` and `ggui_ops_generate_blueprint` are
+   * given. When bound, a delete removes the blueprint's cache row (its
+   * vector and its exact-key binding) so the handshake stops reusing it.
+   */
+  readonly cacheRegistry?: Pick<BlueprintRegistryDeps, 'vectorStore' | 'index'>;
 }
 
 export function createGguiOpsDeleteBlueprintHandler(
@@ -68,7 +86,7 @@ export function createGguiOpsDeleteBlueprintHandler(
     title: 'Delete blueprint',
     audience: ['ops'],
     description:
-      "Remove a blueprint row by id. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-app probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
+      "Remove a blueprint by id: its durable row, and its entry in the cache the handshake reuses blueprints from, so it is no longer reused. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-app probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -87,7 +105,10 @@ export function createGguiOpsDeleteBlueprintHandler(
 
       const existing = await deps.blueprintStore.get(parsed.blueprintId);
       if (existing === null) {
-        // Unknown id — idempotent. Return the success shape.
+        // Unknown id — idempotent. Its cache row may outlive it (an earlier
+        // delete removed the durable row only): clear it in the caller's
+        // own app scope, which says nothing about any other app.
+        if (deps.cacheRegistry) await deleteBlueprint(deps.cacheRegistry, appId, parsed.blueprintId);
         return { deleted: true };
       }
       if (existing.appId !== appId) {
@@ -97,6 +118,9 @@ export function createGguiOpsDeleteBlueprintHandler(
         // leak across app boundaries.
         return { deleted: true };
       }
+      // Out of reuse first, then the durable row: a cache delete that fails
+      // fails the call with the durable row intact, so a retry completes it.
+      if (deps.cacheRegistry) await deleteBlueprint(deps.cacheRegistry, appId, parsed.blueprintId);
       await deps.blueprintStore.delete(parsed.blueprintId);
       return { deleted: true };
     },
