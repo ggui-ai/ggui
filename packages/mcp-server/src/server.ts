@@ -269,7 +269,7 @@ import {
 import { createCsrfMiddleware, mountCsrfTokenRoute } from "./csrf-middleware.js";
 import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./email-login.js";
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
-import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
+import { createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
 import { buildControlService, CONTROL_PATH } from "./control-service.js";
 import { createBrowserCorsMiddleware, createPreflightFallback } from "./browser-cors.js";
@@ -4601,23 +4601,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // every story-path render + emits `cache.hit /
               // similarity / cachedBlueprintId / llmCallsAvoided` on
               // structuredContent.
-              ...(generationWithCache
-                ? {
-                    generation: {
-                      ...generationWithCache,
-                      // Thread an LLMCaller resolver into
-                      // render so the registry-based three-tier matcher
-                      // can fire its rerank step. Per-call resolution
-                      // because BYOK creds depend on ctx.
-                      resolveLlmCaller: async (ctx) => {
-                        if (!generationWithCache.resolveLlm) return null;
-                        const creds = await generationWithCache.resolveLlm(ctx);
-                        if (!creds) return null;
-                        return buildLlmCaller(creds.selection, creds.providerKey);
-                      },
-                    },
-                  }
-                : {}),
+              ...(generationWithCache ? { generation: generationWithCache } : {}),
               // Live-subscriber notifier. Late-binds to the
               // GguiSessionChannelServer created further down (`channel`
               // / `channelForHealth`) — the channel doesn't exist yet

@@ -139,7 +139,6 @@ import {
   storyForHandshake,
   type HandshakeGenerationStory,
 } from './handshake-generation-inputs.js';
-import type { LLMCaller } from '@ggui-ai/negotiator';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import {
@@ -278,25 +277,11 @@ export interface GenerationDeps {
   readonly seedPools?: readonly BlueprintPool[];
 
   /**
-   * NOT READ by the render handler (ggui#1229). Since §6 the render
-   * flow does not run the blueprint matcher — it resolves the blueprint
-   * by the identity the handshake decided — so passing an LLM resolver
-   * here has no effect. The matcher's judge is wired through the
-   * handshake negotiator's own deps (`createLlmBackedHandshakeNegotiator`
-   * in `@ggui-ai/mcp-server`). The key stays on this published type
-   * because removing it is a breaking change for a self-hoster that
-   * passes it; it leaves at the next major.
-   */
-  readonly resolveLlmCaller?: (
-    ctx: HandlerContext,
-  ) => LLMCaller | null | Promise<LLMCaller | null>;
-
-  /**
-   * Optional marketplace-install bridge — NOT READ by the render
-   * handler (ggui#1229): the matcher that consumes it runs in the
-   * handshake path, whose deps (`decide-handshake`, the handshake
-   * negotiator) carry it. Passing it here has no effect; the key stays
-   * on this published type until the next major, as above.
+   * Optional marketplace-install bridge. The render handler does not read
+   * it (ggui#1229): the matcher that consumes it runs in the handshake
+   * path. `createGguiServer` takes it from here and hands it to the
+   * handshake negotiator, whose exact-key probe then sees installed
+   * blueprints too (ggui#1625).
    *
    * Constructed by the CLI / embedder via
    * `createInstalledBlueprintsProvider(...)` — `mcp-server-handlers`
