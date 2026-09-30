@@ -46,6 +46,7 @@ import { runSandboxed } from '@ggui-ai/sandbox';
 import type { SandboxResult } from '@ggui-ai/sandbox';
 import type { ProbeHostLoad } from '../../../evaluation/types-public.js';
 import type { RenderCheckResult, RunRenderCheckInput } from './render-check.js';
+import { parseVerdictLine } from '../../../internal/verdict-line.js';
 
 /**
  * The subprocess bounds of one isolated check (ggui#1380). They are
@@ -227,12 +228,9 @@ export function mapSandboxResultToCheckResult(
       t0,
     );
   }
-  const stdout = result.stdout.trim();
-  if (stdout.length === 0) {
-    return unverified('render check worker exited without producing a verdict.', t0);
-  }
+  let verdict: RenderCheckResult | undefined;
   try {
-    return JSON.parse(stdout) as RenderCheckResult;
+    verdict = parseVerdictLine<RenderCheckResult>(result.stdout);
   } catch (err) {
     return unverified(
       `render check worker verdict was not valid JSON — ${
@@ -241,6 +239,10 @@ export function mapSandboxResultToCheckResult(
       t0,
     );
   }
+  if (verdict === undefined) {
+    return unverified('render check worker exited without producing a verdict.', t0);
+  }
+  return verdict;
 }
 
 /**

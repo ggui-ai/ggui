@@ -43,6 +43,7 @@ import * as esbuild from 'esbuild';
 import type { JsonObject } from '@ggui-ai/protocol';
 import { evaluateComponentSource } from '../internal/evaluate-component-source.js';
 import { hostGlobals } from '../internal/open-record.js';
+import { formatVerdictLine } from '../internal/verdict-line.js';
 
 interface WorkerInput {
   readonly sourceCode: string;
@@ -212,7 +213,7 @@ async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
 }
 
 function emit(output: WorkerOutput): void {
-  process.stdout.write(JSON.stringify(output));
+  process.stdout.write(formatVerdictLine(output));
 }
 
 async function readAllStdin(): Promise<string> {

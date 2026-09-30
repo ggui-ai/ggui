@@ -28,6 +28,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { runSandboxed } from '@ggui-ai/sandbox';
+import { parseVerdictLine } from '../internal/verdict-line.js';
 import type {
   JsonObject,
 } from '@ggui-ai/protocol';
@@ -168,19 +169,19 @@ export async function tryRender(
     return `Render error: worker exited ${result.exitCode}${tail ? ` — ${tail}` : ''}`;
   }
 
-  const stdout = result.stdout.trim();
-  if (stdout.length === 0) {
-    return 'Render error: worker exited without producing a verdict.';
-  }
-
   type Verdict = { ok: true } | { ok: false; error: string };
-  let verdict: Verdict;
+  let verdict: Verdict | undefined;
   try {
-    verdict = JSON.parse(stdout) as Verdict;
+    // The verdict rides its own prefixed line, so a component that logs to
+    // stdout while it renders cannot corrupt it.
+    verdict = parseVerdictLine<Verdict>(result.stdout);
   } catch (err) {
     return `Render error: malformed worker verdict — ${
       err instanceof Error ? err.message : String(err)
     }`;
+  }
+  if (verdict === undefined) {
+    return 'Render error: worker exited without producing a verdict.';
   }
 
   return verdict.ok ? null : verdict.error;

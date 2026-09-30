@@ -7,6 +7,7 @@
 // is real (esbuild's real `transform` under a spied `stop`); the render is
 // `react-dom/server`'s.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseVerdictLine } from '../internal/verdict-line.js';
 
 const esbuildStop = vi.hoisted(() => vi.fn(async (): Promise<void> => {}));
 
@@ -38,7 +39,7 @@ describe('tools/render-check-worker — esbuild.stop() after the verdict (ggui#1
   it('writes exactly one { ok: true } verdict, then stops esbuild exactly once — in that order', async () => {
     await workerMain(INPUT);
     expect(write).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toEqual({ ok: true });
+    expect(parseVerdictLine(String(write.mock.calls[0]?.[0]))).toEqual({ ok: true });
     expect(esbuildStop).toHaveBeenCalledTimes(1);
     expect(Number(esbuildStop.mock.invocationCallOrder[0])).toBeGreaterThan(
       Number(write.mock.invocationCallOrder[0]),
@@ -48,9 +49,9 @@ describe('tools/render-check-worker — esbuild.stop() after the verdict (ggui#1
   it('a component that throws at render: one { ok: false } verdict, esbuild stopped once', async () => {
     await workerMain(JSON.stringify({ sourceCode: "export default function C() { throw new Error('boom'); }" }));
     expect(write).toHaveBeenCalledTimes(1);
-    const verdict: { ok: boolean; error?: string } = JSON.parse(String(write.mock.calls[0]?.[0]));
-    expect(verdict.ok).toBe(false);
-    expect(verdict.error).toContain('boom');
+    const verdict = parseVerdictLine<{ ok: boolean; error?: string }>(String(write.mock.calls[0]?.[0]));
+    expect(verdict?.ok).toBe(false);
+    expect(verdict?.error).toContain('boom');
     expect(esbuildStop).toHaveBeenCalledTimes(1);
   });
 

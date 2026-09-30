@@ -17,6 +17,7 @@ import {
   runRenderCheckViaWorker,
 } from './render-check-host.js';
 import { runRenderCheck } from './render-check.js';
+import { VERDICT_PREFIX, formatVerdictLine } from '../../../internal/verdict-line.js';
 
 /** Complete SandboxResult with per-test overrides — no type erasure. */
 function sandboxResult(overrides: Partial<SandboxResult>): SandboxResult {
@@ -108,6 +109,15 @@ describe('runRenderCheck isolation (#592)', () => {
     expect(sdkBrowserSniffFires()).toBe(false);
   }, 60_000);
 
+  it('a card that console.logs while it is checked still yields its verdict', async () => {
+    const result = await runRenderCheckViaWorker({
+      sourceCode: `export default function Component() { console.log('hello from the card'); return <p>ok</p>; }`,
+      mockupProps: {},
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 60_000);
+
   it('reports component failures from inside the worker as issues, not throws', async () => {
     const result = await runRenderCheckViaWorker({
       sourceCode: `export default function Component() { throw new Error('boom at render'); }`,
@@ -163,23 +173,32 @@ describe('mapSandboxResultToCheckResult', () => {
     expect(result.issues[0]?.reason).toContain('malformed input JSON');
   });
 
-  it('maps unparseable stdout to UNVERIFIED', () => {
+  it('maps stdout with no verdict line to UNVERIFIED', () => {
     const result = mapSandboxResultToCheckResult(
       sandboxResult({ stdout: 'not json' }),
+      t0,
+    );
+    expect(result.issues[0]?.outcome).toBe('unverified');
+    expect(result.issues[0]?.reason).toContain('without producing a verdict');
+  });
+
+  it('maps a verdict line that is not JSON to UNVERIFIED', () => {
+    const result = mapSandboxResultToCheckResult(
+      sandboxResult({ stdout: `${VERDICT_PREFIX} {broken\n` }),
       t0,
     );
     expect(result.issues[0]?.outcome).toBe('unverified');
     expect(result.issues[0]?.reason).toContain('not valid JSON');
   });
 
-  it('passes a clean verdict through verbatim', () => {
+  it('passes a clean verdict through verbatim, whatever else is on stdout', () => {
     const verdict = {
       ok: true,
       issues: [],
       stats: { actionsChecked: 2, streamsChecked: 1, renderMs: 42 },
     };
     const result = mapSandboxResultToCheckResult(
-      sandboxResult({ stdout: JSON.stringify(verdict) }),
+      sandboxResult({ stdout: `a card's log line\n${formatVerdictLine(verdict)}` }),
       t0,
     );
     expect(result).toEqual(verdict);

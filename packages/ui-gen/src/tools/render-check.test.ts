@@ -30,6 +30,19 @@ describe('tryRender — render smoke test', () => {
     expect(error).toBeNull();
   });
 
+  it('passes for a component that logs to the console while it renders (its output is not the verdict)', async () => {
+    const source = `
+      import React from 'react';
+      export default function Chatty() {
+        console.log('hello from the component');
+        return <div>ok</div>;
+      }
+    `;
+    const compiled = await compile(source);
+    const error = await tryRender(compiled, source);
+    expect(error).toBeNull();
+  });
+
   it('catches undefined.toLowerCase()', async () => {
     const source = `
       import React from 'react';

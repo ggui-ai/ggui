@@ -43,7 +43,8 @@ import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { runRenderCheckInProcess } from './render-check.js';
-import type { RunRenderCheckInput } from './render-check.js';
+import type { RenderCheckResult, RunRenderCheckInput } from './render-check.js';
+import { formatVerdictLine } from '../../../internal/verdict-line.js';
 
 async function readAllStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -53,8 +54,10 @@ async function readAllStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function emit(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
+function emit(value: RenderCheckResult): void {
+  // One prefixed line: the host reads the last such line, so a card that
+  // writes to stdout while it is checked cannot corrupt the verdict.
+  process.stdout.write(formatVerdictLine(value));
 }
 
 /**

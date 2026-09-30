@@ -12,6 +12,7 @@
 // stdin — the process-entry guard is what keeps this import inert.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RenderCheckResult } from './render-check.js';
+import { parseVerdictLine } from '../../../internal/verdict-line.js';
 
 const esbuildStop = vi.hoisted(() => vi.fn(async (): Promise<void> => {}));
 const check = vi.hoisted((): { next: (() => Promise<RenderCheckResult>) | undefined } => ({ next: undefined }));
@@ -66,7 +67,7 @@ describe('render-check-worker — esbuild.stop() after the verdict (ggui#1380 C2
     expect(write).toHaveBeenCalledTimes(1);
     const written = write.mock.calls[0]?.[0];
     expect(typeof written).toBe('string');
-    expect(JSON.parse(String(written))).toEqual(VERDICT);
+    expect(parseVerdictLine(String(written))).toEqual(VERDICT);
     expect(esbuildStop).toHaveBeenCalledTimes(1);
     const writeOrder = write.mock.invocationCallOrder[0];
     const stopOrder = esbuildStop.mock.invocationCallOrder[0];
