@@ -107,12 +107,14 @@ export interface ProbeHostLoad {
  * the coding loop.
  */
 export interface ProbePendingAffordance {
-  /** Actions whose control the click walk made dispatch (click or submit wiring). */
+  /** Controls the pending phase marked pending: those whose click dispatched their action (click or submit wiring) and that were still in the page. `visible + missing.length === dispatched`. */
   readonly dispatched: number;
-  /** Of those, how many controls visibly changed while pending (disabled, busy, text, or replaced). */
+  /** Of those, how many visibly changed while pending (disabled, busy, text, or replaced). */
   readonly visible: number;
-  /** The actions whose control did not visibly change. */
+  /** The actions whose control did not visibly change, including one whose card threw while pending. */
   readonly missing: readonly string[];
+  /** Actions whose control was no longer in the page when its turn came (the card replaced it, or blanked after a throw): never marked, not counted as dispatched. */
+  readonly gone: readonly string[];
 }
 
 /**

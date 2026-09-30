@@ -162,7 +162,17 @@ export interface RunRenderCheckInput {
   readonly sourceCode: string;
   readonly mockupProps: JsonObject;
   readonly contract?: DataContract;
+  /**
+   * Epoch ms by which the check must finish: set by the isolating host from
+   * its own bound, absent in-process. The report-only pending phase is
+   * skipped when less than {@link PENDING_PHASE_RESERVE_MS} remains, so it
+   * can never push a check past its bound (ggui#1398).
+   */
+  readonly deadlineAt?: number;
 }
+
+/** The time the pending phase needs left before the check's deadline to run at all (ggui#1398). */
+export const PENDING_PHASE_RESERVE_MS = 5000;
 
 /**
  * Options of {@link runRenderCheck} (ggui#1380): the host's options —
@@ -827,7 +837,8 @@ export async function runRenderCheckInProcess(
       // LAST, while the main render is still mounted: every check above has
       // already read the DOM, so a card that crashes or resets while pending
       // cannot change what they found.
-      if (input.contract?.actionSpec) {
+      const timeLeft = input.deadlineAt === undefined ? Number.POSITIVE_INFINITY : input.deadlineAt - Date.now();
+      if (input.contract?.actionSpec && timeLeft >= PENDING_PHASE_RESERVE_MS) {
         pendingTally = await runPendingPhase({
           targets: pendingTargets,
           container,
@@ -1216,7 +1227,14 @@ function finalize(
       streamsChecked,
       renderMs: Date.now() - t0,
       ...(pendingTally !== undefined
-        ? { pendingAffordance: { dispatched: pendingTally.dispatched, visible: pendingTally.visible, missing: [...pendingTally.missing] } }
+        ? {
+            pendingAffordance: {
+              dispatched: pendingTally.dispatched,
+              visible: pendingTally.visible,
+              missing: [...pendingTally.missing],
+              gone: [...pendingTally.gone],
+            },
+          }
         : {}),
     },
   };
@@ -1227,6 +1245,7 @@ interface PendingTally {
   dispatched: number;
   visible: number;
   missing: string[];
+  gone: string[];
 }
 
 /** A control whose click really dispatched its action (ggui#1398). */
@@ -1235,6 +1254,8 @@ interface PendingTarget {
   readonly actionLabel: string;
   readonly wiringKind: "click" | "submit";
   readonly element: MinimalElement;
+  /** The element's text just before its click: the control's identity when it was pressed, to tell it from a reused node. */
+  readonly preClickText: string;
 }
 
 interface PendingPhaseInput {
@@ -1248,26 +1269,30 @@ interface PendingPhaseInput {
 }
 
 /**
- * For each control whose click dispatched: look at it, mark its action
- * pending (the runtime does this when the dispatch commits), look again,
- * then clear it (the agent's answer). Visible means the pending state
- * itself changed the control. A control no longer in the page is found
- * again by the same lookup the click used; one that cannot be found, or
- * whose card throws while pending, counts as missing. A throw also ends the
- * phase: the card renders nothing from there, and the controls after it are
- * not counted.
+ * For each control whose click dispatched: mark its action pending (the
+ * runtime does this when the dispatch commits), compare the control with
+ * its look just before, then clear it (the agent's answer). Visible means
+ * the pending state itself changed the control.
+ *
+ * - A form target (submit wiring) is read through its submit control.
+ * - A control no longer in the page is looked for again ONLY by its own
+ *   action identity (label, aria-label, `data-action`), never by the
+ *   any-clickable fallback the click used. If it is not found it is
+ *   `gone`: never marked, not counted as dispatched.
+ * - A card that throws while pending counts that control as missing and
+ *   ends the phase: the card renders nothing from there, so every control
+ *   after it is gone.
  */
 async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> {
-  const tally: PendingTally = { dispatched: 0, visible: 0, missing: [] };
+  const tally: PendingTally = { dispatched: 0, visible: 0, missing: [], gone: [] };
+  let blank = false;
   for (const target of input.targets) {
-    const el = lookOf(target.element).connected
-      ? target.element
-      : findCandidateElements(input.container, target.wiringKind, target.actionName, target.actionLabel)[0];
-    tally.dispatched += 1;
-    if (el === undefined) {
-      tally.missing.push(target.actionName);
+    const found = blank ? undefined : pendingControlOf(input.container, target);
+    if (found === undefined) {
+      tally.gone.push(target.actionName);
       continue;
     }
+    const el = controlToRead(found);
     const before = lookOf(el);
     const caughtBefore = input.catches();
     await input.act(async () => {
@@ -1275,15 +1300,47 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
     });
     await flushPromises();
     const crashed = input.catches() !== caughtBefore;
+    tally.dispatched += 1;
     if (!crashed && lookChanged(before, lookOf(el))) tally.visible += 1;
     else tally.missing.push(target.actionName);
     await input.act(async () => {
       input.source.clear();
     });
     await flushPromises();
-    if (crashed) break;
+    if (crashed) blank = true;
   }
   return tally;
+}
+
+/**
+ * The action's control at the phase's turn. The target element counts when
+ * it is still in the page and is still the same control: its text is what
+ * it was when it was pressed, or it still names the action (React can
+ * reuse a node for a different control). Otherwise the action's control is
+ * looked for again by its own identity only. A submit target (a form) has
+ * no identity to look for, so a replaced one is not found.
+ */
+function pendingControlOf(container: MinimalElement, target: PendingTarget): MinimalElement | undefined {
+  const look = lookOf(target.element);
+  // Its text still reads as when it was pressed, or it still names the action.
+  const sameControl =
+    look.connected &&
+    (look.text.trim() === target.preClickText.trim() ||
+      matchesActionIdentity(target.element, target.actionName, target.actionLabel));
+  if (sameControl) return target.element;
+  if (target.wiringKind !== "click") return undefined;
+  return findActionElements(container, target.actionName, target.actionLabel, { identityOnly: true })[0];
+}
+
+/** The control a person sees for a target: a form is read through its submit control, when it has one. */
+function controlToRead(el: MinimalElement): MinimalElement {
+  if (el.tagName.toLowerCase() !== "form") return el;
+  for (const submitter of el.querySelectorAll<MinimalElement>(
+    'button[type="submit"], input[type="submit"], button:not([type])'
+  )) {
+    return submitter;
+  }
+  return el;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1350,7 +1407,13 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
   if (fired.fired) {
     // ggui#1398: record the control for the pending phase; nothing is marked here.
     if (input.pendingTargets && fired.element && (wiring.kind === "click" || wiring.kind === "submit")) {
-      input.pendingTargets.push({ actionName, actionLabel, wiringKind: wiring.kind, element: fired.element });
+      input.pendingTargets.push({
+        actionName,
+        actionLabel,
+        wiringKind: wiring.kind,
+        element: fired.element,
+        preClickText: fired.preClickText ?? "",
+      });
     }
     return null; // verified — no issue
   }
@@ -1507,8 +1570,9 @@ interface SimulateResult {
   fired: boolean;
   attemptedHint?: string;
   otherActionsFired?: string[];
-  /** The element whose trigger fired the action (ggui#1398). */
+  /** The element whose trigger fired the action, and its text just before the trigger (ggui#1398). */
   element?: MinimalElement;
+  preClickText?: string;
 }
 
 async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateResult> {
@@ -1521,6 +1585,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
 
   for (const el of candidates) {
     const before = probe.getFireLog().length;
+    const preClickText = el.textContent ?? "";
     try {
       await dispatchTrigger(el, wiringKind, user);
     } catch {
@@ -1529,7 +1594,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
     await flushPromises();
     const newEvents = probe.getFireLog().slice(before);
     const matched = newEvents.some((e) => e.kind === eventKind && e.name === actionName);
-    if (matched) return { fired: true, element: el };
+    if (matched) return { fired: true, element: el, preClickText };
   }
 
   // Capture what DID fire — useful diagnostic.
@@ -1789,17 +1854,30 @@ async function checkStreamRerender(
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Whether `el` names the action itself: its text, aria-label or `data-action` carries the action's name or label. */
+function matchesActionIdentity(el: MinimalElement, name: string, label: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+  const aria = (el.getAttribute("aria-label") ?? "").toLowerCase();
+  const txt = (el.textContent ?? "").toLowerCase();
+  const dataAction = (el.getAttribute("data-action") ?? "").toLowerCase();
+  return (
+    aria.includes(label.toLowerCase()) ||
+    txt.includes(label.toLowerCase()) ||
+    norm(aria).includes(norm(name)) ||
+    norm(txt).includes(norm(name)) ||
+    dataAction === name.toLowerCase() ||
+    norm(txt).includes(norm(label))
+  );
+}
+
 function findActionElements(
   container: MinimalElement,
   name: string,
-  label: string
+  label: string,
+  options: { readonly identityOnly?: boolean } = {}
 ): MinimalElement[] {
   const candidates: MinimalElement[] = [];
   const seen = new Set<MinimalElement>();
-
-  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
-  const nameKey = norm(name);
-  const labelKey = norm(label);
 
   const allClickable = container.querySelectorAll<MinimalElement>(
     'button, [role="button"], input[type="submit"], input[type="button"], a[href]'
@@ -1807,17 +1885,7 @@ function findActionElements(
 
   // Pass 1: text/aria-label/data-action match
   for (const el of allClickable) {
-    const aria = (el.getAttribute("aria-label") ?? "").toLowerCase();
-    const txt = (el.textContent ?? "").toLowerCase();
-    const dataAction = (el.getAttribute("data-action") ?? "").toLowerCase();
-    if (
-      aria.includes(label.toLowerCase()) ||
-      txt.includes(label.toLowerCase()) ||
-      norm(aria).includes(nameKey) ||
-      norm(txt).includes(nameKey) ||
-      dataAction === name.toLowerCase() ||
-      norm(txt).includes(labelKey)
-    ) {
+    if (matchesActionIdentity(el, name, label)) {
       if (!seen.has(el)) {
         seen.add(el);
         candidates.push(el);
@@ -1825,7 +1893,9 @@ function findActionElements(
     }
   }
 
-  // Pass 2: any clickable as fallback (we'll click them all)
+  // Pass 2: any clickable as fallback (we'll click them all). Skipped when
+  // only the action's own control may answer (the pending phase's re-find).
+  if (options.identityOnly) return candidates;
   for (const el of allClickable) {
     if (!seen.has(el)) {
       seen.add(el);

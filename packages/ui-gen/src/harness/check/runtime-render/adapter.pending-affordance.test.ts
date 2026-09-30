@@ -38,7 +38,7 @@ describe("the runtime-render adapter — the pending-affordance walk (ggui#1398)
   });
 
   it("is carried onto the ran outcome as the check reported it, with no issue", async () => {
-    const pendingAffordance = { dispatched: 1, visible: 0, missing: ["send"] };
+    const pendingAffordance = { dispatched: 1, visible: 0, missing: ["send"], gone: ["cancel"] };
     stubbed.result = { ok: true, issues: [], stats: { actionsChecked: 1, streamsChecked: 0, renderMs: 5, pendingAffordance } };
     const outcome = await run();
     expect(outcome.status).toBe("ran");

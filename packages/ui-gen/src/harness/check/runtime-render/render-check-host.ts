@@ -269,7 +269,9 @@ export async function runRenderCheckViaWorker(
     gracePeriodMs: bounds.gracePeriodMs,
     maxStdoutBytes: CHECK_STDOUT_CAP,
     nodeHeapMb: bounds.heapMb,
-    stdin: JSON.stringify(input),
+    // ggui#1398: the check learns its own deadline, so its report-only
+    // pending phase can step aside instead of pushing it past the bound.
+    stdin: JSON.stringify({ ...input, deadlineAt: t0 + bounds.timeoutMs }),
     // NODE_ENV steers React's production vs development build — keep
     // parity with the caller; everything else stays on the sandbox's
     // default allowlist.

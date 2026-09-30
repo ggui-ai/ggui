@@ -106,3 +106,21 @@ describe('runRenderCheckViaWorker — subprocess bounds as inputs (ggui#1380 C2)
     expect(resolveRenderCheckHostBounds({ timeoutMs: 3 }).gracePeriodMs).toBe(1);
   });
 });
+
+describe('runRenderCheckViaWorker — the check learns its deadline (ggui#1398)', () => {
+  beforeEach(() => {
+    captured.options.length = 0;
+  });
+
+  it('passes deadlineAt = the time it started + its own bound, beside the caller\'s input', async () => {
+    const before = Date.now();
+    await runRenderCheckViaWorker(INPUT, { bounds: { timeoutMs: 10_000 } });
+    const after = Date.now();
+    const stdin = lastOptions().stdin;
+    if (typeof stdin !== 'string') throw new Error('the host sends its input as a JSON string');
+    const sent = JSON.parse(stdin) as typeof INPUT & { deadlineAt?: number };
+    expect(sent.sourceCode).toBe(INPUT.sourceCode);
+    expect(sent.deadlineAt).toBeGreaterThanOrEqual(before + 10_000);
+    expect(sent.deadlineAt).toBeLessThanOrEqual(after + 10_000);
+  });
+});

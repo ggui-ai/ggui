@@ -190,7 +190,7 @@ describe('the probe-only round (ggui#1380)', () => {
   });
 
   it('the pending-affordance walk rides the probe meta, report-only: no issue, the verdict untouched (ggui#1398)', async () => {
-    const pendingAffordance = { dispatched: 2, visible: 1, missing: ['cancel'] };
+    const pendingAffordance = { dispatched: 2, visible: 1, missing: ['cancel'], gone: ['help'] };
     const { probe } = stubProbe({ status: 'ran', issues: [], elapsedMs: 10, renderMs: 8, pendingAffordance });
     const { ctx, input } = await buildRound({ probe, probeOnly: true, costTracker: new CostTracker(null) });
 
