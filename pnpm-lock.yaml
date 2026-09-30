@@ -1212,6 +1212,10 @@ importers:
         version: 3.2.7(@types/node@24.12.2)(happy-dom@20.11.1)(jsdom@24.1.3)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
 
   packages/live-channel:
+    dependencies:
+      '@ggui-ai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
