@@ -521,6 +521,25 @@ export function toVisualOutcome(r: VisualEvaluationResult | null): VisualOutcome
   };
 }
 
+/** The members of `T` whose names end in `Tokens` — the same derivation as ui-gen's judge-spend.ts, which keeps it private. */
+type TokenMember<T> = { [K in keyof T]-?: K extends `${string}Tokens` ? K : never }[keyof T];
+/** ggui#1645 — the token legs the visual judge's result reports. */
+export type VisualResultTokenLeg = TokenMember<VisualEvaluationResult>;
+
+/**
+ * ggui#1645 — every token leg of the visual judge's result and the published cost field it is priced into.
+ * {@link toVisualOutcome} carries `inputTokens` / `outputTokens` as `tokens` ({@link visualJudgeCostUsd} prices them into
+ * `estimatedCostUsd`) and `criteriaTokens` as `criteriaTokens` ({@link criteriaJudgeCostUsd} prices it into
+ * `criteriaEstimatedCostUsd`). A `*Tokens` leg added to `VisualEvaluationResult` fails the build here until it is
+ * mapped, so it cannot drop out of the published cost silently; the test that walks this table fails when a mapped leg
+ * is not priced into the field named.
+ */
+export const VISUAL_RESULT_COST_FIELDS = {
+  inputTokens: 'estimatedCostUsd',
+  outputTokens: 'estimatedCostUsd',
+  criteriaTokens: 'criteriaEstimatedCostUsd',
+} as const satisfies Record<VisualResultTokenLeg, 'estimatedCostUsd' | 'criteriaEstimatedCostUsd'>;
+
 export type PanelJudge = (sourceCode: string, prompt: string, contract: DataContract) => Promise<PanelEvalResult | null>;
 /** Why the visual judge could not judge — the launcher, the in-page render or the screenshot failed (reason verbatim), at which canvas when known. */
 export interface VisualUnavailable {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { copyFileSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +11,9 @@ import {
   evaluateCell,
   toVisualOutcome,
   visualJudgeCostUsd,
+  criteriaJudgeCostUsd,
+  VISUAL_RESULT_COST_FIELDS,
+  type VisualResultTokenLeg,
   EXP008_CELL_REPORT_VERSION,
   MINT_RECEIPT_ABSENT_NOTE,
   readJudgeInput,
@@ -192,6 +195,28 @@ describe('toVisualOutcome — typed against ui-gen\'s VisualEvaluationResult (th
     const expected = calculateCost(resolveJudgeCostModelId('claude-sonnet-5'), { input: 3000, output: 200 });
     expect(visualJudgeCostUsd(judge, toVisualOutcome(real))).toBe(expected);
     expect(visualJudgeCostUsd(judge, { score: 1, passed: true })).toBe(0);
+  });
+  it('#1645 — every token leg of the judge result lands in the published cost field the table names, and in no other', () => {
+    const LEGS = ['inputTokens', 'outputTokens', 'criteriaTokens'] as const;
+    // A leg added to the result type (or the table) without a fixture here is a type error, not a silent pass.
+    expectTypeOf<(typeof LEGS)[number]>().toEqualTypeOf<VisualResultTokenLeg>();
+    expectTypeOf<keyof typeof VISUAL_RESULT_COST_FIELDS>().toEqualTypeOf<VisualResultTokenLeg>();
+    const judge = { provider: 'claude' as const, model: 'claude-sonnet-5', passThreshold: 60 };
+    const base: VisualEvaluationResult = { ...real, inputTokens: 0, outputTokens: 0 };
+    const only: Record<VisualResultTokenLeg, VisualEvaluationResult> = {
+      inputTokens: { ...base, inputTokens: 1000 },
+      outputTokens: { ...base, outputTokens: 1000 },
+      criteriaTokens: { ...base, criteriaTokens: { inputTokens: 1000, outputTokens: 1000 } },
+    };
+    for (const leg of LEGS) {
+      const o = toVisualOutcome(only[leg]);
+      const priced = { estimatedCostUsd: visualJudgeCostUsd(judge, o), criteriaEstimatedCostUsd: criteriaJudgeCostUsd(judge, o) ?? 0 };
+      const field = VISUAL_RESULT_COST_FIELDS[leg];
+      expect(priced[field], `${leg} → ${field}`).toBeGreaterThan(0);
+      for (const other of ['estimatedCostUsd', 'criteriaEstimatedCostUsd'] as const) {
+        if (other !== field) expect(priced[other], `${leg} must not reach ${other}`).toBe(0);
+      }
+    }
   });
 });
 
