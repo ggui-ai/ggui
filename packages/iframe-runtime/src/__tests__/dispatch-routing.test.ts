@@ -41,6 +41,9 @@
  * exact failure this suite's `consumerPresent:false` + post-reload
  * regression cases lock down.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';
 import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -1681,7 +1684,7 @@ describe('a refused doorbell is named in the view (ggui#1314)', () => {
     const real = createTelemetrySink({ sessionId: 'sess_1', callTool: async () => ({}) });
     sink = {
       ...real,
-      record: (kind: string, detail?: string) => {
+      record: (kind, detail) => {
         recorded.push(detail === undefined ? { kind } : { kind, detail });
         real.record(kind, detail);
       },
@@ -1904,5 +1907,66 @@ describe('visitor-facing gesture copy (ggui#1444)', () => {
     expect(toastShown()).toBe(false);
     await tick();
     await tick();
+  });
+});
+
+/**
+ * ggui#1383 — free text leaves every recorded `detail`, on every host. The gesture path records the dispatch and its
+ * result through the real emit sites; neither may carry the action's intent string or a relay's error MESSAGE (a
+ * host's words, not ours). The result keeps `ok` and the JSON-RPC error CODE.
+ */
+describe('gesture telemetry carries no free text (ggui#1383)', () => {
+  const recorded: Array<{ kind: string; detail?: string }> = [];
+  let sink: TelemetrySink | null = null;
+
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    recorded.length = 0;
+    const real = createTelemetrySink({ sessionId: 'sess_1', callTool: async () => ({}) });
+    sink = {
+      ...real,
+      record: (kind, detail) => {
+        recorded.push(detail === undefined ? { kind } : { kind, detail });
+        real.record(kind, detail);
+      },
+    };
+    __setTelemetrySinkForTest(sink);
+    setHostCapabilities({ message: {} });
+  });
+
+  afterEach(() => {
+    __setTelemetrySinkForTest(null);
+    sink?.dispose();
+    sink = null;
+  });
+
+  it('gesture.dispatch keeps the tool name only; gesture.result keeps ok and the error code, never the message', async () => {
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'SECRET-HOST-ERROR-WORDS' },
+    });
+    routeDispatch({
+      actionName: 'intent_text_that_must_not_travel',
+      data: { note: 'user data' },
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+    const gesture = recorded.filter((r) => r.kind.startsWith('gesture.'));
+    expect(gesture.map((r) => r.kind)).toEqual(expect.arrayContaining(['gesture.dispatch', 'gesture.result']));
+    for (const r of recorded) {
+      expect(r.detail ?? '', r.kind).not.toContain('intent_text_that_must_not_travel');
+      expect(r.detail ?? '', r.kind).not.toContain('SECRET-HOST-ERROR-WORDS');
+      expect(r.detail ?? '', r.kind).not.toContain('user data');
+    }
+    expect(recorded.find((r) => r.kind === 'gesture.dispatch')?.detail).toBe('{"toolName":"ggui_runtime_submit_action"}');
+    expect(recorded.find((r) => r.kind === 'gesture.result')?.detail).toBe('{"ok":false,"code":-32601}');
+  });
+
+  it('gesture.dropped_superseded records no detail (source pin: the one call has no second argument)', () => {
+    const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'runtime.ts'), 'utf8');
+    const calls = [...src.matchAll(/record\(\s*'gesture\.dropped_superseded'([^)]*)\)/g)].map((m) => m[1]!.trim());
+    expect(calls).toEqual(['']);
   });
 });

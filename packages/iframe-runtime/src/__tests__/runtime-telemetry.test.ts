@@ -1,15 +1,77 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTelemetrySink } from '../runtime-telemetry.js';
+import { CHANNEL_LOG_EVENTS } from '@ggui-ai/live-channel';
+import {
+  CONNECTION_STATUSES,
+  RUNTIME_TELEMETRY_KINDS,
+  createTelemetrySink,
+  type RuntimeTelemetryKind,
+} from '../runtime-telemetry.js';
 
 /**
- * Telemetry sink — the iframe's transport self-report. Pins:
- *   - first flush delayed (~4s) so one batch carries the boot story;
- *   - later flushes throttle; per-session flush cap;
- *   - channelLogger facade forwards live-channel events verbatim
- *     (event name = kind, fields JSON = detail);
- *   - buffer cap drops OLDEST; flush failures swallowed; dispose
- *     cancels timers.
+ * Telemetry sink — the iframe's self-report. Pins:
+ *   - two batches, HEALTH and DIAGNOSTIC, never mixed in one call (#1383): a host that admits only the health
+ *     vocabulary judges a batch whole, so one diagnostic event would cost the batch its doorbell ring;
+ *   - the kind → batch → detail-shape table is a reading of the runtime's emit sites, both ways;
+ *   - a health event carries only the detail its kind pins (none | id | booleans), recorded without it otherwise;
+ *   - the health batch flushes first, and the two batches have separate flush caps (health 8, diagnostic 4), so
+ *     refused diagnostic flushes can never starve the health batch;
+ *   - first flush delayed (~4s); later flushes throttle; buffer caps drop the OLDEST; flush failures swallowed;
+ *     dispose cancels timers.
  */
+type Call = { name: string; arguments: { sessionId: string; events: Array<{ at: number; kind: string; detail?: string }> } };
+
+function makeSink(): { sink: ReturnType<typeof createTelemetrySink>; calls: Call[] } {
+  const calls: Call[] = [];
+  const sink = createTelemetrySink({
+    sessionId: 'render_tel',
+    callTool: async (args) => {
+      calls.push({ name: args.name, arguments: JSON.parse(JSON.stringify(args.arguments)) });
+      return {};
+    },
+  });
+  return { sink, calls };
+}
+
+const spec = (kind: string) => RUNTIME_TELEMETRY_KINDS.find((k) => k.kind === kind);
+
+describe('the kind table is a reading of the emit sites', () => {
+  const runtimeSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'runtime.ts'), 'utf8');
+  const literalKinds = [...runtimeSrc.matchAll(/\.record\(\s*'([a-z_.]+)'/g)].map((m) => m[1]!);
+
+  it('every literal kind the runtime records is in the table', () => {
+    expect(literalKinds.length).toBeGreaterThan(10);
+    for (const kind of literalKinds) expect(spec(kind), kind).toBeDefined();
+  });
+
+  it('the status kinds are exactly `status.<ConnectionStatus>`, and the runtime records them from one template', () => {
+    expect(runtimeSrc).toContain('.record(`status.${status}`)');
+    const statusKinds = RUNTIME_TELEMETRY_KINDS.filter((k) => k.kind.startsWith('status.')).map((k) => k.kind);
+    expect(statusKinds.sort()).toEqual(CONNECTION_STATUSES.map((s) => `status.${s}`).sort());
+  });
+
+  it("the channel kinds are exactly the live channel's log events, as health with no detail", () => {
+    const channelKinds = RUNTIME_TELEMETRY_KINDS.filter((k) => k.kind.startsWith('channel_'));
+    expect(channelKinds.map((k) => k.kind).sort()).toEqual([...CHANNEL_LOG_EVENTS].sort());
+    for (const k of channelKinds) expect([k.batch, k.detail]).toEqual(['health', 'none']);
+  });
+
+  it('every other table kind is recorded somewhere in the runtime', () => {
+    const others = RUNTIME_TELEMETRY_KINDS.filter((k) => !k.kind.startsWith('status.') && !k.kind.startsWith('channel_'));
+    for (const k of others) expect(literalKinds, k.kind).toContain(k.kind);
+  });
+
+  it('pins the health set this row agreed, and the detail shapes a host door reads', () => {
+    const health = RUNTIME_TELEMETRY_KINDS.filter((k) => k.batch === 'health' && !k.kind.startsWith('status.') && !k.kind.startsWith('channel_'));
+    expect(health.map((k) => `${k.kind}:${k.detail}`).sort()).toEqual(
+      ['boot.path:booleans', 'boot.static_only_no_bridge:none', 'doorbell.ring:id', 'subscribe.resolved:booleans'].sort(),
+    );
+    for (const k of RUNTIME_TELEMETRY_KINDS) if (k.batch === 'health') expect(['none', 'id', 'booleans']).toContain(k.detail);
+  });
+});
+
 describe('createTelemetrySink', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -18,22 +80,7 @@ describe('createTelemetrySink', () => {
     vi.useRealTimers();
   });
 
-  function makeSink(): {
-    sink: ReturnType<typeof createTelemetrySink>;
-    calls: Array<{ name: string; arguments: Record<string, unknown> }>;
-  } {
-    const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
-    const sink = createTelemetrySink({
-      sessionId: 'render_tel',
-      callTool: async (args) => {
-        calls.push(args);
-        return {};
-      },
-    });
-    return { sink, calls };
-  }
-
-  it('batches records and first-flushes after the boot-story delay', async () => {
+  it('first-flushes after the boot-story delay, the health batch alone when only health was recorded', async () => {
     const { sink, calls } = makeSink();
     sink.record('boot.path', '{"hasLiveTrio":false}');
     sink.record('status.connecting');
@@ -42,68 +89,129 @@ describe('createTelemetrySink', () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.name).toBe('ggui_runtime_telemetry');
-    const args = calls[0]?.arguments as {
-      sessionId: string;
-      events: Array<{ kind: string }>;
-    };
-    expect(args.sessionId).toBe('render_tel');
-    expect(args.events.map((e) => e.kind)).toEqual([
-      'boot.path',
-      'status.connecting',
+    expect(calls[0]?.arguments.sessionId).toBe('render_tel');
+    expect(calls[0]?.arguments.events.map((e) => e.kind)).toEqual(['boot.path', 'status.connecting']);
+  });
+
+  it('never mixes the batches in one call, and flushes health first', async () => {
+    const { sink, calls } = makeSink();
+    sink.record('gesture.dispatch', '{"toolName":"ggui_runtime_submit_action"}');
+    sink.record('doorbell.ring', 'render_abc123');
+    sink.record('epoch.frozen', '3');
+    sink.record('boot.static_only_no_bridge');
+    await vi.advanceTimersByTimeAsync(4100);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.arguments.events.map((e) => e.kind)).toEqual(['doorbell.ring', 'boot.static_only_no_bridge']);
+    expect(calls[1]?.arguments.events.map((e) => e.kind)).toEqual(['gesture.dispatch', 'epoch.frozen']);
+    for (const call of calls) {
+      const batches = new Set(call.arguments.events.map((e) => spec(e.kind)?.batch));
+      expect(batches.size).toBe(1);
+    }
+  });
+
+  it('a health event carries only the detail its kind pins, for every health kind (property)', async () => {
+    const { sink, calls } = makeSink();
+    const free = 'the user typed: my card number is 4111 1111';
+    for (const k of RUNTIME_TELEMETRY_KINDS) if (k.batch === 'health') sink.record(k.kind, free);
+    await vi.advanceTimersByTimeAsync(4100);
+    sink.record('doorbell.ring', 'render_abc123');
+    sink.record('boot.path', '{"hasStaticContent":true,"bridgeCapable":false}');
+    sink.record('boot.path', '{"hasStaticContent":true,"url":"https://x"}');
+    sink.record('subscribe.resolved', '{"kind":"ws","hasAck":true}');
+    sink.record('subscribe.resolved', '{"hasAck":true}');
+    await vi.advanceTimersByTimeAsync(8100);
+    const health = calls.flatMap((c) => c.arguments.events).filter((e) => spec(e.kind)?.batch === 'health');
+    expect(health.length).toBeGreaterThan(20);
+    for (const e of health) {
+      expect(e.detail ?? '', e.kind).not.toContain('card number');
+      const shape = spec(e.kind)?.detail;
+      if (shape === 'none') expect(e.detail, e.kind).toBeUndefined();
+      if (shape === 'id' && e.detail !== undefined) expect(e.detail).toMatch(/^[A-Za-z0-9_.:-]{1,128}$/);
+      if (shape === 'booleans' && e.detail !== undefined) {
+        const parsed: unknown = JSON.parse(e.detail);
+        expect(parsed !== null && typeof parsed === 'object').toBe(true);
+        if (parsed !== null && typeof parsed === 'object') for (const v of Object.values(parsed)) expect(typeof v).toBe('boolean');
+      }
+    }
+    expect(health.find((e) => e.kind === 'doorbell.ring' && e.detail === 'render_abc123')).toBeDefined();
+    expect(health.find((e) => e.kind === 'boot.path' && e.detail === '{"hasStaticContent":true,"bridgeCapable":false}')).toBeDefined();
+    expect(health.find((e) => e.kind === 'subscribe.resolved' && e.detail === '{"hasAck":true}')).toBeDefined();
+    // A booleans kind with one non-boolean field is recorded WITHOUT its detail: never dropped, never sent free.
+    expect(health.filter((e) => e.kind === 'boot.path' && e.detail === undefined)).toHaveLength(2);
+    expect(health.filter((e) => e.kind === 'subscribe.resolved' && e.detail === undefined)).toHaveLength(2);
+  });
+
+  it('the channel facade records each transport event as health with no detail', async () => {
+    const { sink, calls } = makeSink();
+    sink.channelLogger.warn?.('channel_failover_swap', { from: 'ws', to: 'sse', error: 'socket closed by https://x' });
+    sink.channelLogger.info?.('channel_polling_fetch_failed', { url: 'https://x/poll', error: 'boom' });
+    await vi.advanceTimersByTimeAsync(4100);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.arguments.events).toEqual([
+      { at: expect.any(Number), kind: 'channel_failover_swap' },
+      { at: expect.any(Number), kind: 'channel_polling_fetch_failed' },
     ]);
   });
 
-  it('channelLogger facade forwards transport diagnostics as events', async () => {
+  it('the batches have separate flush caps, so a diagnostic flood cannot starve the health batch', async () => {
     const { sink, calls } = makeSink();
-    sink.channelLogger.warn?.('channel_failover_swap', {
-      from: 'ws',
-      to: 'sse',
-    });
-    await vi.advanceTimersByTimeAsync(4100);
-    const args = calls[0]?.arguments as {
-      events: Array<{ kind: string; detail?: string }>;
-    };
-    expect(args.events[0]?.kind).toBe('channel_failover_swap');
-    expect(args.events[0]?.detail).toBe('{"from":"ws","to":"sse"}');
+    for (let round = 0; round < 12; round += 1) {
+      sink.record('gesture.dom_click', '{"tag":"BUTTON","trusted":true}');
+      sink.record(round % 2 === 0 ? 'status.connected' : 'status.reconnecting');
+      await vi.advanceTimersByTimeAsync(round === 0 ? 4100 : 8100);
+    }
+    const batchOf = (c: Call) => spec(c.arguments.events[0]?.kind ?? '')?.batch;
+    expect(calls.filter((c) => batchOf(c) === 'diagnostic')).toHaveLength(4);
+    expect(calls.filter((c) => batchOf(c) === 'health')).toHaveLength(8);
   });
 
-  it('throttles subsequent flushes and honors the per-session cap', async () => {
+  it('throttles later flushes at 8s, not 4s', async () => {
     const { sink, calls } = makeSink();
-    sink.record('boot.path');
+    sink.record('boot.static_only_no_bridge');
     await vi.advanceTimersByTimeAsync(4100);
     expect(calls).toHaveLength(1);
-    // Second batch throttles at 8s, not 4s.
     sink.record('status.connected');
     await vi.advanceTimersByTimeAsync(7900);
     expect(calls).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(200);
     expect(calls).toHaveLength(2);
-    // Exhaust the cap (2 used; 10 more allowed).
-    for (let i = 0; i < 15; i += 1) {
-      sink.record(`k${i}`);
-      await vi.advanceTimersByTimeAsync(8100);
-    }
-    expect(calls.length).toBeLessThanOrEqual(12);
   });
 
-  it('drops the OLDEST events past the buffer cap; flush failure is swallowed', async () => {
+  it("drops the OLDEST events past a batch's buffer cap; flush failure is swallowed", async () => {
+    const seen: Call[] = [];
     const failing = createTelemetrySink({
       sessionId: 's',
-      callTool: async () => {
+      callTool: async (args) => {
+        seen.push({ name: args.name, arguments: JSON.parse(JSON.stringify(args.arguments)) });
         throw new Error('host rejected');
       },
     });
-    for (let i = 0; i < 45; i += 1) failing.record(`k${i}`);
-    // 40-cap: oldest 5 dropped. Flush swallows the rejection.
+    for (let i = 0; i < 45; i += 1) failing.record('epoch.frozen', String(i));
     await vi.advanceTimersByTimeAsync(4100);
+    const details = seen.flatMap((c) => c.arguments.events).map((e) => e.detail);
+    expect(details).toHaveLength(40);
+    expect(details[0]).toBe('5');
     failing.dispose();
   });
 
   it('dispose cancels pending flushes', async () => {
     const { sink, calls } = makeSink();
-    sink.record('boot.path');
+    sink.record('boot.static_only_no_bridge');
     sink.dispose();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(calls).toHaveLength(0);
   });
+
+  it('an unlisted kind (a JS caller past the types) is diagnostic and carries no detail', async () => {
+    const { sink, calls } = makeSink();
+    Reflect.apply(sink.record, sink, ['something.new', 'free text']);
+    sink.record('doorbell.ring', 'render_1');
+    await vi.advanceTimersByTimeAsync(4100);
+    expect(calls[0]?.arguments.events.map((e) => e.kind)).toEqual(['doorbell.ring']);
+    expect(calls[1]?.arguments.events).toEqual([{ at: expect.any(Number), kind: 'something.new' }]);
+  });
 });
+
+// Compile-time: record() takes only the table's kinds.
+const kindCheck: RuntimeTelemetryKind = 'doorbell.ring';
+void kindCheck;

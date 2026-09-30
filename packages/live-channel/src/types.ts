@@ -21,6 +21,8 @@
  * handlers — they only differ in how they MOUNT components, not in
  * how they listen for updates.
  */
+import type { ChannelLogEvent } from './log-events.js';
+
 
 /**
  * Per-channel handler — what the registry dispatches when a frame of
@@ -249,9 +251,9 @@ export interface ChannelClientBootstrap {
  * `mcp-server-handlers`).
  */
 export interface ChannelLogger {
-  info?(event: string, fields: Record<string, unknown>): void;
-  warn?(event: string, fields: Record<string, unknown>): void;
-  debug?(event: string, fields: Record<string, unknown>): void;
+  info?(event: ChannelLogEvent, fields: Record<string, unknown>): void;
+  warn?(event: ChannelLogEvent, fields: Record<string, unknown>): void;
+  debug?(event: ChannelLogEvent, fields: Record<string, unknown>): void;
 }
 
 /**

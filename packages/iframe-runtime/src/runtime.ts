@@ -1639,10 +1639,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return endOnSubscribeFailure(handle.refused.message ?? handle.refused.code);
   }
 
-  telemetry?.record(
-    'subscribe.resolved',
-    JSON.stringify({ kind: handle.handle.kind, hasAck: handle.ack !== undefined }),
-  );
+  // Health (#1383): booleans only; the handle's kind string stays home.
+  telemetry?.record('subscribe.resolved', JSON.stringify({ hasAck: handle.ack !== undefined }));
   // Attach the live transport handle to the renderer — flushes any
   // buffered outbound `action` frames that were queued while the
   // subscribe handshake completed. `send` narrows to the ws surface:
@@ -3875,7 +3873,7 @@ export function dispatchSubmitAction(args: {
   // the live session — drop the gesture rather than submit a stale
   // view's action against the current head.
   if (mountSuperseded) {
-    currentTelemetrySink?.record('gesture.dropped_superseded', args.intent);
+    currentTelemetrySink?.record('gesture.dropped_superseded');
     return;
   }
   const { toolName, intent, data, sessionId, appId, label } = args;
@@ -3887,7 +3885,7 @@ export function dispatchSubmitAction(args: {
   // while clicks produced NOTHING observable; without a record at the
   // dispatch entry there is no way to tell "handler never fired" from
   // "dispatch swallowed it" on a console-less host.
-  currentTelemetrySink?.record('gesture.dispatch', JSON.stringify({ intent, toolName }));
+  currentTelemetrySink?.record('gesture.dispatch', JSON.stringify({ toolName }));
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
@@ -3986,14 +3984,13 @@ export function dispatchSubmitAction(args: {
     }
     // Final hop of the gesture autopsy trail — what the relay
     // answered (or that it didn't).
+    // No free text (#1383): the relay's error CODE rides, never its
+    // message (a host's words), and the intent string stays home.
     currentTelemetrySink?.record(
       'gesture.result',
       JSON.stringify({
-        intent,
         ok: resp !== null && resp.error === undefined,
-        ...(resp?.error?.message !== undefined
-          ? { error: resp.error.message.slice(0, 120) }
-          : {}),
+        ...(typeof resp?.error?.code === 'number' ? { code: resp.error.code } : {}),
       }),
     );
     // Self-healing (ggui#440): a result envelope arriving at all is

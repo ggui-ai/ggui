@@ -34,6 +34,7 @@
  * of replaying.
  */
 
+import type { ChannelLogEvent } from './log-events.js';
 import type {
   ChannelFrame,
   ChannelHandler,
@@ -290,7 +291,7 @@ export class SSETransport implements SseTransportHandle {
   }
 
   /** Terminal failure: log, tear down the instance + timers, emit `'failed'`. */
-  private enterFailed(event: string, fields: Record<string, unknown>): void {
+  private enterFailed(event: ChannelLogEvent, fields: Record<string, unknown>): void {
     this.opts.logger?.warn?.(event, fields);
     this.clearTimers();
     this.source?.close();
