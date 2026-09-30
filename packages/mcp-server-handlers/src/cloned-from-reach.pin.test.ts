@@ -35,6 +35,9 @@ const ALLOWED: Readonly<Record<string, string>> = {
   'protocol/src/version.ts': 'the wire ledger entry (prose)',
   'mcp-server-core/src/contract-tests/blueprint-store.conformance.ts': 'the store kit: a store persists it verbatim',
   'protocol-conformance/src/n1-compat-conformance/index.ts': "the N−1 grader: kept as sent across the list's parse",
+  'protocol/src/schemas/ops-blueprint.ts': "the operator door's input member",
+  'mcp-server-handlers/src/ops-blueprint/register.ts': 'the writer (emit step): a copy registered through the door or in-process names its parent on the durable row',
+  'mcp-server-handlers/src/ops-blueprint/errors.ts': "the writer's one refusal (empty, self, missing or another app's parent)",
 };
 
 function sources(dir: string): string[] {

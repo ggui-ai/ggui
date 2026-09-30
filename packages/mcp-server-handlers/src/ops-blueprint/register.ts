@@ -63,7 +63,7 @@ import { mirrorIntoCache } from "./cache-mirror.js";
 import { defineHandler, type HandlerContext } from "../types.js";
 import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import type { PutCodeHook } from "./generate.js";
-import { DirectionScopeWithoutDigestError } from "./errors.js";
+import { ClonedFromRefusedError, DirectionScopeWithoutDigestError } from "./errors.js";
 import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
 
 const opsInputSchema = opsRegisterBlueprintInputSchema.shape;
@@ -256,6 +256,17 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
     }
 
     const blueprintId = mintBlueprintId();
+    // ggui#1570 — a copy (`clonedFrom`, the door's input member, which the
+    // in-process generated-bytes entry parses too) names another row of this
+    // app that the store holds. Checked after the id is minted (a copy never
+    // names itself) and before anything is persisted. The cache mirror's own
+    // durable write-through, when it writes to a store other than this one,
+    // does not carry it: that copy serves re-mint, which ignores provenance.
+    if (parsed.clonedFrom !== undefined) {
+      const parentId = parsed.clonedFrom;
+      const parent = parentId.length > 0 && parentId !== blueprintId ? await deps.blueprintStore.get(parentId) : null;
+      if (parent === null || parent.appId !== appId) throw new ClonedFromRefusedError(parentId);
+    }
     // ONE variance for BOTH stores. The cache row's exact key is
     // `variantKey(variance)`; omitting it on the cache call filed every
     // variant under the default-variant key, where an earlier registration
@@ -279,6 +290,8 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
       source: provenance.source,
       // ggui#1280 — the minting build, on a generation mint's bytes only.
       ...(provenance.build !== undefined ? { build: provenance.build } : {}),
+      // ggui#1570 — provenance about the row: the row whose bytes it copies.
+      ...(parsed.clonedFrom !== undefined ? { clonedFrom: parsed.clonedFrom } : {}),
       variance,
       createdAt: now(),
       createdBy: "operator",

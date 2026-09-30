@@ -247,6 +247,12 @@ export const opsRegisterBlueprintInputSchema = z
       .describe(
         'When true, marks the new blueprint as the operator default for its `(appId, contractHash)` group and clears the mark from any other in the group. The mark orders blueprint listings (the default first) and is shown to operators; it does not decide which blueprint serves a render.',
       ),
+    clonedFrom: z
+      .string()
+      .optional()
+      .describe(
+        "ggui#1570 — when these bytes are a COPY of a row this app already holds, that row's `blueprintId`. The new row records it as provenance about the row; nothing that serves reads it. It must name another row of this app: an empty id, the new row's own id, an id not held and another app's row are all refused (`cloned_from_refused`) before anything is persisted, with the same answer for a missing row as for another app's."
+      ),
   })
   .strict();
 

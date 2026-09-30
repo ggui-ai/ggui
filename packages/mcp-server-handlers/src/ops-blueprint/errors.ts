@@ -70,6 +70,23 @@ export class DirectionScopeWithoutDigestError extends Error {
   }
 }
 
+/**
+ * ggui#1570 — a registration named a parent (`clonedFrom`) this registration
+ * cannot record: an empty id, the row's own id, or an id that is not a row of
+ * the registering app in the durable store. One answer for all of them, and
+ * the same text for a missing row and another app's, so the refusal says
+ * nothing about another app's rows. Refused before anything is persisted.
+ */
+export class ClonedFromRefusedError extends Error {
+  readonly code = "cloned_from_refused" as const;
+  constructor(clonedFrom: string) {
+    super(
+      `cloned_from_refused: clonedFrom "${clonedFrom}" is not another row of this app — a copy names a row of its own app, other than itself, that the store holds.`
+    );
+    this.name = "ClonedFromRefusedError";
+  }
+}
+
 export class MissingCredentialsError extends Error {
   readonly code = "missing_credentials" as const;
   constructor(message?: string) {

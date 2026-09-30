@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A copied row now SAYS it is a copy: `Blueprint.clonedFrom` is EMITTED
+ * (2026-09-30, ggui#1570 emit step: no schema change, same draft stamp).
+ * The declare step served on dev, staging and prod before any writer set
+ * it, because the previous release's strict `blueprintSchema` refuses a row
+ * with a member it does not name. `ggui_ops_register_blueprint`
+ * gains an optional input, `clonedFrom` (the parent's id), which
+ * `createRegisterGeneratedBlueprint` parses too. The durable row records it,
+ * and an empty id, the row's own id, and any id that is not a row of the
+ * registering app are refused before anything is persisted. Nothing that
+ * serves reads it. N−1: over MCP a server from before this STRIPS the member
+ * (the SDK registers the input's shape), so a newer client's copy lands
+ * unmarked, silently; a writer outside the server's own image checks the
+ * server's `tools/list` before relying on the mark.
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A card whose render failed can say so: `ggui_runtime_report_render_failure`
  * is declared (2026-09-30, additive, ggui#1609 declare step: MINOR, same
  * draft stamp). It is a new app-only runtime tool, the seventh (SPEC §4.9):
