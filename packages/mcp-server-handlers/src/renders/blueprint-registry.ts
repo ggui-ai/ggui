@@ -870,8 +870,9 @@ export async function registerBlueprint(
     const existing = await findBlueprintByUuid(deps.vectorStore, scope, existingId);
     if (existing) return { ...existing, deduped: true };
     // Dangling binding (id present, row gone) — self-heal: drop the stale
-    // binding and fall through to mint a fresh row.
-    await deps.index.deleteId(scope, exactKey);
+    // binding and fall through to mint a fresh row. Conditional on the stale
+    // id, so a registration that bound the key in between keeps it (#1603).
+    await deps.index.deleteId(scope, exactKey, existingId);
   }
 
   const id = options.mintId?.() ?? `bp_${randomUUID()}`;
@@ -1074,14 +1075,15 @@ async function maybeEvictLowestHitBlueprint(
     victimContractKey !== undefined &&
     victimVariantKey !== undefined
   ) {
+    const victimExactKey = composeExactKey(victimKind, victimContractKey, victimVariantKey);
     try {
-      await deps.index.deleteId(
-        scope,
-        composeExactKey(victimKind, victimContractKey, victimVariantKey),
-      );
-    } catch {
-      // Best-effort — a failed index delete leaves a self-healing
-      // dangling binding, which `findBlueprintExact` resolves to null.
+      // Conditional on the victim's own id: a key re-bound since to a
+      // different blueprint keeps its binding (#1603).
+      await deps.index.deleteId(scope, victimExactKey, victim.key);
+    } catch (err) {
+      // Best-effort — a failed index delete leaves a dangling binding, which
+      // `findBlueprintExact` resolves to null; named so an operator sees it.
+      warnUnbindFailed(scope, victimExactKey, victim.key, err);
     }
   }
 }
@@ -1468,13 +1470,30 @@ export async function deleteBlueprint(
   const existing = await findBlueprintByUuid(deps.vectorStore, scope, id);
   await deps.vectorStore.deleteVector(scope, id);
   if (existing) {
+    const exactKey = composeExactKey(existing.kind, existing.contractKey, existing.variantKey);
     try {
-      await deps.index.deleteId(
-        scope,
-        composeExactKey(existing.kind, existing.contractKey, existing.variantKey),
-      );
-    } catch {
-      // Best-effort — a dangling binding self-heals at the read site.
+      // Conditional on the deleted id: if the key has since been bound to a
+      // different blueprint, that binding is the live design and stays (#1603).
+      await deps.index.deleteId(scope, exactKey, id);
+    } catch (err) {
+      // Best-effort — a dangling binding self-heals at the read site; named
+      // so an operator sees it.
+      warnUnbindFailed(scope, exactKey, id, err);
     }
   }
+}
+
+/**
+ * An index unbind failed after its row was deleted (#1603). Best-effort by
+ * design: the dangling binding self-heals at the read site. Named, so an
+ * operator sees it rather than a silent swallow.
+ */
+function warnUnbindFailed(scope: string, exactKey: string, blueprintId: string, err: unknown): void {
+  // eslint-disable-next-line no-console -- operator-visible degradation notice
+  console.warn(
+    `[ggui] blueprint registry: blueprint_index_unbind_failed — scope ${scope}, key ${exactKey}, ` +
+      `blueprint ${blueprintId}; the binding dangles until a read self-heals it: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+  );
 }

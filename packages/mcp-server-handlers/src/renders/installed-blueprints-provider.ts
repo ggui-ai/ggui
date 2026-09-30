@@ -508,7 +508,9 @@ export function createInstalledBlueprintsProvider(
       for (const [cKey, binding] of bucket) {
         if (liveKeys.has(cKey)) continue;
         try {
-          await options.deps.index.deleteId(scope, binding.exactKey);
+          // Conditional on the id this instance bound: a key re-bound since
+          // to a different blueprint keeps it (#1603).
+          await options.deps.index.deleteId(scope, binding.exactKey, binding.id);
         } catch {
           // Best-effort — a surviving binding self-heals only once
           // the backing listing catches up; the issue line below

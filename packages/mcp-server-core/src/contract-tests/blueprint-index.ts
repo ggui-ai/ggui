@@ -11,7 +11,9 @@
  *     `(scope, exactKey)` MUST keep the FIRST uuid. This is the dedup
  *     primitive; an overwrite is a contract violation.
  *   - Scope isolation — the same `exactKey` in two scopes is independent.
- *   - `deleteId` on a missing binding is a no-op.
+ *   - `deleteId(scope, exactKey, expectedId)` removes the binding only
+ *     while it points at `expectedId`: it never unbinds a key bound since to
+ *     a different id, and on a missing binding it is a no-op.
  *   - `deleteId` followed by `getId` returns `null`.
  *
  * Usage (vitest):
@@ -68,14 +70,24 @@ export function runBlueprintIndexConformance(
     it('deleteId on a missing binding is a no-op', async () => {
       const ix = await makeIndex();
       await expect(
-        ix.deleteId('app-a', 'never-bound'),
+        ix.deleteId('app-a', 'never-bound', 'uuid-1'),
       ).resolves.toBeUndefined();
+    });
+
+    it('deleteId never unbinds a key now bound to a different id (ggui#1603)', async () => {
+      const ix = await makeIndex();
+      await ix.putId('app-a', 'k1', 'uuid-old');
+      await ix.deleteId('app-a', 'k1', 'uuid-old');
+      await ix.putId('app-a', 'k1', 'uuid-new');
+      // A delete aimed at the old id arrives after the key was re-bound.
+      await expect(ix.deleteId('app-a', 'k1', 'uuid-old')).resolves.toBeUndefined();
+      await expect(ix.getId('app-a', 'k1')).resolves.toBe('uuid-new');
     });
 
     it('deleteId then getId returns null', async () => {
       const ix = await makeIndex();
       await ix.putId('app-a', 'k1', 'uuid-1');
-      await ix.deleteId('app-a', 'k1');
+      await ix.deleteId('app-a', 'k1', 'uuid-1');
       await expect(ix.getId('app-a', 'k1')).resolves.toBeNull();
     });
 
@@ -83,7 +95,7 @@ export function runBlueprintIndexConformance(
       const ix = await makeIndex();
       await ix.putId('app-a', 'k1', 'uuid-1');
       await ix.putId('app-a', 'k2', 'uuid-2');
-      await ix.deleteId('app-a', 'k1');
+      await ix.deleteId('app-a', 'k1', 'uuid-1');
       await expect(ix.getId('app-a', 'k1')).resolves.toBeNull();
       await expect(ix.getId('app-a', 'k2')).resolves.toBe('uuid-2');
     });
@@ -91,7 +103,7 @@ export function runBlueprintIndexConformance(
     it('after deleteId a fresh putId may bind a new uuid (delete clears first-write-wins)', async () => {
       const ix = await makeIndex();
       await ix.putId('app-a', 'k1', 'uuid-first');
-      await ix.deleteId('app-a', 'k1');
+      await ix.deleteId('app-a', 'k1', 'uuid-first');
       await ix.putId('app-a', 'k1', 'uuid-second');
       await expect(ix.getId('app-a', 'k1')).resolves.toBe('uuid-second');
     });
@@ -125,7 +137,7 @@ export function runBlueprintIndexConformance(
       if (typeof ix.countIds !== 'function') return;
       await ix.putId('app-a', 'template:c1:v1', 'u1');
       await ix.putId('app-a', 'template:c2:v1', 'u2');
-      await ix.deleteId('app-a', 'template:c1:v1');
+      await ix.deleteId('app-a', 'template:c1:v1', 'u1');
       await expect(ix.countIds('app-a', 'template:')).resolves.toBe(1);
     });
 

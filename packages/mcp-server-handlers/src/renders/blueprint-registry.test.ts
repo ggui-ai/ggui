@@ -622,6 +622,42 @@ describe('deleteBlueprint', () => {
       deleteBlueprint(deps, SCOPE, 'template:missing'),
     ).resolves.toBeUndefined();
   });
+
+  it('never unbinds a key since re-bound to a different blueprint: the live design keeps it (ggui#1603)', async () => {
+    const deps = makeDeps();
+    const old = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'old',
+      source: { kind: 'user' },
+    });
+    const exactKey = composeExactKey('template', old.contractKey, old.variantKey);
+    // The key moves to a newer design while the old row still exists (a
+    // re-mint whose stale row is cleaned up afterwards).
+    const newerId = 'bp_newer';
+    await deps.index.deleteId(SCOPE, exactKey, old.id);
+    await deps.index.putId(SCOPE, exactKey, newerId);
+
+    await deleteBlueprint(deps, SCOPE, old.id);
+
+    await expect(deps.index.getId(SCOPE, exactKey)).resolves.toBe(newerId);
+  });
+
+  it('unbinds the key when it still points at the deleted blueprint', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    await deleteBlueprint(deps, SCOPE, bp.id);
+    await expect(
+      deps.index.getId(SCOPE, composeExactKey('template', bp.contractKey, bp.variantKey)),
+    ).resolves.toBeNull();
+  });
 });
 
 describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
@@ -1558,7 +1594,7 @@ describe('registerBlueprint — eviction count-gate (ggui#540)', () => {
     const bare = {
       getId: (s: string, k: string) => deps.index.getId(s, k),
       putId: (s: string, k: string, id: string) => deps.index.putId(s, k, id),
-      deleteId: (s: string, k: string) => deps.index.deleteId(s, k),
+      deleteId: (s: string, k: string, id: string) => deps.index.deleteId(s, k, id),
     };
     const list = vi.spyOn(deps.vectorStore, 'listByScope');
     await registerBlueprint(
@@ -1581,7 +1617,7 @@ describe('registerBlueprint — eviction count-gate (ggui#540)', () => {
     const throwing = {
       getId: (s: string, k: string) => deps.index.getId(s, k),
       putId: (s: string, k: string, id: string) => deps.index.putId(s, k, id),
-      deleteId: (s: string, k: string) => deps.index.deleteId(s, k),
+      deleteId: (s: string, k: string, id: string) => deps.index.deleteId(s, k, id),
       countIds: async (): Promise<number> => {
         throw new Error('count backend down');
       },

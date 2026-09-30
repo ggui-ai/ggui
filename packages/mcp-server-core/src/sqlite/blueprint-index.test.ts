@@ -51,7 +51,7 @@ describe('SqliteBlueprintIndex — persistence', () => {
     const path = join(tmpRoot, 'deletes.sqlite');
     const a = new SqliteBlueprintIndex({ filename: path });
     await a.putId('app-a', 'k1', 'uuid-1');
-    await a.deleteId('app-a', 'k1');
+    await a.deleteId('app-a', 'k1', 'uuid-1');
     a.close();
 
     const b = new SqliteBlueprintIndex({ filename: path });

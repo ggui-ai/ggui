@@ -104,7 +104,7 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
          WHERE scope = ? AND exact_key = ?`,
       ),
       del: this.db.prepare<unknown[]>(
-        `DELETE FROM blueprint_index WHERE scope = ? AND exact_key = ?`,
+        `DELETE FROM blueprint_index WHERE scope = ? AND exact_key = ? AND blueprint_id = ?`,
       ),
       // Literal-prefix count via substr, deliberately NOT LIKE — `%`/`_`
       // in a prefix must never widen the match (contract-pinned). The
@@ -140,10 +140,11 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
     this.stmts.insert.run(scope, exactKey, blueprintId);
   }
 
-  async deleteId(scope: string, exactKey: string): Promise<void> {
-    // `DELETE WHERE` is naturally idempotent — zero-row deletes are not
-    // errors in SQLite, matching the BlueprintIndex contract.
-    this.stmts.del.run(scope, exactKey);
+  async deleteId(scope: string, exactKey: string, expectedId: string): Promise<void> {
+    // Conditional on the bound id: a key since re-bound to another blueprint
+    // matches no row. `DELETE WHERE` is idempotent (zero-row deletes are not
+    // errors in SQLite), matching the BlueprintIndex contract.
+    this.stmts.del.run(scope, exactKey, expectedId);
   }
 
   async countIds(scope: string, exactKeyPrefix: string): Promise<number> {

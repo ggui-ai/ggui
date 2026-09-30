@@ -6,7 +6,14 @@ export interface BlueprintIndex {
   getId(scope: string, exactKey: string): Promise<string | null>;
   /** First-write-wins on (scope, exactKey) — the dedup primitive. MUST NOT overwrite. */
   putId(scope: string, exactKey: string, blueprintId: string): Promise<void>;
-  deleteId(scope: string, exactKey: string): Promise<void>;
+  /**
+   * Remove the binding at `(scope, exactKey)` only while it points at
+   * `expectedId`. A binding since re-bound to a different id is left alone,
+   * and a missing binding is a no-op: an unbind aimed at one blueprint must
+   * never remove another's (ggui#1603). `runBlueprintIndexConformance`
+   * grades it.
+   */
+  deleteId(scope: string, exactKey: string, expectedId: string): Promise<void>;
   /**
    * Optional: number of bindings in `scope` whose exactKey starts with
    * the LITERAL `exactKeyPrefix` (no pattern semantics). Powers the
