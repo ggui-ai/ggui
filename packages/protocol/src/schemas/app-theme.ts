@@ -369,6 +369,117 @@ export const appThemeCarrySchema = z.object(appThemeSchema.shape).passthrough();
 export type AppThemeCarry = z.infer<typeof appThemeCarrySchema>;
 
 /**
+ * ggui#1175 — why a stored theme document is not a theme on this release, in
+ * a vocabulary the protocol owns. zod's own issue codes are not ours: they were
+ * renamed across majors, so carrying them would let a dependency upgrade change
+ * a wire member. Every zod issue maps to one of these through
+ * {@link describeUninterpretableTheme}, and anything it does not recognise
+ * maps to `other`, so an upgrade can move an issue to `other` but never invent
+ * a word on the wire.
+ */
+export const THEME_ISSUE_CODES = ['wrong_type', 'missing', 'unknown_key', 'value_not_allowed', 'too_long', 'other'] as const;
+export type ThemeIssueCode = (typeof THEME_ISSUE_CODES)[number];
+
+/** At most this many issues ride a response. `issueCount` carries the true total. */
+export const THEME_ISSUES_MAX = 20;
+/**
+ * A path segment is at most this many characters. A key name is the one
+ * builder-controlled string that reaches the wire (as the segment of an
+ * `unknown_key` issue), so the bound is on each segment, never on a joined path.
+ */
+export const THEME_ISSUE_SEGMENT_MAX = 100;
+/** A path is at most this many segments. */
+export const THEME_ISSUE_PATH_MAX = 16;
+
+const themeIssueSchema = z
+  .object({
+    path: z
+      .array(z.union([z.string().max(THEME_ISSUE_SEGMENT_MAX), z.number().int().nonnegative()]))
+      .max(THEME_ISSUE_PATH_MAX),
+    code: z.enum(THEME_ISSUE_CODES),
+  })
+  .strict();
+
+/**
+ * ggui#1175 — a stored theme document the carry shape refuses, named. The
+ * issues carry a path (zod's own segment-array form, so a key containing a dot
+ * needs no escaping) and a code, and never a stored value. `issueCount` is the
+ * total, so twenty listed of three hundred reads as twenty of three hundred.
+ */
+export const appThemeUninterpretableSchema = z
+  .object({
+    issueCount: z.number().int().min(1),
+    issues: z.array(themeIssueSchema).min(1).max(THEME_ISSUES_MAX),
+  })
+  .strict()
+  .refine((u) => u.issueCount >= u.issues.length, {
+    message: 'issueCount is the total, so it is never below the number of issues listed',
+  });
+export type AppThemeUninterpretable = z.infer<typeof appThemeUninterpretableSchema>;
+
+/** The value at `path` in `doc`, or undefined where the path leaves the document. */
+function valueAtPath(doc: unknown, path: readonly PropertyKey[]): unknown {
+  let at: unknown = doc;
+  for (const segment of path) {
+    if (typeof at !== 'object' || at === null) return undefined;
+    at = Reflect.get(at, segment);
+  }
+  return at;
+}
+
+function issueSegment(segment: PropertyKey): string | number {
+  if (typeof segment === 'number' && Number.isInteger(segment) && segment >= 0) return segment;
+  const text = String(segment);
+  return text.length > THEME_ISSUE_SEGMENT_MAX ? text.slice(0, THEME_ISSUE_SEGMENT_MAX) : text;
+}
+
+function issuePath(path: readonly PropertyKey[]): (string | number)[] {
+  return path.slice(0, THEME_ISSUE_PATH_MAX).map(issueSegment);
+}
+
+/**
+ * ggui#1175 — name why `stored` fails {@link appThemeCarrySchema}, from that
+ * parse's own issues, in {@link THEME_ISSUE_CODES}. It reads the document only
+ * to tell a missing member from a wrong-typed one, and it returns paths and
+ * codes only, never a value. A failed parse always has at least one issue; if
+ * none maps, the result is one `other` at the root, so the result always
+ * satisfies {@link appThemeUninterpretableSchema}.
+ */
+export function describeUninterpretableTheme(stored: unknown, issues: z.ZodError['issues']): AppThemeUninterpretable {
+  const named: { path: (string | number)[]; code: ThemeIssueCode }[] = [];
+  for (const issue of issues) {
+    switch (issue.code) {
+      case 'invalid_type':
+        named.push({ path: issuePath(issue.path), code: valueAtPath(stored, issue.path) === undefined ? 'missing' : 'wrong_type' });
+        break;
+      case 'unrecognized_keys':
+        for (const key of issue.keys) named.push({ path: issuePath([...issue.path, key]), code: 'unknown_key' });
+        break;
+      case 'invalid_key':
+        // A record key that fails its own schema (a token that is not a `--ggui-*` name) is a key this document
+        // may not carry here; the key is already the last segment of the path.
+        named.push({ path: issuePath(issue.path), code: 'unknown_key' });
+        break;
+      case 'invalid_value':
+      case 'invalid_format':
+      case 'too_small':
+        named.push({ path: issuePath(issue.path), code: 'value_not_allowed' });
+        break;
+      case 'too_big':
+        named.push({
+          path: issuePath(issue.path),
+          code: issue.origin === 'string' || issue.origin === 'array' ? 'too_long' : 'value_not_allowed',
+        });
+        break;
+      default:
+        named.push({ path: issuePath(issue.path), code: 'other' });
+    }
+  }
+  if (named.length === 0) return { issueCount: 1, issues: [{ path: [], code: 'other' }] };
+  return { issueCount: named.length, issues: named.slice(0, THEME_ISSUES_MAX) };
+}
+
+/**
  * What a theme GET promises (ggui#1155) — the DOOR's emit-side contract.
  *
  * `theme` is the stored document verbatim ({@link appThemeCarrySchema}) or
@@ -385,9 +496,18 @@ export type AppThemeCarry = z.infer<typeof appThemeCarrySchema>;
  * an older release parses it with its own tolerant read, per §3.6; this
  * schema states the promise, not the reader's demand.
  *
+ * `uninterpretable` (ggui#1175) is present exactly when the row holds a
+ * `theme` that fails the carry shape: `theme` is then `null`, because there is
+ * nothing valid to carry, and the member is what tells that apart from "no
+ * theme". A carrier that sees it knows the only path is clear-then-set, the
+ * path the ggui#1124 refusal already names. It never rides beside a theme or
+ * beside `interpreted`, and the schema refuses both combinations.
+ *
  * Observable violation: a response whose `theme` carries fewer top-level
- * members than the stored row holds; or `interpreted` present with nothing
- * in it. The conformance kit's `app-theme-carry` forward case grades both.
+ * members than the stored row holds; `interpreted` present with nothing in
+ * it; or `theme: null` without `uninterpretable` for a row that holds a
+ * `theme`. The conformance kit's `app-theme-carry` forward cases grade the
+ * shape.
  */
 export const appThemeGetResponseSchema = z
   .object({
@@ -396,8 +516,18 @@ export const appThemeGetResponseSchema = z
       .object({ stripped: z.array(z.string().min(1)).min(1) })
       .strict()
       .optional(),
+    uninterpretable: appThemeUninterpretableSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((response, ctx) => {
+    if (response.uninterpretable === undefined) return;
+    if (response.theme !== null) {
+      ctx.addIssue({ code: 'custom', path: ['uninterpretable'], message: 'uninterpretable rides only beside theme: null' });
+    }
+    if (response.interpreted !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['uninterpretable'], message: 'uninterpretable and interpreted are never both present' });
+    }
+  });
 
 export type AppThemeGetResponse = z.infer<typeof appThemeGetResponseSchema>;
 

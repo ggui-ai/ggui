@@ -404,6 +404,21 @@
  * the route stays accepted by shape like any uncurated slug. Bedrock Opus
  * 5.5 is not registered (held). No `PROTOCOL_VERSION` move.
  * --------------------------------------------------------------------
+ * Theme carry read NAMES an uninterpretable stored document (2026-09-30,
+ * additive, ggui#1175 — MINOR, same draft stamp): `appThemeGetResponseSchema`
+ * gains an optional `uninterpretable: { issueCount, issues: [{ path, code }] }`,
+ * present exactly when the row holds a `theme` that fails the carry shape
+ * (`theme` is then `null`; never beside `interpreted`, refused by the schema).
+ * New exports: `THEME_ISSUE_CODES` / `ThemeIssueCode` (a closed set the
+ * protocol owns, never zod's codes), `THEME_ISSUES_MAX` (20),
+ * `THEME_ISSUE_SEGMENT_MAX` (100), `THEME_ISSUE_PATH_MAX` (16),
+ * `appThemeUninterpretableSchema` / `AppThemeUninterpretable`, and
+ * `describeUninterpretableTheme` (the one mapping; unknown issues map to
+ * `other`). No stored value is carried. N−1: an additive optional member;
+ * the previous release's three payloads parse unchanged (pinned), and the
+ * one outside reader drops an unknown member. Kit: a second
+ * `app-theme-carry` forward case.
+ * --------------------------------------------------------------------
  * Theme CARRY read (2026-09-17, additive, ggui#1155 — MINOR, same draft
  * stamp): `appThemeCarrySchema` / `AppThemeCarry` and
  * `appThemeGetResponseSchema` / `AppThemeGetResponse` — the REPRODUCE side

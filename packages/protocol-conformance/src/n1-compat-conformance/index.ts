@@ -34,6 +34,7 @@ import release13RenderResult from './cases/release-13-render-result.json' with {
 import release14OpsListBlueprints from './cases/release-14-ops-list-blueprints.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
+import forwardAppThemeCarryUninterpretable from './cases/forward-app-theme-carry-uninterpretable.json' with { type: 'json' };
 import forwardRenderMetaUnknownMember from './cases/forward-render-meta-unknown-member.json' with { type: 'json' };
 import forwardOpsListBlueprintsStamped from './cases/forward-ops-list-blueprints-stamped.json' with { type: 'json' };
 import forwardOpsListBlueprintsCloned from './cases/forward-ops-list-blueprints-cloned.json' with { type: 'json' };
@@ -133,6 +134,7 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release14OpsListBlueprints,
   forwardAppThemeUnknownMember,
   forwardAppThemeCarryUnknownMember,
+  forwardAppThemeCarryUninterpretable,
   forwardRenderMetaUnknownMember,
   forwardOpsListBlueprintsStamped,
   forwardOpsListBlueprintsCloned,
@@ -167,6 +169,13 @@ function gradeAppThemeCarry(payload: unknown): { pass: boolean; detail: string }
   // beside it, exactly the members an INTERPRET reader on this release would drop.
   const r = appThemeGetResponseSchema.safeParse(payload);
   if (!r.success) return { pass: false, detail: `appThemeGetResponseSchema refused a later release's carry response: ${r.error.issues.map((i) => i.message).join('; ')}` };
+  // ggui#1175 — a stored document that is not a theme comes back `theme: null` WITH `uninterpretable`;
+  // the case grades that today's schema reads it as that, never as "no theme".
+  if (r.data.theme === null) {
+    const u = r.data.uninterpretable;
+    if (u === undefined) return { pass: false, detail: 'a null-theme case must carry `uninterpretable`: a bare null is "no theme", not a forward case' };
+    return { pass: true, detail: `appThemeGetResponseSchema: theme null, uninterpretable (${u.issueCount} issue(s): ${u.issues.map((i) => i.code).join(', ')})` };
+  }
   const sentTheme = isRecord(payload) ? payload['theme'] : undefined;
   if (!isRecord(sentTheme)) return { pass: false, detail: 'the case must carry a non-null theme' };
   if (canonicalJson(r.data.theme) !== canonicalJson(sentTheme)) return { pass: false, detail: 'the carry read did not return the stored document VERBATIM' };

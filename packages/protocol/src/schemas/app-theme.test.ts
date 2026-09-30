@@ -12,6 +12,12 @@ import {
   appThemeWouldDropRefusalText,
   appThemeCarrySchema,
   appThemeGetResponseSchema,
+  appThemeUninterpretableSchema,
+  describeUninterpretableTheme,
+  THEME_ISSUE_CODES,
+  THEME_ISSUES_MAX,
+  THEME_ISSUE_SEGMENT_MAX,
+  THEME_ISSUE_PATH_MAX,
   APP_THEME_CLEARABLE_MEMBERS,
   appThemeWriteSchema,
   splitAppThemeWrite,
@@ -411,6 +417,108 @@ describe('appThemeGetResponseSchema — what the theme GET promises (ggui#1155)'
   it('REFUSES an undeclared top-level member on the response — the door promises exactly this shape', () => {
     expect(appThemeGetResponseSchema.safeParse({ theme, extra: true }).success).toBe(false);
     expect(appThemeGetResponseSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+// ggui#1175 — a stored document that fails the carry shape is NAMED on the wire, not
+// returned as a bare `theme: null` that reads exactly like "no theme".
+describe('appThemeGetResponseSchema — `uninterpretable` (ggui#1175)', () => {
+  const theme = { overlayHash: 'b'.repeat(64), overlays: { light: {}, dark: {} } };
+  const one = { issueCount: 1, issues: [{ path: ['overlays', 'light', 'not-a-ggui-var'], code: 'unknown_key' }] };
+
+  it('accepts `theme: null` with `uninterpretable` naming why the stored document is not a theme', () => {
+    const r = appThemeGetResponseSchema.safeParse({ theme: null, uninterpretable: one });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.uninterpretable).toEqual(one);
+  });
+
+  it("still accepts the previous release's three payloads unchanged (N−1)", () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme: null }).success).toBe(true);
+    expect(appThemeGetResponseSchema.safeParse({ theme }).success).toBe(true);
+    expect(appThemeGetResponseSchema.safeParse({ theme: { ...theme, futureMember: 1 }, interpreted: { stripped: ['futureMember'] } }).success).toBe(true);
+  });
+
+  it('REFUSES `uninterpretable` beside a theme, and beside `interpreted`: one response, one reading', () => {
+    expect(appThemeGetResponseSchema.safeParse({ theme, uninterpretable: one }).success).toBe(false);
+    expect(appThemeGetResponseSchema.safeParse({ theme: null, uninterpretable: one, interpreted: { stripped: ['x'] } }).success).toBe(false);
+  });
+
+  it('REFUSES an empty, overlong or undercounted issue list: presence means at least one, and the count is the total', () => {
+    const issue = one.issues[0];
+    expect(appThemeUninterpretableSchema.safeParse({ issueCount: 0, issues: [] }).success).toBe(false);
+    expect(appThemeUninterpretableSchema.safeParse({ issueCount: 21, issues: Array(THEME_ISSUES_MAX + 1).fill(issue) }).success).toBe(false);
+    expect(appThemeUninterpretableSchema.safeParse({ issueCount: 300, issues: Array(THEME_ISSUES_MAX).fill(issue) }).success).toBe(true);
+    expect(appThemeUninterpretableSchema.safeParse({ issueCount: 1, issues: [issue, issue] }).success).toBe(false);
+  });
+
+  it('REFUSES a code outside the closed set, an overlong segment, a deep path and an undeclared issue member', () => {
+    const ok = (path: (string | number)[], code: string, extra: object = {}) =>
+      appThemeUninterpretableSchema.safeParse({ issueCount: 1, issues: [{ path, code, ...extra }] }).success;
+    expect(THEME_ISSUE_CODES).toEqual(['wrong_type', 'missing', 'unknown_key', 'value_not_allowed', 'too_long', 'other']);
+    expect(ok(['mode'], 'invalid_value')).toBe(false);
+    expect(ok(['x'.repeat(THEME_ISSUE_SEGMENT_MAX)], 'unknown_key')).toBe(true);
+    expect(ok(['x'.repeat(THEME_ISSUE_SEGMENT_MAX + 1)], 'unknown_key')).toBe(false);
+    expect(ok(Array(THEME_ISSUE_PATH_MAX).fill('a'), 'other')).toBe(true);
+    expect(ok(Array(THEME_ISSUE_PATH_MAX + 1).fill('a'), 'other')).toBe(false);
+    expect(ok(['fonts', -1], 'other')).toBe(false);
+    expect(ok(['mode'], 'value_not_allowed', { message: 'x' })).toBe(false);
+  });
+});
+
+describe('describeUninterpretableTheme — our vocabulary, never zod\'s, and never a stored value (ggui#1175)', () => {
+  const SENTINEL = 'SENTINEL-7f3a';
+  const HASH64 = 'a'.repeat(64);
+  const describeOf = (doc: unknown) => {
+    const r = appThemeCarrySchema.safeParse(doc);
+    if (r.success) throw new Error('the fixture must fail the carry shape');
+    return describeUninterpretableTheme(doc, r.error.issues);
+  };
+
+  it('maps each failure class to one closed code, at the path it failed', () => {
+    expect(describeOf({ overlayHash: HASH64, overlays: { light: { 'not-a-ggui-var': '#000' }, dark: {} } }).issues).toEqual([
+      { path: ['overlays', 'light', 'not-a-ggui-var'], code: 'unknown_key' },
+    ]);
+    expect(describeOf({ overlayHash: 42, overlays: { light: {}, dark: {} } }).issues).toEqual([{ path: ['overlayHash'], code: 'wrong_type' }]);
+    expect(describeOf({ overlays: { light: {}, dark: {} } }).issues).toEqual([{ path: ['overlayHash'], code: 'missing' }]);
+    expect(describeOf({ overlayHash: HASH64, overlays: { light: {}, dark: {} }, mode: 'sepia' }).issues).toEqual([{ path: ['mode'], code: 'value_not_allowed' }]);
+    expect(describeOf({ overlayHash: HASH64, overlays: { light: { '--ggui-color-primary-600': 'not a colour; }' }, dark: {} } }).issues).toEqual([
+      { path: ['overlays', 'light', '--ggui-color-primary-600'], code: 'value_not_allowed' },
+    ]);
+    expect(describeOf({ overlayHash: HASH64, overlays: { light: {}, dark: {} }, name: 'n'.repeat(500) }).issues).toEqual([{ path: ['name'], code: 'too_long' }]);
+  });
+
+  it('never carries a stored VALUE: a sentinel under a wrong-typed, a not-allowed and a malformed field appears nowhere in the bytes', () => {
+    const doc = {
+      overlayHash: { nested: SENTINEL },
+      overlays: { light: { '--ggui-color-primary-600': `${SENTINEL}; } body {` }, dark: {} },
+      mode: SENTINEL,
+      name: SENTINEL.repeat(40),
+    };
+    const out = describeOf(doc);
+    expect(out.issues.length).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(out)).not.toContain(SENTINEL);
+    expect(appThemeUninterpretableSchema.safeParse(out).success).toBe(true);
+  });
+
+  it('carries a stored KEY only as a path segment, cut at the segment bound', () => {
+    const key = `--${SENTINEL}-${'k'.repeat(200)}`;
+    const out = describeOf({ overlayHash: HASH64, overlays: { light: { [key]: '#000' }, dark: {} } });
+    expect(out.issues).toEqual([{ path: ['overlays', 'light', key.slice(0, THEME_ISSUE_SEGMENT_MAX)], code: 'unknown_key' }]);
+    expect(appThemeUninterpretableSchema.safeParse(out).success).toBe(true);
+  });
+
+  it('counts every issue and lists at most the bound: 20 of 30 reads as 20 of 30', () => {
+    const light = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`bad-${i}`, '#000']));
+    const out = describeOf({ overlayHash: HASH64, overlays: { light, dark: {} } });
+    expect(out.issueCount).toBe(30);
+    expect(out.issues).toHaveLength(THEME_ISSUES_MAX);
+    expect(appThemeUninterpretableSchema.safeParse(out).success).toBe(true);
+  });
+
+  it('a code zod may add later reads `other`, never a new word on the wire', () => {
+    const out = describeUninterpretableTheme({}, [{ code: 'custom', path: ['fonts', 0, 'src'], message: SENTINEL, input: SENTINEL }]);
+    expect(out).toEqual({ issueCount: 1, issues: [{ path: ['fonts', 0, 'src'], code: 'other' }] });
   });
 });
 

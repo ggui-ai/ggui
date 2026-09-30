@@ -161,6 +161,7 @@ const EXPECTED_PASSING = [
   // vendor-neutral server passes them by construction. Named because the
   // pass set is exact by design. The FORWARD case (ggui#1093 belt) grades
   // the read door's tolerance of a later release's top-level member.
+  'n1-compat/forward-app-theme-carry-uninterpretable',
   'n1-compat/forward-app-theme-carry-unknown-member',
   'n1-compat/forward-app-theme-unknown-member',
   'n1-compat/forward-ops-list-blueprints-cloned',

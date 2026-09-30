@@ -1,0 +1,21 @@
+{
+  "name": "forward-app-theme-carry-uninterpretable",
+  "description": "FORWARD tolerance on the theme CARRY read (ggui#1175, VERSION-POLICY §3.6): a theme GET response for a stored document that fails the carry shape, as a door that names it returns it — `theme: null` beside `uninterpretable`, whose issues carry a path and a protocol-owned code and never a stored value. Today's response schema must accept it, and must read it as a document that is not a theme, never as \"no theme\".",
+  "direction": "forward",
+  "release": {
+    "label": "a later ggui release (synthetic): the theme GET naming an uninterpretable stored document",
+    "sha": "synthetic"
+  },
+  "wire": "app-theme-carry",
+  "payload": {
+    "theme": null,
+    "uninterpretable": {
+      "issueCount": 2,
+      "issues": [
+        { "path": ["overlays", "light", "not-a-ggui-var"], "code": "unknown_key" },
+        { "path": ["mode"], "code": "value_not_allowed" }
+      ]
+    }
+  },
+  "expect": "accepted"
+}
