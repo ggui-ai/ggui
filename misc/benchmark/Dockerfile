@@ -32,7 +32,10 @@
 #   BENCH_DATE                — override target date (YYYY-MM-DD, default: today UTC)
 
 # ─── Prep stage: strip the giants in transient layers ─────────────────
-FROM node:24-bookworm-slim AS prep
+# The base is pinned by digest (its multi-arch index), not by tag: the Node.js patch release and the base OS
+# packages are then part of the commit, and a bump is a reviewed change that moves the source hash instead of
+# drift at build time. Both stages use the same digest.
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS prep
 WORKDIR /prep
 
 COPY deploy/ ./
@@ -90,7 +93,7 @@ RUN find node_modules/.pnpm \
 # Liberation face a visitor's sans/serif/mono would be, and the build ASSERTS
 # the resolution: an image whose `sans-serif` is not Liberation Sans does not
 # build. The design token itself is never touched — it is the visitor's stack.
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
 WORKDIR /app
 ENV NODE_ENV=production
