@@ -91,6 +91,65 @@ export default function Component() {
 }
 `;
 
+const RELABELS_ON_PRESS = `
+import { useState } from 'react';
+import { useAction, useActionPending } from '@ggui-ai/wire';
+
+export default function Component() {
+  const add = useAction('addToCart');
+  const adding = useActionPending('addToCart');
+  const [added, setAdded] = useState(false);
+  return (
+    <button disabled={adding} onClick={() => { setAdded(true); add({}); }}>
+      {added ? 'Added to Cart' : 'Add to Cart'}
+    </button>
+  );
+}
+`;
+
+const BECOMES_ANOTHER_ACTION = `
+import { useState } from 'react';
+import { useAction } from '@ggui-ai/wire';
+
+export default function Component() {
+  const send = useAction('send');
+  const cancel = useAction('cancel');
+  const [sent, setSent] = useState(false);
+  if (sent) return <button onClick={() => cancel({})}>Cancel</button>;
+  return <button onClick={() => { setSent(true); send({}); }}>Send</button>;
+}
+`;
+
+const FORM_WITH_TYPE_BUTTON = `
+import { useAction, useActionPending } from '@ggui-ai/wire';
+
+export default function Component() {
+  const send = useAction('send');
+  const sending = useActionPending('send');
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); send({}); }}>
+      <input aria-label="note" defaultValue="" />
+      <button type="button">Clear</button>
+      <button type="button" disabled={sending}>Send</button>
+    </form>
+  );
+}
+`;
+
+const INPUT_SUBMIT_VALUE = `
+import { useAction, useActionPending } from '@ggui-ai/wire';
+
+export default function Component() {
+  const send = useAction('send');
+  const sending = useActionPending('send');
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); send({}); }}>
+      <input type="submit" value={sending ? 'Sending…' : 'Send'} />
+    </form>
+  );
+}
+`;
+
 const NO_ACTIONS = `
 export default function Component() {
   return <p>Nothing to press</p>;
@@ -134,9 +193,31 @@ describe("runRenderCheck — the pending affordance (ggui#1398)", () => {
     expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [] });
   }, 30000);
 
-  it("a control replaced after its click is re-found only by its own identity, never credited to another control", async () => {
+  it("a node the card reuses for an unrelated control is still read as the pressed one, and not credited: missing", async () => {
     const result = await runRenderCheck({ sourceCode: REPLACED_BY_OTHER_CONTROL, mockupProps: {}, contract: withSend });
-    expect(result.stats.pendingAffordance).toEqual({ dispatched: 0, visible: 0, missing: [], gone: ["send"] });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 0, missing: ["send"], gone: [] });
+  }, 30000);
+
+  it("a button that relabels itself on press ('Add to Cart' → 'Added to Cart') stays its action's control", async () => {
+    const contract: DataContract = { actionSpec: { addToCart: { label: "Add to Cart" } } };
+    const result = await runRenderCheck({ sourceCode: RELABELS_ON_PRESS, mockupProps: {}, contract });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [] });
+  }, 30000);
+
+  it("a pressed node that now names ANOTHER of the contract's actions is not this action's control: gone", async () => {
+    const contract: DataContract = { actionSpec: { send: { label: "Send" }, cancel: { label: "Cancel" } } };
+    const result = await runRenderCheck({ sourceCode: BECOMES_ANOTHER_ACTION, mockupProps: {}, contract });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 0, missing: ["cancel"], gone: ["send"] });
+  }, 30000);
+
+  it("a form that submits through a type=button Button is read through that button", async () => {
+    const result = await runRenderCheck({ sourceCode: FORM_WITH_TYPE_BUTTON, mockupProps: {}, contract: withSend });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [] });
+  }, 30000);
+
+  it("an <input type=submit> that relabels through its value reads visible", async () => {
+    const result = await runRenderCheck({ sourceCode: INPUT_SUBMIT_VALUE, mockupProps: {}, contract: withSend });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [] });
   }, 30000);
 
   it("with too little of the check's time left, the phase is skipped and the field is absent; the other checks stand", async () => {

@@ -59,12 +59,15 @@ export interface ControlLook {
 
 /**
  * The DOM surface {@link lookOf} reads: the probe's `MinimalElement` plus
- * the optional `isConnected` a live DOM node carries.
+ * the optional `isConnected` a live DOM node carries, and an input's live
+ * `value` (an `<input type="submit">` shows its label through it).
  */
 export interface LookableElement {
+  readonly tagName?: string;
   readonly textContent: string | null;
   getAttribute(name: string): string | null;
   readonly isConnected?: boolean;
+  readonly value?: unknown;
 }
 
 export function lookOf(el: LookableElement): ControlLook {
@@ -73,8 +76,27 @@ export function lookOf(el: LookableElement): ControlLook {
     // React renders `disabled={true}` as `disabled=""`, so presence is the test.
     disabled: el.getAttribute("disabled") !== null || el.getAttribute("aria-disabled") === "true",
     ariaBusy: el.getAttribute("aria-busy") === "true",
-    text: el.textContent ?? "",
+    text:
+      el.tagName?.toLowerCase() === "input"
+        ? String(typeof el.value === "string" ? el.value : (el.getAttribute("value") ?? ""))
+        : (el.textContent ?? ""),
   };
+}
+
+/**
+ * Whether `work` settles within `ms`. It never cancels `work`; it only stops
+ * waiting for it, so a phase can give up on a card that stalls.
+ */
+export async function settlesWithin(ms: number, work: Promise<unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), Math.max(0, ms));
+  });
+  try {
+    return await Promise.race([work.then(() => true), expired]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /**

@@ -3,7 +3,7 @@
  * visibly change" rule, as pure pieces.
  */
 import { describe, expect, it } from "vitest";
-import { createProbePendingSource, lookChanged, lookOf, type ControlLook } from "./probe-pending";
+import { createProbePendingSource, lookChanged, lookOf, settlesWithin, type ControlLook } from "./probe-pending";
 
 describe("createProbePendingSource (ggui#1398)", () => {
   it("an action is pending once marked, until cleared, and nothing else is", () => {
@@ -87,5 +87,23 @@ describe("lookOf (ggui#1398)", () => {
     expect(lookOf(el({ "aria-disabled": "true" }, "Send")).disabled).toBe(true);
     expect(lookOf(el({}, "Send")).connected).toBe(true);
     expect(lookOf(el({}, "Send", false)).connected).toBe(false);
+  });
+});
+
+describe("lookOf on an input button, and settlesWithin (ggui#1398)", () => {
+  it("an input reads its live value as its text, falling back to the value attribute", () => {
+    const input = (value: unknown, attr: string | null) => ({
+      tagName: "INPUT",
+      textContent: "",
+      value,
+      getAttribute: (name: string) => (name === "value" ? attr : null),
+    });
+    expect(lookOf(input("Sending…", "Send")).text).toBe("Sending…");
+    expect(lookOf(input(undefined, "Send")).text).toBe("Send");
+  });
+
+  it("settles within the time when the work does, and reports false when it does not", async () => {
+    expect(await settlesWithin(200, Promise.resolve())).toBe(true);
+    expect(await settlesWithin(50, new Promise(() => undefined))).toBe(false);
   });
 });
