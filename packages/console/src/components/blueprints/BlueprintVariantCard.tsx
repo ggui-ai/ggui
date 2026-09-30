@@ -154,7 +154,7 @@ export function BlueprintVariantCard({
           title={
             isDefault
               ? 'Already the operator default for this contract'
-              : 'Pin as the operator default for this contract'
+              : 'Mark as the operator default for this contract: it lists first and shows ★; it does not change what serves'
           }
         >
           {isDefault ? '★ default' : 'set as default'}

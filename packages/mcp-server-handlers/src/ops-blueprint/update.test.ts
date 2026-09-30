@@ -282,3 +282,11 @@ describe('createGguiOpsUpdateBlueprintHandler — appId input + authorizer', () 
     ).rejects.toThrow(/not curatable/);
   });
 });
+
+describe('ggui_ops_update_blueprint description (ggui#1611)', () => {
+  it('says the operator-default mark does not decide what serves, and never "pin/unpin"', () => {
+    const handler = createGguiOpsUpdateBlueprintHandler({ blueprintStore: new InMemoryBlueprintStore() });
+    expect(handler.description).toContain('it does not decide which blueprint serves a render');
+    expect(handler.description).not.toContain('pin/unpin');
+  });
+});

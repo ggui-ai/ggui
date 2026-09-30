@@ -373,7 +373,7 @@ function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
       }
     }
 
-    // 4. Pin as operator default when requested.
+    // 4. Mark as operator default when requested.
     if (parsed.setAsOperatorDefault === true) {
       await deps.blueprintStore.setOperatorDefault(blueprintId);
     }

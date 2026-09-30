@@ -87,6 +87,23 @@ describe('BlueprintVariantCard — badges', () => {
     expect(setDefaultBtn.disabled).toBe(true);
   });
 
+  it("the set-default button says the mark does not change what serves, never that it pins (ggui#1611)", () => {
+    const { container } = render(
+      <ul>
+        <BlueprintVariantCard
+          blueprint={makeBlueprint({ blueprintId: 'bp-copy' })}
+          index={0}
+          onPreview={() => {}}
+          onSetDefault={() => {}}
+          onDelete={() => {}}
+        />
+      </ul>,
+    );
+    const title = container.querySelector('[data-ggui-variant-action="set-default"]')?.getAttribute('title') ?? '';
+    expect(title).toContain('it does not change what serves');
+    expect(title).not.toMatch(/\bpin\b/i);
+  });
+
   it('fires preview / set-default / delete callbacks with the blueprintId', () => {
     const onPreview = vi.fn();
     const onSetDefault = vi.fn();

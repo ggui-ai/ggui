@@ -43,7 +43,7 @@ describe('BlueprintGenerateForm', () => {
       target: { value: 'ui-gen-advanced' },
     });
     fireEvent.click(
-      screen.getByLabelText(/pin as operator default for this contract/i),
+      screen.getByLabelText(/mark as operator default for this contract/i),
     );
     fireEvent.click(
       screen.getByRole('button', { name: /generate →/i }),

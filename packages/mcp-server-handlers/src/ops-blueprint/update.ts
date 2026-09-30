@@ -3,8 +3,9 @@
  *
  * Patches the two mutable surfaces of a blueprint:
  *
- *   1. `isOperatorDefault` — pin as the operator default for the
- *      blueprint's `(appId, contractHash)` group. The store
+ *   1. `isOperatorDefault` — mark as the operator default for the
+ *      blueprint's `(appId, contractHash)` group (orders listings; no
+ *      render path reads it to choose what serves). The store
  *      automatically clears any prior default in the same group
  *      (see `BlueprintStore.setOperatorDefault`).
  *   2. `variance` — partial merge into the persisted variance. Keys
@@ -139,7 +140,7 @@ export function createGguiOpsUpdateBlueprintHandler(
     title: 'Update blueprint',
     audience: ['ops'],
     description:
-      'Patch the mutable surface of an existing blueprint: pin/unpin operator-default + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, source, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).',
+      'Patch the mutable surface of an existing blueprint: set the operator-default mark (it orders blueprint listings and is shown to operators; it does not decide which blueprint serves a render) + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, source, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).',
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

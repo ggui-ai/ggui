@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS, opsGenerateBlueprintInputSchema } from './ops-blueprint';
+import {
+  OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS,
+  opsGenerateBlueprintInputSchema,
+  opsRegisterBlueprintInputSchema,
+  opsUpdateBlueprintInputSchema,
+} from './ops-blueprint';
 import { variantKey } from '../registry/variant-key';
 
 // ggui#1046 — `intent`: the generation prompt as a NON-identity field. `seedPrompt`
@@ -43,5 +48,19 @@ describe('opsGenerateBlueprintInputSchema.intent (ggui#1046)', () => {
   it('is representable as JSON Schema (maxLength surfaced)', () => {
     const js = z.toJSONSchema(opsGenerateBlueprintInputSchema) as { properties?: Record<string, { maxLength?: number }> };
     expect(js.properties?.['intent']?.maxLength).toBe(2000);
+  });
+});
+
+describe('the operator-default mark says what it does (ggui#1611)', () => {
+  // The flag orders listings and is shown to operators; no render path reads it
+  // to choose what serves. These describes ship in tools/list to every model.
+  const described = [
+    ['generate.setAsOperatorDefault', opsGenerateBlueprintInputSchema.shape.setAsOperatorDefault.description],
+    ['register.setAsOperatorDefault', opsRegisterBlueprintInputSchema.shape.setAsOperatorDefault.description],
+    ['update.isOperatorDefault', opsUpdateBlueprintInputSchema.shape.isOperatorDefault.description],
+  ] as const;
+  it.each(described)('%s says the mark does not decide what serves, and never that it pins', (_name, text) => {
+    expect(text).toContain('it does not decide which blueprint serves a render');
+    expect(text).not.toMatch(/\bpins?\b/i);
   });
 });

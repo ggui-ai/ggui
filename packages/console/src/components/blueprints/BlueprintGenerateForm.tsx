@@ -250,7 +250,7 @@ export function BlueprintGenerateForm({
             onChange={(event) => setSetAsOperatorDefault(event.target.checked)}
           />
           <span className="ggui-label" style={{ margin: 0 }}>
-            pin as operator default for this contract
+            mark as operator default for this contract
           </span>
         </label>
       </Section>

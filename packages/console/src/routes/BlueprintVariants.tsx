@@ -143,10 +143,10 @@ export function BlueprintVariants(): ReactElement {
         intro={
           <>
             Every blueprint variant the server has for the current app,
-            grouped by the contract they implement. The matcher picks
-            among siblings in a group at handshake time — pin one as the
-            operator default to fix the floor, or seed personas for the
-            LLM selector (MVB-6) to choose from.
+            grouped by the contract they implement. Marking one as the
+            operator default lists it first and shows ★ on it; which
+            variant serves a render is decided at handshake time from the
+            blueprint index, not by the mark.
           </>
         }
       />

@@ -856,3 +856,11 @@ describe("createGguiOpsGenerateBlueprintHandler — the code key is the CodeStor
     expect(await codeStore.get(result.codeHash ?? "")).toBe(CODE);
   });
 });
+
+describe('ggui_ops_generate_blueprint description (ggui#1611)', () => {
+  it('says the operator-default mark does not decide what serves, and never that it pins', () => {
+    const handler = createGguiOpsGenerateBlueprintHandler(defaultDeps());
+    expect(handler.description).toContain('it does not decide which blueprint serves a render');
+    expect(handler.description).not.toContain('Optionally pins');
+  });
+});

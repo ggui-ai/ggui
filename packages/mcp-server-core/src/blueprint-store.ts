@@ -167,8 +167,10 @@ export interface BlueprintStore {
   put(blueprint: Blueprint): Promise<void>;
 
   /**
-   * Pin one blueprint as the operator default for its
-   * `(appId, contractHash)` group. The store MUST clear the flag
+   * Mark one blueprint as the operator default for its
+   * `(appId, contractHash)` group. The mark orders listings and is shown
+   * to operators; no render path reads it to choose what serves. The
+   * store MUST clear the flag
    * on any prior default for the same group so the
    * `isOperatorDefault: true` invariant ("at most one row per
    * group") holds. Throws {@link BlueprintNotFoundError} when the

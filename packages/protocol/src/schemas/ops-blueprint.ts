@@ -4,8 +4,9 @@
  *
  *   - `ggui_ops_generate_blueprint` — author a new blueprint by
  *     dispatching through the registry's selected generator and
- *     persisting the result. Optionally pins as the operator default
- *     for its `(appId, contractHash)` group.
+ *     persisting the result. Optionally marks it as the operator default
+ *     for its `(appId, contractHash)` group (a mark that orders listings;
+ *     it does not decide which blueprint serves).
  *   - `ggui_ops_list_blueprints` — enumerate blueprint metadata
  *     (no code body) under the caller's app scope + optional filters. Sorted by
  *     `createdAt desc`.
@@ -113,7 +114,7 @@ export const opsGenerateBlueprintInputSchema = z
       .boolean()
       .optional()
       .describe(
-        'When true, pins the new blueprint as the operator default for its `(appId, contractHash)` group, clearing any prior default in the same group.',
+        'When true, marks the new blueprint as the operator default for its `(appId, contractHash)` group and clears the mark from any other in the group. The mark orders blueprint listings (the default first) and is shown to operators; it does not decide which blueprint serves a render.',
       ),
   })
   .strict();
@@ -243,7 +244,7 @@ export const opsRegisterBlueprintInputSchema = z
       .boolean()
       .optional()
       .describe(
-        'When true, pins the new blueprint as the operator default for its `(appId, contractHash)` group, clearing any prior default in the same group.',
+        'When true, marks the new blueprint as the operator default for its `(appId, contractHash)` group and clears the mark from any other in the group. The mark orders blueprint listings (the default first) and is shown to operators; it does not decide which blueprint serves a render.',
       ),
   })
   .strict();
@@ -357,7 +358,7 @@ export const opsUpdateBlueprintInputSchema = z
       .literal(true)
       .optional()
       .describe(
-        'When `true`, pins this blueprint as the operator default for its `(appId, contractHash)` group. Clears any prior default. Cannot set to `false` — to unpin, set another blueprint in the same group as default, or delete this one.',
+        'When `true`, marks this blueprint as the operator default for its `(appId, contractHash)` group and clears the mark from any other in the group. The mark orders blueprint listings (the default first) and is shown to operators; it does not decide which blueprint serves a render. Cannot be set to `false`: to move the mark, set another blueprint in the group as default, or delete this one.',
       ),
     variance: blueprintVarianceSchema
       .optional()
