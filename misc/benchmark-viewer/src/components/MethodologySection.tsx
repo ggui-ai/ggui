@@ -65,6 +65,85 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-30',
+    text:
+      'Disclosure (internal issues #743 and #1310): in short, a run\'s runner commit does not pin ' +
+      'the third-party parts of the image the run used (its npm packages, its Node.js base image ' +
+      'and, from the 2026-09-10 run on, its browser), so two images built from one commit can ' +
+      'differ in them. One effect is confirmed: the model registry\'s price cut for GPT-5.6 Sol ' +
+      'reached the 2026-09-02 run\'s image and accounts for about half of openai-premium\'s cost fall ' +
+      'at that run. An audit of the rest is open (internal issue #1636), and what it confirms will ' +
+      'be published here as dated corrections. The details: every run this page has published ' +
+      '(2026-06-15 onward) used a container image that took its third-party parts when it was ' +
+      'built. Its npm packages resolve on the build day to the newest versions allowed by their ' +
+      'declared ranges and by the override list in the development repository\'s root ' +
+      'pnpm-workspace.yaml, which pins a few exactly. The step that installs the image\'s packages ' +
+      '(a legacy `pnpm deploy`) does not read the lockfile, the repository\'s record of exact ' +
+      'versions, and does not apply the public mirror\'s own, much longer pin list. The Node.js base ' +
+      'image comes from its current release the same way, and so, from the 2026-09-10 run on, do ' +
+      'the Chromium browser and fonts in which the contract-behaviour check renders and clicks the ' +
+      'components of the five prompts whose contracts declare actions. (The judge panel scores ' +
+      'source code, not a rendering; no published run has used the visual judge some earlier ' +
+      'entries mention.) A run\'s runner commit (`meta.version` in its report) therefore identifies ' +
+      'the first-party code its image was built from, not those versions: two images built from one ' +
+      'commit can differ in them. The source hash (`multiSdk.sourceHash` on each run\'s row in the ' +
+      'published index, data/index.json, from the 2026-09-03 run on; the dashboard does not display ' +
+      'it, though some changelog entries quote values) has so far covered the version ranges and ' +
+      'tags written in the files it lists. It has not covered the root override list, the ranges in ' +
+      'the package.json of the shipped packages it does not list, the versions any range or tag ' +
+      'resolves to (listed or not), or the source of most first-party packages the image ships: ' +
+      'besides the runner\'s own, it has hashed only ui-gen\'s, ui-visual-tester\'s (from the ' +
+      '2026-09-10 run) and design\'s (from the 2026-09-14 run) (internal issue #1310), and the ' +
+      'protocol package, whose model registry prices the cost column, only by its package.json. ' +
+      'Since 2026-09-03 a change in those alone has not started a run, and a move between two runs\' ' +
+      'readings can include changes picked up when the later run\'s image was built. The five runs ' +
+      'of 2026-08-24 to 2026-09-01 that the 2026-09-03 entry calls "honest re-measurements of an ' +
+      'unchanged harness" ran an unchanged harness, but not necessarily unchanged dependencies (its ' +
+      '"declared dependencies" are ranges, not resolved versions) or unchanged first-party packages ' +
+      'outside its hash, some of which changed; nor were they all "caused only by unrelated ' +
+      'dependency-lockfile changes": version-number and build-script edits in files that entry\'s ' +
+      'hash covers moved that hash at the 2026-08-24, 08-26 and 09-01 runs, so under it those three ' +
+      'would still have started a run. The 2026-09-13 entry\'s "a different instrument on the page, ' +
+      'never a silent one" promised more than the page gives: no published run used a judge that ' +
+      'paints, the source hash it relies on is in data/index.json, not on the page, and it moves ' +
+      'only for changes inside the files it lists, not for the parts above. This entry changes no ' +
+      'corpus, matrix, judge model or prompt. One move of this kind is known: the image the ' +
+      '2026-09-02 run used carried the model registry\'s price cut for GPT-5.6 Sol (input $5 to $4, ' +
+      'output $30 to $20 per 1M tokens), so from that run on openai-premium\'s tokens are priced ' +
+      'about a fifth lower overall with no change in its model. That accounts for about half of the ' +
+      'arm\'s fall in cost per cell at that run ($0.78 on 2026-09-01, $0.50 on 2026-09-02), and ' +
+      'lower token use for the rest. The 2026-09-02 matrix entry\'s "prior rows stay comparable" ' +
+      'therefore does not hold for that arm\'s cost, and it is not established for the other arms: ' +
+      'the same image changed the generation harness, and five other arms\' cost per cell rose 35 to ' +
+      '56 percent at that run with no price change. Whether any other reading moved because of a ' +
+      'change of this kind is not yet established; an audit of this page\'s history against its data ' +
+      'is open in the development repository (internal issue #1636), and what it confirms will be ' +
+      'published here as a dated correction. History is not rewritten.',
+  },
+  {
+    date: '2026-09-30',
+    text:
+      'Correction to this page\'s receipts and its cadence claim, not a score change: a run\'s runner ' +
+      'commit and the git commit ids and issue numbers in this changelog belong to ggui\'s ' +
+      'development repository, which is not public. Its commit ids are not the public mirror\'s ' +
+      '(github.com/ggui-ai/ggui carries the open code under other ids and without the `oss/` path ' +
+      'prefix), and its issue numbers are not the mirror\'s issues. The 2026-09-25 corpus entry\'s ' +
+      'commit 34039b416 is that change\'s id before it landed and is on no branch of either ' +
+      'repository: it landed as e4fbeaeb3, which runner images carry from the 2026-09-25 run on. ' +
+      'The 2026-08-21 entry\'s "every published run corresponds to an actual update", which this ' +
+      'page\'s header repeated, promised more than the gate checks: the daily probe compares one key ' +
+      '(the runner commit until 2026-09-03, the source hash since, which an edit that changes ' +
+      'nothing measured also moves), and a run an operator starts by hand skips the gate. Nothing ' +
+      'in its index row marks it; its report\'s run id carries its start time, and the probe\'s own ' +
+      'runs start within two minutes after 03:00 UTC. Since 2026-09-02 the probe also skips while a ' +
+      'hold is open on the development repository\'s main branch (marked by data/HOLD.json); no ' +
+      'entry announced that rule, and it has not yet skipped a firing. A second run on the same UTC ' +
+      'date replaces that date\'s row and report, and one has: the published 2026-08-19 row and ' +
+      'report are that day\'s second run (started 11:36 UTC, 79 of 90 cells generated), which ' +
+      'replaced its 03:00 UTC run (0 of 90), the run the 2026-08-19 entry\'s "0% success" describes. ' +
+      'This entry changes no published row or report.',
+  },
+  {
     date: '2026-09-25',
     text:
       'Methodology change, announced (issue #1350): from the first run judged with panel prompt ' +
