@@ -126,11 +126,11 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     BENCH_PLAYWRIGHT=1
 
 ARG GIT_SHA=dev
-# Hash of the triad/runner SOURCE the image measures (git tree hashes of
-# ui-gen/src, benchmark/src, benchmark/scripts + the triad packages'
-# package.json — see `make bench-image`). The publish gate compares this,
-# not GIT_SHA, to decide whether an update exists: the image also
-# rebuilds on unrelated pnpm-lock churn, which is not an update (ggui#766).
+# Hash of the SOURCE the image measures: every tracked file (tests excluded)
+# of the workspace packages the runner ships, plus the workspace and build
+# configuration — see `make bench-source-hash` (ggui#766, #1310). The publish
+# gate compares this, not GIT_SHA, to decide whether an update exists: the
+# image also rebuilds on unrelated pnpm-lock churn, which is not an update.
 ARG BENCH_SOURCE_HASH=dev
 LABEL org.opencontainers.image.revision=$GIT_SHA
 LABEL ai.ggui.bench.source-hash=$BENCH_SOURCE_HASH
@@ -140,6 +140,10 @@ ENV GIT_SHA=$GIT_SHA
 ENV BENCH_SOURCE_HASH=$BENCH_SOURCE_HASH
 
 COPY --from=prep --chown=node:node /prep ./
+# The image's IDENTITY (ggui#1310): its dependencies are resolved when the image is built, not pinned by a commit, so
+# the final tree records what it ships — every installed package's name, version and file hash — after every strip
+# above, so it reads what runs. `sha256sum /app/installed-set.json` reproduces the set hash in the `.sha256` file.
+RUN node scripts/installed-set.mjs --root /app --out /app/installed-set.json
 # COPY --chown sets ownership on copied FILES but not on the WORKDIR
 # itself. /app stays root:root, so `mkdir /app/benchmark-results` (which
 # bench.mjs does to write the report JSON) hits EACCES under USER node.
