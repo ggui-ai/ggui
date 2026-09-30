@@ -37,9 +37,31 @@ export interface CreditTransactionSource {
   }>;
 }
 
+/**
+ * The ledger kinds this package names (ggui#1532). The vocabulary is OPEN: a
+ * deployment's ledger may carry kinds not listed here, and a reader MUST accept
+ * one it does not know, keep it as named, and never read it as a render charge.
+ * Listing a kind here documents it; it is not the set of kinds that may appear.
+ */
+export const KNOWN_CREDIT_TRANSACTION_KINDS = ['free_credit', 'render_charge', 'topup', 'refund'] as const;
+
+/** One of the kinds this package names. */
+export type KnownCreditTransactionKind = (typeof KNOWN_CREDIT_TRANSACTION_KINDS)[number];
+
+/**
+ * A ledger entry's kind: a known kind, or any other non-empty kind a
+ * deployment names. The `string & {}` arm keeps the set OPEN while editors
+ * still offer the known kinds and a `switch` can name them (it needs a default).
+ */
+export type CreditTransactionKind = KnownCreditTransactionKind | (string & {});
+
 export interface CreditTransactionView {
   readonly transactionId: string;
-  readonly kind: 'free_credit' | 'render_charge' | 'topup' | 'refund';
+  /**
+   * The entry's kind: one of {@link KNOWN_CREDIT_TRANSACTION_KINDS}, or a kind
+   * the deployment names that this package does not. Open vocabulary.
+   */
+  readonly kind: CreditTransactionKind;
   readonly deltaCents: number;
   readonly balanceAfterCents: number;
   readonly reason: string;
@@ -62,7 +84,12 @@ const outputSchema = {
   transactions: z.array(
     z.object({
       transactionId: z.string(),
-      kind: z.enum(['free_credit', 'render_charge', 'topup', 'refund']),
+      kind: z
+        .string()
+        .min(1)
+        .describe(
+          "The ledger entry's kind, an open vocabulary. Known kinds: 'free_credit', 'render_charge', 'topup', 'refund'. A deployment may add others: accept a kind you do not know, keep it as named, and never read it as a render charge.",
+        ),
       deltaCents: z.number().int(),
       balanceAfterCents: z.number().int(),
       reason: z.string(),
@@ -87,7 +114,7 @@ export function createListCreditTransactionsHandler(
     title: 'List credit transactions',
     audience: ['ops'],
     description:
-      "Returns the calling user's credit transaction ledger, newest-first. Each row carries kind ('free_credit' | 'render_charge' | 'topup' | 'refund'), deltaCents (signed — positive for grants/topups, negative for charges), balanceAfterCents (snapshot at time of write), reason (human-readable), and optional relatedSessionId for render_charge rows. Default limit 20, cap 100; pass `cursor` from the previous response's `nextCursor` for paging.",
+      "Returns the calling user's credit transaction ledger, newest-first. Each row carries kind (an open vocabulary: known kinds are 'free_credit', 'render_charge', 'topup' and 'refund', and a deployment may add others; treat an unknown kind as a ledger entry of that name, never as a render charge), deltaCents (signed — positive for grants/topups, negative for charges), balanceAfterCents (snapshot at time of write), reason (human-readable), and optional relatedSessionId for render_charge rows. Default limit 20, cap 100; pass `cursor` from the previous response's `nextCursor` for paging.",
     inputSchema,
     outputSchema,
     // No `allowedFor` — same toolset on every deployment kind. Callers

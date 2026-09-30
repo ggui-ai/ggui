@@ -36,10 +36,13 @@ export type {
 
 export {
   createListCreditTransactionsHandler,
+  KNOWN_CREDIT_TRANSACTION_KINDS,
 } from './list-credit-transactions.js';
 export type {
+  CreditTransactionKind,
   CreditTransactionSource,
   CreditTransactionView,
+  KnownCreditTransactionKind,
   ListCreditTransactionsDeps,
   ListCreditTransactionsOutput,
 } from './list-credit-transactions.js';
