@@ -51,14 +51,15 @@ export function isRealSourceHash(hash) {
  *   naming at least one issue means a commit escaped onto main ahead of its
  *   verdict: the probe must not measure it. Checked BEFORE update detection.
  * @param {string|undefined} [a.imageSourceHash]
- *   BENCH_SOURCE_HASH baked into the image (ggui#766): sha256 of the git
- *   tree hashes of oss/packages/ui-gen/src, oss/misc/benchmark/src,
- *   + oss/packages/ui-visual-tester/src and its package.json (ggui#973: it
- *   decides the published `contractBehavior` field, so it is harness source)
- *   oss/misc/benchmark/scripts and the package.json of ui-gen / benchmark /
- *   protocol / shared (`make bench-source-hash`). This is what the bench
- *   MEASURES; the image also rebuilds on unrelated pnpm-lock churn, and
- *   that is not an update.
+ *   BENCH_SOURCE_HASH baked into the image (ggui#766, #1310): sha256 over
+ *   every tracked file (tests excluded by path) of the runner's shipped
+ *   workspace closure — this package and every workspace package it links,
+ *   read from pnpm-lock.yaml — plus the root install/build inputs
+ *   (`make bench-source-hash`; `node scripts/bench-source.mjs roots` lists
+ *   what is hashed). This is what the bench MEASURES; the image also
+ *   rebuilds on pnpm-lock churn, and that alone is not an update. Rows
+ *   published before this recipe carry the earlier 12-path hash, so the
+ *   first image under it compares as an update once.
  * @param {string|undefined} [a.latestSourceHash]
  *   `sourceHash` of the newest index row (absent on rows before 2026-09-03).
  *   When BOTH hashes are present they decide; otherwise the version
