@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_ops_generate_blueprint`'s output drops `validatorScore`
+ * (2026-09-30, a removal, ggui#1579: MINOR, same draft stamp).
+ * `opsGenerateBlueprintOutputSchema` no longer declares the optional
+ * member. No release ever populated it: the handler read it off the
+ * generator's metadata through an undeclared field that no generator
+ * sets. So §3.6's N−1 clock is already satisfied: the release that
+ * "stops sending" it is every release, and a client holding a previous
+ * `tools/list` that declares it meets outputs without it, as it always
+ * did. `Blueprint.validatorScore`, on durable rows, is a different field
+ * and is unchanged. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A copied blueprint row can say it is a copy (2026-09-29, additive,
  * ggui#1570 declare step: MINOR, same draft stamp). `Blueprint.clonedFrom?`
  * names the row whose code bytes the row copies; the copy's `source`,
