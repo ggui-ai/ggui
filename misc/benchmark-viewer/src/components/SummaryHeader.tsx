@@ -53,12 +53,12 @@ export function SummaryHeader({ report, date }: Props) {
         </div>
       </dl>
       {meta.judges && meta.judges.length > 0 && (
-        <p className="font-mono text-xs text-ink-4 mt-3">
+        <p className="font-mono text-xs text-ink-4 mt-3 text-wrap">
           scores judged by panel: {meta.judges.map(formatJudge).join(', ')}
         </p>
       )}
       {coverage && (
-        <p className="font-mono text-xs mt-1">
+        <p className="font-mono text-xs mt-1 text-wrap">
           <span className="text-ink-4">{coverage.text}</span>
           {coverage.degraded && (
             <span className="ml-2 px-1.5 py-0.5 rounded bg-draft/10 text-draft font-semibold">
@@ -68,7 +68,7 @@ export function SummaryHeader({ report, date }: Props) {
         </p>
       )}
       {criteria && (
-        <p className="font-mono text-xs mt-1">
+        <p className="font-mono text-xs mt-1 text-wrap">
           <span className="text-ink-4">{criteria.text}</span>
           {criteria.degraded && (
             <span className="ml-2 px-1.5 py-0.5 rounded bg-draft/10 text-draft font-semibold">

@@ -260,7 +260,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
           const color = PROVIDER_COLOR[trend.sdkName] ?? FALLBACK_COLOR;
           const dash = TIER_DASH[trend.tier];
           return (
-            <li key={trend.variantId} className="flex items-center gap-2">
+            <li key={trend.variantId} className="flex items-center gap-2 text-wrap">
               <svg aria-hidden width={14} height={4} viewBox="0 0 14 4">
                 <line
                   x1={0}

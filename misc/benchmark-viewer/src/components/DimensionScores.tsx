@@ -26,7 +26,7 @@ export function DimensionScores({ scores }: Props) {
         {DIMENSIONS.map(({ key, label }) => {
           const score = scores[key];
           return (
-            <li key={key} className="flex items-center gap-3 text-sm">
+            <li key={key} className="flex items-center gap-3 text-sm text-wrap">
               <span className="text-ink-3 w-32 shrink-0">{label}</span>
               <div className="flex-1 h-1.5 bg-paper-2 relative">
                 <div

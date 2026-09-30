@@ -87,7 +87,7 @@ export function ResultDetail({ result, onClose }: Props) {
             {panel.map((j) => (
               <li
                 key={j.model}
-                className="flex items-baseline justify-between gap-4 font-mono"
+                className="flex items-baseline justify-between gap-4 font-mono text-wrap"
               >
                 <span className="text-ink-3">{j.model}</span>
                 <span className="text-ink">{formatScore(j.score)}</span>

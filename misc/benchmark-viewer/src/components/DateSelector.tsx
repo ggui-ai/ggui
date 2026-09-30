@@ -21,7 +21,7 @@ export function DateSelector({ runs, selectedDate, onSelect }: Props) {
       <p className="eyebrow mb-3">runs</p>
       <ol className="flex flex-wrap gap-2">
         {runs.map((run) => (
-          <li key={run.date}>
+          <li key={run.date} className="text-wrap">
             <button
               type="button"
               onClick={() => onSelect(run.date)}
