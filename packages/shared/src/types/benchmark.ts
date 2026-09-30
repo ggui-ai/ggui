@@ -320,6 +320,11 @@ export interface BenchmarkRunResultDisplay {
   timestamp: string;
   /** Runner's per-cell runtime-probe verdict (`benchmark-report.v2`, #973). */
   runtimeProbeVerdict?: RuntimeProbeVerdictDisplay;
+  /**
+   * The probe's pending-affordance reading (#1398), beside the verdict and never counted into it. Absent when no
+   * action walk ran — never zero-filled, so "no data" and "0 of 0" read differently.
+   */
+  runtimeProbePendingAffordance?: RuntimePendingAffordanceDisplay;
   /** `validateContractBehavior` re-run in-task for this cell (`benchmark-report.v2`, #973). */
   contractBehavior?: ContractBehaviorDisplay;
   /** Per-canvas visual scores + PNG artefact refs (`benchmark-report.v2`, #973). */
@@ -383,6 +388,20 @@ export interface RuntimeProbeVerdictDisplay {
   failures: number;
   warnings: number;
   reason?: string;
+}
+
+/**
+ * Mirrors `ProbePendingAffordance` in `@ggui-ai/ui-gen/evaluation` (#1398): of the actions whose control the
+ * runtime probe's click walk made dispatch and that were still in the page when marked pending, how many controls
+ * visibly changed (disabled, busy, text, or replaced) and which did not (`visible + missing.length === dispatched`),
+ * plus the actions whose control was gone before its turn (never marked). Report-only: it moves no verdict, count,
+ * score or pass.
+ */
+export interface RuntimePendingAffordanceDisplay {
+  dispatched: number;
+  visible: number;
+  missing: readonly string[];
+  gone: readonly string[];
 }
 
 export interface VariantSummaryDisplay {

@@ -38,7 +38,7 @@ import type {
   GenerationResult,
   PostGenerationResult,
 } from "./types.js";
-import { deriveRuntimeProbeVerdict, runtimeProbeIssues } from './runtime-probe.js';
+import { deriveRuntimeProbeVerdict, runtimePendingAffordanceOf, runtimeProbeIssues } from './runtime-probe.js';
 import { runContractBehaviorCheck } from './contract-behavior.js';
 import { visualCanvasesFromTierEvaluation } from './canvas.js';
 import { createLimiter } from './post-eval.js';
@@ -555,6 +555,8 @@ export class BenchmarkRunner {
       //   - PASS: probe RAN, no probe issues with result=fail
       //   - FAIL: probe RAN, ≥1 probe issue with result=fail
       const runtimeProbeVerdict = deriveRuntimeProbeVerdict(tierEvaluation);
+      // #1398: the pending-affordance reading rides beside the verdict, report-only (never counted into it).
+      const runtimeProbePendingAffordance = runtimePendingAffordanceOf(tierEvaluation);
       if (runtimeProbeVerdict.status === 'skipped') {
         console.log(
           `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — ${runtimeProbeVerdict.reason}`,
@@ -665,6 +667,7 @@ export class BenchmarkRunner {
         evaluation: aestheticEval,
         tierEvaluation,
         runtimeProbeVerdict,
+        ...(runtimeProbePendingAffordance !== undefined ? { runtimeProbePendingAffordance } : {}),
         contractBehavior,
         ...(harnessCanvases !== undefined ? { visualCanvases: harnessCanvases } : {}),
         // Coding-model cost (adapter rawCost when reported, else our

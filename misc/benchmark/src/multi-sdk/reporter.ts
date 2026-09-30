@@ -738,6 +738,16 @@ export function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
     error: r.error,
     timestamp: r.timestamp,
     ...(r.runtimeProbeVerdict ? { runtimeProbeVerdict: r.runtimeProbeVerdict } : {}),
+    ...(r.runtimeProbePendingAffordance
+      ? {
+          runtimeProbePendingAffordance: {
+            dispatched: r.runtimeProbePendingAffordance.dispatched,
+            visible: r.runtimeProbePendingAffordance.visible,
+            missing: [...r.runtimeProbePendingAffordance.missing],
+            gone: [...r.runtimeProbePendingAffordance.gone],
+          },
+        }
+      : {}),
     ...(r.contractBehavior ? { contractBehavior: r.contractBehavior } : {}),
     ...(r.visualCanvases ? { visualCanvases: r.visualCanvases } : {}),
     postGeneration: mapPostGeneration(r),

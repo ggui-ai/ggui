@@ -78,7 +78,7 @@ export interface BenchmarkVariant {
  * is absent. Pinned to the open-source seed so older fixtures keep
  * producing identical results.
  */
-import type { RuntimeProbeVerdict } from './runtime-probe.js';
+import type { RuntimePendingAffordance, RuntimeProbeVerdict } from './runtime-probe.js';
 import type { ContractBehaviorResult } from './contract-behavior.js';
 import type { VisualCanvasArtefact } from './canvas.js';
 import type { PanelPrompt } from './post-eval.js';
@@ -249,6 +249,11 @@ export interface BenchmarkRunResult {
    * the reason and is never a pass. Absent on results from older reports.
    */
   runtimeProbeVerdict?: RuntimeProbeVerdict;
+  /**
+   * The probe's pending-affordance reading (#1398), from {@link runtimePendingAffordanceOf}. Report-only: never counted
+   * into `runtimeProbeVerdict`. Absent when no action walk ran.
+   */
+  runtimeProbePendingAffordance?: RuntimePendingAffordance;
   /**
    * `validateContractBehavior` re-run for this cell in-task (#973 §5a(4);
    * `benchmark-report.v2`). `skipped` carries the reason, never a pass.

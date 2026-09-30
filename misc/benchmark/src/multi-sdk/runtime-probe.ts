@@ -18,6 +18,18 @@ export interface RuntimeProbeVerdict {
   readonly reason?: string;
 }
 
+/** The probe's pending-affordance reading, typed from the eval result itself (#1398). */
+export type RuntimePendingAffordance = NonNullable<NonNullable<EvalResult['runtimeProbe']>['pendingAffordance']>;
+
+/**
+ * The cell's pending-affordance reading (#1398): copied from the eval result's probe meta, beside the verdict and
+ * never counted into it (`warnings` counts `runtime:*` issues only). `undefined` when no action walk ran — the
+ * probe leaves it absent then, and absent stays absent.
+ */
+export function runtimePendingAffordanceOf(tierEvaluation: EvalResult | undefined): RuntimePendingAffordance | undefined {
+  return tierEvaluation?.runtimeProbe?.pendingAffordance;
+}
+
 /** The `runtime:*` issues of an eval result — the probe's own findings. */
 export function runtimeProbeIssues(tierEvaluation: EvalResult): EvalResult['issues'] {
   return tierEvaluation.issues.filter(
