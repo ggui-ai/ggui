@@ -67,6 +67,37 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-30',
     text:
+      'Run-trigger change, not a score change (internal issue #1310): in short, from the first run ' +
+      'on a runner image built with this change (which may come later than this entry\'s date), an ' +
+      'edit to any non-test file of the first-party code the image ships, or to its root build ' +
+      'files, starts a run at the next daily probe unless a hold is open; that includes the model ' +
+      'registry that prices the cost column. The image\'s Node.js base is pinned by digest, so a ' +
+      'run\'s runner commit now also fixes its Node.js release. The details: the source hash ' +
+      '(`multiSdk.sourceHash` on each run\'s index row) now covers every tracked file of every ' +
+      'first-party package the image ships, except files named as tests (`*.test.*` and `*.spec.*` ' +
+      'scripts and anything under `__tests__/`; test fixtures, helpers and configuration stay in, ' +
+      'so an edit to one also starts a run). Those packages are the runner and every workspace ' +
+      'package it depends on, found by following its workspace dependencies in the lockfile instead ' +
+      'of from a hand-kept list. The hash also covers the files outside them that their build ' +
+      'scripts run, and the root workspace and build files (package.json, pnpm-workspace.yaml with ' +
+      'its override list, .npmrc, turbo.json, the Makefile and the image workflow). With the base ' +
+      'pinned by digest, a run\'s runner commit (`meta.version`) now also fixes its Node.js patch ' +
+      'release and the OS packages the base image starts with, except any that apt upgrades when it ' +
+      'installs the browser, and a bump moves the hash too. The first run under these rules reads ' +
+      'as an update whatever else changed, because earlier rows\' hashes were computed under the old ' +
+      'rule and cannot match; like any run, it also carries whatever else changed since the ' +
+      'previous one. Earlier rows keep the hashes they were published with. Three things are still ' +
+      'outside the hash: the exact third-party npm versions the image\'s deploy step resolves on its ' +
+      'build day; the lockfile, which the deploy does not read (see the 2026-09-30 Disclosure) but ' +
+      'the first-party packages are compiled from, so it fixes the versions of the compilers and of ' +
+      'the React bundled into the contract-behaviour check\'s page runtime (internal issue #1641); ' +
+      'and the Chromium browser, its fonts and the system packages apt installs or upgrades with ' +
+      'them from Debian 12\'s package archive as it stands on the build day. The corpus, the judge ' +
+      'panel and every arm are unchanged, and no scoring rule changes; history is not rewritten.',
+  },
+  {
+    date: '2026-09-30',
+    text:
       'Disclosure (internal issues #743 and #1310): in short, a run\'s runner commit does not pin ' +
       'the third-party parts of the image the run used (its npm packages, its Node.js base image ' +
       'and, from the 2026-09-10 run on, its browser), so two images built from one commit can ' +
