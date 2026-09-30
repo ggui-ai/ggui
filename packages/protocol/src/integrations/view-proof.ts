@@ -75,12 +75,16 @@ export const VIEW_ORIGIN_UNPROVEN = 'VIEW_ORIGIN_UNPROVEN' as const;
  * is the object of the listed keys that are present and not `undefined`.
  * Bound: every field the protocol forbids a relay to change. Left out:
  * `ggui_runtime_pull`'s `wait`, which a relay MUST clamp to its own
- * timeout. Changing this table is a new label (`/v2`).
+ * timeout. Changing a tool's row is a new label (`/v2`): its signed bytes
+ * change. Adding a row for a NEW tool is not (ggui#1609): no earlier signer
+ * sends that tool and no earlier verifier accepts it, so no existing proof's
+ * bytes move and the known-answer vectors stand.
  */
 export const VIEW_PROOF_V1_BOUND_ARGS = {
   ggui_runtime_submit_action: ['kind', 'payload', 'sessionId', 'appId', 'actionId', 'firedAt'],
   ggui_runtime_sync_context: ['sessionId', 'appId', 'snapshot'],
   ggui_runtime_pull: ['sessionId', 'sinceSequence', 'limit'],
+  ggui_runtime_report_render_failure: ['sessionId', 'appId', 'phase', 'errorName', 'catches'],
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /** A tool whose calls carry a view proof. */

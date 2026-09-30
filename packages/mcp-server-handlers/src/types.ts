@@ -196,9 +196,12 @@ export interface HandlerContext {
    * verdict here; it is `undefined` for a tool that declares no proof, on a
    * server with no verifier, and for in-process invocations.
    *
-   * At this release it is measured and never refused, and no handler acts
-   * on it. A `valid` verdict means the call carries a proof this server can
-   * verify for this session and app, and nothing about who holds the key.
+   * No handler refuses on it during v1. One handler,
+   * `ggui_runtime_report_render_failure`, records on `valid` and refuses
+   * nothing (ggui#1609): a handler that would refuse on a verdict ends the
+   * measure period and meets the contract bar first. A `valid` verdict
+   * means the call carries a proof this server can verify for this session
+   * and app, and nothing about who holds the key.
    */
   readonly viewProof?: ViewProofVerdict;
   /**

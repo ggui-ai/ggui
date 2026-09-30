@@ -204,6 +204,7 @@ import {
   createGguiListSessionsHandler,
   createGguiRefreshWsTokenHandler,
   createGguiRenderHandler,
+  createGguiReportRenderFailureHandler,
   createGguiRuntimePullHandler,
   createGguiRuntimeTelemetryHandler,
   createGguiSubmitActionHandler,
@@ -1281,6 +1282,17 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRuntimeTelemetryHandler({
         ...(deps.logger ? { logger: deps.logger } : {}),
+      })
+    );
+    // `ggui_runtime_report_render_failure` (ggui#1609) — a card whose render
+    // failed says so, for the session its view proof binds. Unlike
+    // telemetry it is recorded, so its session is proven, never claimed;
+    // this server names each proven report (`render_failed`) and stores
+    // nothing — a deployment that keeps a per-session mark supplies
+    // `recordRenderFailure` when it composes its own handler set.
+    handlers.push(
+      createGguiReportRenderFailureHandler({
+        renderStore: deps.render.renderStore,
       })
     );
     // `ggui_runtime_refresh_ws_token` — the authorized re-mint of a

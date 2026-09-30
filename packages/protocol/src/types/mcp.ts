@@ -17,6 +17,8 @@ import type {
   runtimePullInputSchema,
   runtimeTelemetryInputSchema,
   runtimeTelemetryOutputSchema,
+  reportRenderFailureInputSchema,
+  reportRenderFailureOutputSchema,
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
@@ -472,6 +474,18 @@ export type GguiRuntimeTelemetryInput = z.infer<typeof runtimeTelemetryInputSche
  * `ggui_runtime_telemetry` output — bare `{ok: true}` acknowledgement.
  */
 export type GguiRuntimeTelemetryOutput = z.infer<typeof runtimeTelemetryOutputSchema>;
+
+/**
+ * `ggui_runtime_report_render_failure` input (ggui#1609). Derived from
+ * {@link reportRenderFailureInputSchema} — the schema is the source of truth.
+ */
+export type GguiReportRenderFailureInput = z.infer<typeof reportRenderFailureInputSchema>;
+
+/**
+ * `ggui_runtime_report_render_failure` output. Derived from
+ * {@link reportRenderFailureOutputSchema}.
+ */
+export type GguiReportRenderFailureOutput = z.infer<typeof reportRenderFailureOutputSchema>;
 
 // =============================================================================
 // MCP Error Codes

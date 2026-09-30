@@ -213,7 +213,7 @@ export interface ModelToolSetOptions {
  * A served-equivalent shape the M1 grade feeds a host's filter (ggui#1414):
  * agent tools as ggui declares them — `ggui_render` and `ggui_update` stamp
  * `visibility: ['model']`, the others carry no marker (the spec's default)
- * — and ggui's six app-only `ggui_runtime_*` tools. The list is static and
+ * — and ggui's seven app-only `ggui_runtime_*` tools. The list is static and
  * the names are the protocol's own, so it grades the FILTER a host applies,
  * never the host's live `tools/list`: a host that filters by name rather
  * than by visibility passes only as long as this list matches what its
@@ -231,6 +231,7 @@ export const MODEL_TOOL_SET_FIXTURE: readonly ServedToolDeclaration[] = [
   { name: 'ggui_runtime_sync_context', _meta: { ui: { visibility: ['app'] } } },
   { name: 'ggui_runtime_refresh_ws_token', _meta: { ui: { visibility: ['app'] } } },
   { name: 'ggui_runtime_telemetry', _meta: { ui: { visibility: ['app'] } } },
+  { name: 'ggui_runtime_report_render_failure', _meta: { ui: { visibility: ['app'] } } },
   { name: 'ggui_runtime_declare_tool_catalog', _meta: { ui: { visibility: ['app'] } } },
 ];
 
@@ -411,6 +412,10 @@ export const VIEW_SESSION_BOUND_CALLS: readonly { readonly name: string; readonl
   { name: 'ggui_runtime_sync_context', args: (sessionId) => ({ sessionId, appId: 'vmx-app', snapshot: {} }) },
   { name: 'ggui_runtime_pull', args: (sessionId) => ({ sessionId }) },
   { name: 'ggui_runtime_telemetry', args: (sessionId) => ({ sessionId, events: [{ at: 0, kind: 'boot.path' }] }) },
+  {
+    name: 'ggui_runtime_report_render_failure',
+    args: (sessionId) => ({ sessionId, appId: 'vmx-app', phase: 'mount', errorName: 'TypeError', catches: 2 }),
+  },
   { name: 'ggui_consume', args: (sessionId) => ({ sessionId }) },
   { name: 'ggui_amend', args: (sessionId) => ({ sessionId, kind: 'merge', patch: { count: 1 } }) },
   { name: 'ggui_emit', args: (sessionId) => ({ sessionId, channel: 'status', payload: { text: 'hi' } }) },

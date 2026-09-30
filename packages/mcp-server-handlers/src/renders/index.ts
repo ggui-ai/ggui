@@ -238,6 +238,11 @@ export {
   type RuntimeTelemetryLogger,
 } from "./runtime-telemetry.js";
 export {
+  createGguiReportRenderFailureHandler,
+  type CreateGguiReportRenderFailureHandlerDeps,
+  type RenderFailureRecord,
+} from "./report-render-failure.js";
+export {
   createGguiSyncContextHandler,
   type CreateGguiSyncContextHandlerDeps,
 } from "./sync-context.js";

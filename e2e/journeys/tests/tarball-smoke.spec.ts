@@ -171,6 +171,9 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
       // tools/call bridge.
       'ggui_runtime_pull',
       'ggui_runtime_refresh_ws_token',
+      // A card's render-failure report (ggui#1609): recorded only for the
+      // session its view proof binds, never an agent turn.
+      'ggui_runtime_report_render_failure',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
       // Transport self-report (view-callable diagnostics — the only

@@ -6,6 +6,23 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A card whose render failed can say so: `ggui_runtime_report_render_failure`
+ * is declared (2026-09-30, additive, ggui#1609 declare step: MINOR, same
+ * draft stamp). It is a new app-only runtime tool, the seventh (SPEC §4.9):
+ * `{sessionId, appId, phase, errorName, catches}`, the thrown value's class
+ * name and never its message or stack. The server records a report only for
+ * the session its view proof binds, answers `ok` whatever the verdict, and
+ * never enqueues it as a turn. `VIEW_PROOF_V1_BOUND_ARGS` gains the tool's
+ * row. Adding a row for a new tool is not a new label: no earlier signer
+ * sends it and no earlier verifier accepts it, so the v1 vectors stand. No
+ * runtime sends it until relays admit the name and this release's server
+ * serves on that env. New exports: `reportRenderFailureInputShape`,
+ * `reportRenderFailureInputSchema`, `reportRenderFailureOutputSchema`,
+ * `GguiReportRenderFailureInput`, `GguiReportRenderFailureOutput`,
+ * `RENDER_FAILURE_PHASES`, `RENDER_FAILURE_ERROR_NAME_PATTERN`,
+ * `RENDER_FAILURE_MAX_CATCHES` and `renderFailureErrorName`.
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `ggui_ops_generate_blueprint`'s output drops `validatorScore`
  * (2026-09-30, a removal, ggui#1579: MINOR, same draft stamp).
  * `opsGenerateBlueprintOutputSchema` no longer declares the optional

@@ -25,6 +25,7 @@ import {
   getSessionInputSchema,
   runtimePullInputSchema,
   runtimeTelemetryInputSchema,
+  reportRenderFailureInputSchema,
 } from '@ggui-ai/protocol';
 import { isGguiSubmitActionInput } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
@@ -517,7 +518,7 @@ describe('T-grades — token coverage (ggui#600 grade class 4, #598 manifest)', 
  * call are indistinguishable on the wire), so the kit grades the host's own
  * filter, implementation-as-callbacks: the host supplies the function it
  * uses to derive the model's tool list from a served `tools/list`, the kit
- * feeds the fixture catalog (model tools, six app-only runtime tools) and
+ * feeds the fixture catalog (model tools, seven app-only runtime tools) and
  * grades the result against the reference predicate.
  */
 describe('M1 — model tool set excludes app-only tools (ggui#1414)', () => {
@@ -572,12 +573,13 @@ describe('M1 — model tool set excludes app-only tools (ggui#1414)', () => {
     expect(m1?.detail).toContain('ggui_invented_tool');
   });
 
-  it('the fixture is a served-equivalent shape: six app-only runtime tools, the rest model-visible or unmarked', () => {
+  it('the fixture is a served-equivalent shape: seven app-only runtime tools, the rest model-visible or unmarked', () => {
     const appOnly = MODEL_TOOL_SET_FIXTURE.filter((t) => t._meta?.ui?.visibility?.includes('model') === false);
     expect(appOnly.map((t) => t.name).sort()).toEqual([
       'ggui_runtime_declare_tool_catalog',
       'ggui_runtime_pull',
       'ggui_runtime_refresh_ws_token',
+      'ggui_runtime_report_render_failure',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
       'ggui_runtime_telemetry',
@@ -808,6 +810,7 @@ describe('L1 — a view bound to its own locator (ggui#1415)', () => {
       'ggui_get_render_source',
       'ggui_get_session',
       'ggui_runtime_pull',
+      'ggui_runtime_report_render_failure',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
       'ggui_runtime_telemetry',
@@ -821,8 +824,8 @@ describe('L1 — a view bound to its own locator (ggui#1415)', () => {
       ['ui://ggui/render/vmx-s2/bk-vmx2', 'refuse'],
       ['ui://ggui/render/vmx-s2/bk-vmx2#1', 'refuse'],
     ]);
-    expect(VIEW_BINDING_CASES.filter((c) => c.expect === 'relay').length).toBe(12);
-    expect(VIEW_BINDING_CASES.filter((c) => c.expect === 'refuse').length).toBe(12);
+    expect(VIEW_BINDING_CASES.filter((c) => c.expect === 'relay').length).toBe(13);
+    expect(VIEW_BINDING_CASES.filter((c) => c.expect === 'refuse').length).toBe(13);
   });
 
   it("each call's arguments are ones the tool's own input schema accepts, so a host that validates them does not refuse its own view", () => {
@@ -830,6 +833,7 @@ describe('L1 — a view bound to its own locator (ggui#1415)', () => {
       ggui_runtime_submit_action: (a) => isGguiSubmitActionInput(a),
       ggui_runtime_pull: (a) => runtimePullInputSchema.safeParse(a).success,
       ggui_runtime_telemetry: (a) => runtimeTelemetryInputSchema.safeParse(a).success,
+      ggui_runtime_report_render_failure: (a) => reportRenderFailureInputSchema.safeParse(a).success,
       ggui_consume: (a) => consumeInputSchema.safeParse(a).success,
       ggui_amend: (a) => amendInputSchema.safeParse(a).success,
       ggui_emit: (a) => emitInputSchema.safeParse(a).success,

@@ -91,6 +91,15 @@ const CLASSIFIED: Record<string, { readonly kind: 'not-found' | 'blind'; readonl
     kind: 'blind',
     input: (sessionId) => ({ sessionId, events: [{ at: 10, kind: 'boot.path' }] }),
   },
+  // ggui#1609: without a VALID view proof (this harness presents none) a
+  // report records nothing and reads no row, so every caller gets
+  // {ok: true}. With one, a foreign session answers exactly as a missing
+  // one and records nothing: that path needs a verdict on ctx, and is
+  // pinned in report-render-failure.test.ts.
+  ggui_runtime_report_render_failure: {
+    kind: 'blind',
+    input: (sessionId, declaredAppId) => ({ sessionId, appId: declaredAppId, phase: 'mount', errorName: 'TypeError', catches: 2 }),
+  },
 };
 
 function card(id: string, appId: string): ComponentGguiSession {
