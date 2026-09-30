@@ -654,6 +654,8 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     const resp = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`);
     expect(resp.status).toBe(200);
     expect(resp.headers.get('access-control-allow-origin')).toBe('*');
+    // Release the unread 1.2 MB body so afterEach's close() is not held open (ggui#1277).
+    await resp.body?.cancel();
   });
 
   it('serves a 503 with remediation hint when the renderer bundle is missing', async () => {
@@ -792,6 +794,10 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     });
     const resp = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`);
     expect(resp.status).toBe(200);
+    // Release the body: the case reads only the status, and an unread
+    // 1.2 MB response keeps its connection open, which holds the
+    // server's close() in afterEach until the hook's timeout (ggui#1277).
+    await resp.body?.cancel();
   });
 
   it('publishes the configured `runtime.url` on bootstrap.runtimeUrl (CDN override)', async () => {
