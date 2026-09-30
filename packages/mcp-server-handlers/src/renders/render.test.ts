@@ -419,6 +419,13 @@ function buildRecord(opts: {
 async function buildAcceptCacheHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   readonly renderIdentityStore?: RenderIdentityStore;
+  /**
+   * Name a card on the suggestion, as the decide core writes a cache proposal
+   * (`blueprintMeta.blueprintId`): `true` names the stored card, a string names
+   * that id instead (a proposal the store has since rebound). Off by default:
+   * most cases here read the point-read path, not the proposal.
+   */
+  readonly proposes?: boolean | string;
 } = {}): Promise<{
   readonly harness: Harness;
   readonly storedUuid: string;
@@ -444,19 +451,28 @@ async function buildAcceptCacheHarness(extraOpts: {
   );
 
   const handshakeId = 'hs-cache-1';
-  await seedHandshake(
-    handshakeStore,
+  const record = buildRecord({
     handshakeId,
-    buildRecord({
-      handshakeId,
-      origin: 'cache',
-      matchedBlueprint: {
-        id: storedUuid,
-        contractKey: blueprintKey(CONTRACT),
-        variantKey: variantKey(undefined),
-      },
-    }),
-  );
+    origin: 'cache',
+    matchedBlueprint: {
+      id: storedUuid,
+      contractKey: blueprintKey(CONTRACT),
+      variantKey: variantKey(undefined),
+    },
+  });
+  const proposedId =
+    extraOpts.proposes === true ? storedUuid : typeof extraOpts.proposes === 'string' ? extraOpts.proposes : undefined;
+  const proposed: HandshakeRecord =
+    proposedId !== undefined
+      ? {
+          ...record,
+          suggestion: {
+            ...record.suggestion,
+            blueprintMeta: { ...record.suggestion.blueprintMeta, blueprintId: proposedId },
+          },
+        }
+      : record;
+  await seedHandshake(handshakeStore, handshakeId, proposed);
 
   const handler = buildHandler({
     handshakeStore,
@@ -1007,6 +1023,46 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       CTX,
     );
     expect(typeof seen.at(-1)).toBe('boolean');
+    expect(seen.at(-1)).toBe(false);
+  });
+
+  it('passes proposalServed to postSuccessHook: true only when the render served the proposed stored blueprint as proposed (ggui#1331)', async () => {
+    const seen: Array<boolean | undefined> = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (a) => {
+      seen.push(a.proposalServed);
+    };
+
+    // The handshake's proposal accepted, served from the store: true.
+    const accepted = await buildAcceptCacheHarness({ postSuccessHook, proposes: true });
+    await accepted.harness.handler.handler({ handshakeId: accepted.handshakeId, props: {} }, CTX);
+    expect(seen.at(-1)).toBe(true);
+
+    // A content-identical override serves the SAME stored card (cacheHit true,
+    // the proposed id) but re-aimed, not as proposed: false.
+    const reaimed = await buildAcceptCacheHarness({ postSuccessHook, proposes: true });
+    const out = await reaimed.harness.handler.handler(
+      { handshakeId: reaimed.handshakeId, override: { contract: CONTRACT }, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(reaimed.storedUuid);
+    expect(seen.at(-1)).toBe(false);
+
+    // Accepted, served from the store, but the store serves a different card
+    // than the one proposed (the key was rebound since the handshake): false.
+    const rebound = await buildAcceptCacheHarness({
+      postSuccessHook,
+      proposes: 'bp_22222222-2222-4222-8222-222222222222',
+    });
+    const reboundOut = await rebound.harness.handler.handler({ handshakeId: rebound.handshakeId, props: {} }, CTX);
+    assertRenderSuccess(reboundOut);
+    expect(reboundOut.blueprintId).toBe(rebound.storedUuid);
+    expect(seen.at(-1)).toBe(false);
+
+    // A cold generation serves no stored blueprint: false.
+    const cold = await buildColdGenHarness({ postSuccessHook });
+    await cold.harness.handler.handler({ handshakeId: cold.handshakeId, props: {} }, CTX);
     expect(seen.at(-1)).toBe(false);
   });
 

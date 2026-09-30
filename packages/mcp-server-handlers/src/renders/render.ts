@@ -506,6 +506,18 @@ export interface GguiSessionPostSuccessArgs {
    * field, same posture as {@link cacheHit}.
    */
   readonly variantKey: string;
+  /**
+   * True when this render served the stored blueprint its consumed
+   * handshake proposed, as proposed: the proposal was accepted (no
+   * `override`, no forced fresh generation) and the stored blueprint it
+   * named is what served. False on every other path: a re-aimed render
+   * (even one that resolves to the same blueprint), a cold generation, a
+   * failed render. The same predicate as a
+   * {@link BlueprintResolutionEvent} with `strategy: 'proposed'`,
+   * `served: 'stored'` and `blueprintId` equal to `proposedBlueprintId`.
+   * Neutral observability field, same posture as {@link cacheHit}.
+   */
+  readonly proposalServed?: boolean;
 }
 
 /**
@@ -2006,6 +2018,9 @@ export function createGguiRenderHandler(
     // ggui#1405 — set by the registration hook when this render serves an
     // ephemeral id, so every identity write for that id says no row holds it.
     let resolvedBlueprintIdentity: 'ephemeral' | undefined;
+    // ggui#1331 — set where the resolution observer is told a stored
+    // blueprint served, from the same values; false on every other path.
+    let proposalServed = false;
     // ggui#884 — the model a generation ran, for the post-success hook; null
     // until a generation produces an interface (reuse and failure leave it).
     let generationRan: GguiSessionPostSuccessArgs['generation'] = null;
@@ -2279,6 +2294,10 @@ export function createGguiRenderHandler(
         // at that commit already carries the id (no backfill needed
         // on this path).
         resolvedBlueprintId = blueprintHit.id;
+        proposalServed =
+          resolutionStrategy === 'proposed' &&
+          proposedBlueprintId !== undefined &&
+          blueprintHit.id === proposedBlueprintId;
         emitBlueprintResolution(deps, {
           scope: 'render',
           strategy: resolutionStrategy,
@@ -2786,6 +2805,7 @@ export function createGguiRenderHandler(
           // still the one the attempt keyed on.
           blueprintId: '',
           variantKey: effectiveVariantKey,
+          proposalServed: false,
         });
       }
       return handlerFailure(
@@ -2906,6 +2926,7 @@ export function createGguiRenderHandler(
         // assembly above for the per-branch semantics.
         blueprintId: result.blueprintId,
         variantKey: result.variantKey,
+        proposalServed,
       });
     }
 
