@@ -100,13 +100,16 @@ export function jsonSchemaTypesCompatible(candidateType: JsonValue | undefined, 
 }
 
 /**
- * Two arms, one per side's `required`: a prop the CANDIDATE requires must be
- * declared by the request with a compatible type (the cached interface
- * cannot render without it); a prop the REQUEST requires must be declared
- * by the candidate at all (a render carrying a key the served contract does
- * not declare is refused every time, so such a candidate cannot serve the
- * request). An optional request prop the candidate lacks stays a coverage
- * matter, reported on the hit, never a miss here.
+ * Two arms, one per side's `required`, each with a compatible type: a prop
+ * the CANDIDATE requires must be declared by the request with a type the
+ * candidate accepts (the cached interface cannot render without it); a prop
+ * the REQUEST requires must be declared by the candidate, again with a type
+ * the candidate accepts (a required prop is always sent, and a render carrying
+ * a key the served contract does not declare, or a value its type refuses, is
+ * refused every time, so such a candidate cannot serve the request). An
+ * optional request prop the candidate lacks, or declares with another type,
+ * stays a coverage matter, reported on the hit, never a miss here: it is
+ * refused only when it is sent.
  */
 function checkDataShape(candidate: DataContract | undefined, request: DataContract | undefined): FitCheck {
   if (candidate === undefined || request === undefined) return 'not-evaluated';
@@ -119,7 +122,10 @@ function checkDataShape(candidate: DataContract | undefined, request: DataContra
     if (!jsonSchemaTypesCompatible(entry.schema.type, asked.schema.type)) return 'miss';
   }
   for (const [name, entry] of Object.entries(declared)) {
-    if (entry.required === true && offered[name] === undefined) return 'miss';
+    if (entry.required !== true) continue;
+    const served = offered[name];
+    if (served === undefined) return 'miss';
+    if (!jsonSchemaTypesCompatible(served.schema.type, entry.schema.type)) return 'miss';
   }
   return 'hit';
 }

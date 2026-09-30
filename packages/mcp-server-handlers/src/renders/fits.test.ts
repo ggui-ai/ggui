@@ -113,8 +113,14 @@ describe('fits', () => {
         { contract: props({ bookTitle: { type: 'string', required: true }, author: { type: 'string' } }) },
       ).checks['data-shape'],
     ).toBe('miss');
-    // A request prop the candidate DOES declare is a coverage matter, whatever its type or required flag — never a fit miss here.
-    expect(fits({ contract: props({ rating: { type: 'string' } }) }, { contract: props({ rating: { type: 'number', required: true } }) }).checks['data-shape']).toBe('hit');
+    // A request-REQUIRED prop the candidate declares with an INCOMPATIBLE type is a miss too: it is always sent, and the
+    // served contract's type check refuses it every time, exactly as it refuses an undeclared key (ggui#1427, the CTO's read).
+    expect(fits({ contract: props({ rating: { type: 'string' } }) }, { contract: props({ rating: { type: 'number', required: true } }) }).checks['data-shape']).toBe('miss');
+    // Compatibility, not string equality: an integer the request requires fits a candidate's number, and an absent type fits anything.
+    expect(fits({ contract: props({ rating: { type: 'number' } }) }, { contract: props({ rating: { type: 'integer', required: true } }) }).checks['data-shape']).toBe('hit');
+    expect(fits({ contract: props({ rating: {} }) }, { contract: props({ rating: { type: 'number', required: true } }) }).checks['data-shape']).toBe('hit');
+    // An OPTIONAL request prop declared with another type stays a coverage matter: it is refused only when sent, never a fit miss here.
+    expect(fits({ contract: props({ rating: { type: 'string' } }) }, { contract: props({ rating: { type: 'number' } }) }).checks['data-shape']).toBe('hit');
     // An OPTIONAL request prop the candidate lacks stays a coverage gap (informational), not a miss.
     expect(fits(list, { contract: props({ contacts: { type: 'array' } }) }).checks['data-shape']).toBe('hit');
     // The candidate may declare more than the request; an empty request declaration is covered by any candidate.
