@@ -101,7 +101,7 @@ export const opsGenerateBlueprintInputSchema = z
       .string()
       .optional()
       .describe(
-        "The raw operator prompt that produced this variant. Round-trip input for the variant-selector + audit trail.",
+        "The raw operator prompt that produced this variant. Persisted on `Blueprint.variance.seedPrompt`, and used as the generation prompt when `intent` is absent.",
       ),
     intent: z
       .string()

@@ -19,26 +19,16 @@ export * from './ui-generator.js';
 // `ui-gen-<tier>-<model>` slugs. The registry is the addressable seam
 // blueprints, benchmarks, and the console all hang off of.
 export * from './generator-registry.js';
-// Multi-variant blueprint persistence + selector seams. Multiple
-// `Blueprint` rows MAY share `(appId, contractHash)`; the selector
-// picks one at runtime via a deterministic fallback ladder (an
-// optional LLM-driven pick can layer on top). The code body lives in
-// S3 in cloud adapters; in-memory holds it inline via `Map<codeHash, string>`.
+// Multi-variant blueprint persistence. Multiple `Blueprint` rows MAY
+// share `(appId, contractHash)`. The code body lives in whatever store a
+// deployment binds; in-memory holds it inline via `Map<codeHash, string>`.
 export * from './blueprint-store.js';
-export * from './blueprint-selector.js';
 // Multi-axis blueprint search across `(appId, *)`. Sister of
 // BlueprintStore: the store is a byte-exact key lookup; search finds
 // the closest match by hash + embedding + structure + variance +
 // intent across the entire app. The three-step handshake is the
 // load-bearing consumer (parallel search + validate).
 export * from './blueprint-search.js';
-// LLM-driven variant selector seam. Layers an LLM-pick step ahead of
-// the deterministic ladder, with a `(contractHash, persona,
-// context-hash)`-keyed cache and graceful fall-through to the ladder
-// on low confidence, errors, or no LLM bound. The deterministic
-// ladder remains the load-bearing floor.
-export * from './variant-selection.js';
-export * from './variant-selector-with-llm.js';
 export * from './ggui-session-store.js';
 export * from './ggui-session-stream-buffer.js';
 export * from './stream-fanout.js';

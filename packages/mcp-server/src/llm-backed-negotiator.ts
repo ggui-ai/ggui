@@ -25,11 +25,6 @@
  *   `ensureConformingContract`. Operational errors fail open; programmer
  *   errors re-throw. See `decide-handshake.ts` for the full contract.
  *
- * ## selectVariant
- *
- * The optional LLM-driven variant-selection seam is OSS-specific and
- * stays on this binding (it is not part of the shared decide spine).
- *
  * ## Default binding
  *
  * Bound by default in `createGguiServer` when handshake is enabled AND a
@@ -42,8 +37,6 @@ import type {
   LlmRoute,
   LlmSelection,
   ProviderKeyRef,
-  VariantSelectionContext,
-  VariantSelectionDecision,
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
@@ -56,7 +49,6 @@ import {
   type ToolIdentityCatalogStore,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { LLMCaller, Metered, TokenUsage } from "@ggui-ai/negotiator";
-import type { Blueprint } from "@ggui-ai/protocol";
 import { anthropicRejectsForcedToolChoice, isRecord } from "@ggui-ai/protocol";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
 
@@ -425,7 +417,6 @@ export function assembleHandshakePools(
  * decision spine (find-similar → coverage guard → judge → atomic
  * reuse, else synth-repair create) is shared verbatim across every
  * negotiator binding; only the injected adapter differs.
- * `selectVariant` is specific to this binding.
  *
  * @public
  */
@@ -464,233 +455,5 @@ export function createLlmBackedHandshakeNegotiator(
 
   return {
     decide: (input) => decideHandshake(adapter, input),
-
-    // LLM-driven variant selection. Reads each candidate's
-    // `variance` + `validatorScore` + `isOperatorDefault` + the
-    // provenance (`source`), asks the LLM to pick the best fit for
-    // the current request's `intent` + `variance`, and returns a
-    // calibrated decision. The caller (`selectVariantWithLlm`)
-    // thresholds on `confidence`.
-    //
-    // Errors throw — the caller catches and falls through to the
-    // deterministic ladder. The decide() seam uses a more permissive
-    // fail-open pattern because there's no fallback higher up; the
-    // variant-selector caller owns the fallback path itself.
-    async selectVariant({ candidates, context, ctx }): Promise<VariantSelectionDecision> {
-      if (candidates.length === 0) {
-        throw new Error(
-          "selectVariant: empty candidates list — orchestration should short-circuit before calling"
-        );
-      }
-      const creds = await deps.resolveLlm(ctx);
-      if (!creds) {
-        throw new Error(
-          "selectVariant: no BYOK credentials resolved; orchestration falls through to deterministic ladder"
-        );
-      }
-      const llm = buildLlmCaller(creds.selection, creds.providerKey);
-      return runVariantSelectionLlm(llm, candidates, context);
-    },
   };
-}
-
-/**
- * The system prompt for the variant-selection LLM call. Calibration
- * is load-bearing — the model is explicitly told to surface low
- * confidence when signals are weak so the deterministic-ladder
- * fallback takes over. The prompt is intentionally short: high
- * token budget on the user message (candidate JSON) is more useful
- * than verbose system framing.
- */
-export const VARIANT_SELECTION_SYSTEM_PROMPT = `You are the variant selector for the ggui UI matcher. You receive a shortlist of pre-built UI blueprint variants and a request context. Pick the variant that best fits the request.
-
-Each variant carries:
-  - blueprintId: stable identity (you MUST echo back exactly one of these).
-  - source: provenance. {kind:"llm", generator, model} = engine-generated (advanced generators win on visual polish; default generators win on simplicity). {kind:"user"} = operator-registered hand-authored code. {kind:"curated"} = catalog-shipped system blueprint.
-  - validatorScore: optional 0-1 self-assessed quality from the advanced generator's validators. Higher is better, undefined ⇒ unknown.
-  - isOperatorDefault: true ⇒ the human operator pinned this as the default. Strong signal.
-  - variance.persona: free-form tag ("minimalist", "data-dense", "mobile-first"…).
-  - variance.aesthetic: optional free-form tag ("glassy", "flat", "editorial"…).
-  - variance.context: small structured signal (theme, accent, …).
-  - variance.seedPrompt: the operator's original prose that produced this variant.
-
-The request context carries the same fields. Match on:
-  1. variance.persona equality / closeness (strongest non-pin signal).
-  2. variance.aesthetic equality / closeness.
-  3. variance.context overlap (shared keys + values).
-  4. seedPrompt semantic similarity to context.intent.
-
-Honor operator pins (isOperatorDefault: true) unless variance.persona / variance.aesthetic on the request clearly contradicts the pinned variant — that's the only case where you should override the pin.
-
-Calibrate confidence honestly. Return high (≥ 0.7) only when a clear best match exists. Return low (< 0.6) when signals are weak — the orchestration falls back to a deterministic ladder in that case. The fallback is safe; over-confident picks are NOT.`;
-
-const VARIANT_SELECTION_TOOL_NAME = "select_variant";
-
-const VARIANT_SELECTION_TOOL_DESCRIPTION =
-  "Pick the variant that best fits the request context. Return the chosen blueprintId, a calibrated 0-1 confidence, and a one-sentence reason citing the matching axes (persona / aesthetic / context / seedPrompt / pin / validator).";
-
-/**
- * JSON Schema for the structured-output tool call. Forces the model
- * to emit `{blueprintId, confidence, reason}` — no free-text prose.
- * Used on Anthropic via `LLMCaller.callStructured`; the text-fallback
- * path parses the same shape from regex-extracted JSON.
- */
-const VARIANT_SELECTION_TOOL_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    blueprintId: {
-      type: "string",
-      description:
-        "One of the candidate blueprintIds shown in the request. Echo exactly — must match a candidate.",
-    },
-    confidence: {
-      type: "number",
-      minimum: 0,
-      maximum: 1,
-      description:
-        "Calibrated confidence in this pick on [0, 1]. Use < 0.6 when signals are weak; the orchestration falls back to a deterministic ladder.",
-    },
-    reason: {
-      type: "string",
-      description:
-        "One-sentence rationale citing the matching axes (persona, aesthetic, context, seedPrompt, validator, pin).",
-    },
-  },
-  required: ["blueprintId", "confidence", "reason"],
-};
-
-/**
- * Build the user-message payload for the variant-selection prompt.
- * The candidate list is projected to a compact JSON shape that
- * surfaces the decision-relevant fields only — full contract
- * embedding is too much surface area for a sub-second pick.
- *
- * Exposed for testing — the prompt structure is load-bearing, so
- * snapshot tests against this output anchor regressions.
- */
-export function buildVariantSelectionUserMessage(
-  candidates: readonly Blueprint[],
-  context: VariantSelectionContext
-): string {
-  const projectedCandidates = candidates.map((c) => ({
-    blueprintId: c.blueprintId,
-    source: c.source,
-    ...(c.validatorScore !== undefined ? { validatorScore: c.validatorScore } : {}),
-    ...(c.isOperatorDefault === true ? { isOperatorDefault: true } : {}),
-    variance: {
-      ...(c.variance.persona !== undefined ? { persona: c.variance.persona } : {}),
-      ...(c.variance.context !== undefined ? { context: c.variance.context } : {}),
-      ...(c.variance.seedPrompt !== undefined ? { seedPrompt: c.variance.seedPrompt } : {}),
-    },
-  }));
-  const requestProjection = {
-    contractHash: context.contractHash,
-    ...(context.intent !== undefined ? { intent: context.intent } : {}),
-    ...(context.variance !== undefined
-      ? {
-          variance: {
-            ...(context.variance.persona !== undefined
-              ? { persona: context.variance.persona }
-              : {}),
-            ...(context.variance.aesthetic !== undefined
-              ? { aesthetic: context.variance.aesthetic }
-              : {}),
-            ...(context.variance.context !== undefined
-              ? { context: context.variance.context }
-              : {}),
-            ...(context.variance.seedPrompt !== undefined
-              ? { seedPrompt: context.variance.seedPrompt }
-              : {}),
-          },
-        }
-      : {}),
-  };
-  return [
-    "CANDIDATES:",
-    JSON.stringify(projectedCandidates, null, 2),
-    "",
-    "REQUEST:",
-    JSON.stringify(requestProjection, null, 2),
-    "",
-    "Pick the variant that best fits the REQUEST. Echo the blueprintId exactly, surface calibrated confidence, give a one-sentence rationale.",
-  ].join("\n");
-}
-
-/**
- * Run the LLM call + decode. Anthropic path uses `callStructured`
- * (forced tool use ⇒ guaranteed JSON); other providers fall back to
- * text + regex-extracted JSON. The caller (`selectVariantWithLlm`)
- * catches any throw from this function and routes through the
- * deterministic ladder; this function surfaces detail in the thrown
- * error so telemetry can attribute the fallback cause.
- */
-async function runVariantSelectionLlm(
-  llm: LLMCaller,
-  candidates: readonly Blueprint[],
-  context: VariantSelectionContext
-): Promise<VariantSelectionDecision> {
-  const userMessage = buildVariantSelectionUserMessage(candidates, context);
-  if (llm.callStructured) {
-    const decoded = await llm.callStructured(
-      VARIANT_SELECTION_SYSTEM_PROMPT,
-      userMessage,
-      {
-        name: VARIANT_SELECTION_TOOL_NAME,
-        description: VARIANT_SELECTION_TOOL_DESCRIPTION,
-        input_schema: VARIANT_SELECTION_TOOL_SCHEMA,
-      },
-      512
-    );
-    return parseVariantSelectionResponse(decoded);
-  }
-  // Text-fallback — parse JSON via regex. Lower reliability;
-  // operators on non-Anthropic providers get this path until
-  // `callStructured` extends to their adapter.
-  const text = await llm.call(
-    VARIANT_SELECTION_SYSTEM_PROMPT,
-    `${userMessage}\n\nRespond as ONE LINE of JSON: {"blueprintId":"…","confidence":0.0-1.0,"reason":"…"}`,
-    512
-  );
-  const match = text.match(/\{[\s\S]*?"blueprintId"[\s\S]*?\}/);
-  if (!match) {
-    throw new Error(
-      `variant-selection: no JSON object found in text response (length ${text.length})`
-    );
-  }
-  return parseVariantSelectionResponse(JSON.parse(match[0]));
-}
-
-/**
- * Parse + validate the LLM-tool-use response shape. Exposed for
- * testing; in production it is only called via `runVariantSelectionLlm`.
- *
- * @throws Error on any shape violation. The caller catches and falls
- *   through to the deterministic ladder; the message is surfaced in
- *   `VariantSelectionResult.reason` for telemetry.
- */
-export function parseVariantSelectionResponse(raw: unknown): VariantSelectionDecision {
-  if (!isRecord(raw)) {
-    throw new Error("variant-selection: response is not an object");
-  }
-  const obj = raw;
-  const blueprintId = obj["blueprintId"];
-  const confidence = obj["confidence"];
-  const reason = obj["reason"];
-  if (typeof blueprintId !== "string" || blueprintId.length === 0) {
-    throw new Error("variant-selection: blueprintId missing or non-string");
-  }
-  if (
-    typeof confidence !== "number" ||
-    !Number.isFinite(confidence) ||
-    confidence < 0 ||
-    confidence > 1
-  ) {
-    throw new Error(
-      `variant-selection: confidence missing or out of range: ${JSON.stringify(confidence)}`
-    );
-  }
-  if (typeof reason !== "string") {
-    throw new Error("variant-selection: reason missing or non-string");
-  }
-  return { blueprintId, confidence, reason };
 }

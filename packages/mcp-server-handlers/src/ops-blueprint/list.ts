@@ -83,8 +83,7 @@ export interface GguiOpsListBlueprintsDeps {
 
 /**
  * Sort blueprints by `createdAt desc`, then `blueprintId asc` as
- * stable tiebreaker. Mirrors the `BlueprintSelector` deterministic
- * ladder ordering (see `@ggui-ai/mcp-server-core/blueprint-selector`).
+ * stable tiebreaker.
  */
 function sortBlueprintsByCreatedAtDesc(
   rows: readonly Blueprint[],

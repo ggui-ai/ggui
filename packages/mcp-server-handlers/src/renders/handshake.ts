@@ -76,8 +76,6 @@ import type {
   AppMetadataStore,
   KeyValueStore,
   TelemetrySink,
-  VariantSelectionContext,
-  VariantSelectionDecision,
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { buildSalvagedOrDeclined } from './handshake-fallbacks.js';
@@ -252,40 +250,6 @@ export interface HandshakeNegotiator {
     readonly gadgets?: readonly GadgetDescriptor[];
     readonly ctx: HandlerContext;
   }): Promise<HandshakeNegotiatorResult> | HandshakeNegotiatorResult;
-
-  /**
-   * Optional LLM-driven variant selection. When a negotiator
-   * exposes this method, the variant-selector orchestration
-   * ({@link selectVariantWithLlm}) can dispatch the per-call LLM
-   * pick into the same negotiator that owns the rest of the
-   * handshake decision pipeline. Implementations:
-   *
-   *   - Read each candidate's `variance` (persona / aesthetic /
-   *     context / seedPrompt) + `validatorScore` +
-   *     `isOperatorDefault` and compare to the context's `intent`
-   *     + `variance` signals.
-   *   - Return a {@link VariantSelectionDecision} carrying the
-   *     chosen `blueprintId`, a `[0, 1]` calibrated confidence, and
-   *     a human-readable reason.
-   *
-   * Calibration is load-bearing: the orchestration thresholds on
-   * `confidence` to decide LLM-pick vs deterministic-ladder
-   * fallback. An impl that always returns `1.0` defeats the
-   * fallback; an impl that always returns `0.0` defeats the LLM
-   * layer. The default threshold is `0.6`
-   * ({@link DEFAULT_VARIANT_SELECTION_CONFIDENCE_THRESHOLD}).
-   *
-   * Absent → the orchestration falls straight through to the
-   * deterministic ladder. This is the default posture when no LLM
-   * is bound.
-   */
-  selectVariant?(input: {
-    /** Pre-filtered candidate shortlist (≤ shortlistSize per the orchestration). */
-    readonly candidates: readonly Blueprint[];
-    /** Per-call inputs — see {@link VariantSelectionContext}. */
-    readonly context: VariantSelectionContext;
-    readonly ctx: HandlerContext;
-  }): Promise<VariantSelectionDecision>;
 }
 
 /**
@@ -466,14 +430,11 @@ export interface GguiHandshakeHandlerDeps {
    *   - `selectionReasonHash` — sha256 prefix of `blueprintMeta.selectedReason`
    *                              / `suggestion.rationale`; the text itself
    *                              never rides (ggui#1343)
-   *   - `selectionConfidence` — surfaced when the negotiator's
-   *                              `selectVariant` ran AND the
-   *                              orchestration carried confidence
-   *                              into `blueprintMeta.selectedReason`;
-   *                              absent on negotiators that don't
-   *                              implement the optional `selectVariant`
-   *                              seam (the deterministic ladder
-   *                              doesn't carry a confidence axis).
+   *   - `selectionConfidence` — surfaced when
+   *                              `blueprintMeta.selectedReason` carries a
+   *                              `conf=<n>` suffix (a reader rule: this
+   *                              package writes none, a negotiator may);
+   *                              absent otherwise.
    *
    * Lossy + non-throwing per the {@link TelemetrySink} contract;
    * absent dep is a NoopTelemetrySink semantic equivalent.

@@ -163,9 +163,8 @@ export interface BlueprintSearch {
    * Determinism: the implementation MUST be deterministic for
    * identical inputs (same store contents + same criteria ⇒ same
    * output). Ordering ties resolve via `createdAt desc` then
-   * `blueprintId asc` — mirrors the BlueprintSelector ladder so
-   * search + selector agree on which blueprint "wins" when scores
-   * are equal.
+   * `blueprintId asc`, so equal scores always put the same blueprint
+   * first.
    */
   search(criteria: BlueprintSearchCriteria): Promise<readonly BlueprintSearchResult[]>;
 }

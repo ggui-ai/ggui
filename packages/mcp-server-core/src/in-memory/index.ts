@@ -100,10 +100,3 @@ export type {
   AppListableBlueprintStore,
   InMemoryBlueprintSearchOptions,
 } from './blueprint-search.js';
-
-// In-memory variant-selection cache. Pairs with `selectVariantWithLlm`
-// from `../variant-selector-with-llm.ts`. Lazy-expiry TTL (no timers).
-// Production deployments bind a Redis-backed adapter against the same
-// interface.
-export { InMemoryVariantSelectionCache } from './variant-selection-cache.js';
-export type { InMemoryVariantSelectionCacheOptions } from './variant-selection-cache.js';

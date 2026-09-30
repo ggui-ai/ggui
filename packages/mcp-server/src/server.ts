@@ -53,7 +53,6 @@ import type {
   BlueprintIndex,
   BlueprintProvider,
   BlueprintSearch,
-  BlueprintSelector,
   BlueprintStore,
   CodeStore,
   EmbeddingProvider,
@@ -72,7 +71,6 @@ import type {
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import {
-  createDeterministicBlueprintSelector,
   isTokenRegisteringAuthAdapter,
   DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER,
   DEFAULT_WS_TOKEN_TTL_SEC,
@@ -3396,19 +3394,6 @@ export interface CreateGguiServerOptions {
   readonly blueprintStore?: BlueprintStore;
 
   /**
-   * Optional variant selector. When present, the handshake handler
-   * calls `selectVariant(candidates)` against the candidate list
-   * returned by `blueprintStore.list((appId, contractHash))`. When
-   * omitted, `createGguiServer` defaults to
-   * {@link createDeterministicBlueprintSelector} — a deterministic
-   * fallback ladder.
-   *
-   * Operators MAY swap in an LLM-driven selector without touching the
-   * handler composition.
-   */
-  readonly blueprintSelector?: BlueprintSelector;
-
-  /**
    * Optional multi-axis blueprint search. When present, the
    * three-step handshake reads through this seam for the
    * parallel-search half of step 2 (cache vs agent vs synth
@@ -3690,13 +3675,6 @@ export interface GguiServer {
    * Otherwise an auto-seeded {@link InMemoryBlueprintStore}.
    */
   readonly blueprintStore: BlueprintStore;
-  /**
-   * The composed variant selector. When the caller passed
-   * `opts.blueprintSelector`, this is that exact instance. Otherwise
-   * {@link createDeterministicBlueprintSelector} — a deterministic
-   * fallback ladder. Operators MAY swap in an LLM-driven selector.
-   */
-  readonly blueprintSelector: BlueprintSelector;
   /**
    * The composed multi-axis blueprint search. When the caller passed
    * `opts.blueprintSearch`, this is that exact instance. Otherwise
@@ -4252,8 +4230,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     new InMemoryBlueprintStore({
       embeddingProvider: opts.embedding,
     });
-  const blueprintSelector: BlueprintSelector =
-    opts.blueprintSelector ?? createDeterministicBlueprintSelector();
   // Auto-seed the multi-axis search against the resolved store.
   // Type-narrowed at the call site: when the caller passed
   // their own store we can't assume it implements `listAllForApp`,
@@ -6400,7 +6376,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     adminToken: resolvedAdminToken,
     generators: generators ?? null,
     blueprintStore,
-    blueprintSelector,
     blueprintSearch,
     async listen(port = 0, host = opts.host ?? "127.0.0.1"): Promise<NodeHttpServer> {
       // The Origin/Host validation policy (ggui#438a) was built above

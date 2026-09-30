@@ -1083,7 +1083,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(attrs['sourceKind']).toBeUndefined();
       expect(attrs['sourceGenerator']).toBeUndefined();
       expect(attrs['sourceModel']).toBeUndefined();
-      // No selectVariant ran ⇒ no confidence axis.
+      // No `conf=<n>` suffix on the reason ⇒ no confidence axis.
       expect(attrs['selectionConfidence']).toBeUndefined();
     });
 

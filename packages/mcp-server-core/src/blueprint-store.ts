@@ -9,11 +9,10 @@
  * `contractHash` being the 16-char `blueprintKey(contract)` value
  * everywhere it appears in this file (see "The `contractHash` domain"
  * below). Rows in a group differ on {@link Blueprint.source} and/or
- * {@link Blueprint.variance}. The selector picks one at runtime: a
- * deterministic fallback ladder
- * (`isOperatorDefault → validatorScore → createdAt → blueprintId`)
- * via {@link BlueprintSelector}, with an optional LLM-driven pick
- * layered atop it that never removes the deterministic floor.
+ * {@link Blueprint.variance}. This store does not decide which row a
+ * render serves. The operator-default mark orders blueprint listings
+ * (the default first) and is shown to operators; it does not decide
+ * which blueprint serves a render.
  *
  * Reference implementations:
  *   - `InMemoryBlueprintStore` (this package's `/in-memory` entry) —

@@ -3,10 +3,7 @@
  * generated UI code that renders it.
  *
  * Multiple `Blueprint` records MAY share `(appId, contractHash)`; they
- * differ on `source` and/or {@link BlueprintVariance}. The selector
- * picks one at runtime (an LLM-driven pick layered atop the
- * deterministic fallback ladder; see
- * {@link BlueprintSelector} in `@ggui-ai/mcp-server-core`).
+ * differ on `source` and/or {@link BlueprintVariance}.
  *
  * Locked decisions:
  *
