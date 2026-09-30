@@ -65,6 +65,62 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-01',
+    text:
+      'Instrument change (internal issue #1398): in short, a new report-only field records the ' +
+      'control\'s reaction to the runtime\'s pending state: for a cell of one of the five prompts ' +
+      'whose contracts declare an action (one each), whether that action\'s control changed when the ' +
+      'probe put the action into the pending state the served runtime sets while it waits for the ' +
+      'agent\'s answer (the state a card reads with `useActionPending`): it became disabled or busy, ' +
+      'changed its text, or was removed or replaced. The comparison is with the control as it stood ' +
+      'after the press, so a change the card makes on its own when pressed, such as its own ' +
+      '"sending" flag, does not count. It reads as `visible` of `dispatched`: 1 of 1 (it changed); ' +
+      '0 of 1 (it did not, or while pending the card crashed in a way React\'s error boundary ' +
+      'catches, or its update was still unsettled after two seconds); or 0 of 0, which means not ' +
+      'measured. A cell whose card did not mount, or whose probe did not finish or ran short of ' +
+      'time, carries no field at all, and a missing field is not a zero. The field is not scored, ' +
+      'and the dashboard does not show it. The check reaches past the field in one case: a card ' +
+      'that breaks the probe itself while pending (see below) loses that probe\'s verdict and ' +
+      'findings, in the report and in the generation loop, so on such a cell the probe verdict can ' +
+      'move and, through that round\'s feedback, so can the card and its scores. The details: from ' +
+      'the first run on a runner image built with this change (which may come later than this ' +
+      'entry\'s date), a cell of one of the five action prompts carries ' +
+      '`runtimeProbePendingAffordance` when its runtime probe finished with the card mounted and ' +
+      'had at least five seconds of its time limit left for this check. After every other check, ' +
+      'the probe marks the action as pending, as the served runtime does until the agent answers, ' +
+      'if its own click or form submit fired it (an action fired through a change or the Enter key, ' +
+      'or one the probe\'s click did not fire, is not marked and reads 0 of 0), and compares the ' +
+      'action\'s control with how it looked just before that mark, that is after the press and after ' +
+      'every other check. The control is, for a click, the element that was pressed, while it is ' +
+      'still in the page (if it has left the page, a control naming the action by its name or label ' +
+      'is looked for instead); for a form submit, the form\'s clickable that names the action, else ' +
+      'its first submit-type control, else the form itself. `dispatched` is 1 when the probe marked ' +
+      'the action. `visible` is 1 when the control became disabled or aria-disabled, became ' +
+      'aria-busy, changed its text (an input button\'s value included), or was removed or replaced; ' +
+      'a change of style or class alone does not count, nor does a text-free icon added beside ' +
+      'unchanged text; anything added that carries text counts, including an emoji and the design ' +
+      'system\'s `Spinner` (its inline animation stylesheet is part of the control\'s text), and an ' +
+      'icon that replaces the label counts because the text changed. Otherwise `missing` holds the ' +
+      'action\'s name, including when the card crashed while pending in a way React\'s error boundary ' +
+      'catches (a throw during rendering or in an effect) or the read did not settle within two ' +
+      'seconds. `gone` holds the action\'s name when its control could not be read at its turn (the ' +
+      'pressed element or form had left the page and, for a click, no control naming the action was ' +
+      'found); a gone action is not marked, so it reads 0 of 0. The field is absent on every other ' +
+      'cell, including one whose card failed to mount, whose probe did not finish, or whose probe ' +
+      'had less than five seconds left. The check adds no probe finding, and the probe\'s verdict ' +
+      'and its warning and failure counts do not include it. Each read waits at most two seconds ' +
+      'and never past the probe\'s deadline. But a card that breaks the probe itself once pending, ' +
+      'for example by hanging in an endless synchronous loop, throwing where React\'s error boundary ' +
+      'cannot catch it (in a timer or an unhandled promise), flooding the probe\'s output or ' +
+      'exhausting its memory, ends the probe as it would at any other moment: the probe times out ' +
+      '(its verdict reads "probe did not run (timed-out: …)") or ends with one render-no-throw ' +
+      'warning or failure in place of its findings, this field is absent, and the generation loop\'s ' +
+      'probe feedback for that round is replaced the same way. The corpus, the judge panel and ' +
+      'every arm are unchanged, and no scoring rule changes; on a cell whose card breaks the probe ' +
+      'while pending, the probe verdict can move, and through the loop the card and its scores can ' +
+      'move. History is not rewritten.',
+  },
+  {
     date: '2026-09-30',
     text:
       'Run-trigger change, not a score change (internal issue #1310): in short, from the first run ' +
