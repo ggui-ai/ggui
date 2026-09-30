@@ -43,6 +43,48 @@ plain `{ type, props, key }` objects, so it needs no framework.
   `vite.environments.prerender.resolve.external` in Astro 7, since the
   top-level `ssr.external` does not reach the prerender environment.
 
+### Keying the image URL
+
+Link-preview services cache a card by its image URL, so a changed card reaches
+new shares only when the URL changes. Put a content key in the URL's path that
+moves exactly when what the card shows moves. Never key it on a package
+version: a consumer inside a workspace never moves it, while the renderer under
+it changes.
+
+- **A card rendered on demand:** `socialCardKey(input, { engine })` hashes the
+  card's input with the renderer's own digest (`SOCIAL_CARD_RENDERER_DIGEST`,
+  over its sources and faces). It moves when any input field, the renderer or
+  its faces change. Pass `engine`, the version of whatever turns the card into
+  pixels, since that is outside this package.
+- **A card rendered to a file at build:** `socialCardKeyFromImage(pngBytes)`
+  hashes the rendered bytes. The render is deterministic (the same card gives
+  the same bytes), so the key is stable until the card changes.
+
+```ts
+// app/og/[key]/route.ts: serve the CURRENT card under any well-formed key.
+import { isSocialCardKey } from "@ggui-ai/brand";
+
+export async function GET(_req: Request, { params }: { params: Promise<{ key: string }> }) {
+  if (!isSocialCardKey((await params).key)) return new Response(null, { status: 404 });
+  return renderTheCard(); // ImageResponse over renderSocialCard(CARD), as above
+}
+
+// app/layout.tsx: page metadata points at the current key.
+import { socialCardKey } from "@ggui-ai/brand";
+
+const image = `/og/${socialCardKey(CARD, { engine: NEXT_VERSION })}`;
+export const metadata = { openGraph: { images: [image] }, twitter: { images: [image] } };
+```
+
+Keep every image URL you have published answering with the current card: an
+old key still renders, and a fixed URL you served before (such as a bare
+`/opengraph-image`) stays as a route that returns the current card with a 200.
+A preview service that re-fetches an old link's image then still finds one.
+
+After changing the renderer or a face, run
+`pnpm --filter @ggui-ai/brand generate:digest`: the package's tests fail until
+the committed digest matches.
+
 ## The wordmark
 
 `WORDMARK_SHAPES` is the canonical four-glyph construction on its 224 × 50

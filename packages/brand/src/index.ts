@@ -7,6 +7,8 @@
  *   ({@link brandTokensCss}), namespaced `--ggb-*`.
  * - The social card as one renderer ({@link renderSocialCard}), with its face
  *   bundle ({@link socialCardFonts}).
+ * - Content keys for a card's image URL ({@link socialCardKey},
+ *   {@link socialCardKeyFromImage}), so a card change reaches new shares.
  */
 export { BRAND_COLORS, BRAND_CSS_PREFIX, brandTokensCss, type BrandColor } from './tokens.js';
 export {
@@ -24,4 +26,12 @@ export {
   renderSocialCard,
   type SocialCardInput,
 } from './social-card.js';
+export {
+  isSocialCardKey,
+  SOCIAL_CARD_KEY_LENGTH,
+  socialCardKey,
+  socialCardKeyFromImage,
+  type SocialCardKeyOptions,
+} from './card-key.js';
+export { SOCIAL_CARD_RENDERER_DIGEST } from './renderer-digest.js';
 export type { CardChild, CardNode, CardNodeProps, CardStyle } from './node.js';
