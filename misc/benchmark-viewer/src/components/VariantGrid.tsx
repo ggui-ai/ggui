@@ -119,7 +119,7 @@ function VariantRow({
         className="text-left py-3 pr-6 sticky left-0 bg-paper z-10 align-top"
       >
         <span className="font-mono text-ink">{variant.sdkName}</span>
-        <span className="block font-mono text-xs text-ink-4 mt-0.5">
+        <span className="block font-mono text-xs text-ink-3 mt-0.5">
           {variant.modelId.split('/').pop()} · {variant.tier}
         </span>
       </th>
@@ -139,7 +139,7 @@ function VariantRow({
       })}
       <td className="py-3 pl-6 text-right align-top">
         <span className="font-mono text-ink">{formatScore(variant.avgScore)}</span>
-        <span className="block font-mono text-xs text-ink-4 mt-0.5">
+        <span className="block font-mono text-xs text-ink-3 mt-0.5">
           {formatPercent(variant.successRate)} · {formatDurationMs(variant.avgTimeMs)} ·{' '}
           {formatCostUsd(variant.avgCostUsd)}
         </span>
@@ -158,7 +158,7 @@ function ResultCell({
   onClick: () => void;
 }) {
   if (!result) {
-    return <span className="text-ink-4 font-mono text-xs">—</span>;
+    return <span className="text-ink-3 font-mono text-xs">—</span>;
   }
   const evalScore = readEvalScore(result.evaluation);
   const failed = !!result.error;
@@ -184,7 +184,7 @@ function ResultCell({
       </span>
       <span
         className={`block font-mono text-xs mt-0.5 ${
-          isSelected ? 'text-chrome' : 'text-ink-4'
+          isSelected ? 'text-chrome' : 'text-ink-3'
         }`}
       >
         {typeof generationTimeMs === 'number' ? formatDurationMs(generationTimeMs) : '—'} ·{' '}

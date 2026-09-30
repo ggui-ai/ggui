@@ -152,7 +152,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
     <section className="mb-10">
       <div className="flex items-baseline justify-between mb-3">
         <p className="eyebrow">trend · score by variant</p>
-        {loading && <span className="text-ink-4 font-mono text-xs">loading…</span>}
+        {loading && <span className="text-ink-3 font-mono text-xs">loading…</span>}
       </div>
 
       <div className="rule-line pt-4 overflow-x-auto">
@@ -182,7 +182,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
                   textAnchor="end"
                   fontSize="10"
                   fontFamily="var(--font-geist-mono, ui-monospace, monospace)"
-                  fill="#8C8C93"
+                  fill="#5A5A5A"
                 >
                   {y}
                 </text>
@@ -204,7 +204,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
                   textAnchor="middle"
                   fontSize="10"
                   fontFamily="var(--font-geist-mono, ui-monospace, monospace)"
-                  fill="#8C8C93"
+                  fill="#5A5A5A"
                 >
                   {run.date.slice(5)}
                 </text>

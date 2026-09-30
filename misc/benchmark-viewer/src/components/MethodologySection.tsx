@@ -649,7 +649,7 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
             (max−min of the panel) as a disagreement signal.
           </p>
           {judges && judges.length > 0 && (
-            <p className="font-mono text-xs text-ink-4 mt-2 text-wrap">
+            <p className="font-mono text-xs text-ink-3 mt-2 text-wrap">
               panel: {judges.map(formatJudge).join(', ')}
             </p>
           )}
@@ -676,7 +676,7 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
               {commits.length} fixed prompt{commits.length === 1 ? '' : 's'},
               run identically across every variant:
             </p>
-            <ul className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-4">
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-3">
               {commits.map((c) => (
                 <li key={c.commitId} className="text-wrap">
                   {c.name} <span className="text-ink-3">({c.commitId})</span>
@@ -691,7 +691,7 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
           <ul className="space-y-2">
             {CHANGELOG.map((entry, i) => (
               <li key={`${entry.date}-${i}`}>
-                <span className="font-mono text-xs text-ink-4 mr-2">
+                <span className="font-mono text-xs text-ink-3 mr-2">
                   {entry.date}
                 </span>
                 {entry.text}

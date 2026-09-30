@@ -36,7 +36,7 @@ export function DateSelector({ runs, selectedDate, onSelect }: Props) {
               {run.multiSdk && (
                 <span
                   className={`ml-2 ${
-                    run.date === selectedDate ? 'text-chrome' : 'text-ink-4'
+                    run.date === selectedDate ? 'text-chrome' : 'text-ink-3'
                   }`}
                 >
                   {formatPercent(run.multiSdk.successRate)}
