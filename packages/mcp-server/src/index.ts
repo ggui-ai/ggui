@@ -43,7 +43,7 @@ export type { GenerationDeps } from '@ggui-ai/mcp-server-handlers';
 // `/settings` URL) without taking a direct `@ggui-ai/mcp-server-handlers`
 // dependency.
 export { buildNoCredentialsGguiSession } from '@ggui-ai/mcp-server-handlers';
-export { buildOpsBundleHandlers, createGguiServer, defaultHandlers } from './server.js';
+export { buildOpsBundleHandlers, createGguiServer, defaultHandlers, DEFAULT_CLOSE_GRACE_MS } from './server.js';
 export type {
   CreateGguiServerOptions,
   ErrorMapperResult,

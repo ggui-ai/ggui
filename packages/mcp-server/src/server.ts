@@ -3582,6 +3582,12 @@ export interface CreateGguiServerOptions {
   }>;
 }
 
+/**
+ * How long {@link GguiServer.close} lets active connections finish before
+ * it ends them (ggui#1631), in milliseconds.
+ */
+export const DEFAULT_CLOSE_GRACE_MS = 5000;
+
 export interface GguiServer {
   /**
    * The Express app. Mount it under your own parent router if you want
@@ -3593,8 +3599,15 @@ export interface GguiServer {
    * Resolves once the listener is accepting connections.
    */
   listen(port?: number, host?: string): Promise<NodeHttpServer>;
-  /** Close every outstanding HTTP connection. Idempotent. */
-  close(): Promise<void>;
+  /**
+   * Stop the server. It stops accepting connections and closes idle ones
+   * at once, lets active ones finish for up to `graceMs` (default
+   * {@link DEFAULT_CLOSE_GRACE_MS}, 5 s), then ends every connection still
+   * open, so a client that never finishes its request or never reads a
+   * response cannot hold `close()` open. Pass `graceMs: Infinity` to wait
+   * for active connections with no bound. Idempotent.
+   */
+  close(options?: { readonly graceMs?: number }): Promise<void>;
   /**
    * Number of MCP tools registered on this server. Same value the
    * `GET /ggui/health` endpoint echoes. Useful for hosts (CLIs,
@@ -6448,12 +6461,23 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
       });
     },
-    async close(): Promise<void> {
+    async close(options: { readonly graceMs?: number } = {}): Promise<void> {
       if (channel) await channel.close();
       const server = httpServer;
       if (!server) return;
+      const graceMs = options.graceMs ?? DEFAULT_CLOSE_GRACE_MS;
       await new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
+        // ggui#1631: after the grace, end what is still open. The timer is
+        // unref'd so it never keeps the process alive on its own.
+        const deadline = Number.isFinite(graceMs)
+          ? setTimeout(() => server.closeAllConnections(), Math.max(0, graceMs))
+          : undefined;
+        deadline?.unref();
+        server.close((err) => {
+          if (deadline !== undefined) clearTimeout(deadline);
+          if (err) reject(err);
+          else resolve();
+        });
       });
       httpServer = null;
     },
