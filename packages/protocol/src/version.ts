@@ -20,7 +20,9 @@
  * `reportRenderFailureInputSchema`, `reportRenderFailureOutputSchema`,
  * `GguiReportRenderFailureInput`, `GguiReportRenderFailureOutput`,
  * `RENDER_FAILURE_PHASES`, `RENDER_FAILURE_ERROR_NAME_PATTERN`,
- * `RENDER_FAILURE_MAX_CATCHES` and `renderFailureErrorName`.
+ * `RENDER_FAILURE_MAX_CATCHES`, `RENDER_FAILURE_MAX_ID_LENGTH` (`sessionId` and
+ * `appId` are 1 to 256 characters, the bound a relaying door applies too) and
+ * `renderFailureErrorName`. A card sends at most one report per session.
  * No `PROTOCOL_VERSION` move.
  * --------------------------------------------------------------------
  * `ggui_ops_generate_blueprint`'s output drops `validatorScore`

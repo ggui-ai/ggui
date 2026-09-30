@@ -1535,6 +1535,14 @@ export const RENDER_FAILURE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_$.]{0,63}$
 export const RENDER_FAILURE_MAX_CATCHES = 100;
 
 /**
+ * Upper bound on a report's `sessionId` and `appId` (ggui#1609). A relaying
+ * door applies the same bound, so the protocol and the door cannot disagree
+ * on which report is valid. Today's ids are far shorter (a hosted session id
+ * is 43 characters, an app id 8).
+ */
+export const RENDER_FAILURE_MAX_ID_LENGTH = 256;
+
+/**
  * The `errorName` a runtime sends for a thrown value: an `Error`'s own
  * `name` when it matches {@link RENDER_FAILURE_ERROR_NAME_PATTERN}, else
  * `"Error"`. Anything that is not an `Error` reports as `"Error"`, so no
@@ -1560,10 +1568,12 @@ export const reportRenderFailureInputShape = {
   sessionId: z
     .string()
     .min(1)
+    .max(RENDER_FAILURE_MAX_ID_LENGTH)
     .describe('Render id whose card failed to render — sourced from the boot envelope. Recorded only when the call\'s view proof binds it.'),
   appId: z
     .string()
     .min(1)
+    .max(RENDER_FAILURE_MAX_ID_LENGTH)
     .describe('App id from the boot envelope. Accepted and never decides: the server uses the caller\'s own app.'),
   phase: z
     .enum(RENDER_FAILURE_PHASES)

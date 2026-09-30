@@ -9,6 +9,7 @@ import { VIEW_PROOF_V1_BOUND_ARGS, isViewProofTool } from '../integrations/view-
 import {
   RENDER_FAILURE_ERROR_NAME_PATTERN,
   RENDER_FAILURE_MAX_CATCHES,
+  RENDER_FAILURE_MAX_ID_LENGTH,
   RENDER_FAILURE_PHASES,
   renderFailureErrorName,
   reportRenderFailureInputSchema,
@@ -60,6 +61,15 @@ describe('ggui_runtime_report_render_failure — the wire (ggui#1609)', () => {
       { ...VALID, sessionId: '' },
     ];
     for (const input of refused) expect(reportRenderFailureInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+  });
+
+  it('bounds sessionId and appId at RENDER_FAILURE_MAX_ID_LENGTH, the same bound a relaying door applies', () => {
+    expect(RENDER_FAILURE_MAX_ID_LENGTH).toBe(256);
+    const at = 'x'.repeat(RENDER_FAILURE_MAX_ID_LENGTH);
+    const over = 'x'.repeat(RENDER_FAILURE_MAX_ID_LENGTH + 1);
+    expect(reportRenderFailureInputSchema.safeParse({ ...VALID, sessionId: at, appId: at }).success).toBe(true);
+    expect(reportRenderFailureInputSchema.safeParse({ ...VALID, sessionId: over }).success).toBe(false);
+    expect(reportRenderFailureInputSchema.safeParse({ ...VALID, appId: over }).success).toBe(false);
   });
 
   it('strips a member it does not name rather than refusing the report (N−1: a later runtime may send more)', () => {
