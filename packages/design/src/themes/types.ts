@@ -279,18 +279,16 @@ export interface DtcgTheme {
       exit?: DtcgToken;
     };
     /**
-     * What the composer does under `prefers-reduced-motion: reduce`.
+     * The document's reduced-motion stance. Whatever it says, a card never
+     * overrides its viewer's reduced-motion request (ggui#1326): the
+     * reduced-motion rule (`reducedMotionCSS`) applies under
+     * `prefers-reduced-motion: reduce` for every theme. The preference is
+     * the viewer's own accessibility setting, so no app theme can turn it
+     * off.
      *
-     * Two defaults, stated together so they never read as disagreeing
-     * (ggui#1093 P1c): the document door stamps nothing — absent stays
-     * absent — and the COMPOSER's default is `respect`, emitting the
-     * reduced-motion rule unless a document explicitly says `ignore`.
-     *
-     * CONTRACTED, NOT YET CONSUMED: the tempo and easings above ARE consumed
-     * (ggui#1106), but no composer in this package emits a document-driven
-     * reduced-motion rule yet — `reduce` is carried and stored, and the
-     * shipped `reducedMotionCSS` applies regardless of it. Declaring it today
-     * is correct; nobody should read it as shipping the behaviour.
+     * `'ignore'` is still accepted, because stored documents and theme
+     * writes from earlier releases carry it, and it is treated as
+     * `'respect'`. The document door stamps nothing: absent stays absent.
      */
     reduce?: 'respect' | 'ignore';
   };

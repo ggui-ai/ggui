@@ -283,7 +283,9 @@ const TypeScaleRole = z.strictObject({
  * shell's knob, carried and stored, never projected). `motion.duration` /
  * `motion.easing` DO reach the card since **ggui#1106** (the primitives
  * read `--ggui-motion-*` variables the projection emits); `motion.reduce`
- * is still carried without a composer that reads it. A writer may declare
+ * is carried and never read, because a card always honours the viewer's
+ * reduced-motion request, so `'ignore'` is treated as `'respect'`
+ * (ggui#1326). A writer may declare
  * all of them now, which is the point of contracting first; nobody should
  * read the contract as shipping a behaviour this list says is not consumed.
  */
@@ -385,14 +387,16 @@ const MotionGroup = z.strictObject({
   /** Per-app easing override — three roles, each value validated at the door (ggui#1093 P1c). */
   easing: MotionEasingGroup.optional(),
   /**
-   * What the composer does under `prefers-reduced-motion: reduce`.
+   * The document's reduced-motion stance. Whatever it says, a card never
+   * overrides its viewer's reduced-motion request (ggui#1326): the
+   * reduced-motion rule applies under `prefers-reduced-motion: reduce`
+   * for every theme, because the preference is the viewer's own
+   * accessibility setting.
    *
-   * Two defaults that must never be read as disagreeing (rnd, ggui#1093
-   * P1c): the DOOR does not stamp a value — absent stays absent, so the
-   * document never carries something its author did not write — and the
-   * COMPOSER's default is `respect`: it emits the reduced-motion rule
-   * unless a document explicitly says `ignore`. Absence therefore means
-   * "respect" downstream, without the wire inventing it.
+   * The door still accepts `'ignore'`, because stored documents and theme
+   * writes from earlier releases carry it, and downstream treats it as
+   * `'respect'`. The door does not stamp a value: absent stays absent, so
+   * the document never carries something its author did not write.
    */
   reduce: z.enum(['respect', 'ignore']).optional(),
 });

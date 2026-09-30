@@ -403,6 +403,13 @@ describe('ThemeDocumentV2 — typeScale / rhythm / scrim / motion (ggui#1093 P1b
     expect(parseThemeDocument({ ...baseTheme, motion: { transition: motion.transition } }).motion?.duration).toBeUndefined();
   });
 
+  it("still accepts reduce: 'ignore' from a stored document or an earlier release's theme write, and keeps it as written (ggui#1326: downstream treats it as 'respect')", () => {
+    const transition = { base: { $type: 'transition', $value: { duration: '200ms', timingFunction: 'ease-out' } } };
+    const parsed = parseThemeDocument({ ...baseTheme, motion: { transition, reduce: 'ignore' } });
+    expect(parsed.motion?.reduce).toBe('ignore');
+    expect(() => parseThemeDocument({ ...baseTheme, motion: { transition, reduce: 'never' } })).toThrow();
+  });
+
   it('validates easing AT THE DOOR: CSS keywords, well-formed cubic-bezier and steps; nothing else (ggui#1093 P1c)', () => {
     const ease = (v: string) => ({ $type: 'cubicBezier', $value: v });
     for (const v of ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end', 'cubic-bezier(0,0,1,1)', 'cubic-bezier(0.4, 0, 0.2, 1)', 'steps(4)', 'steps(4, end)', 'steps(2, jump-both)']) {
