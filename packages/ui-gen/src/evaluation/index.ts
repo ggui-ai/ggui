@@ -171,4 +171,5 @@ export { CRITERIA_SELECTOR_VERSION, canonicalCriteriaContext, criteriaSetIdFor, 
 export { chromaOfCssTokens, criteriaContextFor, type CriteriaContextInput, type CriteriaContextSources } from './criteria/context.js';
 export { INSTRUMENT_BY_ID, buildCriteriaJudgeBlock, resolveCriteriaBlock, type CriteriaMeasurements } from './criteria/resolve.js';
 export { judgeStoredCapture, type StoredCaptureInput, type StoredCaptureOutcome, type StoredCaptureVerdict } from './visual-evaluator.js';
+export { judgedFrameTokens, type JudgeSpend, type JudgedTokens } from './judge-spend.js';
 
