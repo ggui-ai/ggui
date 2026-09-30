@@ -38,7 +38,8 @@ import {
   type ParentLink,
 } from "./host-boundary.js";
 import { hostGlobals, openRecord } from "../../../internal/open-record.js";
-import type { ProbeHostLoad } from "../../../evaluation/types-public.js";
+import type { ProbeHostLoad, ProbePendingAffordance } from "../../../evaluation/types-public.js";
+import { createProbePendingSource, lookChanged, lookOf, type ControlLook, type ProbePendingSource } from "./probe-pending.js";
 import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
 
 /**
@@ -152,6 +153,8 @@ export interface RenderCheckResult {
     readonly renderMs: number;
     /** Host load around an isolated check (absent in-process). */
     readonly hostLoad?: ProbeHostLoad;
+    /** ggui#1398: the pending-affordance walk, report-only; absent when no action walk ran. */
+    readonly pendingAffordance?: ProbePendingAffordance;
   };
 }
 
@@ -341,7 +344,11 @@ export async function runRenderCheckInProcess(
     // Must run before RTL's first import in this process — see
     // production-act-shim.ts's docstring for why.
     installProductionActShim();
-    const { render, cleanup } = await import("@testing-library/react");
+    const { render, cleanup, act } = await import("@testing-library/react");
+    // ggui#1398: the card mounts inside the runtime's pending context, driven
+    // by the probe (see probe-pending.ts). Same wire instance as the card's.
+    const { ActionPendingContext } = await import("@ggui-ai/wire/internal");
+    const pendingSource = createProbePendingSource();
     // user-event v14 default export — see https://testing-library.com/docs/user-event/intro/
     const userEventModule = await import("@testing-library/user-event");
     const userEvent = userEventModule.default ?? userEventModule;
@@ -455,7 +462,10 @@ export async function runRenderCheckInProcess(
           React.createElement(GguiWireProvider, {
             config: wireConfig,
             children: React.createElement(ProbeErrorBoundary, {
-              children: React.createElement(Component, input.mockupProps),
+              children: React.createElement(ActionPendingContext.Provider, {
+                value: pendingSource,
+                children: React.createElement(Component, input.mockupProps),
+              }),
             }),
           })
         )
@@ -559,6 +569,9 @@ export async function runRenderCheckInProcess(
 
     let actionsChecked = 0;
     let streamsChecked = 0;
+    // ggui#1398 leg 3 — the pending-affordance tally, report-only. Set only
+    // when the action walk runs, so an absent field means "no walk".
+    let pendingTally: PendingTally | undefined;
 
     try {
       // ggui#1187: prime form inputs before the action-wiring probe. A wired
@@ -583,6 +596,8 @@ export async function runRenderCheckInProcess(
       // ── Check 2: Action wiring (BLOCK / unverified-as-warn) ───────────
       if (input.contract?.actionSpec) {
         const actionSpec = input.contract.actionSpec;
+        pendingTally = { dispatched: 0, visible: 0, missing: [] };
+        const pendingWalk: PendingWalk = { source: pendingSource, act, tally: pendingTally };
         for (const [name, entry] of Object.entries(actionSpec)) {
           actionsChecked++;
           const wiring = findWiring({
@@ -597,6 +612,7 @@ export async function runRenderCheckInProcess(
             wiring,
             probe,
             user,
+            pending: pendingWalk,
           });
           if (issue) issues.push({ ...issue, diagnostics: { ...issue.diagnostics, inputPriming } });
         }
@@ -805,7 +821,7 @@ export async function runRenderCheckInProcess(
       cleanup();
     }
 
-    return finalize(issues, t0, actionsChecked, streamsChecked);
+    return finalize(issues, t0, actionsChecked, streamsChecked, pendingTally);
   } finally {
     try {
       uninstallSpy?.();
@@ -1169,7 +1185,8 @@ function finalize(
   issues: RenderCheckIssue[],
   t0: number,
   actionsChecked: number,
-  streamsChecked: number
+  streamsChecked: number,
+  pendingTally?: PendingTally
 ): RenderCheckResult {
   const ok = !issues.some((i) => i.outcome === "failed");
   return {
@@ -1179,8 +1196,47 @@ function finalize(
       actionsChecked,
       streamsChecked,
       renderMs: Date.now() - t0,
+      ...(pendingTally !== undefined
+        ? { pendingAffordance: { dispatched: pendingTally.dispatched, visible: pendingTally.visible, missing: [...pendingTally.missing] } }
+        : {}),
     },
   };
+}
+
+/** The walk's running tally (ggui#1398); frozen into `stats.pendingAffordance` by {@link finalize}. */
+interface PendingTally {
+  dispatched: number;
+  visible: number;
+  missing: string[];
+}
+
+/** What the action-wiring check needs to look at a control while its action is pending (ggui#1398). */
+interface PendingWalk {
+  readonly source: ProbePendingSource;
+  /** React Testing Library's `act`, so the pending re-render commits before the control is read. */
+  readonly act: (callback: () => Promise<void>) => Promise<unknown>;
+  readonly tally: PendingTally;
+}
+
+/**
+ * Mark `actionName` pending (the runtime does this when the dispatch
+ * commits), read the clicked control, record whether it visibly changed,
+ * then clear it (the agent's answer). Only called after the click really
+ * fired the action.
+ */
+async function recordPendingLook(walk: PendingWalk, actionName: string, el: MinimalElement, before: ControlLook): Promise<void> {
+  await walk.act(async () => {
+    walk.source.mark(actionName);
+  });
+  await flushPromises();
+  const visible = lookChanged(before, lookOf(el));
+  walk.tally.dispatched += 1;
+  if (visible) walk.tally.visible += 1;
+  else walk.tally.missing.push(actionName);
+  await walk.act(async () => {
+    walk.source.clear();
+  });
+  await flushPromises();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1194,6 +1250,8 @@ interface CheckActionInput {
   wiring: WiringDetection;
   probe: Probe;
   user: { click: (el: MinimalElement) => Promise<void> };
+  /** ggui#1398: present when the pending-affordance walk runs. */
+  pending?: PendingWalk;
 }
 
 async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIssue | null> {
@@ -1242,7 +1300,13 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
     eventKind: "action.fired",
   });
 
-  if (fired.fired) return null; // verified — no issue
+  if (fired.fired) {
+    // ggui#1398: report-only — the walk records, it never adds an issue.
+    if (input.pending && fired.element && fired.before && (wiring.kind === "click" || wiring.kind === "submit")) {
+      await recordPendingLook(input.pending, actionName, fired.element, fired.before);
+    }
+    return null; // verified — no issue
+  }
 
   // The AST already confirmed the wiring exists in source. The
   // simulator couldn't trigger it — most likely a conditional-render or
@@ -1396,6 +1460,9 @@ interface SimulateResult {
   fired: boolean;
   attemptedHint?: string;
   otherActionsFired?: string[];
+  /** The element whose trigger fired the action, and how it looked just before (ggui#1398). */
+  element?: MinimalElement;
+  before?: ControlLook;
 }
 
 async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateResult> {
@@ -1408,6 +1475,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
 
   for (const el of candidates) {
     const before = probe.getFireLog().length;
+    const look = lookOf(el);
     try {
       await dispatchTrigger(el, wiringKind, user);
     } catch {
@@ -1416,7 +1484,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
     await flushPromises();
     const newEvents = probe.getFireLog().slice(before);
     const matched = newEvents.some((e) => e.kind === eventKind && e.name === actionName);
-    if (matched) return { fired: true };
+    if (matched) return { fired: true, element: el, before: look };
   }
 
   // Capture what DID fire — useful diagnostic.

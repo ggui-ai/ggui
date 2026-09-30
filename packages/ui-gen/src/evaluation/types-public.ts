@@ -101,6 +101,21 @@ export interface ProbeHostLoad {
 }
 
 /**
+ * ggui#1398 — whether the controls the probe clicked showed they were
+ * working once their action was pending. Report-only: it is read by the
+ * benchmark and never counted into the probe's warnings or fed back to
+ * the coding loop.
+ */
+export interface ProbePendingAffordance {
+  /** Actions whose control the click walk made dispatch (click or submit wiring). */
+  readonly dispatched: number;
+  /** Of those, how many controls visibly changed while pending (disabled, busy, text, or replaced). */
+  readonly visible: number;
+  /** The actions whose control did not visibly change. */
+  readonly missing: readonly string[];
+}
+
+/**
  * The engine's own fields on a probe's meta, beside the outcome a
  * generation's metadata reports: why a probe did not finish, its render
  * time, the host's load around it. Present on every arm of
@@ -116,6 +131,11 @@ export interface RuntimeProbeMetaDetail {
   readonly hostLoad?: ProbeHostLoad;
   /** Time the check waited for a probe slot before it started, ms; present only when > 0 (ggui#1380 C2b). */
   readonly queuedMs?: number;
+  /**
+   * `ran` only: the pending-affordance walk (ggui#1398). Absent when no
+   * action walk ran, so "no data" and "0 of 0" read differently.
+   */
+  readonly pendingAffordance?: ProbePendingAffordance;
 }
 
 /**

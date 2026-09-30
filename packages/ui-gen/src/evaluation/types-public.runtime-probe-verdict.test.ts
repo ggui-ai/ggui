@@ -14,18 +14,19 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { GenerationRuntimeProbeOutcome } from '@ggui-ai/mcp-server-core';
 import type { RenderCheckKind } from '../harness/check/runtime-render/render-check.js';
-import type { ProbeHostLoad, RuntimeProbeMeta, RuntimeProbeRepair } from './types-public.js';
+import type { ProbeHostLoad, ProbePendingAffordance, RuntimeProbeMeta, RuntimeProbeRepair } from './types-public.js';
 
 type FailMeta = Extract<RuntimeProbeMeta, { verdict: 'fail' }>;
 
 describe('RuntimeProbeMeta carries the verdict (ggui#1380)', () => {
-  it('is the metadata outcome union with reason / renderMs / hostLoad / queuedMs on every arm', () => {
+  it('is the metadata outcome union with reason / renderMs / hostLoad / queuedMs / pendingAffordance on every arm', () => {
     expectTypeOf<RuntimeProbeMeta>().toEqualTypeOf<
       GenerationRuntimeProbeOutcome & {
         readonly reason?: string;
         readonly renderMs?: number;
         readonly hostLoad?: ProbeHostLoad;
         readonly queuedMs?: number;
+        readonly pendingAffordance?: ProbePendingAffordance;
       }
     >();
     expectTypeOf<FailMeta['failChecks'][number]>().toEqualTypeOf<RenderCheckKind>();

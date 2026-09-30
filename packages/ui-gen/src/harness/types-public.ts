@@ -21,7 +21,14 @@
 import type { GenerationProfileInput } from "../boilerplate/styling-profile.js";
 import type { GadgetDescriptor, DataContract, JsonValue } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/axes.js";
-import type { EvalIssue, EvalTier, AxisCheck, ProbeHostLoad, RuntimeProbeStatus } from "../evaluation/types-public.js";
+import type {
+  EvalIssue,
+  EvalTier,
+  AxisCheck,
+  ProbeHostLoad,
+  ProbePendingAffordance,
+  RuntimeProbeStatus,
+} from "../evaluation/types-public.js";
 import type { LLMToolDef } from "../llm.js";
 import type { CacheTier, HarnessFragment } from "../fragments/index.js";
 import type { HarnessPolicy, ProcessMode } from "../policy.js";
@@ -160,6 +167,8 @@ export interface RuntimeRenderOutcome {
   readonly hostLoad?: ProbeHostLoad;
   /** Time the check waited for a probe slot before it started, ms; present only when > 0 (ggui#1380 C2b). */
   readonly queuedMs?: number;
+  /** `ran` only: the pending-affordance walk (ggui#1398), report-only; absent when no action walk ran. */
+  readonly pendingAffordance?: ProbePendingAffordance;
 }
 
 export interface RuntimeRenderCheck {

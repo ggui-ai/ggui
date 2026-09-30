@@ -424,6 +424,7 @@ function probeMetaOf(outcome: RuntimeRenderOutcome, probeIssues: readonly EvalIs
     ...(outcome.renderMs !== undefined ? { renderMs: outcome.renderMs } : {}),
     ...(outcome.hostLoad !== undefined ? { hostLoad: outcome.hostLoad } : {}),
     ...(outcome.queuedMs !== undefined ? { queuedMs: outcome.queuedMs } : {}),
+    ...(outcome.pendingAffordance !== undefined ? { pendingAffordance: outcome.pendingAffordance } : {}),
   };
   const elapsed = outcome.elapsedMs !== undefined ? { elapsedMs: outcome.elapsedMs } : {};
   if (outcome.status !== "ran") {

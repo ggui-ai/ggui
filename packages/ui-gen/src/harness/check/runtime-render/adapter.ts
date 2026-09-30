@@ -198,6 +198,8 @@ export function createRuntimeRenderCheck(
         ...queuedField(queuedMs),
         renderMs: result.stats.renderMs,
         ...load,
+        // ggui#1398: report-only — carried to the probe's meta for the bench, never an issue.
+        ...(result.stats.pendingAffordance !== undefined ? { pendingAffordance: result.stats.pendingAffordance } : {}),
       };
     },
   };

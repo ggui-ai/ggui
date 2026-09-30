@@ -189,6 +189,26 @@ describe('the probe-only round (ggui#1380)', () => {
     expect(round.evalResult).not.toHaveProperty('runtimeProbeRepair');
   });
 
+  it('the pending-affordance walk rides the probe meta, report-only: no issue, the verdict untouched (ggui#1398)', async () => {
+    const pendingAffordance = { dispatched: 2, visible: 1, missing: ['cancel'] };
+    const { probe } = stubProbe({ status: 'ran', issues: [], elapsedMs: 10, renderMs: 8, pendingAffordance });
+    const { ctx, input } = await buildRound({ probe, probeOnly: true, costTracker: new CostTracker(null) });
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult?.issues).toEqual([]);
+    expect(round.evalResult?.runtimeProbe).toEqual({ status: 'ran', verdict: 'pass', elapsedMs: 10, renderMs: 8, pendingAffordance });
+  });
+
+  it('no walk, no field: an outcome without pendingAffordance leaves the meta without it (ggui#1398)', async () => {
+    const { probe } = stubProbe({ status: 'ran', issues: [], elapsedMs: 10, renderMs: 8 });
+    const { ctx, input } = await buildRound({ probe, probeOnly: true, costTracker: new CostTracker(null) });
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult?.runtimeProbe).not.toHaveProperty('pendingAffordance');
+  });
+
   it.each<RuntimeRenderOutcome>([
     { status: 'timed-out', issues: [], reason: 'render check did not finish within 30000 ms (stopped at 30412 ms)', elapsedMs: 30_412 },
     { status: 'infra-skipped', issues: [], reason: 'happy-dom failed to load', elapsedMs: 41 },
