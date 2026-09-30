@@ -3,7 +3,7 @@
  *
  * Operator UX entry point. Dispatches through the bound
  * {@link GeneratorRegistry} to mint a blueprint variant with
- * operator-authored variance tags + optional default-pin.
+ * operator-authored variance tags + an optional operator-default mark.
  *
  * ## Behavior
  *

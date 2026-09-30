@@ -746,3 +746,11 @@ describe("ggui_ops_register_blueprint — one id per registration, and a re-mint
     expect(await w.codeStore.get(row?.codeHash ?? "")).toBe(SAMPLE_CODE);
   });
 });
+
+describe('ggui_ops_register_blueprint description (ggui#1611)', () => {
+  it('says the operator-default mark does not decide what serves, and never "default-pin"', () => {
+    const handler = createGguiOpsRegisterBlueprintHandler({ blueprintStore: new InMemoryBlueprintStore() });
+    expect(handler.description).toContain('it does not decide which blueprint serves a render');
+    expect(handler.description).not.toContain('default-pin');
+  });
+});

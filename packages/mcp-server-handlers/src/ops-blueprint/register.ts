@@ -4,7 +4,7 @@
  *
  * Sibling of `ggui_ops_generate_blueprint`. Same persistence seams +
  * dual-write (BlueprintStore + cache vectorStore via registerBlueprint),
- * same variance + default-pin semantics. The only difference is the
+ * same variance + operator-default mark semantics. The only difference is the
  * code body: instead of dispatching through `generator.generate(...)`
  * to produce componentCode, the operator supplies the bytes directly
  * and the handler persists them verbatim.
@@ -172,7 +172,7 @@ interface RegistrationProvenance {
 
 /**
  * The registration body both entries share: app resolution, the
- * contract gates, the durable row, the cache mirror, the default pin and
+ * contract gates, the durable row, the cache mirror, the operator-default mark and
  * the event. The two entries differ only in the provenance they pass.
  */
 function makeRegisterCore(deps: GguiOpsRegisterBlueprintDeps) {
@@ -412,7 +412,7 @@ export function createGguiOpsRegisterBlueprintHandler(
     title: "Register blueprint",
     audience: ["ops"],
     description:
-      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, source}` where `source` is always `{kind: 'user'}` — hand-supplied bytes carry no engine claim, so none is recorded. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
+      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + operator-default mark behavior (the mark orders blueprint listings; it does not decide which blueprint serves a render). Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, source}` where `source` is always `{kind: 'user'}` — hand-supplied bytes carry no engine claim, so none is recorded. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

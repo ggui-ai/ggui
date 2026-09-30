@@ -13,8 +13,9 @@
  *   - **generator** — slug select. Empty means dispatch through the
  *     registry default.
  *   - **setAsOperatorDefault** — checkbox; when checked, the
- *     newly-minted blueprint pins as the default for its `(appId,
- *     contractHash)` group.
+ *     newly-minted blueprint is marked as the operator default for its
+ *     `(appId, contractHash)` group (it lists first; it does not change
+ *     what serves).
  *
  * Loading state: while in flight, the submit button disables and the
  * form prints a `pending` badge. On success, the parent navigates to

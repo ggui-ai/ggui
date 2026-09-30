@@ -40,9 +40,10 @@ import {
 /**
  * `ggui_ops_generate_blueprint` input. Operator picks the contract +
  * optional generator override + variance tags. `setAsOperatorDefault`
- * pins the newly-minted blueprint as the default for its
- * `(appId, contractHash)` group (the store clears any prior default
- * in the same group, mirroring `BlueprintStore.setOperatorDefault`).
+ * marks the newly-minted blueprint as the operator default for its
+ * `(appId, contractHash)` group (the store clears the mark from any prior
+ * default in the group, mirroring `BlueprintStore.setOperatorDefault`).
+ * The mark orders listings; it does not decide which blueprint serves.
  *
  * `persona` is a top-level convenience field — handlers fold it into
  * the `variance.persona` slot after normalization (lowercase + trim
@@ -152,7 +153,7 @@ export const opsGenerateBlueprintOutputSchema = z
  *   - Reapplying a fixed version of a blueprint after live edits
  *     (manual recovery from a bad generate run).
  *
- * Same app-scoping + variance + default-pin semantics as
+ * Same app-scoping + variance + operator-default mark semantics as
  * `*_generate_*`; the only difference is the LLM/generator dispatch
  * is replaced with a verbatim accept of the operator's
  * `componentCode` string.
