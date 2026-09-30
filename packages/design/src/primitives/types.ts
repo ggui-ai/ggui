@@ -1026,7 +1026,8 @@ export interface SelectOption {
  *   `var(--ggui-color-container)` (disabled)
  * - Text: `var(--ggui-color-onContainer)` for the displayed option,
  *   `var(--ggui-color-onSunken)` only while the placeholder shows (a
- *   `placeholder` with `value=""` or `defaultValue=""`)
+ *   `placeholder` with no `value` or `defaultValue`, until the user picks;
+ *   or with `value=""` / `defaultValue=""`)
  * - Border radius: `var(--ggui-shape-radius-control)` — the control ROLE (the host's button/field radius; falls to `var(--ggui-shape-radius-md)`)
  * - Cursor: `pointer` (normal), `not-allowed` (disabled)
  * - Transitions: border-color, box-shadow at 200ms ease-in-out
@@ -1073,7 +1074,8 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
   options: SelectOption[];
   /**
    * Placeholder text rendered as a disabled `<option value="">` at the top of the
-   * list. Shown when no value is selected.
+   * list. With no `value` and no `defaultValue` the select starts on it, so it
+   * shows until the user picks; it cannot be picked again after that.
    */
   placeholder?: string;
   /**

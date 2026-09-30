@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { SelectProps } from './types';
 import { motionVar } from '../tokens/transitions';
@@ -35,6 +35,17 @@ export function Select({
   const messageId = `${uniqueId}-message`;
   const hasError = Boolean(error);
   const hasMessage = Boolean(error || helperText);
+  // ggui#1569 — with a placeholder and neither `value` nor `defaultValue`, start
+  // on the empty choice, so the placeholder option is what shows until the user
+  // picks. Left alone, the browser selects the first option that is not
+  // disabled, and the placeholder option is disabled: the first real option
+  // showed as if chosen.
+  const startsOnPlaceholder = Boolean(placeholder) && value === undefined && rest.defaultValue === undefined;
+  // Uncontrolled, the shown value lives here, so the text colour follows the pick.
+  const [uncontrolledValue, setUncontrolledValue] = useState<string | undefined>(
+    startsOnPlaceholder ? '' : typeof rest.defaultValue === 'string' ? rest.defaultValue : undefined,
+  );
+  const showingPlaceholder = Boolean(placeholder) && (value ?? uncontrolledValue) === '';
 
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ggui-spacing-1, 4px)', ...style }}>
@@ -54,7 +65,11 @@ export function Select({
       <select
         id={selectId}
         value={value}
-        onChange={(e) => onChange?.(e.target.value)}
+        {...(startsOnPlaceholder ? { defaultValue: '' } : {})}
+        onChange={(e) => {
+          if (value === undefined) setUncontrolledValue(e.target.value);
+          onChange?.(e.target.value);
+        }}
         disabled={disabled}
         required={required}
         aria-invalid={hasError || undefined}
@@ -65,14 +80,10 @@ export function Select({
           borderRadius: 'var(--ggui-shape-radius-control, var(--ggui-shape-radius-md, 8px))',
           border: `1px solid ${hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-controlOutline, var(--ggui-color-outline, #d4d4d8))'}`,
           backgroundColor: disabled ? 'var(--ggui-color-sunken, #fafafa)' : 'var(--ggui-color-sunken, #ffffff)',
-          // Muted only while the placeholder is what shows: a placeholder option
-          // exists and the shown value, controlled or default, is the empty choice.
-          // With no value at all the browser shows the first real option (the
-          // placeholder option is disabled), so that text reads (ggui#1566).
-          color:
-            placeholder && (value ?? rest.defaultValue) === ''
-              ? 'var(--ggui-color-onSunken, #52525b)'
-              : 'var(--ggui-color-onContainer, #18181b)',
+          // Muted only while the placeholder is what shows (ggui#1566, #1569).
+          color: showingPlaceholder
+            ? 'var(--ggui-color-onSunken, #52525b)'
+            : 'var(--ggui-color-onContainer, #18181b)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           appearance: 'none',
           backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,

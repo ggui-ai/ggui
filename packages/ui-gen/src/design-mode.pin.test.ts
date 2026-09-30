@@ -218,8 +218,15 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // Constrained prompt a35119f0… → 51d355ee…, constrained boilerplate 63fe2f81… → 1a1346a2…, free prompt
 // 2b96db36… → 40623f56…. Receipt: with the six edited files put back to their previous text against the
 // same design build, all four digests returned to their constants.
+// Re-recorded 2026-09-30 for ggui#1569 (a Select with a placeholder and no value starts on the
+// placeholder): the primitive catalog, generated from `design/src/primitives/types.ts`, restates the
+// Select's text-colour line and its `placeholder` prop. Both arms carry the catalog, so BOTH prompt
+// digests move together; the boilerplate digests are byte-stable. Constrained 51d355ee… → 6781d3af…,
+// free 40623f56… → cb86afa4…. INVARIANT 1 holds: the 5 changed catalog lines are byte-identical in
+// both arms' dumps. Receipt: with the previous catalog against the rebuilt design dist, all four
+// digests returned to their constants.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "51d355eeba013b0485eac97660dec4256ee6d9acd4df51ed8a815179d042707e";
+  "6781d3af16d0692a365174a35e3366a28318a76f4cd1a36c23c46b7d8ae134e9";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1a1346a2f1886b72a066cec3b299115fdaffff6a2935c61a5f91d708b7a42e60';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -277,8 +284,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-24 for ggui#1083 cut 2's (B) — see the constrained note (the opening hero band).
 // Re-recorded 2026-09-29 for ggui#1566 — see the constrained note (the catalog's text colours).
 // Re-recorded 2026-09-29 for ggui#1556 A — see the constrained note (the one reading column).
+// Re-recorded 2026-09-30 for ggui#1569 — see the constrained note (the Select catalog lines).
 export const FREE_PROMPT_SHA256 =
-  "40623f5657bf119008e47671800fa5a56567f75f2f398406af999250b422b99c";
+  "cb86afa4e4103dbd60b8eb227f6315fec27de5fed18750ef5d453ed07975604c";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =

@@ -77,8 +77,8 @@ describe('reading text is onContainer; the muted tier stays onSunken (ggui#1566)
     const options = [{ value: 'us', label: 'United States' }];
     // A chosen value.
     expect(roleOf(<Select options={options} value="us" onChange={() => {}} />, 'United States')).toBe('onContainer');
-    // Uncontrolled: the browser displays the first real option (the placeholder option is disabled), so it reads.
-    expect(roleOf(<Select options={options} placeholder="Pick one" />, 'United States')).toBe('onContainer');
+    // Uncontrolled with a placeholder: it starts on the placeholder, which is muted (ggui#1569).
+    expect(roleOf(<Select options={options} placeholder="Pick one" />, 'Pick one')).toBe('onSunken');
     // The placeholder is what shows only when the value is the empty choice, controlled or by default.
     expect(roleOf(<Select options={options} placeholder="Pick one" value="" onChange={() => {}} />, 'Pick one')).toBe('onSunken');
     expect(roleOf(<Select options={options} placeholder="Pick one" defaultValue="" />, 'Pick one')).toBe('onSunken');
