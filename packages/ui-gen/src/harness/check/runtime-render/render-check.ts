@@ -39,7 +39,7 @@ import {
 } from "./host-boundary.js";
 import { hostGlobals, openRecord } from "../../../internal/open-record.js";
 import type { ProbeHostLoad, ProbePendingAffordance } from "../../../evaluation/types-public.js";
-import { createProbePendingSource, lookChanged, lookOf, type ControlLook, type ProbePendingSource } from "./probe-pending.js";
+import { createProbePendingSource, lookChanged, lookOf, type ProbePendingSource } from "./probe-pending.js";
 import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
 
 /**
@@ -424,9 +424,10 @@ export async function runRenderCheckInProcess(
     // Use object container so TS narrowing follows property access (not
     // closure flow analysis, which can't see the componentDidCatch
     // mutation and would narrow these to `null` at the use site).
-    const boundaryRef: { stack: string | null; error: Error | null } = {
+    const boundaryRef: { stack: string | null; error: Error | null; catches: number } = {
       stack: null,
       error: null,
+      catches: 0,
     };
     class ProbeErrorBoundary extends React.Component<
       { children: React.ReactNode },
@@ -437,6 +438,9 @@ export async function runRenderCheckInProcess(
         return { caught: true };
       }
       componentDidCatch(error: Error, errorInfo: { componentStack?: string }): void {
+        // ggui#1398: every catch is counted, so the pending phase can tell a
+        // crash while pending from a control that simply went away.
+        boundaryRef.catches += 1;
         if (errorInfo.componentStack && !boundaryRef.stack) {
           boundaryRef.stack = errorInfo.componentStack;
         }
@@ -572,6 +576,9 @@ export async function runRenderCheckInProcess(
     // ggui#1398 leg 3 — the pending-affordance tally, report-only. Set only
     // when the action walk runs, so an absent field means "no walk".
     let pendingTally: PendingTally | undefined;
+    // The controls whose click really dispatched their action, looked at in
+    // the pending phase after every other check (see runPendingPhase).
+    const pendingTargets: PendingTarget[] = [];
 
     try {
       // ggui#1187: prime form inputs before the action-wiring probe. A wired
@@ -596,8 +603,6 @@ export async function runRenderCheckInProcess(
       // ── Check 2: Action wiring (BLOCK / unverified-as-warn) ───────────
       if (input.contract?.actionSpec) {
         const actionSpec = input.contract.actionSpec;
-        pendingTally = { dispatched: 0, visible: 0, missing: [] };
-        const pendingWalk: PendingWalk = { source: pendingSource, act, tally: pendingTally };
         for (const [name, entry] of Object.entries(actionSpec)) {
           actionsChecked++;
           const wiring = findWiring({
@@ -612,7 +617,7 @@ export async function runRenderCheckInProcess(
             wiring,
             probe,
             user,
-            pending: pendingWalk,
+            pendingTargets,
           });
           if (issue) issues.push({ ...issue, diagnostics: { ...issue.diagnostics, inputPriming } });
         }
@@ -816,6 +821,20 @@ export async function runRenderCheckInProcess(
             });
           }
         }
+      }
+
+      // ── Pending phase (ggui#1398, report-only) ────────────────────────
+      // LAST, while the main render is still mounted: every check above has
+      // already read the DOM, so a card that crashes or resets while pending
+      // cannot change what they found.
+      if (input.contract?.actionSpec) {
+        pendingTally = await runPendingPhase({
+          targets: pendingTargets,
+          container,
+          source: pendingSource,
+          act,
+          catches: () => boundaryRef.catches,
+        });
       }
     } finally {
       cleanup();
@@ -1210,33 +1229,61 @@ interface PendingTally {
   missing: string[];
 }
 
-/** What the action-wiring check needs to look at a control while its action is pending (ggui#1398). */
-interface PendingWalk {
+/** A control whose click really dispatched its action (ggui#1398). */
+interface PendingTarget {
+  readonly actionName: string;
+  readonly actionLabel: string;
+  readonly wiringKind: "click" | "submit";
+  readonly element: MinimalElement;
+}
+
+interface PendingPhaseInput {
+  readonly targets: readonly PendingTarget[];
+  readonly container: MinimalElement;
   readonly source: ProbePendingSource;
   /** React Testing Library's `act`, so the pending re-render commits before the control is read. */
   readonly act: (callback: () => Promise<void>) => Promise<unknown>;
-  readonly tally: PendingTally;
+  /** How many throws the probe's error boundary has caught so far. */
+  readonly catches: () => number;
 }
 
 /**
- * Mark `actionName` pending (the runtime does this when the dispatch
- * commits), read the clicked control, record whether it visibly changed,
- * then clear it (the agent's answer). Only called after the click really
- * fired the action.
+ * For each control whose click dispatched: look at it, mark its action
+ * pending (the runtime does this when the dispatch commits), look again,
+ * then clear it (the agent's answer). Visible means the pending state
+ * itself changed the control. A control no longer in the page is found
+ * again by the same lookup the click used; one that cannot be found, or
+ * whose card throws while pending, counts as missing. A throw also ends the
+ * phase: the card renders nothing from there, and the controls after it are
+ * not counted.
  */
-async function recordPendingLook(walk: PendingWalk, actionName: string, el: MinimalElement, before: ControlLook): Promise<void> {
-  await walk.act(async () => {
-    walk.source.mark(actionName);
-  });
-  await flushPromises();
-  const visible = lookChanged(before, lookOf(el));
-  walk.tally.dispatched += 1;
-  if (visible) walk.tally.visible += 1;
-  else walk.tally.missing.push(actionName);
-  await walk.act(async () => {
-    walk.source.clear();
-  });
-  await flushPromises();
+async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> {
+  const tally: PendingTally = { dispatched: 0, visible: 0, missing: [] };
+  for (const target of input.targets) {
+    const el = lookOf(target.element).connected
+      ? target.element
+      : findCandidateElements(input.container, target.wiringKind, target.actionName, target.actionLabel)[0];
+    tally.dispatched += 1;
+    if (el === undefined) {
+      tally.missing.push(target.actionName);
+      continue;
+    }
+    const before = lookOf(el);
+    const caughtBefore = input.catches();
+    await input.act(async () => {
+      input.source.mark(target.actionName);
+    });
+    await flushPromises();
+    const crashed = input.catches() !== caughtBefore;
+    if (!crashed && lookChanged(before, lookOf(el))) tally.visible += 1;
+    else tally.missing.push(target.actionName);
+    await input.act(async () => {
+      input.source.clear();
+    });
+    await flushPromises();
+    if (crashed) break;
+  }
+  return tally;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1250,8 +1297,8 @@ interface CheckActionInput {
   wiring: WiringDetection;
   probe: Probe;
   user: { click: (el: MinimalElement) => Promise<void> };
-  /** ggui#1398: present when the pending-affordance walk runs. */
-  pending?: PendingWalk;
+  /** ggui#1398: where a control whose click dispatched is recorded, for the pending phase. */
+  pendingTargets?: PendingTarget[];
 }
 
 async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIssue | null> {
@@ -1301,9 +1348,9 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
   });
 
   if (fired.fired) {
-    // ggui#1398: report-only — the walk records, it never adds an issue.
-    if (input.pending && fired.element && fired.before && (wiring.kind === "click" || wiring.kind === "submit")) {
-      await recordPendingLook(input.pending, actionName, fired.element, fired.before);
+    // ggui#1398: record the control for the pending phase; nothing is marked here.
+    if (input.pendingTargets && fired.element && (wiring.kind === "click" || wiring.kind === "submit")) {
+      input.pendingTargets.push({ actionName, actionLabel, wiringKind: wiring.kind, element: fired.element });
     }
     return null; // verified — no issue
   }
@@ -1460,9 +1507,8 @@ interface SimulateResult {
   fired: boolean;
   attemptedHint?: string;
   otherActionsFired?: string[];
-  /** The element whose trigger fired the action, and how it looked just before (ggui#1398). */
+  /** The element whose trigger fired the action (ggui#1398). */
   element?: MinimalElement;
-  before?: ControlLook;
 }
 
 async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateResult> {
@@ -1475,7 +1521,6 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
 
   for (const el of candidates) {
     const before = probe.getFireLog().length;
-    const look = lookOf(el);
     try {
       await dispatchTrigger(el, wiringKind, user);
     } catch {
@@ -1484,7 +1529,7 @@ async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateR
     await flushPromises();
     const newEvents = probe.getFireLog().slice(before);
     const matched = newEvents.some((e) => e.kind === eventKind && e.name === actionName);
-    if (matched) return { fired: true, element: el, before: look };
+    if (matched) return { fired: true, element: el };
   }
 
   // Capture what DID fire — useful diagnostic.
