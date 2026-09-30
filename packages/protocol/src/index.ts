@@ -30,7 +30,8 @@ export * from "./schemas/data-contract";
 // `appThemeReadSchema` / `parseAppThemeAtReadDoor` (VERSION-POLICY §3.6,
 // ggui#1093) and the declared-asset grammar (`fontFaceDeclarationSchema`,
 // `appThemeImagerySchema`). Consumed by the deploy/persist path (ggui.json
-// → managed cloud app) and projected into the rendered iframe's `:root`.
+// → managed cloud app) and applied, in the rendered iframe, to the tokens
+// the components read.
 export * from "./schemas/app-theme";
 export * from "./integrations/overlay-hash";
 export * from "./schemas/app-generation-profile";

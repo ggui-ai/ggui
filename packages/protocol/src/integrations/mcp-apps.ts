@@ -404,9 +404,10 @@ export interface McpAppAiGguiRenderMeta {
    * inlines) and `imagery` (mark / hero / pattern), both outside the
    * attestation — snapshotted from `App.theme`. Distinct from `themeId`
    * (a compiled-theme reference) and `themeMode` (the bare light/dark
-   * discriminator): the iframe injects `overlays[effectiveMode]` then
-   * `cssVariables` as `:root` declarations. Absent ⇒ no per-app overlay;
-   * the renderer applies its default theme. Parsed at the READ door
+   * discriminator): the runtime applies `overlays[effectiveMode]`, then
+   * `cssVariables` over it, to the tokens the components read. Absent ⇒ no
+   * per-app overlay; the renderer applies its default theme. Parsed at the
+   * READ door
    * (`parseAppThemeAtReadDoor`, VERSION-POLICY §3.6): a top-level member
    * this release does not name is stripped and reported, never dropped
    * with the theme.

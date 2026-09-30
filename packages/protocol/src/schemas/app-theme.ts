@@ -14,7 +14,7 @@ import { z } from 'zod';
 export const GGUI_CSS_VAR_KEY_RE = /^--ggui-[a-zA-Z0-9-]+$/;
 
 /**
- * A single safe CSS value. The map is serialized into a `:root { --k: v; }`
+ * A single safe CSS value. The map is serialized into a `--k: v;`
  * declaration block inside the rendered iframe, so a value MUST NOT be able to
  * terminate the declaration or open a new rule/comment. Forbid the breakout
  * characters `; { } < > @` and the comment opener `/*`. Everything else
