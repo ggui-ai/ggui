@@ -6,6 +6,16 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Runtime telemetry vocabulary (2026-10-01, additive, ggui#1381 — MINOR,
+ * same draft stamp): a new subpath, `@ggui-ai/protocol/runtime-telemetry`,
+ * holds the kinds `ggui_runtime_telemetry` carries: `RUNTIME_TELEMETRY_KINDS`
+ * (each kind, its batch `health` | `diagnostic`, and the one `detail` shape it
+ * admits), `CHANNEL_LOG_EVENTS` / `ChannelLogEvent` (moved here from
+ * `@ggui-ai/live-channel`, which re-exports them), `CONNECTION_STATUSES`, and
+ * the kind types. The emitter and a host's door import one list. PURE-CONST
+ * by contract (no runtime imports; a test pins it). The server stays
+ * tolerant: an unknown kind is logged, never refused (N−1). No wire change.
+ * --------------------------------------------------------------------
  * The render result's `effort` is now SENT (2026-10-01, ggui#1459 emit step:
  * no schema change, same draft stamp). `ggui_render` states the named level
  * the generation that produced the render's code applied, from that
@@ -29,6 +39,21 @@
  * `ggui_runtime_sync_context`). The accepted set is unchanged, pinned against
  * the recursing form case by case; a deep invalid member is reported at its
  * member path. The array arm still recurses. No export changes.
+ * --------------------------------------------------------------------
+ * Theme carry read NAMES an uninterpretable stored document (2026-09-30,
+ * additive, ggui#1175 — MINOR, same draft stamp): `appThemeGetResponseSchema`
+ * gains an optional `uninterpretable: { issueCount, issues: [{ path, code }] }`,
+ * present exactly when the row holds a `theme` that fails the carry shape
+ * (`theme` is then `null`; never beside `interpreted`, refused by the schema).
+ * New exports: `THEME_ISSUE_CODES` / `ThemeIssueCode` (a closed set the
+ * protocol owns, never zod's codes), `THEME_ISSUES_MAX` (20),
+ * `THEME_ISSUE_SEGMENT_MAX` (100), `THEME_ISSUE_PATH_MAX` (16),
+ * `appThemeUninterpretableSchema` / `AppThemeUninterpretable`, and
+ * `describeUninterpretableTheme` (the one mapping; unknown issues map to
+ * `other`). No stored value is carried. N−1: an additive optional member;
+ * the previous release's three payloads parse unchanged (pinned), and the
+ * one outside reader drops an unknown member. Kit: a second
+ * `app-theme-carry` forward case.
  * --------------------------------------------------------------------
  * A copied row now SAYS it is a copy: `Blueprint.clonedFrom` is EMITTED
  * (2026-09-30, ggui#1570 emit step: no schema change, same draft stamp).
@@ -427,21 +452,6 @@
  * (retired upstream: LiteLLM dropped it, OpenRouter no longer lists it);
  * the route stays accepted by shape like any uncurated slug. Bedrock Opus
  * 5.5 is not registered (held). No `PROTOCOL_VERSION` move.
- * --------------------------------------------------------------------
- * Theme carry read NAMES an uninterpretable stored document (2026-09-30,
- * additive, ggui#1175 — MINOR, same draft stamp): `appThemeGetResponseSchema`
- * gains an optional `uninterpretable: { issueCount, issues: [{ path, code }] }`,
- * present exactly when the row holds a `theme` that fails the carry shape
- * (`theme` is then `null`; never beside `interpreted`, refused by the schema).
- * New exports: `THEME_ISSUE_CODES` / `ThemeIssueCode` (a closed set the
- * protocol owns, never zod's codes), `THEME_ISSUES_MAX` (20),
- * `THEME_ISSUE_SEGMENT_MAX` (100), `THEME_ISSUE_PATH_MAX` (16),
- * `appThemeUninterpretableSchema` / `AppThemeUninterpretable`, and
- * `describeUninterpretableTheme` (the one mapping; unknown issues map to
- * `other`). No stored value is carried. N−1: an additive optional member;
- * the previous release's three payloads parse unchanged (pinned), and the
- * one outside reader drops an unknown member. Kit: a second
- * `app-theme-carry` forward case.
  * --------------------------------------------------------------------
  * Theme CARRY read (2026-09-17, additive, ggui#1155 — MINOR, same draft
  * stamp): `appThemeCarrySchema` / `AppThemeCarry` and

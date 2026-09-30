@@ -4,28 +4,9 @@
  * that the list is exactly what the transports log. A card's telemetry sends each name as a health event with no
  * detail (the name is the signal: which transport failed), and a host that admits only a closed set of names checks
  * against the same list.
+ *
+ * The source of truth is `@ggui-ai/protocol/runtime-telemetry` (ggui#1381), beside the rest of the telemetry
+ * vocabulary, so the emitter and a host's door import one list. This package re-exports it because it is its own
+ * logger's parameter type, not a copy.
  */
-export const CHANNEL_LOG_EVENTS = [
-  'channel_failover_send_dropped_post_swap',
-  'channel_failover_swap',
-  'channel_handler_throw',
-  'channel_polling_budget_exhausted',
-  'channel_polling_fetch_failed',
-  'channel_polling_invalid_carrier',
-  'channel_polling_no_fetch',
-  'channel_polling_no_handler',
-  'channel_polling_non_ok',
-  'channel_polling_parse_failed',
-  'channel_sse_construct_failed',
-  'channel_sse_fail_fast',
-  'channel_sse_watchdog_expired',
-  'channel_status_listener_throw',
-  'channel_ws_construct_failed',
-  'channel_ws_fail_fast',
-  'channel_ws_refused_terminal',
-  'channel_ws_send_failed',
-  'channel_ws_subscribe_send_failed',
-] as const;
-
-/** One of the transports' log events. */
-export type ChannelLogEvent = (typeof CHANNEL_LOG_EVENTS)[number];
+export { CHANNEL_LOG_EVENTS, type ChannelLogEvent } from '@ggui-ai/protocol/runtime-telemetry';

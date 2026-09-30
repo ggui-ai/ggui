@@ -6,9 +6,9 @@ import { CHANNEL_LOG_EVENTS } from '@ggui-ai/live-channel';
 import {
   CONNECTION_STATUSES,
   RUNTIME_TELEMETRY_KINDS,
-  createTelemetrySink,
   type RuntimeTelemetryKind,
-} from '../runtime-telemetry.js';
+} from '@ggui-ai/protocol/runtime-telemetry';
+import { createTelemetrySink } from '../runtime-telemetry.js';
 
 /**
  * Telemetry sink — the iframe's self-report. Pins:

@@ -38,9 +38,14 @@
  *     flush failures are swallowed (a diagnostics channel must never
  *     cause the symptoms it reports).
  */
-import { CHANNEL_LOG_EVENTS, type ChannelLogEvent, type ChannelLogger } from '@ggui-ai/live-channel';
+import type { ChannelLogEvent, ChannelLogger } from '@ggui-ai/live-channel';
+import {
+  RUNTIME_TELEMETRY_KINDS,
+  type RuntimeTelemetryKind,
+  type RuntimeTelemetryKindSpec,
+  type TelemetryBatch,
+} from '@ggui-ai/protocol/runtime-telemetry';
 import { RUNTIME_TELEMETRY_MAX_EVENTS } from '@ggui-ai/protocol/wire';
-import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 
 const FIRST_FLUSH_DELAY_MS = 4_000;
 const FLUSH_THROTTLE_MS = 8_000;
@@ -48,75 +53,7 @@ const MAX_HEALTH_FLUSHES_PER_SESSION = 8;
 const MAX_DIAGNOSTIC_FLUSHES_PER_SESSION = 4;
 const MAX_DETAIL_CHARS = 500;
 
-/**
- * The connection statuses the runtime reports as `status.<status>`: the
- * const twin of `ConnectionStatus`, held equal to it at compile time
- * both ways, so a status the protocol adds cannot walk in unlisted.
- */
-export const CONNECTION_STATUSES = ['connecting', 'connected', 'disconnected', 'reconnecting'] as const;
-type SameMembers<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-const connectionStatusesExact: SameMembers<(typeof CONNECTION_STATUSES)[number], ConnectionStatus> = true;
-void connectionStatusesExact;
-
-/** Which batch a kind travels in. */
-export type TelemetryBatch = 'health' | 'diagnostic';
-/**
- * The `detail` a kind admits. Health kinds admit `none`, `id` (the card's
- * own render id) or `booleans` (a JSON object of booleans only);
- * diagnostic kinds may carry `fields` (codes, enums, numbers, ids).
- */
-export type TelemetryDetailShape = 'none' | 'id' | 'booleans' | 'fields';
-
-type HealthKind =
-  | 'boot.path'
-  | 'boot.static_only_no_bridge'
-  | `status.${ConnectionStatus}`
-  | 'subscribe.resolved'
-  | 'doorbell.ring'
-  | ChannelLogEvent;
-type DiagnosticKind =
-  | 'boot.credential_refresh'
-  | 'credential.refresh'
-  | 'stream.counter_restart'
-  | 'live.ended'
-  | 'doorbell.refused'
-  | 'gesture.dropped_superseded'
-  | 'gesture.dispatch'
-  | 'gesture.result'
-  | 'gesture.dom_click'
-  | 'gesture.envelope'
-  | 'epoch.frozen';
-/** Every kind the runtime records. */
-export type RuntimeTelemetryKind = HealthKind | DiagnosticKind;
-
-export type RuntimeTelemetryKindSpec =
-  | { readonly kind: HealthKind; readonly batch: 'health'; readonly detail: 'none' | 'id' | 'booleans' }
-  | { readonly kind: DiagnosticKind; readonly batch: 'diagnostic'; readonly detail: 'none' | 'fields' };
-
-/**
- * The one table of telemetry kinds: each kind's batch and the `detail`
- * shape it admits. A reading of the runtime's emit sites, pinned both
- * ways by `runtime-telemetry.test.ts`.
- */
-export const RUNTIME_TELEMETRY_KINDS: readonly RuntimeTelemetryKindSpec[] = [
-  { kind: 'boot.path', batch: 'health', detail: 'booleans' },
-  { kind: 'boot.static_only_no_bridge', batch: 'health', detail: 'none' },
-  ...CONNECTION_STATUSES.map((s) => ({ kind: `status.${s}` as const, batch: 'health' as const, detail: 'none' as const })),
-  { kind: 'subscribe.resolved', batch: 'health', detail: 'booleans' },
-  { kind: 'doorbell.ring', batch: 'health', detail: 'id' },
-  ...CHANNEL_LOG_EVENTS.map((e) => ({ kind: e, batch: 'health' as const, detail: 'none' as const })),
-  { kind: 'boot.credential_refresh', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'credential.refresh', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'stream.counter_restart', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'live.ended', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'doorbell.refused', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'gesture.dropped_superseded', batch: 'diagnostic', detail: 'none' },
-  { kind: 'gesture.dispatch', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'gesture.result', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'gesture.dom_click', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'gesture.envelope', batch: 'diagnostic', detail: 'fields' },
-  { kind: 'epoch.frozen', batch: 'diagnostic', detail: 'fields' },
-];
+/** The kind vocabulary (`@ggui-ai/protocol/runtime-telemetry`, ggui#1381), indexed by kind. */
 const SPEC_BY_KIND: ReadonlyMap<string, RuntimeTelemetryKindSpec> = new Map(
   RUNTIME_TELEMETRY_KINDS.map((s) => [s.kind, s]),
 );

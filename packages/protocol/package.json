@@ -84,6 +84,12 @@
       "require": "./dist/wire.js",
       "default": "./dist/wire.js"
     },
+    "./runtime-telemetry": {
+      "types": "./dist/runtime-telemetry.d.ts",
+      "import": "./dist/runtime-telemetry.js",
+      "require": "./dist/runtime-telemetry.js",
+      "default": "./dist/runtime-telemetry.js"
+    },
     "./version": {
       "types": "./dist/version.d.ts",
       "import": "./dist/version.js",
