@@ -20,6 +20,9 @@
  *   - REPLAY_HORIZON_PASSED: 410 + JSON envelope when sinceSequence is
  *     above lastSequence (cursor from stale deployment).
  *   - Empty events page: 200 + `events: []` when no events match.
+ *   - The polling-rung mount mark (ggui#1614): one
+ *     `render_channel_polled_first {sessionId, appId, kind}` line per
+ *     server process, session and kind, on success only.
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser).
  */
@@ -32,6 +35,7 @@ import {
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { mintWsToken } from '@ggui-ai/mcp-server-core';
+import type { Logger } from './logger.js';
 import { createGguiServer, type GguiServer } from './server.js';
 
 const silentLogger = {
@@ -54,8 +58,16 @@ interface Fixture {
   store: InMemoryGguiSessionStore;
 }
 
+/** One captured `logger.info` call. */
+interface InfoLine {
+  readonly event: string;
+  readonly fields: NonNullable<Parameters<Logger['info']>[1]>;
+}
+
 interface BootOpts {
   readonly eventCount?: number;
+  /** Captures `logger.info` lines, for the polling-rung line (ggui#1614). */
+  readonly infoLines?: InfoLine[];
 }
 
 async function bootWithRender(opts: BootOpts = {}): Promise<Fixture> {
@@ -73,8 +85,19 @@ async function bootWithRender(opts: BootOpts = {}): Promise<Fixture> {
     });
   }
   const shortCodeIndex = new InMemoryShortCodeIndex();
+  const infoLines = opts.infoLines;
+  const logger: Logger =
+    infoLines === undefined
+      ? silentLogger
+      : {
+          ...silentLogger,
+          info: (event, fields) => {
+            infoLines.push({ event, fields: fields ?? {} });
+          },
+          child: () => logger,
+        };
   const server = createGguiServer({
-    logger: silentLogger,
+    logger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     renderChannel: true,
@@ -325,4 +348,48 @@ describe('GET /api/sessions/:sessionId/events', () => {
     expect(body.events[1]?.seq).toBe(4);
     expect(body.lastSequence).toBe(4);
   });
+
+  describe('one success line per view session on the polling rung (ggui#1614)', () => {
+    const polled = (lines: InfoLine[]) =>
+      lines.filter((l) => l.event === 'render_channel_polled_first');
+
+    it('a first successful poll logs once, with the session and app ids, and a second poll does not', async () => {
+      const lines: InfoLine[] = [];
+      fx = await bootWithRender({ eventCount: 3, infoLines: lines });
+      const url = `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=3`;
+      expect((await fetch(url)).status).toBe(200);
+      expect((await fetch(url)).status).toBe(200);
+      expect(polled(lines)).toEqual([
+        { event: 'render_channel_polled_first', fields: { sessionId: fx.sessionId, appId: fx.appId, kind: 'poll' } },
+      ]);
+      // Only ggui's own ids: the query string (and the wsToken in it) never reaches the line.
+      expect(JSON.stringify(polled(lines))).not.toContain(fx.validToken);
+    });
+
+    it('the cold-mount fetch (sinceSequence=0&limit=1) is its own kind, and does not stand in for the first poll', async () => {
+      const lines: InfoLine[] = [];
+      fx = await bootWithRender({ eventCount: 3, infoLines: lines });
+      const base = `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}`;
+      expect((await fetch(`${base}&sinceSequence=0&limit=1`)).status).toBe(200);
+      expect((await fetch(`${base}&sinceSequence=3`)).status).toBe(200);
+      expect(polled(lines).map((l) => l.fields['kind'])).toEqual(['cold-mount', 'poll']);
+    });
+
+    it('a refused poll logs nothing', async () => {
+      const lines: InfoLine[] = [];
+      fx = await bootWithRender({ eventCount: 3, infoLines: lines });
+      // Bad token (401), a token for another app (401 at the app-scope gate)
+      // and a cursor past the ledger (410): none is a view on the rung.
+      expect((await fetch(`${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=bogus&sinceSequence=3`)).status).toBe(401);
+      const { token: otherApp } = mintWsToken({ sessionId: fx.sessionId, appId: 'app-someone-else' }, SECRET);
+      expect(
+        (await fetch(`${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(otherApp)}&sinceSequence=3`)).status,
+      ).toBe(401);
+      expect(
+        (await fetch(`${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=99`)).status,
+      ).toBe(410);
+      expect(polled(lines)).toEqual([]);
+    });
+  });
 });
+

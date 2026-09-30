@@ -62,6 +62,15 @@
  *     `sinceSequence` is below the server's replay horizon OR strictly
  *     greater than `lastSequence` (cursor is from a stale deployment
  *     or the render was reset). Clients re-mount from /state.
+ *
+ * Log (/events): the first 200 per server process, session and kind logs
+ * `render_channel_polled_first {sessionId, appId, kind}`, so a view on the
+ * HTTP polling rung leaves a mount mark tagged with its app, as
+ * `render_channel_subscribed` does for the ws and sse rungs. `kind` is
+ * `cold-mount` for the boot fetch (`sinceSequence=0&limit=1`) and `poll`
+ * otherwise. It fires after every gate, so the `sessionId` is one the
+ * token's app owns, and never carries the query string (the wsToken
+ * rides there).
  */
 
 import type { AppMetadataStore, CodeStore, GguiSessionStore } from "@ggui-ai/mcp-server-core";
@@ -78,8 +87,12 @@ import {
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import type { Express } from "express";
+import { createFirstSeen } from "./first-seen.js";
 import type { Logger } from "./logger.js";
 import { createPublicReadPreflight } from "./browser-cors.js";
+
+/** How many (kind, session) pairs `/events` remembers for its first-success line. */
+const POLLED_FIRST_CAPACITY = 10_000;
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -135,8 +148,10 @@ interface MountOptions {
   /** Per-request runtime-bundle URL resolver (tunnel/proxy aware). */
   readonly resolveRuntimeUrl: () => string;
   /**
-   * Structured logger for store-read failures, and for the `/state`
-   * renewals refused because a chain expired (`state_chain_expired`).
+   * Structured logger for store-read failures, for the `/state`
+   * renewals refused because a chain expired (`state_chain_expired`),
+   * and for the first successful `/events` read per session and kind
+   * (`render_channel_polled_first`).
    */
   readonly logger: Logger;
 }
@@ -165,6 +180,10 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
   // host if fronted separately, else the public origin); the request
   // host is the last resort for local/tunnel deployments.
   const staticBase = codeBaseUrl ?? publicBaseUrl;
+  // Which (kind, session) pairs `/events` has already logged a first
+  // success for. Bounded, so a long-running process never grows with its
+  // session count; a session forgotten under that bound logs again.
+  const polledFirst = createFirstSeen(POLLED_FIRST_CAPACITY);
 
   // ggui#1231 — a public `*` read owns its preflight (null-origin frames).
   /**
@@ -530,6 +549,12 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     // (Wave 7 of flatten-render-identity, 2026-05-28). The store
     // returns events in protocol-canonical shape (seq + type +
     // timestamp[ISO] + data); no projection needed.
+    // The polling rung's mount mark (see the header): once per server
+    // process, session and kind, and only here, past every gate.
+    const kind = sinceSequence === 0 && limit === 1 ? "cold-mount" : "poll";
+    if (polledFirst.first(`${kind}:${sessionId}`)) {
+      logger.info("render_channel_polled_first", { sessionId, appId: stored.appId, kind });
+    }
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.status(200).json({
