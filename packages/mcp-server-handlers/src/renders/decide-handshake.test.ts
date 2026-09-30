@@ -30,7 +30,7 @@ import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
 import { composeExactKey } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import type { BlueprintMatchHit, BlueprintMatchResult } from './blueprint-matcher.js';
-import { matchBlueprint } from './blueprint-matcher.js';
+import { matchBlueprint, semanticExclusionKey } from './blueprint-matcher.js';
 import { ensureConformingContract } from '@ggui-ai/negotiator';
 import type { EnsureConformingResult } from '@ggui-ai/negotiator';
 import {
@@ -109,6 +109,7 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
       : {}),
     ...(over.reuseMode !== undefined ? { reuseMode: over.reuseMode } : {}),
     ...(over.resolveRequestFit !== undefined ? { resolveRequestFit: over.resolveRequestFit } : {}),
+    ...(over.semanticExclusion !== undefined ? { semanticExclusion: over.semanticExclusion } : {}),
   };
 }
 
@@ -709,6 +710,108 @@ describe('decideHandshake — find-similar across pools', () => {
     });
     const opts = mockMatch.mock.calls[0]?.[3];
     expect(opts === undefined || opts.disableSemantic === undefined).toBe(true);
+  });
+
+  describe('adapter.semanticExclusion — rows reserved from the semantic tier (ggui#1568)', () => {
+    const CLEAN: EnsureConformingResult = {
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    };
+    const KEYS: ReadonlySet<string> = new Set([semanticExclusionKey('ck', 'vk')]);
+
+    it("'rows' threads the reserved keys into EVERY pool probe", async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      await decideHandshake(
+        adapter({
+          pools: [pool({ label: 'app' }), pool({ scope: 'shared' })],
+          semanticExclusion: async () => ({ kind: 'rows', keys: KEYS }),
+        }),
+        { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+      );
+      for (const call of mockMatch.mock.calls) {
+        expect(call[3]?.excludeFromSemantic).toBe(KEYS);
+        expect(call[3]?.disableSemantic).toBeUndefined();
+      }
+      expect(mockMatch).toHaveBeenCalledTimes(2);
+    });
+
+    it("'all' turns the semantic tier off for every probe, names the cause, and warns with the reason", async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      const warn = vi.fn();
+      await decideHandshake(
+        adapter({
+          pools: [pool({ label: 'app' }), pool({ scope: 'shared' })],
+          semanticExclusion: () => ({ kind: 'all', reason: 'reserved-row list unavailable' }),
+          warn,
+        }),
+        { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+      );
+      for (const call of mockMatch.mock.calls) {
+        expect(call[3]).toEqual(
+          expect.objectContaining({ disableSemantic: true, disableSemanticCause: 'exclusion-unavailable' }),
+        );
+      }
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('reserved-row list unavailable'));
+    });
+
+    it("a hook that fails operationally is read as 'all': the semantic tier stays off, never open", async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      const warn = vi.fn();
+      await decideHandshake(
+        adapter({
+          pools: [pool()],
+          semanticExclusion: async () => {
+            throw new Error('store timeout');
+          },
+          warn,
+        }),
+        { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+      );
+      expect(mockMatch.mock.calls[0]?.[3]).toEqual(
+        expect.objectContaining({ disableSemantic: true, disableSemanticCause: 'exclusion-unavailable' }),
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('store timeout'));
+    });
+
+    it('a programmer error in the hook is rethrown, as every other hook here does', async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      await expect(
+        decideHandshake(
+          adapter({
+            pools: [pool()],
+            semanticExclusion: () => {
+              throw new TypeError('bug');
+            },
+          }),
+          { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+        ),
+      ).rejects.toThrow('bug');
+      expect(mockMatch).not.toHaveBeenCalled();
+    });
+
+    it("under reuseMode 'exact-only' the hook is never asked (the semantic tier is already off)", async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      const hook = vi.fn(() => ({ kind: 'rows', keys: KEYS }) as const);
+      await decideHandshake(
+        adapter({ pools: [pool()], reuseMode: () => 'exact-only' as const, semanticExclusion: hook }),
+        { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+      );
+      expect(hook).not.toHaveBeenCalled();
+      expect(mockMatch.mock.calls[0]?.[3]).toEqual(expect.objectContaining({ disableSemantic: true }));
+      expect(mockMatch.mock.calls[0]?.[3]?.disableSemanticCause).toBeUndefined();
+    });
+
+    it('absent hook threads no exclusion', async () => {
+      mockMatch.mockResolvedValue(miss);
+      mockEnsure.mockResolvedValue(CLEAN);
+      await decideHandshake(adapter({ pools: [pool()] }), { intent: 'i', blueprintDraft: DRAFT, ctx: CTX });
+      const opts = mockMatch.mock.calls[0]?.[3];
+      expect(opts?.excludeFromSemantic).toBeUndefined();
+    });
   });
 
   it('threads the request variance from blueprintDraft.variance into the match query', async () => {

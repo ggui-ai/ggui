@@ -261,6 +261,7 @@ export {
 // reference implementation.
 export {
   matchBlueprint,
+  semanticExclusionKey,
   type BlueprintMatchHit,
   type BlueprintMatchMiss,
   type BlueprintMatchResult,
@@ -315,6 +316,7 @@ export {
   type BlueprintPool,
   type HandshakeDecideInput,
   type HandshakeDecisionAdapter,
+  type SemanticExclusion,
 } from "./decide-handshake.js";
 // ggui#1427 — `fits()`: the three code checks before the judge, and the
 // direction digest a registrar computes for the row.

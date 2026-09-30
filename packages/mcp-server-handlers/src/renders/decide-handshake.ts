@@ -68,6 +68,7 @@ import {
   type BlueprintMatchHit,
   type BlueprintMatchResult,
   type MatchBlueprintDeps,
+  type MatchBlueprintOptions,
   type RerankPair,
 } from './blueprint-matcher.js';
 import type { RequestFitFacts } from './fits.js';
@@ -132,6 +133,14 @@ export interface BlueprintLookupKeys {
   readonly exactKey: string;
 }
 
+/**
+ * ggui#1568 — a deployment's answer to "which rows may the semantic tier
+ * not offer for this request?" See {@link HandshakeDecisionAdapter.semanticExclusion}.
+ */
+export type SemanticExclusion =
+  | { readonly kind: 'rows'; readonly keys: ReadonlySet<string> }
+  | { readonly kind: 'all'; readonly reason: string };
+
 export interface HandshakeDecisionAdapter {
   /**
    * Resolve the LLM for this request — the find-similar judge AND the
@@ -187,6 +196,25 @@ export interface HandshakeDecisionAdapter {
   resolveRequestFit?(
     ctx: HandlerContext,
   ): Promise<RequestFitFacts | undefined> | RequestFitFacts | undefined;
+  /**
+   * ggui#1568 — rows the deployment reserves from the semantic tier for this
+   * request: rows that must be reached only by their exact key, never by
+   * similarity (an A/B test's arm, served only to the traffic assigned to
+   * it, is the first such row). Resolved once per decision and applied to
+   * every pool probe. Not asked when `reuseMode` is `'exact-only'`, since
+   * the semantic tier is already off.
+   *
+   * `{ kind: 'rows', keys }` excludes each row named by
+   * {@link semanticExclusionKey}. `{ kind: 'all', reason }` turns the
+   * semantic tier off for this request: the answer when the deployment
+   * cannot say which rows are reserved. It must never answer an empty set it
+   * has not read. A hook that throws an operational error is read as
+   * `'all'` and reported through `warn`. A programmer error (TypeError and
+   * kin) is rethrown, as for every hook here. Absent ⇒ nothing is reserved.
+   */
+  readonly semanticExclusion?: (
+    ctx: HandlerContext,
+  ) => Promise<SemanticExclusion> | SemanticExclusion;
   /**
    * Optional deployment-specific pre-match, run BEFORE the find-similar
    * probe so a curated / byte-exact hit wins over everything — e.g. a
@@ -628,6 +656,30 @@ export async function decideHandshake(
     // ggui#607 — resolve the reuse policy once; 'exact-only' threads
     // disableSemantic into every pool probe below.
     const reuseMode = adapter.reuseMode ? await adapter.reuseMode(ctx) : 'full';
+    // ggui#1568 — the reserved rows, resolved once. An operational failure
+    // reads as 'all': the tier stays off rather than offering a reserved row.
+    let exclusion: SemanticExclusion | undefined;
+    if (reuseMode === 'full' && adapter.semanticExclusion) {
+      try {
+        exclusion = await adapter.semanticExclusion(ctx);
+      } catch (err) {
+        if (!isOperationalError(err)) throw err;
+        exclusion = { kind: 'all', reason: `semanticExclusion threw: ${errMessage(err)}` };
+      }
+      if (exclusion.kind === 'all') {
+        adapter.warn?.(
+          `[decideHandshake] semantic tier off for this request, the reserved rows are unknown: ${exclusion.reason}`,
+        );
+      }
+    }
+    const probeOptions: MatchBlueprintOptions | undefined =
+      reuseMode === 'exact-only'
+        ? { disableSemantic: true }
+        : exclusion?.kind === 'all'
+          ? { disableSemantic: true, disableSemanticCause: 'exclusion-unavailable' }
+          : exclusion?.kind === 'rows'
+            ? { excludeFromSemantic: exclusion.keys }
+            : undefined;
     // ggui#1427 — the request's fit facts, resolved once for every pool probe.
     const requestFit = adapter.resolveRequestFit ? await adapter.resolveRequestFit(ctx) : undefined;
     // The requesting agent's declared MCP tools (a set keyed by bare
@@ -672,9 +724,7 @@ export async function decideHandshake(
             ...(variance !== undefined ? { variance } : {}),
             ...(requestFit !== undefined ? { fit: requestFit } : {}),
           },
-          ...(reuseMode === 'exact-only'
-            ? [{ disableSemantic: true } as const]
-            : []),
+          ...(probeOptions !== undefined ? [probeOptions] : []),
         );
         // Isolated in its OWN try/catch, separate from the outer
         // pool-probe catch below: onBlueprintMatch's contract promises

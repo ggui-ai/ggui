@@ -217,6 +217,37 @@ export interface MatchBlueprintOptions {
    * stability-sensitive caller cannot afford (ggui#607).
    */
   readonly disableSemantic?: boolean;
+  /**
+   * ggui#1568 — WHY `disableSemantic` is set, so the trace never names a
+   * cause that did not hold. `'exact-only-policy'` (the default) is the
+   * ggui#607 reuse policy. `'exclusion-unavailable'` means the deployment
+   * could not say which rows are reserved from the semantic tier
+   * ({@link excludeFromSemantic}), so it turned the tier off rather than
+   * risk offering one. Read only when `disableSemantic` is true.
+   */
+  readonly disableSemanticCause?: 'exact-only-policy' | 'exclusion-unavailable';
+  /**
+   * ggui#1568 — rows the deployment reserves from the semantic tier, each
+   * named by {@link semanticExclusionKey}. A named row is dropped straight
+   * after retrieval, so it is never offered to the judge, never returned as
+   * a candidate and never reused by similarity. It stays reachable by its
+   * exact key: exclusion governs how a row is FOUND, never whether it can be
+   * served to a request that names it. Retrieval over-fetches by the set's
+   * size, so the pool the judge ranks is still `topK` deep. A vector store
+   * that clamps its `topK` returns fewer rows than asked, and the pool is
+   * then shallower: fewer reuses, never a reserved row.
+   */
+  readonly excludeFromSemantic?: ReadonlySet<string>;
+}
+
+/**
+ * ggui#1568 — the key {@link MatchBlueprintOptions.excludeFromSemantic}
+ * names a row by: its `(contractKey, variantKey)` pair, the same pair the
+ * exact tier resolves. Unambiguous by construction (JSON array), so no two
+ * different pairs share a key.
+ */
+export function semanticExclusionKey(contractKey: string, variantKey: string): string {
+  return JSON.stringify([contractKey, variantKey]);
 }
 
 const DEFAULT_TOP_K = 20;
@@ -475,11 +506,14 @@ export async function matchBlueprint(
   }
 
   if (options.disableSemantic === true) {
-    // Exact-only reuse policy (ggui#607): the semantic tier is
-    // switched off for this request — report the miss without
-    // spending the retrieval or the judge call.
+    // The semantic tier is switched off for this request: the exact-only
+    // reuse policy (ggui#607), or a deployment that cannot say which rows
+    // are reserved from it (ggui#1568). Report the miss, naming which,
+    // without spending the retrieval or the judge call.
     const reason =
-      'exact-only policy: no canonical match — a new interface will be generated';
+      options.disableSemanticCause === 'exclusion-unavailable'
+        ? 'no-match: no canonical match, and similar-interface reuse is unavailable for this request — a new interface will be generated'
+        : 'exact-only policy: no canonical match — a new interface will be generated';
     emit({ decision: 'no-match', strategy: 'semantic', reason, candidates: [] });
     return { strategy: 'no-match', reason, candidates: [] };
   }
@@ -492,6 +526,9 @@ export async function matchBlueprint(
   // Miss buckets distinguish cosine-gate, no-LLM, judge-declined,
   // low-confidence, defense.
   let candidates: readonly BlueprintCandidate[] = [];
+  const excluded = options.excludeFromSemantic;
+  const excludedCount = excluded?.size ?? 0;
+  let droppedByExclusion = 0;
   try {
     // ggui#606: compose the query the way stored vectors are composed
     // (`composeEmbeddingInput(contract, intent)`), so a candidate is scored
@@ -501,12 +538,22 @@ export async function matchBlueprint(
       query.contract !== undefined
         ? { intent: trimmedIntent, contract: query.contract }
         : { intent: trimmedIntent };
-    candidates = await findBlueprintsByEmbedding(
+    const retrieved = await findBlueprintsByEmbedding(
       deps.registry,
       scope,
       ragArg,
-      { kind, topK },
+      { kind, topK: topK + excludedCount },
     );
+    // ggui#1568 — a reserved row leaves here, before the cosine gate, the
+    // judge, the trace and the result: nothing downstream ever sees it.
+    const kept =
+      excluded === undefined || excludedCount === 0
+        ? retrieved
+        : retrieved.filter(
+            (c) => !excluded.has(semanticExclusionKey(c.blueprint.contractKey, c.blueprint.variantKey)),
+          );
+    droppedByExclusion = retrieved.length - kept.length;
+    candidates = kept.slice(0, topK);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const reason =
@@ -521,12 +568,20 @@ export async function matchBlueprint(
   }
 
   if (candidates.length === 0) {
+    // ggui#1568 — "first registration" is false when rows were retrieved and
+    // every one was reserved; the reason says which it was.
     const reason =
-      'no-match: no candidates in scope — first registration of this kind';
+      droppedByExclusion > 0
+        ? 'no-match: no saved interface is available for reuse — a new one will be generated'
+        : 'no-match: no candidates in scope — first registration of this kind';
+    const traceReason =
+      droppedByExclusion > 0
+        ? `no-match: ${droppedByExclusion} candidates retrieved, every one reserved from the semantic tier by the deployment`
+        : reason;
     emit({
       decision: 'no-match',
       strategy: 'semantic',
-      reason,
+      reason: traceReason,
       candidates: [],
     });
     return { strategy: 'no-match', reason, candidates: [] };
