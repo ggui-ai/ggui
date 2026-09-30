@@ -8,7 +8,7 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { ZodRawShape } from 'zod';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { mintViewRoot } from '@ggui-ai/mcp-server-core';
+import { mintViewRoot, type MintedViewRoot } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import type { ComponentGguiSession, JsonObject } from '@ggui-ai/protocol';
 import {
@@ -64,8 +64,13 @@ const dispatch: JsonObject = {
   firedAt: '2026-09-29T00:00:00.000Z',
 };
 
-/** A proof a view keyed for `sid` under the gate's secret would send for this call. */
+/**
+ * A proof a view keyed for `sid` under the gate's secret would send for this call. It roots in
+ * `opts.root` when given. Otherwise it mints one on the real clock, so a test that reads a root's
+ * `iat` passes that same root: two mints can straddle a second boundary.
+ */
 function prove(opts: {
+  root?: MintedViewRoot;
   sid?: string;
   appId?: string;
   toolName?: ViewProofTool;
@@ -74,7 +79,7 @@ function prove(opts: {
   vtime?: number;
   nonce?: string;
 }): string {
-  const root = mintViewRoot({ sessionId: opts.sid ?? sessionId, appId: opts.appId ?? 'app_1', src: 'result' }, SECRET);
+  const root = opts.root ?? mintViewRoot({ sessionId: opts.sid ?? sessionId, appId: opts.appId ?? 'app_1', src: 'result' }, SECRET);
   const P = root.token.split('.')[0] ?? '';
   const K = Buffer.from(root.viewKey ?? '', 'base64url');
   const toolName = opts.toolName ?? 'ggui_runtime_submit_action';
@@ -129,9 +134,10 @@ describe('the measuring gate: a valid proof (ggui#1415)', () => {
   it('puts the verdict on the context and names the session, the root and the view clock on the line', async () => {
     const store = new InMemoryGguiSessionStore();
     const get = vi.spyOn(store, 'get');
-    // The root is minted on the real clock; the gate's clock is set from it.
-    const now = mintViewRoot({ sessionId, appId: 'app_1', src: 'result' }, SECRET).claims.iat * 1000 + 60_000;
-    const ctx = { ...baseCtx, requestMeta: withProof(prove({ vtime: now - 45_000 })) };
+    // The root is minted on the real clock; the gate's clock is set from it, and the proof roots in it.
+    const root = mintViewRoot({ sessionId, appId: 'app_1', src: 'result' }, SECRET);
+    const now = root.claims.iat * 1000 + 60_000;
+    const ctx = { ...baseCtx, requestMeta: withProof(prove({ vtime: now - 45_000, root })) };
     const out = await runViewProofGate(gateWith(store, undefined, now), submit, dispatch, ctx);
     expect(out.ctx.viewProof).toMatchObject({ verdict: 'valid', src: 'result', userActivation: true });
     expect(out.fields).toEqual({
@@ -160,6 +166,12 @@ describe('the measuring gate: a valid proof (ggui#1415)', () => {
   it('buckets the root age and the skew on the server clock', async () => {
     const root = mintViewRoot({ sessionId, appId: 'app_1', src: 'result' }, SECRET);
     const iatMs = root.claims.iat * 1000;
+    // The flake this pins: every proof below roots in THIS root. A proof that minted its own would
+    // take the wall clock's next second whenever the loop crossed one, and each exact edge after it
+    // would read 1000 ms young (7 d read lt_7d). The clock is moved a second on here, so a regression
+    // fails on every run, not on the rare one.
+    const realNow = Date.now.bind(Date);
+    const later = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 1000);
     // Each edge, from both sides.
     const M = 60_000;
     const H = 3_600_000;
@@ -177,10 +189,14 @@ describe('the measuring gate: a valid proof (ggui#1415)', () => {
       [iatMs + 30 * D - 1, 'lt_30d'],
       [iatMs + 30 * D, 'ge_30d'],
     ];
-    for (const [now, bucket] of cases) {
-      const ctx = { ...baseCtx, requestMeta: withProof(prove({ vtime: now })) };
-      const out = await runViewProofGate(gateWith(undefined, undefined, now), submit, dispatch, ctx);
-      expect(out.fields.viewProofRootAge, bucket).toBe(bucket);
+    try {
+      for (const [now, bucket] of cases) {
+        const ctx = { ...baseCtx, requestMeta: withProof(prove({ vtime: now, root })) };
+        const out = await runViewProofGate(gateWith(undefined, undefined, now), submit, dispatch, ctx);
+        expect(out.fields.viewProofRootAge, bucket).toBe(bucket);
+      }
+    } finally {
+      later.mockRestore();
     }
     const skews: Array<[number, string]> = [
       [-3_600_000, 'behind_ge_1h'],
