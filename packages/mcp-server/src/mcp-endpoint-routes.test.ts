@@ -651,14 +651,21 @@ describe('mcp_client_aborted (ggui#1028) — the client closes before the respon
   afterEach(async () => {
     await fx.server.close();
   });
-  const hangingAuth = (): AuthAdapter => ({
-    authenticate: () => new Promise(() => undefined),
-    getIdentity: () => new Promise(() => undefined),
+  // ggui#1635 — `reached` fires when the request is IN the route's auth stage. The route counts `elapsedMs` from the
+  // request's arrival, which precedes auth, so an abort started after `reached` is at least that late by construction.
+  // Timing the abort from the client's `fetch()` instead let arrival lag under load eat the margin (46 < 50 at load 53).
+  const hangingAuth = (reached: () => void = () => undefined): AuthAdapter => ({
+    authenticate: () => (reached(), new Promise(() => undefined)),
+    getIdentity: () => (reached(), new Promise(() => undefined)),
   });
 
   it('logs the term with the URL app id and the elapsed time when the client aborts mid-request (here: during auth)', async () => {
     const cap = capturingLogger();
-    fx = await boot({ auth: hangingAuth(), perAppRouting: perApp, logger: cap.logger });
+    let reached: () => void = () => undefined;
+    const inAuth = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    fx = await boot({ auth: hangingAuth(() => reached()), perAppRouting: perApp, logger: cap.logger });
     const ac = new AbortController();
     const attempt = fetch(`${fx.url}/apps/beitvdgu`, {
       method: 'POST',
@@ -670,6 +677,8 @@ describe('mcp_client_aborted (ggui#1028) — the client closes before the respon
       body: JSON.stringify(INITIALIZE),
       signal: ac.signal,
     });
+    // The abort starts once the request is in auth, never from the client's `fetch()` (ggui#1635).
+    await inAuth;
     setTimeout(() => ac.abort(), 80);
     await expect(attempt).rejects.toThrow();
     await new Promise((r) => setTimeout(r, 150));
