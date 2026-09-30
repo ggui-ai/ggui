@@ -66,6 +66,38 @@ import type {
 } from '../types/data-contract';
 
 /**
+ * ggui#1637 — whether `value` is a JSON value, by the same rules the schema
+ * below applied when its object arm recursed: finite numbers only, plain
+ * objects only (a `null` prototype included; a `Date`, `Map` or class
+ * instance is not), no array holes, and no `undefined` member value.
+ */
+function isJsonValue(v: unknown): v is JsonValue {
+  if (v === null || typeof v === 'string' || typeof v === 'boolean') return true;
+  if (typeof v === 'number') return Number.isFinite(v);
+  if (typeof v !== 'object') return false;
+  if (Array.isArray(v)) {
+    for (let i = 0; i < v.length; i++) if (!(i in v) || !isJsonValue(v[i])) return false;
+    return true;
+  }
+  const p: unknown = Object.getPrototypeOf(v);
+  return (p === Object.prototype || p === null) && Object.values(v).every(isJsonValue);
+}
+
+/**
+ * ggui#1637 — an object member's value: any JSON value, checked in code
+ * rather than by recursing into {@link jsonValueSchema}. The accepted set is
+ * the same; what changes is the JSON Schema `tools/list` serves. A recursing
+ * object arm emits `additionalProperties: { $ref: <itself> }`, a definition
+ * that reaches itself through required members only, and Google's
+ * function-declaration validator refuses that whole `tools/list` (measured on
+ * #1637; a `{type: null}` alternative or an OpenAPI `nullable` flag did not
+ * change the verdict). This member emits `additionalProperties: {}`, which it
+ * accepts. The array arm still recurses, since a loop through `items` is
+ * allowed.
+ */
+const jsonObjectMemberSchema = z.unknown().refine(isJsonValue);
+
+/**
  * Recursive {@link JsonValue} — string | number | boolean | null |
  * array | object. All fields on contract entries that carry default
  * values, examples, or arbitrary JSON payloads use this.
@@ -77,10 +109,11 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
     z.boolean(),
     z.null(),
     z.array(jsonValueSchema),
-    // JsonObject is `{[key: string]: JsonValue | undefined}`. zod's
-    // `record` on the value side accepts `JsonValue`; missing keys
-    // surface as `undefined` at runtime which JSON.stringify drops.
-    z.record(z.string(), jsonValueSchema),
+    // JsonObject is `{[key: string]: JsonValue | undefined}`. A missing key
+    // surfaces as `undefined` at runtime, which JSON.stringify drops; an
+    // explicit `undefined` member value is not a JSON value and is refused.
+    // The member is checked in code (ggui#1637), not by recursing here.
+    z.record(z.string(), jsonObjectMemberSchema),
   ]),
 );
 

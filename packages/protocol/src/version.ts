@@ -6,6 +6,17 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * JSON-value schema emits a model-API-safe shape (2026-10-01, ggui#1637 —
+ * PATCH-class wire fix, same draft stamp): `jsonValueSchema`'s object arm
+ * checks its members in code instead of recursing, so the JSON Schema served
+ * on `tools/list` has no definition that reaches itself through required
+ * members (`additionalProperties: {}` in place of a `$ref` back to itself).
+ * Google's function-declaration validator refused the old shape for every
+ * tool that embeds it (`ggui_handshake`, `ggui_render`,
+ * `ggui_runtime_sync_context`). The accepted set is unchanged, pinned against
+ * the recursing form case by case; a deep invalid member is reported at its
+ * member path. The array arm still recurses. No export changes.
+ * --------------------------------------------------------------------
  * A copied row now SAYS it is a copy: `Blueprint.clonedFrom` is EMITTED
  * (2026-09-30, ggui#1570 emit step: no schema change, same draft stamp).
  * The declare step served on dev, staging and prod before any writer set
