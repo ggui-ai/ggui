@@ -48,6 +48,12 @@ export interface RenderIdentityFields {
   readonly contractKey: string;
   /** MUST be `variantKey(variance)` for the same render. */
   readonly variantKey: string;
+  /**
+   * ggui#1568 — MUST be `variantKey()` of the variance the agent named (its
+   * render override's, else its handshake draft's). See
+   * `RenderIdentityRecord.requestedVariantKey`.
+   */
+  readonly requestedVariantKey?: string;
   /** `'ephemeral'` when `blueprintId` names no registry row (ggui#1405); absent otherwise. */
   readonly blueprintIdentity?: 'ephemeral';
 }
@@ -192,6 +198,7 @@ function projectRenderIdentityRecord(
     ...(identity.blueprintIdentity !== undefined ? { blueprintIdentity: identity.blueprintIdentity } : {}),
     contractKey: identity.contractKey,
     variantKey: identity.variantKey,
+    ...(identity.requestedVariantKey !== undefined ? { requestedVariantKey: identity.requestedVariantKey } : {}),
     props: session.render.props,
     seqAtLastCommit: session.eventSequence,
     createdAt: session.createdAt,
@@ -232,9 +239,12 @@ export async function writeRenderIdentity(
  * mirroring a context snapshot.
  *
  * Refreshes only what the row can answer for: props, the sequence at
- * this commit, and `updatedAt`. The identity slice
- * (`blueprintId` / `contractKey` / `variantKey`) is carried forward
- * from the existing record VERBATIM, never recomputed. That is not
+ * this commit, `createdAt` (mirrored from the row) and `updatedAt`.
+ * Every other member is carried forward from the existing record
+ * VERBATIM, by spread, never recomputed and never hand-copied: the
+ * identity slice (`blueprintId` / `contractKey` / `variantKey` /
+ * `requestedVariantKey`, and the `blueprintIdentity` marker), the owning
+ * user, and any member added later (ggui#1568). That is not
  * caution — it is the only correct behaviour available here:
  * `contractKey` is `blueprintKey(agreed contract)`, and the agreed
  * contract lived in the handshake these tools never see. A render row
@@ -250,8 +260,8 @@ export async function writeRenderIdentity(
  *
  * Best-effort throughout, like every write in this module: the tool
  * call succeeds regardless. A consequence worth knowing: because the
- * write rebuilds the WHOLE record from the current row rather than
- * patching fields, any refresh self-heals drift left by an earlier one
+ * write takes every refreshed member from the current row rather than
+ * patching deltas, any refresh self-heals drift left by an earlier one
  * that failed — a later context sync repairs props and sequence a
  * dropped update-refresh had gone stale on.
  */
@@ -276,18 +286,21 @@ export async function refreshRenderIdentity(
     logRenderIdentitySkipped(session.id, 'no-record');
     return;
   }
-  await writeRenderIdentity(
-    store,
-    session,
-    {
-      blueprintId: existing.blueprintId,
-      contractKey: existing.contractKey,
-      variantKey: existing.variantKey,
-      // Carried forward verbatim with the id it describes (ggui#1405).
-      ...(existing.blueprintIdentity !== undefined ? { blueprintIdentity: existing.blueprintIdentity } : {}),
-    },
-    REFRESH_FAILED_EVENT,
-  );
+  // ggui#1568 — every member the refresh does not own rides from the stored
+  // record by spread, never by a hand-listed copy: a member added to the
+  // record later cannot be dropped by this carrier.
+  const refreshed: RenderIdentityRecord = {
+    ...existing,
+    props: session.render.props,
+    seqAtLastCommit: session.eventSequence,
+    createdAt: session.createdAt,
+    updatedAt: Date.now(),
+  };
+  try {
+    await store.put(refreshed);
+  } catch (err) {
+    logRenderIdentityFailure(REFRESH_FAILED_EVENT, session.id, session.appId, err);
+  }
 }
 
 function logRenderIdentitySkipped(

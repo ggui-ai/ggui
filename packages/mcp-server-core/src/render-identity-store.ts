@@ -58,6 +58,19 @@ export interface RenderIdentityRecord {
    */
   readonly contractKey: string;
   readonly variantKey: string;
+  /**
+   * ggui#1568 — `variantKey()` of the variance the AGENT named for this
+   * render: its render `override.variance` when it sent one, else its
+   * handshake draft's variance. It is taken from the agent's own input, never
+   * from what the decision served, so it differs from {@link variantKey}
+   * exactly when something other than the agent chose the served variance
+   * (a match's stored tags, a deployment's rewrite of the decide input). A
+   * request that named none records the default-variant sentinel.
+   *
+   * Absent on records written before the member existed. A reader MUST read
+   * absent as unknown, never as the sentinel.
+   */
+  readonly requestedVariantKey?: string;
   readonly props: ComponentGguiSession['props'];
   /** Sampled at commit time; events appended after the last commit are not reflected. */
   readonly seqAtLastCommit: number;

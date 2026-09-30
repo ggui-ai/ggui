@@ -2616,6 +2616,69 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
     expect(record.updatedAt).toBeGreaterThanOrEqual(record.createdAt);
   });
 
+  describe('requestedVariantKey — the variance the agent itself named (ggui#1568)', () => {
+    const DECIDED = { persona: 'decided-by-deployment' } as const;
+    const AUTHORED = { persona: 'authored-by-agent' } as const;
+
+    /** Reseed the harness's handshake: `input` is what the agent sent, `decided` what the decision served. */
+    async function reseed(
+      harness: Harness,
+      handshakeId: string,
+      opts: { readonly input?: BlueprintVariance; readonly decided?: BlueprintVariance },
+    ): Promise<void> {
+      const base = buildRecord({ handshakeId, origin: 'agent' });
+      await seedHandshake(harness.handshakeStore, handshakeId, {
+        ...base,
+        input: {
+          ...base.input,
+          blueprintDraft: {
+            ...base.input.blueprintDraft,
+            ...(opts.input !== undefined ? { variance: opts.input } : {}),
+          },
+        },
+        suggestion: {
+          ...base.suggestion,
+          blueprintMeta: { ...base.suggestion.blueprintMeta, variance: opts.decided ?? {} },
+        },
+      });
+    }
+
+    it('a variance the decision chose, on a request that named none, records the default sentinel as requested', async () => {
+      const renderIdentityStore = new InMemoryRenderIdentityStore();
+      const { harness, handshakeId } = await buildColdGenHarness({ renderIdentityStore });
+      await reseed(harness, handshakeId, { decided: DECIDED });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const record = await readRecord(renderIdentityStore, out.sessionId);
+      expect(record.variantKey).toBe(variantKey(DECIDED));
+      expect(record.requestedVariantKey).toBe(variantKey(undefined));
+    });
+
+    it('a variance the agent authored at handshake is recorded as requested', async () => {
+      const renderIdentityStore = new InMemoryRenderIdentityStore();
+      const { harness, handshakeId } = await buildColdGenHarness({ renderIdentityStore });
+      await reseed(harness, handshakeId, { input: AUTHORED, decided: AUTHORED });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const record = await readRecord(renderIdentityStore, out.sessionId);
+      expect(record.requestedVariantKey).toBe(variantKey(AUTHORED));
+    });
+
+    it('a render override.variance is the agent naming a variance: recorded as requested', async () => {
+      const renderIdentityStore = new InMemoryRenderIdentityStore();
+      const { harness, handshakeId } = await buildColdGenHarness({ renderIdentityStore });
+      await reseed(harness, handshakeId, { decided: DECIDED });
+      const out = await harness.handler.handler(
+        { handshakeId, override: { variance: AUTHORED }, props: {} },
+        CTX,
+      );
+      assertRenderSuccess(out);
+      const record = await readRecord(renderIdentityStore, out.sessionId);
+      expect(record.variantKey).toBe(variantKey(AUTHORED));
+      expect(record.requestedVariantKey).toBe(variantKey(AUTHORED));
+    });
+  });
+
   it('cold gen writes the blueprintId AT the success commit — no post-commit mutation (#460)', async () => {
     const renderIdentityStore = new InMemoryRenderIdentityStore();
     const puts: Array<{ sessionId: string; blueprintId: string | null }> = [];

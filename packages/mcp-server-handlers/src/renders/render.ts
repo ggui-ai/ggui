@@ -1546,6 +1546,12 @@ export function createGguiRenderHandler(
     // the wire output is assembled.
     const effectiveContractKey = blueprintKey(effectiveContract);
 
+    // ggui#1568 — the variance the AGENT named, beside the one served: its
+    // render override's, else its own handshake draft's (the stored input,
+    // never the decision's). Recorded on the identity record so a reader can
+    // tell a variance the agent chose from one something else chose for it.
+    const requestedVariantKey = variantKey(override?.variance ?? storedInput.blueprintDraft.variance);
+
     // Bind the identity slice a commit will record. The blueprint id
     // is per-path (a reuse knows it up front; a cold gen resolves it
     // via registration immediately BEFORE its success commit — #460),
@@ -1560,6 +1566,7 @@ export function createGguiRenderHandler(
           blueprintId,
           contractKey: effectiveContractKey,
           variantKey: effectiveVariantKey,
+          requestedVariantKey,
           ...(blueprintIdentity !== undefined ? { blueprintIdentity } : {}),
         });
 

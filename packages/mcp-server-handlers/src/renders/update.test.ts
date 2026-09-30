@@ -813,6 +813,34 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     expect(record.createdAt).toBe(stored?.createdAt);
   });
 
+  it('carries every member it does not refresh from the stored record — requestedVariantKey included (ggui#1568)', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const seeded: RenderIdentityRecord = {
+      ...seededRecord(sessionId),
+      userId: 'user-7',
+      blueprintIdentity: 'ephemeral',
+      requestedVariantKey: 'requested-fixed',
+    };
+    await renderIdentityStore.put(seeded);
+
+    const handler = createGguiUpdateHandler({ renderStore: store, renderIdentityStore });
+    await handler.handler({ sessionId, kind: 'replace' as const, props: { count: 3 } }, ctx());
+
+    const record = await renderIdentityStore.get(sessionId);
+    const stored = await store.get(sessionId);
+    // Exactly the refreshed members move; everything else is the stored record's.
+    expect(record).toEqual({
+      ...seeded,
+      props: { count: 3 },
+      seqAtLastCommit: stored?.eventSequence,
+      createdAt: stored?.createdAt,
+      updatedAt: record?.updatedAt,
+    });
+    expect(record?.requestedVariantKey).toBe('requested-fixed');
+  });
+
   it('no existing record — skips with render_identity_refresh_skipped and the update still succeeds', async () => {
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender({ store });

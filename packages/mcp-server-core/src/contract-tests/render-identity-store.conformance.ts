@@ -15,6 +15,8 @@
  *     from a miss).
  *   - a `blueprintIdentity` marker is persisted when given and reads
  *     back undefined when not (ggui#1405).
+ *   - `requestedVariantKey` is persisted when given and reads back
+ *     undefined when not (ggui#1568): absent means unknown.
  *   - put is a whole-record upsert — later writes win, no field merge.
  *   - put rejects an empty `sessionId` (the promise rejects; an
  *     unkeyed record can never be read back).
@@ -55,6 +57,7 @@ function record(overrides: Partial<RenderIdentityRecord> = {}): RenderIdentityRe
     blueprintId: 'bp_00000000-0000-4000-8000-000000000001',
     contractKey: '0123456789abcdef',
     variantKey: 'fedcba9876543210',
+    requestedVariantKey: '44136fa355b3678a',
     props: { title: 'Hello' },
     seqAtLastCommit: 3,
     createdAt: 1_700_000_000_000,
@@ -99,6 +102,18 @@ export function runRenderIdentityStoreConformance(
         // Absent reads back undefined — the suite's convention for optionals
         // (a codec returning `key: undefined` serves every reader the same).
         expect((await store.get('render-reg'))?.blueprintIdentity).toBeUndefined();
+      });
+    });
+
+    it('preserves requestedVariantKey when given, and leaves it absent when not (ggui#1568)', async () => {
+      await withStore(async (store) => {
+        await store.put(record({ sessionId: 'render-req', requestedVariantKey: 'aaaabbbbccccdddd' }));
+        const { requestedVariantKey: _absent, ...without } = record({ sessionId: 'render-old' });
+        await store.put(without);
+        expect((await store.get('render-req'))?.requestedVariantKey).toBe('aaaabbbbccccdddd');
+        // A record written before the member existed reads back without it:
+        // absent means unknown, and a store must not fill it in.
+        expect((await store.get('render-old'))?.requestedVariantKey).toBeUndefined();
       });
     });
 
