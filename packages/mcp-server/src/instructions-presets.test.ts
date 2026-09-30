@@ -220,3 +220,28 @@ describe('the protocol presets state only what the shipped surface does (ggui#15
   });
 });
 
+
+describe('the measured window stays inside 2,048 characters (ggui#1619)', () => {
+  // Claude Code and Agent-SDK hosts show the model only the first 2,048
+  // characters of `instructions`. reliability/017 and /018 measured what
+  // that window does on those hosts: the rendering stance routes every turn
+  // through ggui, and the propsSpec bullet is the props-shape guidance whose
+  // absence (in a draft that pushed it out) came with refused renders. An
+  // edit that moves either past the cut changes what those hosts read, so it
+  // needs its own read first.
+  const HOST_WINDOW = 2048;
+  it.each(['default', 'aggressive', 'always'] as const)(
+    '%s: the rendering stance and the whole propsSpec bullet end inside the window',
+    (name) => {
+      const text = MCP_INSTRUCTIONS_PRESETS[name];
+      const stance = 'There is no plain-text reply path.';
+      expect(text.indexOf(stance)).toBeGreaterThanOrEqual(0);
+      expect(text.indexOf(stance) + stance.length).toBeLessThanOrEqual(HOST_WINDOW);
+      const props = text.indexOf('  • propsSpec');
+      expect(props).toBeGreaterThan(0);
+      const propsEnd = text.indexOf('\n', props);
+      expect(propsEnd).toBeGreaterThan(props);
+      expect(propsEnd).toBeLessThanOrEqual(HOST_WINDOW);
+    },
+  );
+});
