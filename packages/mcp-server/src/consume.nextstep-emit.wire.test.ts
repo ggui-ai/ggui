@@ -6,9 +6,16 @@
  * earlier, so a client that cached that schema at `listTools` accepts the
  * emit here with no validation error (the N−1 receipt). This pins: a
  * non-empty drain carries `nextStep` = `ggui_amend` with the input's
- * sessionId, the model-visible content LEADS with the amend example in
- * plain text (the device that made render → consume stick), and an empty
- * drain carries neither.
+ * sessionId, and an empty drain carries none.
+ *
+ * ggui#1397 — the drain carries NO plain-text lead. A lead ("You drained a
+ * gesture. If it changed what the user is looking at, repaint … then re-call
+ * ggui_consume") was measured as the carrier of a failure: on gpt-6-luna it
+ * left an informational tap unanswered (the model re-called ggui_consume with
+ * no text). Removing it cut those 8 → 2 of 16 while valid repaints held, and
+ * held Haiku's repaint attempts and silent re-consumes level. That was probe 4,
+ * against a rule registered before the data, repeating probe 3's direction.
+ * `nextStep` stays: it alone keeps the repaint on a state-changing tap.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -73,7 +80,7 @@ async function boot(withEvent: boolean) {
 }
 
 describe('ggui_consume over a real SDK client — the amend hint is sent (#1399 step 2)', () => {
-  it('a non-empty drain carries nextStep → ggui_amend with the input sessionId, validated against the cached schema, and the text leads with the example', async () => {
+  it('a non-empty drain carries nextStep → ggui_amend with the input sessionId, validated against the cached schema, and no plain-text lead (ggui#1397)', async () => {
     const { client, server } = await boot(true);
     try {
       const result = await client.callTool({ name: 'ggui_consume', arguments: { sessionId, timeout: 0 } });
@@ -81,10 +88,10 @@ describe('ggui_consume over a real SDK client — the amend hint is sent (#1399 
       const out = result.structuredContent as { events: unknown[]; nextStep?: { tool: string; example: string; args: { sessionId: string } } };
       expect(out.events).toHaveLength(1);
       expect(out.nextStep).toMatchObject({ tool: 'ggui_amend', args: { sessionId } });
-      const first = (result.content as { type: string; text?: string }[])[0];
-      expect(first?.type).toBe('text');
-      expect(first?.text).toContain(out.nextStep?.example ?? 'ggui_amend(');
-      expect(first?.text).not.toMatch(/catch an immediate gesture/); // the poll wording is the consume hint's, not this one
+      const content = result.content as { type: string; text?: string }[];
+      // The JSON block only: no lead sentence about repainting and re-consuming (ggui#1397's measured carrier).
+      expect(content).toHaveLength(1);
+      expect(JSON.parse(content[0]?.text ?? 'null')).toEqual(out);
     } finally {
       await client.close();
       await server.close();

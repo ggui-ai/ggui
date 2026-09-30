@@ -641,26 +641,14 @@ export function buildMcpServer(
           nextStepHint !== undefined && nextStepHint.includes('ggui_consume')
             ? nextStepHint
             : undefined;
-        // The consume → amend hint (ggui#1399 step 2) gets the same
-        // plain-text lead, in its own words: the agent that drained a
-        // gesture repaints THIS card rather than rendering a new one
-        // (the replacement-instead-of-amend pattern ggui#1376 read on
-        // prod). Gentle and bounded like the poll wording above.
-        const amendHint =
-          nextStepHint !== undefined && nextStepHint.includes('ggui_amend(')
-            ? nextStepHint
-            : undefined;
+        // The consume → amend hint (ggui#1399 step 2) rides `nextStep` in
+        // the structured result only, with NO plain-text lead (ggui#1397):
+        // a lead ("repaint … then re-call ggui_consume") was measured as the
+        // carrier of informational taps left unanswered on gpt-6-luna, and
+        // removing it held every repaint. Probes 3 and 4 are on #1397.
         return {
           structuredContent: validated,
           content: [
-            ...(amendHint !== undefined
-              ? [
-                  {
-                    type: 'text' as const,
-                    text: `You drained a gesture. If it changed what the user is looking at, repaint the SAME card in place with ${amendHint} — do not render a new one — then re-call ggui_consume for the next gesture.`,
-                  },
-                ]
-              : []),
             ...(gestureHint !== undefined
               ? [
                   {
