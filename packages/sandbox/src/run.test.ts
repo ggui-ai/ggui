@@ -17,11 +17,23 @@
  *   6. Node heap cap (NODE_OPTIONS wiring)
  *   7. Input validation
  */
-import { existsSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runSandboxed } from './run.js';
+
+/**
+ * A directory path with its symlinks resolved, including one that is
+ * already gone (the owned tmpdir is removed before the result returns):
+ * then its parent is resolved. A child's `process.cwd()` reports the
+ * resolved form, and on macOS `os.tmpdir()` sits under a symlink
+ * (`/var` → `/private/var`), so a cwd assertion compares both sides
+ * resolved (ggui#1037).
+ */
+function canonical(path: string): string {
+  return existsSync(path) ? realpathSync(path) : join(realpathSync(dirname(path)), basename(path));
+}
 
 // ── 1. Exit semantics ────────────────────────────────────────────────
 
@@ -107,16 +119,19 @@ describe('runSandboxed — timeout + abort', () => {
     const result = await runSandboxed({
       command: process.execPath,
       args: ['-e', 'setInterval(()=>{},1000); console.log("running");'],
-      timeoutMs: 400,
+      // Room for the child to start before the timeout fires: node's own
+      // startup took 0.3–1.4 s on a loaded host (ggui#1037), so a 400 ms
+      // budget killed it before it printed.
+      timeoutMs: 2_500,
       gracePeriodMs: 100,
     });
     const elapsed = Date.now() - start;
     expect(result.outcome).toBe('timeout');
     expect(result.stdout).toContain('running');
-    // Finished promptly — timeoutMs + grace + tiny overhead. Give a
-    // generous ceiling to absorb CI jitter while still proving the
-    // sandbox didn't let the child run for a full 1000ms interval.
-    expect(elapsed).toBeLessThan(2_000);
+    // Finished promptly: timeoutMs + grace + overhead. The child never
+    // exits on its own (the interval keeps it alive), so ending near the
+    // timeout is the kill.
+    expect(elapsed).toBeLessThan(5_000);
   });
 
   it('escalates to SIGKILL when the child ignores SIGTERM', async () => {
@@ -181,7 +196,7 @@ describe('runSandboxed — cwd isolation', () => {
     });
     expect(result.outcome).toBe('exit');
     expect(result.cwdOwnedBySandbox).toBe(true);
-    expect(result.stdout).toBe(result.cwd);
+    expect(canonical(result.stdout)).toBe(canonical(result.cwd));
     // `runSandboxed` removes the owned tmpdir once the result is
     // ready — operators shouldn't need to clean up after it.
     expect(existsSync(result.cwd)).toBe(false);
@@ -200,7 +215,7 @@ describe('runSandboxed — cwd isolation', () => {
       });
       expect(result.outcome).toBe('exit');
       expect(result.cwdOwnedBySandbox).toBe(false);
-      expect(result.stdout).toBe(userDir);
+      expect(canonical(result.stdout)).toBe(canonical(userDir));
       expect(existsSync(userDir)).toBe(true);
     } finally {
       rmSync(userDir, { recursive: true, force: true });
@@ -474,7 +489,7 @@ describe('runSandboxed — composed boundaries', () => {
         allowed: string;
         leaked: string | undefined;
       };
-      expect(parsed.cwd).toBe(caller);
+      expect(canonical(parsed.cwd)).toBe(canonical(caller));
       expect(parsed.probeExists).toBe(true);
       expect(parsed.allowed).toBe('from-caller');
       expect(parsed.leaked).toBe(undefined);
