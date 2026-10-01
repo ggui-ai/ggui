@@ -1,6 +1,6 @@
 # @ggui-ai/blueprint-probe
 
-> Dev / CI runtime probe for ggui blueprint manifests.
+> Dev / CI runtime probe for GGUI blueprint manifests.
 
 A development and continuous-integration tool that catches blueprints
 which throw on initial render — hook misuse, destructuring of `undefined`,

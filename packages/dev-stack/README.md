@@ -1,6 +1,6 @@
 # @ggui-ai/dev-stack
 
-> Shared local dev engine for the [ggui](https://github.com/ggui-ai/ggui) protocol.
+> Shared local dev engine for the [GGUI](https://github.com/ggui-ai/ggui) protocol.
 
 [![npm version](https://img.shields.io/npm/v/@ggui-ai/dev-stack.svg)](https://www.npmjs.com/package/@ggui-ai/dev-stack)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)

@@ -1,8 +1,8 @@
 # @ggui-ai/brand
 
-The ggui brand kit as code: the wordmark's canonical geometry, the brand's
+The GGUI brand kit as code: the wordmark's canonical geometry, the brand's
 colour tokens, the vendored faces, and one renderer for the social cards
-(`og:image`) every ggui surface serves.
+(`og:image`) every GGUI surface serves.
 
 > **Private for now.** This package is not published to npm. A published
 > package may use it only by **bundling** it into its build output; it must
@@ -114,6 +114,6 @@ WOFF, since satori reads TTF, OTF and WOFF but not WOFF2:
 ## Licence and trademarks
 
 The code is Apache-2.0 (see `LICENSE`); the faces are OFL-1.1. The Apache
-licence grants no rights to the ggui name or wordmark (§6): they are the
-ggui project's marks, included here so ggui's own surfaces render them
+licence grants no rights to the GGUI name or wordmark (§6): they are the
+GGUI project's marks, included here so GGUI's own surfaces render them
 consistently.

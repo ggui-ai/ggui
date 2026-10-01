@@ -71,13 +71,13 @@ When the variable is unset, or the module fails shape validation, the CLI falls 
 | `ggui whoami`       | Print the authenticated user.                                                                                                  |
 | `ggui keys`         | Manage `ggui_user_*` connector keys (list / create / revoke).                                                                  |
 | `ggui create`       | Create cloud resources tied to this project (`create app` writes `appId` into `ggui.json`).                                    |
-| `ggui gadget`       | Author gadgets for the ggui marketplace (`gadget create <scope/name>` scaffolds a repo).                                       |
-| `ggui blueprint`    | Author UI blueprints for the ggui marketplace (`blueprint create <scope/name>` scaffolds a repo).                              |
+| `ggui gadget`       | Author gadgets for the GGUI marketplace (`gadget create <scope/name>` scaffolds a repo).                                       |
+| `ggui blueprint`    | Author UI blueprints for the GGUI marketplace (`blueprint create <scope/name>` scaffolds a repo).                              |
 | `ggui theme`        | Validate + inspect operator-authored DTCG themes (`theme validate <path>`).                                                    |
 | `ggui export-pool`  | Export this deployment's reusable blueprints as a shareable pool directory; load elsewhere via `ggui serve --seed-pool <dir>`. |
 | `ggui push`         | Compile + bulk-push blueprints to a ggui.ai cloud app (requires `ggui login`).                                                 |
 | `ggui deploy`       | Provision + wire a ggui.ai cloud app for this project (idempotent).                                                            |
-| `ggui provider-key` | Manage provider API keys for a cloud ggui app (`provider-key set --app <appId>`).                                              |
+| `ggui provider-key` | Manage provider API keys for a cloud GGUI app (`provider-key set --app <appId>`).                                              |
 
 Run `ggui --help` for per-command flags.
 

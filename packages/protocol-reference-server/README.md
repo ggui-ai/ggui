@@ -1,17 +1,17 @@
 # @ggui-ai/protocol-reference-server
 
-Minimal reference implementation of the **ggui protocol** — the narrow WebSocket server
+Minimal reference implementation of the **GGUI protocol** — the narrow WebSocket server
 that `@ggui-ai/protocol-conformance` runs against to prove the protocol is vendor-neutral.
 
 This package is **not a production server**. It implements exactly enough of the
-ggui live-channel WebSocket wire to pass the conformance kit. Its deliberate design
+GGUI live-channel WebSocket wire to pass the conformance kit. Its deliberate design
 constraint — zero runtime dependency on `@ggui-ai/mcp-server*` — is what makes the
 vendor-neutrality claim real: an independent, from-scratch implementation passing the
 kit grounds the claim empirically rather than by assertion.
 
 ## Scope
 
-- WebSocket transport matching the ggui live-channel wire.
+- WebSocket transport matching the GGUI live-channel wire.
 - In-memory render store with a consume-buffer event ledger (no persistence).
 - `schemaVersion` handshake with `UPGRADE_REQUIRED` on mismatch.
 - Subscribe app scope: the subscribe's `appId` must match the GguiSession's

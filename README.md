@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>ggui</strong> is the universal MCP-UI protocol — a runtime-negotiated data contract between AI agents and human users.</p>
+<p align="center"><strong>GGUI</strong> is the universal MCP-UI protocol — a runtime-negotiated data contract between AI agents and human users.</p>
 
 <p align="center">
   <a href="https://docs.ggui.ai">Docs</a> ·
@@ -16,7 +16,7 @@
 
 ---
 
-Agents describe what they need in natural language; ggui generates ephemeral, interactive interfaces over MCP. No frontend code, no React templates, no custom components — agents talk, users see UI.
+Agents describe what they need in natural language; GGUI generates ephemeral, interactive interfaces over MCP. No frontend code, no React templates, no custom components — agents talk, users see UI.
 
 This repo is the **open protocol + reference runtime**. Self-host with `ggui serve`; pair against any MCP-aware agent runtime (Claude Desktop, Claude Code, claude.ai, Cursor, ChatGPT desktop, Goose, your own). Zero account required, zero managed infrastructure required, zero cloud dependency.
 
@@ -26,9 +26,9 @@ This repo is the **open protocol + reference runtime**. Self-host with `ggui ser
 
 ### 1. Composed golden path — platform-composed (guuey-sdk)
 
-One flow from a `guuey.json` to a rendered, interactive todo UI — every piece a published SDK. [guuey](https://guuey.com)'s dev tooling runs the agent (`@guuey/cli` + `@guuey/worker`), the ggui runtime is the dev router's injected MCP default, and the web client talks to the router with `@guuey/agent-client`. This path is **platform-composed**: it drives the ggui protocol through guuey's published SDKs. The protocol itself has no guuey dependency — paths 2–4 run without it, and the framework-native samples (path 2) stay first-class.
+One flow from a `guuey.json` to a rendered, interactive todo UI — every piece a published SDK. [guuey](https://guuey.com)'s dev tooling runs the agent (`@guuey/cli` + `@guuey/worker`), the GGUI runtime is the dev router's injected MCP default, and the web client talks to the router with `@guuey/agent-client`. This path is **platform-composed**: it drives the GGUI protocol through guuey's published SDKs. The protocol itself has no guuey dependency — paths 2–4 run without it, and the framework-native samples (path 2) stay first-class.
 
-Prerequisites: **Node.js 22+**, **pnpm**, and an **`ANTHROPIC_API_KEY`** (one key drives both the agent and ggui's UI generation).
+Prerequisites: **Node.js 22+**, **pnpm**, and an **`ANTHROPIC_API_KEY`** (one key drives both the agent and GGUI's UI generation).
 
 ```bash
 git clone https://github.com/ggui-ai/ggui && cd ggui
@@ -64,13 +64,13 @@ covers both. It is not authentication — `/mcp` still requires a bearer.
 Non-browser clients (Claude Desktop, agents, curl) are unaffected: they
 connect server-to-server and ignore CORS entirely.
 
-Open **`http://127.0.0.1:6890`** and ask for your todos: the agent calls the todo MCP, renders an interactive todo UI through ggui, and your clicks flow back to the agent. Per-sample detail (ports, env vars, known limitations): [`samples/agents/with-guuey`](https://github.com/ggui-ai/ggui/tree/main/samples/agents/with-guuey) · [`samples/apps/with-guuey-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/with-guuey-web). Prefer a scaffolded start? `npx @guuey/create-agentic-app` scaffolds a guuey agentic app of the same shape (agent + MCP + ggui + web) in one command.
+Open **`http://127.0.0.1:6890`** and ask for your todos: the agent calls the todo MCP, renders an interactive todo UI through GGUI, and your clicks flow back to the agent. Per-sample detail (ports, env vars, known limitations): [`samples/agents/with-guuey`](https://github.com/ggui-ai/ggui/tree/main/samples/agents/with-guuey) · [`samples/apps/with-guuey-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/with-guuey-web). Prefer a scaffolded start? `npx @guuey/create-agentic-app` scaffolds a guuey agentic app of the same shape (agent + MCP + GGUI + web) in one command.
 
 > **Dev-server trust:** `guuey dev` runs your agent unjailed with your environment — standard dev-server trust; run it in a container if that posture doesn't fit.
 
 ### 2. Bring your own framework — build from the framework-native samples
 
-The framework-native path to **ship an agent end-to-end** — no guuey dependency. The canonical samples are complete, runnable pieces of an agentic app — an agent backend per SDK, a stock ggui server config, a reference MCP server, and a web client. Compose them into a workspace and run the whole thing:
+The framework-native path to **ship an agent end-to-end** — no guuey dependency. The canonical samples are complete, runnable pieces of an agentic app — an agent backend per SDK, a stock GGUI server config, a reference MCP server, and a web client. Compose them into a workspace and run the whole thing:
 
 ```bash
 git clone https://github.com/ggui-ai/ggui && cd ggui
@@ -94,7 +94,7 @@ Building a hosted agent instead? See [guuey.com](https://guuey.com) — the mana
 
 ### 3. Self-host the OSS MCP server + test from claude.ai
 
-For **testing the ggui protocol against a real chat host**. Localhost won't work from claude.ai — you need a public HTTPS URL, which [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides for free.
+For **testing the GGUI protocol against a real chat host**. Localhost won't work from claude.ai — you need a public HTTPS URL, which [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides for free.
 
 ```bash
 # terminal 1 — boot the OSS MCP server
@@ -123,9 +123,9 @@ Then in **claude.ai → Settings → Connectors → Add custom connector**, past
 
 Install cloudflared via your package manager: `brew install cloudflared` (macOS), `apt install cloudflared` (Debian), or grab a binary from [cloudflare.com/products/tunnel](https://www.cloudflare.com/products/tunnel/).
 
-### 4. Use the hosted ggui cloud — `mcp.ggui.ai`
+### 4. Use the hosted GGUI cloud — `mcp.ggui.ai`
 
-For **production**, sign in at [the ggui console](https://console.ggui.ai) → create an app → mint a connector key. Paste the bare `https://mcp.ggui.ai` endpoint into your chat host's connector settings — no self-hosting, no tunnel, no key management.
+For **production**, sign in at [the GGUI console](https://console.ggui.ai) → create an app → mint a connector key. Paste the bare `https://mcp.ggui.ai` endpoint into your chat host's connector settings — no self-hosting, no tunnel, no key management.
 
 ---
 
@@ -138,7 +138,7 @@ For **production**, sign in at [the ggui console](https://console.ggui.ai) → c
 | `ggui serve`     | Boot the OSS MCP server (`/mcp`), session viewer (`/r/<shortCode>`), pairing endpoints, and live-channel WebSocket. `--mcp-only` skips agent supervision — fastest first-run. `--port`, `--host` adjust binding.   |
 | `ggui dev`       | Local UI registry + compile-on-demand dev hub for iterating on a `ggui.json` project. Optional tunnel, agent supervision, browser auto-open. Run `ggui --help` for the full flag list.                             |
 | `ggui blueprint` | Author + publish + install cached UI templates — `create`, `publish`, `install`. Blueprints make a known screen cheap, repeatable, and visually consistent by matching before falling back to full LLM generation. |
-| `ggui gadget`    | Author + publish + install client-side libraries (maps, charts, camera, clipboard, anything) wrapped as ggui hooks/components so the generator can use them — `create`, `publish`, `install`.                      |
+| `ggui gadget`    | Author + publish + install client-side libraries (maps, charts, camera, clipboard, anything) wrapped as GGUI hooks/components so the generator can use them — `create`, `publish`, `install`.                      |
 | `ggui theme`     | Validate and inspect `ggui.json#theme` DTCG documents — `ggui theme validate <path>`. Catches schema errors before they reach the runtime.                                                                         |
 
 Plus auth verbs for the hosted path: `ggui login` / `ggui logout` / `ggui whoami` / `ggui keys`. Run `ggui --help` for the top-level overview, or `ggui <verb> --help` for per-command flags.
@@ -152,8 +152,8 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 [`samples/`](https://github.com/ggui-ai/ggui/tree/main/samples) holds end-to-end examples you can clone:
 
 - [`samples/gguis/`](https://github.com/ggui-ai/ggui/tree/main/samples/gguis) — ready-to-run project configs (`default`, `leaflet-demo`, `mapbox-demo`, `canvas-demo`) showing how a `ggui.json` is shaped.
-- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — framework-native reference agents per SDK (Claude Agent SDK, OpenAI Agents SDK, Google ADK) talking to ggui as an MCP server.
-- [`samples/agents/with-guuey`](https://github.com/ggui-ai/ggui/tree/main/samples/agents/with-guuey) + [`samples/apps/with-guuey-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/with-guuey-web) — the **platform-composed (guuey-sdk)** golden-path pair: a `guuey.json` Claude agent served by `@guuey/cli`'s dev router, and a web client on `@guuey/agent-client` rendering ggui cards (see [path 1](#1-composed-golden-path--platform-composed-guuey-sdk) above).
+- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — framework-native reference agents per SDK (Claude Agent SDK, OpenAI Agents SDK, Google ADK) talking to GGUI as an MCP server.
+- [`samples/agents/with-guuey`](https://github.com/ggui-ai/ggui/tree/main/samples/agents/with-guuey) + [`samples/apps/with-guuey-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/with-guuey-web) — the **platform-composed (guuey-sdk)** golden-path pair: a `guuey.json` Claude agent served by `@guuey/cli`'s dev router, and a web client on `@guuey/agent-client` rendering GGUI cards (see [path 1](#1-composed-golden-path--platform-composed-guuey-sdk) above).
 - [`samples/gadgets/`](https://github.com/ggui-ai/ggui/tree/main/samples/gadgets) — example component / hook gadgets for the marketplace.
 - [`samples/mcp-servers/`](https://github.com/ggui-ai/ggui/tree/main/samples/mcp-servers) — minimal domain MCP servers (e.g. a todo server) you can pair against.
 
@@ -208,7 +208,7 @@ The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `
 
 ## Embedding UIs
 
-On web, `<AppRenderer>` — imported directly from `@mcp-ui/client`, the spec-canonical MCP Apps host — is the canonical consumer primitive, driven by ggui's `useMcpAppsChat` hook from `@ggui-ai/mcp-apps-react`. `<AppRenderer>` mounts each ggui render inside a sandboxed iframe; the iframe owns the WebSocket lifecycle and renderer bundle, so host code never touches render internals or WebSocket machinery directly.
+On web, `<AppRenderer>` — imported directly from `@mcp-ui/client`, the spec-canonical MCP Apps host — is the canonical consumer primitive, driven by GGUI's `useMcpAppsChat` hook from `@ggui-ai/mcp-apps-react`. `<AppRenderer>` mounts each GGUI render inside a sandboxed iframe; the iframe owns the WebSocket lifecycle and renderer bundle, so host code never touches render internals or WebSocket machinery directly.
 
 ```bash
 npm install @ggui-ai/mcp-apps-react @mcp-ui/client

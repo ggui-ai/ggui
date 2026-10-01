@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-server
 
-Self-hosted [MCP](https://modelcontextprotocol.io) server for the **ggui protocol** —
+Self-hosted [MCP](https://modelcontextprotocol.io) server for the **GGUI protocol** —
 the interface layer that lets AI agents describe UIs in natural language and have
-ggui generate ephemeral interfaces for them.
+GGUI generate ephemeral interfaces for them.
 
 This package is the HTTP/MCP binding layer. It composes
 [`@ggui-ai/mcp-server-handlers`](https://www.npmjs.com/package/@ggui-ai/mcp-server-handlers)

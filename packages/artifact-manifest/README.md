@@ -1,6 +1,6 @@
 # @ggui-ai/artifact-manifest
 
-Strict [Zod](https://zod.dev) schemas and parsers for the two ggui marketplace artifact manifests:
+Strict [Zod](https://zod.dev) schemas and parsers for the two GGUI marketplace artifact manifests:
 
 - **`ggui.gadget.json`** — gadget bundles (reusable client capabilities).
 - **`ggui.blueprint.json`** — cached UI blueprints (TSX + data contract).

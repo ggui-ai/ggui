@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-apps-react-native
 
-MCP Apps host helper for React Native, from [ggui](https://ggui.ai) — the interface layer
+MCP Apps host helper for React Native, from [GGUI](https://ggui.ai) — the interface layer
 between AI agents and humans. Agents describe UIs in natural language
-over MCP; ggui generates ephemeral interfaces. This package lets you
+over MCP; GGUI generates ephemeral interfaces. This package lets you
 embed those interfaces in a React Native or Expo app.
 
 ## Install
@@ -38,7 +38,7 @@ export function AgentCard({ toolResult }) {
 }
 ```
 
-The component works for any MCP Apps-conformant UI, not only ggui
+The component works for any MCP Apps-conformant UI, not only GGUI
 renders — it has zero ggui-specific coupling.
 
 To build a chat experience around those cards, drive the Streamable

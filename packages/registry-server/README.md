@@ -1,6 +1,6 @@
 # @ggui-ai/registry-server
 
-OSS-runnable HTTP server for the **ggui marketplace registry**. Wraps [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-core) with [hono](https://hono.dev) + filesystem storage + bearer-token auth. Self-hostable via `npx @ggui-ai/registry-server` for local dev, CI, and enterprise on-prem deployments.
+OSS-runnable HTTP server for the **GGUI marketplace registry**. Wraps [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-core) with [hono](https://hono.dev) + filesystem storage + bearer-token auth. Self-hostable via `npx @ggui-ai/registry-server` for local dev, CI, and enterprise on-prem deployments.
 
 ## Quick start
 

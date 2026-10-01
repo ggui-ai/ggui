@@ -2,7 +2,7 @@
 
 Pluggable adapter seam for "the thing that runs an agent."
 
-Part of the **ggui protocol** toolchain, this package defines a small contract —
+Part of the **GGUI protocol** toolchain, this package defines a small contract —
 `AgentRuntimeAdapter` — for supervising whatever actually executes an agent: the
 Claude Agent SDK, OpenAI Agents, the Vercel AI SDK, a plain subprocess, or anything
 else. A host consumes this seam so no agent framework is hardcoded into its dev loop;

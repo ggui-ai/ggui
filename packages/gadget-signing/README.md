@@ -1,8 +1,8 @@
 # @ggui-ai/gadget-signing
 
-> Gadget bundle signing + verification for the ggui gadget marketplace.
+> Gadget bundle signing + verification for the GGUI gadget marketplace.
 
-Signs and verifies the `bundle.js` files that authors publish to a ggui
+Signs and verifies the `bundle.js` files that authors publish to a GGUI
 gadget registry. The Ed25519 path is pure-TS via `@noble/ed25519` +
 `@noble/hashes` — no `node:crypto` dependency, so that path is safe to
 import from browser contexts (e.g. client-side signature verification in

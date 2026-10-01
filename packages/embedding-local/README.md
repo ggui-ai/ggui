@@ -1,13 +1,13 @@
 # @ggui-ai/embedding-local
 
-Local-model text embeddings for self-hosted [ggui](https://ggui.ai).
+Local-model text embeddings for self-hosted [GGUI](https://ggui.ai).
 
 Runs entirely on-device — no embedding API key required. The default
 model is `Xenova/bge-small-en-v1.5` (384-dimensional, MIT-licensed).
 
 This package provides a **`@huggingface/transformers`-backed embedding
 provider** that satisfies the `EmbeddingProvider` contract consumed by
-the ggui MCP server. Transformers.js owns the model download + cache
+the GGUI MCP server. Transformers.js owns the model download + cache
 pipeline: the first `embed()` (or the construction-time warmup)
 fetches the quantized weights into the configured cache directory;
 subsequent runs load from disk.

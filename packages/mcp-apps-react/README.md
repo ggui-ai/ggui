@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-apps-react
 
-MCP Apps host helper for React, from [ggui](https://ggui.ai) — the interface layer between AI
+MCP Apps host helper for React, from [GGUI](https://ggui.ai) — the interface layer between AI
 agents and humans. Agents describe UIs in natural language over MCP;
-ggui generates ephemeral interfaces. This package lets you embed those
+GGUI generates ephemeral interfaces. This package lets you embed those
 interfaces in a React web app.
 
 ## Install
@@ -15,7 +15,7 @@ npm install @ggui-ai/mcp-apps-react react react-dom
 `@modelcontextprotocol/sdk` is also a peer dependency.
 
 To host a render's sandboxed iframe you also need `@mcp-ui/client`
-(install it directly; ggui does not re-export it):
+(install it directly; GGUI does not re-export it):
 
 ```bash
 npm install @mcp-ui/client
@@ -51,7 +51,7 @@ runnable reference — including auth — is the
 The package also exports the `useInvoke` hook for driving the invoke
 conversation loop directly. It pairs with `<AppRenderer>` from
 `@mcp-ui/client` for hosting an MCP Apps render in a sandboxed iframe
-— install that package directly; ggui does not re-export it. (React
+— install that package directly; GGUI does not re-export it. (React
 Native's equivalent host is `<McpAppIframe>` from
 `@ggui-ai/mcp-apps-react-native`.)
 

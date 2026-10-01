@@ -1,6 +1,6 @@
 # @ggui-ai/live-channel
 
-Transport-negotiated channel registry for [ggui](https://ggui.ai) clients.
+Transport-negotiated channel registry for [GGUI](https://ggui.ai) clients.
 
 A framework-agnostic library — no React, no iframe assumptions. It
 separates three concerns that are easy to tangle together in a client:

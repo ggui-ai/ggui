@@ -1,11 +1,11 @@
 # @ggui-ai/iframe-runtime
 
-The iframe-local runtime for [ggui](https://ggui.ai).
+The iframe-local runtime for [GGUI](https://ggui.ai).
 
 A self-contained ESM bundle that boots inside an MCP Apps host iframe,
 runs the protocol-version handshake, opens the live-channel WebSocket,
 and mounts the rendered UI. It bundles React, ReactDOM, and the
-ggui design system inside the artifact so generated component code has a
+GGUI design system inside the artifact so generated component code has a
 single seam to read from.
 
 Most consumers never call this package's API directly — they load the
