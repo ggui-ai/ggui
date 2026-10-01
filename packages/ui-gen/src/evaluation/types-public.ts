@@ -61,6 +61,11 @@ export interface EvalIssue {
   description: string;
   fix: string;
   line?: number;
+  /**
+   * The visual leg's provenance (ggui#1545): `judge` (the model's finding) or `instrument` (a deterministic
+   * measurement). Absent on every other leg's issues. `visualEvaluation.actOn` acts on `judge` only.
+   */
+  origin?: "judge" | "instrument";
 }
 
 /**

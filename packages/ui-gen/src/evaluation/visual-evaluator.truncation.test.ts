@@ -70,6 +70,8 @@ describe('visual judge — truncated answers', () => {
     expect(r).not.toBeNull();
     expect(r?.finalScore).toBe(82);
     expect(r?.issues.length).toBe(2);
+    // ggui#1545 — the kept issues are still the judge's own findings.
+    expect(r?.issues.every((i) => i.origin === 'judge')).toBe(true);
     expect(r?.critique).toContain('truncated');
     expect(salvageTruncatedVisualAnswer(NO_DIMS, 60)).toBeNull();
   });

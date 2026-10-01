@@ -28,6 +28,13 @@ export interface EvaluationIssue {
   severity: 'critical' | 'major' | 'minor';
   /** Suggested fix for the agent to apply */
   fix: string;
+  /**
+   * Who produced it, on the visual leg (ggui#1545): `judge` for the model's own findings, `instrument` for a
+   * deterministic measurement (fit, overflow, blank). Absent on issues from other evaluators. The loop's
+   * `visualEvaluation.actOn` acts on `judge` findings only, so a new instrument check never joins the treatment
+   * by accident: it has to say it is a judge finding, and absence reads as "not acted on".
+   */
+  origin?: 'judge' | 'instrument';
 }
 
 /**

@@ -37,6 +37,7 @@ const judgeMajor: EvalIssue = {
   category: "visual",
   subcategory: "layout",
   severity: "major",
+  origin: "judge",
   description: "The chips sit in a sparse lower section with blank space below.",
   fix: "Group the header, message and chips as one compact unit.",
 };
@@ -46,6 +47,7 @@ const fitMajor: EvalIssue = {
   category: "visual",
   subcategory: "canvas-overflow",
   severity: "major",
+  origin: "instrument",
   description: "The content runs a few pixels past the box.",
   fix: "Tighten the vertical spacing.",
 };
@@ -187,6 +189,23 @@ describe("visualEvaluation.actOn — the visual leg’s majors may start a round
     expect(reasonLines()).toEqual([
       "[simple] eval round 1: continuing: fails=0, visual majors acted=1 (actOn=major)",
     ]);
+  });
+
+  it("'major' never acts on a NEW instrument check either: selection is by origin, not by name (ggui#1545)", async () => {
+    // A future deterministic check at `major`, under a dimension the old name-exclusion never listed.
+    const newInstrumentMajor: EvalIssue = { ...fitMajor, subcategory: "canvas-contrast", description: "Low contrast." };
+    const { ctx, input } = await buildCtx({ visualIssues: [newInstrumentMajor], actOn: "major" });
+    const round = await runEvalRound(ctx, input);
+    expect(round.control).toBe("break");
+    expect(reasonLines()).toEqual([]);
+  });
+
+  it("'major' fails closed: a visual major with no origin is not acted on (ggui#1545)", async () => {
+    const { origin: _dropped, ...unmarked } = judgeMajor;
+    const { ctx, input } = await buildCtx({ visualIssues: [unmarked], actOn: "major" });
+    const round = await runEvalRound(ctx, input);
+    expect(round.control).toBe("break");
+    expect(reasonLines()).toEqual([]);
   });
 
   it("the other quality modes are unchanged: every warn already continues there, with or without the setting", async () => {

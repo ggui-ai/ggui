@@ -175,6 +175,18 @@ describe('runVisualEval — the harness outcome', () => {
     }
   });
 
+  it("the judge's findings reach the loop marked origin 'judge', so actOn can select them (ggui#1545)", async () => {
+    const deps = recordingDeps([90, 60]);
+    const outcome = await runVisualEval(
+      { compiledCode: COMPONENT, originalPrompt: 'a card' },
+      { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card', 'md'] },
+      deps,
+    );
+    const cramped = outcome.issues.find((i) => i.description.includes('cramped'));
+    expect(cramped?.severity).toBe('major');
+    expect(cramped?.origin).toBe('judge');
+  });
+
   it('a judged run says the leg RAN, beside the summary (ggui#1221)', async () => {
     const deps = recordingDeps([80, 90]);
     const outcome = await runVisualEval(

@@ -1028,16 +1028,16 @@ export async function runEvalRound(
     // ── Decide whether to continue the loop ──
     // In fast mode: only fails trigger another iteration, plus (ggui#1542) the visual JUDGE's major findings when
     // `visualEvaluation.actOn` is 'major'. They are taken from the visual outcome itself, never by category over the
-    // merged list, because the text evaluator has a tier-2 `visual` criterion of its own. The fit measurement's own
-    // warn-level overflow (`canvas-overflow*`, also `major`) is excluded: fit is deterministic and runs with or
-    // without a judge, so acting on it here would switch a second feedback source on with the judge's.
+    // merged list, because the text evaluator has a tier-2 `visual` criterion of its own. Only findings whose
+    // `origin` is `judge` act (ggui#1545): the instruments' warn-level majors (fit's `canvas-overflow*` today) are
+    // deterministic and run with or without a judge, so acting on them would switch a second feedback source on
+    // with the judge's. Selecting by origin rather than excluding by name fails closed: a new instrument check, or
+    // any issue with no origin, never joins the treatment unless it is marked a judge finding.
     // In auto-improve / high-quality: fails + warns trigger iterations.
     const blocking = evalResult.issues.filter((i) => i.result === "fail");
     const visualMajorsActed =
       visualEvaluation?.actOn === "major"
-        ? (visualIssues ?? []).filter(
-            (i) => i.result === "warn" && i.severity === "major" && i.subcategory?.startsWith("canvas-overflow") !== true,
-          )
+        ? (visualIssues ?? []).filter((i) => i.origin === "judge" && i.result === "warn" && i.severity === "major")
         : [];
     const shouldContinue =
       qualityMode === "fast"

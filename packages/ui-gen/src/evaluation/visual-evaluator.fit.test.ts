@@ -178,9 +178,13 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
     expect(issue?.severity).toBe('critical');
     expect(issue?.description).toContain('200px');
     expect(issue?.description).toContain('400px');
+    // ggui#1545 — a measurement, so the loop's `actOn` never treats it as a judge finding.
+    expect(issue?.origin).toBe('instrument');
     // The fit-only path reaches the same verdict.
     const fit = await runVisualFit({ compiledCode: COMPONENT, originalPrompt: 'a greeting card' }, { canvases: ['xs-chat-card'] }, fitDeps(280, 85, 200));
     expect(fit.status === 'measured' && fit.issues.map((i) => [i.severity, i.subcategory])).toEqual([['critical', 'canvas-overflow-x']]);
+    // ggui#1545 — the origin survives the harness's issue shape (toEvalIssue).
+    expect(fit.status === 'measured' && fit.issues.map((i) => i.origin)).toEqual(['instrument']);
   });
   it('a 1 px sideways reading is layout rounding, never an overflow; 2 px is', async () => {
     // scrollWidth and clientWidth are rounded integers, so a fractional layout width can read as 1 px past the card

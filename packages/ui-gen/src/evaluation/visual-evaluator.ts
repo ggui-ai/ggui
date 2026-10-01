@@ -372,6 +372,7 @@ export function canvasOverflowIssue(
     : `${viewport.width}×${viewport.height}`;
   return {
     dimension: 'canvas-overflow',
+    origin: 'instrument',
     severity: verdict === 'fail' ? 'critical' : 'major',
     description:
       `Rendered content is ${contentHeight}px tall on the ${canvas} canvas (${box}) — ` +
@@ -391,6 +392,7 @@ export function canvasOverflowXIssue(
 ): EvaluationIssue {
   return {
     dimension: 'canvas-overflow-x',
+    origin: 'instrument',
     severity: verdict === 'fail' ? 'critical' : 'major',
     description:
       `Content runs ${hiddenPx}px past the ${canvas} card's ${viewport.width}px width — the card's frame clips it, ` +
@@ -409,6 +411,7 @@ export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport):
     : `${viewport.width}×${viewport.height}`;
   return {
     dimension: 'canvas-blank',
+    origin: 'instrument',
     severity: 'critical',
     description: `Nothing painted on the ${canvas} canvas (${box}): the capture is one flat colour — the component mounted and rendered no pixels.`,
     fix:
@@ -1795,6 +1798,7 @@ function parseVisualResponse(text: string, passThreshold: number): EvaluationRes
 
   const issues: EvaluationIssue[] = (raw.issues || []).map((i: Record<string, string>) => ({
     dimension: i.dimension || 'visual',
+    origin: 'judge',
     severity: (i.severity as 'critical' | 'major' | 'minor') || 'minor',
     description: i.description || '',
     fix: i.fix || '',
@@ -1918,6 +1922,7 @@ function toEvalIssue(issue: EvaluationIssue): EvalIssue {
     severity: issue.severity === 'critical' ? 'critical' : 'major',
     description: issue.description,
     fix: issue.fix || '',
+    ...(issue.origin !== undefined ? { origin: issue.origin } : {}),
   };
 }
 
