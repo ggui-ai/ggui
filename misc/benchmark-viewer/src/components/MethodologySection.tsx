@@ -67,6 +67,86 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-01',
     text:
+      'Instrument change (internal issue #1652): in short, the runtime probe\'s action check now ' +
+      'walks through a card\'s screens in a copy of the card of its own, so an action whose ' +
+      'control appears only on a later screen, such as a wizard\'s last step, an Edit button that ' +
+      'turns into Save, or a form a button opens, can now be found and its wiring verified. An ' +
+      '"unverified" action-wiring result now means that no press the walk could reach within its ' +
+      'bounds fired the action, and its published description says how far the walk got. Across ' +
+      'this change, nothing changes on the five prompts that declare no action, so their counts, ' +
+      'verdicts, times and warning texts remain comparable; on the five prompts whose contracts ' +
+      'declare an action, compare only runs on runner images built with this change, because ' +
+      'there the probe\'s warning and failure counts, its verdict, the pending-state field and the ' +
+      'generation time move, and through the generation loop the cards and their scores can move ' +
+      'too. The details: before, the check pressed each candidate control of the card\'s first ' +
+      'screen once and reported an action it could not reach that way as "unverified". Because ' +
+      'the walk has its own copy, the copy the probe\'s other checks read is no longer pressed by ' +
+      'the action check (its empty fields are still filled first, as before). On the five action ' +
+      'prompts, what can move is the action-wiring warnings; the report-only pending-state field ' +
+      '(the earlier 2026-10-01 entry), now measured on more cells where it read 0 of 0; and the ' +
+      'prop-coverage, prop-sensitivity and stream checks, which now read a card the action check ' +
+      'has not pressed. Of the probe\'s findings, only a render crash of a kind the loop knows how ' +
+      'to fix and a prop-sensitivity failure can be fed back to the generation loop, each once; ' +
+      'warnings are recorded, never fed back. Prop sensitivity can now flag a displayed prop ' +
+      'whose value the card ignores on a card where the old check\'s presses had changed its text, ' +
+      'and such a failure counts in the probe\'s verdict and can be fed back, so there the card ' +
+      'can change, and with it its scores, turns, time and cost; the walk\'s own time also counts ' +
+      'directly in the generation time of every cell of those prompts. On the other five prompts ' +
+      'no walk runs and nothing changes. For each action whose wiring the probe can trace, it ' +
+      'mounts a fresh copy of the card and walks it screen by screen, pressing its buttons and ' +
+      'links (for an action wired to the Enter key, each is clicked and then given Enter; for one ' +
+      'wired to a form submit or a change, its forms and submit buttons, or its fields, get that ' +
+      'trigger first, and then every button and link is clicked to move between screens, which ' +
+      'the old pass did not do), with every screen\'s empty fields filled first (text, date and ' +
+      'number fields, selects and radio groups; checkboxes are left alone). A screen is told ' +
+      'apart by its controls: each one\'s tag, type, label (its aria-label, placeholder or text) ' +
+      'and whether it is disabled, never typed values, selections, or element names and ids. ' +
+      'Choosing an answer is the same screen unless it adds, removes, relabels, enables or ' +
+      'disables a control. Each control is pressed once per screen, and when a screen has none ' +
+      'left the walk returns, through presses it has already made, to the nearest screen that ' +
+      'still has one. A press that leads back to a screen already seen is not progress, so Back ' +
+      'and Next cannot loop, in any language; there is no list of labels. The walk stops at the ' +
+      'first press that fires the action. Each action\'s walk stops at 60 presses in all, 3 ' +
+      'seconds after it began, or 7 seconds before the probe\'s deadline (the pending phase\'s ' +
+      '5-second reserve plus 2), but none of these bounds applies while it is on the first screen ' +
+      'with a control there still unpressed, including when it returns there. A first-screen ' +
+      'control left unpressed when a press leads elsewhere is pressed only if it is still shown ' +
+      'on the next screen or a known route leads back to it (a one-way wizard has none), where ' +
+      'the old single pass pressed every candidate. An action the walk cannot fire stays ' +
+      '"unverified"; in the published report its issue (subcategory ' +
+      '`runtime:action-wiring:<action>`) now ends with the walk\'s account (presses, screens, why ' +
+      'it stopped, whether any screen named the action, the last presses) instead of naming the ' +
+      'first control the old pass tried, which, where no control named the action, was the first ' +
+      'clickable on the page (on the 2026-10-01 survey cells, a disabled Back button). An action ' +
+      'wired only through a component prop the probe cannot trace (a design-system Select\'s ' +
+      'change, for example) or to dragging is not walked and stays "unverified", as before; so ' +
+      'does one clicked from an element that is not a button or link, such as a checkbox, a row ' +
+      'or a span, and a step gated on a checkbox cannot be passed. An action declared but wired ' +
+      'to nothing still fails. The pending-state field still marks only an action the probe\'s own ' +
+      'click or form submit fired, and now reads the control in the copy whose press fired it. A ' +
+      'submit-wired action can now also be fired by a plain click on a button that submits its ' +
+      'form; that button is then the control read, as for any pressed control that is not a form, ' +
+      'and it reads as gone if it has left the page; and a crash in any copy of the card while ' +
+      'the action is pending now reads 0 of 1. Prop coverage counts a required prop as shown when ' +
+      'its value appears on the copy the other checks read or on any screen a walk reached, so a ' +
+      'value shown on a later step counts; on a card a walk ran on, a prop-coverage warning now ' +
+      'says it also looked on the screens the walk reached. The walk costs a fresh copy of the ' +
+      'card per action and, past the first screen, up to 3 seconds; the first screen has no time ' +
+      'bound, and for an action wired to a submit or a change it is now pressed more than before. ' +
+      'That leaves less time for the probe\'s later checks: the pending-state field can be absent ' +
+      'where it was present before, and a slow card, or one that hangs on a screen only the walk ' +
+      'reaches, can run the probe out of time, which leaves that probe with no verdict and no ' +
+      'findings, no pending-state field and no feedback to the loop that round, as the earlier ' +
+      'entry describes. The change was checked by replaying the old and the new check on six ' +
+      'freshly generated cards of the survey, kanban and onboarding prompts; that replay is not ' +
+      'published, so its figures are not given here. The published measurement is the first runs ' +
+      'on a runner image built with this change (which may come later than this entry\'s date), ' +
+      'and they will be read against the 2026-09-30 and 2026-10-01 runs. The corpus, the judge ' +
+      'panel and every arm are unchanged, and no scoring rule changes. History is not rewritten.',
+  },
+  {
+    date: '2026-10-01',
+    text:
       'Instrument change (internal issue #1398): in short, a new report-only field records the ' +
       'control\'s reaction to the runtime\'s pending state: for a cell of one of the five prompts ' +
       'whose contracts declare an action (one each), whether that action\'s control changed when the ' +
