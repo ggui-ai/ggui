@@ -62,10 +62,44 @@ export function renderReadAllowed(
   row: RenderReadRowView,
   ctx: HandlerContext | undefined
 ): boolean {
-  if (ctx === undefined) return false;
-  if (ctx.appId !== row.appId) return false;
-  if (row.userId !== undefined && ctx.userId !== undefined) {
-    return ctx.userId === row.userId;
-  }
-  return true;
+  return renderReadVerdict(row, ctx).allowed;
 }
+
+/** Which rung of {@link renderReadAllowed} decided a read. */
+export type RenderReadRung = 'no-context' | 'app' | 'subject' | 'app-trust';
+
+/** {@link renderReadAllowed}'s answer, with the rung that gave it. */
+export interface RenderReadVerdict {
+  readonly allowed: boolean;
+  readonly rung: RenderReadRung;
+  /**
+   * Rung 4 admitted a caller with NO end-user identity to a row that HAS
+   * one: an app credential reading a subject-bound session on app trust.
+   * It is the one case where this predicate and `isVisibleToCaller` (the
+   * agent doors' predicate, which refuses it) disagree, so a door that
+   * admits it logs one line (ggui#1553 measures how often it happens before
+   * the two are unified).
+   */
+  readonly appTrustOverSubject: boolean;
+}
+
+/** The read gate's answer and the rung that gave it; see {@link renderReadAllowed} for the rungs. */
+export function renderReadVerdict(
+  row: RenderReadRowView,
+  ctx: HandlerContext | undefined
+): RenderReadVerdict {
+  if (ctx === undefined) return { allowed: false, rung: 'no-context', appTrustOverSubject: false };
+  if (ctx.appId !== row.appId) return { allowed: false, rung: 'app', appTrustOverSubject: false };
+  if (row.userId !== undefined && ctx.userId !== undefined) {
+    return { allowed: ctx.userId === row.userId, rung: 'subject', appTrustOverSubject: false };
+  }
+  return { allowed: true, rung: 'app-trust', appTrustOverSubject: row.userId !== undefined };
+}
+
+/**
+ * The structured line a door logs when it admits a read on
+ * {@link RenderReadVerdict.appTrustOverSubject} (ggui#1553). It carries the
+ * door, the app and the caller's auth source, never the session or the
+ * subject.
+ */
+export const RENDER_READ_APP_TRUST_OVER_SUBJECT = 'render_read_app_trust_over_subject' as const;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderReadAllowed } from "./render-read-gate.js";
+import { renderReadAllowed, renderReadVerdict } from "./render-read-gate.js";
 import type { HandlerContext } from "../types.js";
 
 const APP = "app_a";
@@ -123,5 +123,27 @@ describe("renderReadAllowed", () => {
     // And the inverse: a row that genuinely belongs to a person is NOT
     // readable by a bootstrap credential carrying the sessionId.
     expect(renderReadAllowed(subjectRow, bootstrapCtx)).toBe(false);
+  });
+});
+
+describe("renderReadVerdict — which rung decided, and the one case #1553 measures", () => {
+  const appKey = ctx({ appId: APP, authSource: "apikey", apiKeyHash: "h" });
+  const alice = ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_alice" });
+  const bob = ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" });
+
+  it("names the rung on every path, and agrees with renderReadAllowed", () => {
+    const cases = [
+      [subjectRow, undefined, { allowed: false, rung: "no-context", appTrustOverSubject: false }],
+      [subjectRow, ctx({ appId: "other", authSource: "apikey", apiKeyHash: "h" }), { allowed: false, rung: "app", appTrustOverSubject: false }],
+      [subjectRow, alice, { allowed: true, rung: "subject", appTrustOverSubject: false }],
+      [subjectRow, bob, { allowed: false, rung: "subject", appTrustOverSubject: false }],
+      [subjectRow, appKey, { allowed: true, rung: "app-trust", appTrustOverSubject: true }],
+      [bareRow, appKey, { allowed: true, rung: "app-trust", appTrustOverSubject: false }],
+      [bareRow, alice, { allowed: true, rung: "app-trust", appTrustOverSubject: false }],
+    ] as const;
+    for (const [row, caller, expected] of cases) {
+      expect(renderReadVerdict(row, caller)).toEqual(expected);
+      expect(renderReadAllowed(row, caller)).toBe(expected.allowed);
+    }
   });
 });

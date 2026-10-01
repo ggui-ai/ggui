@@ -180,7 +180,14 @@ export {
   type RefreshRejected,
   type WsEnvelopeVerdict,
 } from "./refresh-ws-token.js";
-export { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
+export {
+  RENDER_READ_APP_TRUST_OVER_SUBJECT,
+  renderReadAllowed,
+  renderReadVerdict,
+  type RenderReadRowView,
+  type RenderReadRung,
+  type RenderReadVerdict,
+} from "./render-read-gate.js";
 export {
   appGadgetsForContract,
   generationInputsForHandshake,

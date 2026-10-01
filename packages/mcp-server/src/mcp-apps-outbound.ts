@@ -94,7 +94,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
-import { renderReadAllowed, type RenderReadRowView } from "@ggui-ai/mcp-server-handlers/renders";
+import { RENDER_READ_APP_TRUST_OVER_SUBJECT, renderReadVerdict, type RenderReadRowView } from "@ggui-ai/mcp-server-handlers/renders";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
 import { RUNTIME_BUNDLE_PLAIN_NAME } from "./runtime-bundle-hash.js";
@@ -2323,7 +2323,19 @@ export function registerGguiRenderResourceTemplate(
             requestId: "resource-read",
           }
         : callerCtx;
-    if (renderReadAllowed(candidate, fallbackCtx)) return true;
+    const verdict = renderReadVerdict(candidate, fallbackCtx);
+    if (verdict.allowed) {
+      // ggui#1553: rung 4 admitted an app credential to a subject-bound
+      // session. Door, app, source; never the session or the subject.
+      if (verdict.appTrustOverSubject) {
+        opts.logger?.info(RENDER_READ_APP_TRUST_OVER_SUBJECT, {
+          door: "resources_read",
+          appId: candidate.appId,
+          source: fallbackCtx?.authSource ?? null,
+        });
+      }
+      return true;
+    }
     opts.logger?.warn("render_resource_read_denied", {
       sessionId,
       rowAppId: candidate.appId,

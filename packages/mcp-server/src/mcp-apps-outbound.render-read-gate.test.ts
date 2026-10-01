@@ -242,6 +242,36 @@ describe("render-resource read gate — deny is byte-identical to miss", () => {
     }
   });
 
+  it("#1553: an app credential reading a SUBJECT-BOUND session on app trust logs one info line (door, app, source; never the session or subject); a bare row logs none", async () => {
+    const info = vi.fn();
+    const renderStore = new InMemoryGguiSessionStore();
+    const owner: HandlerContext = { appId: ROW_APP_ID, authSource: "apikey", apiKeyHash: "h", requestId: "req-app-trust" };
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    registerGguiRenderResourceTemplate(server, {
+      renderStore,
+      runtimeUrl: "https://runtime.example/bundle.js",
+      getContext: () => owner,
+      logger: { ...silentLogger, info },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "gate-test-client-1553", version: "0.0.1" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const measured = () => info.mock.calls.filter((c) => c[0] === "render_read_app_trust_over_subject");
+    try {
+      const bound = (await renderStore.create({ appId: ROW_APP_ID, userId: "guuey:g_alice" })).id;
+      await client.readResource({ uri: `${GGUI_RENDER_RESOURCE_URI}/${bound}` }).catch(() => undefined);
+      expect(measured()).toEqual([
+        ["render_read_app_trust_over_subject", { door: "resources_read", appId: ROW_APP_ID, source: "apikey" }],
+      ]);
+      const bare = (await renderStore.create({ appId: ROW_APP_ID })).id;
+      await client.readResource({ uri: `${GGUI_RENDER_RESOURCE_URI}/${bare}` }).catch(() => undefined);
+      expect(measured()).toHaveLength(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("warn-logs render_resource_read_denied on the denied read (server-side signal preserved)", async () => {
     const warn = vi.fn();
     const renderStore = new InMemoryGguiSessionStore();

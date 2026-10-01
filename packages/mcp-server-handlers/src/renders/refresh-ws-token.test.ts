@@ -273,6 +273,24 @@ describe("ggui_runtime_refresh_ws_token is an authorized re-mint (ggui#1496 part
     ]);
   });
 
+  it("#1553: an app credential refreshing a SUBJECT-BOUND session on app trust logs one line (door, app, source; never the session or subject); the subject itself, or a bare row, logs none", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00Z"));
+    const bound = await seeded({ id: "s1", appId: "A", userId: "u1" });
+    const bare = await seeded({ id: "s2", appId: "A" });
+    const envelopeOf = (sessionId: string) => mintWsToken({ sessionId, appId: "A" }, SECRET).token;
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const measured = () =>
+      info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[ggui] render_read_app_trust_over_subject"));
+    await refresh({ renderStore: bound, verify, mint }, envelopeOf("s1"), { ...ctxOf("A"), authSource: "apikey" });
+    expect(measured()).toEqual([
+      '[ggui] render_read_app_trust_over_subject {"door":"refresh_ws_token","appId":"A","source":"apikey"}',
+    ]);
+    await refresh({ renderStore: bound, verify, mint }, envelopeOf("s1"), { ...ctxOf("A", "u1"), authSource: "oidc" });
+    await refresh({ renderStore: bare, verify, mint }, envelopeOf("s2"), { ...ctxOf("A"), authSource: "apikey" });
+    expect(measured()).toHaveLength(1);
+  });
+
   it("S6: a chained envelope's rootAgeSec counts from its chain's root, not from its own iat (slice 2)", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-01T00:00:00Z"));
