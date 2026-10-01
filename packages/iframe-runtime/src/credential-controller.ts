@@ -35,7 +35,7 @@ export type ExpirySource = "ws" | "polling" | "bridge" | "boot";
 
 export type RefreshOutcome =
   | { readonly kind: "adopted"; readonly credential: HeldCredential }
-  /** A plain refusal: `BOOTSTRAP_INVALID`, `BOOTSTRAP_NOT_SUPPORTED`, or an N−1 server's `REFRESH_WINDOW_CLOSED`. */
+  /** A plain refusal: `BOOTSTRAP_INVALID` or `BOOTSTRAP_NOT_SUPPORTED`, or any other code a server sends. */
   | { readonly kind: "refused"; readonly code: string }
   /** The session is gone, or not visible to the caller: the pull's own not-found. */
   | { readonly kind: "not-found" }

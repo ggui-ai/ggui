@@ -30,10 +30,8 @@
  *
  * Every call is authorized by the caller's own connection, so no refresh
  * window bounds this path. A holder of an envelope who is not admitted to
- * its session gets nothing. The advertised output schema is unchanged from
- * the release before (its `code` enum still names `REFRESH_WINDOW_CLOSED`,
- * which this server never sends), so a client that cached the previous
- * schema accepts every answer (N−1, pinned in `@ggui-ai/mcp-server`).
+ * its session gets nothing. The advertised output schema is pinned byte for
+ * byte in `@ggui-ai/mcp-server` (ggui#1510).
  */
 import { z } from 'zod';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
@@ -57,8 +55,6 @@ const outputSchema = {
    * On `ok:false`, the canonical rejection code:
    *   - `'BOOTSTRAP_INVALID'` — signature mismatch, malformed envelope,
    *     or the wrong kind (e.g. a session token submitted here).
-   *   - `'REFRESH_WINDOW_CLOSED'` — declared for N−1 only: a previous-
-   *     release server sends it; this server never does.
    *   - `'BOOTSTRAP_NOT_SUPPORTED'` — the deployment wires no render
    *     store, envelope verifier or minter.
    *   A session the caller cannot see is NOT answered here: it throws the
@@ -67,7 +63,6 @@ const outputSchema = {
   code: z
     .enum([
       'BOOTSTRAP_INVALID',
-      'REFRESH_WINDOW_CLOSED',
       'BOOTSTRAP_NOT_SUPPORTED',
     ])
     .optional(),
@@ -92,9 +87,7 @@ export interface RefreshAccepted {
 
 export interface RefreshRejected {
   readonly ok: false;
-  /** `REFRESH_WINDOW_CLOSED` stays declared for N−1 (a previous-release
-   *  server sends it); this server never does. */
-  readonly code: 'BOOTSTRAP_INVALID' | 'REFRESH_WINDOW_CLOSED' | 'BOOTSTRAP_NOT_SUPPORTED';
+  readonly code: 'BOOTSTRAP_INVALID' | 'BOOTSTRAP_NOT_SUPPORTED';
   readonly message: string;
 }
 

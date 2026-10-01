@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_runtime_refresh_ws_token` stops declaring `REFRESH_WINDOW_CLOSED`
+ * (2026-10-01, a wire removal, ggui#1510: same draft stamp). The output
+ * schema's `code` enum names `BOOTSTRAP_INVALID` and `BOOTSTRAP_NOT_SUPPORTED`,
+ * and `GguiRefreshWsTokenOutput` types those two. No server has sent the
+ * member since the refresh became an authorized re-mint (ggui#1496 part B
+ * slice 1, `79b4ced2e`: in npm 0.25.0, and on dev, staging and prod), and
+ * it stayed declared one release after that, so a client holding an older
+ * schema accepts every answer. The advertised schema is pinned byte for
+ * byte (tag 14's without the member). The ack's `sessionToken` and the
+ * `'session'` token kind are NOT removed here: npm 0.25.0 still mints the
+ * ack's reconnect token, so they wait for the release after the one that
+ * stops it on npm. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The build stamp rides the reference registry's row, a portable export and
  * a seed-pool import (2026-10-01, ggui#1476: no schema change, same draft
  * stamp). The registry writes `build` into its vector-store row (a JSON

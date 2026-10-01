@@ -1,12 +1,12 @@
 /**
- * ggui#1496 part B — N−1 receipt for the authorized refresh: the refresh
- * tool's ADVERTISED output schema is byte-identical to the one served at
- * tag 14 (`b68b964a7`). A client that cached that schema at `listTools`
- * validates every answer an N server gives (the output is closed, so a new
- * member would be refused). The fixture was captured from the unchanged
- * handler before the change; its `code` enum still names
- * `REFRESH_WINDOW_CLOSED`, which an N−1 server sends and an N server never
- * does.
+ * ggui#1510 — N−1 receipt for the refresh tool's ADVERTISED output schema.
+ * The output is closed, so a client validates every answer against the schema
+ * it cached at `listTools`. The fixture is the previous release's served
+ * schema (tag 14, `b68b964a7`). The served schema MUST be exactly that schema
+ * with one enum member deleted, `REFRESH_WINDOW_CLOSED`, which no server has
+ * sent since ggui#1496 part B: compared byte for byte, so any other change
+ * fails here, and the served `code` set is a strict subset of the cached one,
+ * so a client holding the previous release's schema accepts every answer.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,9 +33,27 @@ const FIXTURE = path.join(
   '__fixtures__/n1/refresh-ws-token.output-schema.b68b964a7.json',
 );
 
-describe('ggui_runtime_refresh_ws_token — N−1 advertised schema (ggui#1496 part B)', () => {
-  it('advertises the output schema tag 14 served, byte for byte, with the new deps wired', async () => {
-    const served = (JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as { outputSchema: unknown }).outputSchema;
+interface CodeProp {
+  readonly type: string;
+  readonly enum: readonly string[];
+}
+interface RefreshOutputSchema {
+  readonly properties: { readonly code: CodeProp } & Readonly<Record<string, unknown>>;
+  readonly [key: string]: unknown;
+}
+
+describe('ggui_runtime_refresh_ws_token — the advertised output schema against the previous release (ggui#1510)', () => {
+  it('advertises the previous release\'s schema without REFRESH_WINDOW_CLOSED, byte for byte', async () => {
+    const previous = (JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as { outputSchema: RefreshOutputSchema }).outputSchema;
+    // Control: the previous release really declares the member this release drops.
+    expect(previous.properties.code.enum).toContain('REFRESH_WINDOW_CLOSED');
+    const expected: RefreshOutputSchema = {
+      ...previous,
+      properties: {
+        ...previous.properties,
+        code: { ...previous.properties.code, enum: previous.properties.code.enum.filter((c) => c !== 'REFRESH_WINDOW_CLOSED') },
+      },
+    };
     const ctx: HandlerContext = { appId: 'app-1', requestId: 'r-1' };
     const handler = createGguiRefreshWsTokenHandler({
       renderStore: new InMemoryGguiSessionStore(),
@@ -44,14 +62,16 @@ describe('ggui_runtime_refresh_ws_token — N−1 advertised schema (ggui#1496 p
     });
     const server = buildMcpServer({ name: 'test', version: '0' }, [handler], () => ctx, silentLogger);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'refresh-n1-wire-test', version: '0' });
+    const client = new Client({ name: 'refresh-schema-wire-test', version: '0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const { tools } = await client.listTools();
       const tool = tools.find((t) => t.name === 'ggui_runtime_refresh_ws_token');
       expect(tool, 'the tool is listed').toBeDefined();
-      expect(tool?.outputSchema).toEqual(served);
-      expect(JSON.stringify(tool?.outputSchema)).toBe(JSON.stringify(served));
+      expect(tool?.outputSchema).toEqual(expected);
+      expect(JSON.stringify(tool?.outputSchema)).toBe(JSON.stringify(expected));
+      // N−1: every code this release can answer is one the previous release's schema names.
+      for (const code of expected.properties.code.enum) expect(previous.properties.code.enum).toContain(code);
     } finally {
       await client.close();
       await server.close();
