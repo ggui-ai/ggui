@@ -2152,7 +2152,12 @@ function inlineScriptJson(value: unknown): string {
  *   `BUNDLE_FETCH_FAILED` to the parent (SPEC §5.5.2), the same envelope the
  *   thin shell posts. Adding the twin can throw, for example under a Trusted
  *   Types policy that refuses a plain `src` string; that is reported at once,
- *   as the thin shell's loader does.
+ *   as the thin shell's loader does. Then (ggui#1518) it removes the loading
+ *   mark (when the shell rendered one; `loadingIndicator: null` renders none,
+ *   and the script then names no mark) and paints the thin shell's failure
+ *   line with a Retry that reloads,
+ *   so a host that ignores the envelope never shows a mark animating forever.
+ *   Nothing is painted while the twin is still being tried.
  * - An evaluation or parse error in a runtime that DID load is an `error`
  *   targeted at `window`, not at the element, so it is never reported here as
  *   a fetch failure.
@@ -2160,8 +2165,12 @@ function inlineScriptJson(value: unknown): string {
  * A separate element from the meta script, whose `;</script>` terminator two
  * readers parse.
  */
-function runtimeBundleFailureScript(twinUrl: string | undefined): string {
+function runtimeBundleFailureScript(twinUrl: string | undefined, retireLoadingMark: boolean): string {
   const twin = twinUrl === undefined ? 'null' : inlineScriptJson(twinUrl);
+  // Emitted only when the shell renders a mark (`loadingIndicator: null` renders none).
+  const retire = retireLoadingMark
+    ? `var L=document.querySelectorAll('[data-ggui-shell-loading]');for(var i=0;i<L.length;i++){if(L[i].parentNode)L[i].parentNode.removeChild(L[i]);}`
+    : '';
   return (
     `<script>(function(){var t=${twin},used=false,told=false;` +
     `window.addEventListener('error',function(e){var s=e&&e.target;` +
@@ -2173,6 +2182,17 @@ function runtimeBundleFailureScript(twinUrl: string | undefined): string {
     `catch(x){d='its twin could not be added: '+((x&&x.message)||x);}}` +
     `if(told)return;told=true;` +
     `try{window.parent.postMessage({type:'${MCP_APP_BOOTSTRAP_FAILED_TYPE}',reason:'BUNDLE_FETCH_FAILED',message:'Runtime bundle failed to load: '+d},'*');}catch(_){}` +
+    // ggui#1518: the runtime never ran, so nothing else retires the loading
+    // mark or tells the user. A host that ignores the envelope still shows this.
+    retire +
+    `var c=document.createElement('div');c.setAttribute('data-ggui-shell-failure','');c.setAttribute('role','alert');` +
+    `c.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 24px;min-height:160px;font-family:system-ui,sans-serif;text-align:center;color:var(--ggui-color-onGround,var(--ggui-shell-scheme-on-surface,#374151))';` +
+    `var h=document.createElement('div');h.style.cssText='font-size:14px;font-weight:600';h.textContent='This view could not load';c.appendChild(h);` +
+    `var q=document.createElement('div');q.style.cssText='font-size:12px;opacity:.65;max-width:320px;line-height:1.45';` +
+    `q.textContent='The interface could not start. The conversation is unaffected \u2014 you can also just ask for the view again.';c.appendChild(q);` +
+    `var b=document.createElement('button');b.type='button';b.textContent='Retry';` +
+    `b.style.cssText='margin-top:2px;padding:7px 18px;border-radius:8px;border:1px solid currentColor;background:none;color:inherit;opacity:.75;font:500 13px system-ui,sans-serif;cursor:pointer';` +
+    `b.onclick=function(){location.reload();};c.appendChild(b);document.body.appendChild(c);` +
     `},true);})();</script>`
   );
 }
@@ -2284,7 +2304,7 @@ export function gguiShellHtml(
   const runtimeTag =
     options?.runtimeInlineSource !== undefined
       ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
-      : `${runtimeBundleFailureScript(fallbackTwin)}\n<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${safeRuntimeUrl}"></script>`;
+      : `${runtimeBundleFailureScript(fallbackTwin, loadingBlock !== '')}\n<script type="module" crossorigin="anonymous" data-ggui-runtime="src" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
 <html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;${background}">${loadingBlock}

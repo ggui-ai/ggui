@@ -105,17 +105,70 @@ interface ErrorEventLike {
   message?: string;
 }
 
+/** A non-script element the failure path builds (ggui#1518). */
+interface FakeElement {
+  tagName: string;
+  type: string;
+  textContent: string;
+  style: { cssText: string };
+  attrs: Record<string, string>;
+  children: FakeElement[];
+  onclick: (() => void) | null;
+  setAttribute(name: string, value: string): void;
+  appendChild(child: FakeElement): void;
+}
+
+function fakeElement(tagName: string): FakeElement {
+  const el: FakeElement = {
+    tagName: tagName.toUpperCase(),
+    type: "",
+    textContent: "",
+    style: { cssText: "" },
+    attrs: {},
+    children: [],
+    onclick: null,
+    setAttribute: (name, value) => {
+      el.attrs[name] = value;
+    },
+    appendChild: (child) => {
+      el.children.push(child);
+    },
+  };
+  return el;
+}
+
+/** The shell's loading mark, as `[data-ggui-shell-loading]` finds it; removal is recorded. */
+interface FakeMark {
+  parentNode: { removeChild(el: FakeMark): void };
+}
+
+const textOf = (el: FakeElement): string => [el.textContent, ...el.children.map(textOf)].join(" ");
+
 /**
  * Run every inline classic `<script>` of the shell except the meta one, as a
- * browser would before the module tag. `createElement` stands in for the
- * document's, so a test can make adding the twin throw.
+ * browser would before the module tag. `createScript` stands in for the
+ * document's script factory, so a test can make adding the twin throw; any
+ * other element is a plain fake. The document carries one loading mark.
  */
-function runFallbackScript(html: string, createElement: () => FakeScript = () => fakeScript()) {
+function runFallbackScript(html: string, createScript: () => FakeScript = () => fakeScript()) {
   const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? "");
   const listeners: Array<(ev: ErrorEventLike) => void> = [];
   const appended: FakeScript[] = [];
+  const painted: FakeElement[] = [];
+  const removedMarks: FakeMark[] = [];
   const warned: string[] = [];
   const posted: Array<{ message: unknown; targetOrigin: string }> = [];
+  let reloads = 0;
+  const live: FakeMark[] = [];
+  const mark: FakeMark = {
+    parentNode: {
+      removeChild: (el) => {
+        removedMarks.push(el);
+        live.splice(live.indexOf(el), 1);
+      },
+    },
+  };
+  live.push(mark);
   const win = {
     addEventListener: (type: string, fn: (ev: ErrorEventLike) => void, capture: boolean) => {
       if (type === "error" && capture === true) listeners.push(fn);
@@ -128,9 +181,20 @@ function runFallbackScript(html: string, createElement: () => FakeScript = () =>
   };
   const context = vm.createContext({
     window: win,
+    location: {
+      reload: () => {
+        reloads += 1;
+      },
+    },
     document: {
-      createElement,
-      body: { appendChild: (el: FakeScript) => appended.push(el) },
+      createElement: (tag: string) => (tag.toLowerCase() === "script" ? createScript() : fakeElement(tag)),
+      querySelectorAll: (selector: string) => (selector === "[data-ggui-shell-loading]" ? [...live] : []),
+      body: {
+        appendChild: (el: FakeScript | FakeElement) => {
+          if (el.tagName === "SCRIPT") appended.push(el as FakeScript);
+          else painted.push(el as FakeElement);
+        },
+      },
     },
     console: { warn: (m: string) => warned.push(m) },
     globalThis: {},
@@ -141,7 +205,18 @@ function runFallbackScript(html: string, createElement: () => FakeScript = () =>
   }
   const fireEvent = (ev: ErrorEventLike): void => listeners.forEach((fn) => fn(ev));
   const fire = (target: unknown): void => fireEvent({ target });
-  return { listeners, appended, warned, posted, fire, fireEvent, window: win };
+  return {
+    listeners,
+    appended,
+    painted,
+    removedMarks,
+    warned,
+    posted,
+    fire,
+    fireEvent,
+    window: win,
+    reloads: () => reloads,
+  };
 }
 
 const reasons = (posted: Array<{ message: unknown }>): string[] =>
@@ -328,5 +403,50 @@ describe("gguiShellHtml runtime-bundle fallback (ggui#1501)", () => {
     expect(run.listeners).toHaveLength(1);
     run.fire(fakeScript({ "data-ggui-runtime": "src" }));
     expect(run.appended[0]?.src).toBe("https://a.example/</script><b>/iframe-runtime.js");
+  });
+
+  it("once nothing is left to try, the loading mark goes and a failure line with Retry is painted, once (ggui#1518)", () => {
+    const run = runFallbackScript(gguiShellHtml(BOOTSTRAP(hashedUrl), { background: "surface" }));
+    expect(run.removedMarks).toHaveLength(0);
+    expect(run.painted).toHaveLength(0);
+    run.fire(fakeScript({ "data-ggui-runtime": "src" }));
+    expect(reasons(run.posted)).toEqual(["BUNDLE_FETCH_FAILED"]);
+    expect(run.removedMarks).toHaveLength(1);
+    expect(run.painted).toHaveLength(1);
+    const card = run.painted[0];
+    expect(card?.attrs["data-ggui-shell-failure"]).toBe("");
+    expect(card?.attrs["role"]).toBe("alert");
+    expect(card === undefined ? "" : textOf(card)).toContain("This view could not load");
+    const retry = card?.children.find((c) => c.tagName === "BUTTON");
+    expect(retry?.textContent).toBe("Retry");
+    retry?.onclick?.();
+    expect(run.reloads()).toBe(1);
+    // A later error paints nothing more.
+    run.fire(fakeScript({ "data-ggui-runtime": "src" }));
+    expect(run.painted).toHaveLength(1);
+  });
+
+  it("with the loading mark disabled, the failure still paints, and the shell never names the mark (ggui#1518, #667)", () => {
+    const html = gguiShellHtml(BOOTSTRAP(hashedUrl), { background: "surface", loadingIndicator: null });
+    expect(html).not.toContain("data-ggui-shell-loading");
+    const run = runFallbackScript(html);
+    run.fire(fakeScript({ "data-ggui-runtime": "src" }));
+    expect(reasons(run.posted)).toEqual(["BUNDLE_FETCH_FAILED"]);
+    expect(run.removedMarks).toHaveLength(0);
+    expect(run.painted).toHaveLength(1);
+  });
+
+  it("while the twin is being tried, the loading mark stays and nothing is painted (ggui#1518)", () => {
+    const run = runFallbackScript(
+      gguiShellHtml(BOOTSTRAP(hashedUrl), { background: "surface", runtimeBundlePlainName: PLAIN })
+    );
+    run.fire(fakeScript({ "data-ggui-runtime": "src" }));
+    expect(run.appended).toHaveLength(1);
+    expect(run.removedMarks).toHaveLength(0);
+    expect(run.painted).toHaveLength(0);
+    run.fire(fakeScript({ "data-ggui-runtime": "fallback" }));
+    expect(reasons(run.posted)).toEqual(["BUNDLE_FETCH_FAILED"]);
+    expect(run.removedMarks).toHaveLength(1);
+    expect(run.painted).toHaveLength(1);
   });
 });

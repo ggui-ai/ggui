@@ -6,6 +6,15 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The self-contained shell shows a runtime it cannot load (2026-10-01,
+ * ggui#1518: PATCH-class, no schema change, same draft stamp). After its
+ * bundle-failure script posts the one `BUNDLE_FETCH_FAILED` (ggui#1503), it
+ * removes `[data-ggui-shell-loading]` and paints a failure line
+ * (`[data-ggui-shell-failure]`, `role="alert"`) with the thin shell's
+ * wording and a Retry that reloads the frame. Nothing is painted while the
+ * unhashed twin is still being tried. `gguiShellHtml` stays a pure function
+ * of its inputs and gains no option.
+ * --------------------------------------------------------------------
  * `ggui_runtime_refresh_ws_token` stops declaring `REFRESH_WINDOW_CLOSED`
  * (2026-10-01, a wire removal, ggui#1510: same draft stamp). The output
  * schema's `code` enum names `BOOTSTRAP_INVALID` and `BOOTSTRAP_NOT_SUPPORTED`,
