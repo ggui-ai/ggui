@@ -15,10 +15,16 @@
  *   7. Integration — 2 commits × 2 generators = 4 cells, all rows
  *      populated in the report.
  *
- * No real LLM calls — adapters are absent from the runner so unknown
- * generators / playwright-missing short-circuits trigger first.
+ * No real LLM calls (#1097): the runner's generation dispatch is mocked to
+ * reject at once, so a cell that reaches generation fails fast with the
+ * stub's message instead of calling a provider. Before, the default
+ * generator's cells reached the real harness and provider SDK: without a
+ * key they failed on authentication, and with one in the shell they ran
+ * a real generation, which is how this file once tripped the 30 s
+ * timeout under load.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { dispatchGeneration } from '@ggui-ai/ui-gen/adapters/generation-dispatch';
 import {
   GeneratorAdapter,
   type GenerateParams,
@@ -49,6 +55,15 @@ import {
   type PanelEvalResult,
 } from './types';
 import { AESTHETIC_PROMPT_VERSION_PANEL } from './post-eval';
+
+vi.mock('@ggui-ai/ui-gen/adapters/generation-dispatch', () => ({
+  dispatchGeneration: vi.fn(async () => {
+    throw new Error('unit test: generation dispatch is stubbed; no provider is called (#1097)');
+  }),
+}));
+
+/** The message every cell that reaches generation fails with here. */
+const DISPATCH_STUB_ERROR = 'unit test: generation dispatch is stubbed; no provider is called (#1097)';
 
 /** The 3-model judge panel used in fixtures — mirrors the real PANEL. */
 const FIXTURE_JUDGE_MODELS = ['claude-haiku-4-5-20251001', 'gpt-5.4-mini', 'gemini-3-flash-preview'] as const;
@@ -226,16 +241,13 @@ describe('BenchmarkRunner generator dispatch', () => {
     expect(report.results[0]!.generator).toBe('ui-gen-future-experimental-llm');
   });
 
-  it('advanced generator with Playwright stub → passes the gate, then routes to dispatch (errors downstream is OK)', { timeout: 60_000 }, async () => {
+  it('advanced generator with Playwright stub → passes the gate, then routes to dispatch (errors downstream is OK)', async () => {
     // With playwright stubbed, the advanced-not-available SKIP is
-    // bypassed. The run will go on to invoke dispatchGeneration which
-    // fails because MockAdapter throws — that's fine; the dispatch
-    // failure shows up as `error` on the result, the `generator` field
-    // still records the slug, and we've proved the gate is configurable.
-    //
-    // 60s timeout: the dispatch-failure path retries with jittered
-    // backoff — measured 18-27s wall on an idle machine (2026-08-19,
-    // n=4), which tips over the default 30s under full-suite load.
+    // bypassed. The run goes on to the (mocked) dispatchGeneration, which
+    // rejects at once: the dispatch failure shows up as `error` on the
+    // result, the `generator` field still records the slug, and we've
+    // proved the gate is configurable. No provider retry loop runs, so
+    // the default timeout holds (it once needed 60 s, #1097).
     const runner = makeRunnerWithMockAdapter({
       // A real `PlaywrightModule` shape (#973 tightened the config type from
       // `{ chromium?: unknown }`): presence of `chromium` marks the advanced
@@ -265,6 +277,7 @@ describe('BenchmarkRunner generator dispatch', () => {
     // error) or the result is still classified as a Playwright-skip
     // — we explicitly assert it's NOT the playwright-missing message.
     expect(report.results[0]!.error ?? '').not.toMatch(/requires Playwright/);
+    expect(report.results[0]!.error ?? '').toContain(DISPATCH_STUB_ERROR);
   });
 });
 
@@ -422,6 +435,13 @@ describe('Multi-generator integration', () => {
     const report = await runner.run({ variants, commits });
 
     expect(report.results).toHaveLength(4);
+    // Hermetic (#1097): every cell that reached generation hit the stub,
+    // never a provider; the advanced cells stop earlier, at the Playwright gate.
+    expect(vi.mocked(dispatchGeneration)).toHaveBeenCalled();
+    for (const r of report.results) {
+      const error = r.error ?? '';
+      expect(error.includes(DISPATCH_STUB_ERROR) || error.includes('requires Playwright')).toBe(true);
+    }
     // Each variant × each commit produced a row; no row was dropped.
     const seen = new Set<string>();
     for (const r of report.results) {
