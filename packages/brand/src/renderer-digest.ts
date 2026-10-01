@@ -2,4 +2,4 @@
 // `pnpm --filter @ggui-ai/brand generate:digest` after changing the renderer.
 
 /** A sha256 over the social card renderer's sources and face files. */
-export const SOCIAL_CARD_RENDERER_DIGEST = 'a841dece5723b88f7c3bbb21921e732c8dfe73450b3496daa90a35e8ca3791a8';
+export const SOCIAL_CARD_RENDERER_DIGEST = '6d373c99341e46fd39e04f35e0bc3b2239ac3c560911b8f42450212842a4c107';

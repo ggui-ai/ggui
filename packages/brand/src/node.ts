@@ -11,11 +11,13 @@ export interface CardStyle {
   readonly alignItems?: 'center' | 'flex-start';
   readonly position?: 'relative' | 'absolute';
   readonly top?: number;
+  readonly bottom?: number;
   readonly left?: number;
   readonly right?: number;
   readonly width?: number;
   readonly height?: number;
   readonly marginTop?: number;
+  readonly marginBottom?: number;
   readonly padding?: string;
   readonly background?: string;
   readonly color?: string;
@@ -28,6 +30,7 @@ export interface CardStyle {
   readonly lineHeight?: number;
   readonly textTransform?: 'uppercase';
   readonly whiteSpace?: 'pre-line';
+  readonly textWrap?: 'balance';
 }
 
 export interface CardNodeProps {

@@ -16,10 +16,14 @@ export interface SocialCardInput {
   /**
    * The headline: at most two lines at the card's scale. Where it breaks is
    * design, so a `\n` places the break; without one, the line wraps where it
-   * runs out of room.
+   * runs out of room, balanced so that line 2 is not one word alone.
    */
   readonly title: string;
-  /** An optional line under the headline, at most two lines; a `\n` places the break. */
+  /**
+   * An optional line under the headline, at most two lines; a `\n` places the
+   * break. A two-line headline takes a one-line description at most: the
+   * card holds three lines of text in all.
+   */
   readonly description?: string;
   /**
    * The footer. `url` is the surface's address (left, mono). `fact` is one
@@ -37,15 +41,23 @@ const LEFT = 96;
 const RIGHT_EDGE = 1104;
 const MARK = { top: 88, width: 448, height: 100 } as const;
 const BADGE_LEFT = 592;
-const EYEBROW_TOP = 313; // baseline ≈ 330 at Geist Mono 20, line-height 1
+const EYEBROW_SIZE = 20; // Geist Mono 20, line-height 1: the eyebrow's line box is 20 tall
+const EYEBROW_TOP = 313; // baseline ≈ 330
 const HEADLINE_TOP = 342; // first baseline ≈ 400 at Inter Bold 64, line-height 1.1
+// The reference card's two-line headline ends here, 60 above the footer.
+const TEXT_BOTTOM = 482;
 const FOOTER_LEFT_TOP = 542; // baseline ≈ 562 at Geist Mono 24
 const FOOTER_RIGHT_TOP = 545; // same baseline at Geist Mono 20
 
+/** The number of lines a text's hard breaks alone make. */
+function hardLines(text: string): number {
+  return text.split('\n').length;
+}
+
 /** Refuse text whose hard breaks alone make more than two lines. */
 function assertAtMostTwoLines(field: 'title' | 'description', text: string): void {
-  if (text.split('\n').length > 2) {
-    throw new RangeError(`social card ${field} must be at most two lines; got ${text.split('\n').length}`);
+  if (hardLines(text) > 2) {
+    throw new RangeError(`social card ${field} must be at most two lines; got ${hardLines(text)}`);
   }
 }
 
@@ -101,11 +113,35 @@ function badge(word: string): CardNode {
 /**
  * The estate's social card as one element tree. Render it with satori (the
  * faces come from `socialCardFonts()`), or pass it to Next's `ImageResponse`.
+ *
+ * The eyebrow, headline and description are one column whose last line ends
+ * at the same height on every card, 60 above the footer, so no headline and
+ * description can reach the footer. A shorter text leaves the room above it,
+ * under the mark.
  */
 export function renderSocialCard(input: SocialCardInput): CardNode {
   assertAtMostTwoLines('title', input.title);
-  if (input.description !== undefined) assertAtMostTwoLines('description', input.description);
-  const body: CardChild[] = [
+  if (input.description !== undefined) {
+    assertAtMostTwoLines('description', input.description);
+    const lines = hardLines(input.title) + hardLines(input.description);
+    if (lines > 3) {
+      throw new RangeError(`social card title and description must be at most three lines together; got ${lines}`);
+    }
+  }
+  const column: CardChild[] = [
+    el('div', {
+      style: {
+        display: 'flex',
+        marginBottom: HEADLINE_TOP - EYEBROW_TOP - EYEBROW_SIZE,
+        fontFamily: 'Geist Mono',
+        fontSize: EYEBROW_SIZE,
+        letterSpacing: track(0.2, EYEBROW_SIZE),
+        textTransform: 'uppercase',
+        lineHeight: 1,
+        color: BRAND_COLORS.ink3,
+      },
+      children: input.eyebrow ?? DEFAULT_EYEBROW,
+    }),
     el('div', {
       style: {
         display: 'flex',
@@ -116,12 +152,13 @@ export function renderSocialCard(input: SocialCardInput): CardNode {
         letterSpacing: track(-0.02, 64),
         color: BRAND_COLORS.ink,
         whiteSpace: 'pre-line',
+        textWrap: 'balance',
       },
       children: input.title,
     }),
   ];
   if (input.description !== undefined) {
-    body.push(
+    column.push(
       el('div', {
         style: {
           display: 'flex',
@@ -156,27 +193,12 @@ export function renderSocialCard(input: SocialCardInput): CardNode {
       style: {
         position: 'absolute',
         left: LEFT,
-        top: EYEBROW_TOP,
-        display: 'flex',
-        fontFamily: 'Geist Mono',
-        fontSize: 20,
-        letterSpacing: track(0.2, 20),
-        textTransform: 'uppercase',
-        lineHeight: 1,
-        color: BRAND_COLORS.ink3,
-      },
-      children: input.eyebrow ?? DEFAULT_EYEBROW,
-    }),
-    el('div', {
-      style: {
-        position: 'absolute',
-        left: LEFT,
-        top: HEADLINE_TOP,
+        bottom: SOCIAL_CARD_SIZE.height - TEXT_BOTTOM,
         width: RIGHT_EDGE - LEFT,
         display: 'flex',
         flexDirection: 'column',
       },
-      children: body,
+      children: column,
     }),
     el('div', {
       style: {
