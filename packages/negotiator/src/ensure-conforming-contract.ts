@@ -44,6 +44,7 @@ import type { LLMCaller } from './llm-caller.js';
 import { synthesizeContract } from './synthesize-contract.js';
 import { liftedRequiredNames, normalizeDraft } from './normalize-draft.js';
 import { salvageConformingSubset } from './salvage-draft.js';
+import { REPAIR_ENTRY_RESTORED } from './preserve-declared-members.js';
 
 /**
  * How a conforming contract was produced — finer-grained than `origin`,
@@ -78,12 +79,14 @@ export interface EnsureConformingAccepted {
    * findings that rejected the agent's draft — so the agent-side model
    * learns what it got wrong, even though we repaired it. On
    * `llm-repair` they additionally carry one `REPAIR_MEMBER_DROPPED` per
-   * declared action-entry member the repair could not keep and one
-   * `REPAIR_ENTRY_DROPPED` per draft action it no longer carries
-   * (ggui#1421 — a repair preserves the draft's declarations, `oneShot`
-   * above all, and names any it must drop, each at its own path with the
-   * gate's reason in the message; a member under repair is named by the
-   * gate's own finding at that same path).
+   * declared member the repair could not keep, on any spec, one
+   * `REPAIR_ENTRY_DROPPED` per draft entry it no longer carries under its
+   * key, and one `REPAIR_ENTRY_RESTORED` (`warn`) per draft tool the repair
+   * dropped and the overlay put back (ggui#1421, ggui#1430 — a repair
+   * preserves the draft's declarations, `oneShot` above all, and names any
+   * it must drop, each at its own path with the gate's reason in the
+   * message; a member under repair is named by the gate's own finding at
+   * that same path).
    * The error findings are the union of what the gate refused on the
    * raw draft and on its normalized form (the gate stops after the
    * shape phase, so the raw lint alone can hide a semantic finding). On
@@ -223,7 +226,8 @@ export async function ensureConformingContract(
     synth.contract !== null &&
     lintContract(synth.contract).errors.length === 0
   ) {
-    const droppedPaths = synth.dropped.map((d) => d.path);
+    const droppedPaths = synth.dropped.filter((d) => d.code !== REPAIR_ENTRY_RESTORED).map((d) => d.path);
+    const restoredPaths = synth.dropped.filter((d) => d.code === REPAIR_ENTRY_RESTORED).map((d) => d.path);
     return {
       contract: synth.contract,
       origin: 'synth',
@@ -232,7 +236,10 @@ export async function ensureConformingContract(
       reasoning:
         `repaired the agent draft to pass validateContract — ${synth.reason}` +
         (droppedPaths.length > 0
-          ? `; dropped ${droppedPaths.length} declared action ${droppedPaths.length === 1 ? 'member/entry' : 'members/entries'} the repair could not keep (${droppedPaths.join(', ')}) — each is a finding`
+          ? `; dropped ${droppedPaths.length} declared ${droppedPaths.length === 1 ? 'member/entry' : 'members/entries'} the repair could not keep (${droppedPaths.join(', ')}) — each is a finding`
+          : '') +
+        (restoredPaths.length > 0
+          ? `; restored ${restoredPaths.length} declared ${restoredPaths.length === 1 ? 'tool' : 'tools'} the repair dropped (${restoredPaths.join(', ')}) — each is a finding`
           : ''),
     };
   }

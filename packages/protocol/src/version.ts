@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A repaired handshake draft keeps every declared member on every spec
+ * (2026-10-01, ggui#1430: no schema change, same draft stamp). The
+ * `origin: 'synth'` repair keeps, under the same key, every member the
+ * draft declared on its props, context slots, stream channels and tools,
+ * beside its actions (ggui#1421), changing only what a repair may
+ * re-author. A draft tool the repair dropped is restored whole and named
+ * `REPAIR_ENTRY_RESTORED` (`warn`) at `agentCapabilities.tools.<name>`, a new
+ * `validationFindings` code; `SuggestionFinding.code` is an open string, so
+ * a reader on an earlier release reads it as one. `REPAIR_ENTRY_DROPPED` now
+ * names a renamed, moved or removed entry on every spec. SPEC's "Repair
+ * fidelity" clause is widened to match. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The self-contained shell shows a runtime it cannot load (2026-10-01,
  * ggui#1518: PATCH-class, no schema change, same draft stamp). After its
  * bundle-failure script posts the one `BUNDLE_FETCH_FAILED` (ggui#1503), it

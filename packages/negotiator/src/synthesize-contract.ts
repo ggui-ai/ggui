@@ -47,7 +47,7 @@ import {
 import { lintContract, type ContractIssue, type SuggestionFinding } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 import { normalizeSchema } from './normalize-schema.js';
-import { findDroppedActionEntries, isMemberDropOf, restoreDraftActionMembers } from './preserve-action-members.js';
+import { findDroppedEntries, isOnSurvivingEntry, REPAIR_ENTRY_DROPPED, restoreDraftDeclaredMembers } from './preserve-declared-members.js';
 import {
   draftSeedPropKeys,
   findDroppedSeedSurfaces,
@@ -933,11 +933,12 @@ export async function synthesizeContract(
 
     // `buildContract` normalizes every emitted schema (invalid `type`
     // spellings → canonical JSON Schema) before the gate sees it. On a
-    // repair-in-place it authors only `{label, schema}` per action; the
-    // agent's DECLARED members (`oneShot` above all) are put back from
-    // the draft deterministically, and anything the merged tree cannot
-    // carry is named rather than lost (ggui#1421).
-    const restored = restoreDraftActionMembers(options?.draft, buildContract(parsed), underRepair);
+    // repair-in-place it authors only a few members per entry; the agent's
+    // DECLARED members (`oneShot` above all) are put back from the draft
+    // deterministically, on every spec, and so is any tool the repair
+    // dropped. Anything the merged tree cannot carry is named rather than
+    // lost (ggui#1421, ggui#1430).
+    const restored = restoreDraftDeclaredMembers(options?.draft, buildContract(parsed), underRepair);
     const contract = restored.contract;
 
     // Defensive gate: re-validate the assembled contract against the
@@ -1055,22 +1056,26 @@ export async function synthesizeContract(
 }
 
 /**
- * What a repair could not keep, against the contract it finally
- * returns: the member drops of the accepted attempt, minus those on an
- * entry the loop's own placement pass pruned afterwards (the entry
- * finding names that loss once, with every member), plus one entry
- * finding per draft action the final contract no longer carries.
+ * What a repair could not keep, or put back, against the contract it finally
+ * returns: the accepted attempt's member drops and restored tools, minus
+ * those on an entry the final contract no longer carries (the entry finding
+ * names that loss once), plus one entry finding per draft entry, on every
+ * spec, that the final contract no longer carries under its key. Where the
+ * overlay itself named an entry it had to un-restore, its finding (which
+ * carries the gate's reason) stands for that entry.
  */
 function droppedFor(
-  memberDrops: readonly SuggestionFinding[],
+  overlayFindings: readonly SuggestionFinding[],
   draft: unknown,
   finalContract: DataContract,
   underRepair: ReadonlySet<string>,
 ): readonly SuggestionFinding[] {
-  const survivingEntries = Object.keys(finalContract.actionSpec ?? {});
+  const overlayEntryDrops = new Map(
+    overlayFindings.filter((f) => f.code === REPAIR_ENTRY_DROPPED).map((f) => [f.path, f] as const),
+  );
   return [
-    ...memberDrops.filter((f) => isMemberDropOf(f, survivingEntries)),
-    ...findDroppedActionEntries(draft, finalContract, underRepair),
+    ...overlayFindings.filter((f) => f.code !== REPAIR_ENTRY_DROPPED && isOnSurvivingEntry(f, finalContract)),
+    ...findDroppedEntries(draft, finalContract, underRepair).map((f) => overlayEntryDrops.get(f.path) ?? f),
   ];
 }
 

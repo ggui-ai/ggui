@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { lintContract } from '@ggui-ai/protocol';
 import type { LLMCaller } from './llm-caller.js';
 import { ensureConformingContract } from './ensure-conforming-contract.js';
-import { REPAIR_ENTRY_DROPPED, REPAIR_MEMBER_DROPPED } from './preserve-action-members.js';
+import { REPAIR_ENTRY_DROPPED, REPAIR_ENTRY_RESTORED, REPAIR_MEMBER_DROPPED } from './preserve-declared-members.js';
 
 const EMPTY_SCHEMA = { type: 'object', properties: {}, additionalProperties: false } as const;
 
@@ -134,7 +134,7 @@ describe('ensureConformingContract — a repair keeps the draft’s action-entry
     expect(result.findings.map((f) => f.code)).toEqual(['CTR_SHAPE_UNRECOGNIZED_KEYS']);
   });
 
-  it('llm-repair: a VALID nextStep the repair de-wired (toolbox not re-emitted) is dropped and named REPAIR_MEMBER_DROPPED', async () => {
+  it('llm-repair: a VALID nextStep survives a repair that dropped the toolbox: the tool is restored from the draft and named REPAIR_ENTRY_RESTORED (ggui#1430)', async () => {
     const draft = {
       ...BOOKING,
       agentCapabilities: { tools: { booking_edit: { toolInfo: { inputSchema: { type: 'object' } } } } },
@@ -142,11 +142,14 @@ describe('ensureConformingContract — a repair keeps the draft’s action-entry
     const result = await ensureConformingContract({ llm: llmAnswering(REPAIRED_TOOL_INPUT) }, { draft, intent: INTENT });
     expect(result.method).toBe('llm-repair');
     expect(result.contract?.actionSpec?.['confirm']).toMatchObject({ oneShot: true });
-    expect(result.contract?.actionSpec?.['edit']).not.toHaveProperty('nextStep');
+    expect(result.contract?.actionSpec?.['edit']).toMatchObject({ nextStep: 'booking_edit' });
+    expect(result.contract?.agentCapabilities?.tools['booking_edit']).toEqual(draft.agentCapabilities.tools.booking_edit);
     expect(result.findings.map((f) => [f.code, f.path])).toEqual([
       ['CTR_REF_NEXT_STEP', 'actionSpec.confirm.nextStep'],
-      [REPAIR_MEMBER_DROPPED, 'actionSpec.edit.nextStep'],
+      [REPAIR_ENTRY_RESTORED, 'agentCapabilities.tools.booking_edit'],
     ]);
+    expect(result.reasoning).toContain('restored 1 declared tool the repair dropped (agentCapabilities.tools.booking_edit)');
+    expect(result.reasoning).not.toContain('dropped 1 declared member');
     expect(lintContract(result.contract).errors).toEqual([]);
   });
 
@@ -165,7 +168,7 @@ describe('ensureConformingContract — a repair keeps the draft’s action-entry
     expect(result.findings).toContainEqual(
       expect.objectContaining({ code: REPAIR_ENTRY_DROPPED, severity: 'error', path: 'actionSpec.edit' }),
     );
-    expect(result.reasoning).toContain('dropped 1 declared action member/entry the repair could not keep (actionSpec.edit)');
+    expect(result.reasoning).toContain('dropped 1 declared member/entry the repair could not keep (actionSpec.edit)');
   });
 
   it('salvaged-subset (LLM down): the conforming subset of the draft keeps confirm.oneShot', async () => {

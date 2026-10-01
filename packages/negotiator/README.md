@@ -36,11 +36,13 @@ pnpm add @ggui-ai/negotiator
   an untrusted draft and, on errors, deterministically normalizes or
   LLM-repairs it so the handshake always returns a contract that passes the
   backstop. Never throws. A repair keeps every member the draft declared on
-  its actions (`oneShot`, `confirm`, `nextStep`, `description`, `example`,
-  `icon`) and names anything it cannot keep at its own path — the LLM
-  repair as `REPAIR_MEMBER_DROPPED` / `REPAIR_ENTRY_DROPPED` with the
-  gate's reason in the message, the salvaged subset with the gate's code
-  at the cut path — so a declaration is never lost silently.
+  each entry it keeps under the same key, on every spec (an action's
+  `oneShot` and `nextStep`, a stream's `mode` and `replay`, a tool's
+  `toolInfo.description`, …), puts back any tool the repair dropped
+  (`REPAIR_ENTRY_RESTORED`), and names anything it cannot keep at its own
+  path — the LLM repair as `REPAIR_MEMBER_DROPPED` / `REPAIR_ENTRY_DROPPED`
+  with the gate's reason in the message, the salvaged subset with the
+  gate's code at the cut path — so a declaration is never lost silently.
 - **`rerankCandidates(...)`** — LLM judge that re-ranks blueprint-match
   retrieval candidates (the semantic-match decision used by
   `decideHandshake`).
