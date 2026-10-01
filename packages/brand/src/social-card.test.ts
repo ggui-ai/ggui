@@ -63,8 +63,9 @@ describe('renderSocialCard — the reference placements', () => {
     expect(headline!.props.style).toMatchObject({ fontFamily: 'Inter', fontWeight: 700, fontSize: 64, lineHeight: 1.1, color: '#292929', textWrap: 'balance' });
     expect(footerLeft!.props.style).toMatchObject({ left: 96, fontFamily: 'Geist Mono', fontSize: 24, color: '#3D3D3D' });
     expect(textOf(footerLeft!)).toBe('docs.ggui.ai');
-    // Right-aligned to x 1104.
-    expect(footerRight!.props.style).toMatchObject({ right: SOCIAL_CARD_SIZE.width - 1104, fontSize: 20, color: '#8C8C93' });
+    // Right-aligned to x 1104, in ink-3 like the eyebrow: 20 px text, so not
+    // ink-4, which colour-roles keeps for non-text below 24 px (#1654).
+    expect(footerRight!.props.style).toMatchObject({ right: SOCIAL_CARD_SIZE.width - 1104, fontSize: 20, color: '#5A5A5A' });
     expect(textOf(footerRight!)).toBe('OPEN PROTOCOL');
   });
 

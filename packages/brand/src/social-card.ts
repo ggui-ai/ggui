@@ -224,7 +224,9 @@ export function renderSocialCard(input: SocialCardInput): CardNode {
         letterSpacing: track(0.16, 20),
         textTransform: 'uppercase',
         lineHeight: 1,
-        color: BRAND_COLORS.ink4,
+        // ink-3, like the eyebrow: 20 px text at an unfurl's ~8 px needs the
+        // text step; ink-4 is for non-text below 24 px (#1654).
+        color: BRAND_COLORS.ink3,
       },
       children: input.footer.fact,
     }),
