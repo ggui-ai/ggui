@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-server-core
 
-Core interfaces and reference storage adapters for the **ggui protocol** MCP server.
+Core interfaces and reference storage adapters for the **GGUI protocol** MCP server.
 
-This package defines the narrow seams that an MCP server for ggui is built on —
+This package defines the narrow seams that an MCP server for GGUI is built on —
 `UiGenerator`, `GguiSessionStore`, `BlueprintProvider`, `AuthAdapter`, plus the
 negotiator / embedding / vector / kv storage contracts — and ships reference
 implementations of each.

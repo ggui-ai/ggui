@@ -1,7 +1,7 @@
 # @ggui-ai/negotiator
 
 Contract-synthesis + match-judge engine for
-[ggui](https://github.com/ggui-ai/ggui)'s handshake.
+[GGUI](https://github.com/ggui-ai/ggui)'s handshake.
 
 Given an agent's draft contract + intent, this package synthesizes (or
 repairs) a conforming `DataContract`, judges blueprint-match candidates for

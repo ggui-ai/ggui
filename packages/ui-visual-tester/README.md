@@ -1,6 +1,6 @@
 # @ggui-ai/ui-visual-tester
 
-Behavioral validator for [ggui](https://ggui.ai)-generated component code.
+Behavioral validator for [GGUI](https://ggui.ai)-generated component code.
 
 Structural validators (schema checks, wire-preservation, compile/lint)
 confirm that a component is _shaped_ correctly. They cannot tell you

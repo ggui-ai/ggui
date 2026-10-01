@@ -1,10 +1,10 @@
 # @ggui-ai/ui-gen
 
-UI generation harness for [ggui](https://github.com/ggui-ai/ggui) — the engine that turns a `DataContract` into a working React component.
+UI generation harness for [GGUI](https://github.com/ggui-ai/ggui) — the engine that turns a `DataContract` into a working React component.
 
 It bundles the three coupled pieces of the generation pipeline:
 
-- **System prompt** — the instructions that tell the LLM _how_ to code against the ggui design system.
+- **System prompt** — the instructions that tell the LLM _how_ to code against the GGUI design system.
 - **Coding harness** — the multi-turn loop (implement → self-check → patch → evaluate) plus provider adapters for Claude, OpenAI, and Google models.
 - **Evaluation engine** — deterministic checks and LLM-judged scoring of generated components.
 

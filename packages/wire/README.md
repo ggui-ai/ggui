@@ -10,7 +10,7 @@ npm install @ggui-ai/wire
 
 ## How it fits
 
-A ggui component runs inside an iframe wired to a live channel. `GguiWireProvider` injects the channel config; the hooks read it from context. Every hook is a thin, typed binding over that channel — no SDK, no manual subscriptions.
+A GGUI component runs inside an iframe wired to a live channel. `GguiWireProvider` injects the channel config; the hooks read it from context. Every hook is a thin, typed binding over that channel — no SDK, no manual subscriptions.
 
 ```tsx
 import { GguiWireProvider, useAction, useStream } from "@ggui-ai/wire";

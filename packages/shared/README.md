@@ -1,6 +1,6 @@
 # @ggui-ai/shared
 
-Shared TypeScript types used across ggui SDK packages — the types that aren't wire-protocol shapes (those live in [`@ggui-ai/protocol`](https://www.npmjs.com/package/@ggui-ai/protocol)) but are still needed by more than one package.
+Shared TypeScript types used across GGUI SDK packages — the types that aren't wire-protocol shapes (those live in [`@ggui-ai/protocol`](https://www.npmjs.com/package/@ggui-ai/protocol)) but are still needed by more than one package.
 
 ```bash
 npm install @ggui-ai/shared

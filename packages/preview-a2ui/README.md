@@ -1,8 +1,8 @@
 # @ggui-ai/preview-a2ui
 
-Narrow A2UI boundary for ggui's provisional UI assembly channel.
+Narrow A2UI boundary for GGUI's provisional UI assembly channel.
 
-Everything A2UI-shaped in the ggui workspace lives here and **only** here.
+Everything A2UI-shaped in the GGUI workspace lives here and **only** here.
 The core protocol (`@ggui-ai/protocol`) stays vendor-neutral; it carries
 only the reserved `_ggui:preview` channel rule — no A2UI types.
 

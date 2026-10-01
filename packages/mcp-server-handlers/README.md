@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-server-handlers
 
-MCP tool handler logic for the **ggui protocol**.
+MCP tool handler logic for the **GGUI protocol**.
 
-This package implements the actual behavior behind every ggui MCP tool — render
+This package implements the actual behavior behind every GGUI MCP tool — render
 lifecycle, the contract handshake, UI emission, blueprint management, threads, app
 discovery, and the operator (`ggui_ops_*`) tools. The handlers are written purely
 over the seam interfaces in

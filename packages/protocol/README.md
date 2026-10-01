@@ -1,6 +1,6 @@
 # @ggui-ai/protocol
 
-TypeScript source of truth for the ggui protocol — the open wire format between agents and generated user interfaces. Ships the envelope types (`ActionEnvelope`, `StreamEnvelope`), the canonical error-frame codes, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
+TypeScript source of truth for the GGUI protocol — the open wire format between agents and generated user interfaces. Ships the envelope types (`ActionEnvelope`, `StreamEnvelope`), the canonical error-frame codes, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
 
 The full normative spec lives at [docs.ggui.ai](https://docs.ggui.ai). This package is what an implementer actually imports.
 
@@ -27,7 +27,7 @@ Here is what happens when a user clicks "Add" on a generated todo UI:
 
 ## Implementer guide
 
-Building a third-party MCP host that renders ggui UIs, a non-React viewer, or any runtime that speaks the ggui wire contract? The implementer guide at [docs.ggui.ai](https://docs.ggui.ai) covers the three-way quickstart (React via `<McpAppIframe>` / vanilla iframe + postMessage / MCP-host install), the full `ProtocolError` recipe with suggested UX per variant, `ObservabilityEvent` kinds, and version negotiation.
+Building a third-party MCP host that renders GGUI UIs, a non-React viewer, or any runtime that speaks the GGUI wire contract? The implementer guide at [docs.ggui.ai](https://docs.ggui.ai) covers the three-way quickstart (React via `<McpAppIframe>` / vanilla iframe + postMessage / MCP-host install), the full `ProtocolError` recipe with suggested UX per variant, `ObservabilityEvent` kinds, and version negotiation.
 
 ## What this package exports
 

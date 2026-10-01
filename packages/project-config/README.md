@@ -1,11 +1,11 @@
 # @ggui-ai/project-config
 
-> Schema and loader for `ggui.json` — the portable app/agent manifest for the [ggui](https://github.com/ggui-ai/ggui) protocol.
+> Schema and loader for `ggui.json` — the portable app/agent manifest for the [GGUI](https://github.com/ggui-ai/ggui) protocol.
 
 [![npm version](https://img.shields.io/npm/v/@ggui-ai/project-config.svg)](https://www.npmjs.com/package/@ggui-ai/project-config)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-`ggui.json` is the single source of truth for a ggui app: its identity, the agent entry point, storage, theme, primitives, and blueprints. This package owns the schema (a [Zod](https://zod.dev) document) and the loaders that read, validate, and write it.
+`ggui.json` is the single source of truth for a GGUI app: its identity, the agent entry point, storage, theme, primitives, and blueprints. This package owns the schema (a [Zod](https://zod.dev) document) and the loaders that read, validate, and write it.
 
 ## Install
 

@@ -1,6 +1,6 @@
 # @ggui-ai/design
 
-The ggui design system — a themeable React component library built for
+The GGUI design system — a themeable React component library built for
 AI-generated UIs. Atomic-design primitives, components, and compositions,
 all styled with CSS custom properties so a theme can
 be swapped at runtime via [DTCG](https://design-tokens.github.io/community-group/format/)
