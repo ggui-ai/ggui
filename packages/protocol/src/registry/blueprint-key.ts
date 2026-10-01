@@ -2,10 +2,20 @@
  * Deterministic identity hash for a `DataContract` shape.
  *
  * `blueprintKey(contract)` is the Tier 1 exact-match key in the
- * blueprint registry: two contract that canonicalize to the same
- * string produce the same key, regardless of how the agent
- * paraphrased the surrounding intent. Equal key → guaranteed
- * registry lookup hit (no LLM rerank, no embedding similarity).
+ * blueprint registry: two contracts that canonicalize to the same
+ * string produce the same key. Equal key → guaranteed registry
+ * lookup hit (no LLM rerank, no embedding similarity).
+ *
+ * The key covers the contract OBJECT and nothing else (ggui#1137):
+ *   - The `intent` argument of `ggui_handshake` is not an input, so
+ *     rewording that sentence does not move the key.
+ *   - Every key the contract object itself carries is hashed, declared
+ *     or not: `dataContractSchema` passes unknown keys through, and the
+ *     canonicalizer strips only string-valued `description` / `usage`
+ *     and a tool's `serverInfo.version`. So a contract object that
+ *     carries its own `intent` key keys on that sentence: the same
+ *     specs with a different, or no, `intent` key give three different
+ *     keys.
  *
  * 16-character sha256 prefix — matches the existing `blueprintHash`
  * shape in `cache-trace-sink` and `generation-cache.ts`. Collision

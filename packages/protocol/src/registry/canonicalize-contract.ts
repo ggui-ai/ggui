@@ -56,6 +56,10 @@
  *     `clientCapabilities.gadgets` (package-keyed — npm package names as
  *     outer keys, export names as the inner `exports` map keys; no
  *     `version`, no transport metadata on the wire).
+ *   - Any other key the contract object carries. `dataContractSchema`
+ *     passes unknown keys through and nothing here removes them, so an
+ *     undeclared top-level `intent` key, for one, is canonicalized in
+ *     (ggui#1137).
  *
  * # Domain rule: `agentCapabilities.tools[*].serverInfo.version` is stripped
  *
@@ -224,9 +228,11 @@ function stripToolServerInfo(contract: DataContract): IdentityContract {
 /**
  * Produce the canonical bytes for a `DataContract` value, suitable
  * for hashing or external content-address lookups. Stable across
- * paraphrase, key order, whitespace, description-only edits, and
+ * key order, whitespace, description-only edits, and
  * `serverInfo.version` (server-version metadata; `serverInfo.name` is
- * identity and is preserved).
+ * identity and is preserved). Not stable across a key the contract
+ * object itself carries, an undeclared `intent` key included (see
+ * "Preserved" above, ggui#1137).
  *
  * Empty / undefined / `{}` all collapse to the same canonical bytes,
  * which produces a stable `blueprintKey` for the "no-contract" case.

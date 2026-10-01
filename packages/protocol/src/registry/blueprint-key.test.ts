@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { blueprintKey } from './blueprint-key.js';
 import type { DataContract } from '../types/data-contract.js';
+import { dataContractSchema } from '../schemas/data-contract.js';
 
 describe('blueprintKey', () => {
   it('returns a 16-char lowercase hex string', () => {
@@ -56,6 +57,18 @@ describe('blueprintKey', () => {
       contextSpec: { text: { schema: { type: 'string' } } },
     };
     expect(blueprintKey(a)).not.toBe(blueprintKey(b));
+  });
+
+  it('keys on every key the contract object carries, an undeclared `intent` included; a description does not move it (ggui#1137)', () => {
+    const specs = { contextSpec: { x: { schema: { type: 'string' } } } };
+    // The schema passes unknown keys through, so a parsed contract keeps an `intent` key it was given.
+    const welcome = dataContractSchema.parse({ ...specs, intent: 'welcome screen' });
+    const other = dataContractSchema.parse({ ...specs, intent: 'a totally different sentence' });
+    const none = dataContractSchema.parse(specs);
+    expect(new Set([blueprintKey(welcome), blueprintKey(other), blueprintKey(none)]).size).toBe(3);
+    // Control: informational prose is stripped, so it leaves the key alone.
+    const described = dataContractSchema.parse({ contextSpec: { x: { description: 'a note', schema: { type: 'string' } } } });
+    expect(blueprintKey(described)).toBe(blueprintKey(none));
   });
 
   it('empty / undefined / {} produce the same stable sentinel key', () => {
