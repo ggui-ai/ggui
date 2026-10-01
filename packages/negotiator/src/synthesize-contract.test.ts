@@ -1018,3 +1018,23 @@ describe('synthesizeContract — validate-and-repair loop', () => {
     expect(calls[0]!.user).toBe(calls[1]!.user);
   });
 });
+
+describe('#1650 — the prompt agrees with itself about the agent\'s toolbox', () => {
+  it('cold path: no worked example emits a nextStep (the synthesizer has no toolbox to point at, and says so)', async () => {
+    const calls: Captured[] = [];
+    await synthesizeContract({ llm: captureLlm({ reason: '' }, calls) }, 'a todo list');
+    const system = calls[0]?.system ?? '';
+    expect(system).not.toMatch(/nextStep: "/);
+    expect(system).toContain('the synthesizer does NOT emit nextStep');
+  });
+
+  it('repair path: the patch preamble keeps the agent\'s toolbox, and scopes the cold-path tool rules to what the model synthesizes', async () => {
+    const calls: Captured[] = [];
+    const draft = { actionSpec: { go: { label: 'Go', nextStep: 'tool_go' } }, agentCapabilities: { tools: { tool_go: { toolInfo: { inputSchema: { type: 'object' } } } } } };
+    await synthesizeContract({ llm: captureLlm({ reason: '' }, calls) }, 'a go button', { draft });
+    const system = calls[0]?.system ?? '';
+    const keep = system.indexOf("KEEP the agent's TOOLBOX");
+    expect(keep).toBeGreaterThan(-1);
+    expect(keep).toBeLessThan(system.indexOf('the synthesizer does NOT emit nextStep'));
+  });
+});

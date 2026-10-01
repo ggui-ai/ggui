@@ -211,7 +211,7 @@ CONCRETE PATTERNS
     (a) Agent-owned — "show my todos", "an agent-backed todo list that persists across sessions", "render my cart", "the messages in this thread", "the directory contents"
         The AGENT owns the items: it fetched / persists / keeps them in sync. The collection is the agent's data → it goes on PROPSSPEC, seeded at render and refreshed via ggui_amend after each change. This is the ONLY shape that round-trips — contextSpec has no agent-push channel, so an agent-owned list placed there can never be seeded or updated (the UI renders empty). add / delete / toggle are discrete events the agent must witness to persist → declare them on actionSpec (with a matching agentCapabilities tool for each nextStep). Mutability is fine: ggui_amend is exactly how the agent pushes the change.
         propsSpec:   { properties: { todos: {schema: {type: "array", items: {type: "object", properties: {id: {type: "string"}, text: {type: "string"}, done: {type: "boolean"}}, required: ["id", "text", "done"]}}, required: true} } }
-        actionSpec:  { toggleTodo: {label: "Toggle todo", schema: {type: "object", properties: {id: {type: "string"}}, required: ["id"]}, nextStep: "todo_toggle"}, addTodo: {label: "Add todo", schema: {type: "object", properties: {text: {type: "string"}}, required: ["text"]}, nextStep: "todo_add"} }
+        actionSpec:  { toggleTodo: {label: "Toggle todo", schema: {type: "object", properties: {id: {type: "string"}}, required: ["id"]}}, addTodo: {label: "Add todo", schema: {type: "object", properties: {text: {type: "string"}}, required: ["text"]}} }
 
     (b) User-built local — "a todo list where I can add and remove items", "a shopping list", "a checklist I tick off"
         No agent-owned source: the USER assembles the list in the UI and the agent merely observes it. The items are client-originated state → a CONTEXTSPEC slot; OMIT actionSpec (the slot mirror IS the wire — the agent already sees every change). Only when the intent says the agent must persist / sync each change does it become the agent-owned case (a) above.
@@ -576,6 +576,7 @@ const REPAIR_PREAMBLE = `PATCH MODE — you are REPAIRING a contract the agent a
 - PRESERVE every spec the agent declared — ESPECIALLY every propsSpec property (agent-owned render-time seed data the UI needs). Never drop it.
 - Do NOT move data between specs (e.g. propsSpec → contextSpec) unless a finding explicitly requires it. A collection the agent supplies on propsSpec STAYS on propsSpec.
 - Keep the agent's names, shapes, and structure intact wherever the findings do not force a change.
+- KEEP the agent's TOOLBOX: every agentCapabilities.tools entry the draft declares, and every actionSpec[X].nextStep that names one of them. The rules below about tools (declare them only behind a streamSpec source; emit no nextStep) govern only what YOU synthesize from scratch — they never remove a tool or a nextStep the agent declared.
 The four-spec model and placement rules below still hold — but in PATCH MODE they are guardrails for the fix, not a license to re-author.`;
 
 /**
