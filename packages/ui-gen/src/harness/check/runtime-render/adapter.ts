@@ -378,6 +378,22 @@ export function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
         : `input priming failed: ${diag.inputPriming.error}`
     );
   }
+  if (diag?.walk) {
+    // ggui#1652: how far the walk over the card's screens got, so a
+    // multi-step card reads differently from a control that never rendered.
+    const w = diag.walk;
+    const stopped = {
+      explored: "every reachable control pressed",
+      "press-cap": "stopped at the press cap",
+      deadline: "stopped at the time budget",
+      "no-mount": "the card could not be mounted for the walk",
+    }[w.stoppedBy];
+    const named = w.namedControlSeen
+      ? "a control naming the action rendered, but pressing it did not dispatch the action"
+      : "no screen rendered a control naming the action";
+    const last = w.lastPressed.length ? `; last pressed: ${w.lastPressed.join(", ")}` : "";
+    diagParts.push(`walk: ${w.presses} press(es) across ${w.screens} screen(s), ${stopped}; ${named}${last}`);
+  }
   const diagSuffix = diagParts.length ? ` [observed: ${diagParts.join("; ")}]` : "";
 
   switch (issue.check) {

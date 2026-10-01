@@ -41,6 +41,7 @@ import { hostGlobals, openRecord } from "../../../internal/open-record.js";
 import type { ProbeHostLoad, ProbePendingAffordance } from "../../../evaluation/types-public.js";
 import { createProbePendingSource, lookChanged, lookOf, settlesWithin, type ProbePendingSource } from "./probe-pending.js";
 import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
+import { walkToAction, type WalkControl, type WalkMount, type WalkStop } from "./walk.js";
 
 /**
  * Module-namespace-shaped value injected into `loadComponent`'s
@@ -118,7 +119,23 @@ export interface RenderCheckIssue {
      * beside `{ primed: 0 }` or `{ error }` than beside `{ primed: 1 }`.
      */
     readonly inputPriming?: InputPrimingDiagnostic;
+    /** For action-wiring (ggui#1652): how far the walk over the card's screens got without dispatching the action. */
+    readonly walk?: ActionWalkDiagnostic;
   };
+}
+
+/**
+ * The action walk's account of an action it could not dispatch (ggui#1652):
+ * how many controls it pressed across how many screens, why it stopped,
+ * whether any screen rendered a control naming the action, and the last
+ * controls it pressed. Never the first button in the page.
+ */
+export interface ActionWalkDiagnostic {
+  readonly presses: number;
+  readonly screens: number;
+  readonly stoppedBy: Exclude<WalkStop, "dispatched">;
+  readonly namedControlSeen: boolean;
+  readonly lastPressed: readonly string[];
 }
 
 /**
@@ -173,6 +190,17 @@ export interface RunRenderCheckInput {
 
 /** The time the pending phase needs left before the check's deadline to run at all (ggui#1398). */
 export const PENDING_PHASE_RESERVE_MS = 5000;
+
+/**
+ * The action walk's bounds (ggui#1652), applied once a press has left the
+ * first screen (see walk.ts): at most this many presses and this long per
+ * action, and never within the pending phase's reserve plus
+ * {@link WALK_DEADLINE_MARGIN_MS} (for the checks that run after the walk)
+ * of the check's deadline.
+ */
+export const WALK_MAX_PRESSES = 60;
+export const WALK_ACTION_CAP_MS = 3000;
+const WALK_DEADLINE_MARGIN_MS = 2000;
 
 /**
  * Options of {@link runRenderCheck} (ggui#1380): the host's options —
@@ -464,6 +492,20 @@ export async function runRenderCheckInProcess(
       }
     }
 
+    // The card as the runtime mounts it: inside the wire, the probe's error
+    // boundary and the pending context. The main render and every action
+    // walk's mount (ggui#1652) are this same tree.
+    const cardTree = (): React.ReactElement =>
+      React.createElement(GguiWireProvider, {
+        config: wireConfig,
+        children: React.createElement(ProbeErrorBoundary, {
+          children: React.createElement(ActionPendingContext.Provider, {
+            value: pendingSource,
+            children: React.createElement(Component, input.mockupProps),
+          }),
+        }),
+      });
+
     let renderResult: Awaited<ReturnType<typeof render>>;
     const RENDER_TIMEOUT_MS = 5000;
     try {
@@ -471,19 +513,7 @@ export async function runRenderCheckInProcess(
       // Synchronous hangs would block the event loop and the timer never
       // fires, but happy-dom effects are mostly microtask-scheduled so the
       // timeout is actually effective for ~95% of the hang cases.
-      const renderPromise = Promise.resolve().then(() =>
-        render(
-          React.createElement(GguiWireProvider, {
-            config: wireConfig,
-            children: React.createElement(ProbeErrorBoundary, {
-              children: React.createElement(ActionPendingContext.Provider, {
-                value: pendingSource,
-                children: React.createElement(Component, input.mockupProps),
-              }),
-            }),
-          })
-        )
-      );
+      const renderPromise = Promise.resolve().then(() => render(cardTree()));
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () =>
@@ -589,16 +619,19 @@ export async function runRenderCheckInProcess(
     // The controls whose click really dispatched their action, looked at in
     // the pending phase after every other check (see runPendingPhase).
     const pendingTargets: PendingTarget[] = [];
+    // The text of every screen the action walks reached (ggui#1652): a prop
+    // shown on a later step is shown, though the action check never moves
+    // the main render off its first screen.
+    const walkedTexts: string[] = [];
 
     try {
       // ggui#1187: prime form inputs before the action-wiring probe. A wired
       // Send/Submit gated on a non-empty input (the chat-interface shape) is a
       // no-op on empty, so an un-primed synthetic click never dispatches and
       // the probe false-warns "did not dispatch it". Shared with the visual
-      // tester's primeInputs (#1021/#1040) so both prime identically. Priming
-      // sets input VALUES (not textContent) and fires input/change before the
-      // per-candidate fire-log window is opened, so it neither perturbs the
-      // prop-sensitivity text baseline nor false-positives the wiring probe.
+      // tester's primeInputs (#1021/#1040) so both prime identically. The
+      // main render is primed here, on every card, before any check reads it;
+      // each action walk's mount (ggui#1652) primes every screen it reaches.
       // A priming failure never aborts the check — it is RECORDED on every
       // action-wiring issue as `diagnostics.inputPriming`. (The first cut
       // swallowed it, and a `ReferenceError` in the check worker's realm —
@@ -611,6 +644,10 @@ export async function runRenderCheckInProcess(
         inputPriming = { error: err instanceof Error ? err.message : String(err) };
       }
       // ── Check 2: Action wiring (BLOCK / unverified-as-warn) ───────────
+      // ggui#1652: each action is looked for in a mount of its own, walked
+      // screen by screen (walk.ts), so this check never presses the main
+      // render the later checks read. (The duplicate-label check below, #601,
+      // still makes its two clicks there, as it always did.)
       if (input.contract?.actionSpec) {
         const actionSpec = input.contract.actionSpec;
         for (const [name, entry] of Object.entries(actionSpec)) {
@@ -620,16 +657,47 @@ export async function runRenderCheckInProcess(
             hookName: "useAction",
             hookArg: name,
           });
+          // A priming failure on a screen the walk reached is recorded too,
+          // when the main render's priming did not already fail.
+          const walkPriming: { error?: string } = {};
+          const mount = async (): Promise<WalkMount | undefined> => {
+            let mounted: ReturnType<typeof render>;
+            try {
+              mounted = render(cardTree());
+            } catch {
+              return undefined;
+            }
+            await flushPromises();
+            const root = mounted.container;
+            return {
+              container: toMinimalElement(root),
+              prime: () => {
+                try {
+                  primeInputs(root);
+                } catch (err) {
+                  walkPriming.error ??= err instanceof Error ? err.message : String(err);
+                }
+              },
+            };
+          };
           const issue = await checkActionWiring({
-            container,
+            mount,
             actionName: name,
             actionLabel: entry.label,
             wiring,
             probe,
             user,
             pendingTargets,
+            stopAt: walkStopAt(input.deadlineAt),
+            walkedTexts,
           });
-          if (issue) issues.push({ ...issue, diagnostics: { ...issue.diagnostics, inputPriming } });
+          if (issue) {
+            const priming: InputPrimingDiagnostic =
+              "primed" in inputPriming && walkPriming.error !== undefined
+                ? { error: `on a screen the action walk reached: ${walkPriming.error}` }
+                : inputPriming;
+            issues.push({ ...issue, diagnostics: { ...issue.diagnostics, inputPriming: priming } });
+          }
         }
       }
 
@@ -681,6 +749,7 @@ export async function runRenderCheckInProcess(
       if (input.contract?.propsSpec) {
         for (const issue of checkPropCoverage({
           container,
+          walkedTexts,
           propsSpec: input.contract.propsSpec as PropsSpec,
           mockupProps: input.mockupProps,
         })) {
@@ -841,7 +910,6 @@ export async function runRenderCheckInProcess(
       if (input.contract?.actionSpec && timeLeft >= PENDING_PHASE_RESERVE_MS) {
         pendingTally = await runPendingPhase({
           targets: pendingTargets,
-          container,
           source: pendingSource,
           act,
           catches: () => boundaryRef.catches,
@@ -1256,11 +1324,12 @@ interface PendingTarget {
   readonly actionLabel: string;
   readonly wiringKind: "click" | "submit";
   readonly element: MinimalElement;
+  /** The mount the action's walk pressed it in (ggui#1652), where it is looked for again. */
+  readonly container: MinimalElement;
 }
 
 interface PendingPhaseInput {
   readonly targets: readonly PendingTarget[];
-  readonly container: MinimalElement;
   readonly source: ProbePendingSource;
   /** React Testing Library's `act`, so the pending re-render commits before the control is read. */
   readonly act: (callback: () => Promise<void>) => Promise<unknown>;
@@ -1306,7 +1375,7 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
       PENDING_TARGET_CAP_MS,
       input.deadlineAt === undefined ? Number.POSITIVE_INFINITY : input.deadlineAt - Date.now() - PENDING_PHASE_TAIL_MS
     );
-    const found = stopped || budget <= 0 ? undefined : pendingControlOf(input.container, target, input.actions);
+    const found = stopped || budget <= 0 ? undefined : pendingControlOf(target, input.actions);
     if (found === undefined) {
       tally.gone.push(target.actionName);
       if (budget <= 0) stopped = true;
@@ -1348,7 +1417,6 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
  * identity only. A submit target (a form) has no identity to look for.
  */
 function pendingControlOf(
-  container: MinimalElement,
   target: PendingTarget,
   actions: readonly { readonly name: string; readonly label: string }[]
 ): MinimalElement | undefined {
@@ -1357,7 +1425,7 @@ function pendingControlOf(
     actions.some((a) => a.name !== target.actionName && matchesActionIdentity(target.element, a.name, a.label));
   if (lookOf(target.element).connected && !movedToAnother) return target.element;
   if (target.wiringKind !== "click") return undefined;
-  return findActionElements(container, target.actionName, target.actionLabel, { identityOnly: true })[0];
+  return findActionElements(target.container, target.actionName, target.actionLabel, { identityOnly: true })[0];
 }
 
 /**
@@ -1383,18 +1451,36 @@ function controlToRead(el: MinimalElement, target: PendingTarget): MinimalElemen
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface CheckActionInput {
-  container: MinimalElement;
+  /** Mount a fresh copy of the card for this action's walk (ggui#1652). */
+  mount: () => Promise<WalkMount | undefined>;
   actionName: string;
   actionLabel: string;
   wiring: WiringDetection;
   probe: Probe;
   user: { click: (el: MinimalElement) => Promise<void> };
-  /** ggui#1398: where a control whose click dispatched is recorded, for the pending phase. */
+  /** ggui#1398: where a control whose press dispatched is recorded, for the pending phase. */
   pendingTargets?: PendingTarget[];
+  /** Epoch ms after which the walk stops, once a press has left the first screen. */
+  stopAt: number;
+  /** Where the text of every screen the walk reaches is collected, for prop coverage (ggui#1652). */
+  walkedTexts: string[];
+}
+
+/** When the walk stops, once a press has left the first screen (ggui#1652). */
+function walkStopAt(deadlineAt: number | undefined): number {
+  const cap = Date.now() + WALK_ACTION_CAP_MS;
+  return deadlineAt === undefined ? cap : Math.min(cap, deadlineAt - PENDING_PHASE_RESERVE_MS - WALK_DEADLINE_MARGIN_MS);
+}
+
+type WiredKind = "click" | "submit" | "change" | "keyboard-enter";
+
+/** A control the walk may press, and the trigger it is pressed with. */
+interface ActionControl extends WalkControl {
+  readonly how: WiredKind;
 }
 
 async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIssue | null> {
-  const { container, actionName, actionLabel, wiring, probe, user } = input;
+  const { actionName, actionLabel, wiring, probe, user } = input;
 
   const baseDiagnostics = {
     observedJsxElements: wiring.observedJsxElements,
@@ -1428,43 +1514,73 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
     };
   }
 
-  // Source-detected deterministic wiring → simulate the matching trigger.
-  const fired = await simulateAndCheck({
-    container,
-    user,
-    probe,
-    wiringKind: wiring.kind,
-    actionName,
-    actionLabel,
-    eventKind: "action.fired",
+  // Source-detected deterministic wiring → walk the card's screens, pressing
+  // the matching trigger, until one press dispatches the action (ggui#1652).
+  const kind = wiring.kind;
+  const walk = await walkToAction<ActionControl>({
+    mount: input.mount,
+    controls: (container) => actionControls(container, kind, actionName, actionLabel),
+    press: async (control) => {
+      const before = probe.getFireLog().length;
+      try {
+        await dispatchTrigger(control.element, control.how, user);
+      } catch {
+        return false;
+      }
+      await flushPromises();
+      return probe
+        .getFireLog()
+        .slice(before)
+        .some((e) => e.kind === "action.fired" && e.name === actionName);
+    },
+    describe: describeElement,
+    stopAt: input.stopAt,
+    maxPresses: WALK_MAX_PRESSES,
   });
+  input.walkedTexts.push(...walk.screenTexts);
 
-  if (fired.fired) {
+  if (walk.fired) {
     // ggui#1398: record the control for the pending phase; nothing is marked here.
-    if (input.pendingTargets && fired.element && (wiring.kind === "click" || wiring.kind === "submit")) {
+    if (input.pendingTargets && walk.element && walk.container && (kind === "click" || kind === "submit")) {
       input.pendingTargets.push({
         actionName,
         actionLabel,
-        wiringKind: wiring.kind,
-        element: fired.element,
+        wiringKind: kind,
+        element: walk.element,
+        container: walk.container,
       });
     }
     return null; // verified — no issue
   }
 
-  // The AST already confirmed the wiring exists in source. The
-  // simulator couldn't trigger it — most likely a conditional-render or
+  // Capture what DID fire — useful diagnostic.
+  const allFired = probe
+    .getFireLog()
+    .filter((e) => e.kind === "action.fired")
+    .map((e) => e.name);
+  const otherActionsFired = Array.from(new Set(allFired)).filter((n) => n !== actionName);
+  const stoppedBy = walk.stoppedBy === "dispatched" ? "explored" : walk.stoppedBy;
+
+  // The AST already confirmed the wiring exists in source. The walk
+  // couldn't trigger it — most likely a conditional-render or
   // required-form-fill case. Be conservative: downgrade to unverified
   // rather than reporting a fake failure.
   return {
     check: "action-wiring",
     outcome: "unverified",
     subject: actionName,
-    reason: `Source confirms ${wiring.kind} wiring exists for action '${actionName}', but synthetic ${wiring.kind} did not dispatch it. Likely cause: conditional rendering, required input/form fill, or a multi-step interaction the static probe cannot complete.`,
-    elementHint: fired.attemptedHint,
+    reason: `Source confirms ${kind} wiring exists for action '${actionName}', but synthetic ${kind} did not dispatch it. Likely cause: conditional rendering, required input/form fill, or a multi-step interaction the static probe cannot complete.`,
+    ...(walk.presses === 0 && stoppedBy === "explored" ? { elementHint: `No ${kind}-eligible element found in DOM` } : {}),
     diagnostics: {
       ...baseDiagnostics,
-      actionsFiredFromClicks: fired.otherActionsFired,
+      actionsFiredFromClicks: otherActionsFired,
+      walk: {
+        presses: walk.presses,
+        screens: walk.screens,
+        stoppedBy,
+        namedControlSeen: walk.namedControlSeen,
+        lastPressed: walk.lastPressed,
+      },
     },
   };
 }
@@ -1590,62 +1706,9 @@ async function checkSelectionIdentity(
 // Trigger simulators — narrow set, deterministic only
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface SimulateAndCheckInput {
-  container: MinimalElement;
-  user: { click: (el: MinimalElement) => Promise<void> };
-  probe: Probe;
-  wiringKind: "click" | "submit" | "change" | "keyboard-enter";
-  actionName: string;
-  actionLabel: string;
-  eventKind: "action.fired" | "wiredTool.called";
-}
-
-interface SimulateResult {
-  fired: boolean;
-  attemptedHint?: string;
-  otherActionsFired?: string[];
-  /** The element whose trigger fired the action (ggui#1398). */
-  element?: MinimalElement;
-}
-
-async function simulateAndCheck(input: SimulateAndCheckInput): Promise<SimulateResult> {
-  const { container, user, probe, wiringKind, actionName, actionLabel, eventKind } = input;
-
-  const candidates = findCandidateElements(container, wiringKind, actionName, actionLabel);
-  if (candidates.length === 0) {
-    return { fired: false, attemptedHint: `No ${wiringKind}-eligible element found in DOM` };
-  }
-
-  for (const el of candidates) {
-    const before = probe.getFireLog().length;
-    try {
-      await dispatchTrigger(el, wiringKind, user);
-    } catch {
-      continue;
-    }
-    await flushPromises();
-    const newEvents = probe.getFireLog().slice(before);
-    const matched = newEvents.some((e) => e.kind === eventKind && e.name === actionName);
-    if (matched) return { fired: true, element: el };
-  }
-
-  // Capture what DID fire — useful diagnostic.
-  const allFired = probe
-    .getFireLog()
-    .filter((e) => e.kind === "action.fired")
-    .map((e) => e.name);
-  const otherActionsFired = Array.from(new Set(allFired)).filter((n) => n !== actionName);
-
-  return {
-    fired: false,
-    attemptedHint: candidates.length ? describeElement(candidates[0]!) : undefined,
-    otherActionsFired,
-  };
-}
-
 async function dispatchTrigger(
   el: MinimalElement,
-  kind: "click" | "submit" | "change" | "keyboard-enter",
+  kind: WiredKind,
   user: { click: (el: MinimalElement) => Promise<void> }
 ): Promise<void> {
   switch (kind) {
@@ -1770,41 +1833,44 @@ function closestForm(el: MinimalElement): MinimalElement | null {
   return null;
 }
 
-function findCandidateElements(
-  container: MinimalElement,
-  kind: "click" | "submit" | "change" | "keyboard-enter",
-  name: string,
-  label: string
-): MinimalElement[] {
-  switch (kind) {
-    case "click":
-      return findActionElements(container, name, label);
-    case "submit": {
-      // submit-eligible: <form>, button[type=submit], input[type=submit]
-      const all = container.querySelectorAll<MinimalElement>(
-        'form, button[type="submit"], input[type="submit"]'
-      );
-      return Array.from(all);
-    }
-    case "change": {
-      const all = container.querySelectorAll<MinimalElement>("select, input, textarea");
-      return Array.from(all);
-    }
-    case "keyboard-enter":
-      return findActionElements(container, name, label);
+/**
+ * The controls an action's walk may press on the current screen, in the
+ * order they are tried (ggui#1652). Click and Enter wiring: the controls
+ * that name the action, then every other clickable, each pressed the way the
+ * action is wired. Submit and change wiring: the eligible elements, pressed
+ * with that trigger, then every clickable, pressed with a click, so the walk
+ * can reach a screen where the eligible element appears.
+ */
+function actionControls(container: MinimalElement, kind: WiredKind, name: string, label: string): ActionControl[] {
+  const clickables = findActionElements(container, name, label);
+  const named = (el: MinimalElement): boolean => matchesActionIdentity(el, name, label);
+  if (kind === "click" || kind === "keyboard-enter") {
+    return clickables.map((element) => ({ element, namesAction: named(element), how: kind }));
   }
+  const eligible = Array.from(
+    container.querySelectorAll<MinimalElement>(
+      kind === "submit" ? 'form, button[type="submit"], input[type="submit"]' : "select, input, textarea"
+    )
+  );
+  const seen = new Set(eligible);
+  return [
+    ...eligible.map((element) => ({ element, namesAction: named(element), how: kind })),
+    ...clickables.filter((el) => !seen.has(el)).map((element) => ({ element, namesAction: named(element), how: "click" as const })),
+  ];
 }
 
 interface CheckPropCoverageInput {
   container: MinimalElement;
+  /** The text of the screens the action walks reached (ggui#1652). */
+  walkedTexts: readonly string[];
   propsSpec: PropsSpec;
   mockupProps: JsonObject;
 }
 
 function checkPropCoverage(input: CheckPropCoverageInput): RenderCheckIssue[] {
-  const { container, propsSpec, mockupProps } = input;
+  const { container, walkedTexts, propsSpec, mockupProps } = input;
   const issues: RenderCheckIssue[] = [];
-  const text = container.textContent ?? "";
+  const texts = [container.textContent ?? "", ...walkedTexts];
 
   for (const [propName, entry] of Object.entries(propsSpec.properties)) {
     if (!entry.required) continue;
@@ -1815,12 +1881,15 @@ function checkPropCoverage(input: CheckPropCoverageInput): RenderCheckIssue[] {
     const marker = pickScalarMarker(value);
     if (marker === null) continue;
 
-    if (!text.includes(marker)) {
+    if (!texts.some((text) => text.includes(marker))) {
+      // Name the walked screens only where a walk ran (a card with actions);
+      // a card without one reads exactly as it did before the walk.
+      const where = walkedTexts.length > 0 ? ", on the first screen or any screen the action walk reached" : "";
       issues.push({
         check: "prop-coverage",
         outcome: "unverified",
         subject: propName,
-        reason: `Required prop '${propName}' value (${JSON.stringify(marker).slice(0, 60)}) not visible in rendered DOM`,
+        reason: `Required prop '${propName}' value (${JSON.stringify(marker).slice(0, 60)}) not visible in rendered DOM${where}`,
       });
     }
   }
