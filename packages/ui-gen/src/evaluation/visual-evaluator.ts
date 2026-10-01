@@ -30,9 +30,9 @@ import { createRequire } from 'node:module';
 import { existsSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
-import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
+import { createVisionAgent, type AgentConfig, type VisionFinishReason } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
-import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
+import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, JudgeSalvageCause, JudgeSalvageCounts, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 
@@ -433,6 +433,11 @@ export interface VisualEvaluationResult extends EvaluationResult {
    * `outputTokens` stay the SCORING calls' alone, so a cost read off them never includes the report-only block.
    */
   criteriaTokens?: CriteriaCallTokens;
+  /**
+   * ggui#1127 — salvaged judge answers across the canvases, per leg, as N of M (scoring answers; criteria calls
+   * answered). Present on every canvas run, zeros included, so a reader can tell "none salvaged" from "not counted".
+   */
+  judgeSalvage?: JudgeSalvageCounts;
   /** The design tree the judge painted with (ggui#1042) — present on every per-canvas judgement. */
   design?: JudgeDesignIdentity;
   /** The mode `cssTokens` were composed in, when the caller said (ggui#1076). */
@@ -1189,8 +1194,66 @@ function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIs
 
 /** One judge call parsed, retried ONCE on a malformed answer (#1017); the FIRST reason is kept verbatim. */
 type JudgedAnswer =
-  | { readonly kind: 'ok'; readonly result: EvaluationResult; readonly inputTokens: number; readonly outputTokens: number }
+  | {
+      readonly kind: 'ok';
+      readonly result: EvaluationResult;
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+      /** ggui#1127 — present when the answer did not parse and its score was salvaged. */
+      readonly salvage?: JudgeSalvage;
+    }
   | { readonly kind: 'unparsable'; readonly reason: string };
+
+/** ggui#1127 — what a salvaged answer leaves on the record: why, and where the parse broke. Never the answer's text. */
+interface JudgeSalvage {
+  readonly cause: JudgeSalvageCause;
+  /** The provider's normalized stop reason; absent when it reported none. */
+  readonly finishReason?: VisionFinishReason;
+  /** The parser's error, with every quoted span of the answer removed. */
+  readonly parseError: string;
+  /** Where the parse broke, as a character offset into the answer, when the parser said. */
+  readonly offset?: number;
+  /** The answer's length in characters: an offset at the end reads as a cut, one mid-answer as malformed. */
+  readonly chars: number;
+}
+
+/**
+ * ggui#1127 — why an unparsable answer was salvaged. The cause comes from the provider's stop reason, never from the
+ * answer's length: a short answer can still be cut (thinking spends the cap), and a long one can still be malformed.
+ */
+function judgeSalvageOf(error: unknown, text: string, finishReason: VisionFinishReason | undefined): JudgeSalvage {
+  const cause: JudgeSalvageCause =
+    finishReason === undefined ? 'unknown' : finishReason === 'length' ? 'output-cap' : finishReason === 'stop' ? 'malformed' : 'stopped';
+  const message = error instanceof Error ? error.message : String(error);
+  // The JSON is parsed from the first `{` (parseVisualResponse), so the parser's position is shifted by that start.
+  const position = /position (\d+)/.exec(message);
+  const start = text.indexOf('{');
+  const offset = position !== null ? (start > 0 ? start : 0) + Number(position[1]) : undefined;
+  const parseError = message.startsWith('Visual evaluator did not return valid JSON')
+    ? 'no complete JSON object in the answer'
+    : message.replace(/"(?:[^"\\]|\\.)*"/g, '"…"').slice(0, 160);
+  return { cause, ...(finishReason !== undefined ? { finishReason } : {}), parseError, ...(offset !== undefined ? { offset } : {}), chars: text.length };
+}
+
+/** ggui#1127 — a canvas's judge record: the K samples, and which of them (and the criteria call) were salvaged. */
+function judgeRecordOf(
+  k: number,
+  parsed: readonly Extract<JudgedAnswer, { kind: 'ok' }>[],
+  samples: number[],
+  criteria: JudgedAnswer | undefined,
+): CanvasJudgeRecord {
+  const salvaged = parsed.flatMap((a) => (a.salvage !== undefined ? [a.salvage.cause] : []));
+  const criteriaSalvaged = criteria?.kind === 'ok' ? criteria.salvage?.cause : undefined;
+  return {
+    k,
+    rule: 'median',
+    samples,
+    sigma: populationSigma(samples),
+    notes: parsed.map((a) => a.result.critique ?? ''),
+    ...(salvaged.length > 0 ? { salvaged } : {}),
+    ...(criteriaSalvaged !== undefined ? { criteriaSalvaged } : {}),
+  };
+}
 
 /**
  * ggui#1436 — the criteria are REPORT-ONLY, so they are never asked inside a call whose score binds. The K
@@ -1226,7 +1289,15 @@ function criteriaCallTokens(criteria: JudgedAnswer | undefined): CriteriaCallTok
 
 /** The criteria call's answers, as the one read the block resolves; none when it was not asked or did not parse. */
 function criteriaReads(criteria: JudgedAnswer | undefined): CriteriaAnswer[][] {
-  return criteria?.kind === 'ok' ? [criteria.result.criteriaAnswers ?? []] : [];
+  // ggui#1127 — a salvaged answer keeps no criteria: it is no read, and its rows say why (criteriaUnansweredReason).
+  return criteria?.kind === 'ok' && criteria.salvage === undefined ? [criteria.result.criteriaAnswers ?? []] : [];
+}
+
+/** ggui#1127 — the reason a salvaged criteria answer's judge rows give, so none reads as a clean `n/a`. */
+function criteriaUnansweredReason(criteria: JudgedAnswer | undefined): { unansweredReason?: string } {
+  return criteria?.kind === 'ok' && criteria.salvage !== undefined
+    ? { unansweredReason: `not answered: the criteria answer was salvaged (${criteria.salvage.cause})` }
+    : {};
 }
 
 /** How many vision calls this canvas gets (ggui#1072): `judgeK` when the canvas is sampled, else 1. */
@@ -1267,13 +1338,19 @@ async function judgeAndParse(
       const result = parseVisualResponse(response.text, config.passThreshold);
       return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
     } catch (e) {
-      // A TRUNCATED answer (cut inside `issues` at the output cap) is deterministic on
-      // the content — retrying the same prompt reproduces it. The four dimensions are
-      // emitted before `issues`, so the score is recoverable from the closed prefix.
+      // An answer that fails to parse but whose four dimensions closed is SALVAGED (ggui#1127): they are emitted
+      // before `issues`, so the score is recoverable from the closed prefix. Whether it was cut at the output cap or
+      // ended malformed is the provider's stop reason to say, not the answer's length; the record and the warn
+      // line carry the cause, the parse error and where it broke, never the answer's text. One token per leg.
       const salvaged = salvageTruncatedVisualAnswer(response.text, config.passThreshold);
       if (salvaged !== null) {
-        console.warn(`[visual-eval] visual_judge_truncated${canvas ? ` canvas=${canvas}` : ''}: answer cut after ${response.text.length} chars — score recovered from the closed prefix, issues list partial`);
-        return { kind: 'ok', result: salvaged, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
+        const salvage = judgeSalvageOf(e, response.text, response.finishReason);
+        const token = criteriaBlock.length > 0 ? 'visual_criteria_salvaged' : 'visual_judge_salvaged';
+        console.warn(
+          `[visual-eval] ${token}${canvas ? ` canvas=${canvas}` : ''} cause=${salvage.cause} finish=${salvage.finishReason ?? 'unreported'} ` +
+            `at=${salvage.offset ?? '?'}/${salvage.chars} (${salvage.parseError}): score recovered from the closed prefix, issues list partial`,
+        );
+        return { kind: 'ok', result: salvaged, inputTokens: response.inputTokens, outputTokens: response.outputTokens, salvage };
       }
       const reason = `judge answer unparsable: ${e instanceof Error ? e.message : String(e)}`;
       if (attempt === 1) {
@@ -1372,13 +1449,7 @@ export async function runVisualEvaluationDetailed(
       result.outputTokens = parsed.reduce((sum, a) => sum + a.outputTokens, 0);
       const response = { inputTokens: result.inputTokens, outputTokens: result.outputTokens };
       const criteriaTokens = criteriaCallTokens(criteriaAnswer);
-      const judgeRecord: CanvasJudgeRecord = {
-        k,
-        rule: 'median',
-        samples,
-        sigma: populationSigma(samples),
-        notes: parsed.map((a) => a.result.critique ?? ''),
-      };
+      const judgeRecord = judgeRecordOf(k, parsed, samples, criteriaAnswer);
       // The fit verdict (ggui#1027): deterministic, in the judge's issue channel.
       const contentHeight = attempt.contentHeight;
       const overflow = contentHeight !== null && contentHeight > viewport.height;
@@ -1408,6 +1479,7 @@ export async function runVisualEvaluationDetailed(
               selected: criteriaSelected,
               answers: criteriaReads(criteriaAnswer),
               measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
+              ...criteriaUnansweredReason(criteriaAnswer),
             })
           : undefined;
       perCanvasResults.push(result);
@@ -1514,7 +1586,20 @@ function aggregateCanvasResults(
     outputTokens += r.outputTokens ?? 0;
   });
   const criteriaSpent = perCanvas.flatMap((c) => (c.criteriaTokens !== undefined ? [c.criteriaTokens] : []));
+  // ggui#1127 — N of M per leg. A criteria call that parsed or was salvaged reports its spend, so `criteriaTokens`
+  // marks an answered call.
+  const judgeSalvage: JudgeSalvageCounts = {
+    scoring: {
+      salvaged: perCanvas.reduce((sum, c) => sum + (c.judge.salvaged?.length ?? 0), 0),
+      answers: perCanvas.reduce((sum, c) => sum + c.judge.samples.length, 0),
+    },
+    criteria: {
+      salvaged: perCanvas.filter((c) => c.judge.criteriaSalvaged !== undefined).length,
+      answered: perCanvas.filter((c) => c.criteriaTokens !== undefined).length,
+    },
+  };
   return {
+    judgeSalvage,
     passed: perCanvas.every((c) => c.passed),
     finalScore: mean((r) => r.finalScore),
     dimensions,
@@ -1685,6 +1770,7 @@ export async function judgeStoredCapture(
           selected: criteriaSelected,
           answers: criteriaReads(criteriaAnswer),
           measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
+          ...criteriaUnansweredReason(criteriaAnswer),
         })
       : undefined;
   const criteriaTokens = criteriaCallTokens(criteriaAnswer);
@@ -1696,7 +1782,7 @@ export async function judgeStoredCapture(
       score: median,
       passed,
       issues,
-      judge: { k, rule: 'median', samples, sigma: populationSigma(samples), notes: parsed.map((a) => a.result.critique ?? '') },
+      judge: judgeRecordOf(k, parsed, samples, criteriaAnswer),
       contentHeight,
       overflow,
       inkRatio,
@@ -1760,7 +1846,7 @@ export function salvageTruncatedVisualAnswer(text: string, passThreshold: number
     hierarchy,
     aesthetics,
     issues,
-    critique: `[truncated judge answer — score recovered from the closed prefix; ${issues.length} issue(s) kept, the rest and the critique were cut]`,
+    critique: `[salvaged judge answer — it did not parse; score recovered from the closed prefix; ${issues.length} issue(s) kept, the rest and the critique lost]`,
   });
   return parseVisualResponse(rebuilt, passThreshold);
 }

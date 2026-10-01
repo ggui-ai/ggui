@@ -161,6 +161,39 @@ export interface LLMResponse {
    * requested".
    */
   sampling?: AppliedSampling;
+  /**
+   * Why the provider stopped, normalized (ggui#1127): `length` = it hit the output cap, `stop` = it ended its
+   * answer, `content-filter` = a safety stop, `other` = anything else it reported. Set by the vision calls of
+   * providers that report one (Anthropic `stop_reason`, Google `finishReason`); absent when the provider or route
+   * said nothing — read absence as unknown, never as `stop`.
+   */
+  finishReason?: VisionFinishReason;
+}
+
+/** The normalized stop reason a vision call reports (ggui#1127). */
+export type VisionFinishReason = 'stop' | 'length' | 'content-filter' | 'other';
+
+/** Anthropic's `stop_reason`, normalized; absent stays absent. */
+export function anthropicFinishReason(stopReason: string | null | undefined): VisionFinishReason | undefined {
+  if (stopReason === null || stopReason === undefined) return undefined;
+  if (stopReason === 'end_turn' || stopReason === 'stop_sequence') return 'stop';
+  if (stopReason === 'max_tokens') return 'length';
+  if (stopReason === 'refusal') return 'content-filter';
+  return 'other';
+}
+
+/** Gemini's `finishReason`, normalized; absent stays absent. */
+export function googleFinishReason(finishReason: string | null | undefined): VisionFinishReason | undefined {
+  if (finishReason === null || finishReason === undefined) return undefined;
+  if (finishReason === 'STOP') return 'stop';
+  if (finishReason === 'MAX_TOKENS') return 'length';
+  if (['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY'].includes(finishReason)) return 'content-filter';
+  return 'other';
+}
+
+/** The `finishReason` field to spread into an {@link LLMResponse}: present only when the provider said. */
+function visionFinish(finishReason: VisionFinishReason | undefined): { finishReason?: VisionFinishReason } {
+  return finishReason !== undefined ? { finishReason } : {};
 }
 
 /**
@@ -806,6 +839,7 @@ export class AnthropicAgent extends LLMAgent {
         text,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        ...visionFinish(anthropicFinishReason(response.stop_reason)),
       };
     } catch (e) {
       const endedAt = Date.now();
@@ -1739,6 +1773,7 @@ export class GoogleAgent extends LLMAgent {
         // ggui#1186 (third site): `promptTokenCount` includes `cachedContentTokenCount` — report the non-cached input.
         inputTokens: splitCacheInclusiveUsage(usage?.promptTokenCount ?? 0, usage?.candidatesTokenCount ?? 0, usage?.cachedContentTokenCount ?? 0).tokens.input,
         outputTokens: usage?.candidatesTokenCount ?? 0,
+        ...visionFinish(googleFinishReason(response.candidates?.[0]?.finishReason)),
       };
 
       const endedAt = Date.now();

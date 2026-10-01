@@ -29,9 +29,9 @@ export interface CriteriaMeasurements {
 
 type Read = { verdict: CriteriaVerdict; evidence: string };
 
-function majority(id: string, answers: readonly CriteriaAnswer[][]): Read {
+function majority(id: string, answers: readonly CriteriaAnswer[][], unansweredReason: string | undefined): Read {
   const votes = answers.flatMap((a) => a.filter((x) => x.id === id));
-  if (votes.length === 0) return { verdict: 'n/a', evidence: 'not answered' };
+  if (votes.length === 0) return { verdict: 'n/a', evidence: unansweredReason ?? 'not answered' };
   const counts = new Map<CriteriaVerdict, number>();
   for (const v of votes) counts.set(v.verdict, (counts.get(v.verdict) ?? 0) + 1);
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -51,8 +51,8 @@ function instrumentRead(kind: 'fit' | 'fill', m: CriteriaMeasurements): Read {
   return { verdict: 'n/a', evidence: `fill ${m.inkRatio.toFixed(3)} reported; no floor ruled` };
 }
 
-function readRow(row: BankRow, answers: readonly CriteriaAnswer[][], m: CriteriaMeasurements): Read {
-  if (row.evaluation === 'judge') return majority(row.id, answers);
+function readRow(row: BankRow, answers: readonly CriteriaAnswer[][], m: CriteriaMeasurements, unansweredReason: string | undefined): Read {
+  if (row.evaluation === 'judge') return majority(row.id, answers, unansweredReason);
   if (row.evaluation === 'human') return { verdict: 'n/a', evidence: `reader's column (status ${row.status})` };
   if (row.status !== 'live') return { verdict: 'n/a', evidence: `not implemented (status ${row.status})` };
   const kind = INSTRUMENT_BY_ID[row.id];
@@ -65,13 +65,18 @@ export function resolveCriteriaBlock(args: {
   readonly selected: CriteriaSelectionResult;
   readonly answers: readonly CriteriaAnswer[][];
   readonly measurements: CriteriaMeasurements;
+  /**
+   * ggui#1127 — why a judge row has no answer, when the caller knows: a salvaged criteria answer keeps no criteria,
+   * so its rows say so instead of reading as a clean `n/a`. Absent ⇒ "not answered".
+   */
+  readonly unansweredReason?: string;
 }): CriteriaBlock {
   const byId = new Map<string, BankRow>(bankRows(args.bank).map((r) => [r.id, r]));
   const verdicts: CriterionVerdict[] = [];
   for (const s of args.selected.selection) {
     const row = byId.get(s.id);
     if (row === undefined) continue;
-    const read = readRow(row, args.answers, args.measurements);
+    const read = readRow(row, args.answers, args.measurements, args.unansweredReason);
     verdicts.push({ id: row.id, severity: row.severity, method: row.evaluation, status: row.status, source: s.source, verdict: read.verdict, evidence: read.evidence });
   }
   return {

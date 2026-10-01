@@ -26,7 +26,7 @@ const TRUNCATED =
   '    { "dimension": "layout", "severity": "minor", "description": "cut he';
 const NO_DIMS = '{\n  "completeness": 88,\n  "layout": 76,\n  "issues": [ { "dimension": "lay';
 
-function deps(answers: readonly string[]): VisualEvalDeps & { calls: number } {
+function deps(answers: readonly string[], finishReason?: 'stop' | 'length' | 'content-filter' | 'other'): VisualEvalDeps & { calls: number } {
   const state = { calls: 0 };
   return {
     get calls() {
@@ -47,7 +47,7 @@ function deps(answers: readonly string[]): VisualEvalDeps & { calls: number } {
     judge: async () => {
       const text = answers[Math.min(state.calls, answers.length - 1)] ?? '';
       state.calls += 1;
-      return { text, inputTokens: 1, outputTokens: 1 };
+      return { text, inputTokens: 1, outputTokens: 1, ...(finishReason !== undefined ? { finishReason } : {}) };
     },
   };
 }
@@ -72,12 +72,21 @@ describe('visual judge — truncated answers', () => {
     expect(r?.issues.length).toBe(2);
     // ggui#1545 — the kept issues are still the judge's own findings.
     expect(r?.issues.every((i) => i.origin === 'judge')).toBe(true);
-    expect(r?.critique).toContain('truncated');
+    expect(r?.critique).toContain('salvaged judge answer');
     expect(salvageTruncatedVisualAnswer(NO_DIMS, 60)).toBeNull();
   });
-  it('a truncated answer is recovered in ONE judge call with a logged visual_judge_truncated (no retry)', async () => {
+  // ggui#1127 — a salvaged answer is recovered in ONE call (no retry), and its CAUSE comes from the provider's stop
+  // reason, never from the answer's length: the record, the run's N-of-M counts and the warn line all carry it, and
+  // the warn line carries none of the answer's text.
+  it.each([
+    ['length' as const, 'output-cap', 'length'],
+    ['stop' as const, 'malformed', 'stop'],
+    ['content-filter' as const, 'stopped', 'content-filter'],
+    ['other' as const, 'stopped', 'other'],
+    [undefined, 'unknown', 'unreported'],
+  ])('a salvaged answer (stop reason %s) is recorded as %s, counted, and logged without its text', async (finishReason, cause, finish) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const d = deps([TRUNCATED]);
+    const d = deps([TRUNCATED], finishReason);
     const out = await runVisualEvaluationDetailed(
       { compiledCode: COMPONENT, originalPrompt: 'x' },
       { provider: 'claude', passThreshold: 60, canvases: ['md'] },
@@ -85,7 +94,20 @@ describe('visual judge — truncated answers', () => {
     );
     expect(out.result?.finalScore).toBe(82);
     expect(d.calls).toBe(1);
-    expect(warn.mock.calls.filter((c) => String(c[0]).includes('visual_judge_truncated')).length).toBe(1);
+    expect(out.result?.canvases?.[0]?.judge.salvaged).toEqual([cause]);
+    expect(out.result?.judgeSalvage).toEqual({ scoring: { salvaged: 1, answers: 1 }, criteria: { salvaged: 0, answered: 0 } });
+    const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('visual_judge_salvaged'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`canvas=md cause=${cause} finish=${finish} at=`);
+    expect(lines[0]).toMatch(new RegExp(`at=\\d+/${TRUNCATED.length} `));
+    for (const text of ['columns stacked', 'flat cards', 'cut he', 'use a row']) expect(lines[0]).not.toContain(text);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('visual_judge_truncated'))).toBe(false);
+  });
+  it('a run with no salvage counts zero of M, so "none salvaged" reads apart from "not counted"', async () => {
+    const d = deps(['{"completeness": 80, "layout": 80, "hierarchy": 80, "aesthetics": 80, "issues": [], "critique": "ok"}']);
+    const out = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'x' }, { provider: 'claude', passThreshold: 60, canvases: ['md'] }, d);
+    expect(out.result?.canvases?.[0]?.judge.salvaged).toBeUndefined();
+    expect(out.result?.judgeSalvage).toEqual({ scoring: { salvaged: 0, answers: 1 }, criteria: { salvaged: 0, answered: 0 } });
   });
   it('a prefix without all dimensions falls to the retry path (two calls) and then unavailable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});

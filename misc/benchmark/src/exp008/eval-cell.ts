@@ -500,6 +500,8 @@ export interface VisualOutcome {
   readonly design?: NonNullable<VisualEvaluationResult['design']>;
   /** The mode the judge's tokens were composed in, when the caller said (ggui#1076). */
   readonly themeMode?: NonNullable<VisualEvaluationResult['themeMode']>;
+  /** ggui#1127 — salvaged judge answers, per leg, as N of M; the per-canvas causes ride each canvas's `judge` record. */
+  readonly judgeSalvage?: NonNullable<VisualEvaluationResult['judgeSalvage']>;
 }
 export const VISUAL_DESIGN_UNSTAMPED_NOTE = 'visual judge design tree unstamped — the evaluator returned no design receipt (a judge before #1042)';
 
@@ -518,6 +520,7 @@ export function toVisualOutcome(r: VisualEvaluationResult | null): VisualOutcome
     ...(r.criteriaTokens !== undefined ? { criteriaTokens: { input: r.criteriaTokens.inputTokens, output: r.criteriaTokens.outputTokens } } : {}),
     ...(r.design !== undefined ? { design: r.design } : {}),
     ...(r.themeMode !== undefined ? { themeMode: r.themeMode } : {}),
+    ...(r.judgeSalvage !== undefined ? { judgeSalvage: r.judgeSalvage } : {}),
   };
 }
 

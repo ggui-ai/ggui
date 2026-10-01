@@ -9,7 +9,7 @@
 // block — the first release that carried it into a served judge lowered first-attempt scores. The invariant pinned here is the
 // one a scripted judge CAN check: the scoring calls are asked exactly what they are asked with no bank at all, and the
 // block rides one call of its own whose score is discarded.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { parseCriteriaBank } from './criteria/bank.js';
 import type { CriteriaContextInput } from './criteria/context.js';
@@ -149,6 +149,19 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     const c = out.result!.canvases![0]!;
     expect(c.score).toBe(72);
     expect(c.criteria!.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
+  });
+
+  it('a SALVAGED criteria answer (it did not parse, its four dimensions closed) never reads as a clean n/a: its rows say why, and the run counts it (ggui#1127)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Cut inside its criteria array: the dimensions closed, so it is salvaged, and a salvage keeps no criteria.
+    const cut = answer(72, [{ id: 'task.copy', verdict: 'pass', evidence: 'g' }]).replace(/"critique":"c",.*$/, '"critique":"c","criteria":[{"id":"task.copy","verd');
+    const d = deps([answer(72)], cut);
+    const out = await runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank, context } }, config, d);
+    const c = out.result!.canvases![0]!;
+    expect(c.score).toBe(72);
+    expect(c.judge.criteriaSalvaged).toBe('unknown');
+    expect(c.criteria!.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'n/a', evidence: 'not answered: the criteria answer was salvaged (unknown)' });
+    expect(out.result!.judgeSalvage).toEqual({ scoring: { salvaged: 0, answers: 1 }, criteria: { salvaged: 1, answered: 1 } });
   });
 
   it('N−1: a criteria answer without the array still parses; its judge rows read n/a "not answered"', async () => {

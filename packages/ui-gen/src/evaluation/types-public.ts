@@ -361,6 +361,34 @@ export interface CanvasJudgeRecord {
   readonly sigma: number;
   /** The judge's per-canvas critique per sample — the words beside a swing. */
   readonly notes: string[];
+  /**
+   * ggui#1127 — the cause of each scoring sample whose answer failed to parse and was SALVAGED: its four dimensions
+   * were recovered from the closed prefix, its issues kept only as far as they closed, its critique lost. One entry
+   * per salvaged sample; absent when every sample parsed. The salvaged sample's score still counts.
+   */
+  readonly salvaged?: readonly JudgeSalvageCause[];
+  /**
+   * ggui#1127 — the criteria call's answer was salvaged. A salvage keeps no criteria, so that frame's judge rows read
+   * "not answered" with this cause rather than a clean `n/a`. Absent when the call parsed or was not asked.
+   */
+  readonly criteriaSalvaged?: JudgeSalvageCause;
+}
+
+/**
+ * ggui#1127 — why a judge answer that failed to parse had to be salvaged. `output-cap`: the provider reported it
+ * stopped at the output cap. `malformed`: the provider reported a normal stop, so the answer ended but did not
+ * parse. `stopped`: the provider stopped it for another reason it named (a safety stop, or one it reports as
+ * other), so it is cut, not malformed. `unknown`: the provider or route reported no stop reason. Never inferred
+ * from the answer's length.
+ */
+export type JudgeSalvageCause = "output-cap" | "malformed" | "stopped" | "unknown";
+
+/** ggui#1127 — salvaged judge answers across a canvas run, per leg, as N of M. */
+export interface JudgeSalvageCounts {
+  /** Scoring answers: `answers` = samples that parsed or were salvaged, `salvaged` = those salvaged. */
+  readonly scoring: { readonly salvaged: number; readonly answers: number };
+  /** Criteria calls: `answered` = calls that parsed or were salvaged, `salvaged` = those salvaged (criteria lost). */
+  readonly criteria: { readonly salvaged: number; readonly answered: number };
 }
 
 // ─── Visual criteria (ggui#1436) ──────────────────────────────────────────
