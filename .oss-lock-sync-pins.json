@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T08:53:25.562Z",
+  "generatedAt": "2026-10-01T13:04:12.071Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -178,7 +178,6 @@
     "@types/express-serve-static-core",
     "@types/leaflet",
     "@types/mdx",
-    "@types/nodemailer",
     "@types/qs",
     "@typescript-eslint/parser",
     "@typescript-eslint/project-service",
@@ -518,7 +517,6 @@
     "@types/express-serve-static-core",
     "@types/leaflet",
     "@types/mdx",
-    "@types/nodemailer",
     "@types/qs",
     "@typescript-eslint/parser",
     "@typescript-eslint/project-service",
