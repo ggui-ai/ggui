@@ -67,6 +67,23 @@ packages. See each subdirectory's `package.json` for the full picture.
 - ESLint + Prettier (run automatically on commit)
 - Prefer small, focused PRs
 
+### Claims about browser behaviour
+
+A comment or docstring that says how a browser behaves ships with the package as fact. It is costly to test, so it
+rarely is, and a reader of the source has no way to challenge it. When you write one:
+
+1. **Prefer a runtime feature test to a version claim.** `@supports (color: color-mix(in srgb, red, blue))` can't go
+   stale, but "Safari < 16.2" can. Where a feature test exists, the version sentence is a note, not a dependency
+   (`packages/design/src/rendering/css-tokens.ts` is the pattern).
+2. **A claim with no feature test carries its bound and its date:** what was observed, in which browser at which
+   version, and when (`packages/protocol/src/integrations/mcp-apps.ts`, the `background` option's receipt).
+3. **Point at the observation; don't restate the conclusion.** When the claim is needed in another package, link the
+   measurement (a test, a commit, an issue) rather than copying the sentence. The copy is where a dated observation
+   turns into a timeless fact.
+4. **Say what would retire it.** If nobody can re-check what triggers a workaround, nobody can ever remove it.
+
+When reviewing a claim like this that justifies a default, ask what would falsify it and where that was last checked.
+
 ## Questions?
 
 Open a [Discussion](https://github.com/ggui-ai/ggui/discussions) or [Issue](https://github.com/ggui-ai/ggui/issues).
