@@ -750,6 +750,32 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
     expect(judgeCalled).toBe(true);
   });
 
+  it('a stored action without the oneShot the request declares is reported on the hit and named in the reason (ggui#1428)', async () => {
+    const STORED: DataContract = { actionSpec: { confirm: { label: 'Confirm' } } };
+    const REQUEST: DataContract = { actionSpec: { confirm: { label: 'Confirm', oneShot: true } } };
+    const registry = makeRegistry();
+    const stored = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: STORED,
+      intent: 'an order confirmation card',
+      componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
+    });
+    const result = await matchBlueprint(
+      { registry, llm: stubLlm(() => ({ matchId: stored.id, confidence: 0.95, reason: 'same card' })) },
+      SCOPE,
+      { intent: 'an order confirmation card', contract: REQUEST },
+      { minCosineForRerank: -1 },
+    );
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      expect(result.coverage.actionMembers).toEqual(['confirm.oneShot']);
+      expect(result.coverage.actions).toEqual([]);
+      expect(result.reason).toMatch(/coverage gap/);
+      expect(result.reason).toMatch(/action members: confirm\.oneShot/);
+    }
+  });
+
   it('still hits match-exact on canonical-key equality (gate does not block exact match)', async () => {
     const registry = makeRegistry();
     const stored = await registerBlueprint(registry, SCOPE, {

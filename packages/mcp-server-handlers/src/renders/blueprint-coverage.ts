@@ -23,10 +23,13 @@
  * proposed contract is the safety valve when a flagged surface is one
  * the user must directly see or act on.
  *
- * Pure — no store, no LLM. Compares only declared key-SETS; differences
- * WITHIN a shared surface (a relabeled action, an `id` vs `id+done`
- * payload schema) are tolerated, because atomic reuse hands the agent
- * the cached contract and it drives that contract, not its own draft.
+ * Pure — no store, no LLM. Compares declared key-SETS, plus ONE thing
+ * inside a shared action: the members that change what the runtime does
+ * with a gesture ({@link LOAD_BEARING_ACTION_MEMBERS}). Every other
+ * difference WITHIN a shared surface (a relabeled action, an `id` vs
+ * `id+done` payload schema) is tolerated, because atomic reuse hands the
+ * agent the cached contract and it drives that contract, not its own
+ * draft.
  */
 
 import type { DataContract } from '@ggui-ai/protocol';
@@ -40,6 +43,49 @@ export interface CoverageGap {
   readonly context: readonly string[];
   readonly streams: readonly string[];
   readonly gadgets: readonly string[];
+  /**
+   * `<action>.<member>` for every load-bearing member the request declares
+   * on an action BOTH contracts carry, where the candidate's entry does not
+   * say the same (ggui#1428). An action the candidate lacks altogether is in
+   * {@link actions}, never here.
+   */
+  readonly actionMembers: readonly string[];
+}
+
+/**
+ * The action-entry members that change what the runtime DOES with a gesture,
+ * as opposed to how the action reads: `oneShot` arms the single-dispatch
+ * guard, `confirm` asks before firing, `nextStep` names the tool the agent is
+ * routed to. A stored card that lacks one the draft declares serves a card
+ * without that behaviour, so the agent is told. `label`, `description`,
+ * `icon`, `example` and `schema` stay tolerated differences.
+ */
+export const LOAD_BEARING_ACTION_MEMBERS = ['oneShot', 'confirm', 'nextStep'] as const;
+
+/**
+ * Members the request DECLARES on `name` that the candidate's entry does not
+ * match. One direction, like the rest of coverage: a boolean member counts as
+ * declared only when `true` (`false` and absent both mean "off"), `nextStep`
+ * when present. A candidate that is stricter than the request (it carries a
+ * member the request does not) is not a gap. That holds for `nextStep` too,
+ * because the case that would matter there is already refused elsewhere: a
+ * stored `nextStep` naming a tool the requesting agent does not declare makes
+ * the candidate unfulfillable, and `isFulfillable` declines it before it is
+ * ever proposed (`blueprint-fulfillability.ts`).
+ */
+function mismatchedActionMembers(
+  request: DataContract,
+  candidate: DataContract,
+): string[] {
+  const out: string[] = [];
+  for (const [name, wanted] of Object.entries(request.actionSpec ?? {})) {
+    const stored = candidate.actionSpec?.[name];
+    if (stored === undefined) continue;
+    if (wanted.oneShot === true && stored.oneShot !== true) out.push(`${name}.oneShot`);
+    if (wanted.confirm === true && stored.confirm !== true) out.push(`${name}.confirm`);
+    if (wanted.nextStep !== undefined && stored.nextStep !== wanted.nextStep) out.push(`${name}.nextStep`);
+  }
+  return out.sort();
 }
 
 function keySet(map: Record<string, unknown> | undefined): Set<string> {
@@ -76,6 +122,7 @@ export function coverageGap(
     context: missing(keySet(request.contextSpec), keySet(candidate.contextSpec)),
     streams: missing(keySet(request.streamSpec), keySet(candidate.streamSpec)),
     gadgets: missing(gadgetIdSet(request), gadgetIdSet(candidate)),
+    actionMembers: mismatchedActionMembers(request, candidate),
   };
 }
 
@@ -88,6 +135,7 @@ export function covers(candidate: DataContract, request: DataContract): boolean 
     gap.props.length === 0 &&
     gap.context.length === 0 &&
     gap.streams.length === 0 &&
-    gap.gadgets.length === 0
+    gap.gadgets.length === 0 &&
+    gap.actionMembers.length === 0
   );
 }

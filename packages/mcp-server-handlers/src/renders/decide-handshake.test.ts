@@ -324,6 +324,7 @@ const EMPTY_GAP = {
   context: [],
   streams: [],
   gadgets: [],
+  actionMembers: [],
 } as const;
 
 function hit(strategy: 'exact-key' | 'semantic', over: {
@@ -1194,6 +1195,7 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
     context: [],
     streams: [],
     gadgets: [],
+    actionMembers: [],
   } as const;
 
   it('prefers a FULLY-COVERING hit over a gapped one even at lower confidence', async () => {
@@ -1235,6 +1237,39 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
     expect(gapFindings[0]?.message).toMatch(/decrement/);
   });
 
+  it('a stored action without a load-bearing member the draft declares is a COVERAGE_GAP at actionSpec.<name>.<member> (ggui#1428)', async () => {
+    const MEMBER_GAP = { ...EMPTY_GAP, actionMembers: ['confirm.oneShot', 'confirm.nextStep'] };
+    mockMatch.mockResolvedValueOnce(
+      hit('semantic', { id: 'bp-member-gap', judgeConfidence: 0.9, coverage: MEMBER_GAP }),
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    // Reuse stays the default: the finding informs, it does not drop the card.
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-member-gap');
+    const gapFindings = r.suggestion.validationFindings?.filter((f) => f.code === 'COVERAGE_GAP') ?? [];
+    expect(gapFindings.map((f) => f.path)).toEqual(['actionSpec.confirm.oneShot', 'actionSpec.confirm.nextStep']);
+    expect(gapFindings.every((f) => f.severity === 'warn')).toBe(true);
+    expect(gapFindings[0]?.message).toMatch(/confirm/);
+    expect(gapFindings[0]?.message).toMatch(/oneShot/);
+    expect(gapFindings[0]?.message).toMatch(/default.*accept/i);
+  });
+
+  it('a member gap counts as a gap in the tiebreak: a fully covering hit wins at lower confidence (ggui#1428)', async () => {
+    const MEMBER_GAP = { ...EMPTY_GAP, actionMembers: ['confirm.oneShot'] };
+    mockMatch
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-member-gap', judgeConfidence: 0.95, coverage: MEMBER_GAP }))
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-full', judgeConfidence: 0.7 }));
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: 'app' }), pool({ scope: 'shared' })] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-full');
+    expect(r.suggestion.validationFindings?.some((f) => f.code === 'COVERAGE_GAP')).toBeFalsy();
+  });
+
   it('the COVERAGE_GAP message steers default-accept / override-if and names the surface', async () => {
     mockMatch.mockResolvedValueOnce(
       hit('semantic', { id: 'bp-gap', judgeConfidence: 0.9, coverage: GAP }),
@@ -1260,6 +1295,7 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
       context: [],
       streams: [],
       gadgets: [],
+      actionMembers: [],
     } as const;
     // Draft declares `city` required, `units` optional-via-absence, and
     // `detail` EXPLICITLY required:false — the missing-prop findings must
@@ -1432,6 +1468,7 @@ describe('decideHandshake — VARIANCE_GAP finding (D5)', () => {
         context: [],
         streams: [],
         gadgets: [],
+        actionMembers: [],
       },
       judgeConfidence: 0.9,
     });

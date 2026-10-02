@@ -33,6 +33,7 @@ describe('covers — equal / superset candidates are safe', () => {
       context: [],
       streams: [],
       gadgets: [],
+      actionMembers: [],
     });
   });
 
@@ -186,5 +187,56 @@ describe('covers — tolerates differences WITHIN a shared surface', () => {
     // label + schema noise. This is the legitimate reuse the cache must allow.
     expect(covers(cached, agent)).toBe(true);
     expect(covers(agent, cached)).toBe(true);
+  });
+});
+
+// ggui#1428 — coverage on a shared action also compares the members that
+// change what the runtime does with a gesture. A stored card without the
+// `oneShot` the draft declares serves a card with no one-shot guard; before
+// this the gap was empty and the agent was told nothing.
+describe('coverageGap — load-bearing members of a shared action (ggui#1428)', () => {
+  const draft = (entry: NonNullable<DataContract['actionSpec']>[string]): DataContract => ({
+    actionSpec: { confirm: entry },
+  });
+
+  it('a stored action without the oneShot the draft declares is a gap at <action>.oneShot, and no longer covers', () => {
+    const stored = draft({ label: 'Confirm' });
+    const request = draft({ label: 'Confirm', oneShot: true });
+    expect(coverageGap(stored, request).actionMembers).toEqual(['confirm.oneShot']);
+    expect(coverageGap(stored, request).actions).toEqual([]);
+    expect(covers(stored, request)).toBe(false);
+  });
+
+  it('equal members are no gap', () => {
+    const both = draft({ label: 'Confirm', oneShot: true, confirm: true, nextStep: 'order_place' });
+    expect(coverageGap(both, both).actionMembers).toEqual([]);
+    expect(covers(both, both)).toBe(true);
+  });
+
+  it('confirm and nextStep are compared the same way; a different nextStep is a gap', () => {
+    const stored = draft({ label: 'Confirm', nextStep: 'order_cancel' });
+    const request = draft({ label: 'Confirm', confirm: true, nextStep: 'order_place' });
+    expect(coverageGap(stored, request).actionMembers).toEqual(['confirm.confirm', 'confirm.nextStep']);
+  });
+
+  it('one direction: a stored card that is stricter than the draft is not a gap', () => {
+    const stored = draft({ label: 'Confirm', oneShot: true, confirm: true, nextStep: 'order_place' });
+    const request = draft({ label: 'Confirm' });
+    expect(coverageGap(stored, request).actionMembers).toEqual([]);
+    expect(covers(stored, request)).toBe(true);
+  });
+
+  it('a member declared false reads as not declared', () => {
+    const stored = draft({ label: 'Confirm' });
+    const request = draft({ label: 'Confirm', oneShot: false, confirm: false });
+    expect(coverageGap(stored, request).actionMembers).toEqual([]);
+  });
+
+  it('an action the stored card lacks altogether stays in `actions`, never in `actionMembers`', () => {
+    const stored: DataContract = { actionSpec: { cancel: { label: 'Cancel' } } };
+    const request = draft({ label: 'Confirm', oneShot: true });
+    const gap = coverageGap(stored, request);
+    expect(gap.actions).toEqual(['confirm']);
+    expect(gap.actionMembers).toEqual([]);
   });
 });

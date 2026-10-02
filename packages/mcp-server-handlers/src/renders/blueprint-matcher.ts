@@ -82,6 +82,7 @@ const EMPTY_GAP: CoverageGap = {
   context: [],
   streams: [],
   gadgets: [],
+  actionMembers: [],
 };
 
 /** Match-found shape — everything the caller needs to commit a reuse. */
@@ -802,6 +803,7 @@ function coverageGapNote(gap: CoverageGap): string {
   if (gap.context.length > 0) parts.push(`context: ${gap.context.join(', ')}`);
   if (gap.streams.length > 0) parts.push(`streams: ${gap.streams.join(', ')}`);
   if (gap.gadgets.length > 0) parts.push(`gadgets: ${gap.gadgets.join(', ')}`);
+  if (gap.actionMembers.length > 0) parts.push(`action members: ${gap.actionMembers.join(', ')}`);
   if (parts.length === 0) return '';
   return ` [coverage gap — the request declares surfaces this cached UI lacks (${parts.join('; ')}); agent override is the safety valve]`;
 }

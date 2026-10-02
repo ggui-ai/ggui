@@ -304,7 +304,8 @@ function coverageHasGap(gap: CoverageGap): boolean {
     gap.props.length > 0 ||
     gap.context.length > 0 ||
     gap.streams.length > 0 ||
-    gap.gadgets.length > 0
+    gap.gadgets.length > 0 ||
+    gap.actionMembers.length > 0
   );
 }
 
@@ -328,7 +329,7 @@ function coverageGapFindings(
   request: DataContract,
 ): SuggestionFinding[] {
   const findings: SuggestionFinding[] = [];
-  const push = (kind: keyof CoverageGap, path: string): void => {
+  const push = (kind: Exclude<keyof CoverageGap, 'actionMembers'>, path: string): void => {
     for (const name of gap[kind]) {
       const annotation =
         kind === 'props'
@@ -349,6 +350,19 @@ function coverageGapFindings(
   push('context', 'contextSpec');
   push('streams', 'streamSpec');
   push('gadgets', 'gadgets');
+  // ggui#1428 — a shared action whose stored entry lacks a load-bearing
+  // member the draft declares: the served card will not behave that way.
+  for (const entry of gap.actionMembers) {
+    const dot = entry.lastIndexOf('.');
+    const name = entry.slice(0, dot);
+    const member = entry.slice(dot + 1);
+    findings.push({
+      code: COVERAGE_GAP_CODE,
+      severity: 'warn',
+      path: `actionSpec.${entry}`,
+      message: `the proposed cached UI declares action '${name}' without the \`${member}\` your draft declares, so the served card will not carry that behaviour. Default to ACCEPT (reuse-and-refine) — override only if the user or your flow depends on it.`,
+    });
+  }
   return findings;
 }
 
