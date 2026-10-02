@@ -265,8 +265,15 @@ export const actionEntrySchema = z
      * EVENT, not silence — otherwise a silent double-fire is replaced by a
      * silent swallow, the same unobservable violation facing the other
      * way. The RELAY never collapses distinct `actionId`s — two gestures
-     * are two facts and the relay stays honest about them; the AGENT
-     * treats `actionId` as an idempotency key for EVERY action, which buys
+     * are two facts and the relay stays honest about them — with ONE
+     * exception, the third line of defence (ggui#1424): the SERVER refuses
+     * a second COMMITTED dispatch of a declared one-shot action on the same
+     * card under a different `actionId`, as a contract violation named at
+     * `actionSpec.<name>.oneShot`, before it reaches the agent — whoever
+     * sends it. The spend is claimed before the pipe append and the holder
+     * marks its delivery after; a holder that never marked is taken over,
+     * so a retap after a lost response is served once. The AGENT treats
+     * `actionId` as an idempotency key for EVERY action, which buys
      * at-most-once per DISPATCH (a replay, a re-delivered buffer) and
      * explicitly NOT per intent, since a second gesture mints a new
      * `actionId`.
@@ -284,9 +291,10 @@ export const actionEntrySchema = z
      *
      * Failure mode: a duplicated side effect — a confirm card that writes
      * twice. Observable violation: two consume entries with distinct
-     * `actionId`s for the same declared one-shot action inside one render;
-     * or a second gesture on such an action that produced neither a consume
-     * entry NOR a named suppression trace.
+     * `actionId`s for the same declared one-shot action inside one render
+     * (ggui#1424's staging receipt was exactly this, before the server
+     * refused); or a second gesture on such an action that produced neither
+     * a consume entry NOR a named suppression trace nor a server refusal.
      */
     oneShot: z.boolean().optional(),
     nextStep: z.string().min(1).optional(),

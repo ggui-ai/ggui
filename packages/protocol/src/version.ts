@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The server refuses a second gesture on a spent one-shot (2026-10-02,
+ * ggui#1424: no schema change, same draft stamp). `ggui_runtime_submit_action`
+ * claims the spend before the pipe append; a second committed dispatch of a
+ * declared `oneShot` on the same card under a different `actionId`, once the
+ * holder's delivery is marked, answers `{ok:false, code:'CONTRACT_VIOLATION'}`
+ * with one violation at `actionSpec.<name>.oneShot` — the normative
+ * discriminator from "bad payload" — and reaches no agent. Both the code and
+ * `violations` were declared and emitted since ggui#1358, so no reader
+ * changes. The `oneShot` docblock names the exception to "the RELAY never
+ * collapses distinct actionIds"; SPEC's spent-oneShot clause gains the
+ * refusal. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `ggui_render` captures the host-session slice; its fields are bounded
  * (2026-10-02, ggui#1339: same draft stamp). The request's
  * `_meta["ai.ggui/host-session"]` pair is stored on the session the render
