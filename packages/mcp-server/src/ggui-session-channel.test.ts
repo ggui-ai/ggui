@@ -624,6 +624,39 @@ describe('handleInboundAction — the committed oneShot spend (#1305)', () => {
     await submitAction(fx, { action: 'ping', data: null });
     expect(await spent(fx)).toBeUndefined();
   });
+
+  // ggui#1424 — the channel door refuses too: a second data:submit of a spent
+  // oneShot answers the channel's existing CONTRACT_VIOLATION error frame
+  // with the field actionSpec.<name>.oneShot (no new wire), writes no ledger
+  // row and appends nothing.
+  it('a second data:submit of a spent oneShot is refused with the contract-violation error frame at actionSpec.<name>.oneShot; one ledger row, nothing more (ggui#1424)', async () => {
+    fx = await bootSubscribed({
+      confirm: { label: 'Confirm', oneShot: true },
+      ping: { label: 'Ping' },
+    });
+    await submitAction(fx, { action: 'confirm', data: null });
+    expect(await spent(fx)).toEqual({ epoch: 0, actions: ['confirm'] });
+    const requestId = randomUUID();
+    fx.ws.send(
+      JSON.stringify({
+        type: 'action',
+        payload: { sessionId: fx.sessionId, type: 'data:submit', payload: { action: 'confirm', data: null } },
+        requestId,
+      }),
+    );
+    const err = await fx.nextFrame('error');
+    const payload = err['payload'] as { code: string; details?: { violations?: Array<{ field: string; keyword?: string }> } };
+    expect(err['requestId']).toBe(requestId);
+    expect(payload.code).toBe('CONTRACT_VIOLATION');
+    expect(payload.details?.violations?.map((v) => v.field)).toEqual(['actionSpec.confirm.oneShot']);
+    expect(payload.details?.violations?.[0]?.keyword).toBe('oneShot');
+    const page = await fx.store.listEventsSince(fx.sessionId, 0, 10);
+    expect((page?.events ?? []).filter((e) => e.type === 'user.submitted')).toHaveLength(1);
+    expect(fx.loggedWarns).toContain('render_channel_one_shot_refused');
+    // The repeating action is never refused.
+    await submitAction(fx, { action: 'ping', data: null });
+    await submitAction(fx, { action: 'ping', data: null });
+  });
 });
 
 describe('per-socket inbound ordering — inboundChain serializes async frame handling', () => {

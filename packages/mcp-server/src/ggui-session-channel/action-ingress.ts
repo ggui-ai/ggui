@@ -271,8 +271,62 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
     // the pipe id per frame (`toConsumeEventEntry`), so a duplicate cannot
     // arise, and the ledger write is this path's load-bearing one.
     // The pipe entry (and its minted actionId, which also names the holder of
-    // a oneShot spend below, ggui#1424) is built once per frame.
+    // a oneShot spend, ggui#1424) is built once per frame.
     const entry = envelope.type === "data:submit" ? toConsumeEventEntry(envelope, sub.sessionId) : null;
+
+    // ggui#1424 — the channel door refuses a second gesture on a spent
+    // oneShot too, so the server's refusal holds at both doors. The claim is
+    // taken BEFORE the writes under this frame's minted actionId; the answer
+    // decides as it does on the tool door (`claimDispatchSpend` there):
+    // already-spent by another holder whose delivery is marked → refused with
+    // the channel's existing CONTRACT_VIOLATION error frame (#1358), one
+    // violation at `actionSpec.<name>.oneShot`, no ledger row, no pipe entry,
+    // one named line; an unmarked holder is taken over; the same holder, no
+    // holder, a non-oneShot action, a store that answers no claim, or a store
+    // failure (fail-open, named) → the frame goes on as before. The store
+    // enforces `delivered`: the refusal arm reads it only as the store
+    // answers it. Delivery is marked after the writes below.
+    const framePayload = envelope.payload;
+    const oneShotPayload =
+      entry !== null &&
+      activeItem !== undefined &&
+      framePayload !== null &&
+      typeof framePayload === "object" &&
+      !Array.isArray(framePayload) &&
+      typeof framePayload.action === "string"
+        ? { action: framePayload.action, data: framePayload.data }
+        : null;
+    if (oneShotPayload !== null && entry !== null && activeItem !== undefined) {
+      const verdict = await claimChannelSpend(deps, sub.sessionId, activeItem, oneShotPayload, entry.actionId);
+      if (verdict.kind === "refuse") {
+        deps.logger.warn("render_channel_one_shot_refused", {
+          sessionId: sub.sessionId,
+          action: oneShotPayload.action,
+          actionId: entry.actionId,
+          by: verdict.by,
+        });
+        deps.sendError(
+          ws,
+          "CONTRACT_VIOLATION",
+          `actionSpec.${oneShotPayload.action} is declared oneShot and already fired on this card; a second gesture is refused`,
+          message.requestId,
+          {
+            error: "contract_violation",
+            violations: [
+              {
+                field: `actionSpec.${oneShotPayload.action}.oneShot`,
+                keyword: "oneShot",
+                message: "this one-shot action already fired on this card",
+                expected: verdict.by,
+                received: entry.actionId,
+              },
+            ],
+            hint: "The action already fired on this card. Render a new card to fire it again.",
+          }
+        );
+        return;
+      }
+    }
     const consumeWrite: Promise<PendingEventAppendOutcome | void> = (() => {
       if (deps.pendingEventConsumer === undefined || entry === null) {
         return Promise.resolve();
@@ -318,10 +372,12 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
     }
     const seq: number = ledgerResult.value;
 
-    // ggui#1223 / #1305 — the gesture is in the ledger, so a committed
-    // `oneShot` now spends its card durably, BEFORE the ack: a client that
-    // holds the ack can reload and find the card spent. FAIL-OPEN, as on the
-    // tool path: a failed record is named and never withholds the ack.
+    // ggui#1223 / #1305 / #1424 — the gesture is in the ledger, so the
+    // holder MARKS its spend delivered (claimed above, before the writes),
+    // BEFORE the ack: a client that holds the ack can reload and find the
+    // card spent. FAIL-OPEN, as on the tool path: a failed record is named
+    // and never withholds the ack. With no pipe entry (the frame did not
+    // parse as a dispatch) the spend is recorded held by nobody, as before.
     if (envelope.type === "data:submit" && activeItem !== undefined) {
       const payload = envelope.payload;
       if (
@@ -337,11 +393,6 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
             render: activeItem,
             action: payload.action,
             data: payload.data,
-            // ggui#1424 — this gesture holds the spend, and its ledger append
-            // already landed, so it is recorded delivered in one step. A later
-            // `ggui_runtime_submit_action` for the same action under another
-            // id is refused there. With no pipe entry (the frame did not parse
-            // as a dispatch) the spend is held by nobody, as before.
             ...(entry !== null ? { actionId: entry.actionId, delivered: true as const } : {}),
           });
         } catch (err) {
@@ -362,4 +413,47 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
   }
 
   return { handleInboundAction };
+}
+
+/** The channel door's verdict on a oneShot claim (ggui#1424); mirrors the tool door's `claimDispatchSpend`. */
+type ChannelSpendVerdict = { readonly kind: "proceed" } | { readonly kind: "refuse"; readonly by: string };
+
+async function claimChannelSpend(
+  deps: ActionIngressDeps,
+  sessionId: string,
+  render: GguiSession,
+  payload: { readonly action: string; readonly data: unknown },
+  actionId: string,
+): Promise<ChannelSpendVerdict> {
+  const claimOnce = async (spend: { readonly actionId: string; readonly reclaimFrom?: string }) => {
+    try {
+      return await recordCommittedOneShot({
+        store: deps.renderStore,
+        sessionId,
+        render,
+        action: payload.action,
+        data: payload.data,
+        ...spend,
+      });
+    } catch (err) {
+      deps.logger.warn("render_channel_spent_oneshot_persist_failed", {
+        sessionId,
+        action: payload.action,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
+    }
+  };
+  const first = await claimOnce({ actionId });
+  const claim = first?.claim;
+  if (claim === undefined || claim.outcome !== "already-spent" || claim.by === undefined || claim.by === actionId) {
+    return { kind: "proceed" };
+  }
+  if (claim.delivered === true) return { kind: "refuse", by: claim.by };
+  const retaken = await claimOnce({ actionId, reclaimFrom: claim.by });
+  const second = retaken?.claim;
+  if (second === undefined || second.outcome !== "already-spent" || second.by === undefined || second.by === actionId) {
+    return { kind: "proceed" };
+  }
+  return { kind: "refuse", by: second.by };
 }
