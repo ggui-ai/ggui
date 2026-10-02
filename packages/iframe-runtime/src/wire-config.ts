@@ -80,6 +80,13 @@ export interface BuildRootWireConfigOptions {
    * Passed through as wire's `spentInputsChanged` and `pendingInputsChanged`.
    */
   readonly renderChanges?: (listener: () => void) => () => void;
+  /**
+   * ggui#1424 — the `oneShot` names the SERVER refused for this card as
+   * already spent (a `CONTRACT_VIOLATION` at `actionSpec.<name>.oneShot`),
+   * which the runtime marks so the guard reads them beside the card's
+   * persisted record. Read on every dispatch; `undefined` means none.
+   */
+  readonly refusedSpentOneShots?: () => readonly string[] | undefined;
   /** Handle to the renderer's WS manager; used for outbound `action` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */
@@ -281,7 +288,11 @@ export function buildRootWireConfig(
         return undefined;
       }
       const record = currentRender.spentOneShots;
-      return record !== undefined && record.epoch === (currentRender.epoch ?? 0) ? record.actions : undefined;
+      const persisted = record !== undefined && record.epoch === (currentRender.epoch ?? 0) ? record.actions : undefined;
+      // ggui#1424 — plus the names the server refused as already spent.
+      const refused = opts.refusedSpentOneShots?.();
+      if (refused === undefined || refused.length === 0) return persisted;
+      return persisted === undefined ? refused : [...persisted, ...refused];
     },
     // The iframe's precompiled-validator variant — the dispatch never
     // trips the iframe's no-`unsafe-eval` CSP.

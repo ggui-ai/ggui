@@ -3018,7 +3018,54 @@ const GESTURE_COPY = {
   // send, so nothing left the card. The visitor cannot fix that, but a tap
   // that visibly failed is better than a dead one.
   refused: (label?: string): string => `⚠ ${named(label, 'could not be sent', 'Could not be sent')}`,
+  // ggui#1424 — the server refused the gesture because this one-shot action
+  // already fired on this card: the honest state is "done", not an error.
+  alreadyDone: (label?: string): string => `✓ ${named(label, 'already done', 'Already done')}`,
 } as const;
+
+/**
+ * ggui#1424 — the `oneShot` names the server refused as already spent, per
+ * render, so the wire guard (`refusedSpentOneShots`) reads them beside the
+ * card's persisted record and the control reads done from now on. Keyed by
+ * render id because a `ggui_update` mints a new card whose actions are
+ * re-armed, and that card has a new id.
+ */
+const refusedSpentOneShotsByRender = new Map<string, Set<string>>();
+/** The mounted document's "spent inputs changed" notifier, set at mount; `null` before one. */
+let notifySpentInputsChanged: (() => void) | null = null;
+
+/** @internal — exported for unit tests. */
+export function isActionSpentByRefusal(renderId: string, actionName: string): boolean {
+  return refusedSpentOneShotsByRender.get(renderId)?.has(actionName) === true;
+}
+
+function markSpentByRefusal(renderId: string, actionName: string): void {
+  let set = refusedSpentOneShotsByRender.get(renderId);
+  if (set === undefined) {
+    set = new Set<string>();
+    refusedSpentOneShotsByRender.set(renderId, set);
+  }
+  set.add(actionName);
+  notifySpentInputsChanged?.();
+}
+
+/**
+ * Does a submit_action answer refuse THIS gesture because its one-shot action
+ * already fired on the card (ggui#1424)? The discriminator is the violation's
+ * `field`, `actionSpec.<name>.oneShot` — never the code alone, which a bad
+ * payload shares (`CONTRACT_VIOLATION`, ggui#1358).
+ */
+function readsOneShotRefusal(resp: JsonRpcResponse | null, actionName: string): boolean {
+  if (resp === null) return false;
+  const inner = submitActionPayload(resp);
+  if (inner === null || inner.ok !== false || inner.code !== 'CONTRACT_VIOLATION') return false;
+  const violations = inner.violations;
+  if (!Array.isArray(violations)) return false;
+  const field = `actionSpec.${actionName}.oneShot`;
+  return violations.some(
+    (v) => typeof v === 'object' && v !== null && (v as { field?: unknown }).field === field,
+  );
+}
 
 /**
  * The toast for a tap the outbound contract check refused (ggui#1536): the
@@ -4081,6 +4128,25 @@ export function dispatchSubmitAction(args: {
       return;
     }
 
+    // ggui#1424 — the server refused the gesture because this one-shot
+    // action already fired on the card (a tap that got past the guard: a
+    // re-served card before its spent record arrived, a forced click). The
+    // honest state is DONE: the guard reads the action spent from now on,
+    // the host is told on the `action-refused` channel with the field, and
+    // the visitor sees the action as already done — never "could not reach
+    // the agent". Nothing is on the pipe, so no doorbell.
+    if (readsOneShotRefusal(resp, intent)) {
+      markSpentByRefusal(sessionId, intent);
+      postObservabilityToParent({
+        kind: 'action-refused',
+        renderId: sessionId,
+        actionName: intent,
+        violations: [{ field: `actionSpec.${intent}.oneShot`, keyword: 'oneShot' }],
+      });
+      showActionToast(GESTURE_COPY.alreadyDone(label), 'success');
+      return;
+    }
+
     // Enqueue failed (pipe gone / transport error / host has no relay).
     // The gesture is not on any pipe, so a doorbell would point at an
     // empty queue; no `ui/message` is emitted either way.
@@ -5030,6 +5096,11 @@ async function bootProduction(opts: {
           renderListeners.delete(listener);
         };
       };
+      // ggui#1424 — a server refusal marks an action spent; the guard re-reads
+      // through the same listeners a replaced render wakes.
+      notifySpentInputsChanged = () => {
+        for (const listener of renderListeners) listener();
+      };
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
@@ -5090,6 +5161,11 @@ async function bootProduction(opts: {
         // visitor sees the tap failed, named by its declared label.
         onDispatchRefused: (actionName) => showRefusedDispatchToast(declaredActionLabel(currentRender, actionName)),
         renderChanges: onRenderChange,
+        // ggui#1424 — the names the server refused as already spent on this card.
+        refusedSpentOneShots: () => {
+          const set = currentRender === null ? undefined : refusedSpentOneShotsByRender.get(currentRender.id);
+          return set === undefined ? undefined : [...set];
+        },
         manager,
         streamBus,
         onDispatchEnvelope: (envelope) => {

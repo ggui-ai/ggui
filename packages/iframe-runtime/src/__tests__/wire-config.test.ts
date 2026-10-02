@@ -496,3 +496,30 @@ describe('buildRootWireConfig — a refused dispatch is named (ggui#1536)', () =
     expect(refusedEvents()[10]).toMatchObject({ renderId: 'render_next' });
   });
 });
+
+// ggui#1424 — an action the SERVER refused as already spent (a contract
+// violation at `actionSpec.<name>.oneShot`) is marked spent by the runtime,
+// and the guard reads that mark beside the card's persisted record.
+describe('buildRootWireConfig — refusal-marked spent oneShots (ggui#1424)', () => {
+  const SPEC: ActionSpec = { confirm: { label: 'Confirm', oneShot: true }, note: { label: 'Note' } };
+
+  it('a oneShot the runtime marked as refused-spent is suppressed like a persisted spend; a repeating action is not', () => {
+    const { send, messages } = makeFakeManager();
+    const render = makeRender('render_refused', { actionSpec: SPEC, epoch: 0 });
+    const cfg = buildRootWireConfig({
+      sessionId: 'render_refused',
+      appId: 'app_x',
+      getCurrentGguiSession: () => render,
+      refusedSpentOneShots: () => ['confirm'],
+      manager: { send },
+      streamBus: new StreamBus(),
+    });
+    cfg.dispatch('confirm', {});
+    cfg.dispatch('note', {});
+    cfg.dispatch('note', {});
+    const actions = messages
+      .filter((m): m is WebSocketMessage & { type: 'action' } => m.type === 'action')
+      .map((m) => (m.payload.payload as { action: string }).action);
+    expect(actions).toEqual(['note', 'note']);
+  });
+});

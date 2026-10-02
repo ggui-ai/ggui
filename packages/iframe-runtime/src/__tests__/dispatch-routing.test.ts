@@ -56,6 +56,7 @@ import {
   resetRelayLatchForBoot,
   routeDispatch,
   setCurrentApp,
+  isActionSpentByRefusal,
   __setTelemetrySinkForTest,
 } from '../runtime.js';
 import { ensureStatusDom } from '../status-dom.js';
@@ -1968,5 +1969,85 @@ describe('gesture telemetry carries no free text (ggui#1383)', () => {
     const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'runtime.ts'), 'utf8');
     const calls = [...src.matchAll(/record\(\s*'gesture\.dropped_superseded'([^)]*)\)/g)].map((m) => m[1]!.trim());
     expect(calls).toEqual(['']);
+  });
+});
+
+// ggui#1424 — the server refuses a second gesture on a spent one-shot as a
+// contract violation at `actionSpec.<name>.oneShot`. For this runtime that
+// answer means "already happened" (a tap that got past the guard, e.g. on a
+// re-served card before its spent record arrived), never "could not reach the
+// agent": the control reads done, the host is told, and no error is shown.
+describe('a server refusal of a spent oneShot reads as done, not as an error (ggui#1424)', () => {
+  function observabilityEvents(): Array<{ kind?: string }> {
+    return postMessageSpy.mock.calls
+      .map((call) => call[0] as { type?: unknown; event?: { kind?: string } })
+      .filter((msg) => msg.type === MCP_APP_OBSERVE_TYPE)
+      .map((msg) => msg.event ?? {});
+  }
+
+  it('on {ok:false, CONTRACT_VIOLATION at actionSpec.<name>.oneShot}: no doorbell, the toast says already done, and the host sees action-refused with the field', async () => {
+    transport.queueResponse('tools/call', {
+      result: {
+        structuredContent: {
+          ok: false,
+          code: 'CONTRACT_VIOLATION',
+          message: 'actionSpec.archive is declared oneShot and already fired on this card',
+          violations: [{ field: 'actionSpec.archive.oneShot', keyword: 'oneShot', message: 'already fired', expected: 'g-1', received: 'g-2' }],
+        },
+      },
+    });
+
+    routeDispatch({
+      actionName: 'archive',
+      data: { id: 'msg_1' },
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+      label: 'Archive',
+    });
+    await tick();
+    await tick();
+
+    const transportMethods = transport.sent
+      .map((msg) => (msg as { method?: unknown }).method)
+      .filter((m): m is string => typeof m === 'string');
+    expect(transportMethods).not.toContain('ui/message');
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/already done/i);
+    expect(toast?.textContent).not.toMatch(/could not reach/i);
+
+    expect(observabilityEvents()).toContainEqual({
+      kind: 'action-refused',
+      renderId: 'sess_1',
+      actionName: 'archive',
+      violations: [{ field: 'actionSpec.archive.oneShot', keyword: 'oneShot' }],
+    });
+    // The guard reads the action as spent from now on.
+    expect(isActionSpentByRefusal('sess_1', 'archive')).toBe(true);
+  });
+
+  it('control: a CONTRACT_VIOLATION on another field is the ordinary failure, not done', async () => {
+    transport.queueResponse('tools/call', {
+      result: {
+        structuredContent: {
+          ok: false,
+          code: 'CONTRACT_VIOLATION',
+          message: 'bad payload',
+          violations: [{ field: 'actionSpec.archive.schema', keyword: 'required', message: 'missing id' }],
+        },
+      },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_2', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/already done/i);
+    expect(observabilityEvents().some((e) => e.kind === 'action-refused')).toBe(false);
+    expect(isActionSpentByRefusal('sess_2', 'archive')).toBe(false);
   });
 });
