@@ -192,3 +192,26 @@ describe('the 2026-10-02 decisions (#1663 step 4 review)', () => {
     expect(judgeEdges([...steps, controls('deploy', 262, { right: 352 })]).verdict).toBe('fail');
   });
 });
+
+describe('the 2026-10-02 decisions, second set (#1663: cards 50 and 20)', () => {
+  const c = (id: string, left: number, right: number, top: number): EdgeBlock => ({ id, kind: 'text', edge: left, left, right, top, role: 'centred' });
+  it('a centred group of two after its label passes when nothing edge-aligned follows it (card 50 at the chat-card width)', () => {
+    expect(judgeEdges([text('label', 24, { right: 187, top: 400 }), c('ready', 82, 302, 500), c('send', 62, 322, 540)]).verdict).toBe('pass');
+  });
+  it('one centred block after its label still fails', () => {
+    expect(judgeEdges([text('label', 24, { right: 187, top: 400 }), c('ready', 82, 302, 500)]).verdict).toBe('fail');
+  });
+  it('a column that returns to an edge after a centred group fails', () => {
+    expect(judgeEdges([text('label', 24, { right: 187, top: 400 }), c('ready', 82, 302, 500), c('send', 62, 322, 540), text('after', 24, { right: 300, top: 600 })]).verdict).toBe('fail');
+  });
+  const bar = (id: string, top: number): EdgeBlock => ({ id, kind: 'surface', edge: 49, left: 49, right: 335, top, role: 'placeholder' });
+  it('placeholders are not blocks: a heading over loading bars is not evaluated (card 20)', () => {
+    expect(judgeEdges([text('heading', 24, { top: 60 }), bar('b1', 230), bar('b2', 270), bar('b3', 300)]).verdict).toBe('n/a');
+    // The card's own box and a box of bars are containers, not a second block.
+    expect(judgeEdges([surface('card', 0, { right: 384 }), text('heading', 24, { top: 60, within: 'card' }), surface('list', 24, { within: 'card', right: 360 }), bar('b1', 230)]).verdict).toBe('n/a');
+  });
+  it('two blocks over loading bars are evaluated, and the bars never count against them', () => {
+    expect(judgeEdges([text('heading', 24, { top: 60 }), text('caption', 24, { top: 90 }), bar('b1', 230)]).verdict).toBe('pass');
+    expect(judgeEdges([text('heading', 24, { top: 60 }), text('caption', 40, { top: 90 }), bar('b1', 230)]).verdict).toBe('fail');
+  });
+});

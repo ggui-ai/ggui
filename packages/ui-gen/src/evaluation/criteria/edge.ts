@@ -40,7 +40,7 @@ export interface EdgeBlock {
   /** A hanging marker's text edge: what stacks with the block may line up with this or with `edge`. */
   readonly textEdge?: number;
   /** Structure the DOM names: a list item, a table (measured at its rule), a member of a centred group. */
-  readonly role?: 'list-item' | 'table' | 'centred';
+  readonly role?: 'list-item' | 'table' | 'centred' | 'placeholder';
 }
 
 export interface EdgeOffset {
@@ -155,8 +155,14 @@ function checkColumn(container: string, col: readonly EdgeBlock[], blocks: reado
   // A centred group: its members share one centre axis, and it must be the whole content of its column. A column is
   // edge-aligned or centred, never both (decided 2026-10-02).
   const centred = col.filter((b) => b.role === 'centred');
-  if (centred.length > 0 && flow.length > 0) {
-    const E = flow[0]!.edge;
+  // A centred group of two or more may follow a label or heading when nothing edge-aligned follows it (an empty state
+  // under its section label). One centred block among edge-aligned ones, or a column that returns to an edge after
+  // the group, fails (decided 2026-10-02).
+  const edgeAligned = col.filter((b) => b.role !== 'centred');
+  const groupTop = centred.length > 0 ? Math.min(...centred.map((c) => c.top)) : 0;
+  const groupEndsColumn = centred.length > 1 && edgeAligned.every((b) => b.top < groupTop);
+  if (centred.length > 0 && edgeAligned.some((b) => b.kind !== 'surface') && !groupEndsColumn) {
+    const E = flow[0]?.edge ?? edgeAligned[0]!.edge;
     for (const c of centred) offsets.push({ container, block: c.id, at: c.edge, nearest: E, offPx: Math.abs(c.edge - E), reason: 'a centred block in an edge-aligned column' });
   } else if (centred.length > 1) {
     const a0 = axis(centred[0]!);
@@ -169,9 +175,16 @@ const sum = (o: readonly EdgeOffset[]): number => o.reduce((s, x) => s + x.offPx
 /**
  * Judge one captured width. `placeholdersOnly`: the frame shows only loading placeholders, so the row is not evaluated.
  */
-export function judgeEdges(blocks: readonly EdgeBlock[], opts: { readonly placeholdersOnly?: boolean } = {}): EdgeVerdict {
+export function judgeEdges(measured: readonly EdgeBlock[], opts: { readonly placeholdersOnly?: boolean } = {}): EdgeVerdict {
   if (opts.placeholdersOnly === true) return { verdict: 'n/a', offsets: [], evidence: 'only loading placeholders are shown; not evaluated' };
-  if (blocks.length === 0) return { verdict: 'n/a', offsets: [], evidence: 'no blocks were measured' };
+  let blocks = measured;
+  // A placeholder (a box with nothing in it, shown while content loads) is not a block, and the rule needs two blocks to
+  // compare: with fewer than two once placeholders are set aside, the frame is not evaluated (decided 2026-10-02).
+  // The two blocks are content, text or controls: a box holds them and is not one of them for this count.
+  const kept = blocks.filter((b) => b.role !== 'placeholder');
+  const content = kept.filter((b) => b.kind !== 'surface').length;
+  if (content < 2) return { verdict: 'n/a', offsets: [], evidence: kept.length === 0 ? 'no blocks were measured' : 'fewer than two blocks once placeholders are set aside; not evaluated' };
+  blocks = kept;
   const offsets: EdgeOffset[] = [];
   const containers = [CARD, ...blocks.filter((b) => b.kind === 'surface' && b.role !== 'table').map((b) => b.id)];
   for (const container of containers) {
