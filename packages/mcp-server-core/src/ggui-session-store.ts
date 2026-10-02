@@ -236,9 +236,17 @@ export interface AppendEventInput {
  *     lifecycle fields populated from `now`, and the ledger seeded per
  *     {@link firstWriteEventSequence}).
  *   - If a row with `render.id` exists, replace its visible-bits surface
- *     in place; lifecycle fields (`createdAt`, `eventSequence`,
- *     `hostSession`) are preserved across the upsert. `lastActivityAt`
- *     bumps to `now`.
+ *     in place; lifecycle fields (`createdAt`, `eventSequence`) are
+ *     preserved across the upsert. `lastActivityAt` bumps to `now`.
+ *   - `userId` and `hostSession` are FILL-ABSENT-NEVER-OVERWRITE on that
+ *     replace (#446, ggui#1339): a commit that carries one sets it when
+ *     the row has none and leaves it unchanged when the row has one. A
+ *     hosted server births the row at the handshake's provisional
+ *     preview, before the `ggui_render` whose request `_meta` carries the
+ *     host's pair, so the render's commit is the pair's first writer —
+ *     and a later commit with a different pair is kept as it was (the
+ *     handler names the conflict; the store does not). Pinned by the
+ *     conformance kit on every store.
  *
  * Implementations MAY refuse to commit to an expired render (past
  * `expiresAt`); the OSS in-memory + sqlite stores currently accept

@@ -220,6 +220,53 @@ export function runGguiSessionStoreConformance(
         });
       });
 
+      it('commit fills an absent hostSession once, and never overwrites one (ggui#1339)', async () => {
+        await withStore(async (store) => {
+          // The hosted server births the row at the handshake's provisional
+          // preview, before the `ggui_render` that carries the host's pair,
+          // so the render's commit is the pair's FIRST writer — the same
+          // fill-absent-never-overwrite rule as the subject (#446). A later
+          // commit with a different pair is kept as it is by the store; the
+          // handler is what names that conflict. A commit carrying no pair
+          // leaves the row's pair alone.
+          const PAIR = { hostName: 'sample', hostSessionId: 'chat-42' };
+          await store.create({ id: 'render-hs', appId: 'app-1' });
+          expect((await store.get('render-hs'))?.hostSession).toBeUndefined();
+
+          await store.commit({
+            appId: 'app-1',
+            hostSession: PAIR,
+            render: makeComponentGguiSession('render-hs', 'app-1', ''),
+          });
+          expect((await store.get('render-hs'))?.hostSession).toEqual(PAIR);
+
+          await store.commit({
+            appId: 'app-1',
+            hostSession: { hostName: 'sample', hostSessionId: 'chat-99' },
+            render: makeComponentGguiSession('render-hs', 'app-1', ''),
+          });
+          expect((await store.get('render-hs'))?.hostSession).toEqual(PAIR);
+
+          await store.commit({
+            appId: 'app-1',
+            render: makeComponentGguiSession('render-hs', 'app-1', ''),
+          });
+          expect((await store.get('render-hs'))?.hostSession).toEqual(PAIR);
+        });
+      });
+
+      it('a first-write commit carrying hostSession mints the row with it (ggui#1339)', async () => {
+        await withStore(async (store) => {
+          const PAIR = { hostName: 'sample', hostSessionId: 'chat-7' };
+          await store.commit({
+            appId: 'app-1',
+            hostSession: PAIR,
+            render: makeComponentGguiSession('render-hs-mint', 'app-1', ''),
+          });
+          expect((await store.get('render-hs-mint'))?.hostSession).toEqual(PAIR);
+        });
+      });
+
       it('preserves userId when supplied', async () => {
         await withStore(async (store) => {
           await store.create({ id: 'render-1', appId: 'app-1', userId: 'u-42' });

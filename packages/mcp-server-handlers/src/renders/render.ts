@@ -1405,9 +1405,13 @@ export function createGguiRenderHandler(
     // The full envelope: the registered shape plus the route grammar (#818).
     const parsed = renderInputEnvelopeSchema.parse(input);
     // ggui#1339 — the host's conversation-grouping pair, read ONCE from this
-    // request's `_meta` and handed to every commit below. The store keeps it
-    // only on the commit that creates the row and never rewrites it, so
-    // which commit comes first does not matter.
+    // request's `_meta` and handed to every commit below. The store sets it
+    // once — on the commit that first carries it when the row has none — and
+    // never moves it after (fill-absent-never-overwrite, as the subject): a
+    // hosted server births the row at the handshake's provisional preview,
+    // before this request, so the render's commit is the pair's first writer.
+    // A differing later pair is named by `noteHostSessionConflict`, not
+    // written.
     const hostSessionSlice = hostSessionSliceOf(ctx);
     // themeId DOOR (ggui#598 slice 3) — before any store or
     // generation work: a typo'd id refuses here, where it was typed.
@@ -1967,6 +1971,7 @@ export function createGguiRenderHandler(
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           ...hostSessionSlice,
         });
+        noteHostSessionConflict(committed, hostSessionSlice.hostSession);
         placeholderCommitted = true;
         // The placeholder is a real row a locator can address, so it
         // gets a record too — the later in-place replacement
@@ -2050,6 +2055,7 @@ export function createGguiRenderHandler(
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           ...hostSessionSlice,
         });
+        noteHostSessionConflict(committed, hostSessionSlice.hostSession);
         safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
         generatedCodeReady = true;
         await identityWriterFor(null)(committed);
@@ -2629,6 +2635,7 @@ export function createGguiRenderHandler(
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           ...hostSessionSlice,
         });
+        noteHostSessionConflict(committed, hostSessionSlice.hostSession);
         await identityWriterFor(null)(committed);
       } catch {
         // Defensive, matching the provisional-preview placeholder
@@ -2743,6 +2750,7 @@ export function createGguiRenderHandler(
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
             ...hostSessionSlice,
           });
+          noteHostSessionConflict(committed, hostSessionSlice.hostSession);
           // Last commit of the render when a theme override is in
           // play, and every reuse / cold-gen path has settled by
           // here — so this write carries the final blueprint id
@@ -3458,6 +3466,20 @@ type HostSessionSlice = { readonly hostSession?: McpAppAiGguiHostSessionMeta };
  * host implementation error, not a security boundary, so it is named once
  * per request and refuses nothing.
  */
+/**
+ * ggui#1339 — a commit whose host-session pair differs from the pair the row
+ * already holds is NAMED, once per such commit, ids only. The store keeps the
+ * first pair (set once, first writer wins — `GguiSessionStore.commit`), so
+ * without this line a host that reuses one session across two conversations
+ * would be kept on the first pair in silence. No payload, nothing on the wire.
+ */
+function noteHostSessionConflict(committed: StoredGguiSession, wanted: McpAppAiGguiHostSessionMeta | undefined): void {
+  const kept = committed.hostSession;
+  if (wanted === undefined || kept === undefined) return;
+  if (kept.hostName === wanted.hostName && kept.hostSessionId === wanted.hostSessionId) return;
+  console.warn(`[ggui_render] host_session_conflict ${JSON.stringify({ sessionId: committed.id, appId: committed.appId })}`);
+}
+
 function hostSessionSliceOf(ctx: HandlerContext): HostSessionSlice {
   const parsed = parseMcpAppAiGguiHostSessionMeta(ctx.requestMeta);
   if (!parsed.ok) {
@@ -3898,6 +3920,7 @@ async function runGenerationIntoGguiSession(
         ? { sourceCode: result.response.sourceCode }
         : {}),
     });
+    noteHostSessionConflict(committed, hostSessionSlice.hostSession);
     await args.writeIdentityFor(resolvedBlueprintId ?? null)(committed);
   } catch {
     await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
@@ -3972,6 +3995,7 @@ async function commitNoCredentialsCardGguiSession(
       userId: args.userId,
       ...(args.hostSession !== undefined ? { hostSession: args.hostSession } : {}),
     });
+    noteHostSessionConflict(stored, args.hostSession);
     committed = true;
     await args.writeIdentity(stored);
   } catch {
@@ -4072,6 +4096,7 @@ async function commitErrorGguiSession(
       userId: args.userId,
       ...(args.hostSession !== undefined ? { hostSession: args.hostSession } : {}),
     });
+    noteHostSessionConflict(stored, args.hostSession);
     committed = true;
     await args.writeIdentity(stored);
   } catch {
@@ -4267,6 +4292,7 @@ async function commitCachedGguiSession(
         ? { sourceCode: args.cacheHit.sourceCode }
         : {}),
     });
+    noteHostSessionConflict(committed, args.hostSession);
     await args.writeIdentity(committed);
   } catch {
     await safelyFinalizePreview(previewDeps, args.sessionId, 'commit-failed');

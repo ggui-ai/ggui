@@ -300,6 +300,8 @@ function buildHandler(opts: {
    * other path unchanged).
    */
   readonly renderIdentityStore?: RenderIdentityStore;
+  /** ggui#1339 — the id the handler mints, so a test can create the row first (the hosted provisional-preview shape). */
+  readonly sessionIdFactory?: GguiRenderHandlerDeps['sessionIdFactory'];
   /**
    * Optional content-addressable code-delivery pair. Both must be
    * present for the handler to mint a `codeUrl`; the code-delivery
@@ -346,6 +348,7 @@ function buildHandler(opts: {
     ...(opts.renderIdentityStore
       ? { renderIdentityStore: opts.renderIdentityStore }
       : {}),
+    ...(opts.sessionIdFactory ? { sessionIdFactory: opts.sessionIdFactory } : {}),
     ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
     ...(opts.codeBaseUrl !== undefined
       ? { codeBaseUrl: opts.codeBaseUrl }
@@ -421,6 +424,8 @@ function buildRecord(opts: {
 async function buildAcceptCacheHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   readonly renderIdentityStore?: RenderIdentityStore;
+  /** ggui#1339 — see {@link buildHandler}'s `sessionIdFactory`. */
+  readonly sessionIdFactory?: GguiRenderHandlerDeps['sessionIdFactory'];
   /**
    * Name a card on the suggestion, as the decide core writes a cache proposal
    * (`blueprintMeta.blueprintId`): `true` names the stored card, a string names
@@ -488,6 +493,7 @@ async function buildAcceptCacheHarness(extraOpts: {
     ...(extraOpts.renderIdentityStore
       ? { renderIdentityStore: extraOpts.renderIdentityStore }
       : {}),
+    ...(extraOpts.sessionIdFactory ? { sessionIdFactory: extraOpts.sessionIdFactory } : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -602,6 +608,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly coldTokens?: ColdTokens;
   readonly renderTtlMs?: number;
   readonly renderIdentityStore?: RenderIdentityStore;
+  /** ggui#1339 — see {@link buildHandler}'s `sessionIdFactory`. */
+  readonly sessionIdFactory?: GguiRenderHandlerDeps['sessionIdFactory'];
   /** #460 — injectable so a test can make registration fail. */
   readonly index?: InMemoryBlueprintIndex;
   /** Agreed contract for the seeded handshake. Defaults to {@link CONTRACT}. */
@@ -663,6 +671,7 @@ async function buildColdGenHarness(extraOpts: {
     ...(extraOpts.renderIdentityStore
       ? { renderIdentityStore: extraOpts.renderIdentityStore }
       : {}),
+    ...(extraOpts.sessionIdFactory ? { sessionIdFactory: extraOpts.sessionIdFactory } : {}),
     ...(extraOpts.codeStore ? { codeStore: extraOpts.codeStore } : {}),
     ...(extraOpts.codeBaseUrl !== undefined
       ? { codeBaseUrl: extraOpts.codeBaseUrl }
@@ -3659,6 +3668,56 @@ describe("createGguiRenderHandler — the request's ai.ggui/host-session slice i
     assertRenderSuccess(out);
     expect((await harness.renderStore.get(out.sessionId))?.hostSession).toBeUndefined();
     expect(await listed(harness.renderStore, CTX)).toEqual([]);
+  });
+
+  // The hosted server births the session row at the handshake's provisional
+  // preview, before the render that carries the pair (a staging read on
+  // 2026-10-02 found the pair missing for exactly that reason). The render's
+  // commit must then be the pair's first writer.
+  it('a row that exists before the render (the hosted provisional-preview shape) takes the pair from the render\'s commit', async () => {
+    const PRE = 'render_pre_1339';
+    const { harness, handshakeId } = await buildColdGenHarness({ sessionIdFactory: () => PRE });
+    await harness.renderStore.create({ id: PRE, appId: CTX.appId });
+    expect((await harness.renderStore.get(PRE))?.hostSession).toBeUndefined();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(PAIR));
+    assertRenderSuccess(out);
+    expect(out.sessionId).toBe(PRE);
+    expect((await harness.renderStore.get(PRE))?.hostSession).toEqual(PAIR);
+    expect(await listed(harness.renderStore, CTX)).toEqual([PRE]);
+  });
+
+  it('a row that already holds a pair keeps it, and a render carrying a different pair is named once (host_session_conflict, ids only)', async () => {
+    const PRE = 'render_pre_conflict_1339';
+    const HELD = { hostName: 'sample', hostSessionId: 'chat-first' };
+    const { harness, handshakeId } = await buildColdGenHarness({ sessionIdFactory: () => PRE });
+    await harness.renderStore.create({ id: PRE, appId: CTX.appId, hostSession: HELD });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(PAIR));
+      assertRenderSuccess(out);
+      expect((await harness.renderStore.get(PRE))?.hostSession).toEqual(HELD);
+      const lines = warn.mock.calls.map(([m]) => String(m)).filter((m) => m.includes('host_session_conflict'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain(`"sessionId":"${PRE}"`);
+      expect(lines[0]).not.toContain('chat-42');
+      expect(lines[0]).not.toContain('chat-first');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('control: the same pair committed again is not a conflict', async () => {
+    const PRE = 'render_pre_same_1339';
+    const { harness, handshakeId } = await buildColdGenHarness({ sessionIdFactory: () => PRE });
+    await harness.renderStore.create({ id: PRE, appId: CTX.appId, hostSession: PAIR });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(PAIR));
+      assertRenderSuccess(out);
+      expect(warn.mock.calls.filter(([m]) => String(m).includes('host_session_conflict'))).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it.each([

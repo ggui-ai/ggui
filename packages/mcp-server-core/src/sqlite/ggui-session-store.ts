@@ -421,11 +421,14 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     const t = this.now();
     if (existing) {
       // Replace visible-bits surface; preserve lifecycle (createdAt,
-      // eventSequence, hostSession captured at create time).
+      // eventSequence). The subject and the host-session pair are
+      // fill-absent-never-overwrite (#446, ggui#1339): see the SQL.
       this.stmts.upsertRenderPayload.run(
         JSON.stringify(incoming),
         t,
         input.userId ?? null,
+        input.hostSession?.hostName ?? null,
+        input.hostSession?.hostSessionId ?? null,
         incoming.id,
       );
       const updated = requireGguiSessionRow(
@@ -729,8 +732,16 @@ INSERT INTO renders (
 // row that already HAS one must never have it overwritten, or a second
 // caller could re-point someone else's render at themselves. Matches
 // the cloud adapter's conditional write.
+//
+// The host-session pair takes the same rule (ggui#1339): a row born before
+// the render that carries the pair takes it from the first commit that
+// carries one, and no later commit moves it. The two columns are set
+// together, from one pair, so COALESCE on each cannot split a pair.
 const UPSERT_RENDER_PAYLOAD_SQL = `
-UPDATE renders SET payload = ?, last_activity_at = ?, user_id = COALESCE(user_id, ?) WHERE id = ?
+UPDATE renders
+   SET payload = ?, last_activity_at = ?, user_id = COALESCE(user_id, ?),
+       host_name = COALESCE(host_name, ?), host_session_id = COALESCE(host_session_id, ?)
+ WHERE id = ?
 `;
 
 // ─────────────────────────────────────────────────────────────────────

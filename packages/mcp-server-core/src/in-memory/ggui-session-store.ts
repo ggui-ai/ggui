@@ -237,6 +237,15 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
         ...(existing.stored.userId === undefined && input.userId !== undefined
           ? { userId: input.userId }
           : {}),
+        // The same rule for the host's conversation pair (ggui#1339): a row
+        // born before the render that carries the pair — the hosted server
+        // births it at the handshake's provisional preview — takes the pair
+        // from the first commit that carries one, and no later commit moves
+        // it. The handler names a differing later pair; the store keeps the
+        // first.
+        ...(existing.stored.hostSession === undefined && input.hostSession !== undefined
+          ? { hostSession: input.hostSession }
+          : {}),
         lastActivityAt: t,
         // The spent record is store-owned (#1305): a render carrying a copy
         // of it (a read view the caller took earlier) never writes it.

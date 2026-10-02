@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The host-session pair is set once, by the first commit that carries it
+ * (2026-10-02, ggui#1339's hosted form: no schema change, same draft
+ * stamp). `GguiSessionStore.commit` now states the rule the row's subject
+ * already had: `hostSession` is fill-absent-never-overwrite on the replace
+ * path, so a row born before the `ggui_render` whose request `_meta`
+ * carries the pair (a hosted server births it at the handshake's
+ * provisional preview) takes the pair from that render's commit, and no
+ * later commit moves it; the conformance kit pins it on every store. The
+ * render handler names a differing later pair (`host_session_conflict`,
+ * ids only). A slice on the `ggui_handshake` request is ignored (extension
+ * doc §2.4). Found by a staging read: the pair never landed on the hosted
+ * row. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The runtime sends the render-failure report (2026-10-02, ggui#1679: no
  * schema change, same draft stamp). The emit step of ggui#1609's
  * `ggui_runtime_report_render_failure`: `@ggui-ai/iframe-runtime` reports a
