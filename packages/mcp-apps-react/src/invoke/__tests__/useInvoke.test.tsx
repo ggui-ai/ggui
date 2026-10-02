@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AppDisplayConfig, ToolUseBlock } from '@ggui-ai/protocol';
+import { invokeRequestSchema } from '@ggui-ai/protocol/wire';
 import { GguiProvider } from '../../components/GguiProvider';
 import { useInvoke } from '../useInvoke';
 
@@ -113,6 +114,8 @@ describe('useInvoke', () => {
       message: 'weather please',
       history: [],
     });
+    // The body is the protocol's request shape (ggui#1334): the sender is pinned to the schema.
+    expect(invokeRequestSchema.safeParse(JSON.parse(init.body as string)).success).toBe(true);
 
     // messages shape
     expect(result.current.messages).toHaveLength(2);
@@ -207,6 +210,7 @@ describe('useInvoke', () => {
 
     const secondCall = fetchMock.mock.calls[1]![1];
     const body = JSON.parse(secondCall.body as string);
+    expect(invokeRequestSchema.safeParse(body).success).toBe(true);
     expect(body.message).toBe('and again');
     expect(body.history).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },

@@ -477,11 +477,17 @@ export const NPM_PACKAGE_NAME_RE =
  * Exact semver pin (e.g., `0.0.1`, `1.2.3-beta.1`, `2.0.0+build.7`).
  * No ranges (`^`, `~`, `>=`), no leading `v`, no wildcards.
  *
- * Why pin-only: the cache key for a generated UI is
- * `hashContract(wire, intent)` — making the wire carry an exact
- * version means cache invalidation is a pure function of the wire
- * bytes (no canonicalize step). Version bumps produce new wire →
- * fresh generation; forensics are observable from storage alone.
+ * Why pin-only: a gadget descriptor's identity is `(package, version)`,
+ * and its `bundleUrl` / `bundleSri` name the bytes of exactly one build.
+ * A range would name many builds under one integrity hash, so it cannot be
+ * verified; an exact pin can, and it reads back from storage as the build
+ * that was served.
+ *
+ * What the pin is NOT: part of a generated UI's cache key. The version
+ * lives on the app's installed descriptor, never on the contract — a
+ * contract's `clientCapabilities.gadgets` names packages and exports only
+ * — and the cache key is `blueprintKey(contract)`. So a version bump does
+ * not, by itself, change the key or invalidate a stored blueprint.
  *
  * Grammar mirrors semver 2.0 spec:
  *   `MAJOR.MINOR.PATCH(-PRERELEASE)?(+BUILD)?`

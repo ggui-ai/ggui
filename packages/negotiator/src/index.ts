@@ -8,8 +8,11 @@
  *     handshake always returns a valid contract;
  *   - judges blueprint-match candidates for reuse (`rerankCandidates`);
  *   - validates contract structure + novelty (`contract-validators`);
- *   - hashes contracts into identity + variant keys (`hashContract`,
- *     `buildVariant`) and normalizes untrusted drafts (`normalizeDraft`).
+ *   - normalizes untrusted drafts (`normalizeDraft`).
+ *
+ * Contract identity is not this package's: the cache key is
+ * `blueprintKey(contract)` and the variant key is `variantKey(variance)`,
+ * both from `@ggui-ai/protocol/blueprint-key`.
  *
  * The HANDSHAKE DECISION itself (find-similar → reuse vs synth-create)
  * lives in the shared `decideHandshake` core in
@@ -25,7 +28,6 @@
  * consumers need. Each additive export carries semver weight.
  */
 
-export { hashContract, buildVariant } from './contract-hash.js';
 export type { LLMCaller, LLMCallerConfig, Metered, TokenUsage, ToolSchema } from './llm-caller.js';
 export { llmRerankJudge, rerankCandidates, RERANK_SYSTEM_PROMPT } from './llm-rerank.js';
 export type {

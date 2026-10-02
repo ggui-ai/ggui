@@ -197,7 +197,15 @@ export const invokeTurnSchema = z.object({
 });
 
 /**
- * POST body shape for `{endpointUrl}/invoke`.
+ * POST body shape for `{endpointUrl}/invoke` — the request half of the
+ * Streamable Invoke Protocol, whose event half is {@link invokeEventSchema}.
+ *
+ * Who speaks it: the SENDER is a host helper's `useInvoke`
+ * (`@ggui-ai/mcp-apps-react`, `@ggui-ai/mcp-apps-react-native`), and the
+ * React helper's test parses the body it sends with this schema, so the two
+ * cannot drift apart unseen. The RECEIVER is an agent's own `/invoke`
+ * endpoint, which may validate with this schema; no ggui server receives
+ * this body.
  *
  * Stateless by default — client holds history, sends full `history[]` every
  * turn. Agents that need server-side memory layer their own keyed on
