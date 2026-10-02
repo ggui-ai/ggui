@@ -24,7 +24,10 @@
  *
  * Hidden elements (through any ancestor), zero-size ones and transparent text are skipped. What the rows and ornament
  * rules set aside is counted. A frame with no text in ink is reported as placeholders only. The expression returns a
- * JSON value; {@link parseEdgeProbe} is its typed read.
+ * JSON value; {@link parseEdgeProbe} is its typed read. *
+ * **Validated instrument (#1663, 2026-10-02):** this file as of `cec465319` (with `7bb4da13e`) passed a fresh sealed
+ * blind draw at the registered bar (27/30, κ 0.76), stricter than the design lead's reading on its disagreements. Any
+ * later change to what this file measures or decides is a new instrument until another fresh sealed draw.
  */
 import type { EdgeBlock } from './edge.js';
 

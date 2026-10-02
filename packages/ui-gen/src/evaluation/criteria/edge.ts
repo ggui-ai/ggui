@@ -13,7 +13,10 @@
  * placeholders is not evaluated.
  *
  * Input is the measured block list (a DOM probe at capture produces it); output is the verdict plus every offset in
- * px, so a near miss reads apart from a split. This module measures nothing itself.
+ * px, so a near miss reads apart from a split. This module measures nothing itself. *
+ * **Validated instrument (#1663, 2026-10-02):** this file as of `cec465319` (with `7bb4da13e`) passed a fresh sealed
+ * blind draw at the registered bar (27/30, κ 0.76), stricter than the design lead's reading on its disagreements. Any
+ * later change to what this file measures or decides is a new instrument until another fresh sealed draw.
  */
 
 /** The rule's tolerance: two edges within this many px are the same edge. */
