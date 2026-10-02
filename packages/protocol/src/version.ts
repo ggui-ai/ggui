@@ -4321,8 +4321,8 @@ export const GGUI_WAVE_VERSION = "0.25.0";
  * reject-with-UPGRADE-REQUIRED when the received version's major bumps
  * past the client's known major).
  *
- * Kept as a string so SemVer-like extensions (`'1.0-rc.2'`,
- * `'1.1'`) don't require retyping consumers. Value equals
+ * Kept as a string so SemVer-like extensions (`'1.0.0-rc.2'`,
+ * `'1.1.0'`) don't require retyping consumers. Value equals
  * {@link PROTOCOL_VERSION} today — the alias exists so envelope-layer
  * consumers can reference schema-versioning specifically without
  * coupling to the broader cache-invalidation constant.
@@ -4370,8 +4370,10 @@ export const UPGRADE_REQUIRED = "UPGRADE_REQUIRED";
  *
  * Seeded with {@link PROTOCOL_SCHEMA_VERSION}. Future minor-compatible
  * versions are added here as the protocol evolves — a client that
- * accepts both `"1.0"` and `"1.1"` ships with `['1.0', '1.1']`, and
- * `PROTOCOL_SCHEMA_VERSION` advances independently.
+ * accepts both `"1.0.0"` and `"1.1.0"` ships with `['1.0.0', '1.1.0']`,
+ * and `PROTOCOL_SCHEMA_VERSION` advances independently. The first stable
+ * protocol version is spelled `1.0.0` — three components, never `1.0`
+ * (founder, 2026-10-02, on ggui#909 / ggui#1338).
  *
  * Frozen so runtime consumers can't mutate the module-level array
  * (would be a cross-session leak).
