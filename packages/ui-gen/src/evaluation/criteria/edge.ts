@@ -52,6 +52,8 @@ export interface EdgeOffset {
   readonly at: number;
   readonly nearest: number;
   readonly offPx: number;
+  /** Why the block is off when it is not plain distance (a centred block among edge-aligned ones). */
+  readonly reason?: string;
 }
 
 export interface EdgeVerdict {
@@ -76,28 +78,35 @@ function contentEdge(surface: EdgeBlock, blocks: readonly EdgeBlock[]): number |
 
 /** Columns among a container's direct blocks: non-surface blocks that overlap horizontally, transitively. */
 function columns(direct: readonly EdgeBlock[]): EdgeBlock[][] {
-  const flow = direct.filter((b) => b.kind !== 'surface');
+  const all = direct.filter((b) => b.kind !== 'surface');
+  // A block that spans two columns side by side (it overlaps two blocks that do not overlap each other) belongs to
+  // their parent column, never to either (decided 2026-10-02): it must not chain them into one.
+  const bridges = (b: EdgeBlock): boolean => {
+    const under = all.filter((x) => x !== b && overlaps(x, b));
+    return under.some((x, i) => under.slice(i + 1).some((y) => !overlaps(x, y)));
+  };
+  const flow = all.filter((b) => !bridges(b));
+  const parentPool: EdgeBlock[] = all.filter((b) => bridges(b));
   const parent = flow.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
   for (let i = 0; i < flow.length; i += 1) for (let j = i + 1; j < flow.length; j += 1) if (overlaps(flow[i]!, flow[j]!)) parent[find(i)] = find(j);
   const groups = new Map<number, EdgeBlock[]>();
   flow.forEach((b, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), b]));
   const cols = [...groups.values()];
-  const loose: EdgeBlock[] = [];
-  // A surface joins every column whose text or controls it overlaps (a band over two side-by-side columns is a ground
-  // for both); one that overlaps none stands as a column of its own. Only flow blocks decide: a surface already placed
-  // in a column must not chain another surface into it (a full-width band would merge side-by-side boxes).
+  // A surface joins the one column whose text or controls it overlaps. One that overlaps two or more columns spans
+  // them and goes to their parent, like a spanning text block; one that overlaps none stands with the other
+  // unclaimed blocks. Only flow blocks decide, so a surface never chains another surface into a column.
   for (const s of direct.filter((b) => b.kind === 'surface')) {
     const hit = cols.filter((c) => c.some((b) => b.kind !== 'surface' && overlaps(b, s)));
-    if (hit.length === 0) loose.push(s);
-    else for (const c of hit) c.push(s);
+    if (hit.length === 1) hit[0]!.push(s);
+    else parentPool.push(s);
   }
-  // Surfaces no text column claims form columns among themselves: boxes that overlap horizontally stack.
-  const lp = loose.map((_, i) => i);
+  // The parent's blocks and the unclaimed surfaces form columns among themselves: blocks that overlap stack.
+  const lp = parentPool.map((_, i) => i);
   const lfind = (i: number): number => (lp[i] === i ? i : (lp[i] = lfind(lp[i]!)));
-  for (let i = 0; i < loose.length; i += 1) for (let j = i + 1; j < loose.length; j += 1) if (overlaps(loose[i]!, loose[j]!)) lp[lfind(i)] = lfind(j);
+  for (let i = 0; i < parentPool.length; i += 1) for (let j = i + 1; j < parentPool.length; j += 1) if (overlaps(parentPool[i]!, parentPool[j]!)) lp[lfind(i)] = lfind(j);
   const lgroups = new Map<number, EdgeBlock[]>();
-  loose.forEach((b, i) => lgroups.set(lfind(i), [...(lgroups.get(lfind(i)) ?? []), b]));
+  parentPool.forEach((b, i) => lgroups.set(lfind(i), [...(lgroups.get(lfind(i)) ?? []), b]));
   cols.push(...lgroups.values());
   return cols;
 }
@@ -114,6 +123,8 @@ function checkColumn(container: string, col: readonly EdgeBlock[], blocks: reado
   // Every edge a flow block or a surface offers; the common edge E must sit on one of them.
   const candidates = [...flow.flatMap((b) => [b.edge, ...(b.textEdge !== undefined ? [b.textEdge] : [])]), ...surfaces.flatMap((s) => [s.edge]), ...grounds];
   const blockEdges = (b: EdgeBlock): number[] => [b.edge, ...(b.textEdge !== undefined ? [b.textEdge] : [])];
+  // The end edges another block of the column offers: its boxes' and its other control sets'.
+  const endEdgesBesides = (b: EdgeBlock): number[] => [...surfaces.map((s) => s.right), ...flow.filter((x) => x !== b && x.kind === 'controls').map((x) => x.right)];
   // A column of only list items or only a centred group has no common edge to find; their own checks below still run.
   let best: EdgeOffset[] | null = candidates.length === 0 ? [] : null;
   for (const E of candidates) {
@@ -121,6 +132,8 @@ function checkColumn(container: string, col: readonly EdgeBlock[], blocks: reado
     const off: EdgeOffset[] = [];
     for (const b of flow) {
       if (blockEdges(b).some((x) => allowed.some((a) => same(x, a)))) continue;
+      // A control set alone on its line may END on the end edge its column's boxes or other controls share.
+      if (b.kind === 'controls' && endEdgesBesides(b).some((r) => same(b.right, r))) continue;
       const nearest = allowed.reduce((n, a) => (Math.abs(a - b.edge) < Math.abs(n - b.edge) ? a : n));
       off.push({ container, block: b.id, at: b.edge, nearest, offPx: Math.abs(b.edge - nearest) });
     }
@@ -139,9 +152,13 @@ function checkColumn(container: string, col: readonly EdgeBlock[], blocks: reado
     const e0 = listItems[0]!.edge;
     for (const li of listItems.slice(1)) if (!same(li.edge, e0)) offsets.push({ container, block: li.id, at: li.edge, nearest: e0, offPx: Math.abs(li.edge - e0) });
   }
-  // A centred group: its members share one centre axis.
+  // A centred group: its members share one centre axis, and it must be the whole content of its column. A column is
+  // edge-aligned or centred, never both (decided 2026-10-02).
   const centred = col.filter((b) => b.role === 'centred');
-  if (centred.length > 1) {
+  if (centred.length > 0 && flow.length > 0) {
+    const E = flow[0]!.edge;
+    for (const c of centred) offsets.push({ container, block: c.id, at: c.edge, nearest: E, offPx: Math.abs(c.edge - E), reason: 'a centred block in an edge-aligned column' });
+  } else if (centred.length > 1) {
     const a0 = axis(centred[0]!);
     for (const c of centred.slice(1)) if (!same(axis(c), a0)) offsets.push({ container, block: c.id, at: axis(c), nearest: a0, offPx: Math.abs(axis(c) - a0) });
   }
@@ -163,7 +180,7 @@ export function judgeEdges(blocks: readonly EdgeBlock[], opts: { readonly placeh
   }
   if (offsets.length === 0) return { verdict: 'pass', offsets, evidence: 'every column shares its edge, or sits on a stacked surface’s content edge, within 2 px' };
   const worst = offsets.reduce((a, b) => (b.offPx > a.offPx ? b : a));
-  const lines = offsets.map((o) => `${o.block} at x${round(o.at)} is ${round(o.offPx)} px from x${round(o.nearest)} (in ${o.container})`);
+  const lines = offsets.map((o) => `${o.block} at x${round(o.at)} is ${round(o.offPx)} px from x${round(o.nearest)} (in ${o.container}${o.reason !== undefined ? `; ${o.reason}` : ''})`);
   return { verdict: 'fail', offsets, evidence: `${offsets.length} block(s) off the allowed edges, largest ${round(worst.offPx)} px: ${lines.join('; ')}` };
 }
 const round = (n: number): string => (Math.round(n * 10) / 10).toString();

@@ -32,7 +32,9 @@ describe('the edge rule on the cards of its table', () => {
     const v = judgeEdges([
       text('label', 168),
       surface('panel', 168),
-      text('panel text', 200, { within: 'panel' }),
+      // The label ends before the centred group starts (measured on the real card: label to x179, group from x224),
+      // so the centred group is the whole content of its own column, which the rule allows (decided 2026-10-02).
+      text('panel text', 200, { within: 'panel', right: 280 }),
       { id: 'empty state', kind: 'text', edge: 300, left: 300, right: 468, top: at(), within: 'panel', role: 'centred' },
       { id: 'empty action', kind: 'controls', edge: 334, left: 334, right: 434, top: at(), within: 'panel', role: 'centred' },
     ]);
@@ -159,5 +161,34 @@ describe('the allowed levels', () => {
   });
   it('a heading stacked above its text is not a level (it shares the text’s edge)', () => {
     expect(judgeEdges([text('heading', 16), text('body', 33)]).verdict).toBe('fail');
+  });
+});
+
+describe('the 2026-10-02 decisions (#1663 step 4 review)', () => {
+  it('a band that spans two side-by-side columns belongs to their parent, not to either (card 13 at pane width)', () => {
+    const v = judgeEdges([
+      surface('band', 16, { right: 800 }),
+      text('band title', 48, { within: 'band', right: 700 }),
+      text('how it works', 16, { right: 190 }),
+      surface('step', 16, { right: 384 }),
+      text('pick a plan', 432, { right: 580 }),
+      controls('plans', 432, { right: 800 }),
+    ]);
+    expect(v.verdict).toBe('pass');
+  });
+  it('a text block spanning two columns does not chain them into one', () => {
+    // Without the parent rule the wide intro merges the columns, and the right column reads 400 px off the left.
+    const v = judgeEdges([text('intro', 16, { right: 800 }), text('left', 16, { right: 380 }), text('right', 416, { right: 800 })]);
+    expect(v.verdict).toBe('pass');
+  });
+  it('a centred block among edge-aligned ones fails, and says so', () => {
+    const v = judgeEdges([text('heading', 48, { right: 400 }), { id: 'status', kind: 'text', edge: 96, left: 96, right: 260, top: at(), role: 'centred' }]);
+    expect(v.verdict).toBe('fail');
+    expect(v.evidence).toContain('a centred block in an edge-aligned column');
+  });
+  it('a lone control set may end on the end edge the column’s boxes share (card 24), and fails when it ends elsewhere', () => {
+    const steps = [surface('step 1', 32, { right: 360 }), text('s1', 48, { within: 'step 1', right: 340 }), surface('step 2', 32, { right: 360 }), text('s2', 48, { within: 'step 2', right: 340 })];
+    expect(judgeEdges([...steps, controls('deploy', 270, { right: 360 })]).verdict).toBe('pass');
+    expect(judgeEdges([...steps, controls('deploy', 262, { right: 352 })]).verdict).toBe('fail');
   });
 });
