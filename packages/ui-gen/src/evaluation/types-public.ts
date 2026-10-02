@@ -448,6 +448,11 @@ export interface CriterionVerdict {
   source: CriteriaSource;
   verdict: CriteriaVerdict;
   evidence: string;
+  /**
+   * ggui#1663 — a measured reading beside a judge row, REPORT-ONLY: the row's `verdict` stays the judge's, so this
+   * changes no verdict, score or bar. Present only on rows an instrument answers beside the judge (`space.edge`).
+   */
+  instrument?: { verdict: CriteriaVerdict; evidence: string };
 }
 export interface CriteriaBlock {
   /** sha256(bank version | selector version | canonical context), 16 hex — the block's own digest. */

@@ -95,3 +95,32 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [{ id: 'comp.fit', source: 'static', reason: 'static' }] })).toBe('');
   });
 });
+
+// ggui#1663 — space.edge's instrument reads BESIDE the judge, report-only: the row keeps the judge's verdict and
+// carries the measurement as `instrument`; nothing else changes.
+describe('an instrument beside a judge row (ggui#1663)', () => {
+  const edgeBank = parseCriteriaBank({
+    version: 'v2',
+    criteria: [
+      { id: 'space.edge', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'one edge', evidence: 'the left edges' },
+      { id: 'space.shape', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'two radius families', evidence: 'the pills' },
+    ],
+  });
+  const sel = selectCriteria(edgeBank, ctx);
+  const answers = [[{ id: 'space.edge', verdict: 'pass' as const, evidence: 'looks aligned' }, { id: 'space.shape', verdict: 'pass' as const, evidence: 'ok' }]];
+  const fail = { verdict: 'fail' as const, offsets: [{ container: 'card', block: 'chips', at: 32, nearest: 168, offPx: 136 }], evidence: '1 block(s) off the allowed edges, largest 136 px' };
+  const read = (edge: typeof fail | null | undefined) =>
+    resolveCriteriaBlock({ bank: edgeBank, context: ctx, selected: sel, answers, measurements: edge === undefined ? m : { ...m, edge } });
+
+  it("the judge's verdict stands; the measurement rides beside it", () => {
+    const v = read(fail).verdicts.find((x) => x.id === 'space.edge');
+    expect(v).toMatchObject({ verdict: 'pass', evidence: 'looks aligned', instrument: { verdict: 'fail', evidence: fail.evidence } });
+  });
+  it('no page to read (a stored frame) and a failed probe are both n/a, and say which', () => {
+    expect(read(undefined).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read' });
+    expect(read(null).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'edge probe failed on this capture' });
+  });
+  it('rows without an instrument beside them carry no field', () => {
+    expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrument');
+  });
+});

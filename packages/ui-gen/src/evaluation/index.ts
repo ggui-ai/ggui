@@ -169,7 +169,9 @@ export { designTreeSha256, judgeDesignIdentity, resetJudgeDesignIdentityCache, t
 export { bankRows, criteriaBankSchema, parseCriteriaBank, type BankRow, type CriteriaBank, type CriteriaScope } from './criteria/bank.js';
 export { CRITERIA_SELECTOR_VERSION, canonicalCriteriaContext, criteriaSetIdFor, selectCriteria, type CriteriaSelectionResult } from './criteria/select.js';
 export { chromaOfCssTokens, criteriaContextFor, type CriteriaContextInput, type CriteriaContextSources } from './criteria/context.js';
-export { INSTRUMENT_BY_ID, buildCriteriaJudgeBlock, resolveCriteriaBlock, type CriteriaMeasurements } from './criteria/resolve.js';
+export { INSTRUMENT_BESIDE_JUDGE, INSTRUMENT_BY_ID, buildCriteriaJudgeBlock, resolveCriteriaBlock, type CriteriaMeasurements } from './criteria/resolve.js';
+export { EDGE_TOLERANCE_PX, judgeEdges, type EdgeBlock, type EdgeOffset, type EdgeVerdict } from './criteria/edge.js';
+export { EDGE_BLOCKS_EXPRESSION, parseEdgeProbe, type EdgeProbe } from './criteria/edge-probe.js';
 export { judgeStoredCapture, type StoredCaptureInput, type StoredCaptureOutcome, type StoredCaptureVerdict } from './visual-evaluator.js';
 export { judgedFrameTokens, type JudgeSpend, type JudgedTokens } from './judge-spend.js';
 

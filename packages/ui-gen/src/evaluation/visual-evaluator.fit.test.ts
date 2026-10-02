@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
 import { CANVAS_VIEWPORTS } from '../design-mode.js';
+import { EDGE_BLOCKS_EXPRESSION } from './criteria/edge-probe.js';
 import {
   CARD_HEIGHT_EXPRESSION,
   CARD_OVERFLOW_X_EXPRESSION,
@@ -134,7 +135,8 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
       { provider: 'claude', passThreshold: 70, canvases: ['xs-chat-card'] },
       deps,
     );
-    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION]);
+    // ggui#1663 — the edge probe reads the page last, just before the screenshot.
+    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, EDGE_BLOCKS_EXPRESSION]);
     expect(result!.issues.some((i) => i.dimension === 'canvas-overflow-x')).toBe(false);
     expect(deps.captures).toEqual([{ width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 280 + 2 * M } }]);
     expect(deps.pages[0]).toContain(`class="${JUDGE_GROUND_CLASS}"`);
@@ -228,7 +230,11 @@ describe('the fit measurement in the per-canvas round (ggui#1027)', () => {
     );
     expect(result).not.toBeNull();
     // The inline card is measured from its mount (ggui#1475); every other canvas from the document, as before.
-    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, CONTENT_HEIGHT_EXPRESSION, CONTENT_HEIGHT_EXPRESSION]);
+    expect(deps.expressions).toEqual([
+      CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, EDGE_BLOCKS_EXPRESSION,
+      CONTENT_HEIGHT_EXPRESSION, EDGE_BLOCKS_EXPRESSION,
+      CONTENT_HEIGHT_EXPRESSION, EDGE_BLOCKS_EXPRESSION,
+    ]);
     expect(deps.captures).toEqual([
       // xs on the host ground, clipped to the card and capped at its box (ggui#1475).
       { width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 640 + 2 * M } },

@@ -12,6 +12,7 @@ import type { CriteriaAnswer } from '../types.js';
 import type { CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
 import { bankRows, type BankRow, type CriteriaBank } from './bank.js';
 import { CRITERIA_SELECTOR_VERSION, type CriteriaSelectionResult } from './select.js';
+import type { EdgeVerdict } from './edge.js';
 
 /** The instruments the capture runs today, by the bank ids they answer (v1 binding; a bank field may replace it). */
 export const INSTRUMENT_BY_ID: Readonly<Record<string, 'fit' | 'fill'>> = {
@@ -20,11 +21,30 @@ export const INSTRUMENT_BY_ID: Readonly<Record<string, 'fit' | 'fill'>> = {
   'finish.canvas.inhabited': 'fill',
 };
 
+/**
+ * ggui#1663 — instruments that read BESIDE a judge row, report-only: the row keeps the judge's verdict and gains the
+ * measurement as `instrument`, so the two can be compared before any verdict moves.
+ */
+export const INSTRUMENT_BESIDE_JUDGE: Readonly<Record<string, 'edge'>> = {
+  'space.edge': 'edge',
+};
+
 export interface CriteriaMeasurements {
   readonly overflow: boolean;
   readonly contentHeight: number | null;
   readonly viewportHeight: number;
   readonly inkRatio: number | null;
+  /**
+   * ggui#1663 — the edge rule on the capture's DOM: absent when this capture had no page to read (a stored frame),
+   * `null` when the probe ran and failed.
+   */
+  readonly edge?: EdgeVerdict | null;
+}
+
+function besideRead(kind: 'edge', m: CriteriaMeasurements): Read {
+  if (m.edge === undefined) return { verdict: 'n/a', evidence: 'not measured: this capture had no page to read' };
+  if (m.edge === null) return { verdict: 'n/a', evidence: 'edge probe failed on this capture' };
+  return { verdict: m.edge.verdict, evidence: m.edge.evidence };
 }
 
 type Read = { verdict: CriteriaVerdict; evidence: string };
@@ -77,7 +97,17 @@ export function resolveCriteriaBlock(args: {
     const row = byId.get(s.id);
     if (row === undefined) continue;
     const read = readRow(row, args.answers, args.measurements, args.unansweredReason);
-    verdicts.push({ id: row.id, severity: row.severity, method: row.evaluation, status: row.status, source: s.source, verdict: read.verdict, evidence: read.evidence });
+    const beside = INSTRUMENT_BESIDE_JUDGE[row.id];
+    verdicts.push({
+      id: row.id,
+      severity: row.severity,
+      method: row.evaluation,
+      status: row.status,
+      source: s.source,
+      verdict: read.verdict,
+      evidence: read.evidence,
+      ...(beside !== undefined && row.evaluation === 'judge' ? { instrument: besideRead(beside, args.measurements) } : {}),
+    });
   }
   return {
     criteriaSetId: args.selected.criteriaSetId,

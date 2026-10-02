@@ -43,6 +43,8 @@ type VisualIssue = EvaluationIssue & { origin: 'judge' | 'instrument' };
 import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, JudgeSalvageCause, JudgeSalvageCounts, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
+import { judgeEdges, type EdgeVerdict } from './criteria/edge.js';
+import { EDGE_BLOCKS_EXPRESSION, parseEdgeProbe } from './criteria/edge-probe.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -849,6 +851,11 @@ export interface ScreenshotAttempt {
   readonly contentHeight: number | null;
   /** ggui#1475 — a natural capture's horizontal overflow: how many px the card's content runs past its width; absent on every other capture. */
   readonly overflowX?: number | null;
+  /**
+   * ggui#1663 — the edge rule on this capture's DOM, read just before the screenshot (report-only); `null` when the
+   * probe failed. Absent on a failed capture.
+   */
+  readonly edge?: EdgeVerdict | null;
 }
 
 /** The expression the fit measurement evaluates in the page — the taller of the two scroll heights. */
@@ -906,6 +913,24 @@ async function measureContentHeight(page: ScreenshotPage, expression: string = C
   }
 }
 
+/**
+ * ggui#1663 — read the edge rule off the page the screenshot is about to take. The probe only reads layout (it never
+ * writes to the DOM), so the frame is unchanged; a failed read is reported and returns `null`, never a failed capture.
+ */
+async function measureEdges(page: ScreenshotPage): Promise<EdgeVerdict | null> {
+  try {
+    const probe = parseEdgeProbe(await page.evaluate(EDGE_BLOCKS_EXPRESSION));
+    if (probe === null) {
+      console.warn('[visual-eval] edge probe unavailable: the page returned no readable blocks');
+      return null;
+    }
+    return judgeEdges(probe.blocks, { placeholdersOnly: probe.placeholdersOnly });
+  } catch (e) {
+    console.warn(`[visual-eval] edge probe unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 /** ggui#1492 — a natural capture's geometry: the page's pad per side, and the host's floor when it has one. */
 export interface NaturalCaptureOptions {
   readonly padPx: number;
@@ -944,12 +969,14 @@ export async function captureScreenshotDetailed(
         }
         const framed = cardHeightPx === null ? viewport.height - 2 * natural.padPx : floorPx !== undefined ? Math.max(cardHeightPx, floorPx) : cardHeightPx;
         const clip = naturalClip(viewport, framed, natural.padPx);
+        const edge = await measureEdges(page);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
-        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX };
+        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX, edge };
       }
       const contentHeight = await measureContentHeight(page);
+      const edge = await measureEdges(page);
       const screenshot = await page.screenshot({ type: 'png', fullPage: capture === 'full-page' });
-      return { png: Buffer.from(screenshot), contentHeight };
+      return { png: Buffer.from(screenshot), contentHeight, edge };
     } finally {
       await browser.close();
     }
@@ -1486,7 +1513,7 @@ export async function runVisualEvaluationDetailed(
               context: criteriaContext,
               selected: criteriaSelected,
               answers: criteriaReads(criteriaAnswer),
-              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
+              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null },
               ...criteriaUnansweredReason(criteriaAnswer),
             })
           : undefined;
