@@ -6,6 +6,35 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_render` captures the host-session slice; its fields are bounded
+ * (2026-10-02, ggui#1339: same draft stamp). The request's
+ * `_meta["ai.ggui/host-session"]` pair is stored on the session the render
+ * creates, as the extension doc's section 2.4 already said, so
+ * `ggui_list_sessions` filtered by the pair returns it. The render request
+ * is the one that must carry the slice; the handshake creates no session.
+ * `parseMcpAppAiGguiHostSessionMeta` now refuses a `hostName` or
+ * `hostSessionId` longer than `MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH` (256,
+ * a new export) as `MALFORMED_HOST_SESSION`, and a server treats a
+ * malformed slice as absent: the render succeeds, ungrouped. No server
+ * stored the slice before, so no stored pair is affected. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
+ * Coverage on a judged reuse compares load-bearing action members
+ * (2026-10-02, ggui#1428: no schema change, same draft stamp). A
+ * `COVERAGE_GAP` finding's `path` may now be `actionSpec.<name>.<member>`
+ * for `oneShot`, `confirm` or `nextStep`: the draft declares the member on
+ * an action both contracts carry and the proposed stored entry does not
+ * match. `SuggestionFinding.path` is an open string, so an earlier reader
+ * reads it as one. The finding stays `warn`; reuse stays the default.
+ * --------------------------------------------------------------------
+ * A render whose generator returns no contract commits the agreed one
+ * (2026-10-02, ggui#1429: no schema change, same draft stamp).
+ * `UIGenerationResponse.contract` states it: a returned contract is
+ * complete, never a patch, and an omitted one means the negotiated contract
+ * unchanged. The committed session then carries the agreed `actionSpec`,
+ * `streamSpec`, `contextSpec` and `clientCapabilities`, where before it
+ * carried only the agreed `propsSpec`.
+ * --------------------------------------------------------------------
  * A repaired handshake draft keeps every declared member on every spec
  * (2026-10-01, ggui#1430: no schema change, same draft stamp). The
  * `origin: 'synth'` repair keeps, under the same key, every member the
