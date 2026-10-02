@@ -32,6 +32,14 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig, type VisionFinishReason } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
+
+/**
+ * An issue as the visual leg CREATES it (ggui#1545 follow-up): its `origin` is required here, so a new producer, an
+ * instrument check or a judge-side parse, that forgets to say whose finding it is fails to compile instead of
+ * quietly dropping out of `visualEvaluation.actOn`'s treatment. The public `EvaluationIssue` keeps `origin` optional
+ * for stored and external data.
+ */
+type VisualIssue = EvaluationIssue & { origin: 'judge' | 'instrument' };
 import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, JudgeSalvageCause, JudgeSalvageCounts, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
@@ -361,7 +369,7 @@ export function canvasOverflowIssue(
   viewport: CanvasViewport,
   contentHeight: number,
   verdict: 'fail' | 'warn',
-): EvaluationIssue {
+): VisualIssue {
   const hidden = contentHeight - viewport.height;
   // ggui#1195 — when the judge captured at a DECLARED box, the refusal names
   // both boxes: the ceiling the content was measured against and the class
@@ -389,7 +397,7 @@ export function canvasOverflowXIssue(
   viewport: CanvasViewport,
   hiddenPx: number,
   verdict: 'fail' | 'warn',
-): EvaluationIssue {
+): VisualIssue {
   return {
     dimension: 'canvas-overflow-x',
     origin: 'instrument',
@@ -404,7 +412,7 @@ export function canvasOverflowXIssue(
 }
 
 /** ggui#1120 — the deterministic blank: the capture is one flat colour, so the component mounted and painted nothing. */
-export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport): EvaluationIssue {
+export function canvasBlankIssue(canvas: CanvasClass, viewport: CanvasViewport): VisualIssue {
   const classBox = CANVAS_VIEWPORTS[canvas];
   const box = isDeclaredViewport(canvas, viewport)
     ? `declared ${viewport.width}×${viewport.height}; class box ${classBox.width}×${classBox.height}`
@@ -1127,7 +1135,7 @@ function readInk(png: Buffer | null, chrome: CanvasChrome, canvas: CanvasClass, 
   return ink;
 }
 /** The deterministic blank verdict (ggui#1120): an issue when the frame read no ink at all; `null` otherwise, an unreadable capture included. */
-function blankVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+function blankVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue | null {
   // ggui#1475 — a naturally-captured card that measured no height painted nothing: its capture is only the host's frame,
   // which the ink reading skips by design, so the blank is read from the measurement, never mistaken for unreadable.
   if (frame.chrome === 'ground' && frame.attempt.contentHeight !== null && frame.attempt.contentHeight <= 0) {
@@ -1173,7 +1181,7 @@ async function frameCanvas(
  * canvas's policy gives an overflow, or `null` when the content fits, could
  * not be measured, or the canvas scrolls by design.
  */
-function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue | null {
   const contentHeight = frame.attempt.contentHeight;
   if (contentHeight === null || contentHeight <= frame.viewport.height || frame.policy.overflow === 'none') return null;
   return canvasOverflowIssue(canvas, frame.viewport, contentHeight, frame.policy.overflow);
@@ -1184,7 +1192,7 @@ function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | 
  * is judged by the canvas's own fit policy (the inline card: a critical that fails the canvas), in its own dimension,
  * so the in-loop `[fit]` extension (vertical overflow) is unchanged.
  */
-function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): EvaluationIssue | null {
+function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue | null {
   const px = frame.attempt.overflowX;
   // `scrollWidth` / `clientWidth` are rounded integers: a fractional layout width reads as 1 px past the card with
   // nothing a visitor could see, so 1 px is rounding and an overflow starts at 2.
@@ -1882,7 +1890,7 @@ function parseVisualResponse(text: string, passThreshold: number): EvaluationRes
     codeQuality: 0,              // can't assess code from screenshot
   };
 
-  const issues: EvaluationIssue[] = (raw.issues || []).map((i: Record<string, string>) => ({
+  const issues: VisualIssue[] = (raw.issues || []).map((i: Record<string, string>) => ({
     dimension: i.dimension || 'visual',
     origin: 'judge',
     severity: (i.severity as 'critical' | 'major' | 'minor') || 'minor',
