@@ -124,6 +124,23 @@ describe('the allowed levels', () => {
     ]);
     expect(v.verdict).toBe('pass');
   });
+  it('side-by-side boxes under a full-width band are separate columns (card 45 at pane width)', () => {
+    // The band spans both columns, so it must not chain the right-hand box into the left column.
+    const v = judgeEdges([
+      text('title', 16, { right: 113 }),
+      surface('band', 16, { right: 800 }),
+      text('band text', 33, { within: 'band' }),
+      surface('left box', 16, { right: 400 }),
+      text('left heading', 32, { within: 'left box', right: 170 }),
+      surface('right box', 416, { right: 800 }),
+      text('right heading', 432, { within: 'right box', right: 585 }),
+    ]);
+    expect(v.verdict).toBe('pass');
+  });
+  it('boxes stacked with no text beside them still share an edge', () => {
+    expect(judgeEdges([surface('box1', 32), text('t1', 48, { within: 'box1' }), surface('box2', 56), text('t2', 72, { within: 'box2' })]).verdict).toBe('fail');
+    expect(judgeEdges([surface('box1', 32), text('t1', 48, { within: 'box1' }), surface('box2', 32), text('t2', 48, { within: 'box2' })]).verdict).toBe('pass');
+  });
   it('a centred group shares one centre axis', () => {
     const ok = judgeEdges([
       { id: 'c1', kind: 'text', edge: 284, left: 284, right: 484, top: at(), role: 'centred' },

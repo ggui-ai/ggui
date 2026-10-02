@@ -83,13 +83,22 @@ function columns(direct: readonly EdgeBlock[]): EdgeBlock[][] {
   const groups = new Map<number, EdgeBlock[]>();
   flow.forEach((b, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), b]));
   const cols = [...groups.values()];
-  // A surface joins every column it overlaps (a band over two side-by-side columns is a ground for both); one that
-  // overlaps none stands as a column of its own.
+  const loose: EdgeBlock[] = [];
+  // A surface joins every column whose text or controls it overlaps (a band over two side-by-side columns is a ground
+  // for both); one that overlaps none stands as a column of its own. Only flow blocks decide: a surface already placed
+  // in a column must not chain another surface into it (a full-width band would merge side-by-side boxes).
   for (const s of direct.filter((b) => b.kind === 'surface')) {
-    const hit = cols.filter((c) => c.some((b) => overlaps(b, s)));
-    if (hit.length === 0) cols.push([s]);
+    const hit = cols.filter((c) => c.some((b) => b.kind !== 'surface' && overlaps(b, s)));
+    if (hit.length === 0) loose.push(s);
     else for (const c of hit) c.push(s);
   }
+  // Surfaces no text column claims form columns among themselves: boxes that overlap horizontally stack.
+  const lp = loose.map((_, i) => i);
+  const lfind = (i: number): number => (lp[i] === i ? i : (lp[i] = lfind(lp[i]!)));
+  for (let i = 0; i < loose.length; i += 1) for (let j = i + 1; j < loose.length; j += 1) if (overlaps(loose[i]!, loose[j]!)) lp[lfind(i)] = lfind(j);
+  const lgroups = new Map<number, EdgeBlock[]>();
+  loose.forEach((b, i) => lgroups.set(lfind(i), [...(lgroups.get(lfind(i)) ?? []), b]));
+  cols.push(...lgroups.values());
   return cols;
 }
 
