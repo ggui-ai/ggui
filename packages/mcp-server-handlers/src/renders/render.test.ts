@@ -79,6 +79,7 @@ import * as matcherModule from './blueprint-matcher.js';
 import { composeExactKey, ephemeralBlueprintId, registerBlueprint } from './blueprint-registry.js';
 import { CODE_DELIVERY_EVENTS } from './code-delivery-events.js';
 import { createGguiGetRenderSourceHandler } from './get-render-source.js';
+import { createGguiListSessionsHandler } from './list-sessions.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import {
   createGguiRenderHandler,
@@ -3616,5 +3617,83 @@ describe('createGguiRenderHandler — a generation that returns no contract comm
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+// ggui#1339 — the request's `_meta["ai.ggui/host-session"]` slice is captured
+// when `ggui_render` creates the session. The slice, the store field, the
+// list filter and the parser all existed; nothing passed the slice to the
+// commit, so `ggui_list_sessions`' host filter could never match.
+describe("createGguiRenderHandler — the request's ai.ggui/host-session slice is captured at session creation (ggui#1339)", () => {
+  const PAIR = { hostName: 'sample', hostSessionId: 'chat-42' };
+  const withSlice = (slice: unknown, over: Partial<HandlerContext> = {}): HandlerContext => ({
+    ...CTX,
+    ...over,
+    requestMeta: { 'ai.ggui/host-session': slice },
+  });
+  const listed = async (store: Harness['renderStore'], ctx: HandlerContext, filter = PAIR): Promise<string[]> => {
+    const out = await createGguiListSessionsHandler({ renderStore: store }).handler(filter, ctx);
+    return out.sessions.map((s) => s.sessionId);
+  };
+  const NAMED = 'host_session_malformed';
+
+  it('cold render: the row carries the pair and ggui_list_sessions lists the session under it', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(PAIR));
+    assertRenderSuccess(out);
+    expect((await harness.renderStore.get(out.sessionId))?.hostSession).toEqual(PAIR);
+    expect(await listed(harness.renderStore, CTX)).toEqual([out.sessionId]);
+    expect(await listed(harness.renderStore, CTX, { ...PAIR, hostSessionId: 'another-chat' })).toEqual([]);
+  });
+
+  it('a reused render carries the pair too', async () => {
+    const { harness, handshakeId } = await buildAcceptCacheHarnessFor(CONTRACT);
+    const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(PAIR));
+    assertRenderSuccess(out);
+    expect((await harness.renderStore.get(out.sessionId))?.hostSession).toEqual(PAIR);
+  });
+
+  it('no slice: the row carries none, and the pair lists nothing', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect((await harness.renderStore.get(out.sessionId))?.hostSession).toBeUndefined();
+    expect(await listed(harness.renderStore, CTX)).toEqual([]);
+  });
+
+  it.each([
+    ['an empty field', { hostName: 'sample', hostSessionId: '' }],
+    ['a missing field', { hostName: 'sample' }],
+    ['a field over the 256-character bound', { hostName: 'sample', hostSessionId: 'x'.repeat(257) }],
+    ['a slice that is not an object', 'chat-42'],
+  ])('%s is treated as absent: the render succeeds, nothing is stored, and one line names it', async (_label, slice) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness();
+      const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(slice));
+      assertRenderSuccess(out);
+      expect((await harness.renderStore.get(out.sessionId))?.hostSession).toBeUndefined();
+      expect(warn.mock.calls.map(([m]) => String(m)).filter((m) => m.includes(NAMED))).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a field at the bound is kept', async () => {
+    const atBound = { hostName: 'sample', hostSessionId: 'x'.repeat(256) };
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, withSlice(atBound));
+    assertRenderSuccess(out);
+    expect((await harness.renderStore.get(out.sessionId))?.hostSession).toEqual(atBound);
+  });
+
+  it('scope: another app, or another subject, supplying the same pair lists none of this caller\'s sessions', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const owner = withSlice(PAIR, { userId: 'user-1' });
+    const out = await harness.handler.handler({ handshakeId, props: {} }, owner);
+    assertRenderSuccess(out);
+    expect(await listed(harness.renderStore, { ...CTX, userId: 'user-1' })).toEqual([out.sessionId]);
+    expect(await listed(harness.renderStore, { ...CTX, userId: 'user-2' })).toEqual([]);
+    expect(await listed(harness.renderStore, { ...CTX, appId: 'another-app', userId: 'user-1' })).toEqual([]);
   });
 });

@@ -69,7 +69,9 @@ import {
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
+  parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
+  type McpAppAiGguiHostSessionMeta,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
@@ -1402,6 +1404,11 @@ export function createGguiRenderHandler(
   ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput>> {
     // The full envelope: the registered shape plus the route grammar (#818).
     const parsed = renderInputEnvelopeSchema.parse(input);
+    // ggui#1339 — the host's conversation-grouping pair, read ONCE from this
+    // request's `_meta` and handed to every commit below. The store keeps it
+    // only on the commit that creates the row and never rewrites it, so
+    // which commit comes first does not matter.
+    const hostSessionSlice = hostSessionSliceOf(ctx);
     // themeId DOOR (ggui#598 slice 3) — before any store or
     // generation work: a typo'd id refuses here, where it was typed.
     if (parsed.themeId !== undefined) {
@@ -1958,6 +1965,7 @@ export function createGguiRenderHandler(
           render: placeholder,
           appId: ctx.appId,
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+          ...hostSessionSlice,
         });
         placeholderCommitted = true;
         // The placeholder is a real row a locator can address, so it
@@ -2040,6 +2048,7 @@ export function createGguiRenderHandler(
           render: probeRender,
           appId: ctx.appId,
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+          ...hostSessionSlice,
         });
         safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
         generatedCodeReady = true;
@@ -2333,6 +2342,7 @@ export function createGguiRenderHandler(
             sessionId,
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+            ...hostSessionSlice,
             story,
             writeIdentity: identityWriterFor(blueprintHit.id),
             cacheHit: {
@@ -2426,6 +2436,7 @@ export function createGguiRenderHandler(
           deps.renderTtlMs,
           {
             ctx,
+            ...hostSessionSlice,
             sessionId,
             story,
             // #460 — the callee binds each commit's id itself:
@@ -2616,6 +2627,7 @@ export function createGguiRenderHandler(
           render: placeholder,
           appId: ctx.appId,
           userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+          ...hostSessionSlice,
         });
         await identityWriterFor(null)(committed);
       } catch {
@@ -2729,6 +2741,7 @@ export function createGguiRenderHandler(
             render: overlaid,
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+            ...hostSessionSlice,
           });
           // Last commit of the render when a theme override is in
           // play, and every reuse / cold-gen path has settled by
@@ -3434,6 +3447,26 @@ type GenerationRunOutcome =
       readonly effort?: AppGenerationProfileEffort;
     };
 
+/** The `hostSession` member of a session commit, or nothing (ggui#1339). */
+type HostSessionSlice = { readonly hostSession?: McpAppAiGguiHostSessionMeta };
+
+/**
+ * ggui#1339 — read the request's `_meta["ai.ggui/host-session"]` slice for
+ * the commit that creates the session. A slice the parser refuses (a missing
+ * or empty field, a field over the bound, not an object) is treated as
+ * ABSENT: the render goes on and the session is simply not grouped. It is a
+ * host implementation error, not a security boundary, so it is named once
+ * per request and refuses nothing.
+ */
+function hostSessionSliceOf(ctx: HandlerContext): HostSessionSlice {
+  const parsed = parseMcpAppAiGguiHostSessionMeta(ctx.requestMeta);
+  if (!parsed.ok) {
+    console.warn(`[ggui_render] host_session_malformed ${JSON.stringify({ appId: ctx.appId, reason: parsed.reason })}`);
+    return {};
+  }
+  return parsed.hostSession !== undefined ? { hostSession: parsed.hostSession } : {};
+}
+
 /**
  * ggui#1429 — what a generator's returned contract leaves out relative to the
  * agreed one, as paths: a whole spec (`actionSpec`) when the returned
@@ -3514,6 +3547,8 @@ async function runGenerationIntoGguiSession(
   renderTtlMs: number | undefined,
   args: {
     readonly ctx: HandlerContext;
+    /** ggui#1339 — the host's grouping pair, read once by the handler. */
+    readonly hostSession?: McpAppAiGguiHostSessionMeta;
     readonly sessionId: string;
     readonly story: {
       readonly intent: string;
@@ -3568,6 +3603,7 @@ async function runGenerationIntoGguiSession(
   },
 ): Promise<GenerationRunOutcome> {
   const { ctx, sessionId, story } = args;
+  const hostSessionSlice: HostSessionSlice = args.hostSession !== undefined ? { hostSession: args.hostSession } : {};
   const nowIso = new Date().toISOString();
   const nowEpochMs = Date.now();
 
@@ -3599,6 +3635,7 @@ async function runGenerationIntoGguiSession(
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        ...hostSessionSlice,
         story,
         nowIso,
         nowEpochMs,
@@ -3622,6 +3659,7 @@ async function runGenerationIntoGguiSession(
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        ...hostSessionSlice,
         story,
         nowIso,
         nowEpochMs,
@@ -3657,6 +3695,7 @@ async function runGenerationIntoGguiSession(
               sessionId,
               appId: ctx.appId,
               userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+              ...hostSessionSlice,
               nowIso,
               render: fallback,
               writeIdentity: args.writeIdentityFor(null),
@@ -3668,6 +3707,7 @@ async function runGenerationIntoGguiSession(
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        ...hostSessionSlice,
         story,
         nowIso,
         nowEpochMs,
@@ -3691,6 +3731,7 @@ async function runGenerationIntoGguiSession(
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+        ...hostSessionSlice,
         story,
         nowIso,
         nowEpochMs,
@@ -3712,6 +3753,7 @@ async function runGenerationIntoGguiSession(
       sessionId,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+      ...hostSessionSlice,
       story,
       nowIso,
       nowEpochMs,
@@ -3847,6 +3889,7 @@ async function runGenerationIntoGguiSession(
       render: componentRender,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+      ...hostSessionSlice,
       // Authored source, when the generator distinguishes it from the
       // compiled `componentCode` above — see
       // `CommitGguiSessionInput.sourceCode`'s docstring. Absent on
@@ -3912,6 +3955,8 @@ async function commitNoCredentialsCardGguiSession(
     readonly appId: string;
     /** Per-user isolation (undefined for non-federated single-user). */
     readonly userId?: string;
+    /** ggui#1339 — the host's grouping pair; stored only by the commit that creates the row. */
+    readonly hostSession?: McpAppAiGguiHostSessionMeta;
     readonly nowIso: string;
     readonly render: GguiSession;
     /** Identity write-through for the card commit. */
@@ -3925,6 +3970,7 @@ async function commitNoCredentialsCardGguiSession(
       render,
       appId: args.appId,
       userId: args.userId,
+      ...(args.hostSession !== undefined ? { hostSession: args.hostSession } : {}),
     });
     committed = true;
     await args.writeIdentity(stored);
@@ -3974,6 +4020,8 @@ async function commitErrorGguiSession(
     readonly appId: string;
     /** Per-user isolation (undefined for non-federated single-user). */
     readonly userId?: string;
+    /** ggui#1339 — the host's grouping pair; stored only by the commit that creates the row. */
+    readonly hostSession?: McpAppAiGguiHostSessionMeta;
     readonly story: { readonly intent: string };
     readonly nowIso: string;
     readonly nowEpochMs: number;
@@ -4022,6 +4070,7 @@ async function commitErrorGguiSession(
       render: errorRender,
       appId: args.appId,
       userId: args.userId,
+      ...(args.hostSession !== undefined ? { hostSession: args.hostSession } : {}),
     });
     committed = true;
     await args.writeIdentity(stored);
@@ -4118,6 +4167,8 @@ async function commitCachedGguiSession(
     readonly appId: string;
     /** Per-user isolation (undefined for non-federated single-user). */
     readonly userId?: string;
+    /** ggui#1339 — the host's grouping pair; stored only by the commit that creates the row. */
+    readonly hostSession?: McpAppAiGguiHostSessionMeta;
     readonly story: { readonly intent: string };
     readonly cacheHit: GenerationCacheHit;
     /** Runtime prop values for THIS render. Validated against the
@@ -4206,6 +4257,7 @@ async function commitCachedGguiSession(
       render: componentRender,
       appId: args.appId,
       userId: args.userId,
+      ...(args.hostSession !== undefined ? { hostSession: args.hostSession } : {}),
       // Authored source — sidecar exactly like
       // the cold-gen commit does (see `CommitGguiSessionInput.sourceCode`'s
       // docstring). Absent when the matched blueprint has no authored

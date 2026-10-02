@@ -908,10 +908,22 @@ export function withWsToken(url: string, wsToken: string): string | undefined {
 export const MCP_APP_AI_GGUI_HOST_SESSION_META_KEY = 'ai.ggui/host-session' as const;
 
 /**
+ * Longest `hostName` / `hostSessionId` a server captures (ggui#1339). Both
+ * are caller-supplied, stored and indexed, so they are bounded: a slice with
+ * a longer field is malformed, and a server treats a malformed slice as
+ * absent. 256 is the bound a `sessionId` already has.
+ *
+ * @public
+ */
+export const MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH = 256;
+
+/**
  * Host-supplied conversation-grouping slice. Sent on the request `_meta`
- * of the first `ggui_*` tool call that creates a ggui render; subsequent
- * calls naming the same render ignore the field — set-at-creation,
- * immutable.
+ * of the `ggui_render` call that creates the session; subsequent calls
+ * naming the same session ignore the field — set-at-creation, immutable.
+ * `ggui_handshake` creates no session, so a slice sent only on the
+ * handshake is not captured: a host that wants grouping stamps the render
+ * request (stamping every `ggui_*` request is fine).
  *
  * Opaque grouping key, NOT a credential. Auth still comes from the
  * caller's identity (API key, OAuth bearer, cookie). `hostSessionId`
@@ -919,7 +931,9 @@ export const MCP_APP_AI_GGUI_HOST_SESSION_META_KEY = 'ai.ggui/host-session' as c
  * does NOT itself authorize access.
  *
  * Both fields are required when the slice is present. A slice with a
- * missing/empty field is treated as absent (degrades to one-shot).
+ * missing or empty field, or a field longer than
+ * {@link MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH}, is treated as absent
+ * (degrades to one-shot); the render itself still succeeds.
  *
  * @public
  */
@@ -960,7 +974,8 @@ export type ParseMcpAppAiGguiHostSessionMetaResult =
 /**
  * Read the `ai.ggui/host-session` slice off a parsed inbound `_meta`
  * object. Structural validation only — `hostName` + `hostSessionId`
- * both required and non-empty. Both missing entirely returns
+ * both required, non-empty and at most
+ * {@link MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH} characters. Both missing entirely returns
  * `{ok: true, hostSession: undefined}` (the documented opt-out path).
  *
  * @public
@@ -982,8 +997,10 @@ export function parseMcpAppAiGguiHostSessionMeta(
   if (
     typeof r.hostName !== 'string' ||
     r.hostName.length === 0 ||
+    r.hostName.length > MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH ||
     typeof r.hostSessionId !== 'string' ||
-    r.hostSessionId.length === 0
+    r.hostSessionId.length === 0 ||
+    r.hostSessionId.length > MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH
   ) {
     return { ok: false, reason: 'MALFORMED_HOST_SESSION' };
   }

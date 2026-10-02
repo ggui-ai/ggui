@@ -15,6 +15,7 @@ import {
   GGUI_RENDER_UI_META,
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   MCP_APP_AI_GGUI_HOST_SESSION_META_KEY,
+  MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH,
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
   parseMcpAppAiGguiRenderMeta,
@@ -763,6 +764,25 @@ describe('parseMcpAppAiGguiHostSessionMeta', () => {
       });
       expect(result.ok ? null : result.reason).toBe('MALFORMED_HOST_SESSION');
     }
+  });
+
+  it('rejects a field longer than the bound, and keeps one at the bound (ggui#1339)', () => {
+    const at = 'x'.repeat(MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH);
+    const over = `${at}x`;
+    expect(MCP_APP_HOST_SESSION_FIELD_MAX_LENGTH).toBe(256);
+    for (const slice of [
+      { hostName: over, hostSessionId: 'chat-abc' },
+      { hostName: 'sample', hostSessionId: over },
+    ]) {
+      expect(parseMcpAppAiGguiHostSessionMeta({ [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: slice })).toEqual({
+        ok: false,
+        reason: 'MALFORMED_HOST_SESSION',
+      });
+    }
+    const kept = parseMcpAppAiGguiHostSessionMeta({
+      [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: { hostName: at, hostSessionId: at },
+    });
+    expect(kept).toEqual({ ok: true, hostSession: { hostName: at, hostSessionId: at } });
   });
 
   it('rejects when hostSessionId is missing / empty / wrong type', () => {
