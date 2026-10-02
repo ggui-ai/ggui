@@ -3,14 +3,19 @@
  * true seed in realistic mixed pools, where contract+intent ranks it
  * higher?
  *
- * Context: stored vectors embed `composeEmbeddingInput(contract,
- * intent)` and `findBlueprintsByEmbedding` COMPOSES the query the same
- * way when a contract is passed — but the matcher's RAG call site drops
- * the contract (`blueprint-matcher.ts` builds `{ intent }` only), so
- * production retrieval is intent-only even for contract-bearing
- * handshakes. Run 5 measured the asymmetry (+0.371 mean top-1 cosine
- * on should-hits under Titan); THIS probe measures whether it moves
- * RANKS: pool = every distinct seed across the 28 hand-labeled pairs
+ * Context, as it stood when this probe was written: stored vectors embed
+ * `composeEmbeddingInput(contract, intent)` and `findBlueprintsByEmbedding`
+ * composes the query the same way when a contract is passed, but the
+ * matcher's RAG call site then built `{ intent }` only, so retrieval was
+ * intent-only even for contract-bearing handshakes. **That is no longer
+ * the case:** since #606's call-site fix the matcher passes the contract
+ * when the request carries one (`blueprint-matcher.ts`, the `ragArg`
+ * beside `findBlueprintsByEmbedding`), and a contract-less request stays
+ * intent-only by design. The probe is kept as the record of the decision
+ * and still compares both compositions. Run 5 measured the asymmetry
+ * (+0.371 mean top-1 cosine on should-hits under Titan); this probe
+ * measures whether it moves RANKS: pool = every distinct seed across the
+ * 28 hand-labeled pairs
  * (a mixed-family library), one query per semantic should-hit case,
  * both compositions, rank of the true seed recorded.
  *
