@@ -67,7 +67,7 @@ describe('recordCommittedOneShot', () => {
       action: 'submit',
       data: { name: 'Ada' },
     });
-    expect(outcome).toBe('recorded');
+    expect(outcome.outcome).toBe('recorded');
     expect(await spentOf(store)).toEqual({ epoch: 2, actions: ['submit'] });
   });
 
@@ -76,7 +76,7 @@ describe('recordCommittedOneShot', () => {
     const store = await storeWith(render);
     expect(
       await recordCommittedOneShot({ store, sessionId: 'r-1', render, action: 'refresh', data: null }),
-    ).toBe('not-one-shot');
+    ).toMatchObject({ outcome: 'not-one-shot' });
     expect(await spentOf(store)).toBeUndefined();
   });
 
@@ -85,7 +85,7 @@ describe('recordCommittedOneShot', () => {
     const store = await storeWith(render);
     expect(
       await recordCommittedOneShot({ store, sessionId: 'r-1', render, action: 'submit', data: { name: 42 } }),
-    ).toBe('not-committed');
+    ).toMatchObject({ outcome: 'not-committed' });
     expect(await spentOf(store)).toBeUndefined();
   });
 
@@ -101,7 +101,7 @@ describe('recordCommittedOneShot', () => {
         data: { name: 'Ada' },
         cardEpoch: 2,
       }),
-    ).toBe('superseded-card');
+    ).toMatchObject({ outcome: 'superseded-card' });
     expect(await spentOf(store)).toBeUndefined();
   });
 
@@ -117,7 +117,7 @@ describe('recordCommittedOneShot', () => {
         data: { name: 'Ada' },
         cardEpoch: 3,
       }),
-    ).toBe('recorded');
+    ).toMatchObject({ outcome: 'recorded' });
     expect(await spentOf(store)).toEqual({ epoch: 3, actions: ['submit'] });
   });
 
@@ -139,7 +139,7 @@ describe('recordCommittedOneShot', () => {
         action: 'submit',
         data: { name: 'Ada' },
       }),
-    ).toBe('not-durable');
+    ).toMatchObject({ outcome: 'not-durable' });
   });
 
   it('a render that is not a component card has no oneShot actions to spend', async () => {
@@ -156,7 +156,7 @@ describe('recordCommittedOneShot', () => {
     const store = await storeWith(render);
     expect(
       await recordCommittedOneShot({ store, sessionId: 'r-1', render, action: 'submit', data: null }),
-    ).toBe('not-one-shot');
+    ).toMatchObject({ outcome: 'not-one-shot' });
   });
 
   it("a store failure propagates to the caller, which owns the fail-open log line", async () => {

@@ -89,7 +89,7 @@ import {
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 import { assertActionContract } from './assert-action-contract.js';
-import { recordCommittedOneShot } from './record-committed-one-shot.js';
+import { recordCommittedOneShot, type CommittedOneShotResult } from './record-committed-one-shot.js';
 
 // `kind` accepts the closed primary set OR an extension string. Zod
 // can't represent `(string & {})` directly; we use `z.string().min(1)`
@@ -161,6 +161,12 @@ const outputSchema = {
    * gate began answering with them: this tool's output reaches `tools/list`
    * closed, so a host that cached the previous release's schema would have
    * refused a code or member it did not name (ggui#1333).
+   *
+   * NORMATIVE discriminator (ggui#1424): a violation whose `field` is
+   * `actionSpec.<name>.oneShot` means the action ALREADY FIRED on this card
+   * and this gesture was refused for that reason — not that its payload was
+   * bad. A consumer that must tell the two apart reads the field; the
+   * first-party runtime shows the action as done on it, never an error.
    */
   violations: z.array(contractViolationSchema).optional(),
   /** Human-readable diagnostic on `ok:false`. */
@@ -388,22 +394,93 @@ async function recordDispatchSpend(
   action: string,
   data: unknown,
   preloaded: StoredGguiSession | null | undefined,
-): Promise<void> {
+  spend: { readonly actionId: string; readonly reclaimFrom?: string; readonly delivered?: true; readonly release?: true },
+): Promise<CommittedOneShotResult | 'failed' | undefined> {
   const store = deps.renderStore;
-  if (store === undefined) return;
+  if (store === undefined) return undefined;
   try {
     // The gate already read the row for this dispatch (ggui#1358); one read
     // serves both. `undefined` means the gate could not read it — read here.
     const stored = preloaded === undefined ? await store.get(sessionId) : preloaded;
-    if (stored === null) return;
-    await recordCommittedOneShot({ store, sessionId, render: stored.render, action, data });
+    if (stored === null) return undefined;
+    return await recordCommittedOneShot({ store, sessionId, render: stored.render, action, data, ...spend });
   } catch (err) {
     deps.logger?.warn?.('submit_action_spent_oneshot_persist_failed', {
       sessionId,
       action,
       error: err instanceof Error ? err.message : String(err),
     });
+    return 'failed';
   }
+}
+
+/**
+ * ggui#1424 — the third line of defence for a declared `oneShot`. The
+ * runtime's guard and the disabled control stop a second gesture from OUR
+ * runtime; only the server stops one from a caller that is not our runtime
+ * (a `ggui_runtime_submit_action` sent under the app credential with a fresh
+ * `actionId` for an already-fired action). So the spend is a CLAIM taken
+ * BEFORE the pipe append, and the answer decides:
+ *
+ *   - `recorded`, `superseded`, `not-one-shot`, `not-committed`,
+ *     `not-durable`, a store that answers no claim, or a store failure
+ *     (fail-open, named) → the dispatch goes on to the append as before;
+ *   - `already-spent` by THIS `actionId` → a retry; the append dedupes it;
+ *   - `already-spent` by a holder that never MARKED its delivery (it claimed
+ *     and died before, or lost its response before, the mark) → this gesture
+ *     takes the spend over (`reclaimFrom`, one CAS) and goes on to the append
+ *     under its own id, so the user who retapped is served once;
+ *   - `already-spent` by a holder whose delivery is marked → REFUSED:
+ *     `{ok:false, code:'CONTRACT_VIOLATION'}` with one violation at
+ *     `actionSpec.<name>.oneShot` — the normative discriminator a consumer
+ *     reads to tell "already happened" from "bad payload" — nothing appended,
+ *     no ledger row, one `submit_action_one_shot_refused` line;
+ *   - `already-spent` with no holder named (a row written before the holder
+ *     ids) → the dispatch goes on as before, so a relay retry during the roll
+ *     still reads duplicate.
+ *
+ * After an append lands, the holder MARKS its spend delivered under its own
+ * id (the instrument a take-over reads, held to the claim's own durability).
+ * The window that remains delivers a gesture twice only through two
+ * failures: the holder's process dies between its append and its mark (its
+ * response is lost by construction), or its mark write fails while it lives
+ * AND its response is lost separately — either way the user retaps, and the
+ * retap's take-over is honoured. Named here so it is not understated.
+ */
+type SpendVerdict =
+  | {
+      readonly kind: 'proceed';
+      /** This dispatch took a FRESH hold (`recorded`): a conflicting append gives it back (ggui#1519). */
+      readonly freshHolder: boolean;
+      /** The store threw on the claim: named once; the mark is not attempted. */
+      readonly storeFailed: boolean;
+    }
+  | { readonly kind: 'refuse'; readonly by: string };
+
+async function claimDispatchSpend(
+  deps: GguiSubmitActionHandlerDeps,
+  sessionId: string,
+  action: string,
+  data: unknown,
+  preloaded: StoredGguiSession | null | undefined,
+  actionId: string,
+): Promise<SpendVerdict> {
+  const first = await recordDispatchSpend(deps, sessionId, action, data, preloaded, { actionId });
+  if (first === 'failed') return { kind: 'proceed', freshHolder: false, storeFailed: true };
+  const claim = first?.claim;
+  if (claim === undefined || claim.outcome !== 'already-spent' || claim.by === undefined || claim.by === actionId) {
+    return { kind: 'proceed', freshHolder: claim?.outcome === 'recorded', storeFailed: false };
+  }
+  if (claim.delivered === true) return { kind: 'refuse', by: claim.by };
+  // The holder never marked its delivery: take the spend over, one CAS. A
+  // rival take-over that won first answers already-spent by the rival.
+  const retaken = await recordDispatchSpend(deps, sessionId, action, data, preloaded, { actionId, reclaimFrom: claim.by });
+  if (retaken === 'failed') return { kind: 'proceed', freshHolder: false, storeFailed: true };
+  const second = retaken?.claim;
+  if (second === undefined || second.outcome !== 'already-spent' || second.by === undefined || second.by === actionId) {
+    return { kind: 'proceed', freshHolder: second?.outcome === 'recorded', storeFailed: false };
+  }
+  return { kind: 'refuse', by: second.by };
 }
 
 export function createGguiSubmitActionHandler(
@@ -537,6 +614,30 @@ export function createGguiSubmitActionHandler(
           }
           throw err;
         }
+        // ggui#1424 — the claim, BEFORE the append (see claimDispatchSpend).
+        const verdict = await claimDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored, env.actionId);
+        if (verdict.kind === 'refuse') {
+          deps.logger?.warn?.('submit_action_one_shot_refused', {
+            sessionId: env.sessionId,
+            action: dispatchPayload.intent,
+            actionId: env.actionId,
+            by: verdict.by,
+          });
+          return {
+            ok: false,
+            code: 'CONTRACT_VIOLATION',
+            message: `actionSpec.${dispatchPayload.intent} is declared oneShot and already fired on this card; a second gesture is refused`,
+            violations: [
+              {
+                field: `actionSpec.${dispatchPayload.intent}.oneShot`,
+                keyword: 'oneShot',
+                message: 'this one-shot action already fired on this card',
+                expected: verdict.by,
+                received: env.actionId,
+              },
+            ],
+          };
+        }
         const actionEnvelope: ConsumeEventEntry = {
           type: 'action',
           sessionId: env.sessionId,
@@ -610,19 +711,29 @@ export function createGguiSubmitActionHandler(
           } else {
             await writeDispatchLedger(deps, actionEnvelope);
           }
-          // ggui#1223 / #1305 — the gesture is on the pipe, so a committed
-          // `oneShot` now spends its card durably. This never changes the
-          // answer: a dispatch that fails the card's contract was accepted
-          // above exactly as before and simply does not spend. It runs on a
-          // duplicate too (ggui#1517): the spend is idempotent per
-          // `{epoch, action}` (the session-store conformance suite pins a
-          // repeat as a no-op), and re-applying it closes the window where
-          // the original appended and failed before it could spend.
-          // Not on a conflict (ggui#1519): that gesture was never stored, so
-          // its action must not be used up. A duplicate IS the stored gesture,
-          // and re-applying its spend is the ggui#1517 close above.
-          if (appended !== 'conflict') {
-            await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored);
+          // ggui#1223 / #1305 / #1424 — the gesture is on the pipe: the holder
+          // MARKS its spend delivered (claimed above, before the append). This
+          // never changes the answer: a dispatch that fails the card's contract
+          // was accepted above exactly as before and simply does not spend. It
+          // runs on a duplicate too (ggui#1517): the spend and the mark are
+          // idempotent per `{epoch, action, actionId}`, and re-applying them
+          // closes the window where the original appended and died before
+          // either. Not on a conflict (ggui#1519): that gesture was never
+          // stored, so its action must not be used up.
+          if (appended === 'conflict') {
+            // The gesture was never stored, so its action must not be used
+            // up: a fresh hold taken above is given back (ggui#1519 / #1424).
+            if (verdict.freshHolder && !verdict.storeFailed) {
+              await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored, {
+                actionId: env.actionId,
+                release: true,
+              });
+            }
+          } else if (!verdict.storeFailed) {
+            await recordDispatchSpend(deps, env.sessionId, dispatchPayload.intent, dispatchPayload.actionData, stored, {
+              actionId: env.actionId,
+              delivered: true,
+            });
           }
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight

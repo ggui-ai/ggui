@@ -270,12 +270,13 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
     // The append's outcome (ggui#1517) is not read here: this path mints
     // the pipe id per frame (`toConsumeEventEntry`), so a duplicate cannot
     // arise, and the ledger write is this path's load-bearing one.
+    // The pipe entry (and its minted actionId, which also names the holder of
+    // a oneShot spend below, ggui#1424) is built once per frame.
+    const entry = envelope.type === "data:submit" ? toConsumeEventEntry(envelope, sub.sessionId) : null;
     const consumeWrite: Promise<PendingEventAppendOutcome | void> = (() => {
-      if (deps.pendingEventConsumer === undefined || envelope.type !== "data:submit") {
+      if (deps.pendingEventConsumer === undefined || entry === null) {
         return Promise.resolve();
       }
-      const entry = toConsumeEventEntry(envelope, sub.sessionId);
-      if (entry === null) return Promise.resolve();
       return deps.pendingEventConsumer.append(sub.sessionId, {
         // The pipe entry's stable id doubles as the `drain_ack` key —
         // same convention as the relay path's iframe-supplied id.
@@ -336,6 +337,12 @@ export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
             render: activeItem,
             action: payload.action,
             data: payload.data,
+            // ggui#1424 — this gesture holds the spend, and its ledger append
+            // already landed, so it is recorded delivered in one step. A later
+            // `ggui_runtime_submit_action` for the same action under another
+            // id is refused there. With no pipe entry (the frame did not parse
+            // as a dispatch) the spend is held by nobody, as before.
+            ...(entry !== null ? { actionId: entry.actionId, delivered: true as const } : {}),
           });
         } catch (err) {
           deps.logger.warn("render_channel_spent_oneshot_persist_failed", {

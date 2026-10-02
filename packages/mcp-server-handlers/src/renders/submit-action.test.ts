@@ -1011,3 +1011,171 @@ describe('the grace choice and the consumer registry\'s exit retention (ggui#148
     expect(get).toHaveBeenCalledTimes(1);
   });
 });
+
+// ggui#1424 — the third line of defence. The runtime guard and the disabled
+// control stop a second gesture on a spent `oneShot` from OUR runtime; only
+// the server can stop one from a caller that is not our runtime. The spend is
+// now a claim taken BEFORE the pipe append: a second gesture under a new
+// actionId is refused as a contract violation at `actionSpec.<name>.oneShot`,
+// and never reaches the agent.
+describe('a second gesture on a spent oneShot is refused server-side (ggui#1424)', () => {
+  const sessionId = 'render-refuse-1';
+  const card: ComponentGguiSession = {
+    type: 'component',
+    id: sessionId,
+    appId: 'app_1',
+    componentCode: '/* card */',
+    eventSequence: 0,
+    createdAt: 0,
+    lastActivityAt: 0,
+    expiresAt: 0,
+    epoch: 1,
+    actionSpec: { confirm: { label: 'Confirm', oneShot: true }, note: { label: 'Note' } },
+  };
+  const gesture = (actionId: string, intent = 'confirm') => ({
+    ...baseEnv,
+    sessionId,
+    actionId,
+    kind: 'dispatch' as const,
+    payload: { intent, actionData: null, uiContext: {} },
+  });
+  async function ledgerRows(store: InMemoryGguiSessionStore): Promise<number> {
+    const page = await store.listEventsSince(sessionId, 0, 100);
+    return (page?.events ?? []).filter((e) => e.type === 'user.submitted').length;
+  }
+  async function spentOf(store: GguiSessionStore) {
+    const got = await store.get(sessionId);
+    return got?.render.type === 'component' ? got.render.spentOneShots : undefined;
+  }
+  function harness() {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated(sessionId);
+    const store = new InMemoryGguiSessionStore();
+    const warnings: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+    const h = createGguiSubmitActionHandler({
+      pendingEventConsumer: consumer,
+      renderStore: store,
+      logger: { warn: (msg, data) => warnings.push({ msg, data }) },
+    });
+    return { consumer, store, warnings, h };
+  }
+
+  it('the second gesture under a new actionId is refused as a contract violation at actionSpec.<name>.oneShot: nothing appended, no ledger row, one named line', async () => {
+    const { consumer, store, warnings, h } = harness();
+    await store.commit({ appId: 'app_1', render: card });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    const second = await h.handler(gesture('g-2'), ctx);
+    expect(second).toMatchObject({ ok: false, code: 'CONTRACT_VIOLATION' });
+    expect(second.ok === false ? second.violations?.map((v) => v.field) : undefined).toEqual(['actionSpec.confirm.oneShot']);
+    expect(second.ok === false ? second.violations?.[0]?.keyword : undefined).toBe('oneShot');
+    expect(await ledgerRows(store)).toBe(1);
+    expect((await consumer.consumeAndClear(sessionId, 100)).events.map((e) => e.id)).toEqual(['g-1']);
+    expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['confirm'] });
+    expect(warnings).toEqual([
+      { msg: 'submit_action_one_shot_refused', data: { sessionId, action: 'confirm', actionId: 'g-2', by: 'g-1' } },
+    ]);
+  });
+
+  it('a repeating action on the same card is never refused, and a different oneShot action is its own first spend', async () => {
+    const { store, h } = harness();
+    await store.commit({ appId: 'app_1', render: card });
+    expect(await h.handler(gesture('g-1', 'note'), ctx)).toEqual({ ok: true });
+    expect(await h.handler(gesture('g-2', 'note'), ctx)).toEqual({ ok: true });
+    expect(await h.handler(gesture('g-3'), ctx)).toEqual({ ok: true });
+    expect(await spentOf(store)).toEqual({ epoch: 1, actions: ['confirm'] });
+  });
+
+  it('the same actionId again is a retry, not a second gesture: answered ok, one pipe entry (ggui#1517 unchanged)', async () => {
+    const { consumer, store, h } = harness();
+    await store.commit({ appId: 'app_1', render: card });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    expect((await consumer.consumeAndClear(sessionId, 100)).events).toHaveLength(1);
+  });
+
+  it('a holder that claimed and never appended is taken over: the next gesture is delivered under its own id, once', async () => {
+    const { consumer, store, h } = harness();
+    await store.commit({ appId: 'app_1', render: card });
+    // g-dead claimed the spend and died before its append: nothing on the pipe, no mark.
+    expect(await store.recordSpentOneShot(sessionId, { epoch: 1, action: 'confirm', actionId: 'g-dead' })).toEqual({ outcome: 'recorded' });
+    expect(await h.handler(gesture('g-2'), ctx)).toEqual({ ok: true });
+    expect((await consumer.consumeAndClear(sessionId, 100)).events.map((e) => e.id)).toEqual(['g-2']);
+    // g-2 holds the spend now, marked delivered: a probe under a third id is refused by it.
+    expect(await store.recordSpentOneShot(sessionId, { epoch: 1, action: 'confirm', actionId: 'probe' })).toEqual({
+      outcome: 'already-spent',
+      by: 'g-2',
+      delivered: true,
+    });
+  });
+
+  it('a holder whose append landed is marked delivered, so a later gesture is refused even if it names the holder', async () => {
+    const { store, h, warnings } = harness();
+    await store.commit({ appId: 'app_1', render: card });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    expect(await store.recordSpentOneShot(sessionId, { epoch: 1, action: 'confirm', actionId: 'probe' })).toEqual({
+      outcome: 'already-spent',
+      by: 'g-1',
+      delivered: true,
+    });
+    expect(await h.handler(gesture('g-2'), ctx)).toMatchObject({ ok: false, code: 'CONTRACT_VIOLATION' });
+    expect(warnings.map((w) => w.msg)).toEqual(['submit_action_one_shot_refused']);
+  });
+
+  it('a store that records without claiming (the earlier port, answering void) keeps today\'s behaviour: both gestures accepted', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated(sessionId);
+    const inner = new InMemoryGguiSessionStore();
+    await inner.commit({ appId: 'app_1', render: card });
+    const preClaim: GguiSessionStore = {
+      create: (i) => inner.create(i),
+      get: (id) => inner.get(id),
+      list: (f) => inner.list(f),
+      update: (id, p) => inner.update(id, p),
+      delete: (id) => inner.delete(id),
+      commit: (i) => inner.commit(i),
+      appendEvent: (i) => inner.appendEvent(i),
+      listEventsSince: (id, since, limit) => inner.listEventsSince(id, since, limit),
+      observe: (id, o) => inner.observe(id, o),
+      recordSpentOneShot: async (id, spend): Promise<void> => {
+        await inner.recordSpentOneShot(id, spend);
+      },
+    };
+    const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: preClaim });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    expect(await h.handler(gesture('g-2'), ctx)).toEqual({ ok: true });
+    expect((await consumer.consumeAndClear(sessionId, 100)).events).toHaveLength(2);
+  });
+
+  it('a spend recorded before the holder ids existed (already-spent, no holder) is not refused: a relay retry during the roll still reads duplicate', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated(sessionId);
+    const inner = new InMemoryGguiSessionStore();
+    await inner.commit({ appId: 'app_1', render: card });
+    // The earlier writer recorded the name with no id.
+    await inner.recordSpentOneShot(sessionId, { epoch: 1, action: 'confirm' });
+    const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: inner });
+    expect(await h.handler(gesture('g-2'), ctx)).toEqual({ ok: true });
+    expect((await consumer.consumeAndClear(sessionId, 100)).events).toHaveLength(1);
+  });
+
+  it('a store without recordSpentOneShot keeps today\'s behaviour: nothing to claim, nothing refused', async () => {
+    const consumer = new InMemoryPendingEventConsumer();
+    consumer.markCreated(sessionId);
+    const inner = new InMemoryGguiSessionStore();
+    await inner.commit({ appId: 'app_1', render: card });
+    const noRecord: GguiSessionStore = {
+      create: (i) => inner.create(i),
+      get: (id) => inner.get(id),
+      list: (f) => inner.list(f),
+      update: (id, p) => inner.update(id, p),
+      delete: (id) => inner.delete(id),
+      commit: (i) => inner.commit(i),
+      appendEvent: (i) => inner.appendEvent(i),
+      listEventsSince: (id, since, limit) => inner.listEventsSince(id, since, limit),
+      observe: (id, o) => inner.observe(id, o),
+    };
+    const h = createGguiSubmitActionHandler({ pendingEventConsumer: consumer, renderStore: noRecord });
+    expect(await h.handler(gesture('g-1'), ctx)).toEqual({ ok: true });
+    expect(await h.handler(gesture('g-2'), ctx)).toEqual({ ok: true });
+  });
+});

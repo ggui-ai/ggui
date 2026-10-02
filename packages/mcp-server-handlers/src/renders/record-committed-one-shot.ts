@@ -17,13 +17,21 @@
  * every dispatch means before the wire carries a card epoch.
  */
 import { validateActionData, type GguiSession } from '@ggui-ai/protocol';
-import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import type { GguiSessionStore, SpentOneShotClaim } from '@ggui-ai/mcp-server-core';
 
 /**
  * What {@link recordCommittedOneShot} decided. Every arm but `recorded` wrote
  * nothing, and none of them is an error: a caller logs only a thrown store
- * failure (fail-open, the gesture has already been delivered).
+ * failure (fail-open). On `recorded`, `claim` carries the store's answer
+ * when the store claims (ggui#1424) — `recorded`, `already-spent {by,
+ * delivered}` or `superseded` — and is absent for a store that records
+ * without claiming (the earlier port).
  */
+export interface CommittedOneShotResult {
+  readonly outcome: CommittedOneShotOutcome;
+  readonly claim?: SpentOneShotClaim;
+}
+
 export type CommittedOneShotOutcome =
   /** The store applied the spend (a repeat of an already-spent action included). */
   | 'recorded'
@@ -47,6 +55,14 @@ export interface RecordCommittedOneShotInput {
   readonly data: unknown;
   /** The dispatching card's history epoch, when the dispatch carries one. */
   readonly cardEpoch?: number;
+  /** The gesture's `actionId` — the holder of the spend it claims (ggui#1424). */
+  readonly actionId?: string;
+  /** A take-over of an undelivered holder — see `SpentOneShotSpend.reclaimFrom`. */
+  readonly reclaimFrom?: string;
+  /** The holder's mark after its append landed — see `SpentOneShotSpend.delivered`. */
+  readonly delivered?: true;
+  /** The holder gives the action back after a conflicting append — see `SpentOneShotSpend.release`. */
+  readonly release?: true;
 }
 
 /**
@@ -55,16 +71,23 @@ export interface RecordCommittedOneShotInput {
  */
 export async function recordCommittedOneShot(
   input: RecordCommittedOneShotInput,
-): Promise<CommittedOneShotOutcome> {
+): Promise<CommittedOneShotResult> {
   const { render, action } = input;
-  if (render.type !== 'component') return 'not-one-shot';
+  if (render.type !== 'component') return { outcome: 'not-one-shot' };
   const spec = render.actionSpec;
-  if (spec?.[action]?.oneShot !== true) return 'not-one-shot';
-  if (!validateActionData({ action, data: input.data }, spec).valid) return 'not-committed';
+  if (spec?.[action]?.oneShot !== true) return { outcome: 'not-one-shot' };
+  if (!validateActionData({ action, data: input.data }, spec).valid) return { outcome: 'not-committed' };
   const headEpoch = render.epoch ?? 0;
   const epoch = input.cardEpoch ?? headEpoch;
-  if (epoch !== headEpoch) return 'superseded-card';
-  if (input.store.recordSpentOneShot === undefined) return 'not-durable';
-  await input.store.recordSpentOneShot(input.sessionId, { epoch, action });
-  return 'recorded';
+  if (epoch !== headEpoch) return { outcome: 'superseded-card' };
+  if (input.store.recordSpentOneShot === undefined) return { outcome: 'not-durable' };
+  const claim = await input.store.recordSpentOneShot(input.sessionId, {
+    epoch,
+    action,
+    ...(input.actionId !== undefined ? { actionId: input.actionId } : {}),
+    ...(input.reclaimFrom !== undefined ? { reclaimFrom: input.reclaimFrom } : {}),
+    ...(input.delivered === true ? { delivered: true } : {}),
+    ...(input.release === true ? { release: true } : {}),
+  });
+  return claim === undefined ? { outcome: 'recorded' } : { outcome: 'recorded', claim };
 }
