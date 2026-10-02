@@ -90,6 +90,12 @@
       "require": "./dist/runtime-telemetry.js",
       "default": "./dist/runtime-telemetry.js"
     },
+    "./render-failure": {
+      "types": "./dist/render-failure.d.ts",
+      "import": "./dist/render-failure.js",
+      "require": "./dist/render-failure.js",
+      "default": "./dist/render-failure.js"
+    },
     "./version": {
       "types": "./dist/version.d.ts",
       "import": "./dist/version.js",

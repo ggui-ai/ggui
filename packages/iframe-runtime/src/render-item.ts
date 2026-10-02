@@ -44,7 +44,7 @@ import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps
 import type { GguiSessionSeedInput } from './types.js';
 import { GguiWireProvider, type BuiltWireConfig } from '@ggui-ai/wire';
 import { ActionPendingContext, ActionSpentContext } from '@ggui-ai/wire/internal';
-import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
+import { mountReactRoot, type ReactRootMount, type RenderFailure } from './react-renderer.js';
 import {
   mountProvisional,
   type ProvisionalMount,
@@ -130,6 +130,8 @@ export interface RenderItemOptions {
   readonly hostPalette?: Readonly<Record<string, string>>;
   readonly cssOverrides?: string;
   readonly onError?: (err: Error) => void;
+  /** The boundary's give-up, forwarded to the React mount (ggui#1679; see {@link ReactRootMountOptions.onRenderFailure}). */
+  readonly onRenderFailure?: (failure: RenderFailure) => void;
   /**
    * Optional outer wrapper applied AROUND the GguiWireProvider — used
    * by `bootProduction` to install the `<ContextStateHost>` provider
@@ -332,6 +334,7 @@ export async function mountRender(
       // without it, and every served hello composed as an inline card.
       ...(currentOpts.fit !== undefined ? { fit: currentOpts.fit } : {}),
       ...(currentOpts.onError !== undefined ? { onError: currentOpts.onError } : {}),
+      ...(currentOpts.onRenderFailure !== undefined ? { onRenderFailure: currentOpts.onRenderFailure } : {}),
       renderWrapper: wrapInScopedProvider,
     });
     currentKind = 'react';
@@ -415,6 +418,7 @@ export async function mountRender(
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
           ...(next.fit !== undefined ? { fit: next.fit } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
+          ...(next.onRenderFailure !== undefined ? { onRenderFailure: next.onRenderFailure } : {}),
           renderWrapper: wrapInScopedProvider,
         });
         return;

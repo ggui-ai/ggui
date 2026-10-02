@@ -4,6 +4,7 @@
  * name, never its message or stack. The shape is the protocol's, so the
  * runtime that sends it and the server that reads it share one definition.
  */
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { VIEW_PROOF_V1_BOUND_ARGS, isViewProofTool } from '../integrations/view-proof';
 import {
@@ -44,6 +45,17 @@ describe('ggui_runtime_report_render_failure — the wire (ggui#1609)', () => {
     expect(renderFailureErrorName('a thrown string')).toBe('Error');
     expect(renderFailureErrorName({ name: 'NotAnError' })).toBe('Error');
     expect(renderFailureErrorName(undefined)).toBe('Error');
+  });
+
+  it('renderFailureErrorName reads an Error from another realm by its brand, where instanceof is false (ggui#1679)', () => {
+    // A card's module can evaluate in a realm other than the runtime's (a
+    // document-injected module, a sandboxed frame): its Error is still one.
+    const foreign: unknown = runInNewContext('new RangeError("from another realm")');
+    expect(foreign instanceof Error).toBe(false);
+    expect(renderFailureErrorName(foreign)).toBe('RangeError');
+    // The pattern still governs the name, and a non-Error from there is still "Error".
+    expect(renderFailureErrorName(runInNewContext('const e = new Error("x"); e.name = "not an identifier"; e'))).toBe('Error');
+    expect(renderFailureErrorName(runInNewContext('({ name: "NotAnError" })'))).toBe('Error');
   });
 
   it('its input carries the five members and nothing that could hold a message', () => {

@@ -43,6 +43,7 @@ import { createRoot } from 'react-dom/client';
 // (ggui#987 v2) — never a hand mirror, so a schema change cannot
 // silently diverge here.
 import type { AppTheme } from '@ggui-ai/protocol/wire';
+import type { RenderFailurePhase } from '@ggui-ai/protocol/render-failure';
 import { postObservabilityToParent } from './observability.js';
 import { trackThemeFontFaces } from './host-fonts.js';
 import {
@@ -143,6 +144,19 @@ const HELD_BLANK_DETAIL: Readonly<Record<HeldBlankReason, string>> = {
 const AUTO_RETRY_LIMIT = 1;
 const AUTO_RETRY_DELAY = 500;
 
+/**
+ * The boundary's give-up, named (ggui#1679): what the component threw on
+ * its terminal catch, the phase — `mount` when the component had never
+ * committed, `update` when a painted card's re-render threw — and the
+ * boundary's catch count at that moment (the retry included: 2 today). The
+ * runtime reports it to the server in exactly these terms.
+ */
+export interface RenderFailure {
+  readonly error: Error;
+  readonly phase: RenderFailurePhase;
+  readonly catches: number;
+}
+
 interface ErrorBoundaryProps {
   // `children` declared optional so `React.createElement(Boundary,
   // props, ...children)` is accepted by TS — the positional children
@@ -150,6 +164,7 @@ interface ErrorBoundaryProps {
   // populates `this.props.children`.
   readonly children?: ReactNode;
   readonly onError?: (error: Error) => void;
+  readonly onRenderFailure?: (failure: RenderFailure) => void;
 }
 
 interface ErrorBoundaryState {
@@ -165,9 +180,23 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
     autoRetrying: false,
   };
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  // Whether the children have ever committed (ggui#1679): a commit with no
+  // error held is the component painting. A boundary whose children never
+  // committed fails in `mount`; one whose painted children throw on a later
+  // render fails in `update`. The boundary is re-keyed on new code, so a
+  // replaced component starts over at `mount`.
+  private childrenCommitted = false;
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { error };
+  }
+
+  componentDidMount(): void {
+    if (this.state.error === null) this.childrenCommitted = true;
+  }
+
+  componentDidUpdate(): void {
+    if (this.state.error === null) this.childrenCommitted = true;
   }
 
   componentDidCatch(error: Error, _info: ErrorInfo): void {
@@ -182,6 +211,13 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
       return;
     }
 
+    // The give-up, named first (ggui#1679) — the phase and the count are the
+    // boundary's facts — then the host's own hook, unchanged.
+    this.props.onRenderFailure?.({
+      error,
+      phase: this.childrenCommitted ? 'update' : 'mount',
+      catches: nextCount,
+    });
     this.props.onError?.(error);
   }
 
@@ -406,6 +442,13 @@ export interface ReactRootMountOptions {
   /** `fill` — the root is the whole canvas: no silhouette, fills the page (ggui#1041; from the host's `displayMode`). */
   readonly fit?: 'fill';
   readonly onError?: (error: Error) => void;
+  /**
+   * The error boundary's give-up (ggui#1679): fires once per terminal catch,
+   * beside `onError`, with the phase and the catch count the runtime reports
+   * to the server. Not fired for an eval failure — a module that does not
+   * load is "no component" (ggui#1103), not a component that threw.
+   */
+  readonly onRenderFailure?: (failure: RenderFailure) => void;
   /**
    * Children injected BETWEEN the mount DOM (scope + CSS) and the
    * evaluated component element. The caller's render dispatcher
@@ -709,6 +752,7 @@ export async function mountReactRoot(
           {
             key: currentCode?.length ?? 0,
             ...(opts.onError ? { onError: opts.onError } : {}),
+            ...(opts.onRenderFailure ? { onRenderFailure: opts.onRenderFailure } : {}),
           },
           createElement(Fragment, null, wrapped),
         ),

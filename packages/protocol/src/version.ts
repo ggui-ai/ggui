@@ -6,6 +6,25 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The runtime sends the render-failure report (2026-10-02, ggui#1679: no
+ * schema change, same draft stamp). The emit step of ggui#1609's
+ * `ggui_runtime_report_render_failure`: `@ggui-ai/iframe-runtime` reports a
+ * card whose component threw past its error boundary's retry, once per
+ * session, with `{sessionId, appId, phase, errorName, catches}` and the view
+ * proof on the call, over the same host relay every runtime tool rides. A
+ * report that is refused, unanswered or met with tool-not-found (a server
+ * from before the tool) is dropped in silence and never resent (SPEC §4.9).
+ * `renderFailureErrorName` now reads "is an Error" by brand
+ * (`[object Error]`) rather than `instanceof`, so an Error thrown in another
+ * realm (a document-injected module) still reports its class name; a plain
+ * object with a `name` is still `"Error"`. The vocabulary moves to its own
+ * PURE-CONST module with a new subpath export, `@ggui-ai/protocol/render-failure`
+ * (as `runtime-telemetry` is): importing these names from the package root
+ * pulled the whole `schemas/mcp` module into the card runtime's bundle
+ * (+34 KB against its budget). The root re-exports the same bindings, so
+ * nothing on the root surface moves; `RenderFailurePhase` is newly exported.
+ * No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The server refuses a second gesture on a spent one-shot (2026-10-02,
  * ggui#1424: no schema change, same draft stamp). `ggui_runtime_submit_action`
  * claims the spend before the pipe append; a second committed dispatch of a

@@ -143,6 +143,7 @@ import {
   type RenderItemHandle,
   type RenderItemOptions,
 } from './render-item.js';
+import { createRenderFailureReporter } from './render-failure-report.js';
 import type { BuiltWireConfig, WireConfig } from '@ggui-ai/wire';
 import {
   fromBootstrapFailure,
@@ -5147,6 +5148,22 @@ async function bootProduction(opts: {
       labelForAction = (actionName) => declaredActionLabel(currentRender, actionName);
       let renderHandle: RenderItemHandle | null = null;
 
+      // ggui#1679 — the card's render failure reaches the server once per
+      // session, in the tool's terms, over the same proof-carrying bridge
+      // every runtime tool call rides. The App handle is read when the
+      // failure happens, not now: a boot with no bridge has nowhere to
+      // report, and the reporter then spends its one report on nothing,
+      // which is the "not reported" outcome SPEC §4.9 allows.
+      const renderFailureReporter = createRenderFailureReporter({
+        sessionId: meta.sessionId,
+        appId: meta.appId,
+        callTool: (name, args) => {
+          const bridge = getCurrentApp();
+          if (bridge === null) return Promise.reject(new Error('no App bridge bound: the report has no relay'));
+          return bridgeCallToolVia(bridge)(name, args);
+        },
+      });
+
       const dispatchToolName = resolveDispatchToolName();
 
       // Native-idiom interceptors — the replacement for the retired
@@ -5348,6 +5365,8 @@ async function bootProduction(opts: {
             return hostPalette !== undefined ? { hostPalette } : {};
           })(),
           ...(wrapOuter !== undefined ? { wrapOuter } : {}),
+          // The boundary's give-up is reported to the server (ggui#1679).
+          onRenderFailure: renderFailureReporter.report,
         };
       };
 
