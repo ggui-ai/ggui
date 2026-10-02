@@ -514,3 +514,55 @@ describe('connectViaRegistry — trio-less bridge-only bind (#471 round-6)', () 
     ).rejects.toThrow(/no bridge descriptor/);
   });
 });
+
+// ggui#1424 — a post-ack `error` frame used to reach no consumer. The channel
+// door now refuses a second gesture on a spent oneShot with such a frame
+// (CONTRACT_VIOLATION at `actionSpec.<name>.oneShot`), so the binder hands
+// every post-ack error to the caller; the runtime decides what it means.
+describe('connectViaRegistry — post-ack error frames reach the caller (ggui#1424)', () => {
+  let originalWs: typeof WebSocket;
+  beforeEach(() => {
+    originalWs = global.WebSocket;
+    MockWebSocket.instances = [];
+    installMockWebSocket();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    global.WebSocket = originalWs;
+    vi.useRealTimers();
+  });
+
+  it('an error frame after the ack is passed to onPostAckError with its code and details; a pre-ack one is not', async () => {
+    const postAck: Array<{ code: string; details?: unknown }> = [];
+    const handlePromise = connectViaRegistry({
+      meta: META,
+      registry: makeRegistry(),
+      onStatusChange: () => {},
+      onPostAckError: (payload) => postAck.push({ code: payload.code, details: payload.details }),
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    const ws = MockWebSocket.instances[0];
+    if (ws === undefined) throw new Error('no socket');
+    // Pre-ack: an auth-class refusal takes the existing refusal path, not the post-ack one.
+    ws.emit({ type: 'error', payload: { code: 'SESSION_NOT_FOUND', message: 'no such session' } });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(postAck).toEqual([]);
+    await handlePromise;
+    ws.emit({
+      type: 'error',
+      payload: {
+        code: 'CONTRACT_VIOLATION',
+        message: 'actionSpec.confirm is declared oneShot and already fired on this card',
+        details: { error: 'contract_violation', violations: [{ field: 'actionSpec.confirm.oneShot', keyword: 'oneShot' }] },
+      },
+      requestId: 'req-2',
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(postAck).toEqual([
+      {
+        code: 'CONTRACT_VIOLATION',
+        details: { error: 'contract_violation', violations: [{ field: 'actionSpec.confirm.oneShot', keyword: 'oneShot' }] },
+      },
+    ]);
+  });
+});

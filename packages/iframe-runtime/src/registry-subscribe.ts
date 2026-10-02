@@ -107,6 +107,13 @@ export interface SubscribeRefusal {
  * Caller-provided callbacks. The runtime's `bootSequence` owns the
  * concrete implementations; tests pass mocks via the `connectFn` seam.
  */
+/** A post-ack `error` frame's payload, as the server sent it (ggui#1424). */
+export interface PostAckErrorPayload {
+  readonly code: string;
+  readonly message?: string;
+  readonly details?: unknown;
+}
+
 export interface ConnectViaRegistryOptions {
   /**
    * GguiSession slice (`McpAppAiGguiRenderMeta`) — the live-channel
@@ -167,6 +174,15 @@ export interface ConnectViaRegistryOptions {
    * coherent by the time the resubscribe-ack arrives.
    */
   readonly onResubscribeAck?: (ack: AckPayload) => void;
+  /**
+   * ggui#1424 — every `error` frame that arrives AFTER the handshake
+   * settled, as sent. Pre-ack errors keep their classification path (the
+   * handshake's refusal / upgrade handling) and never reach this. The
+   * runtime reads a server refusal of a spent one-shot here (the channel
+   * door's CONTRACT_VIOLATION frame with a violation at
+   * `actionSpec.<name>.oneShot`) and shows the action as done.
+   */
+  readonly onPostAckError?: (payload: PostAckErrorPayload) => void;
   /**
    * Registry-level polling descriptor (R6). When supplied, the live-
    * channel's `FailoverHandle` uses this as its polling fallback when
@@ -445,18 +461,15 @@ export function connectViaRegistry(
     opts.registry.register({
       type: 'error',
       onMessage: (payload) => {
-        // Post-ack error frames are NOT handled here — the runtime
-        // doesn't currently route post-ack `error` frames through a
-        // registered handler (they used to surface via the legacy
-        // `onMessage` callback; B3b drops that channel since
-        // post-ack errors are rare + the host inspector logs them
-        // through the typed ProtocolError emitter).
-        if (settled) return;
-        const errPayload = payload as {
-          readonly code: string;
-          readonly message?: string;
-          readonly details?: unknown;
-        };
+        const errPayload = payload as PostAckErrorPayload;
+        // Post-ack error frames go to the caller as sent (ggui#1424): the
+        // runtime reads the channel door's refusal of a spent one-shot
+        // there. Before that they reached nothing (B3b had dropped the
+        // legacy `onMessage` channel as rare).
+        if (settled) {
+          opts.onPostAckError?.(errPayload);
+          return;
+        }
         const upgrade = liftUpgradeRequiredFromError(errPayload);
         if (upgrade !== null) {
           settled = true;

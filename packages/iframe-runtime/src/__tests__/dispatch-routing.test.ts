@@ -57,6 +57,7 @@ import {
   routeDispatch,
   setCurrentApp,
   isActionSpentByRefusal,
+  handlePostAckErrorFrame,
   __setTelemetrySinkForTest,
 } from '../runtime.js';
 import { ensureStatusDom } from '../status-dom.js';
@@ -2049,5 +2050,37 @@ describe('a server refusal of a spent oneShot reads as done, not as an error (gg
     expect(toast?.textContent).not.toMatch(/already done/i);
     expect(observabilityEvents().some((e) => e.kind === 'action-refused')).toBe(false);
     expect(isActionSpentByRefusal('sess_2', 'archive')).toBe(false);
+  });
+});
+
+// ggui#1424 — the live channel refuses the same way, with its `error` frame
+// after the ack: the frame's violation at `actionSpec.<name>.oneShot` means
+// done too.
+describe('a channel error frame refusing a spent oneShot reads as done (ggui#1424)', () => {
+  it('a post-ack CONTRACT_VIOLATION frame at actionSpec.<name>.oneShot marks the action spent, tells the host, and announces done', () => {
+    handlePostAckErrorFrame('sess_ch', {
+      code: 'CONTRACT_VIOLATION',
+      message: 'actionSpec.confirm is declared oneShot and already fired on this card',
+      details: { error: 'contract_violation', violations: [{ field: 'actionSpec.confirm.oneShot', keyword: 'oneShot' }] },
+    });
+    expect(isActionSpentByRefusal('sess_ch', 'confirm')).toBe(true);
+    const events = postMessageSpy.mock.calls
+      .map((call) => call[0] as { type?: unknown; event?: { kind?: string } })
+      .filter((msg) => msg.type === MCP_APP_OBSERVE_TYPE)
+      .map((msg) => msg.event ?? {});
+    expect(events).toContainEqual({
+      kind: 'action-refused',
+      renderId: 'sess_ch',
+      actionName: 'confirm',
+      violations: [{ field: 'actionSpec.confirm.oneShot', keyword: 'oneShot' }],
+    });
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/already done/i);
+  });
+
+  it('control: any other error frame changes nothing', () => {
+    handlePostAckErrorFrame('sess_ch2', { code: 'CONTRACT_VIOLATION', message: 'bad', details: { violations: [{ field: 'actionSpec.confirm.schema' }] } });
+    handlePostAckErrorFrame('sess_ch2', { code: 'APPEND_FAILED', message: 'ledger down' });
+    expect(isActionSpentByRefusal('sess_ch2', 'confirm')).toBe(false);
   });
 });

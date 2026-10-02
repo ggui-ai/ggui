@@ -63,6 +63,7 @@ import {
   type ConnectFn,
   type ConnectViaRegistryOptions,
   type RegistrySubscribeHandle,
+  type PostAckErrorPayload,
 } from './registry-subscribe.js';
 import type { StreamSeqTracker } from './stream-seq.js';
 import { domainErrorCodeOf, isErrorToolResult } from './tool-result-error.js';
@@ -103,6 +104,8 @@ export interface LadderSetOptions {
   readonly onStatus: (status: ConnectionStatus) => void;
   /** Every ack after the boot's first one, from the ladder holding data (a re-snapshot to apply). */
   readonly onAck: (ack: AckPayload) => void;
+  /** Every post-ack `error` frame, as sent (ggui#1424): the runtime reads a spent-one-shot refusal there. */
+  readonly onPostAckError?: (payload: PostAckErrorPayload) => void;
   /** Each refresh a ladder asked for, and what it got. */
   readonly onRefresh?: (source: ExpirySource, outcome: RefreshOutcome) => void;
   /** An ack showed the server's stream counter restarted (a new epoch, or a count below the view's cursor), and the cursor was forgotten. */
@@ -421,6 +424,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
         if (ladder === active) opts.onStatus(status);
       },
       onResubscribeAck: (ack) => onAck(ladder, ack),
+      ...(opts.onPostAckError !== undefined ? { onPostAckError: opts.onPostAckError } : {}),
       onBound: (handle) => {
         ladder.handle = handle;
         if (ladder.disposed) void handle.dispose();

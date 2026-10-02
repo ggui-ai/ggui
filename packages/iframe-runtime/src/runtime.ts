@@ -1557,6 +1557,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         if (mountedRender !== null) emitCodeReadyOnce();
       });
     },
+    // ggui#1424 — the channel door's refusal of a spent one-shot reads as done.
+    onPostAckError: (payload) => handlePostAckErrorFrame(meta.sessionId, payload),
     onRefresh: (source, outcome) => {
       telemetry?.record(
         'credential.refresh',
@@ -3049,6 +3051,59 @@ function markSpentByRefusal(renderId: string, actionName: string): void {
   notifySpentInputsChanged?.();
 }
 
+/** The mounted document's label resolver for an action name, set at mount; `null` before one. */
+let labelForAction: ((actionName: string) => string | undefined) | null = null;
+
+/**
+ * ggui#1424 — the one answer to a server refusal of a spent one-shot, from
+ * either door (the tool answer or the channel's error frame): the guard
+ * reads the action spent from now on, the host is told on the
+ * `action-refused` channel with the field (never the payload), and the
+ * visitor sees the action as already done — never "could not reach the
+ * agent". Nothing is on the pipe, so no doorbell.
+ */
+function settleOneShotRefusal(renderId: string, actionName: string, label: string | undefined): void {
+  markSpentByRefusal(renderId, actionName);
+  postObservabilityToParent({
+    kind: 'action-refused',
+    renderId,
+    actionName,
+    violations: [{ field: `actionSpec.${actionName}.oneShot`, keyword: 'oneShot' }],
+  });
+  showActionToast(GESTURE_COPY.alreadyDone(label), 'success');
+}
+
+/** The action a refusal's violations name at `actionSpec.<name>.oneShot`, or `null`. */
+function oneShotRefusedAction(violations: unknown): string | null {
+  if (!Array.isArray(violations)) return null;
+  for (const v of violations) {
+    const field = typeof v === 'object' && v !== null ? (v as { field?: unknown }).field : undefined;
+    const m = typeof field === 'string' ? /^actionSpec\.(.+)\.oneShot$/.exec(field) : null;
+    if (m?.[1] !== undefined) return m[1];
+  }
+  return null;
+}
+
+/**
+ * ggui#1424 — a post-ack `error` frame from the live channel. The channel
+ * door refuses a second gesture on a spent one-shot with its
+ * CONTRACT_VIOLATION frame and a violation at `actionSpec.<name>.oneShot`;
+ * that one means done, the same as the tool answer. Any other error frame
+ * changes nothing here.
+ *
+ * @internal — exported for unit tests.
+ */
+export function handlePostAckErrorFrame(
+  renderId: string,
+  payload: { readonly code: string; readonly message?: string; readonly details?: unknown },
+): void {
+  if (payload.code !== 'CONTRACT_VIOLATION') return;
+  const details = typeof payload.details === 'object' && payload.details !== null ? (payload.details as { violations?: unknown }) : undefined;
+  const actionName = oneShotRefusedAction(details?.violations);
+  if (actionName === null) return;
+  settleOneShotRefusal(renderId, actionName, labelForAction?.(actionName));
+}
+
 /**
  * Does a submit_action answer refuse THIS gesture because its one-shot action
  * already fired on the card (ggui#1424)? The discriminator is the violation's
@@ -3059,12 +3114,7 @@ function readsOneShotRefusal(resp: JsonRpcResponse | null, actionName: string): 
   if (resp === null) return false;
   const inner = submitActionPayload(resp);
   if (inner === null || inner.ok !== false || inner.code !== 'CONTRACT_VIOLATION') return false;
-  const violations = inner.violations;
-  if (!Array.isArray(violations)) return false;
-  const field = `actionSpec.${actionName}.oneShot`;
-  return violations.some(
-    (v) => typeof v === 'object' && v !== null && (v as { field?: unknown }).field === field,
-  );
+  return oneShotRefusedAction(inner.violations) === actionName;
 }
 
 /**
@@ -4136,14 +4186,7 @@ export function dispatchSubmitAction(args: {
     // the visitor sees the action as already done — never "could not reach
     // the agent". Nothing is on the pipe, so no doorbell.
     if (readsOneShotRefusal(resp, intent)) {
-      markSpentByRefusal(sessionId, intent);
-      postObservabilityToParent({
-        kind: 'action-refused',
-        renderId: sessionId,
-        actionName: intent,
-        violations: [{ field: `actionSpec.${intent}.oneShot`, keyword: 'oneShot' }],
-      });
-      showActionToast(GESTURE_COPY.alreadyDone(label), 'success');
+      settleOneShotRefusal(sessionId, intent, label);
       return;
     }
 
@@ -5101,6 +5144,7 @@ async function bootProduction(opts: {
       notifySpentInputsChanged = () => {
         for (const listener of renderListeners) listener();
       };
+      labelForAction = (actionName) => declaredActionLabel(currentRender, actionName);
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
