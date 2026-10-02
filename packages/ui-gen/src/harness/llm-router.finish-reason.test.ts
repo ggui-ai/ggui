@@ -1,7 +1,7 @@
 // ggui#1127 — the stop reason a vision call reports, normalized. A salvaged judge answer's cause is read from it,
 // never from the answer's length, so each provider's mapping is pinned, and absence stays absence (unknown).
 import { describe, expect, it } from 'vitest';
-import { anthropicFinishReason, googleFinishReason } from './llm-router';
+import { anthropicFinishReason, googleFinishReason, servedModelOf } from './llm-router';
 
 describe('vision stop reasons, normalized (ggui#1127)', () => {
   it('Anthropic: end_turn and stop_sequence stop, max_tokens is the cap, refusal is a safety stop, absence stays absent', () => {
@@ -22,5 +22,14 @@ describe('vision stop reasons, normalized (ggui#1127)', () => {
     }
     expect(googleFinishReason('OTHER')).toBe('other');
     expect(googleFinishReason(undefined)).toBeUndefined();
+  });
+});
+
+describe('servedModelOf (ggui#1687)', () => {
+  it('keeps a name the provider gave, and leaves the field absent when it gave none', () => {
+    expect(servedModelOf('claude-sonnet-5-20260601')).toEqual({ servedModel: 'claude-sonnet-5-20260601' });
+    expect(servedModelOf(undefined)).toEqual({});
+    expect(servedModelOf(null)).toEqual({});
+    expect(servedModelOf('')).toEqual({});
   });
 });

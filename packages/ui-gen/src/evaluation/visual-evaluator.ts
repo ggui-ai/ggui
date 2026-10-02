@@ -40,7 +40,7 @@ import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types
  * for stored and external data.
  */
 type VisualIssue = EvaluationIssue & { origin: 'judge' | 'instrument' };
-import type { CanvasHostPresentation, CanvasJudgeRecord, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, JudgeSalvageCause, JudgeSalvageCounts, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
+import type { CanvasHostPresentation, CanvasJudgeRecord, CriteriaAnswerCounts, CanvasPresentationOutcome, CanvasVisualSummary, EvalIssue, HostInlineFrame, HostPresentationIgnoredReason, JudgeSalvageCause, JudgeSalvageCounts, VisualCoverage, VisualEvalSummary, VisualFitStamp } from './types-public.js';
 import type { LaunchOptions } from 'puppeteer-core';
 import { CANVAS_VIEWPORTS, displayModeForCanvas, type CanvasClass, type CanvasViewport } from '../design-mode.js';
 import { judgeEdges, type EdgeVerdict } from './criteria/edge.js';
@@ -1236,6 +1236,9 @@ type JudgedAnswer =
       readonly outputTokens: number;
       /** ggui#1127 — present when the answer did not parse and its score was salvaged. */
       readonly salvage?: JudgeSalvage;
+      /** ggui#1687 — the provider's stop reason and the model it says answered; each absent when unreported. */
+      readonly finishReason?: VisionFinishReason;
+      readonly servedModel?: string;
     }
   | { readonly kind: 'unparsable'; readonly reason: string };
 
@@ -1276,8 +1279,12 @@ function judgeRecordOf(
   parsed: readonly Extract<JudgedAnswer, { kind: 'ok' }>[],
   samples: number[],
   criteria: JudgedAnswer | undefined,
+  requestedModel: string,
 ): CanvasJudgeRecord {
   const salvaged = parsed.flatMap((a) => (a.salvage !== undefined ? [a.salvage.cause] : []));
+  // ggui#1687 — every model the provider said answered, scoring and criteria, deduplicated in call order.
+  const answered = [...parsed, ...(criteria?.kind === 'ok' ? [criteria] : [])];
+  const served = [...new Set(answered.flatMap((a) => (a.servedModel !== undefined ? [a.servedModel] : [])))];
   const criteriaSalvaged = criteria?.kind === 'ok' ? criteria.salvage?.cause : undefined;
   return {
     k,
@@ -1287,7 +1294,28 @@ function judgeRecordOf(
     notes: parsed.map((a) => a.result.critique ?? ''),
     ...(salvaged.length > 0 ? { salvaged } : {}),
     ...(criteriaSalvaged !== undefined ? { criteriaSalvaged } : {}),
+    models: { requested: requestedModel, served },
   };
+}
+
+/** ggui#1687 — what one call's response says about itself: its stop reason and the model that answered. */
+function callFacts(response: { readonly finishReason?: VisionFinishReason; readonly servedModel?: string }): {
+  finishReason?: VisionFinishReason;
+  servedModel?: string;
+} {
+  return {
+    ...(response.finishReason !== undefined ? { finishReason: response.finishReason } : {}),
+    ...(response.servedModel !== undefined ? { servedModel: response.servedModel } : {}),
+  };
+}
+
+const NO_CRITERIA_ARRAY: CriteriaAnswerCounts = { array: false, received: 0, kept: 0, dropped: { notObject: 0, badId: 0, badVerdict: 0 } };
+
+/** ggui#1687 — the criteria call as it came back, for the block: its answer's counts and its stop reason. */
+function criteriaCallOf(criteria: JudgedAnswer | undefined): { call?: { answer: CriteriaAnswerCounts; finishReason?: VisionFinishReason } } {
+  if (criteria?.kind !== 'ok') return {};
+  const answer = criteria.result.criteriaCounts ?? NO_CRITERIA_ARRAY;
+  return { call: { answer, ...(criteria.finishReason !== undefined ? { finishReason: criteria.finishReason } : {}) } };
 }
 
 /**
@@ -1371,7 +1399,7 @@ async function judgeAndParse(
     const response = await judge(config, model, VISUAL_EVAL_PROMPT, screenshot, originalPrompt, profileBlock, criteriaBlock);
     try {
       const result = parseVisualResponse(response.text, config.passThreshold);
-      return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens };
+      return { kind: 'ok', result, inputTokens: response.inputTokens, outputTokens: response.outputTokens, ...callFacts(response) };
     } catch (e) {
       // An answer that fails to parse but whose four dimensions closed is SALVAGED (ggui#1127): they are emitted
       // before `issues`, so the score is recoverable from the closed prefix. Whether it was cut at the output cap or
@@ -1385,7 +1413,7 @@ async function judgeAndParse(
           `[visual-eval] ${token}${canvas ? ` canvas=${canvas}` : ''} cause=${salvage.cause} finish=${salvage.finishReason ?? 'unreported'} ` +
             `at=${salvage.offset ?? '?'}/${salvage.chars} (${salvage.parseError}): score recovered from the closed prefix, issues list partial`,
         );
-        return { kind: 'ok', result: salvaged, inputTokens: response.inputTokens, outputTokens: response.outputTokens, salvage };
+        return { kind: 'ok', result: salvaged, inputTokens: response.inputTokens, outputTokens: response.outputTokens, salvage, ...callFacts(response) };
       }
       const reason = `judge answer unparsable: ${e instanceof Error ? e.message : String(e)}`;
       if (attempt === 1) {
@@ -1484,7 +1512,7 @@ export async function runVisualEvaluationDetailed(
       result.outputTokens = parsed.reduce((sum, a) => sum + a.outputTokens, 0);
       const response = { inputTokens: result.inputTokens, outputTokens: result.outputTokens };
       const criteriaTokens = criteriaCallTokens(criteriaAnswer);
-      const judgeRecord = judgeRecordOf(k, parsed, samples, criteriaAnswer);
+      const judgeRecord = judgeRecordOf(k, parsed, samples, criteriaAnswer, model);
       // The fit verdict (ggui#1027): deterministic, in the judge's issue channel.
       const contentHeight = attempt.contentHeight;
       const overflow = contentHeight !== null && contentHeight > viewport.height;
@@ -1515,6 +1543,7 @@ export async function runVisualEvaluationDetailed(
               answers: criteriaReads(criteriaAnswer),
               measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null },
               ...criteriaUnansweredReason(criteriaAnswer),
+              ...criteriaCallOf(criteriaAnswer),
             })
           : undefined;
       perCanvasResults.push(result);
@@ -1806,6 +1835,7 @@ export async function judgeStoredCapture(
           answers: criteriaReads(criteriaAnswer),
           measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio },
           ...criteriaUnansweredReason(criteriaAnswer),
+          ...criteriaCallOf(criteriaAnswer),
         })
       : undefined;
   const criteriaTokens = criteriaCallTokens(criteriaAnswer);
@@ -1817,7 +1847,7 @@ export async function judgeStoredCapture(
       score: median,
       passed,
       issues,
-      judge: judgeRecordOf(k, parsed, samples, criteriaAnswer),
+      judge: judgeRecordOf(k, parsed, samples, criteriaAnswer, model),
       contentHeight,
       overflow,
       inkRatio,
@@ -1927,7 +1957,7 @@ function parseVisualResponse(text: string, passThreshold: number): EvaluationRes
 
   // ggui#1436 — the criteria answers, tolerant: absent block → no field (an old answer stays
   // valid); an entry without a string id or with a verdict outside the vocabulary is dropped.
-  const criteriaAnswers = parseCriteriaAnswers(raw.criteria);
+  const criteria = parseCriteriaAnswers(raw.criteria);
 
   return {
     passed: finalScore >= passThreshold,
@@ -1935,21 +1965,37 @@ function parseVisualResponse(text: string, passThreshold: number): EvaluationRes
     dimensions,
     issues,
     critique: raw.critique,
-    ...(criteriaAnswers !== undefined ? { criteriaAnswers } : {}),
+    ...(criteria.answers !== undefined ? { criteriaAnswers: criteria.answers } : {}),
+    criteriaCounts: criteria.counts,
   };
 }
 
-function parseCriteriaAnswers(raw: unknown): CriteriaAnswer[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: CriteriaAnswer[] = [];
+/**
+ * The criteria answers, tolerant (ggui#1436), and what the tolerance dropped (ggui#1687): an absent or non-array block
+ * reads no row, and each dropped entry is counted by why, so an empty or cut call is visible rather than a row of
+ * clean `n/a`s.
+ */
+function parseCriteriaAnswers(raw: unknown): { answers?: CriteriaAnswer[]; counts: CriteriaAnswerCounts } {
+  if (!Array.isArray(raw)) return { counts: NO_CRITERIA_ARRAY };
+  const answers: CriteriaAnswer[] = [];
+  const dropped = { notObject: 0, badId: 0, badVerdict: 0 };
   for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) continue;
+    if (typeof entry !== 'object' || entry === null) {
+      dropped.notObject += 1;
+      continue;
+    }
     const o = entry as { id?: unknown; verdict?: unknown; evidence?: unknown };
-    if (typeof o.id !== 'string') continue;
-    if (o.verdict !== 'pass' && o.verdict !== 'fail' && o.verdict !== 'n/a') continue;
-    out.push({ id: o.id, verdict: o.verdict, evidence: typeof o.evidence === 'string' ? o.evidence : '' });
+    if (typeof o.id !== 'string') {
+      dropped.badId += 1;
+      continue;
+    }
+    if (o.verdict !== 'pass' && o.verdict !== 'fail' && o.verdict !== 'n/a') {
+      dropped.badVerdict += 1;
+      continue;
+    }
+    answers.push({ id: o.id, verdict: o.verdict, evidence: typeof o.evidence === 'string' ? o.evidence : '' });
   }
-  return out;
+  return { answers, counts: { array: true, received: raw.length, kept: answers.length, dropped } };
 }
 
 // ---------------------------------------------------------------------------

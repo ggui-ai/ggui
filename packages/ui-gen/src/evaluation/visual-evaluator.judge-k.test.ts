@@ -55,7 +55,7 @@ describe('median-of-K judge (ggui#1072)', () => {
     expect(d.calls).toBe(1);
     const c = out.result!.canvases![0]!;
     expect(c.score).toBe(80);
-    expect(c.judge).toEqual({ k: 1, rule: 'median', samples: [80], sigma: 0, notes: ['c80'] });
+    expect(c.judge).toEqual({ k: 1, rule: 'median', samples: [80], sigma: 0, notes: ['c80'], models: { requested: expect.any(String), served: [] } });
     expect(summarizeVisualResult(out.result!)!.canvases[0]!.judge).toEqual(c.judge);
   });
 
@@ -66,7 +66,7 @@ describe('median-of-K judge (ggui#1072)', () => {
     const c = out.result!.canvases![0]!;
     expect(c.score).toBe(78);
     expect(c.passed).toBe(true);
-    expect(c.judge).toEqual({ k: 3, rule: 'median', samples: [82, 66, 78], sigma: 6.8, notes: ['c82', 'c66', 'c78'] });
+    expect(c.judge).toEqual({ k: 3, rule: 'median', samples: [82, 66, 78], sigma: 6.8, notes: ['c82', 'c66', 'c78'], models: { requested: expect.any(String), served: [] } });
     expect(out.result!.inputTokens).toBe(30);
   });
 

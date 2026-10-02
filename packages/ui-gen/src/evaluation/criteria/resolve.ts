@@ -9,7 +9,8 @@
  * a gate later reads the set.
  */
 import type { CriteriaAnswer } from '../types.js';
-import type { CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
+import type { CriteriaAnswerCounts, CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
+import type { VisionFinishReason } from '../../harness/llm-router.js';
 import { bankRows, type BankRow, type CriteriaBank } from './bank.js';
 import { CRITERIA_SELECTOR_VERSION, type CriteriaSelectionResult } from './select.js';
 import type { EdgeVerdict } from './edge.js';
@@ -90,6 +91,8 @@ export function resolveCriteriaBlock(args: {
    * so its rows say so instead of reading as a clean `n/a`. Absent ⇒ "not answered".
    */
   readonly unansweredReason?: string;
+  /** ggui#1687 — the call that answered, as it came back: its answer's counts and its stop reason. */
+  readonly call?: { readonly answer: CriteriaAnswerCounts; readonly finishReason?: VisionFinishReason };
 }): CriteriaBlock {
   const byId = new Map<string, BankRow>(bankRows(args.bank).map((r) => [r.id, r]));
   const verdicts: CriterionVerdict[] = [];
@@ -116,6 +119,16 @@ export function resolveCriteriaBlock(args: {
     context: args.context,
     selection: args.selected.selection,
     verdicts,
+    ...(args.call !== undefined
+      ? {
+          call: {
+            answer: args.call.answer,
+            // Kept answers whose id names no row of the bank: the judge answered something nobody asked.
+            unknownIds: args.answers.flat().filter((a) => !byId.has(a.id)).length,
+            ...(args.call.finishReason !== undefined ? { finishReason: args.call.finishReason } : {}),
+          },
+        }
+      : {})
   };
 }
 

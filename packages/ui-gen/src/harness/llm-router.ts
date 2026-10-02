@@ -168,6 +168,17 @@ export interface LLMResponse {
    * said nothing — read absence as unknown, never as `stop`.
    */
   finishReason?: VisionFinishReason;
+  /**
+   * The model that answered, in the provider's own words (ggui#1687): Anthropic's `model`, Google's `modelVersion`.
+   * The request names an alias or a resolved id; this is what the provider says served it. Absent when it said
+   * nothing — read absence as unknown, never as the requested model.
+   */
+  servedModel?: string;
+}
+
+/** The `servedModel` field to spread into an {@link LLMResponse}: present only when the provider named one. */
+export function servedModelOf(name: string | null | undefined): { servedModel?: string } {
+  return typeof name === 'string' && name.length > 0 ? { servedModel: name } : {};
 }
 
 /** The normalized stop reason a vision call reports (ggui#1127). */
@@ -840,6 +851,7 @@ export class AnthropicAgent extends LLMAgent {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
         ...visionFinish(anthropicFinishReason(response.stop_reason)),
+        ...servedModelOf(response.model),
       };
     } catch (e) {
       const endedAt = Date.now();
@@ -1774,6 +1786,7 @@ export class GoogleAgent extends LLMAgent {
         inputTokens: splitCacheInclusiveUsage(usage?.promptTokenCount ?? 0, usage?.candidatesTokenCount ?? 0, usage?.cachedContentTokenCount ?? 0).tokens.input,
         outputTokens: usage?.candidatesTokenCount ?? 0,
         ...visionFinish(googleFinishReason(response.candidates?.[0]?.finishReason)),
+        ...servedModelOf(response.modelVersion),
       };
 
       const endedAt = Date.now();

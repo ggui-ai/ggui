@@ -1,3 +1,4 @@
+import type { CriteriaAnswerCounts } from './types-public.js';
 // packages/ui-gen/src/evaluation/types.ts
 
 /**
@@ -64,6 +65,8 @@ export interface EvaluationResult {
   outputTokens?: number;
   /** ggui#1436 — the judge's criteria answers, when the prompt asked for them; never part of the score. */
   criteriaAnswers?: CriteriaAnswer[];
+  /** ggui#1687 — what the answer's criteria array held and what the parser dropped; set whenever the answer parsed. */
+  criteriaCounts?: CriteriaAnswerCounts;
 }
 
 /**

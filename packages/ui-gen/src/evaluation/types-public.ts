@@ -20,6 +20,7 @@
 
 export type Priority = "P0" | "P1" | "P2";
 
+import type { VisionFinishReason } from '../harness/llm-router.js';
 import type { GenerationRuntimeProbeOutcome, GenerationRuntimeProbeStatus } from "@ggui-ai/mcp-server-core";
 import type { CanvasClass, DesignMode } from "../design-mode.js";
 
@@ -372,6 +373,26 @@ export interface CanvasJudgeRecord {
    * "not answered" with this cause rather than a clean `n/a`. Absent when the call parsed or was not asked.
    */
   readonly criteriaSalvaged?: JudgeSalvageCause;
+  /**
+   * ggui#1687 — the model asked for, and every model the provider said answered this canvas's calls (scoring and
+   * criteria), deduplicated. `served` is empty when no provider named one: unknown, never "the requested model".
+   */
+  readonly models?: { readonly requested: string; readonly served: readonly string[] };
+}
+
+/**
+ * ggui#1687 — what the criteria call's answer held, before resolution. A row the judge left unanswered reads `n/a`
+ * either way; this says whether the call came back empty, cut, or with entries the parser had to drop.
+ */
+export interface CriteriaAnswerCounts {
+  /** The answer carried a `criteria` array. `false`: absent or not an array, so no row was read from it. */
+  readonly array: boolean;
+  /** Entries in the array. */
+  readonly received: number;
+  /** Entries kept: an object with a string id and a verdict of pass, fail or n/a. */
+  readonly kept: number;
+  /** Entries dropped, by why. */
+  readonly dropped: { readonly notObject: number; readonly badId: number; readonly badVerdict: number };
 }
 
 /**
@@ -454,6 +475,14 @@ export interface CriterionVerdict {
    */
   instrument?: { verdict: CriteriaVerdict; evidence: string };
 }
+/** ggui#1687 — the criteria call as it came back: its answer's counts, ids it answered outside the bank, its stop. */
+export interface CriteriaCallRecord {
+  readonly answer: CriteriaAnswerCounts;
+  /** Kept entries whose id names no row of the bank. */
+  readonly unknownIds: number;
+  /** The provider's normalized stop reason (`length` = the output cap); absent when it reported none. */
+  readonly finishReason?: VisionFinishReason;
+}
 export interface CriteriaBlock {
   /** sha256(bank version | selector version | canonical context), 16 hex — the block's own digest. */
   criteriaSetId: string;
@@ -462,6 +491,8 @@ export interface CriteriaBlock {
   context: CriteriaContext;
   selection: CriteriaSelection[];
   verdicts: CriterionVerdict[];
+  /** ggui#1687 — the call that answered this block, when one did. Absent for a block resolved with no call. */
+  call?: CriteriaCallRecord;
 }
 /** The roll-up across canvases; a `must` at `n/a` is listed, never counted as a pass. */
 export interface CriteriaRollup {

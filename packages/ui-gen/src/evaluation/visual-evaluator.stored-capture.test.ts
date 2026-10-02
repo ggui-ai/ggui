@@ -57,7 +57,7 @@ describe('judgeStoredCapture (ggui#1438)', () => {
     const v = out.verdict;
     expect(v.score).toBe(80);
     expect(v.passed).toBe(true);
-    expect(v.judge).toEqual({ k: 3, rule: 'median', samples: [80, 90, 70], sigma: 8.2, notes: ['c80', 'c90', 'c70'] });
+    expect(v.judge).toEqual({ k: 3, rule: 'median', samples: [80, 90, 70], sigma: 8.2, notes: ['c80', 'c90', 'c70'], models: { requested: expect.any(String), served: [] } });
     expect(v.inkRatio).toBeNull();
     expect(v.issues.map((i) => i.dimension)).toEqual([]);
     expect(v.overflow).toBe(false);
@@ -91,5 +91,65 @@ describe('judgeStoredCapture (ggui#1438)', () => {
     const bad = judgeOf(['not json']);
     const u = await judgeStoredCapture({ canvas: 'md', png: NOT_A_PNG, viewport: { width: 768, height: 1024 }, contentHeight: null, originalPrompt: 'a card' }, { ...config, judgeK: 1 }, { judge: bad.judge as never });
     expect(u.kind).toBe('unavailable');
+  });
+});
+
+// ggui#1687 — the judge record names the model each provider said answered, and the criteria block says what the
+// criteria call's answer held, so an empty or cut call reads as itself rather than as rows of clean `n/a`.
+describe('what the judge record and the criteria block say about their calls (ggui#1687)', () => {
+  const scoring = (score: number) => JSON.stringify({ completeness: score, layout: score, hierarchy: score, aesthetics: score, issues: [], critique: `c${score}` });
+  function judgeNaming(served: (string | undefined)[], criteriaText: string, criteriaFinish?: 'stop' | 'length') {
+    let i = 0;
+    return async (_c: unknown, _m: unknown, _p: unknown, _png: unknown, _o: unknown, _pr: unknown, criteriaBlock: unknown = '') => {
+      if ((criteriaBlock as string).length > 0) {
+        return { text: criteriaText, inputTokens: 10, outputTokens: 5, servedModel: 'claude-x-criteria', ...(criteriaFinish !== undefined ? { finishReason: criteriaFinish } : {}) };
+      }
+      const name = served[Math.min(i, served.length - 1)];
+      i += 1;
+      return { text: scoring(80), inputTokens: 10, outputTokens: 5, ...(name !== undefined ? { servedModel: name } : {}) };
+    };
+  }
+  const run = (judge: ReturnType<typeof judgeNaming>) =>
+    judgeStoredCapture(
+      { canvas: 'xs-chat-card', png: NOT_A_PNG, viewport: { width: 400, height: 640 }, contentHeight: 600, originalPrompt: 'a card', criteria: { bank, context } },
+      config,
+      { judge: judge as never },
+    );
+
+  it('served models are the distinct names the provider gave, scoring and criteria, in call order; none named reads as an empty list', async () => {
+    const out = await run(judgeNaming(['claude-x-1', undefined, 'claude-x-1'], answer(10, 'pass')));
+    if (out.kind !== 'ok') throw new Error('expected ok');
+    expect(out.verdict.judge.models).toEqual({ requested: expect.any(String), served: ['claude-x-1', 'claude-x-criteria'] });
+  });
+
+  it('a criteria answer with entries the parser drops is counted by why; an id outside the bank is counted', async () => {
+    const messy = JSON.stringify({
+      completeness: 10, layout: 10, hierarchy: 10, aesthetics: 10, issues: [], critique: 'c',
+      criteria: [
+        { id: 'task.copy', verdict: 'pass', evidence: 'ok' },
+        { id: 'not.in.bank', verdict: 'fail', evidence: 'invented' },
+        { id: 'task.copy', verdict: 'maybe' },
+        { verdict: 'pass' },
+        'stray',
+      ],
+    });
+    const out = await run(judgeNaming(['m'], messy, 'stop'));
+    if (out.kind !== 'ok') throw new Error('expected ok');
+    expect(out.verdict.criteria?.call).toEqual({
+      answer: { array: true, received: 5, kept: 2, dropped: { notObject: 1, badId: 1, badVerdict: 1 } },
+      unknownIds: 1,
+      finishReason: 'stop',
+    });
+  });
+
+  it('a criteria answer with no criteria array is recorded as such, with its stop reason, not as unanswered rows alone', async () => {
+    const out = await run(judgeNaming(['m'], scoring(10), 'length'));
+    if (out.kind !== 'ok') throw new Error('expected ok');
+    expect(out.verdict.criteria?.call).toEqual({
+      answer: { array: false, received: 0, kept: 0, dropped: { notObject: 0, badId: 0, badVerdict: 0 } },
+      unknownIds: 0,
+      finishReason: 'length',
+    });
+    expect(out.verdict.criteria?.verdicts.find((v) => v.id === 'task.copy')).toMatchObject({ verdict: 'n/a', evidence: 'not answered' });
   });
 });
