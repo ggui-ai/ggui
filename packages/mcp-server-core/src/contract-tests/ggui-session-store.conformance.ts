@@ -594,6 +594,174 @@ export function runGguiSessionStoreConformance(
           await expect(record('r-missing', { epoch: 0, action: 'submit' })).rejects.toThrow();
         });
       });
+
+      // ggui#1424 — the record is also a CLAIM: it answers who holds the spend,
+      // so the dispatch handler can refuse a second gesture under a new
+      // actionId before it reaches the pipe. The read view is unchanged
+      // (names only); the holder ids are the store's, never the render's.
+      const NOT_CLAIMING =
+        'store records the spend but answers no claim — a second gesture under a new actionId is not refused server-side (ggui#1424)';
+
+      it('the claim: the first spend of an action answers recorded; a second gesture answers already-spent by the first id; the same id answers already-spent by itself (ggui#1424)', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-claim', 'app-1') });
+          const first = await record('r-claim', { epoch: 0, action: 'confirm', actionId: 'g-1' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          expect(first).toEqual({ outcome: 'recorded' });
+          expect(await record('r-claim', { epoch: 0, action: 'confirm', actionId: 'g-2' })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-1',
+            delivered: false,
+          });
+          expect(await record('r-claim', { epoch: 0, action: 'confirm', actionId: 'g-1' })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-1',
+            delivered: false,
+          });
+          // A second action on the same card is its own first spend.
+          expect(await record('r-claim', { epoch: 0, action: 'cancel', actionId: 'g-3' })).toEqual({ outcome: 'recorded' });
+          // The read view is unchanged: names only, never the ids.
+          const spent = await spentOf(store, 'r-claim');
+          expect(spent?.epoch).toBe(0);
+          expect([...(spent?.actions ?? [])].sort()).toEqual(['cancel', 'confirm']);
+          expect(spent).not.toHaveProperty('spentBy');
+        });
+      });
+
+      it("the claim across cards: a newer card's first spend answers recorded, and an older card's spend answers superseded (ggui#1424)", async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-claim-cards', 'app-1') });
+          const first = await record('r-claim-cards', { epoch: 0, action: 'confirm', actionId: 'g-1' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          expect(await record('r-claim-cards', { epoch: 1, action: 'confirm', actionId: 'g-2' })).toEqual({ outcome: 'recorded' });
+          expect(await record('r-claim-cards', { epoch: 0, action: 'confirm', actionId: 'g-3' })).toEqual({ outcome: 'superseded' });
+          expect(await record('r-claim-cards', { epoch: 1, action: 'confirm', actionId: 'g-4' })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-2',
+            delivered: false,
+          });
+          expect(await spentOf(store, 'r-claim-cards')).toEqual({ epoch: 1, actions: ['confirm'] });
+        });
+      });
+
+      it('a holder that claimed and never appended is taken over: a new id naming it in `reclaimFrom` is recorded; a stale name is not (ggui#1424)', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-reclaim', 'app-1') });
+          const first = await record('r-reclaim', { epoch: 0, action: 'confirm', actionId: 'g-1' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          // g-1 claimed and died before its append: nothing marked it delivered.
+          expect(await record('r-reclaim', { epoch: 0, action: 'confirm', actionId: 'g-2', reclaimFrom: 'g-1' })).toEqual({ outcome: 'recorded' });
+          // g-2 holds it now: a take-over that still names g-1 is stale.
+          expect(await record('r-reclaim', { epoch: 0, action: 'confirm', actionId: 'g-3', reclaimFrom: 'g-1' })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-2',
+            delivered: false,
+          });
+          expect(await spentOf(store, 'r-reclaim')).toEqual({ epoch: 0, actions: ['confirm'] });
+        });
+      });
+
+      it('a holder that claimed and appended is marked delivered and cannot be taken over (ggui#1424)', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-delivered', 'app-1') });
+          const first = await record('r-delivered', { epoch: 0, action: 'confirm', actionId: 'g-1' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          // The holder's append landed; it marks its spend delivered.
+          expect(await record('r-delivered', { epoch: 0, action: 'confirm', actionId: 'g-1', delivered: true })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-1',
+            delivered: true,
+          });
+          // A new id, even naming the holder, is refused: the gesture was delivered once.
+          expect(await record('r-delivered', { epoch: 0, action: 'confirm', actionId: 'g-2', reclaimFrom: 'g-1' })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-1',
+            delivered: true,
+          });
+          expect(await spentOf(store, 'r-delivered')).toEqual({ epoch: 0, actions: ['confirm'] });
+        });
+      });
+
+      it('a release: the holder of an undelivered claim gives the action back, and the next gesture is recorded afresh (ggui#1424 / #1519)', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-release', 'app-1') });
+          const first = await record('r-release', { epoch: 0, action: 'confirm', actionId: 'g-1' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          await record('r-release', { epoch: 0, action: 'cancel', actionId: 'g-2' });
+          // g-1's gesture was never stored (a conflicting append): it gives the action back.
+          expect(await record('r-release', { epoch: 0, action: 'confirm', actionId: 'g-1', release: true })).toEqual({ outcome: 'released' });
+          expect(await spentOf(store, 'r-release')).toEqual({ epoch: 0, actions: ['cancel'] });
+          expect(await record('r-release', { epoch: 0, action: 'confirm', actionId: 'g-3' })).toEqual({ outcome: 'recorded' });
+          // A stranger cannot release another holder's spend.
+          expect(await record('r-release', { epoch: 0, action: 'confirm', actionId: 'g-9', release: true })).toEqual({
+            outcome: 'already-spent',
+            by: 'g-3',
+            delivered: false,
+          });
+          const spent = await spentOf(store, 'r-release');
+          expect([...(spent?.actions ?? [])].sort()).toEqual(['cancel', 'confirm']);
+        });
+      });
+
+      it('a spend recorded without an id is held by nobody: a later gesture reads already-spent with no holder named (ggui#1424)', async (ctx) => {
+        await withStore(async (store) => {
+          const record = store.recordSpentOneShot?.bind(store);
+          if (record === undefined) {
+            ctx.skip(NOT_IMPLEMENTED);
+            return;
+          }
+          await store.commit({ appId: 'app-1', render: makeComponentGguiSession('r-claim-anon', 'app-1') });
+          const first = await record('r-claim-anon', { epoch: 0, action: 'confirm' });
+          if (first === undefined) {
+            ctx.skip(NOT_CLAIMING);
+            return;
+          }
+          expect(first).toEqual({ outcome: 'recorded' });
+          const second = await record('r-claim-anon', { epoch: 0, action: 'confirm', actionId: 'g-9' });
+          expect(second).toEqual({ outcome: 'already-spent' });
+          expect(second !== undefined && 'by' in second ? second.by : undefined).toBeUndefined();
+        });
+      });
     });
   });
 }

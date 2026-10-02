@@ -64,10 +64,13 @@ import type {
   SpentOneShotsRecord,
 } from '@ggui-ai/protocol';
 import {
+  claimSpentOneShot,
   firstWriteEventSequence,
-  nextSpentOneShotsRecord,
   withoutSpentOneShots,
   withSpentOneShots,
+  type SpentOneShotClaim,
+  type SpentOneShotHolder,
+  type SpentOneShotsLedger,
 } from '../ggui-session-store.js';
 import type {
   AppendEventInput,
@@ -194,6 +197,10 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     selectAllSpentOneShots: SqliteStatement<unknown[]>;
     upsertSpentOneShots: SqliteStatement<unknown[]>;
     deleteSpentOneShots: SqliteStatement<unknown[]>;
+    selectSpentOneShotIds: SqliteStatement<unknown[]>;
+    upsertSpentOneShotId: SqliteStatement<unknown[]>;
+    deleteSpentOneShotId: SqliteStatement<unknown[]>;
+    deleteSpentOneShotIds: SqliteStatement<unknown[]>;
   };
 
   private idCounter = 0;
@@ -262,6 +269,18 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       ),
       deleteSpentOneShots: this.db.prepare<unknown[]>(
         `DELETE FROM render_spent_one_shots WHERE render_id = ?`,
+      ),
+      selectSpentOneShotIds: this.db.prepare<unknown[]>(
+        `SELECT action, action_id, delivered FROM render_spent_one_shot_ids WHERE render_id = ?`,
+      ),
+      upsertSpentOneShotId: this.db.prepare<unknown[]>(
+        `INSERT INTO render_spent_one_shot_ids (render_id, action, action_id, delivered) VALUES (?, ?, ?, ?) ON CONFLICT(render_id, action) DO UPDATE SET action_id = excluded.action_id, delivered = excluded.delivered`,
+      ),
+      deleteSpentOneShotId: this.db.prepare<unknown[]>(
+        `DELETE FROM render_spent_one_shot_ids WHERE render_id = ? AND action = ?`,
+      ),
+      deleteSpentOneShotIds: this.db.prepare<unknown[]>(
+        `DELETE FROM render_spent_one_shot_ids WHERE render_id = ?`,
       ),
     };
   }
@@ -386,6 +405,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     // We still clear explicitly to be robust to SQLite builds where
     // `foreign_keys` was disabled.
     this.stmts.deleteRenderEvents.run(id);
+    this.stmts.deleteSpentOneShotIds.run(id);
     this.stmts.deleteSpentOneShots.run(id);
     this.stmts.deleteRender.run(id);
     this.wakeWaiters(id, null);
@@ -444,21 +464,32 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     return stored;
   }
 
-  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<void> {
-    // Read-decide-write under one `BEGIN IMMEDIATE` transaction, so two
-    // concurrent spends cannot both read the same record and lose one.
-    const txn = this.db.transaction((): void => {
+  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<SpentOneShotClaim> {
+    // Read-claim-write under one `BEGIN IMMEDIATE` transaction, so two
+    // concurrent spends cannot both read the same record: exactly one of
+    // two racing gestures is `recorded` (ggui#1424).
+    const txn = this.db.transaction((): SpentOneShotClaim => {
       if (!asGguiSessionRow(this.stmts.getGguiSession.get(sessionId))) {
         throw new Error(
           `SqliteGguiSessionStore.recordSpentOneShot: render not found: ${sessionId}`,
         );
       }
       const current = asSpentOneShotsRow(this.stmts.selectSpentOneShots.get(sessionId));
-      const next = nextSpentOneShotsRecord(current?.record, spend);
-      if (next === null) return;
-      this.stmts.upsertSpentOneShots.run(sessionId, next.epoch, JSON.stringify(next.actions));
+      const ledger: SpentOneShotsLedger | undefined =
+        current?.record === undefined
+          ? undefined
+          : { ...current.record, spentBy: asSpentOneShotIdRows(this.stmts.selectSpentOneShotIds.all(sessionId)) };
+      const { claim, record } = claimSpentOneShot(ledger, spend);
+      if (record === null) return claim;
+      // A newer card's first spend replaces the record; its holders go with it.
+      if (ledger === undefined || ledger.epoch !== record.epoch) this.stmts.deleteSpentOneShotIds.run(sessionId);
+      this.stmts.upsertSpentOneShots.run(sessionId, record.epoch, JSON.stringify(record.actions));
+      const h = record.spentBy[spend.action];
+      if (h !== undefined) this.stmts.upsertSpentOneShotId.run(sessionId, spend.action, h.actionId, h.delivered ? 1 : 0);
+      else this.stmts.deleteSpentOneShotId.run(sessionId, spend.action); // a release, or a spend held by nobody
+      return claim;
     });
-    txn.immediate();
+    return txn.immediate();
   }
 
   /** A row as a reader sees it: the store-owned spent record folded onto the render. */
@@ -664,6 +695,21 @@ CREATE TABLE IF NOT EXISTS render_spent_one_shots (
   epoch INTEGER NOT NULL,
   -- JSON array of action names.
   actions TEXT NOT NULL,
+  FOREIGN KEY (render_id) REFERENCES renders(id) ON DELETE CASCADE
+);
+
+-- #1424 — which dispatch (actionId) holds each spent action of the record
+-- above, so a second gesture under a new id is refused server-side. A
+-- sibling table rather than a column, for the same reason as the record:
+-- an existing database file gains it without an ALTER. Rows written before
+-- it exist have no holder, and a claim on them names none.
+CREATE TABLE IF NOT EXISTS render_spent_one_shot_ids (
+  render_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  -- 1 once the holder's pipe append landed (its mark); 0 while it only claimed.
+  delivered INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (render_id, action),
   FOREIGN KEY (render_id) REFERENCES renders(id) ON DELETE CASCADE
 );
 `;
@@ -948,6 +994,27 @@ function foldSpentOneShots(
   record: SpentOneShotsRecord | undefined,
 ): StoredGguiSession {
   return { ...stored, render: withSpentOneShots(stored.render, record) };
+}
+
+/**
+ * The holders of a record's spent actions (ggui#1424), as `action → actionId`.
+ * A malformed row fails loudly, like every other row narrower here.
+ */
+function asSpentOneShotIdRows(rows: readonly unknown[]): Record<string, SpentOneShotHolder> {
+  const out: Record<string, SpentOneShotHolder> = {};
+  for (const raw of rows) {
+    if (!isRecord(raw)) throw malformedRowError('render_spent_one_shot_ids', undefined);
+    const { action, action_id, delivered } = raw;
+    if (
+      typeof action !== 'string' || action.length === 0 ||
+      typeof action_id !== 'string' || action_id.length === 0 ||
+      (delivered !== 0 && delivered !== 1)
+    ) {
+      throw malformedRowError('render_spent_one_shot_ids', undefined);
+    }
+    out[action] = { actionId: action_id, delivered: delivered === 1 };
+  }
+  return out;
 }
 
 /** Parse JSON, returning `undefined` on syntax failure. */

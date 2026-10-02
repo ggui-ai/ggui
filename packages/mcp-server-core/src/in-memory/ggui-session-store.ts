@@ -15,13 +15,14 @@
 import {
   isErroredGguiSession,
   type GguiSession,
-  type SpentOneShotsRecord,
 } from '@ggui-ai/protocol';
 import {
+  claimSpentOneShot,
   firstWriteEventSequence,
-  nextSpentOneShotsRecord,
   withoutSpentOneShots,
   withSpentOneShots,
+  type SpentOneShotClaim,
+  type SpentOneShotsLedger,
 } from '../ggui-session-store.js';
 import type {
   AppendEventInput,
@@ -57,7 +58,7 @@ interface RenderBucket {
    * `stored.render`, so a `commit` (which replaces the render) cannot erase
    * it. Every read folds it onto the render via {@link readView}.
    */
-  spentOneShots?: SpentOneShotsRecord;
+  spentOneShots?: SpentOneShotsLedger;
 }
 
 export interface InMemoryGguiSessionStoreOptions {
@@ -272,16 +273,17 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
     return this.buckets.get(id)?.authoredSource;
   }
 
-  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<void> {
+  async recordSpentOneShot(sessionId: string, spend: SpentOneShotSpend): Promise<SpentOneShotClaim> {
     const bucket = this.buckets.get(sessionId);
     if (!bucket) {
       throw new Error(
         `InMemoryGguiSessionStore.recordSpentOneShot: render not found: ${sessionId}`,
       );
     }
-    // Atomic by construction: read and write happen in one synchronous turn.
-    const next = nextSpentOneShotsRecord(bucket.spentOneShots, spend);
-    if (next !== null) bucket.spentOneShots = next;
+    // Atomic by construction: read, claim and write happen in one synchronous turn.
+    const { claim, record } = claimSpentOneShot(bucket.spentOneShots, spend);
+    if (record !== null) bucket.spentOneShots = record;
+    return claim;
   }
 
   async appendEvent(input: AppendEventInput): Promise<number> {

@@ -442,7 +442,7 @@ export interface GguiSessionStore {
    * Record one COMMITTED dispatch of a `oneShot` action on a card
    * (ggui#1223 / #1305), so a re-served card renders it spent after a
    * reload. The store keeps ONE {@link SpentOneShotsRecord} per render
-   * and applies {@link nextSpentOneShotsRecord}'s rule ATOMICALLY: the
+   * and applies {@link claimSpentOneShot}'s rule ATOMICALLY: the
    * same card's epoch adds the action (a repeat is a no-op), a newer
    * card's first spend REPLACES the record, and an older card's spend
    * changes nothing. Rejects when the render does not exist.
@@ -457,6 +457,23 @@ export interface GguiSessionStore {
    * `ggui_update` starts fresh because its epoch no longer matches, not
    * because anything was cleared.
    *
+   * **The record is also a CLAIM (ggui#1424).** The answer says who holds
+   * the spend: `recorded` (this dispatch spent the action first on this
+   * card), `already-spent` with the holder's `actionId` when the store has
+   * one, or `superseded` (an older card's spend, which changes nothing). The
+   * dispatch handler refuses a second gesture under a DIFFERENT id on
+   * `already-spent`, before the pipe append, so a forged or replayed gesture
+   * never reaches the agent; the SAME id goes on to its idempotent append.
+   * The holder ids are the store's own: the read view stays `{ epoch,
+   * actions }`, and a row written before the ids existed answers
+   * `already-spent` with no holder named.
+   *
+   * A store written against the earlier port answers nothing (`void`). The
+   * handler reads that as "no verdict" and keeps the behaviour that predates
+   * the claim — the gesture is appended and only the runtime guards the
+   * action — and the conformance suite names such a store as a skip, never
+   * a pass.
+   *
    * Optional, and additive: a store without it serves exactly the
    * behaviour that predates it. The runtime's in-memory guard still
    * suppresses a repeat on a live card, but a consumed `oneShot` renders
@@ -464,7 +481,7 @@ export interface GguiSessionStore {
    * construction (`spent_one_shots_not_durable`), and the conformance
    * suite grades it as a named skip, never a pass.
    */
-  recordSpentOneShot?(sessionId: string, spend: SpentOneShotSpend): Promise<void>;
+  recordSpentOneShot?(sessionId: string, spend: SpentOneShotSpend): Promise<SpentOneShotClaim | void>;
 }
 
 /**
@@ -477,7 +494,82 @@ export interface SpentOneShotSpend {
   readonly epoch: number;
   /** The `actionSpec` name, declared `oneShot` on that card. */
   readonly action: string;
+  /**
+   * The dispatch's `actionId` — the gesture that holds the spend
+   * (ggui#1424). The dispatch handler always names it; absent only for a
+   * writer that predates the claim, whose spend is then held by nobody.
+   */
+  readonly actionId?: string;
+  /**
+   * A take-over (ggui#1424): the `actionId` this spend believes holds the
+   * action, whose gesture was never delivered (the dispatch handler read
+   * the ledger and found no row for it). The claim is honoured — the
+   * action is `recorded` under THIS spend's `actionId` — only while the
+   * ledger still names exactly that holder AND has not marked it delivered;
+   * a stale or delivered holder answers `already-spent` by the real holder,
+   * so two racing take-overs get one winner and a delivered gesture is never
+   * delivered twice. Ignored without an `actionId` of its own.
+   */
+  readonly reclaimFrom?: string;
+  /**
+   * The mark (ggui#1424): the holder, right after its pipe append landed,
+   * records that its gesture was delivered. Honoured only when `actionId` is
+   * the holder's own; the answer is `already-spent` by it with
+   * `delivered: true`. This is the instrument a take-over reads, held to the
+   * claim's own durability, instead of the best-effort audit ledger.
+   */
+  readonly delivered?: true;
+  /**
+   * The release (ggui#1424 / #1519): the holder gives the action back because
+   * its gesture was never stored — the pipe answered the append as a conflict
+   * (its `actionId` was already recorded for a different gesture). Honoured
+   * only under the holder's own id and only while unmarked; the answer is
+   * `released`. A stranger, a delivered holder, or an action the record does
+   * not list changes nothing.
+   */
+  readonly release?: true;
 }
+
+/**
+ * Who holds one spent action (ggui#1424): the gesture's `actionId`, and
+ * whether that gesture reached the pipe (`delivered`, set by the holder's
+ * mark). A holder that claimed and never marked is the loss-window case a
+ * later gesture may take over.
+ */
+export interface SpentOneShotHolder {
+  readonly actionId: string;
+  readonly delivered: boolean;
+}
+
+/**
+ * The store's record behind {@link ComponentGguiSession.spentOneShots}
+ * (ggui#1424): the read view's `{ epoch, actions }` plus `spentBy`, the
+ * `actionId` that holds each spent action. An action spent by a writer
+ * that named no id has no entry. Only the names are ever folded onto a
+ * render; the ids stay in the store.
+ */
+export interface SpentOneShotsLedger extends SpentOneShotsRecord {
+  readonly spentBy: Readonly<Record<string, SpentOneShotHolder>>;
+}
+
+/**
+ * What a spend claim answers (ggui#1424): who holds this action's spend on
+ * this card.
+ *   - `recorded` — this dispatch spent it first;
+ *   - `already-spent` — a dispatch spent it before; `by` names its
+ *     `actionId` when the store has one (the same id is a retry, a
+ *     different id is a second gesture), and `delivered` says whether that
+ *     holder marked its gesture as appended (absent with `by`);
+ *   - `superseded` — the spend names an older card than the record's; it
+ *     changes nothing;
+ *   - `released` — the answer to a `release`: the action is no longer spent
+ *     (or was not listed on this card to begin with).
+ */
+export type SpentOneShotClaim =
+  | { readonly outcome: 'recorded' }
+  | { readonly outcome: 'already-spent'; readonly by?: string; readonly delivered?: boolean }
+  | { readonly outcome: 'superseded' }
+  | { readonly outcome: 'released' };
 
 /**
  * Refuse a malformed spend before any store writes it. The epoch is a
@@ -496,29 +588,82 @@ export function assertSpentOneShotSpend(spend: SpentOneShotSpend): void {
 }
 
 /**
- * The record after one spend, or `null` when the spend changes nothing.
- * This is the ONE spelling of the rule every backend applies; a backend
- * with a conditional write expresses the same three arms as conditions
- * rather than calling this.
+ * One spend against the store's ledger: the claim it answers and the
+ * ledger after it, or `null` when the spend changes nothing. This is the
+ * ONE spelling of the rule every backend applies; a backend with a
+ * conditional write expresses the same arms as conditions rather than
+ * calling this (ggui#1223 / #1305 / #1424).
  *
- * - no record, or a record from an OLDER card → `{ epoch, actions: [action] }`
- *   (a new card's first spend REPLACES, never appends);
- * - the SAME card, action not yet listed → the action appended;
- * - the same card with the action already listed, or a record from a NEWER
- *   card (this spend is on an older card) → `null`.
+ * - no ledger, or a ledger from an OLDER card → `recorded`, with a fresh
+ *   ledger `{ epoch, actions: [action], spentBy }` (a new card's first spend
+ *   REPLACES, never appends);
+ * - the SAME card, action not yet listed → `recorded`, the action appended
+ *   and its holder noted;
+ * - the same card with the action already listed → `already-spent`, `by`
+ *   the holder the ledger names (none for a spend recorded before the ids)
+ *   with its `delivered` mark, ledger unchanged — except: the holder's own
+ *   `delivered: true` sets the mark; and a spend naming an UNDELIVERED
+ *   holder in `reclaimFrom`, with its own `actionId`, is `recorded` and
+ *   replaces the holder (the loss-window close);
+ * - a ledger from a NEWER card (this spend is on an older card) →
+ *   `superseded`, ledger unchanged;
+ * - a `release` by the unmarked holder → `released`, the action and its
+ *   holder removed; a release of an action the card never spent is
+ *   `released` with nothing to change.
  */
-export function nextSpentOneShotsRecord(
-  current: SpentOneShotsRecord | undefined,
+export function claimSpentOneShot(
+  current: SpentOneShotsLedger | undefined,
   spend: SpentOneShotSpend,
-): SpentOneShotsRecord | null {
+): { readonly claim: SpentOneShotClaim; readonly record: SpentOneShotsLedger | null } {
   assertSpentOneShotSpend(spend);
+  if (spend.release === true) return releaseSpentOneShot(current, spend);
+  // A claim that already carries the mark (an ingress whose append preceded
+  // its spend) records a delivered holder in one step.
+  const holder: Readonly<Record<string, SpentOneShotHolder>> =
+    spend.actionId !== undefined ? { [spend.action]: { actionId: spend.actionId, delivered: spend.delivered === true } } : {};
   if (current === undefined || current.epoch < spend.epoch) {
-    return { epoch: spend.epoch, actions: [spend.action] };
+    return { claim: { outcome: 'recorded' }, record: { epoch: spend.epoch, actions: [spend.action], spentBy: holder } };
   }
-  if (current.epoch > spend.epoch || current.actions.includes(spend.action)) {
-    return null;
+  if (current.epoch > spend.epoch) return { claim: { outcome: 'superseded' }, record: null };
+  if (current.actions.includes(spend.action)) {
+    const h = current.spentBy[spend.action];
+    if (h === undefined) return { claim: { outcome: 'already-spent' }, record: null };
+    if (spend.actionId === h.actionId && spend.delivered === true && !h.delivered) {
+      const marked: SpentOneShotHolder = { actionId: h.actionId, delivered: true };
+      return {
+        claim: { outcome: 'already-spent', by: h.actionId, delivered: true },
+        record: { ...current, spentBy: { ...current.spentBy, [spend.action]: marked } },
+      };
+    }
+    if (spend.actionId !== undefined && spend.reclaimFrom === h.actionId && !h.delivered) {
+      return { claim: { outcome: 'recorded' }, record: { ...current, spentBy: { ...current.spentBy, ...holder } } };
+    }
+    return { claim: { outcome: 'already-spent', by: h.actionId, delivered: h.delivered }, record: null };
   }
-  return { epoch: current.epoch, actions: [...current.actions, spend.action] };
+  return {
+    claim: { outcome: 'recorded' },
+    record: { epoch: current.epoch, actions: [...current.actions, spend.action], spentBy: { ...current.spentBy, ...holder } },
+  };
+}
+
+/** The `release` arm of {@link claimSpentOneShot}; see `SpentOneShotSpend.release`. */
+function releaseSpentOneShot(
+  current: SpentOneShotsLedger | undefined,
+  spend: SpentOneShotSpend,
+): { readonly claim: SpentOneShotClaim; readonly record: SpentOneShotsLedger | null } {
+  if (current === undefined || current.epoch !== spend.epoch || !current.actions.includes(spend.action)) {
+    return { claim: { outcome: 'released' }, record: null };
+  }
+  const h = current.spentBy[spend.action];
+  if (h === undefined) return { claim: { outcome: 'already-spent' }, record: null };
+  if (h.actionId !== spend.actionId || h.delivered) {
+    return { claim: { outcome: 'already-spent', by: h.actionId, delivered: h.delivered }, record: null };
+  }
+  const { [spend.action]: _released, ...spentBy } = current.spentBy;
+  return {
+    claim: { outcome: 'released' },
+    record: { epoch: current.epoch, actions: current.actions.filter((a) => a !== spend.action), spentBy },
+  };
 }
 
 /**
@@ -529,11 +674,12 @@ export function nextSpentOneShotsRecord(
  */
 export function withSpentOneShots(
   render: GguiSession,
-  record: SpentOneShotsRecord | undefined,
+  record: SpentOneShotsRecord | SpentOneShotsLedger | undefined,
 ): GguiSession {
   if (render.type !== 'component') return render;
   const { spentOneShots: _prior, ...rest } = render;
-  return record === undefined ? rest : { ...rest, spentOneShots: record };
+  // Names only: a ledger's holder ids (ggui#1424) never reach a render.
+  return record === undefined ? rest : { ...rest, spentOneShots: { epoch: record.epoch, actions: record.actions } };
 }
 
 /**
