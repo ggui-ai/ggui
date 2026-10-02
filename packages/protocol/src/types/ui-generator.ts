@@ -49,6 +49,23 @@ export interface UIGenerationResponse {
    *   richer metadata (labels, schemas, nextStep hints) should
    *   author the contract themselves and pass it on input.
    * - When no wire hooks are used, this field stays absent.
+   *
+   * What a caller that commits a session reads from it (ggui#1429). The
+   * parties are the generator and the caller that negotiated a contract
+   * before generating (`ggui_render`):
+   *
+   * - A RETURNED contract is the one the component conforms to, and it is
+   *   COMPLETE — never a patch over the negotiated contract. The caller
+   *   commits it as given; a member it leaves out is not carried over
+   *   (`propsSpec` excepted: the session keeps the negotiated one, which
+   *   later prop updates validate against).
+   * - An OMITTED contract means "the negotiated contract, unchanged": the
+   *   caller commits the negotiated contract. It is a defined outcome, not
+   *   an error.
+   * - Observable: the committed session's specs, read back through
+   *   `ggui_get_render_source`. A returned contract that lacks a member the
+   *   negotiated one declares is named in the server's log
+   *   (`generator_contract_narrower`), so a narrower session is findable.
    */
   contract?: DataContract;
 }

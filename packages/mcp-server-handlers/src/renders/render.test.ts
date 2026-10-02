@@ -78,6 +78,7 @@ import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
 import { composeExactKey, ephemeralBlueprintId, registerBlueprint } from './blueprint-registry.js';
 import { CODE_DELIVERY_EVENTS } from './code-delivery-events.js';
+import { createGguiGetRenderSourceHandler } from './get-render-source.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import {
   createGguiRenderHandler,
@@ -3522,5 +3523,98 @@ describe('createGguiRenderHandler — the tool catalog reaches the check, not th
     const row = await harness.renderStore.get(out.sessionId);
     expect(row?.render).toBeDefined();
     expect(row?.render).not.toHaveProperty('agentCapabilities');
+  });
+});
+
+// ggui#1429 — the committed session's contract is the AGREED effective
+// contract when the generator's response carries none. Before, only
+// `propsSpec` fell back: the action and context specs came from the
+// generator's echo alone, so a generator that omitted `contract` committed a
+// session whose one-shot guard, spend record and update validation read `{}`.
+describe('createGguiRenderHandler — a generation that returns no contract commits the agreed one (ggui#1429)', () => {
+  const AGREED: DataContract = {
+    propsSpec: { properties: {} },
+    actionSpec: { confirm: { label: 'Confirm', oneShot: true } },
+    contextSpec: { status: { schema: { type: 'string' }, default: 'idle' } },
+  };
+  const NARROWER = 'generator_contract_narrower';
+
+  it('no response.contract: the committed session carries the agreed action and context specs, and ggui_get_render_source reads them back', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // `coldSourceCode`: ggui_get_render_source reads only a render with authored source on record
+      // that differs from its compiled output.
+      const { harness, handshakeId } = await buildColdGenHarness({
+        contract: AGREED,
+        coldSourceCode: 'export default function Authored() { return null; }',
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const row = await harness.renderStore.get(out.sessionId);
+      const render = row?.render as ComponentGguiSession | undefined;
+      expect(render?.actionSpec).toEqual(AGREED.actionSpec);
+      expect(render?.contextSpec).toEqual(AGREED.contextSpec);
+      const source = await createGguiGetRenderSourceHandler({ renderStore: harness.renderStore }).handler(
+        { sessionId: out.sessionId },
+        CTX,
+      );
+      expect(source.blueprint.contract?.actionSpec).toEqual(AGREED.actionSpec);
+      expect(source.blueprint.contract?.contextSpec).toEqual(AGREED.contextSpec);
+      // Nothing was dropped, so nothing is named.
+      expect(warn.mock.calls.filter(([m]) => String(m).includes(NARROWER))).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a returned contract is taken whole: a member it drops is not restored from the agreed contract, and one line names it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        contract: AGREED,
+        coldContract: { propsSpec: { properties: {} }, contextSpec: AGREED.contextSpec },
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const row = await harness.renderStore.get(out.sessionId);
+      const render = row?.render as ComponentGguiSession | undefined;
+      expect(render?.actionSpec).toBeUndefined();
+      expect(render?.contextSpec).toEqual(AGREED.contextSpec);
+      const named = warn.mock.calls.map(([m]) => String(m)).filter((m) => m.includes(NARROWER));
+      expect(named).toHaveLength(1);
+      expect(named[0]).toContain('"dropped":["actionSpec"]');
+      expect(named[0]).toContain(out.sessionId);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a dropped entry inside a spec both contracts carry is named by its path', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        contract: { ...AGREED, actionSpec: { confirm: { label: 'Confirm', oneShot: true }, cancel: { label: 'Cancel' } } },
+        coldContract: { ...AGREED, actionSpec: { cancel: { label: 'Cancel' } } },
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      const named = warn.mock.calls.map(([m]) => String(m)).filter((m) => m.includes(NARROWER));
+      expect(named).toHaveLength(1);
+      expect(named[0]).toContain('"dropped":["actionSpec.confirm"]');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a returned contract that carries every agreed member names nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({ contract: AGREED, coldContract: AGREED });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      expect(warn.mock.calls.filter(([m]) => String(m).includes(NARROWER))).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

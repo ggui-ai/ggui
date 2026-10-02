@@ -3435,6 +3435,38 @@ type GenerationRunOutcome =
     };
 
 /**
+ * ggui#1429 — what a generator's returned contract leaves out relative to the
+ * agreed one, as paths: a whole spec (`actionSpec`) when the returned
+ * contract carries none of it, else each entry the agreed spec declares and
+ * the returned one lacks (`actionSpec.confirm`). `propsSpec` is not listed:
+ * the commit restores it from the agreed contract. Sorted, so the line is
+ * stable.
+ */
+function droppedContractMembers(agreed: DataContract, returned: DataContract): string[] {
+  const dropped: string[] = [];
+  const keyed = (
+    name: 'actionSpec' | 'streamSpec' | 'contextSpec',
+    want: Readonly<Record<string, unknown>> | undefined,
+    got: Readonly<Record<string, unknown>> | undefined,
+  ): void => {
+    if (want === undefined || Object.keys(want).length === 0) return;
+    if (got === undefined) {
+      dropped.push(name);
+      return;
+    }
+    for (const key of Object.keys(want)) {
+      if (!(key in got)) dropped.push(`${name}.${key}`);
+    }
+  };
+  keyed('actionSpec', agreed.actionSpec, returned.actionSpec);
+  keyed('streamSpec', agreed.streamSpec, returned.streamSpec);
+  keyed('contextSpec', agreed.contextSpec, returned.contextSpec);
+  if (agreed.clientCapabilities !== undefined && returned.clientCapabilities === undefined) dropped.push('clientCapabilities');
+  if (agreed.agentCapabilities !== undefined && returned.agentCapabilities === undefined) dropped.push('agentCapabilities');
+  return dropped.sort();
+}
+
+/**
  * What a successful generation hands its registration (#460, ggui#1280):
  * the code, its engine provenance, the authored source when the generator
  * distinguishes one, and the minting engine's build when it reports one.
@@ -3698,7 +3730,28 @@ async function runGenerationIntoGguiSession(
   }
 
   // Happy path — commit the authoritative ComponentGguiSession.
-  const responseContracts = result.response.contract;
+  //
+  // ggui#1429 — the session's contract is the generator's when it returns
+  // one, and the AGREED effective contract when it returns none: a
+  // generation that omits `contract` says "the agreed contract, unchanged".
+  // Without the fallback such a session committed no action, stream or
+  // context spec, so its one-shot guard, its spend record and its
+  // update/amend validation all read `{}`. A RETURNED contract is taken
+  // whole — it is complete, never a patch over the agreed one — so a member
+  // it leaves out is not restored here (`propsSpec` alone is, below); what
+  // it dropped is named once, so a narrower session is a line someone can
+  // find.
+  const agreedContract = story.contract;
+  const returnedContract = result.response.contract;
+  const responseContracts = returnedContract ?? agreedContract;
+  if (returnedContract !== undefined && agreedContract !== undefined) {
+    const dropped = droppedContractMembers(agreedContract, returnedContract);
+    if (dropped.length > 0) {
+      console.warn(
+        `[ggui_render] generator_contract_narrower ${JSON.stringify({ sessionId, appId: ctx.appId, dropped })}`,
+      );
+    }
+  }
   const componentRender: ComponentGguiSession = {
     id: sessionId,
     appId: ctx.appId,
