@@ -41,7 +41,7 @@ describe('control-inline-border (ggui#1697)', () => {
     const hit = await fires(card(chip));
     expect(hit).toHaveLength(1);
     expect(hit[0]).toMatchObject({ result: 'fail', severity: 'critical', category: 'tokens' });
-    // The description starts with the check's id, so the pod's logged violation lines can be counted per mint.
+    // The description starts with the check's id, so a host's logged violation lines can be counted per generation.
     expect(hit[0]?.description.startsWith('control-inline-border:')).toBe(true);
     expect(hit[0]?.description).toContain('borderColor');
   }, 60_000);
