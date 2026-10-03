@@ -481,13 +481,14 @@ MANDATORY:
 2. NEVER use CSS gradients with custom colors. If you need a gradient: \`linear-gradient(to bottom, var(--ggui-color-primary-500), var(--ggui-color-primary-700))\`.
 3. NEVER invent your own palette. The system provides primary, neutral, success, warning, error, and info — use ONLY these.
 4. NEVER include literal fallback values in ANY token reference — colors, spacing, typography, radius, shadows alike. Write \`var(--ggui-spacing-4)\` bare, never \`var(--ggui-spacing-4, 16px)\`; \`var(--ggui-color-primary-600)\` bare, never \`var(--ggui-color-primary-600, #0284c7)\`. The runtime injects every token; a literal fallback paints the wrong value exactly when the operator's theme matters most.
+5. NEVER set an inline \`border\`, \`borderColor\`, \`borderWidth\` or \`borderStyle\` on a kit control — \`Button\`, \`Input\`, \`Select\`, \`TextArea\`, \`Checkbox\`, \`RadioGroup\`, \`Toggle\`, \`SearchField\`. The control draws its own boundary, and it clears 3:1 on its surface in every theme: an outline chip is \`<Button variant="outline">\` exactly as it comes (its edge is \`controlAccentOutline\`). Where you draw a control-like edge on your own element, use \`var(--ggui-color-controlOutline)\`. A ramp step such as \`primary-200\` as a control's border is nearly invisible (about 1.1:1).
 
 Token categories:
 - Brand fills: \`var(--ggui-color-primary-600)\`, \`var(--ggui-color-primary-50)\`
 - Accent text: \`var(--ggui-color-link)\` — eyebrows, taglines, links, labels; readable per mode (never a bare \`primary-<stop>\` as a text color)
 - Text: \`var(--ggui-color-onContainer)\`, \`var(--ggui-color-onSunken)\`
 - Backgrounds: \`var(--ggui-color-container)\`, \`var(--ggui-color-sunken)\`
-- Borders: \`var(--ggui-color-outline)\`
+- Borders: \`var(--ggui-color-outline)\` — dividers and the edges of non-interactive boxes; a control's edge is the kit's (rule 5)
 - Spacing: \`var(--ggui-spacing-4)\`, \`var(--ggui-spacing-6)\`
 - Typography: \`var(--ggui-font-size-sm)\`, \`var(--ggui-font-weight-semibold)\`
 - Shadows: \`var(--ggui-shape-shadow-sm)\`, \`var(--ggui-shape-shadow-md)\`, \`var(--ggui-shape-shadow-lg)\`
@@ -502,7 +503,7 @@ Use the FULL primary palette throughout the component — NOT only on submit but
 | Element | Token | Purpose |
 |---------|-------|---------|
 | Section headers, hero areas, highlight strips | \`primary-50\` / \`primary-100\` | Subtle branded backgrounds |
-| Borders, dividers, focus rings, input focus | \`primary-200\` / \`primary-300\` | Branded structure |
+| Dividers, section rules, edges of non-interactive boxes | \`primary-200\` / \`primary-300\` | Branded structure — never a control's border (rule 5) |
 | Accent TEXT — eyebrows, taglines, links, labels, inline arrows | \`link\` (\`var(--ggui-color-link)\`) or \`<Text tone="emphasized">\` | The brand's READABLE ink, derived per mode to clear 4.5:1 — a bare \`primary-300…600\` as a text color fails tier-0 |
 | Icon fills, badges, active indicators | \`primary-500\` / \`primary-600\` | Core accent fill |
 | Buttons, CTAs, filled interactive elements | \`primary-600\` / \`primary-700\` | Primary actions |

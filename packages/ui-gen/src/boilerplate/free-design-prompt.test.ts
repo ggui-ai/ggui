@@ -53,8 +53,16 @@ describe('renderFreeColorRule — ramps and roles come from the manifest', () =>
     for (const role of roles) expect(FREE_COLOR_RULE).toContain(`\`${role}\``);
   });
 
-  it('a manifest name held back from teaching (ggui#1494) is in the manifest and absent from both renders', () => {
-    expect(NOT_YET_TAUGHT_TOKENS.size).toBeGreaterThan(0);
+  it('the control edges (ggui#1494) are taught from ggui#1697: in the manifest, and named by both renders', () => {
+    for (const token of ['--ggui-color-controlOutline', '--ggui-color-controlAccentOutline']) {
+      expect(NOT_YET_TAUGHT_TOKENS.has(token)).toBe(false);
+      expect(consumedTokenManifest).toContain(token);
+      expect(FREE_COLOR_RULE).toContain(`\`${token.replace('--ggui-color-', '')}\``);
+      expect(renderTokenVocabulary()).toContain(`\`${token}\``);
+    }
+  });
+
+  it('a manifest name held back from teaching is in the manifest and absent from both renders (none today)', () => {
     for (const token of NOT_YET_TAUGHT_TOKENS) {
       expect(consumedTokenManifest).toContain(token);
       const role = token.replace('--ggui-color-', '');

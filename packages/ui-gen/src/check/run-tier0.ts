@@ -571,6 +571,50 @@ function detectComponentNeverReturns(
  * Wraps the same logic as runSelfChecks (adapters/tools.ts) but emits EvalIssue[].
  * Also runs contract validation when contract are provided.
  */
+/** The kit controls whose boundary the design system draws (ggui#1697). */
+const KIT_CONTROLS = ['Button', 'Input', 'Select', 'TextArea', 'Checkbox', 'RadioGroup', 'Toggle', 'SearchField'] as const;
+
+/**
+ * Opening tags of kit controls, read brace- and quote-aware: an attribute like `onClick={() => x}` holds a `>` that a
+ * plain `[^>]*` pattern stops at, which would hide every attribute after it.
+ */
+function kitControlTags(source: string): { name: string; attrs: string; line: number }[] {
+  const out: { name: string; attrs: string; line: number }[] = [];
+  const open = new RegExp(`<(${KIT_CONTROLS.join('|')})\\b`, 'g');
+  for (const m of source.matchAll(open)) {
+    const start = (m.index ?? 0) + m[0].length;
+    let depth = 0;
+    let quote: string | null = null;
+    let i = start;
+    for (; i < source.length; i += 1) {
+      const c = source[i];
+      if (quote !== null) {
+        if (c === quote && source[i - 1] !== '\\') quote = null;
+      } else if (c === '"' || c === "'" || c === '`') quote = c;
+      else if (c === '{') depth += 1;
+      else if (c === '}') depth -= 1;
+      else if (c === '>' && depth === 0) break;
+    }
+    out.push({ name: m[1] ?? '', attrs: source.slice(start, i), line: source.slice(0, m.index ?? 0).split('\n').length });
+  }
+  return out;
+}
+
+/** A border key (not a radius) in the tag's inline style, or in a same-file object its `style={name}` points at. */
+function inlineBorderKey(attrs: string, source: string): string | null {
+  const BORDER = /\b(border(?:Top|Right|Bottom|Left)?(?:Color|Width|Style)?)\s*:/;
+  const style = attrs.match(/\bstyle=\{\{([\s\S]*)\}\}/);
+  if (style !== null) {
+    const hit = (style[1] ?? '').match(BORDER);
+    if (hit !== null) return hit[1] ?? null;
+  }
+  const named = attrs.match(/\bstyle=\{\s*([A-Za-z_$][\w$]*)\s*\}/);
+  if (named === null) return null;
+  const decl = source.match(new RegExp(`\\b(?:const|let)\\s+${named[1]}\\b[^=]*=\\s*\\{([^{}]*)\\}`));
+  const hit = decl !== null ? (decl[1] ?? '').match(BORDER) : null;
+  return hit !== null ? hit[1] ?? null : null;
+}
+
 export async function runTier0Checks(
   sourceCode: string,
   contract?: DataContract,
@@ -1167,6 +1211,23 @@ export async function runTier0Checks(
         line: tagLine,
       });
     }
+  }
+
+  // ── A kit control's boundary is the kit's (ggui#1697) ──────
+  // A control draws its own edge, derived to clear 3:1 on its surface (`controlOutline`, or
+  // `controlAccentOutline` on an outline Button); an inline border paints over it, and the ramp step
+  // the model reached for (`primary-200`) measured about 1.1:1. The prompt's rule 5 says the same, so
+  // this check enforces what the model was told. The description starts with the check's id so the
+  // generator's logged violation lines (`✗ …`) count its fires per generation, in-turn repairs included.
+  for (const tag of enforceDesignVocabulary ? kitControlTags(sourceCode) : []) {
+    const key = inlineBorderKey(tag.attrs, sourceCode);
+    if (key === null) continue;
+    issues.push({
+      tier: 0, result: 'fail', category: 'tokens', subcategory: 'control-inline-border', severity: 'critical',
+      description: `control-inline-border: <${tag.name}> sets an inline \`${key}\` — a kit control draws its own boundary, and an inline border paints over it`,
+      fix: `Remove the border from <${tag.name}>'s style (keep borderRadius if you need it). An outline chip is <Button variant="outline"> exactly as it comes; a control-like edge on your own element uses var(--ggui-color-controlOutline).`,
+      line: tag.line,
+    });
   }
 
   // ── Missing Props interface ───────────────────────────────

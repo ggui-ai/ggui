@@ -18,13 +18,12 @@ import { consumedTokenManifest } from "@ggui-ai/design/themes";
  * closed-set check still admits them: a card that references one is valid wherever this release
  * renders it.
  *
- * - ggui#1494 — the control edges (`controlOutline`, `controlAccentOutline`): derived and completed
- *   from this release; taught from the next.
+ * Empty today. The control edges (`controlOutline`, `controlAccentOutline`, ggui#1494) were held here
+ * until every serving and rollback runtime declared them; the derivation (`10a0c00f2`) is in every
+ * release from tag 17 on, so they are taught from ggui#1697, in the same change as the prompt rule that
+ * teaches a control's edge.
  */
-export const NOT_YET_TAUGHT_TOKENS: ReadonlySet<string> = new Set([
-  "--ggui-color-controlAccentOutline",
-  "--ggui-color-controlOutline",
-]);
+export const NOT_YET_TAUGHT_TOKENS: ReadonlySet<string> = new Set<string>([]);
 
 /** The manifest as the model is taught it. */
 export const taughtTokenManifest: readonly string[] = consumedTokenManifest.filter(

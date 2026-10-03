@@ -49,6 +49,7 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 | link | var(--ggui-color-link) | Accent TEXT — eyebrows, taglines, links, labels, inline arrows: the brand's readable ink, derived per mode to clear 4.5:1 on the container and the ground |
 | outline | var(--ggui-color-outline) | Borders, dividers |
 | outlineVariant | var(--ggui-color-outlineVariant) | Subtle borders |
+| controlOutline | var(--ggui-color-controlOutline) | A control's edge — clears 3:1 on its surface; kit controls draw it themselves |
 
 **Usage pattern:**
 - Page/section background → \`var(--ggui-color-ground)\`
@@ -173,7 +174,7 @@ Use \`var(--ggui-spacing-N)\` for all padding, gap, and margin values. **Never u
 ### Color usage guide
 - **Layering roles** (ground, container, elevated, sunken + their on* inks; outline): one kind of AREA each — use them for every background/text/border decision; they adapt to any theme
 - **primary-50/100**: Section backgrounds, highlight strips, card headers
-- **primary-200/300**: Borders, dividers, focus rings, input outlines
+- **primary-200/300**: Dividers and section rules — never a control's border: kit controls draw their own edge (\`controlOutline\` / \`controlAccentOutline\`), so set no inline border on them
 - **primary-500/600**: Filled buttons, CTAs, badges, icon fills, active indicators — fills and borders, NOT a text color
 - **link**: Accent TEXT — eyebrows, taglines, links, labels, inline arrows; the brand's readable ink per mode (a bare \`primary-300…600\` as a text color fails tier-0: \`universal.accent_text_ink\`)
 - **primary-700/800/900**: Headings and text on light primary backgrounds
