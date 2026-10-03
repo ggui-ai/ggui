@@ -1,5 +1,6 @@
 import type { FooterProps } from './types';
 import { fontSize, fontWeight, lineHeight } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * Footer - A site footer with logo, link columns, and bottom bar
@@ -126,7 +127,7 @@ export function Footer({
             <span
               style={{
                 fontSize: fontSize.sm,
-                color: 'var(--ggui-color-neutral-500, #6b7280)',
+                color: resolveToneCss('subtle'),
                 lineHeight: lineHeight.normal,
               }}
             >
@@ -145,7 +146,7 @@ export function Footer({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--ggui-color-neutral-500, #6b7280)',
+                  color: resolveToneCss('subtle'),
                   transition: 'color 0.15s',
                 }}
               >
@@ -167,7 +168,7 @@ export function Footer({
                 }
                 style={{
                   fontSize: fontSize.sm,
-                  color: 'var(--ggui-color-neutral-500, #6b7280)',
+                  color: resolveToneCss('subtle'),
                   textDecoration: 'none',
                   transition: 'color 0.15s',
                 }}

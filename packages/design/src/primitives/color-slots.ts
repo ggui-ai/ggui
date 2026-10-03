@@ -32,7 +32,7 @@
  * | ------------- | ---------------------------------- | ------------------------------------------- |
  * | `default`     | `--ggui-color-onContainer`         | primary body text (most common)              |
  * | `muted`       | `--ggui-color-onSunken`            | secondary / metadata / captions             |
- * | `subtle`      | `--ggui-color-neutral-500`         | very-low-emphasis labels, hint text          |
+ * | `subtle`      | `--ggui-color-onSunken`            | very-low-emphasis labels, hint text (= muted) |
  * | `emphasized`  | `--ggui-color-link` (700 beneath)  | accent text (branded label, tagline, eyebrow) — the theme's READABLE accent ink |
  * | `loud`        | `--ggui-color-link` (500 beneath)  | the strongest accent (call-to-action label) — the theme's READABLE accent ink |
  * | `success`     | `--ggui-color-success`             | success status text (semantic flat token)    |
@@ -72,13 +72,14 @@ export function resolveToneCss(tone: ToneSlot): string {
     case 'muted':
       return 'var(--ggui-color-onSunken, #52525b)';
     case 'subtle':
-      // `subtle` resolves to `neutral-500` rather than `outline`
-      // (intended for borders, ~2:1 contrast on dark surfaces —
-      // failed WCAG for text). Both light and dark themes ship
-      // `neutral-500` as the canonical tertiary-text grey: light =
-      // #6e6d74 (~5:1 on paper), dark = #5e5c70 (~4:1 on midnight).
-      // Stays "barely visible" for hint-text usage but readable.
-      return 'var(--ggui-color-neutral-500, #71717a)';
+      // `subtle` resolves to the muted ink (ggui#1567). It used to be
+      // `neutral-500`, which is a non-text step on dark grounds: in gguiDark
+      // `#8c8c93` reads 4.36:1 on sunken and 3.25:1 on a raised row. Hint
+      // text must still clear AA wherever it sits, and the theme's
+      // `onSunken` is the ink measured for that, so the two tones resolve
+      // alike. The tone keeps its NAME, so generated code that asks for it
+      // still compiles.
+      return 'var(--ggui-color-onSunken, #52525b)';
     case 'emphasized':
       // Accent TEXT reads through the theme's readable accent ink (ggui#1039 —
       // the #1035 rule for every accent-text slot): the registry audit cleared

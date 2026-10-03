@@ -4,6 +4,7 @@ import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * CommandPalette - A searchable command menu (like Cmd+K)
@@ -196,7 +197,7 @@ export function CommandPalette({
               <Spinner size={24} />
             </div>
           ) : flatCommands.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+            <div style={{ textAlign: 'center', padding: '32px', color: resolveToneCss('subtle') }}>
               No commands found
             </div>
           ) : (
@@ -207,7 +208,7 @@ export function CommandPalette({
                     padding: '8px 12px',
                     fontSize: fontSize.xs,
                     fontWeight: fontWeight.semibold,
-                    color: 'var(--ggui-color-neutral-500, #6b7280)',
+                    color: resolveToneCss('subtle'),
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                   }}
@@ -243,14 +244,14 @@ export function CommandPalette({
                       }}
                     >
                       {cmd.icon && (
-                        <span style={{ display: 'flex', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+                        <span style={{ display: 'flex', color: resolveToneCss('subtle') }}>
                           {cmd.icon}
                         </span>
                       )}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: fontSize.sm }}>{cmd.label}</div>
                         {cmd.description && (
-                          <div style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+                          <div style={{ fontSize: fontSize.xs, color: resolveToneCss('subtle') }}>
                             {cmd.description}
                           </div>
                         )}
@@ -262,7 +263,7 @@ export function CommandPalette({
                             backgroundColor: 'var(--ggui-color-sunken, #f3f4f6)',
                             borderRadius: radius.sm,
                             fontSize: fontSize.xs,
-                            color: 'var(--ggui-color-neutral-500, #6b7280)',
+                            color: resolveToneCss('subtle'),
                             fontFamily: 'inherit',
                           }}
                         >
@@ -286,7 +287,7 @@ export function CommandPalette({
             alignItems: 'center',
             gap: '16px',
             fontSize: fontSize.xs,
-            color: 'var(--ggui-color-neutral-500, #6b7280)',
+            color: resolveToneCss('subtle'),
           }}
         >
           <span>↑↓ Navigate</span>

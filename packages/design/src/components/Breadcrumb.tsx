@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import type { BreadcrumbProps } from './types';
 import { Link } from '../primitives/Link';
 import { fontSize } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * Breadcrumb - A navigation trail showing the current location
@@ -38,7 +39,7 @@ export function Breadcrumb({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  color: isLast ? 'var(--ggui-color-onContainer, #111827)' : 'var(--ggui-color-neutral-500, #6b7280)',
+                  color: isLast ? 'var(--ggui-color-onContainer, #111827)' : resolveToneCss('subtle'),
                 }}
               >
                 {item.icon}
@@ -75,7 +76,7 @@ export function Breadcrumb({
                   background: 'none',
                   border: 'none',
                   padding: 0,
-                  color: 'var(--ggui-color-neutral-500, #6b7280)',
+                  color: resolveToneCss('subtle'),
                   cursor: 'pointer',
                   fontSize: 'inherit',
                 }}

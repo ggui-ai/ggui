@@ -85,7 +85,7 @@ export const lightTheme: DtcgTheme = {
     ground: { $type: 'color', $value: '#ffffff' },
     onGround: { $type: 'color', $value: '#111827' },
     sunken: { $type: 'color', $value: '#f3f4f6' },
-    onSunken: { $type: 'color', $value: '#6b7280' },
+    onSunken: { $type: 'color', $value: '#596273' },
     container: { $type: 'color', $value: '#ffffff' },
     onContainer: { $type: 'color', $value: '#111827' },
     outline: { $type: 'color', $value: '#9ca3af' },

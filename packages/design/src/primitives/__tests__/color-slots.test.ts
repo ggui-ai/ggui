@@ -21,7 +21,8 @@ describe('resolveToneCss', () => {
   it.each([
     ['default', 'var(--ggui-color-onContainer, #18181b)'],
     ['muted', 'var(--ggui-color-onSunken, #52525b)'],
-    ['subtle', 'var(--ggui-color-neutral-500, #71717a)'],
+    // ggui#1567: subtle resolves to the muted ink, the same as `muted`.
+    ['subtle', 'var(--ggui-color-onSunken, #52525b)'],
     ['emphasized', 'var(--ggui-color-link, var(--ggui-color-primary-700, #0369a1))'], // ggui#1039: the readable accent ink, 700 beneath
     ['loud', 'var(--ggui-color-link, var(--ggui-color-primary-500, #0ea5e9))'],
     ['success', 'var(--ggui-color-success-500, #15803d)'],

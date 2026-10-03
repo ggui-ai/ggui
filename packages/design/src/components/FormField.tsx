@@ -1,5 +1,6 @@
 import type { FormFieldProps } from './types';
 import { fontSize, fontWeight } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * FormField - A wrapper that adds label, description, error, and helper text to form inputs
@@ -42,7 +43,7 @@ export function FormField({
         <span
           style={{
             fontSize: fontSize.xs,
-            color: 'var(--ggui-color-neutral-500, #6b7280)',
+            color: resolveToneCss('subtle'),
             marginBottom: '4px',
           }}
         >
@@ -54,7 +55,7 @@ export function FormField({
         <span
           style={{
             fontSize: fontSize.xs,
-            color: hasError ? 'var(--ggui-color-error-500, #ef4444)' : 'var(--ggui-color-neutral-500, #6b7280)',
+            color: hasError ? 'var(--ggui-color-error-500, #ef4444)' : resolveToneCss('subtle'),
           }}
         >
           {error || helperText}

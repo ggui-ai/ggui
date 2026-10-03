@@ -5,6 +5,7 @@ import { Progress } from '../primitives/Progress';
 import { Icon } from '../primitives/Icon';
 import { radius } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -101,7 +102,7 @@ export function FileUploader({
         <p style={{ margin: '12px 0 4px', color: 'var(--ggui-color-onContainer, #374151)', fontSize: fontSize.sm }}>
           {dragDrop ? 'Drag and drop files here, or click to browse' : 'Click to browse files'}
         </p>
-        <p style={{ margin: 0, color: 'var(--ggui-color-neutral-500, #6b7280)', fontSize: fontSize.xs }}>
+        <p style={{ margin: 0, color: resolveToneCss('subtle'), fontSize: fontSize.xs }}>
           {accept && `Accepted: ${accept}`}
           {maxSize && ` • Max size: ${formatFileSize(maxSize)}`}
           {maxFiles && ` • Max files: ${maxFiles}`}
@@ -137,7 +138,7 @@ export function FileUploader({
                 >
                   {file.name}
                 </p>
-                <p style={{ margin: '2px 0 0', fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+                <p style={{ margin: '2px 0 0', fontSize: fontSize.xs, color: resolveToneCss('subtle') }}>
                   {formatFileSize(file.size)}
                   {file.error && (
                     <span style={{ color: 'var(--ggui-color-error-500, #ef4444)', marginLeft: '8px' }}>

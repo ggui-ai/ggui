@@ -5,6 +5,7 @@ import { Button } from '../primitives/Button';
 import { TextArea } from '../primitives/TextArea';
 import { Spinner } from '../primitives/Spinner';
 import { fontSize } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 function CommentItem({
   comment,
@@ -45,7 +46,7 @@ function CommentItem({
             <span style={{ fontWeight: 500, fontSize: fontSize.sm }}>
               {comment.author.name}
             </span>
-            <span style={{ color: 'var(--ggui-color-neutral-500, #6b7280)', fontSize: fontSize.xs }}>
+            <span style={{ color: resolveToneCss('subtle'), fontSize: fontSize.xs }}>
               {timestamp}
             </span>
           </div>
@@ -74,7 +75,7 @@ function CommentItem({
               style={{
                 background: 'none',
                 border: 'none',
-                color: 'var(--ggui-color-neutral-500, #6b7280)',
+                color: resolveToneCss('subtle'),
                 fontSize: fontSize.xs,
                 cursor: 'pointer',
               }}

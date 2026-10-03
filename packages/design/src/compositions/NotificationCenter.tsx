@@ -2,6 +2,7 @@ import type { NotificationCenterProps, Notification } from './types';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
+import { resolveToneCss } from '../primitives/color-slots';
 import { radius } from '../tokens/spacing';
 import { fontSize, fontWeight } from '../tokens/typography';
 
@@ -34,7 +35,10 @@ function NotificationItem({
         display: 'flex',
         gap: '12px',
         padding: '12px',
-        backgroundColor: notification.read ? 'transparent' : 'var(--ggui-color-primaryContainer, #f0f9ff)',
+        // Unread is carried by the dot and the title's weight; the row takes the
+        // ground its muted text is measured on (ggui#1567), not a raised accent
+        // ground where that text falls under AA in dark themes.
+        backgroundColor: notification.read ? 'transparent' : 'var(--ggui-color-sunken, #f4f4f5)',
         borderRadius: radius.md,
         transition: 'background-color 0.15s',
       }}
@@ -87,7 +91,7 @@ function NotificationItem({
           </p>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
-          <span style={{ color: 'var(--ggui-color-neutral-400, #9ca3af)', fontSize: fontSize.xs }}>{timestamp}</span>
+          <span style={{ color: resolveToneCss('subtle'), fontSize: fontSize.xs }}>{timestamp}</span>
           {!notification.read && (
             <button
               onClick={() => onMarkAsRead?.(notification.id)}
@@ -197,7 +201,7 @@ export function NotificationCenter({
             <Spinner size={24} />
           </div>
         ) : notifications.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+          <div style={{ textAlign: 'center', padding: '32px', color: resolveToneCss('subtle') }}>
             {emptyText}
           </div>
         ) : (

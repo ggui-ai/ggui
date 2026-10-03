@@ -6,6 +6,7 @@ import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
 import { radius } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * ChatWindow - A chat interface with messages and input
@@ -149,7 +150,7 @@ export function ChatWindow({
 
         {typing && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+            <span style={{ fontSize: fontSize.xs, color: resolveToneCss('subtle') }}>
               {typing.name} is typing...
             </span>
           </div>

@@ -88,10 +88,9 @@ function varsOf(mode: 'light' | 'dark'): Record<string, string> {
 const AA_PAIRS: ReadonlyArray<readonly [string, string]> = [
   // Plain text on the three grounds.
   ['onContainer', 'container'],
-  ['onSunken', 'sunken'],
+  ['onSunken', 'sunken'], // muted text, and hint text: the 'subtle' tone resolves here too (ggui#1567)
   ['onSunken', 'container'],
   ['onContainer', 'container'],
-  ['neutral-500', 'container'], // hint text ('subtle' tone)
   // Solid-accent components (Button primary/danger, Tabs pills,
   // Checkbox mark) — bg is the -600 stop in the variant styles.
   ['onPrimary', 'primary-500'],

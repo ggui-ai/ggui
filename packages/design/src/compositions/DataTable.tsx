@@ -3,6 +3,7 @@ import { Checkbox } from '../primitives/Checkbox';
 import { Spinner } from '../primitives/Spinner';
 import { Icon } from '../primitives/Icon';
 import { fontSize, fontWeight } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * DataTable - A sortable, selectable data table
@@ -118,7 +119,7 @@ export function DataTable<T extends Record<string, unknown>>({
             <tr>
               <td
                 colSpan={columns.length + (selectable ? 1 : 0)}
-                style={{ padding: '48px', textAlign: 'center', color: 'var(--ggui-color-neutral-500, #6b7280)' }}
+                style={{ padding: '48px', textAlign: 'center', color: resolveToneCss('subtle') }}
               >
                 {emptyText}
               </td>

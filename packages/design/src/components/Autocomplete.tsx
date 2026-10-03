@@ -4,6 +4,7 @@ import { Input } from '../primitives/Input';
 import { Spinner } from '../primitives/Spinner';
 import { radius, shadow, zIndex } from '../tokens/spacing';
 import { fontSize } from '../tokens/typography';
+import { resolveToneCss } from '../primitives/color-slots';
 
 /**
  * Autocomplete - An input with suggestion dropdown
@@ -140,7 +141,7 @@ export function Autocomplete({
               style={{
                 padding: '12px',
                 textAlign: 'center',
-                color: 'var(--ggui-color-neutral-500, #6b7280)',
+                color: resolveToneCss('subtle'),
                 fontSize: fontSize.sm,
               }}
             >
@@ -168,7 +169,7 @@ export function Autocomplete({
                 <div style={{ flex: 1 }}>
                   <div>{option.label}</div>
                   {option.description && (
-                    <div style={{ fontSize: fontSize.xs, color: 'var(--ggui-color-neutral-500, #6b7280)' }}>
+                    <div style={{ fontSize: fontSize.xs, color: resolveToneCss('subtle') }}>
                       {option.description}
                     </div>
                   )}
