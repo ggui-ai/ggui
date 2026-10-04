@@ -1,6 +1,7 @@
 // packages/ui-gen/src/evaluation/loop.ts
 
 import { query, type McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
+import { sdkToolPins } from '../adapters/claude/sdk-tool-pins';
 import { runEvaluation } from './evaluator';
 import {
   extractCompiledCodeFromMessage,
@@ -39,8 +40,13 @@ export interface EvaluationLoopOptions {
     cwd?: string;
     /** MCP servers available to the fix agent */
     mcpServers?: Record<string, McpServerConfig>;
-    /** Tools the fix agent is allowed to call */
+    /** Tool names to approve. Absent → every tool of every server in `mcpServers` (ggui#1714). */
     allowedTools?: string[];
+    /**
+     * CLI built-in tools to offer the fix agent (e.g. `['Write']`). Default: none.
+     * An explicit opt-in: a built-in that writes or executes acts on the host (ggui#1714).
+     */
+    builtinTools?: readonly string[];
     /** LLM model for fix rounds */
     model?: string;
     /** Environment variables (includes BYOK credentials) */
@@ -89,6 +95,18 @@ export async function runEvaluationLoop(
   let currentSourceCode: string | undefined = context.sourceCode;
   let round = 0;
   const maxRounds = Math.min(config.maxRounds ?? 3, MAX_EVAL_ROUNDS_HARD_LIMIT);
+
+  // ggui#1714 — a fix round runs with no CLI built-ins unless asked for. With no
+  // MCP server and no built-in either, the fix agent has nothing that can return
+  // code, and every fix round would silently hand back the original: refuse.
+  const offersATool =
+    Object.keys(generatorOptions?.mcpServers ?? {}).length > 0 || (generatorOptions?.builtinTools?.length ?? 0) > 0;
+  if (maxRounds > 1 && !offersATool) {
+    throw new Error(
+      'runEvaluationLoop: a fix round needs a tool that can return code — pass generatorOptions.mcpServers ' +
+        "(e.g. a server with compile_component) or opt into a built-in with generatorOptions.builtinTools (e.g. ['Write']).",
+    );
+  }
 
   while (round < maxRounds) {
     round++;
@@ -145,12 +163,15 @@ export async function runEvaluationLoop(
         maxTurns: 15,
         maxBudgetUsd: config.maxBudgetPerFix,
         env,
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
         ...(cliPath && { pathToClaudeCodeExecutable: cliPath }),
         ...(generatorOptions?.cwd && { cwd: generatorOptions.cwd }),
         ...(generatorOptions?.mcpServers && { mcpServers: generatorOptions.mcpServers }),
-        ...(generatorOptions?.allowedTools && { allowedTools: generatorOptions.allowedTools }),
+        // ggui#1714 — no CLI built-ins unless asked for, no host settings, no permission bypass.
+        ...sdkToolPins({
+          mcpServers: generatorOptions?.mcpServers,
+          allowedTools: generatorOptions?.allowedTools,
+          builtinTools: generatorOptions?.builtinTools,
+        }),
         ...(generatorOptions?.model && { model: generatorOptions.model }),
         ...(generatorOptions?.stderr && { stderr: generatorOptions.stderr }),
       },

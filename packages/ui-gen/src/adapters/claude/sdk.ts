@@ -14,6 +14,7 @@ import type { AdapterResult, ProviderName, AdapterMode } from '../types';
 import { createArtifacts, processMessage } from './message-parser';
 import { createToolMcpServer } from './tool-bridge';
 import { claudeCodeLoginQueryOptions, loginChildEnv } from './claude-code-login';
+import { sdkToolPins } from './sdk-tool-pins';
 
 export class ClaudeSdkAdapter extends GeneratorAdapter {
   readonly provider: ProviderName = 'claude';
@@ -73,9 +74,8 @@ export class ClaudeSdkAdapter extends GeneratorAdapter {
         systemPrompt: params.systemPrompt,
         ...(mcpServers && { mcpServers }),
         ...(cfg.agents && { agents: cfg.agents }),
-        ...(allowedTools && { allowedTools }),
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
+        // ggui#1714 — no CLI built-ins unless asked for, no host settings, no permission bypass.
+        ...sdkToolPins({ mcpServers, allowedTools, builtinTools: cfg.builtinTools }),
         ...(cfg.cliPath && { pathToClaudeCodeExecutable: cfg.cliPath }),
         ...(cfg.stderr && { stderr: cfg.stderr }),
         // ggui#1185 — tool-less, config-less, non-bare; the model is pinned above.

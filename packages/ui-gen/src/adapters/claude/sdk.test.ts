@@ -8,13 +8,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 
-const seen = vi.hoisted(() => ({ options: [] as Options[] }));
+const seen = vi.hoisted(() => ({ options: [] as Options[], before: [] as object[] }));
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   query: (args: { options: Options }) => {
     seen.options.push(args.options);
     // One final message with no compiled code: the adapter may fail AFTER the
     // call; the assertions below are on what it sent, not on what came back.
     return (async function* () {
+      yield* seen.before;
       yield {
         type: "result",
         subtype: "success",
@@ -41,6 +42,7 @@ const PARAMS = {
 describe("ClaudeSdkAdapter — claude-code-login path (ggui#1185)", () => {
   afterEach(() => {
     seen.options.length = 0;
+    seen.before.length = 0;
   });
 
   it("strips every provider key from the spawned env, pins tools/settings (no --no-bare: the bundled binary rejects it), keeps the model", async () => {
@@ -93,15 +95,40 @@ describe("ClaudeSdkAdapter — claude-code-login path (ggui#1185)", () => {
     }
   });
 
-  it("off the login path, nothing is pinned and the env is passed as configured", async () => {
+  it("off the login path the env is passed as configured, and the tool surface is still pinned: no built-ins, no host settings, no bypass (ggui#1714)", async () => {
     const adapter = new ClaudeSdkAdapter({
       env: { ANTHROPIC_API_KEY: "sk-ant-real", PATH: "/usr/bin" },
     });
     await adapter.generate(PARAMS).catch(() => undefined);
     const o = seen.options[0]!;
     expect((o.env as Record<string, string>).ANTHROPIC_API_KEY).toBe("sk-ant-real");
-    expect(o.tools).toBeUndefined();
-    expect(o.settingSources).toBeUndefined();
+    expect(o.tools).toEqual([]);
+    expect(o.settingSources).toEqual([]);
+    expect(o.permissionMode).toBeUndefined();
+    expect(o.allowDangerouslySkipPermissions).toBeUndefined();
     expect(o.extraArgs).toBeUndefined();
+  });
+
+  it("a caller's own MCP servers are approved server-wide; built-ins come only by opt-in, and are approved with them (ggui#1714)", async () => {
+    const server = { type: "stdio" as const, command: "node" };
+    await new ClaudeSdkAdapter({ env: {}, mcpServers: { app: server } }).generate(PARAMS).catch(() => undefined);
+    await new ClaudeSdkAdapter({ env: {}, mcpServers: { app: server }, builtinTools: ["Write"] }).generate(PARAMS).catch(() => undefined);
+    const [plain, optedIn] = seen.options;
+    expect(plain!.allowedTools).toEqual(["mcp__app"]);
+    expect(plain!.tools).toEqual([]);
+    expect(optedIn!.tools).toEqual(["Write"]);
+    expect(optedIn!.allowedTools).toEqual(["mcp__app", "Write"]);
+  });
+
+  it("with no built-in Write, the source comes from the bridged compile_component call (ggui#1714)", async () => {
+    seen.before.push({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "t1", name: "mcp__ggui__compile_component", input: { code: "export default () => null;" } }] },
+    }, {
+      type: "user",
+      message: { content: [{ type: "tool_result", tool_use_id: "t1", content: JSON.stringify({ success: true, compiledCode: "compiled" }) }] },
+    });
+    const result = await new ClaudeSdkAdapter({ env: {} }).generate(PARAMS);
+    expect(result.sourceCode).toBe("export default () => null;");
   });
 });

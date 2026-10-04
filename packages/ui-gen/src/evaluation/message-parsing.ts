@@ -10,6 +10,7 @@
  */
 
 import type { EvaluationResult } from './types';
+import { sourceCodeFromToolUse } from '../adapters/claude/source-capture';
 
 // ── SDK message type aliases ────────────────────────────────────────
 
@@ -137,13 +138,14 @@ export function extractCompiledCodeFromMessage(message: SdkMessage): string | un
 // ── sourceCode extraction ───────────────────────────────────────────
 
 /**
- * Extract source code from an assistant's Write tool_use message.
+ * Extract source code from an assistant message's tool_use blocks.
  *
- * Looks for `tool_use` blocks with `name === 'Write'` and returns
- * the `input.content` string. If multiple Write calls exist, returns
- * the last one (the final version).
+ * Reads the bridged compile tool (`*__compile_component`, `input.code`)
+ * and the CLI's `Write` (`input.content`, offered only by opt-in), by the
+ * one rule in `adapters/claude/source-capture.ts` (ggui#1714). If several
+ * calls carry source, returns the last one (the final version).
  *
- * Used by: loop.ts, generator.ts
+ * Used by: loop.ts
  */
 export function extractSourceCodeFromMessage(message: SdkMessage): string | undefined {
   if ((message.type as string) !== 'assistant') return undefined;
@@ -155,12 +157,9 @@ export function extractSourceCodeFromMessage(message: SdkMessage): string | unde
   if (!Array.isArray(content)) return undefined;
 
   for (const block of content) {
-    if (block.type === 'tool_use' && block.name === 'Write') {
-      const input = block.input as { content?: string } | undefined;
-      if (input?.content) {
-        sourceCode = input.content;
-      }
-    }
+    if (block.type !== 'tool_use') continue;
+    const value = sourceCodeFromToolUse(block.name, block.input);
+    if (value !== undefined) sourceCode = value;
   }
 
   return sourceCode;
@@ -183,7 +182,7 @@ export function extractCompiledCode(messages: SdkMessage[]): string | undefined 
 }
 
 /**
- * Scan all messages for the last sourceCode from Write tool_use.
+ * Scan all messages for the last sourceCode a tool_use carried.
  *
  * Convenience wrapper for tests and one-shot extraction.
  */

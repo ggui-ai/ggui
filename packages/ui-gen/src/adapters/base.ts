@@ -45,8 +45,13 @@ export interface ClaudeSdkConfig extends AdapterConfig {
   env?: Record<string, string>;
   /** MCP server configs for Claude Agent SDK (keyed by name) */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Allowed tool names for Claude Agent SDK */
+  /** Tool names to approve. Absent → every tool of every server in `mcpServers` (ggui#1714). */
   allowedTools?: string[];
+  /**
+   * CLI built-in tools to offer the model (e.g. `['Write']`). Default: none.
+   * An explicit opt-in: a built-in that writes or executes acts on the host (ggui#1714).
+   */
+  builtinTools?: readonly string[];
   /** Subagent definitions for Claude Agent SDK */
   agents?: Record<string, AgentDefinition>;
   /** Custom CLI path for Docker deployments */

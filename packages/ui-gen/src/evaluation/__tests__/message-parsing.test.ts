@@ -357,6 +357,22 @@ describe('extractSourceCode', () => {
     expect(extractSourceCode(messages)).toBe('second version');
   });
 
+  it('extracts source code from the bridged compile_component tool_use (ggui#1714)', () => {
+    const msg: SdkMessage = {
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 't1', name: 'mcp__ggui__compile_component', input: { code: 'bridged source' } }] },
+    };
+    expect(extractSourceCodeFromMessage(msg)).toBe('bridged source');
+  });
+
+  it('a tool_use of any other tool carries no source', () => {
+    const msg: SdkMessage = {
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 't1', name: 'mcp__ggui__validate_component', input: { code: 'not source' } }] },
+    };
+    expect(extractSourceCodeFromMessage(msg)).toBeUndefined();
+  });
+
   it('returns undefined when no Write tool_use exists', () => {
     const messages: SdkMessage[] = [
       {

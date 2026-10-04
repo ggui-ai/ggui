@@ -13,6 +13,7 @@ import type {
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { JsonObject } from '@ggui-ai/protocol';
+import { sourceCodeFromToolUse } from './source-capture';
 
 /**
  * Mutable accumulator for artifacts extracted from the SDK message stream.
@@ -197,12 +198,10 @@ function extractSourceCode(message: SDKMessage, artifacts: MessageArtifacts): vo
   if (!Array.isArray(content)) return;
 
   for (const block of content) {
-    if (block.type === 'tool_use' && block.name === 'Write') {
-      const input = block.input as { content?: string } | undefined;
-      if (input?.content) {
-        artifacts.sourceCode = input.content;
-      }
-    }
+    if (block.type !== 'tool_use') continue;
+    // ggui#1714 — the rule lives in source-capture.ts, shared with the evaluation loop.
+    const value = sourceCodeFromToolUse(block.name, block.input);
+    if (value !== undefined) artifacts.sourceCode = value;
   }
 }
 
