@@ -124,3 +124,32 @@ describe('an instrument beside a judge row (ggui#1663)', () => {
     expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrument');
   });
 });
+
+// ggui#1711 — a row the frame cannot answer without a post-action capture is decided by the capture, not asked: with
+// none it reads n/a with its reason and stays in the tally; with one, the judge is asked exactly as for any row.
+describe('a row that needs a post-action capture (ggui#1711)', () => {
+  const pb = parseCriteriaBank({
+    version: 'v2',
+    criteria: [
+      { id: 'state.feedback', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'an action shows a result', evidence: 'the post-action state' },
+      { id: 'task.copy', scope: {}, severity: 'must', evaluation: 'judge', status: 'planned', text: "the app's copy", evidence: 'the greeting' },
+    ],
+  });
+  const sel = selectCriteria(pb, ctx);
+  const answers = [[{ id: 'state.feedback', verdict: 'pass' as const, evidence: 'the button shows Sending…' }, { id: 'task.copy', verdict: 'pass' as const, evidence: 'ok' }]];
+
+  it('with no post-action capture: the judge is not asked for it, and it reads n/a with the reason, still in the tally', () => {
+    const asked = buildCriteriaJudgeBlock(pb, sel);
+    expect(asked).not.toContain('state.feedback');
+    expect(asked).toContain('task.copy');
+    const block = resolveCriteriaBlock({ bank: pb, context: ctx, selected: sel, answers, measurements: m });
+    expect(block.verdicts.find((v) => v.id === 'state.feedback')).toMatchObject({ verdict: 'n/a', evidence: 'not evaluated: no post-action capture' });
+    expect(block.verdicts.map((v) => v.id)).toEqual(expect.arrayContaining(['state.feedback', 'task.copy']));
+  });
+
+  it('with a post-action capture: the judge is asked, and its answer is the verdict', () => {
+    expect(buildCriteriaJudgeBlock(pb, sel, { postActionCapture: true })).toContain('state.feedback');
+    const block = resolveCriteriaBlock({ bank: pb, context: ctx, selected: sel, answers, measurements: { ...m, postActionCapture: true } });
+    expect(block.verdicts.find((v) => v.id === 'state.feedback')).toMatchObject({ verdict: 'pass', evidence: 'the button shows Sending…' });
+  });
+});

@@ -30,6 +30,16 @@ export const INSTRUMENT_BESIDE_JUDGE: Readonly<Record<string, 'edge'>> = {
   'space.edge': 'edge',
 };
 
+/**
+ * ggui#1711 — judge rows a single pre-action frame cannot answer. Their own text makes them not-evaluated "when the
+ * capture has no post-action state", and every judged frame today is one capture taken before any action. Asked
+ * anyway, the judge answered `n/a` 94 of 94 times and left the row out 15 more times (a dropped row reads like a
+ * skip). So the absence is decided here, from the capture: such a row is never asked without a post-action capture,
+ * and it reads `n/a` with its reason, still in the tally. With one, the judge is asked as for any row.
+ */
+export const REQUIRES_POST_ACTION_CAPTURE: ReadonlySet<string> = new Set(['state.feedback']);
+const NO_POST_ACTION = 'not evaluated: no post-action capture';
+
 export interface CriteriaMeasurements {
   readonly overflow: boolean;
   readonly contentHeight: number | null;
@@ -40,6 +50,8 @@ export interface CriteriaMeasurements {
    * `null` when the probe ran and failed.
    */
   readonly edge?: EdgeVerdict | null;
+  /** ggui#1711 — the capture includes a state after an action ran. Absent = no (every capture today). */
+  readonly postActionCapture?: boolean;
 }
 
 function besideRead(kind: 'edge', m: CriteriaMeasurements): Read {
@@ -73,6 +85,7 @@ function instrumentRead(kind: 'fit' | 'fill', m: CriteriaMeasurements): Read {
 }
 
 function readRow(row: BankRow, answers: readonly CriteriaAnswer[][], m: CriteriaMeasurements, unansweredReason: string | undefined): Read {
+  if (row.evaluation === 'judge' && REQUIRES_POST_ACTION_CAPTURE.has(row.id) && m.postActionCapture !== true) return { verdict: 'n/a', evidence: NO_POST_ACTION };
   if (row.evaluation === 'judge') return majority(row.id, answers, unansweredReason);
   if (row.evaluation === 'human') return { verdict: 'n/a', evidence: `reader's column (status ${row.status})` };
   if (row.status !== 'live') return { verdict: 'n/a', evidence: `not implemented (status ${row.status})` };
@@ -147,6 +160,8 @@ export interface CriteriaJudgeInputs {
   readonly frame?: CriteriaJudgeFrame;
   /** JSON text of the props the card was rendered with; bounded by {@link CRITERIA_PROPS_MAX_CHARS}. */
   readonly propsJson?: string;
+  /** ggui#1711 — the capture includes a post-action state; absent = no, and rows needing one are not asked. */
+  readonly postActionCapture?: boolean;
 }
 
 /** Bound on the props text handed to the judge beside the frame, in characters. */
@@ -190,7 +205,10 @@ function criteriaPropsSection(propsJson: string): string {
 /** The judge's prompt block for the selected `judge` rows; empty when none is selected. */
 export function buildCriteriaJudgeBlock(bank: CriteriaBank, selected: CriteriaSelectionResult, inputs: CriteriaJudgeInputs = {}): string {
   const byId = new Map<string, BankRow>(bankRows(bank).map((r) => [r.id, r]));
-  const asked = selected.selection.map((s) => byId.get(s.id)).filter((r): r is BankRow => r !== undefined && r.evaluation === 'judge');
+  const asked = selected.selection
+    .map((s) => byId.get(s.id))
+    .filter((r): r is BankRow => r !== undefined && r.evaluation === 'judge')
+    .filter((r) => inputs.postActionCapture === true || !REQUIRES_POST_ACTION_CAPTURE.has(r.id));
   if (asked.length === 0) return '';
   const lines = asked.map((r) => `- ${r.id} (${r.severity}): ${r.text} Evidence must name: ${r.evidence}`);
   return (
