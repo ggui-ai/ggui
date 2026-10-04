@@ -376,6 +376,10 @@ export interface CanvasJudgeRecord {
   /**
    * ggui#1687 — the model asked for, and every model the provider said answered this canvas's calls (scoring and
    * criteria), deduplicated. `served` is empty when no provider named one: unknown, never "the requested model".
+   * When the request names an alias and the provider echoes the alias (measured on a hosted route, 125 of 125
+   * canvases), `served` confirms the alias was honoured but cannot tell two snapshots behind it apart. A judge that
+   * must is pinned to a dated snapshot id instead. With the alias, a snapshot change shows only as a step on a date in
+   * the judge's pooled within-call spread, read by week. That is a read someone runs, not a monitor.
    */
   readonly models?: { readonly requested: string; readonly served: readonly string[] };
 }
