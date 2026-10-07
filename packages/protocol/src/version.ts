@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A relaying host never re-issues a held pull (2026-10-07, ggui#1735: a
+ * description only, same draft stamp). `ggui_runtime_pull`'s `wait`
+ * description — which ships on `tools/list` — already obliged a relaying
+ * host to clamp the forwarded hold to its timeout minus one second; it now
+ * also obliges it never to re-issue a held pull on its own timeout, since
+ * the view's demotion and backoff live above the relay and a relay-side
+ * retry multiplies holds at the server while the view sees one failure
+ * (ggui#1030's storm, one layer down). SPEC §5.5.1.1 carries the clause and
+ * its observable. Raised by a host's retry change (`@guuey/mcp-apps-host`
+ * 0.31, a circuit breaker — itself benign). No shape, code or member moves;
+ * the advertised schema's text changes, so the contract projection and the
+ * MCP reference are regenerated. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The host-session pair is set once, by the first commit that carries it
  * (2026-10-02, ggui#1339's hosted form: no schema change, same draft
  * stamp). `GguiSessionStore.commit` now states the rule the row's subject

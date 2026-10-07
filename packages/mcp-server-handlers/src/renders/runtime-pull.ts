@@ -51,7 +51,10 @@
  * **The puller's obligation (ggui#1030).** `wait` MUST NOT exceed the
  * `tools/call` timeout of the host relaying the call, minus a margin; a
  * host that relays a pull MUST clamp the forwarded `wait` to its own
- * timeout − 1 s. A host timeout below the hold is a CALLER-side failure:
+ * timeout − 1 s, and MUST NOT re-issue a held pull on its own timeout
+ * (ggui#1735: the caller's backoff lives above the relay, so a relay-side
+ * retry multiplies holds here while the caller sees one failure). A host
+ * timeout below the hold is a CALLER-side failure:
  * the server's `success` after the socket closed is not a server fault,
  * and the rung MUST demote to sparse un-held pulls on such failures as it
  * does on consecutive empties — otherwise a hot `wait` under a short host
