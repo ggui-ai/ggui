@@ -72,7 +72,7 @@ import type { ViewProofOptions } from './view-proof-signer.js';
 import { createStreamSeqTracker, type StreamSeqTracker } from './stream-seq.js';
 import { createLadderSet } from './ladders.js';
 import {
-  BOOT_REFRESH_RETRIES,
+  REFRESH_RELAY_ERROR_RETRIES,
   createCredentialController,
   type CredentialController,
 } from './credential-controller.js';
@@ -1415,7 +1415,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const outcome = await credentialController.onExpired(
       held,
       'boot',
-      hasStaticContent ? undefined : { retries: BOOT_REFRESH_RETRIES },
+      hasStaticContent ? undefined : { retries: REFRESH_RELAY_ERROR_RETRIES },
     );
     telemetry?.record(
       'boot.credential_refresh',

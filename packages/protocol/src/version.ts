@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * A view parked on its bridge rung keeps asking for its credential
+ * (2026-10-07, ggui#1734: no wire change, same draft stamp).
+ * `DEFAULT_WS_TOKEN_TTL_SEC` (180) is now exported from
+ * `@ggui-ai/protocol/transport/websocket`, the one place the server's
+ * minter (`@ggui-ai/mcp-server-core` re-exports it) and the view's
+ * bridge-rung attempt clock both read it. In `@ggui-ai/iframe-runtime`, a
+ * view whose ladder has left every token rung checks its credential on
+ * every bridge pull and asks `ggui_runtime_refresh_ws_token` again once it
+ * has expired by the view's own clock — at most once per that lifetime,
+ * counted from its last attempt on any rung and whatever that attempt
+ * answered — so a relaying host's pull circuit, which half-opens only on a
+ * refresh the session grants, gets its close key, and a refresh that failed
+ * inside the outage that opened the circuit is asked again. Before, a
+ * parked view asked at most twice per mount. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * A relaying host never re-issues a held pull (2026-10-07, ggui#1735: a
  * description only, same draft stamp). `ggui_runtime_pull`'s `wait`
  * description — which ships on `tools/list` — already obliged a relaying

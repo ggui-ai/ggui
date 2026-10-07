@@ -10,20 +10,30 @@
  * the credential and the budget; the runtime owns the ladders and tells it
  * when a credential expired or was accepted.
  *
- * The budget is one predicate:
- *   - a credential that came back from a refresh and has NOT been accepted
- *     on a token rung is never refreshed again, whether it was refused or
- *     left the token rungs (the loop guard);
- *   - any other expired credential gets exactly one refresh.
- * A credential is marked spent when its refresh is REQUESTED, so triggers
- * that fire together (a WS refusal, the polling 410, entering the bridge)
- * produce one request.
+ * The budget is one predicate per rung class:
+ *   - On a token rung (a WS refusal, the polling 410, the boot): a credential
+ *     that came back from a refresh and has NOT been accepted on a token rung
+ *     is never refreshed again, whether it was refused or left the token
+ *     rungs (the loop guard); any other expired credential gets exactly one
+ *     refresh. A credential is marked spent when its refresh is REQUESTED, so
+ *     triggers that fire together produce one request.
+ *   - On the bridge rung (ggui#1734): no rung carries the credential there, so
+ *     only the view's own clock can say it expired, and a relaying host's pull
+ *     circuit half-opens only on a refresh the session grants. So the view
+ *     asks again from the bridge whenever the current credential's `expiresAt`
+ *     has passed and at least {@link BRIDGE_REFRESH_INTERVAL_MS} has passed
+ *     since its last attempt on ANY rung — whatever that attempt answered,
+ *     because the attempt that fails is the one inside the outage that opened
+ *     the circuit. The interval is the storm bound, and it is the floor that
+ *     keeps a view whose clock runs ahead of the server's from reading every
+ *     fresh credential as expired.
  *
  * Expiry is always reported by the caller, from the slice's `expiresAt` or
  * from a refusal signal, never derived from a token's issue time: a
  * chained token can legitimately live less than a full TTL.
  */
 import { withWsToken } from "@ggui-ai/protocol/integrations/mcp-apps";
+import { DEFAULT_WS_TOKEN_TTL_SEC } from "@ggui-ai/protocol/transport/websocket";
 import { unwrapCallToolResult } from "./call-tool-unwrap.js";
 import { domainErrorCodeOf, isErrorToolResult, toolResultText } from "./tool-result-error.js";
 import type { HeldCredential } from "./types.js";
@@ -58,12 +68,22 @@ export interface CredentialControllerOptions {
   readonly sleep?: (ms: number) => Promise<void>;
   /** Test seam: defaults to `Math.random`. */
   readonly random?: () => number;
+  /** Test seam: the view's clock, in ms; defaults to `Date.now`. */
+  readonly now?: () => number;
 }
 
 export interface CredentialController {
   current(): HeldCredential;
   /** The credential was accepted on a token rung (a WS or SSE ack, or a polling `ok`). */
   markAccepted(credential: HeldCredential): void;
+  /**
+   * Whether a bridge pull should report `credential` expired now (ggui#1734):
+   * it is the current credential, its `expiresAt` has passed by the view's
+   * clock, and {@link BRIDGE_REFRESH_INTERVAL_MS} has passed since the last
+   * refresh attempt on any rung (or there was none). A credential with no
+   * `expiresAt` is never due.
+   */
+  dueOnBridge(credential: HeldCredential): boolean;
   /**
    * `credential` is the one the reporting ladder was built with. `retry`
    * re-sends the SAME request after a relay error, inside the one budgeted
@@ -90,14 +110,26 @@ export const REFRESH_JITTER_MAX_MS = 5_000;
 
 /**
  * The boot refresh of a live-only slice is the view's only way to a live
- * channel, so a relay error there (the host's relay failed, or the
- * server's store read threw) is re-sent this many times before the boot
- * reports `EXPIRED_BOOTSTRAP`, each after a uniform random wait between
+ * channel, and so is a bridge-rung refresh (the ladder has left every token
+ * rung), so a relay error on either (the host's relay failed, or the
+ * server's store read threw) is re-sent this many times inside the one
+ * attempt — before the boot reports `EXPIRED_BOOTSTRAP`, or before the bridge
+ * waits out its next interval — each after a uniform random wait between
  * these bounds.
  */
-export const BOOT_REFRESH_RETRIES = 2;
+export const REFRESH_RELAY_ERROR_RETRIES = 2;
 export const REFRESH_RETRY_DELAY_MIN_MS = 1_000;
 export const REFRESH_RETRY_DELAY_MAX_MS = 3_000;
+
+/**
+ * The bridge rung's attempt clock (ggui#1734): from the bridge, a view asks
+ * for a refresh at most once per this span, counted from its last attempt on
+ * any rung and whatever that attempt answered. It is the server's default
+ * credential lifetime, the one number both readers share; a server that
+ * mints longer-lived credentials slows the heartbeat through `expiresAt`, a
+ * shorter-lived one does not speed it past this floor.
+ */
+export const BRIDGE_REFRESH_INTERVAL_MS = DEFAULT_WS_TOKEN_TTL_SEC * 1_000;
 
 const REFRESH_TOOL = "ggui_runtime_refresh_ws_token";
 
@@ -107,13 +139,23 @@ export function createCredentialController(
   const sleep =
     opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = opts.random ?? Math.random;
+  const now = opts.now ?? Date.now;
   let current = opts.initial;
   const spent = new Set<string>();
   const accepted = new Set<string>();
+  /** The view's clock at the last refresh request, on any rung. */
+  let lastAttemptAt: number | undefined;
 
-  const mayRefresh = (credential: HeldCredential): boolean =>
-    !spent.has(credential.wsToken) &&
-    !(credential.origin === "refreshed" && !accepted.has(credential.wsToken));
+  const expired = (credential: HeldCredential): boolean =>
+    credential.expiresAt !== undefined && Date.parse(credential.expiresAt) <= now();
+  const intervalPassed = (): boolean =>
+    lastAttemptAt === undefined || now() - lastAttemptAt >= BRIDGE_REFRESH_INTERVAL_MS;
+
+  const mayRefresh = (credential: HeldCredential, source: ExpirySource): boolean =>
+    source === "bridge"
+      ? expired(credential) && intervalPassed()
+      : !spent.has(credential.wsToken) &&
+        !(credential.origin === "refreshed" && !accepted.has(credential.wsToken));
 
   const requestRefresh = async (credential: HeldCredential): Promise<RefreshOutcome> => {
     let result: unknown;
@@ -130,10 +172,12 @@ export function createCredentialController(
     markAccepted(credential) {
       accepted.add(credential.wsToken);
     },
+    dueOnBridge: (credential) => credential === current && mayRefresh(credential, "bridge"),
     async onExpired(credential, source, retry) {
       if (credential !== current) return { kind: "skipped", reason: "stale-ladder" };
-      if (!mayRefresh(credential)) return { kind: "skipped", reason: "budget" };
+      if (!mayRefresh(credential, source)) return { kind: "skipped", reason: "budget" };
       spent.add(credential.wsToken);
+      lastAttemptAt = now();
       if (source !== "boot") await sleep(Math.floor(random() * REFRESH_JITTER_MAX_MS));
       let outcome = await requestRefresh(credential);
       for (let left = retry?.retries ?? 0; left > 0 && outcome.kind === "relay-error"; left--) {

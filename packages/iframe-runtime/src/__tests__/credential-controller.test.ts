@@ -5,7 +5,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BOOT_REFRESH_RETRIES,
+  BRIDGE_REFRESH_INTERVAL_MS,
+  REFRESH_RELAY_ERROR_RETRIES,
   createCredentialController,
   type HeldCredential,
 } from '../credential-controller.js';
@@ -172,8 +173,8 @@ describe('credential controller: the boot refresh retries a relay error (F6)', (
     };
     const callTool = flakyRelay(2);
     const c = createCredentialController({ initial: ROOT, callTool, sleep, random: () => 0.5 });
-    const outcome = await c.onExpired(ROOT, 'boot', { retries: BOOT_REFRESH_RETRIES });
-    expect(BOOT_REFRESH_RETRIES).toBe(2);
+    const outcome = await c.onExpired(ROOT, 'boot', { retries: REFRESH_RELAY_ERROR_RETRIES });
+    expect(REFRESH_RELAY_ERROR_RETRIES).toBe(2);
     expect(outcome.kind).toBe('adopted');
     expect(callTool).toHaveBeenCalledTimes(3);
     expect(waits).toEqual([2000, 2000]);
@@ -215,5 +216,95 @@ describe('credential controller: the boot refresh retries a relay error (F6)', (
     const c = createCredentialController({ initial: ROOT, callTool, ...noWait });
     expect((await c.onExpired(ROOT, 'ws')).kind).toBe('relay-error');
     expect(callTool).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("credential controller: the bridge rung's attempt clock (ggui#1734)", () => {
+  /** ROOT's own `expiresAt`, as the view's clock reads it. */
+  const AT_EXPIRY = Date.parse(ROOT.expiresAt ?? '');
+  /** A clock the test moves. */
+  function clock(start: number): { readonly now: () => number; readonly set: (t: number) => void } {
+    let t = start;
+    return {
+      now: () => t,
+      set: (next) => {
+        t = next;
+      },
+    };
+  }
+  /** A relay that rejects every call: the outage that opened a host's pull circuit. */
+  const down = () =>
+    vi.fn(async (): Promise<unknown> => {
+      throw new Error('relay down');
+    });
+
+  it("is the server's default credential lifetime", () => {
+    expect(BRIDGE_REFRESH_INTERVAL_MS).toBe(180_000);
+  });
+
+  it('asks again from the bridge rung one interval after a failed attempt, whatever it answered', async () => {
+    const k = clock(AT_EXPIRY);
+    const callTool = down();
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait, now: k.now });
+    expect(c.dueOnBridge(ROOT)).toBe(true);
+    expect((await c.onExpired(ROOT, 'bridge')).kind).toBe('relay-error');
+    k.set(AT_EXPIRY + BRIDGE_REFRESH_INTERVAL_MS - 1);
+    expect(c.dueOnBridge(ROOT)).toBe(false);
+    expect(await c.onExpired(ROOT, 'bridge')).toEqual({ kind: 'skipped', reason: 'budget' });
+    k.set(AT_EXPIRY + BRIDGE_REFRESH_INTERVAL_MS);
+    expect(c.dueOnBridge(ROOT)).toBe(true);
+    expect((await c.onExpired(ROOT, 'bridge')).kind).toBe('relay-error');
+    expect(callTool).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes an unaccepted refreshed credential again from the bridge once its own expiresAt has passed, and not before', async () => {
+    const k = clock(AT_EXPIRY);
+    const callTool = okRelay(); // adopts tok-new, which expires one hour after ROOT
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait, now: k.now });
+    await c.onExpired(ROOT, 'ws');
+    const refreshed = c.current();
+    expect(refreshed.origin).toBe('refreshed');
+    k.set(AT_EXPIRY + 30 * 60_000); // the interval has passed; the credential has not expired
+    expect(c.dueOnBridge(refreshed)).toBe(false);
+    expect(await c.onExpired(refreshed, 'bridge')).toEqual({ kind: 'skipped', reason: 'budget' });
+    k.set(AT_EXPIRY + 60 * 60_000); // tok-new's own expiresAt
+    expect(c.dueOnBridge(refreshed)).toBe(true);
+    callTool.mockImplementation(okRelay('tok-third'));
+    expect((await c.onExpired(refreshed, 'bridge')).kind).toBe('adopted');
+    expect(c.current().wsToken).toBe('tok-third');
+    expect(c.dueOnBridge(refreshed)).toBe(false); // no longer current
+  });
+
+  it('keeps the loop guard on the token rungs: the same expired credential is still never re-asked from a WS or polling refusal', async () => {
+    const k = clock(AT_EXPIRY);
+    const callTool = okRelay();
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait, now: k.now });
+    await c.onExpired(ROOT, 'ws');
+    const refreshed = c.current();
+    k.set(AT_EXPIRY + 60 * 60_000);
+    expect(await c.onExpired(refreshed, 'ws')).toEqual({ kind: 'skipped', reason: 'budget' });
+    expect(await c.onExpired(refreshed, 'polling')).toEqual({ kind: 'skipped', reason: 'budget' });
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the interval from the last attempt on ANY rung, so a WS refusal's refresh and the demoted ladder's first bridge tick are one request", async () => {
+    const k = clock(AT_EXPIRY);
+    const callTool = down();
+    const c = createCredentialController({ initial: ROOT, callTool, ...noWait, now: k.now });
+    expect((await c.onExpired(ROOT, 'ws')).kind).toBe('relay-error');
+    k.set(AT_EXPIRY + 1_000);
+    expect(c.dueOnBridge(ROOT)).toBe(false);
+    expect(await c.onExpired(ROOT, 'bridge')).toEqual({ kind: 'skipped', reason: 'budget' });
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("is never due for a credential that has not expired by the view's clock, or that carries no expiresAt", async () => {
+    const k = clock(AT_EXPIRY - 1);
+    const c = createCredentialController({ initial: ROOT, callTool: okRelay(), ...noWait, now: k.now });
+    expect(c.dueOnBridge(ROOT)).toBe(false);
+    expect(await c.onExpired(ROOT, 'bridge')).toEqual({ kind: 'skipped', reason: 'budget' });
+    const { expiresAt: _omitted, ...bare } = ROOT;
+    const c2 = createCredentialController({ initial: bare, callTool: okRelay(), ...noWait, now: k.now });
+    expect(c2.dueOnBridge(bare)).toBe(false);
   });
 });

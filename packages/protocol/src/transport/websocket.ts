@@ -132,3 +132,13 @@ export type WebSocketMessage =
  * the browser/Node ws.readyState lifecycle.
  */
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
+
+/**
+ * Default lifetime, in seconds, of a `wsToken` — the live credential a
+ * `SubscribePayload` carries. The one number its two readers share
+ * (ggui#1734): the server mints with it unless configured otherwise, and a
+ * view parked on its bridge rung — where no rung carries the credential and
+ * only the view's own clock can say it expired — asks for a refresh at most
+ * once per this span, counted from its last attempt.
+ */
+export const DEFAULT_WS_TOKEN_TTL_SEC = 180;

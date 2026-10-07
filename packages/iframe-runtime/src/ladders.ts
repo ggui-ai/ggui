@@ -21,8 +21,11 @@
  *   is disposed at that switch, so only one bridge loop runs at a time.
  * - **Expiry** is reported to the credential controller from three places:
  *   a WS `BOOTSTRAP_EXPIRED` frame (the only auth code that triggers), the
- *   first polling `410` whose body is not a replay horizon, and entering
- *   the bridge rung while the ladder's credential is past `expiresAt`. An
+ *   first polling `410` whose body is not a replay horizon, and a bridge
+ *   pull while the controller's attempt clock reads the ladder's credential
+ *   as due — past `expiresAt` by the view's clock, one interval since the
+ *   last attempt (ggui#1734; a bridge report re-sends on a relay error as the
+ *   boot does, since the ladder has no other way to a live channel). An
  *   adopted credential builds the next ladder.
  *
  * A new ladder omits WS when the one it replaces left WS without ever
@@ -51,7 +54,12 @@ import type {
 import type { AckPayload } from '@ggui-ai/protocol/wire';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { CredentialController, ExpirySource, RefreshOutcome } from './credential-controller.js';
+import {
+  REFRESH_RELAY_ERROR_RETRIES,
+  type CredentialController,
+  type ExpirySource,
+  type RefreshOutcome,
+} from './credential-controller.js';
 import {
   buildBridgePolling,
   buildEventsPolling,
@@ -121,8 +129,6 @@ export interface LadderSetOptions {
   readonly webSocketFactory?: (url: string) => WebSocket;
   readonly eventSourceFactory?: (url: string) => EventSource;
   readonly fetchImpl?: typeof fetch;
-  /** Test seam for the bridge-entry expiry check. */
-  readonly now?: () => number;
 }
 
 export interface LadderSet {
@@ -189,7 +195,6 @@ async function isReplayHorizon(response: Response): Promise<boolean> {
 }
 
 export function createLadderSet(opts: LadderSetOptions): LadderSet {
-  const now = opts.now ?? Date.now;
   const baseFetch = opts.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   let nextId = 0;
   const built = new Map<LadderState, Ladder>();
@@ -276,7 +281,11 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     const credential = ladder.spec.credential;
     const controller = opts.controller;
     if (controller === null || credential === undefined || ladder.disposed || ended) return;
-    const pending = controller.onExpired(credential, source);
+    const pending = controller.onExpired(
+      credential,
+      source,
+      source === 'bridge' ? { retries: REFRESH_RELAY_ERROR_RETRIES } : undefined,
+    );
     if (ladder.refresh === undefined) ladder.refresh = pending;
     const outcome = await pending;
     opts.onRefresh?.(source, outcome);
@@ -398,7 +407,7 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
       callTool !== undefined && view !== undefined
         ? buildBridgePolling({
             callTool: async (name, args) => {
-              enterBridge(ladder);
+              onBridgePull(ladder);
               let result: unknown;
               try {
                 result = await callTool(name, args);
@@ -435,13 +444,22 @@ export function createLadderSet(opts: LadderSetOptions): LadderSet {
     };
   };
 
-  /** The ladder's first bridge pull: it has left its token rungs (R3 (b), fact 8). */
-  const enterBridge = (ladder: LadderState): void => {
-    if (ladder.bridgeEntered) return;
-    ladder.bridgeEntered = true;
-    switchTo(ladder);
-    const expiresAt = ladder.spec.credential?.expiresAt;
-    if (expiresAt !== undefined && Date.parse(expiresAt) <= now()) void reportExpired(ladder, 'bridge');
+  /**
+   * Every bridge pull. The first one is the ladder leaving its token rungs
+   * (R3 (b), fact 8); each one asks the controller's attempt clock whether the
+   * credential is due a refresh (ggui#1734) — expired by the view's clock, one
+   * interval since the last attempt — so a view parked here keeps asking, once
+   * per interval, until a refresh is granted or the channel ends.
+   */
+  const onBridgePull = (ladder: LadderState): void => {
+    if (!ladder.bridgeEntered) {
+      ladder.bridgeEntered = true;
+      switchTo(ladder);
+    }
+    const credential = ladder.spec.credential;
+    if (credential !== undefined && opts.controller?.dueOnBridge(credential) === true) {
+      void reportExpired(ladder, 'bridge');
+    }
   };
 
   // The handle arrives through `onBound` as soon as the ladder is bound;

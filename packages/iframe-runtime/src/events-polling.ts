@@ -422,8 +422,9 @@ export function buildBridgePolling(
   //     holds the card is presumed quiet; drop to sparse un-held
   //     pulls every `idleIntervalMs` so a dormant card doesn't pin
   //     the host's relay open forever.
-  //   - A FAILED pull (the relay's own `tools/call` timeout, `-32001`,
-  //     a transport error) is not a live session either (ggui#1029):
+  //   - A FAILED pull (the view's own request timeout — the MCP SDK's
+  //     60 s default on `callServerTool`, answered as `-32001` — or a
+  //     transport error) is not a live session either (ggui#1029):
   //     it counts toward demotion exactly like an empty hold, and
   //     repeated failures back off geometrically from `intervalMs`
   //     up to `idleIntervalMs` — a relay whose call timeout is shorter

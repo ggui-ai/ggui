@@ -9,7 +9,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { createCredentialController } from '../credential-controller.js';
+import {
+  BRIDGE_REFRESH_INTERVAL_MS,
+  REFRESH_RELAY_ERROR_RETRIES,
+  createCredentialController,
+} from '../credential-controller.js';
 import { createSequenceCursor } from '../events-polling.js';
 import { createLadderSet, type LadderSpec, type LiveChannelEnd } from '../ladders.js';
 import { connectViaRegistry } from '../registry-subscribe.js';
@@ -114,6 +118,8 @@ function rig(options: {
   /** Replaces `bridgeBody`: the relay's whole answer, a result or a rejection. */
   readonly bridgeAnswer?: () => Promise<unknown>;
   readonly fetchResponse?: (url: string) => Response;
+  /** The view's clock, as the credential controller reads it; fixed at 2026-09-28T12:00Z by default. */
+  readonly clock?: () => number;
 } = {}): Rig {
   const propsUpdates: unknown[] = [];
   const statuses: string[] = [];
@@ -131,6 +137,7 @@ function rig(options: {
     },
     sleep: async () => undefined,
     random: () => 0,
+    now: options.clock ?? (() => Date.parse('2026-09-28T12:00:00.000Z')),
   });
   const bridgeCalls = vi.fn(
     options.bridgeAnswer ?? (async (): Promise<unknown> => (options.bridgeBody ?? (() => eventsBody(0)))()),
@@ -155,7 +162,6 @@ function rig(options: {
       fetchCalls.push(url);
       return (options.fetchResponse ?? (() => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })))(url);
     },
-    now: () => Date.parse('2026-09-28T12:00:00.000Z'),
   });
   return { set, propsUpdates, statuses, acks, refreshCalls, bridgeCalls, fetchCalls, cursor, streamSeq, ends };
 }
@@ -248,7 +254,7 @@ describe('ladder set: a WS BOOTSTRAP_EXPIRED refreshes the credential and rebind
 });
 
 describe('ladder set: a new ladder refused before acceptance (R3 case (c))', () => {
-  it('demotes to its own bridge, takes over there, and its credential is never refreshed again (the loop guard)', async () => {
+  it('demotes to its own bridge, takes over there, and its credential is not refreshed again before its own lifetime ends (the loop guard)', async () => {
     const r = rig();
     const boot = await bootedOnWs(r);
     boot.emit({ type: 'error', payload: { code: 'BOOTSTRAP_EXPIRED', message: 'expired' } });
@@ -327,6 +333,73 @@ describe('ladder set: entering the bridge past expiresAt (fact 8)', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(r.bridgeCalls).toHaveBeenCalled();
     expect(r.refreshCalls).toEqual([]);
+  });
+});
+
+describe("ladder set: the bridge rung's heartbeat (ggui#1734)", () => {
+  const T = Date.parse('2026-09-28T12:00:00.000Z');
+  const iso = (ms: number): string => new Date(ms).toISOString();
+
+  it('a credential that expires while its ladder is parked on the bridge is refreshed on the first pull after it expires, and the new ladder takes over', async () => {
+    FakeWebSocket.opens = false;
+    let t = T;
+    const fresh: HeldCredential = { ...ROOT, expiresAt: iso(T + 60_000) };
+    const r = rig({ initial: fresh, clock: () => t });
+    void r.set.connectBoot({ ...WS_ONLY, credential: fresh });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(r.bridgeCalls).toHaveBeenCalled();
+    expect(r.refreshCalls).toEqual([]);
+    t = T + 61_000;
+    const pullsBefore = r.bridgeCalls.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(r.refreshCalls).toEqual(['tok-root']);
+    // The new ladder pulls now; it omits the WS the boot's socket never opened
+    // (the boot ladder's own reconnects are the only sockets there are).
+    expect(r.bridgeCalls.mock.calls.length).toBeGreaterThan(pullsBefore);
+    expect(FakeWebSocket.instances.some((ws) => ws.url.includes('tok-new'))).toBe(false);
+    expect(r.ends).toEqual([]);
+  });
+
+  it("a bridge refresh the relay keeps failing is asked again one interval later, with the relay-error retries each time — the view keeps trying", async () => {
+    FakeWebSocket.opens = false;
+    let t = T;
+    const r = rig({
+      clock: () => t,
+      refresh: () => {
+        throw new Error('relay down');
+      },
+    });
+    void r.set.connectBoot(WS_ONLY); // ROOT's expiresAt is in the past: the first bridge pull asks
+    await vi.advanceTimersByTimeAsync(10_000);
+    const perAttempt = 1 + REFRESH_RELAY_ERROR_RETRIES;
+    expect(r.refreshCalls).toEqual(Array<string>(perAttempt).fill('tok-root'));
+    t = T + BRIDGE_REFRESH_INTERVAL_MS - 1;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(r.refreshCalls).toHaveLength(perAttempt);
+    t = T + BRIDGE_REFRESH_INTERVAL_MS;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(r.refreshCalls).toHaveLength(2 * perAttempt);
+    expect(r.ends).toEqual([]);
+  });
+
+  it('after an adopted bridge refresh, the new ladder asks again only once ITS credential has expired and the interval has passed', async () => {
+    FakeWebSocket.opens = false;
+    let t = T;
+    let minted = 0;
+    const r = rig({
+      clock: () => t,
+      refresh: () => ({ structuredContent: { ok: true, envelope: `tok-${++minted}`, expiresAt: iso(t + 60_000) } }),
+    });
+    void r.set.connectBoot(WS_ONLY);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(r.refreshCalls).toEqual(['tok-root']);
+    t = T + 90_000; // tok-1 has expired; the interval has not passed
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(r.refreshCalls).toEqual(['tok-root']);
+    t = T + BRIDGE_REFRESH_INTERVAL_MS;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(r.refreshCalls).toEqual(['tok-root', 'tok-1']);
+    expect(r.ends).toEqual([]);
   });
 });
 

@@ -56,6 +56,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isViewRootSrc, type ViewRootSrc } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { DEFAULT_WS_TOKEN_TTL_SEC } from '@ggui-ai/protocol/transport/websocket';
 import { defaultViewKid, deriveViewKey, viewRootFits } from './view-proof.js';
 
 /**
@@ -127,8 +128,13 @@ export interface WsTokenClaims {
   readonly src?: ViewRootSrc;
 }
 
-/** Default TTLs (seconds). Operators override via mint-call options. */
-export const DEFAULT_WS_TOKEN_TTL_SEC = 180;
+/**
+ * Default TTLs (seconds). Operators override via mint-call options. The ws
+ * token's default is the protocol's (`@ggui-ai/protocol/transport/websocket`):
+ * the view's bridge rung paces its refresh attempts by the same number
+ * (ggui#1734), so it is defined once and read by both.
+ */
+export { DEFAULT_WS_TOKEN_TTL_SEC };
 /**
  * The default refresh window, as a multiple of the ws-token TTL (ggui#1496
  * part B). `GET /api/sessions/:id/state` renews a ws token for whoever holds
