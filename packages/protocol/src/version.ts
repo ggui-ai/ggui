@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The one-code rule is scoped to the frames after a subscribe
+ * (2026-10-07, ggui#1554: an erratum, same draft stamp; no byte on the
+ * wire changes). SPEC §7.9.1 claimed the live channel without
+ * qualification; the subscribe never answered that way — an unknown id
+ * is provisioned and acks, a GguiSession bound to another `appId`
+ * answers `APP_MISMATCH` — and the conformance kit grades both. §7.9.1
+ * now says the rule holds on `tools/call` and on every frame after a
+ * subscribe; §12.2.3 says what a subscribe discloses (whether an id the
+ * caller already holds exists, and the app arm's binding) and why that
+ * is not an enumeration surface (a `sessionId` is server-minted, never a
+ * subscriber's choice). The alternative — refusing both as
+ * `SESSION_NOT_FOUND` and making provisioning opt-in — was rejected: two
+ * kit fixtures and a self-hoster posture would move for a text fix.
+ * --------------------------------------------------------------------
  * A view parked on its bridge rung keeps asking for its credential
  * (2026-10-07, ggui#1734: no wire change, same draft stamp).
  * `DEFAULT_WS_TOKEN_TTL_SEC` (180) is now exported from
