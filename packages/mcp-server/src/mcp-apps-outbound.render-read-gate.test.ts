@@ -272,6 +272,48 @@ describe("render-resource read gate — deny is byte-identical to miss", () => {
     }
   });
 
+  it("#1553: every ALLOWED read logs one render_resource_read info line (door, app, source, whether app trust admitted it; never the session or subject); a denied read logs none", async () => {
+    const info = vi.fn();
+    const renderStore = new InMemoryGguiSessionStore();
+    const owner: HandlerContext = { appId: ROW_APP_ID, authSource: "apikey", apiKeyHash: "h", requestId: "req-read-count" };
+    let ctx: HandlerContext = owner;
+    const server = new McpServer({ name: "test", version: "0.0.1" });
+    registerGguiRenderResourceTemplate(server, {
+      renderStore,
+      runtimeUrl: "https://runtime.example/bundle.js",
+      getContext: () => ctx,
+      logger: { ...silentLogger, info },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "gate-test-client-1553-reads", version: "0.0.1" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const reads = () => info.mock.calls.filter((c) => c[0] === "render_resource_read").map((c) => c[1]);
+    try {
+      const bare = (await renderStore.create({ appId: ROW_APP_ID })).id;
+      await client.readResource({ uri: `${GGUI_RENDER_RESOURCE_URI}/${bare}` }).catch(() => undefined);
+      expect(reads()).toEqual([
+        { door: "resources_read", appId: ROW_APP_ID, source: "apikey", appTrustOverSubject: false },
+      ]);
+      const bound = (await renderStore.create({ appId: ROW_APP_ID, userId: "guuey:g_alice" })).id;
+      await client.readResource({ uri: `${GGUI_RENDER_RESOURCE_URI}/${bound}` }).catch(() => undefined);
+      expect(reads()).toHaveLength(2);
+      expect(reads()[1]).toEqual({ door: "resources_read", appId: ROW_APP_ID, source: "apikey", appTrustOverSubject: true });
+      // Never the session or the subject.
+      for (const line of reads()) {
+        expect(JSON.stringify(line)).not.toContain(bare);
+        expect(JSON.stringify(line)).not.toContain(bound);
+        expect(JSON.stringify(line)).not.toContain("g_alice");
+      }
+      // A denied read (another app's caller) logs no read line.
+      ctx = callerCtx;
+      await readFailure(client, `${GGUI_RENDER_RESOURCE_URI}/${bare}`);
+      expect(reads()).toHaveLength(2);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("warn-logs render_resource_read_denied on the denied read (server-side signal preserved)", async () => {
     const warn = vi.fn();
     const renderStore = new InMemoryGguiSessionStore();

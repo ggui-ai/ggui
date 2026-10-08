@@ -2312,6 +2312,11 @@ export function registerGguiRenderResourceTemplate(
    * would for a locator that never existed. The refusal is observable
    * only server-side, on the audit line below — whose `rowAppId` names
    * the render's owner whichever store answered for it.
+   *
+   * Every allowed read logs `render_resource_read` (ggui#1553: door, app,
+   * auth source, and whether app trust admitted the caller over a
+   * subject-bound row; never the session or the subject), so the rung-4
+   * admission line has a denominator an operator can read beside it.
    */
   function readAllowed(sessionId: string, candidate: RenderReadRowView): boolean {
     const callerCtx = opts.getContext?.();
@@ -2325,8 +2330,19 @@ export function registerGguiRenderResourceTemplate(
         : callerCtx;
     const verdict = renderReadVerdict(candidate, fallbackCtx);
     if (verdict.allowed) {
+      // ggui#1553: one line per ALLOWED read — door, app, source, and
+      // whether rung 4 (app trust) admitted the caller over a subject-bound
+      // row — so the admission count below has the read traffic beside it.
+      // Never the session or the subject.
+      opts.logger?.info("render_resource_read", {
+        door: "resources_read",
+        appId: candidate.appId,
+        source: fallbackCtx?.authSource ?? null,
+        appTrustOverSubject: verdict.appTrustOverSubject === true,
+      });
       // ggui#1553: rung 4 admitted an app credential to a subject-bound
-      // session. Door, app, source; never the session or the subject.
+      // session. Door, app, source; never the session or the subject. Kept
+      // as its own line: it is the one an operator counts.
       if (verdict.appTrustOverSubject) {
         opts.logger?.info(RENDER_READ_APP_TRUST_OVER_SUBJECT, {
           door: "resources_read",
