@@ -219,6 +219,25 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
     expect(handshakeOutputSchema.parse(out)).toEqual(out);
   });
 
+  it('#1736: round-trips the wire output the handler emits — the three propsSchema* fields and a {tool, example} nextStep, no reason', () => {
+    const out = {
+      handshakeId: 'hs_wire_1',
+      action: 'create' as const,
+      suggestion: {
+        origin: 'agent' as const,
+        rationale: 'novel-but-clean contract; gen pending against your draft',
+        blueprintMeta: { blueprintId: 'bp_provisional_wire', contractHash: 'hash_wire', variance: {} },
+      },
+      propsSchema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      propsSchemaHash: 'a'.repeat(64),
+      propsSchemaProfile: 'grammar-safe',
+      nextStep: { tool: 'ggui_render' as const, example: '{"handshakeId":"hs_wire_1","props":{"city":"Seoul"}}' },
+    };
+    expect(handshakeOutputSchema.parse(out)).toEqual(out);
+    // The two members the server stopped emitting on 2026-05-13 are not part of the wire.
+    expect(Object.keys(handshakeOutputSchema.shape)).not.toContain('reason');
+  });
+
   it('round-trips an `origin: agent` handshake output (no codeHash; provisional id)', () => {
     const out = {
       handshakeId: 'hs_agent_1',

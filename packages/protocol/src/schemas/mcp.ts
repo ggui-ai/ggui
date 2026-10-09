@@ -29,7 +29,7 @@ import {
   blueprintDraftSchema,
   handshakeSuggestionSchema,
 } from './handshake-suggestion';
-import { dataContractSchema, jsonObjectSchema, jsonValueSchema } from './data-contract';
+import { dataContractSchema, jsonObjectSchema, jsonSchemaSchema, jsonValueSchema } from './data-contract';
 import { blueprintVarianceSchema, blueprintSourceSchema } from './blueprint';
 import {
   MCP_ENDPOINT_REFUSAL_CODES,
@@ -259,11 +259,21 @@ export const handshakeInputSchema = z.object({
  * contract (resolved at its own key); `override.variance` re-aims the
  * variant axis.
  *
- * Wire-output is intentionally lean. The handler carries `target`,
- * `alternatives`, `contractHash`, `serverCapabilities` on its internal
- * `HandshakeOutput` TS shape for telemetry / post-classify tracing —
- * zod strips them before structuredContent serialization. `reason` IS
- * a wire field (optional, ≤280 chars — see below).
+ * Wire-output is intentionally lean, and THIS SCHEMA IS THE WIRE
+ * (ggui#1736): the server's handler declares no output shape of its own
+ * — its `outputSchema` is `handshakeOutputSchema.shape` — so what
+ * `tools/list` advertises and what the strip gate lets onto
+ * `structuredContent` is exactly this object. The handler carries
+ * `reason`, `target`, `alternatives`, `contractHash`, `serverCapabilities`
+ * on its internal `HandshakeOutput` TS shape for telemetry / post-classify
+ * tracing — zod strips them before structuredContent serialization; none
+ * is a wire member (the 2026-05-13 output trim). The three `propsSchema*`
+ * members are the schema-precise render surface (frozen 2026-08-19): they
+ * ride the RESULT BODY, never `_meta`, so the vocabulary stays in the
+ * model's context and transcript-reading runtimes can consume it. The
+ * `.describe()` strings here are the ones `tools/list` has published since
+ * that freeze; a describe on `handshakeId` or `suggestion` would be a new
+ * publication, so neither carries one.
  *
  * `serverCapabilities` reaches the iframe via the `ai.ggui/render`
  * slice meta (see `slice-meta-derivation.ts`), not via this response.
@@ -273,37 +283,53 @@ export const handshakeInputSchema = z.object({
  * `'declined'` cover every legal outcome.
  */
 export const handshakeOutputSchema = z.object({
-  handshakeId: z.string().describe('Stable id — pass to ggui_render'),
+  /** Stable id — pass to `ggui_render` as `handshakeId`. */
+  handshakeId: z.string(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   /**
    * The handshake suggestion — see `handshakeSuggestionSchema`. The
    * routing discriminator is `suggestion.origin`; `blueprintMeta` is
    * ALWAYS present; `amendments` / `validationFindings` are
-   * conditional on the routing outcome.
+   * conditional on the routing outcome. The agent accepts the proposal
+   * by rendering WITHOUT `override`.
    */
-  suggestion: handshakeSuggestionSchema
-    .describe('Server\'s suggestion — origin-routed (cache | agent | synth). Always carries a provisional `blueprintMeta` the agent reuses by rendering WITHOUT `override` (accept the proposal as-is).'),
+  suggestion: handshakeSuggestionSchema,
   /**
-   * Truncated human-readable rationale for the `action` value. Helps
-   * the agent and the operator narrate why the server chose to reuse a cached
-   * blueprint vs synth a fresh one vs decline. Internal-only
-   * `target`, `alternatives`, `contractHash`, `serverCapabilities`
-   * stay off the wire — they're telemetry, not agent-actionable.
+   * THE ENFORCED PROPS SCHEMA (SPEC §2.3.2): the exact JSON Schema the
+   * paired `ggui_render` enforces for this handshakeId. Emitted when the
+   * agreed contract's props shape differs from the agent's draft; omitted
+   * on a verbatim-accepted draft.
    */
-  reason: z
-    .string()
-    .max(280)
+  propsSchema: jsonSchemaSchema
     .optional()
     .describe(
-      'Short rationale (≤280 chars) for the `action` value. Surfaced for agent + operator visibility; truncated to keep the structuredContent payload predictable.',
+      'The exact JSON Schema the paired ggui_render enforces for this handshakeId — generate props that satisfy it (enum fields list their full legal vocabulary). Present when the agreed contract differs from your draft; when absent, your draft propsSpec is agreed verbatim. Advisory: no agent obligation attaches to reading it; runtimes MAY compile it for constrained argument generation.',
     ),
-  nextStep: z.object({
-    tool: z.literal('ggui_render'),
-    description: z.string(),
-    example: z.string(),
-  }).optional().describe(
-    'Wire-shape recovery hint. A worked literal example of the next ggui_render call the agent should emit — the example string can be copied verbatim and tweaked (e.g. fill in `props` placeholders). Top-level field so a skimming agent finds it immediately.',
-  ),
+  /** sha256 (lowercase hex) over the RFC 8785 canonical bytes of the enforced props schema; present on every non-declined handshake. */
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(
+      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema. Present on every non-declined handshake. A later contract_violation carries the hash of the schema it enforced — equal hashes mean the props were at fault.',
+    ),
+  /** `'grammar-safe'` or `'full'`; consumers treat an unrecognized value as `'full'`. */
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(
+      "Grammar profile of the enforced props schema: 'grammar-safe' (every keyword is in the enumerated core — a runtime can compile the schema into a decoding grammar) or 'full' (read the schema as context instead). Treat unrecognized values as 'full'; the set may grow in minor versions.",
+    ),
+  /**
+   * Wire-shape recovery hint: a worked literal example of the next
+   * `ggui_render` call the agent should emit — copy it verbatim and fill
+   * the `props` placeholders. Top-level so a skimming agent finds it.
+   */
+  nextStep: z
+    .object({
+      tool: z.literal('ggui_render'),
+      example: z.string(),
+    })
+    .optional(),
 });
 
 /**

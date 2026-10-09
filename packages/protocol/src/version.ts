@@ -6,6 +6,26 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `handshakeOutputSchema` is the wire (2026-10-09, ggui#1736: MINOR on
+ * the published type, no byte on the wire changes, same draft stamp).
+ * The server's handler kept its own mirror of this schema, and the two
+ * drifted: the handler emitted `propsSchema` / `propsSchemaHash` /
+ * `propsSchemaProfile` (frozen 2026-08-19) that the protocol schema did
+ * not name, and the protocol schema kept `reason` (reinstated under u3
+ * below as an optional ≤280-char rationale) and `nextStep.description`
+ * that the handler stopped emitting at the 2026-05-13 output trim. The
+ * protocol schema now names exactly the wire, with the three members'
+ * `.describe()` text moved in verbatim and no describe added to
+ * `handshakeId` or `suggestion` (a describe on `tools/list` is a
+ * publication; neither had one), and the handler's `outputSchema` is
+ * `handshakeOutputSchema.shape` — one definition. `GguiHandshakeOutput`
+ * narrows accordingly: a downstream read of `.reason` or
+ * `nextStep.description` becomes a compile error, which is the correct
+ * signal for a field the wire never carried (VERSION-POLICY §3.7). The
+ * advertised `tools/list` output schema is byte-identical before and
+ * after (projection sha256 pinned in the hand-off). No `PROTOCOL_VERSION`
+ * move.
+ * --------------------------------------------------------------------
  * The one-code rule is scoped to the frames after a subscribe
  * (2026-10-07, ggui#1554: an erratum, same draft stamp; no byte on the
  * wire changes). SPEC §7.9.1 claimed the live channel without

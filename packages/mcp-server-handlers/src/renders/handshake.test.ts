@@ -24,6 +24,7 @@ import {
   DATA_CONTRACT_MINIMAL_EXAMPLE,
   DATA_CONTRACT_SHAPE_RULE,
   handshakeInputSchema,
+  handshakeOutputSchema,
   type GguiLifecyclePayload,
 } from '@ggui-ai/protocol';
 import type { GguiLifecycleEmitter } from './lifecycle';
@@ -138,6 +139,20 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         'propsSchemaProfile',
         'suggestion',
       ]);
+    });
+
+    it("#1736: the wire output IS the protocol's handshakeOutputSchema — same keys, and a real answer round-trips through the protocol schema byte for byte", async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      // The handler declares no shape of its own: its output zod shape is the protocol's.
+      expect(Object.keys(handler.outputSchema).sort()).toEqual(Object.keys(handshakeOutputSchema.shape).sort());
+      // What `structuredContent` carries (the handler's strip gate applied) is exactly what the protocol schema admits.
+      const out = await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r-1736' });
+      const wire = z.object(handler.outputSchema).parse(out);
+      expect(Object.keys(wire).sort()).toEqual(expect.arrayContaining(['propsSchemaHash', 'propsSchemaProfile']));
+      expect(handshakeOutputSchema.parse(wire)).toEqual(wire);
+      expect(wire).not.toHaveProperty('reason');
+      expect(wire.nextStep).not.toHaveProperty('description');
     });
   });
 

@@ -350,17 +350,12 @@ export type GguiHandshakeInput = z.infer<typeof handshakeInputSchema>;
 export type GguiHandshakeOutput = z.infer<typeof handshakeOutputSchema>;
 
 /**
- * Server-side stream-transport capability advertised on every successful
- * `ggui_handshake` response (see {@link GguiHandshakeOutput.serverCapabilities}).
- *
- * Mirrors `handshakeOutputSchema.serverCapabilities` exactly — exported
- * here as a named TypeScript type so server-side composition layers
- * (the OSS `createGguiServer` resolver, a hosted deployment's composer) can hand
- * one back to the handshake factory without re-deriving the shape from
- * the schema.
- *
- * Semantics + transport-negotiation rules: see the inline docstring on
- * `handshakeOutputSchema.serverCapabilities` in `schemas/mcp.ts`.
+ * Server-side stream-transport capability a server-side composition layer
+ * (the OSS `createGguiServer` resolver, a hosted deployment's composer)
+ * hands the handshake factory. It is NOT a `ggui_handshake` output member
+ * (that echo was trimmed on 2026-05-13; `handshakeOutputSchema` is the wire,
+ * ggui#1736): it reaches the iframe on the `ai.ggui/render` slice meta —
+ * see `slice-meta-derivation.ts` and the `serverCapabilities` slice field.
  *
  * Absent ⇒ universal iframe-polling fallback. Present ⇒ `@ggui-ai/wire`
  * negotiates per channel against the allowlist.

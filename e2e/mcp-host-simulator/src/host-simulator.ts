@@ -222,24 +222,24 @@ export interface HandshakeSuggestionView {
 }
 
 /**
- * Structural mirror of `handshakeOutputSchema`'s structuredContent.
- * The simulator exposes this on `handshake()` / `openRender()` so
- * tests can branch on `suggestion.origin` without importing the
- * protocol schema directly.
+ * Structural mirror of `handshakeOutputSchema`'s structuredContent — the
+ * wire as the server emits it (ggui#1736): no `reason`, `target`,
+ * `alternatives` or top-level `contractHash` (those live on the server's
+ * internal shape and are stripped; the contract hash a test wants is
+ * `suggestion.blueprintMeta.contractHash`), `nextStep` is `{tool, example}`,
+ * and the three `propsSchema*` members ride the body. The simulator
+ * exposes this on `handshake()` / `openRender()` so tests can branch on
+ * `suggestion.origin` without importing the protocol schema directly.
  */
 export interface HandshakeOutput {
   readonly handshakeId: string;
   readonly action: "create" | "reuse" | "update" | "replace" | "declined";
-  readonly reason: string;
-  readonly target: {
-    readonly sessionId?: string;
-  };
   readonly suggestion: HandshakeSuggestionView;
-  readonly alternatives?: ReadonlyArray<unknown>;
-  readonly contractHash: string;
+  readonly propsSchema?: Record<string, unknown>;
+  readonly propsSchemaHash?: string;
+  readonly propsSchemaProfile?: string;
   readonly nextStep?: {
     readonly tool: "ggui_render";
-    readonly description: string;
     readonly example: string;
   };
 }
@@ -662,7 +662,7 @@ export class HostSimulator {
     const renderResult = await this.render(renderArgs);
     return {
       handshakeId: handshake.handshakeId,
-      contractHash: handshake.contractHash,
+      contractHash: handshake.suggestion.blueprintMeta.contractHash,
       handshake,
       render: renderResult,
     };

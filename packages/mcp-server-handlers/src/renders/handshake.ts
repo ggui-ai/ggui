@@ -48,15 +48,14 @@ import {
   lintContract,
   summarizeContract,
   dataContractSchema,
-  handshakeSuggestionSchema,
   handshakeInputSchema,
+  handshakeOutputSchema,
   blueprintDraftObjectSchema,
   DATA_CONTRACT_SHAPE_RULE,
   DATA_CONTRACT_MINIMAL_EXAMPLE,
   buildEnforcedPropsSchema,
   canonicalPropsSchemaBytes,
   classifyPropsSchemaProfile,
-  jsonSchemaSchema,
   type Blueprint,
   type BlueprintDraft,
   type BlueprintMeta,
@@ -548,44 +547,20 @@ const inputSchema = {
   forceCreate: handshakeInputSchema.shape.forceCreate,
 } as const;
 
-/** Output zod-shape mirror. Same shape as `handshakeOutputSchema`.
- *
- * The three `propsSchema*` fields are the schema-precise render wire
- * surface (frozen 2026-08-19; docs/plans/2026-08-19-schema-precise-render.md
- * §2). P3 pin 1: they are declared HERE, on the zod output schema, and
- * ride the RESULT BODY (`structuredContent`) — never `_meta` — so the
- * vocabulary stays in the model's context and transcript-reading
- * runtimes can consume it. This zod schema is an active strip gate;
- * an emitted-but-undeclared field silently disappears from the wire.
+/**
+ * Output zod shape — the protocol's `handshakeOutputSchema`, not a mirror
+ * of it (ggui#1736). One definition: what `tools/list` advertises and what
+ * this strip gate lets onto `structuredContent` is the protocol schema, so
+ * the two cannot drift again (a mirror did, carrying `reason` and a
+ * `nextStep.description` the wire never had and lacking the three
+ * `propsSchema*` members). The three `propsSchema*` fields are the
+ * schema-precise render wire surface (frozen 2026-08-19;
+ * docs/plans/2026-08-19-schema-precise-render.md §2); P3 pin 1 holds —
+ * they are declared on the zod output schema and ride the RESULT BODY
+ * (`structuredContent`), never `_meta`. This zod schema is an active strip
+ * gate; an emitted-but-undeclared field silently disappears from the wire.
  */
-const outputSchema = {
-  handshakeId: z.string(),
-  action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
-  suggestion: handshakeSuggestionSchema,
-  propsSchema: jsonSchemaSchema
-    .optional()
-    .describe(
-      'The exact JSON Schema the paired ggui_render enforces for this handshakeId — generate props that satisfy it (enum fields list their full legal vocabulary). Present when the agreed contract differs from your draft; when absent, your draft propsSpec is agreed verbatim. Advisory: no agent obligation attaches to reading it; runtimes MAY compile it for constrained argument generation.',
-    ),
-  propsSchemaHash: z
-    .string()
-    .optional()
-    .describe(
-      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema. Present on every non-declined handshake. A later contract_violation carries the hash of the schema it enforced — equal hashes mean the props were at fault.',
-    ),
-  propsSchemaProfile: z
-    .string()
-    .optional()
-    .describe(
-      "Grammar profile of the enforced props schema: 'grammar-safe' (every keyword is in the enumerated core — a runtime can compile the schema into a decoding grammar) or 'full' (read the schema as context instead). Treat unrecognized values as 'full'; the set may grow in minor versions.",
-    ),
-  nextStep: z
-    .object({
-      tool: z.literal('ggui_render'),
-      example: z.string(),
-    })
-    .optional(),
-} as const;
+const outputSchema = handshakeOutputSchema.shape;
 
 interface HandshakeOutput {
   handshakeId: string;
