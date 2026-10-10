@@ -45,12 +45,12 @@ afterEach(() => {
 const TOOL_USE = { type: "tool_use", id: "toolu_1", name: TOOL.name, input: { matchId: null } };
 
 describe("anthropicProbeJudge", () => {
-  it("defaults to Haiku 4.5 with the forced tool and the probes' 512-token budget", async () => {
+  it("defaults to Haiku 5.5 (#1795) with the forced tool and the probes' 512-token budget", async () => {
     replyBody = { content: [TOOL_USE], stop_reason: "tool_use" };
     await expect(anthropicProbeJudge("sk").callStructured?.("sys", "u", TOOL)).resolves.toEqual({
       matchId: null,
     });
-    expect(sent[0]?.model).toBe("claude-haiku-4-5");
+    expect(sent[0]?.model).toBe("claude-haiku-5-5");
     expect(sent[0]?.tool_choice).toEqual({ type: "tool", name: TOOL.name });
     expect(sent[0]?.max_tokens).toBe(512);
     expect(sent[0]?.system).toBe("sys");
