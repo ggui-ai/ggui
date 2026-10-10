@@ -699,7 +699,7 @@ export const PAIRS: readonly MatchPair[] = [
     expect: { verdict: 'miss' },
     reuseWouldBeWrong: true,
     rationale:
-      'Live-filter vs click-to-search are different interaction patterns (the synth corpus treats them as distinct shapes); a live-filter surface cannot honor the submit contract.',
+      'Different interaction MODEL, which is part of UI shape (protocol and design ruling, 2026-10-11, ggui#1795): the seed is context-only — `contextSpec.query` narrows `results` it already has, nothing to press — while the probe submits `actionSpec.runSearch` to fetch (a button, a pending state, results that arrive). That is the contract line in docs/principles/actions-vs-context.md (actions drive turns; context observes state), not an action-count delta, so the coverage-blind "differing actions do not block" rule does not apply and the judge prompt names the model line explicitly. Verbatim reuse would also fail `isFulfillable` on the missing action member, which is why `reuseWouldBeWrong` holds at the system level too.',
   },
 
   // -------------------------------------------------------------------------
