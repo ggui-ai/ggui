@@ -65,6 +65,38 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-10',
+    text:
+      'Disclosure, no change (internal issue #1798): each judge scores its own provider\'s ' +
+      'generations slightly higher. Every published score is the mean of three judges, one from ' +
+      'each provider: Claude Haiku 4.5, GPT-5.4-mini and Gemini 3.5 Flash. We checked whether a ' +
+      'judge treats generations from its own provider differently. On the same cells, we ' +
+      'compared each judge\'s score with the mean of the other two judges, on its own provider\'s ' +
+      'arms and on the other providers\' arms. All three judges score their own provider\'s arms ' +
+      'higher than the other two judges do: Claude Haiku 4.5 by +1.1 points (95% interval +0.4 ' +
+      'to +1.8), GPT-5.4-mini by +1.3 (+0.5 to +2.1) and Gemini 3.5 Flash by +2.4 (+1.5 to ' +
+      '+3.2). The intervals resample whole nights and whole prompt-nights, because cells from ' +
+      'the same night and prompt are not independent. Gemini\'s excess is the largest in 96-98% ' +
+      'of resamples. What this means for the published numbers: each judge is one third of the ' +
+      'mean, so the effect on a published score is about +0.4 for Anthropic arms, +0.4 for ' +
+      'OpenAI arms and +0.8 for Google arms. It is roughly balanced, which is why the panel has ' +
+      'one judge per provider. Google\'s arms sit about 0.4 points higher than the other two as ' +
+      'a result. When comparing a Google arm with an Anthropic or OpenAI arm, read differences ' +
+      'smaller than about a point with that in mind. Anthropic-vs-OpenAI comparisons carry ' +
+      'almost no net tilt (+0.36 vs +0.42). What this cannot tell apart: a judge that prefers ' +
+      'its own provider\'s output, and a judge that is more sensitive to its own provider\'s ' +
+      'style, produce exactly this result. These measurements do not separate them. What ' +
+      'changes: no published score changes. The panel\'s Anthropic judge, Claude Haiku 4.5, is ' +
+      'the same model as the Anthropic fast arm (claude-fast), so today one judge scores its ' +
+      'own model. We intend to re-choose that seat with a model that is not a generator under ' +
+      'test. The switch, if made, will be bridged (old and new panel scoring the same cells, ' +
+      'with the shift published per arm) and announced here before it takes effect. Data: ' +
+      'published nights 2026-09-29 to 2026-10-09 (8 nights, 878 cells with a full panel), ' +
+      'reproducible from the public data/<date>/multi-sdk.json files. Cells are the per-prompt, ' +
+      'per-arm, per-night scores; the intervals cover sampling of nights and prompts, not a ' +
+      'change of judge models.',
+  },
+  {
     date: '2026-10-01',
     text:
       'Instrument change (internal issue #1652): in short, the runtime probe\'s action check now ' +
