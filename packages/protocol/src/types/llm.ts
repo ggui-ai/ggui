@@ -268,15 +268,16 @@ const MODEL_ROWS = defineModelRegistry({
   // shape does not model (as it does not model the 1h cache write).
   // model-deprecations "claude-haiku-5-5 | Active | N/A | Not sooner than
   // October 7, 2027"; models/haiku-5-5/overview: released 2026-10-07, 1M
-  // context, the first dateless Haiku id. Not in the lineup, not the default:
-  // the switch is measured first (ggui#1743).
+  // context, the first dateless Haiku id. The open-source default and on the
+  // lineup since the measured switch (ggui#1743 stage 1 — see DEFAULT_MODEL
+  // below); it replaces Haiku 4.5 on the front page, the ggui#1266 shape.
   "anthropic/claude-haiku-5-5": {
     id: "anthropic/claude-haiku-5-5",
     provider: "anthropic",
     displayName: "Claude Haiku 5.5",
     tier: "fast",
     state: "active",
-    lineup: false,
+    lineup: true,
     retireNotBefore: "2027-10-07",
     costs: {
       inputPer1M: 0.1,
@@ -287,15 +288,20 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
-  // Default generation model (ui-gen's default engine; see
-  // DEFAULT_MODEL below). Hosted pools default here too.
+  // Legacy since ggui#1743 (2026-10-10): Haiku 5.5 replaces it as the
+  // open-source default and on the front page (the ggui#1266 shape); it stays
+  // routable under "See all models". Anthropic's models overview (read
+  // 2026-10-10) lists Claude Haiku 4.5 under "Legacy models (still
+  // available)"; its deprecations page keeps it Active, retire ≥ 2026-10-15.
+  // A hosted deployment's pool default is that deployment's own constant,
+  // not this row.
   "anthropic/claude-haiku-4-5": {
     id: "anthropic/claude-haiku-4-5",
     provider: "anthropic",
     displayName: "Claude Haiku 4.5",
     tier: "fast",
-    state: "active",
-    lineup: true,
+    state: "legacy",
+    lineup: false,
     retireNotBefore: "2026-10-15",
     costs: {
       inputPer1M: 1.0,
@@ -689,7 +695,20 @@ export function isLineupModel(id: ModelId): boolean {
 }
 
 /**
- * Default model for generation. Stays Haiku 4.5 until the founder rules
- * ggui#706 decision 1 (Fable 5.1 is 10× the per-render cost).
+ * Default model for generation — the OPEN-SOURCE default, what a caller
+ * who passes no model gets (`@ggui-ai/ui-gen` carries the same value as
+ * its own constant). A hosted deployment's pool default is that
+ * deployment's own constant, never this one.
+ *
+ * Haiku 5.5 since ggui#1743 (2026-10-10). ggui#706 decision 1 held it at
+ * Haiku 4.5 until a ruling; the ruling came as #1743's "measure, then
+ * switch the defaults": benchmark's stage 1 (same session, the nightly's
+ * ten prompts, n = 3 per arm, judge panel fixed, bars written before the
+ * run) read panel score +3.07 with a one-sided 95 % lower bound of +0.88
+ * against a −2.5 bar, ≥ 6-turn share 2/30 vs 2/30, contract-behaviour
+ * failures 2 vs 2, ≈ 0.18× the cost per generation; the one loop it
+ * exposed was fixed as #1790 and re-measured at 1/1/1 turns. The value
+ * is rnd's decision on that receipt; the lineup slot moves with it
+ * (Haiku 4.5 → legacy, the ggui#1266 shape).
  */
-export const DEFAULT_MODEL: ModelId = "anthropic/claude-haiku-4-5";
+export const DEFAULT_MODEL: ModelId = "anthropic/claude-haiku-5-5";

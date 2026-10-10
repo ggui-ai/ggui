@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * The open-source default moves to Haiku 5.5 (2026-10-10, ggui#1743 — a
+ * registry-fact change, same draft stamp): `DEFAULT_MODEL` is
+ * `anthropic/claude-haiku-5-5` (was `anthropic/claude-haiku-4-5`),
+ * `anthropic/claude-haiku-5-5` joins the lineup and
+ * `anthropic/claude-haiku-4-5` becomes `legacy` and leaves it — the
+ * ggui#1266 replace shape; it stays routable. Measured before the switch
+ * (benchmark's stage 1 on the row: panel score +3.07, one-sided 95 % lower
+ * bound +0.88 against a −2.5 bar; ≥ 6-turn share 2/30 vs 2/30;
+ * contract-behaviour failures 2 vs 2; ≈ 0.18× cost per generation; the
+ * #1790 loop fixed and re-measured). Nothing outside the protocol package
+ * imports `DEFAULT_MODEL`; a hosted deployment's pool default is its own
+ * constant. The MCP wire is unchanged. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Model registry: `anthropic/claude-haiku-5-5`, `anthropic/claude-sonnet-5-5`,
  * `openai/gpt-6.1-sol`, `gemini/gemini-3.8-flash` (2026-10-10, additive,
  * ggui#1743 — MINOR, same draft stamp; the protocol half of the latest-

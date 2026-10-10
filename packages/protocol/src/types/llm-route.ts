@@ -152,6 +152,13 @@ export const MODELS = {
     //     access not open, no vendored LiteLLM Bedrock price row). Requires the AWS account to
     //     have enabled Claude in Amazon Bedrock; otherwise every id
     //     403s "not available for this account".
+    //     Bedrock Haiku 5.5 / Sonnet 5.5 (ggui#1743, 2026-10-10) follow
+    //     the same rule: Anthropic's Bedrock page lists
+    //     `anthropic.claude-haiku-5-5` / `anthropic.claude-sonnet-5-5`
+    //     with access "See Access" (not Open), so neither is registered
+    //     here even though the open-source default is now Haiku 5.5 and
+    //     ui-gen's Bedrock adapter maps it to `us.anthropic.claude-haiku-5-5`
+    //     by shape. Register them when access opens, as for Opus 5.5.
 
     // Messages-API endpoint (Mantle) — Claude 5 family + Opus 4.8
     'anthropic.claude-fable-5-1', // ggui#706: Bedrock id for Fable 5.1
