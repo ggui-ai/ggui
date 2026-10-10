@@ -71,6 +71,17 @@ export function normalizeAnthropicModelId(model: string): string {
  * (ggui#1743): "Omit `temperature`, `top_p`, and `top_k`. See Remove
  * sampling parameters … for the values that return a 400 error." The
  * `haiku-5` arm is the first Haiku on the rule's side of the line.
+ *
+ * The boundary is `(?:-|$)` on purpose — no `[-.]` arm — so OpenRouter's
+ * dotted spellings (`claude-opus-5.5`, `claude-haiku-5.5`) read `false`
+ * (ggui#1776). The OpenRouter agent forwards a caller `temperature`
+ * without consulting this rule, and the one call that would have made a
+ * dotted arm necessary answered 200: OpenRouter-routed
+ * `anthropic/claude-opus-5.5` with `temperature: 0` (2026-10-10). A 200
+ * does not say whether OpenRouter dropped the parameter or an upstream
+ * accepted it, so a temperature sent through OpenRouter is not a
+ * reproducibility pin; it only means there is no 400 to strip for. The
+ * test file pins the `false` so a dotted arm is a decision, not a drift.
  */
 export function anthropicRejectsSamplingParams(model: string): boolean {
   return /^claude-(?:opus-4-7|opus-5|sonnet-5|haiku-5|fable-5)(?:-|$)/.test(

@@ -87,6 +87,21 @@ describe("anthropicRejectsSamplingParams — Opus 4.7+ and the 5-family", () => 
   ])("%s rejects sampling params (ggui#1743)", (id) => {
     expect(anthropicRejectsSamplingParams(id)).toBe(true);
   });
+
+  // ggui#1776 — OpenRouter's dotted spellings read `false` BY DESIGN, not by
+  // omission: the boundary is `(?:-|$)`, and the one call that could have made
+  // a dotted arm necessary answered 200 — OpenRouter-routed
+  // `anthropic/claude-opus-5.5` with `temperature: 0` (ggui-team-rnd,
+  // 2026-10-10). A 200 does not say whether OpenRouter dropped the parameter
+  // or an upstream accepted it, so a temperature through OpenRouter is not a
+  // reproducibility pin; it only means there is no 400 to strip for. If that
+  // ever changes, this pin is the one to flip, deliberately.
+  it.each(["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-5.5"])(
+    "%s is not stripped on the OpenRouter route — measured 200 with temperature set (ggui#1776)",
+    (id) => {
+      expect(anthropicRejectsSamplingParams(id)).toBe(false);
+    }
+  );
 });
 
 describe("anthropicRejectsForcedToolChoice — Fable 5.1 (ggui#706)", () => {
@@ -306,6 +321,11 @@ const VENDOR_FORCED_TOOL_TABLE: Readonly<Record<string, VendorForcedToolRow>> = 
     rejectsForcedToolChoice: true,
     receipt: "OpenRouter spelling of Claude Opus 5.5 (listed ggui#1267) — (A) names Claude Opus 5.5; (B) `auto`, `none` only",
   },
+  "claude-haiku-5.5": {
+    rejectsForcedToolChoice: false,
+    receipt:
+      "OpenRouter spelling of Claude Haiku 5.5 (listed 2026-10-10 after its ggui#1267 smoke: 3/3 tool calls with tool_choice required, not downgraded) — (C)'s thinking row names Claude Haiku 5.5 as accepting",
+  },
 };
 
 /**
@@ -328,8 +348,8 @@ const ROUTABLE_ANTHROPIC_IDS: readonly string[] = [
 const ROUTABLE_NORMALIZED = [...new Set(ROUTABLE_ANTHROPIC_IDS.map(normalizeAnthropicModelId))].sort();
 
 describe("anthropicRejectsForcedToolChoice — pinned against the vendor over every routable Anthropic id (ggui#1268)", () => {
-  it("the routable union is 18 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
-    expect(ROUTABLE_NORMALIZED).toHaveLength(18);
+  it("the routable union is 19 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
+    expect(ROUTABLE_NORMALIZED).toHaveLength(19);
   });
 
   it("every routable Anthropic id has a vendor-quoted row — a new one without a receipt fails here", () => {
@@ -346,7 +366,7 @@ describe("anthropicRejectsForcedToolChoice — pinned against the vendor over ev
     const rows = Object.values(VENDOR_FORCED_TOOL_TABLE);
     // Both directions are exercised, not just one: the table holds both answers.
     expect(rows.filter((r) => r.rejectsForcedToolChoice)).toHaveLength(4);
-    expect(rows.filter((r) => !r.rejectsForcedToolChoice)).toHaveLength(14);
+    expect(rows.filter((r) => !r.rejectsForcedToolChoice)).toHaveLength(15);
     for (const raw of ROUTABLE_ANTHROPIC_IDS) {
       const row = VENDOR_FORCED_TOOL_TABLE[normalizeAnthropicModelId(raw)];
       expect(row, raw).toBeDefined();

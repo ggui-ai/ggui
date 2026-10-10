@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `MODELS.openrouter` gains `anthropic/claude-haiku-5.5` (2026-10-10,
+ * ggui#1743, additive — MINOR, same draft stamp): listed on the ggui#1267
+ * gate's own receipt (the OpenRouter tools smoke, 3/3 with
+ * `tool_choice: required`, 0 errors) and OpenRouter's live price
+ * ($0.10 / $0.50 per 1M). The ggui#1268 vendor table carries the dotted
+ * spelling as accepting forced tool use (routable union 18 → 19). Beside
+ * it, ggui#1776 closes as a documented boundary, not a code change:
+ * `anthropicRejectsSamplingParams` keeps `(?:-|$)` and reads `false` on
+ * OpenRouter's dotted ids, because the OpenRouter route answered 200 with
+ * a temperature set; the test pins that `false` as deliberate. The MCP
+ * wire is unchanged. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * The open-source default moves to Haiku 5.5 (2026-10-10, ggui#1743 — a
  * registry-fact change, same draft stamp): `DEFAULT_MODEL` is
  * `anthropic/claude-haiku-5-5` (was `anthropic/claude-haiku-4-5`),

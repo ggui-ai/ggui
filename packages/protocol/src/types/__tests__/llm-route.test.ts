@@ -57,14 +57,17 @@ describe('MODELS registry', () => {
     }
   });
 
-  it('openrouter autocomplete carries the three ids that passed the OpenRouter tools smoke (ggui#1267, founder D3)', () => {
+  it('openrouter autocomplete carries the four ids that passed the OpenRouter tools smoke (ggui#1267, founder D3)', () => {
     // 2026-09-26 clean smoke, fresh agent per call, tool_choice required:
     // 3/3 tool calls returned per id, 0 errors (ggui#1267). Opus 5.5 joined
     // once its dotted OpenRouter id resolved to a price row (the dashed
-    // Anthropic tail is tried after the dotted one).
+    // Anthropic tail is tried after the dotted one). Haiku 5.5 joined on
+    // 2026-10-10 on the same smoke shape (3/3, `appliedToolChoice: required`,
+    // 0 errors — ggui#1743), the dashed tail pricing it the same way.
     expect(MODELS.openrouter).toContain('openai/gpt-6-luna');
     expect(MODELS.openrouter).toContain('openai/gpt-6-sol');
     expect(MODELS.openrouter).toContain('anthropic/claude-opus-5.5');
+    expect(MODELS.openrouter).toContain('anthropic/claude-haiku-5.5');
   });
 
   it('openrouter known entries follow `<author>/<model>` shape', () => {

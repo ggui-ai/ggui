@@ -208,6 +208,16 @@ export const MODELS = {
     // its dotted id resolves to a price row (the dashed Anthropic tail is
     // tried after the dotted one). OpenRouter keeps the dot.
     'anthropic/claude-opus-5.5',
+    // Haiku 5.5 on OpenRouter (ggui#1743, 2026-10-10) — the same ggui#1267
+    // smoke shape, run by rnd on 2026-10-10: fresh agent per call,
+    // `tool_choice: required` applied (not downgraded), 3/3 tool calls
+    // returned, 0 errors. OpenRouter's catalog (openrouter.ai/api/v1/models,
+    // read 2026-10-10) serves `anthropic/claude-haiku-5.5` at $0.10 prompt /
+    // $0.50 completion per 1M — Anthropic's own price, which is also what the
+    // dashed-tail fallback prices it at now that LiteLLM carries no
+    // `openrouter/*` rows (ggui#1771). The open-source zero-config OpenRouter
+    // route moves to it in ggui-cli, on this listing.
+    'anthropic/claude-haiku-5.5',
     'anthropic/claude-fable-5',
     'anthropic/claude-opus-5',
     'anthropic/claude-sonnet-5',
