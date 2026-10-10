@@ -714,8 +714,8 @@ async function runServeCommand(args: string[]): Promise<number> {
         `  }\n` +
         `\n` +
         `Accepted forms:\n` +
-        `  - canonical: "anthropic:claude-haiku-4-5-20251001"\n` +
-        `  - LiteLLM:   "anthropic/claude-haiku-4-5"\n` +
+        `  - canonical: "anthropic:claude-haiku-5-5"\n` +
+        `  - LiteLLM:   "anthropic/claude-haiku-5-5"\n` +
         `\n` +
         `See docs/principles/model-string-convention.md.\n`,
     );

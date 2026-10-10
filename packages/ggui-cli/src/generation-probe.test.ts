@@ -3,6 +3,7 @@ import type {
   BlueprintProvider,
   LlmProvider,
 } from '@ggui-ai/mcp-server';
+import { DEFAULT_MODEL, isValidLlmRoute, parseAnyLlmRoute } from '@ggui-ai/protocol';
 import {
   DEFAULT_ROUTE_BY_PROVIDER,
   PROVIDER_PROBE_ORDER,
@@ -83,7 +84,7 @@ describe('probeGenerationBinding', () => {
       blueprints: emptyBlueprints,
     });
     expect(binding.bootResolved).toBe(false);
-    // Default to anthropic / claude-haiku-4-5 — the OSS fall-back
+    // Default to anthropic / claude-haiku-5-5 — the OSS fall-back
     // provider that the Connect-Claude card flow steers users toward.
     expect(binding.provider).toBe('anthropic');
     expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.anthropic.model);
@@ -468,6 +469,19 @@ describe('locked constants', () => {
       expect(route.model).toBeTypeOf('string');
       expect(route.model.length).toBeGreaterThan(0);
     }
+  });
+
+  it('every default route is a registered route: the zero-config path never hands out an id the protocol does not know', () => {
+    for (const provider of PROVIDER_PROBE_ORDER) {
+      const route = DEFAULT_ROUTE_BY_PROVIDER[provider];
+      expect(isValidLlmRoute(route.provider, route.model), `${route.provider}:${route.model}`).toBe(true);
+    }
+  });
+
+  it("the Anthropic default route is the protocol's DEFAULT_MODEL (ggui#1792): the CLI keeps its own table, so this pins it to the open-source default", () => {
+    const fromProtocol = parseAnyLlmRoute(DEFAULT_MODEL);
+    expect(fromProtocol?.provider).toBe('anthropic');
+    expect(DEFAULT_ROUTE_BY_PROVIDER.anthropic).toEqual(fromProtocol);
   });
 
   it('PROVIDER_PROBE_ORDER does not include bedrock (hosted-only auth chain)', () => {

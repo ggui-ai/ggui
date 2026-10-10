@@ -20,7 +20,7 @@
  *      `ggui_render`.
  *   3. **No-key default** — when the boot scan finds nothing, we
  *      STILL return a binding (provider=`anthropic`, model=
- *      `claude-haiku-4-5`). Generation stays wired; the
+ *      `claude-haiku-5-5`). Generation stays wired; the
  *      no-credentials path now produces a Connect-Claude card
  *      render via {@link GenerationDeps.onNoCredentials}
  *      instead of the broken `codeReady:false` placeholder.
@@ -77,11 +77,15 @@ import type {
  * what the provider's API expects on the wire) — there is no
  * transformation step downstream. `dispatchGeneration` sends
  * `route.model` verbatim.
+ *
+ * The Anthropic row is the protocol's `DEFAULT_MODEL` (the open-source
+ * default), pinned by a test so the two cannot drift apart (ggui#1792).
+ * The other rows are this CLI's own choice per provider.
  */
 export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
   Record<Exclude<LlmProvider, 'bedrock'>, LlmRoute>
 > = {
-  anthropic: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  anthropic: { provider: 'anthropic', model: 'claude-haiku-5-5' },
   openai: { provider: 'openai', model: 'gpt-5.6-luna' },
   google: { provider: 'google', model: 'gemini-3.5-flash-lite' },
   openrouter: { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' },
