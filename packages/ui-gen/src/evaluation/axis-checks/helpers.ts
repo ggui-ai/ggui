@@ -340,9 +340,12 @@ function initialStateKeys(src: string, argStart: number, argText: string): strin
   if (text.startsWith("{")) return objectLiteralKeysAt(src, at) ?? [];
   const ident = /^([A-Za-z_$][\w$]*)\s*\)?\s*$/.exec(text);
   if (ident === null || ident[1] === undefined) return [];
-  const decl = new RegExp(`(?:const|let|var)\\s+${ident[1]}\\s*(?::[^=]{1,200})?=\\s*`).exec(src);
-  if (decl === null) return [];
-  return objectLiteralKeysAt(src, decl.index + decl[0].length) ?? [];
+  // One binding, or none: a name declared twice (shadowed, or re-declared in another scope) is
+  // ambiguous, and ambiguity reads as absence, so the check can never pass on the wrong binding.
+  const decls = [...src.matchAll(new RegExp(`(?:const|let|var)\\s+${ident[1]}\\s*(?::[^=]{1,200})?=\\s*`, "g"))];
+  const decl = decls.length === 1 ? decls[0] : undefined;
+  if (decl === undefined) return [];
+  return objectLiteralKeysAt(src, (decl.index ?? 0) + decl[0].length) ?? [];
 }
 
 /**

@@ -36,6 +36,11 @@ describe('collectStateKeys (ggui#1790)', () => {
     expect(keys.has('meta')).toBe(true);
   });
 
+  it('a name declared twice is ambiguous and contributes nothing, so the wrong binding can never satisfy the check', () => {
+    const src = `const INITIAL = { ${BODY} };\nfunction Inner() {\n  const INITIAL = { name: '' };\n  return null;\n}\nconst [data, setData] = useState(INITIAL);`;
+    expect(missing(src)).toEqual(KEYS);
+  });
+
   it('an identifier with no object-literal declaration in the file contributes no keys', () => {
     expect(missing(`const [data, setData] = useState(loadFromProps(props));`)).toEqual(KEYS);
   });
