@@ -73,6 +73,7 @@ describe('parseServeFlags', () => {
       host: DEFAULT_SERVE_HOST,
       mcpOnly: false,
       devAllowAll: false,
+      noConsole: false,
       withholdResultMeta: false,
       publicDemo: false,
       multiUser: false,
@@ -185,6 +186,12 @@ describe('parseServeFlags', () => {
     expect(parseServeFlags([]).mcpOnly).toBe(false);
   });
 
+  it('parses --no-console (ggui#1167), off by default and independent of --mcp-only', () => {
+    expect(parseServeFlags(['--no-console']).noConsole).toBe(true);
+    expect(parseServeFlags([]).noConsole).toBe(false);
+    expect(parseServeFlags(['--mcp-only']).noConsole).toBe(false);
+  });
+
   it('rejects --all with a pointer to --mcp-only (§10.2a lock)', () => {
     const parsed = parseServeFlags(['--all']);
     expect(parsed.error).toContain('--all is not a flag');
@@ -287,6 +294,26 @@ describe('describeServeBanner', () => {
     expect(joined).toContain('strict');
     expect(joined).toContain('pair-minted');
     expect(joined).toContain('Ctrl-C');
+  });
+
+  it('under noConsole (ggui#1167) a key-less boot names the env vars, with no admin or /settings wording', () => {
+    const lines = describeServeBanner({
+      port: 6781,
+      host: '127.0.0.1',
+      toolCount: 3,
+      serverName: 'ggui-mcp-server',
+      serverVersion: '1.2.3',
+      agent: AGENT_RUNNING,
+      noLlmKey: true,
+      noConsole: true,
+    });
+    const joined = lines.join('\n');
+    expect(joined).toContain('no LLM key configured');
+    expect(joined).toContain('ANTHROPIC_API_KEY');
+    expect(joined).not.toContain('/settings');
+    expect(joined).not.toMatch(/admin/i);
+    // No console is served, so the banner advertises no landing page to open.
+    expect(joined).not.toContain('open      →');
   });
 
   it('replaces the strict-auth blurb with a DEV ALLOW-ALL warning when devAllowAll', () => {
@@ -517,6 +544,7 @@ describe('runServe', () => {
     host: '127.0.0.1',
     mcpOnly: true,
     devAllowAll: false,
+    noConsole: false,
     withholdResultMeta: false,
     oauth: false,
     publicDemo: false,
@@ -674,6 +702,7 @@ describe('runServe — agent supervision', () => {
     host: '127.0.0.1',
     mcpOnly: false,
     devAllowAll: false,
+    noConsole: false,
     withholdResultMeta: false,
     oauth: false,
     publicDemo: false,

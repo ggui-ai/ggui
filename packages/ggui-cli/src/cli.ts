@@ -66,6 +66,7 @@ import {
   probeGenerationBinding,
   resolveConfiguredRoute,
   type GenerationBinding,
+  type ProbeGenerationBindingOptions,
 } from './generation-probe.js';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
 import { FileSystemSeedPoolSource } from './filesystem-seed-pool-source.js';
@@ -129,6 +130,8 @@ Commands:
                  --port <n>       Bind port (default: 6781, 0 = OS-assigned).
                  --host <addr>    Bind host (default: 127.0.0.1).
                  --mcp-only       Boot only MCP; skip agent supervision.
+                 --no-console     Serve no operator console: no admin token is
+                                  minted or printed (env GGUI_NO_CONSOLE=1).
 
   login        Sign into ggui.ai (device flow). Tokens stored in
                ~/.ggui/auth.json.
@@ -609,6 +612,12 @@ async function runServeCommand(args: string[]): Promise<number> {
   const baseUrlForCard =
     parsed.publicBaseUrl ?? `http://${parsed.host}:${effectivePort}`;
   const settingsUrl = `${baseUrlForCard}/settings`;
+  // ggui#1167 — `--no-console` (or `GGUI_NO_CONSOLE=1` / `true`, the env twin a
+  // supervisor sets without touching argv): serve no operator console.
+  // Resolved before the key probe because the no-credentials card points
+  // at the console's `/settings`, which this mode does not serve.
+  const envNoConsole = process.env['GGUI_NO_CONSOLE']?.trim();
+  const noConsole = parsed.noConsole || envNoConsole === '1' || envNoConsole === 'true';
   // No-credentials cards live for an hour from mint — long enough for
   // the operator to follow the Connect-Claude link, paste a key, and
   // re-prompt before the persisted GguiSession is GC'd.
@@ -658,21 +667,27 @@ async function runServeCommand(args: string[]): Promise<number> {
     // fall back to an empty one so the generator has a valid
     // `blueprints` dep regardless of manifest state.
     const blueprintsForGen = blueprintProvider ?? new InMemoryBlueprintProvider();
+    // Without a console there is no `/settings` page for the card to link
+    // to, so under `--no-console` a key-less render fails with
+    // NO_CREDENTIALS instead (ggui#1167).
+    const onNoCredentials: ProbeGenerationBindingOptions['onNoCredentials'] = noConsole
+      ? undefined
+      : (ctx, story) => {
+          const nowEpochMs = Date.parse(story.nowIso);
+          return buildNoCredentialsGguiSession({
+            sessionId: story.sessionId,
+            appId: ctx.appId,
+            intent: story.intent,
+            nowEpochMs,
+            expiresAt: nowEpochMs + NO_CREDENTIALS_CARD_TTL_MS,
+            settingsUrl,
+          });
+        };
     generationBinding = await probeGenerationBinding({
       resolver: createByokResolver({ localCliLogin: parsed.localCliLogin }),
       blueprints: blueprintsForGen,
       ...(configuredRoute ? { configuredRoute } : {}),
-      onNoCredentials: (ctx, story) => {
-        const nowEpochMs = Date.parse(story.nowIso);
-        return buildNoCredentialsGguiSession({
-          sessionId: story.sessionId,
-          appId: ctx.appId,
-          intent: story.intent,
-          nowEpochMs,
-          expiresAt: nowEpochMs + NO_CREDENTIALS_CARD_TTL_MS,
-          settingsUrl,
-        });
-      },
+      ...(onNoCredentials ? { onNoCredentials } : {}),
     });
   } catch (err) {
     // Don't fail boot on a probe error (malformed credentials file,
@@ -762,6 +777,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         host: parsed.host,
         mcpOnly: parsed.mcpOnly,
         devAllowAll: parsed.devAllowAll,
+        noConsole,
         withholdResultMeta: parsed.withholdResultMeta,
         publicDemo: parsed.publicDemo,
         multiUser: parsed.multiUser,
@@ -785,6 +801,7 @@ async function runServeCommand(args: string[]): Promise<number> {
           publicDemo: parsed.publicDemo,
           multiUser: parsed.multiUser,
           oauth: parsed.oauth,
+          ...(noConsole ? { noConsole: true } : {}),
           ...(parsed.publicBaseUrl !== undefined
             ? { publicBaseUrl: parsed.publicBaseUrl }
             : {}),

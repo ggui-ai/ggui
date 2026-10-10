@@ -67,6 +67,16 @@ export interface ParsedServeFlags {
    */
   devAllowAll: boolean;
   /**
+   * ggui#1167 — serve no operator console. No console routes are
+   * mounted and no console admin token is minted, so nothing prints an
+   * operator bearer (`admin token →`, `ADMIN_TOKEN`). For a server a
+   * tool launches as an MCP endpoint only, where nobody logs in to a
+   * console. Env twin: `GGUI_NO_CONSOLE=1`, resolved by the CLI.
+   * Independent of `--mcp-only`, which skips agent supervision and
+   * still serves the console.
+   */
+  noConsole: boolean;
+  /**
    * Override the public base URL used to compose `mcpApps.wsUrl`
    * and `runtime.url`. Without this, the URLs derive from
    * `--host:--port`, which only resolves from the same machine.
@@ -274,6 +284,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     host: DEFAULT_SERVE_HOST,
     mcpOnly: false,
     devAllowAll: false,
+    noConsole: false,
     withholdResultMeta: false,
     publicDemo: false,
     multiUser: false,
@@ -309,6 +320,10 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     }
     if (arg === '--mcp-only') {
       out.mcpOnly = true;
+      continue;
+    }
+    if (arg === '--no-console') {
+      out.noConsole = true;
       continue;
     }
     if (arg === '--withhold-result-meta') {
@@ -566,6 +581,13 @@ export interface ServeBannerInputs {
    */
   readonly noLlmKey?: boolean;
   /**
+   * ggui#1167 — the server serves no console (`--no-console`). The
+   * banner then advertises no landing page, and a key-less boot names
+   * only the env vars to export: there is no `/settings` page and no
+   * admin token to point at.
+   */
+  readonly noConsole?: boolean;
+  /**
    * Embedding model id surfaced for the local RAG layer. When set,
    * the banner shows a `rag` line so operators see which model is
    * wired (and that bge-small downloads lazily on first render). Absent
@@ -590,7 +612,7 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
     // signal that closes the first-run story. Landing page lives at `/`
     // by default when `ggui serve` is the entry point (see
     // `cli.ts::buildMcpServerBackend`).
-    `  open      →  ${httpUrl}/`,
+    ...(input.noConsole ? [] : [`  open      →  ${httpUrl}/`]),
     `  mcp       →  ${httpUrl}/mcp`,
     `  health    →  ${httpUrl}/ggui/health`,
     `  tools     →  ${input.toolCount} registered`,
@@ -619,7 +641,15 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
       `  admin token →  ${input.adminToken}   (console /keys gate — paste at /admin-login)`,
     );
   }
-  if (input.noLlmKey) {
+  if (input.noLlmKey && input.noConsole) {
+    // ggui#1167 — no console, so no /settings page and no admin token:
+    // the only way to add a key is the environment.
+    lines.push(
+      `  ⚠ no LLM key configured. export ANTHROPIC_API_KEY /`,
+      `        OPENAI_API_KEY / GOOGLE_API_KEY / OPENROUTER_API_KEY`,
+      `        before re-running.`,
+    );
+  } else if (input.noLlmKey) {
     // First-run nudge — without an LLM key, ggui_render falls back to
     // the Connect-Claude card and the iframe never bootstraps. Surface
     // the /settings URL alongside admin-token so the operator can paste
@@ -983,6 +1013,7 @@ export async function runServe(opts: RunServeOptions): Promise<number> {
       : {}),
     ...(backend.adminToken ? { adminToken: backend.adminToken } : {}),
     ...(opts.noLlmKey ? { noLlmKey: true } : {}),
+    ...(opts.flags.noConsole ? { noConsole: true } : {}),
     ...(backend.embeddingModel ? { embeddingModel: backend.embeddingModel } : {}),
     ...(opts.flags.browserOrigins.length > 0
       ? { browserOrigins: opts.flags.browserOrigins }
@@ -995,13 +1026,15 @@ export async function runServe(opts: RunServeOptions): Promise<number> {
   // to the admin onboarding flow at `/admin-login?next=/admin/llm-keys`,
   // so the URL bar lands on the right page without the CLI needing
   // to know which target to pick. Skipped for: `--no-open`, non-TTY
-  // (CI / supervised / piped), `--mcp-only` (no UI surface to open).
+  // (CI / supervised / piped), `--mcp-only` (no UI surface to open),
+  // `--no-console` (no console to open, ggui#1167).
   // Errors are swallowed — the banner already shows the URL so the
   // operator can copy/paste if launchBrowser fails (xdg-open missing,
   // etc.).
   const shouldAutoOpenServe =
     !opts.flags.noOpen
     && !opts.flags.mcpOnly
+    && !opts.flags.noConsole
     && opts.stdout === process.stdout
     && process.stdout.isTTY === true;
   if (shouldAutoOpenServe) {

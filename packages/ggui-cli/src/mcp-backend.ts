@@ -409,6 +409,14 @@ export interface BuildMcpServerBackendOptions {
   readonly adminToken?: string;
 
   /**
+   * ggui#1167 — serve no operator console. The `console` option is not
+   * passed to `createGguiServer`, so no console route is mounted and no
+   * admin token is minted (`adminToken` is `null`). Surface =
+   * `--no-console` / `GGUI_NO_CONSOLE=1`.
+   */
+  readonly noConsole?: boolean;
+
+  /**
    * Server-rendered public welcome page at `/`. Identifies who runs
    * the server (operator block, hidden when nothing configured)
    * and links to the public deep-link surfaces + operator login.
@@ -908,38 +916,44 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // field; flag flips on `oauth: true` defaults (in-memory storage,
     // built-in paste-key consent page).
     ...(opts.oauth ? { oauth: true as const } : {}),
-    console: {
-      sessionCookie: true,
-      ...(opts.adminToken !== undefined ? { adminToken: opts.adminToken } : {}),
-      // First-run onboarding redirect. When neither the credentials
-      // file (`~/.ggui/credentials.json`) nor any provider env var
-      // (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY /
-      // OPENROUTER_API_KEY) is present, send `GET /` to the
-      // **admin** onboarding flow — the operator running `ggui serve`
-      // IS the admin on first-run, so they need the operator-key
-      // plane (`/admin/llm-keys`) and the assistant-connection card
-      // surfaced there. Cookie-gated end-user `/settings` is for a
-      // *separate* user paired with the server later, not the
-      // first-run operator. Once any key is configured, the next
-      // visit serves the SPA normally. Scoped to the root path;
-      // deep links bypass the redirect.
-      landingRedirect: () => {
-        try {
-          const credsFileExists = existsSync(getCredentialsFile());
-          const anyEnvKey =
-            !!process.env.ANTHROPIC_API_KEY ||
-            !!process.env.OPENAI_API_KEY ||
-            !!process.env.GOOGLE_API_KEY ||
-            !!process.env.OPENROUTER_API_KEY;
-          if (!credsFileExists && !anyEnvKey) {
-            return "/admin-login?next=%2Fadmin%2Fllm-keys";
-          }
-          return null;
-        } catch {
-          return null;
-        }
-      },
-    },
+    // ggui#1167 — `--no-console` mounts no console and so mints no admin
+    // token: the server is an MCP endpoint only, with no operator bearer.
+    ...(opts.noConsole
+      ? {}
+      : {
+          console: {
+            sessionCookie: true,
+            ...(opts.adminToken !== undefined ? { adminToken: opts.adminToken } : {}),
+            // First-run onboarding redirect. When neither the credentials
+            // file (`~/.ggui/credentials.json`) nor any provider env var
+            // (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY /
+            // OPENROUTER_API_KEY) is present, send `GET /` to the
+            // **admin** onboarding flow — the operator running `ggui serve`
+            // IS the admin on first-run, so they need the operator-key
+            // plane (`/admin/llm-keys`) and the assistant-connection card
+            // surfaced there. Cookie-gated end-user `/settings` is for a
+            // *separate* user paired with the server later, not the
+            // first-run operator. Once any key is configured, the next
+            // visit serves the SPA normally. Scoped to the root path;
+            // deep links bypass the redirect.
+            landingRedirect: () => {
+              try {
+                const credsFileExists = existsSync(getCredentialsFile());
+                const anyEnvKey =
+                  !!process.env.ANTHROPIC_API_KEY ||
+                  !!process.env.OPENAI_API_KEY ||
+                  !!process.env.GOOGLE_API_KEY ||
+                  !!process.env.OPENROUTER_API_KEY;
+                if (!credsFileExists && !anyEnvKey) {
+                  return "/admin-login?next=%2Fadmin%2Fllm-keys";
+                }
+                return null;
+              } catch {
+                return null;
+              }
+            },
+          },
+        }),
     // Public welcome page at `/` — operator identification + public
     // deep-link surfaces + operator-login affordance. Resolved from
     // `ggui.json#operator` + `ggui.json#app.name` by serve-command.ts;

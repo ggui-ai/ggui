@@ -197,6 +197,16 @@ describe('buildMcpServerBackend', () => {
     expect(res.headers.get('content-security-policy')).toBeTruthy();
   });
 
+  it('noConsole (ggui#1167): no admin token is minted and no console route is served, while MCP still answers', async () => {
+    const port = await pickFreePort();
+    backend = buildMcpServerBackend({ cliVersion: 'test-0.0.0', host: '127.0.0.1', port, noConsole: true });
+    expect(backend.adminToken).toBeNull();
+    boundPort = await backend.listen(port, '127.0.0.1');
+    const url = `http://127.0.0.1:${boundPort}`;
+    expect((await fetch(`${url}/ggui/console/info`)).status).toBe(404);
+    expect((await fetch(`${url}/ggui/health`)).status).toBe(200);
+  });
+
   it('exposes pair endpoints so Portal + third-party clients can pair', async () => {
     const { url } = await boot();
     // POST /pair without a valid code → 400/401/403, NEVER 404. The
