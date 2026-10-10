@@ -302,6 +302,12 @@ const MODEL_ROWS = defineModelRegistry({
     tier: "fast",
     state: "legacy",
     lineup: false,
+    // The vendor's FLOOR ("not sooner than October 15, 2026"), not a
+    // deprecation date: no deprecation of Haiku 4.5 has been announced
+    // (deprecations page, read 2026-10-10), and Anthropic gives at least 60
+    // days' notice before a retirement, so none can land before ~2026-12-09
+    // from a notice given today. Read it as "still served at least until",
+    // never as a deadline (ggui#1796).
     retireNotBefore: "2026-10-15",
     costs: {
       inputPer1M: 1.0,

@@ -152,13 +152,14 @@ export const MODELS = {
     //     access not open, no vendored LiteLLM Bedrock price row). Requires the AWS account to
     //     have enabled Claude in Amazon Bedrock; otherwise every id
     //     403s "not available for this account".
-    //     Bedrock Haiku 5.5 / Sonnet 5.5 (ggui#1743, 2026-10-10) follow
-    //     the same rule: Anthropic's Bedrock page lists
-    //     `anthropic.claude-haiku-5-5` / `anthropic.claude-sonnet-5-5`
-    //     with access "See Access" (not Open), so neither is registered
-    //     here even though the open-source default is now Haiku 5.5 and
-    //     ui-gen's Bedrock adapter maps it to `us.anthropic.claude-haiku-5-5`
-    //     by shape. Register them when access opens, as for Opus 5.5.
+    //     A 5.5-generation Bedrock id is registered on TWO receipts, never
+    //     on the docs page alone (its access column reads "See Access",
+    //     i.e. per account): a live read on this account's region
+    //     (`list-inference-profiles` / `list-foundation-models`) AND a
+    //     row in the vendored price table. Haiku 5.5 has both (ggui#1796,
+    //     below). Sonnet 5.5 has the price rows and no account read, so
+    //     `anthropic.claude-sonnet-5-5` and its profiles stay unregistered
+    //     until someone reads them.
 
     // Messages-API endpoint (Mantle) — Claude 5 family + Opus 4.8
     'anthropic.claude-fable-5-1', // ggui#706: Bedrock id for Fable 5.1
@@ -166,6 +167,19 @@ export const MODELS = {
     'anthropic.claude-opus-5',
     'anthropic.claude-sonnet-5',
     'anthropic.claude-opus-4-8',
+    // Haiku 5.5 (ggui#1796, 2026-10-10): `anthropic.claude-haiku-5-5` read
+    // ACTIVE in `list-foundation-models` (us-east-1) by ggui-team-status;
+    // priced in the vendored table at Anthropic's own rate.
+    'anthropic.claude-haiku-5-5',
+
+    // Haiku 5.5 profiles (ggui#1796, 2026-10-10): `us.` read ACTIVE in
+    // `list-inference-profiles` (us-east-1); `global.` is named for Claude
+    // Haiku 5.5 on Anthropic's Bedrock page (global endpoint, no pricing
+    // premium). Both priced in the vendored table (regional +10 %). `eu.`
+    // and `apac.` are priced too but were not read on the account — add
+    // them on a read, per the rule above.
+    'us.anthropic.claude-haiku-5-5',
+    'global.anthropic.claude-haiku-5-5',
 
     // Haiku 4.5 — has full us/eu/apac/global coverage per Anthropic docs
     'us.anthropic.claude-haiku-4-5-20251001-v1:0',

@@ -57,6 +57,20 @@ describe('MODELS registry', () => {
     }
   });
 
+  it('bedrock lists Claude Haiku 5.5 in the three spellings read live on the account (ggui#1796), and no eu./apac. profile nobody read', () => {
+    // 2026-10-10: `us.anthropic.claude-haiku-5-5` ACTIVE in `list-inference-profiles`
+    // (us-east-1) and `anthropic.claude-haiku-5-5` ACTIVE in `list-foundation-models`
+    // (ggui-team-status, ggui#1796); the global endpoint is named for Claude Haiku 5.5
+    // on Anthropic's Bedrock page. The vendored price table carries all three.
+    expect(MODELS.bedrock).toContain('us.anthropic.claude-haiku-5-5');
+    expect(MODELS.bedrock).toContain('global.anthropic.claude-haiku-5-5');
+    expect(MODELS.bedrock).toContain('anthropic.claude-haiku-5-5');
+    expect(MODELS.bedrock).not.toContain('eu.anthropic.claude-haiku-5-5');
+    expect(MODELS.bedrock).not.toContain('apac.anthropic.claude-haiku-5-5');
+    // Sonnet 5.5 has no account read yet, so its Bedrock ids stay unregistered.
+    expect(MODELS.bedrock.filter((id) => id.includes('claude-sonnet-5-5'))).toEqual([]);
+  });
+
   it('openrouter autocomplete carries the four ids that passed the OpenRouter tools smoke (ggui#1267, founder D3)', () => {
     // 2026-09-26 clean smoke, fresh agent per call, tool_choice required:
     // 3/3 tool calls returned per id, 0 errors (ggui#1267). Opus 5.5 joined

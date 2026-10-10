@@ -6,6 +6,18 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `MODELS.bedrock` gains Claude Haiku 5.5 in three spellings (2026-10-10,
+ * ggui#1796, additive — MINOR, same draft stamp): `anthropic.claude-haiku-5-5`
+ * (Mantle), `us.anthropic.claude-haiku-5-5` and
+ * `global.anthropic.claude-haiku-5-5`, on two receipts — a live read on the
+ * account's region (`list-inference-profiles` / `list-foundation-models`,
+ * us-east-1) and rows in the vendored price table — which is now the stated
+ * rule for registering a 5.5-generation Bedrock id (the docs page's access
+ * column is per account, so it alone does not decide). `eu.` / `apac.` and
+ * every Sonnet 5.5 Bedrock id stay out: priced, not read. The Haiku 4.5 row's
+ * `retireNotBefore` gains a comment saying it is the vendor's floor, not a
+ * deadline. The MCP wire is unchanged. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `ZERO_CONFIG_ROUTE_BY_PROVIDER` (2026-10-10, ggui#1793, additive —
  * MINOR, same draft stamp): the registry exports the zero-config route per
  * non-Bedrock provider beside `DEFAULT_MODEL`, with the Anthropic row
