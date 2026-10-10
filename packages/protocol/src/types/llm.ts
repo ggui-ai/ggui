@@ -47,7 +47,7 @@
  * slice.
  */
 
-import type { LlmProvider } from "./llm-route.js";
+import { parseAnyLlmRoute, type LlmProvider, type LlmRoute } from "./llm-route.js";
 
 // =============================================================================
 // Model Types (LiteLLM format: provider/model-name)
@@ -712,3 +712,49 @@ export function isLineupModel(id: ModelId): boolean {
  * (Haiku 4.5 → legacy, the ggui#1266 shape).
  */
 export const DEFAULT_MODEL: ModelId = "anthropic/claude-haiku-5-5";
+
+/**
+ * The route a registry id names on the wire. Every `ModelId` is a LiteLLM
+ * string the route parser accepts; a key that did not parse would be a
+ * registry row no provider can be called with, which is a bug at the
+ * definition site, so it throws at module load rather than returning null
+ * into a table every zero-config caller reads.
+ */
+function routeOfModelId(id: ModelId): LlmRoute {
+  const route = parseAnyLlmRoute(id);
+  if (route === null) {
+    throw new Error(`MODEL_REGISTRY key "${id}" does not parse as an LlmRoute`);
+  }
+  return route;
+}
+
+/**
+ * The zero-config route per provider (ggui#1793): what a first-run path
+ * generates with when the operator exported ONE provider key and named no
+ * model — `ggui serve` reads this instead of keeping its own table, so a
+ * default switch cannot miss that door again. Routes, not registry ids,
+ * because the OpenRouter default is an `<author>/<model>` string under
+ * `MODELS.openrouter`, not a registry row.
+ *
+ * The Anthropic row is DERIVED from {@link DEFAULT_MODEL}, never written
+ * beside it. Every row is a LISTED model (`isKnownModel`; for OpenRouter
+ * that means it passed the tools smoke every listed OpenRouter id passes),
+ * and every non-OpenRouter row resolves to an ACTIVE registry row — a
+ * legacy model cannot stay a zero-config default by accident. The test
+ * file pins all of it, and the exact values, so a move is a decision with
+ * a receipt. Which model each provider's default should be is decided per
+ * provider on its own measurement (ggui#1743 stage 1 for Anthropic; the
+ * OpenAI and Google rows are unchanged from the table they replace, pending
+ * theirs). `bedrock` is absent on purpose: AWS credentials flow through the
+ * SDK chain, outside a key probe. A hosted deployment's pool default is that
+ * deployment's own constant and is not this table.
+ */
+export const ZERO_CONFIG_ROUTE_BY_PROVIDER: Readonly<
+  Record<Exclude<LlmProvider, "bedrock">, LlmRoute>
+> = {
+  anthropic: routeOfModelId(DEFAULT_MODEL),
+  openai: { provider: "openai", model: "gpt-5.6-luna" },
+  google: { provider: "google", model: "gemini-3.5-flash-lite" },
+  // Listed on ggui#1743 after its ggui#1267 smoke (3/3, `tool_choice: required`).
+  openrouter: { provider: "openrouter", model: "anthropic/claude-haiku-5.5" },
+};

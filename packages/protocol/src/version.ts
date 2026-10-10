@@ -6,6 +6,21 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ZERO_CONFIG_ROUTE_BY_PROVIDER` (2026-10-10, ggui#1793, additive —
+ * MINOR, same draft stamp): the registry exports the zero-config route per
+ * non-Bedrock provider beside `DEFAULT_MODEL`, with the Anthropic row
+ * derived from it in code and every row pinned as a listed model
+ * (`isKnownModel`) that resolves to an active registry row (non-OpenRouter).
+ * `ggui serve`'s first-run path imports it and deletes its own copy, so a
+ * default switch cannot miss that door again (ggui#1743 did). No value
+ * moves in this entry beyond what the two preceding entries record:
+ * Anthropic = `claude-haiku-5-5` (the default), OpenRouter =
+ * `anthropic/claude-haiku-5.5` (listed above), OpenAI `gpt-5.6-luna` and
+ * Google `gemini-3.5-flash-lite` unchanged from the table they replace.
+ * `types/llm.ts` now imports `parseAnyLlmRoute` from `types/llm-route.ts`
+ * (one direction; `llm-route.ts` imports nothing). The MCP wire is
+ * unchanged. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `MODELS.openrouter` gains `anthropic/claude-haiku-5.5` (2026-10-10,
  * ggui#1743, additive — MINOR, same draft stamp): listed on the ggui#1267
  * gate's own receipt (the OpenRouter tools smoke, 3/3 with
