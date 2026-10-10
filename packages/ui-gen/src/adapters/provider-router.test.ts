@@ -285,6 +285,10 @@ describe('getBedrockModelId — Claude 5-family ids are explicit, pinned entries
 });
 
 describe('getBedrockModelId — Bedrock opt-in dot form', () => {
+  it('maps the default model, Haiku 5.5, to its listed cross-region inference profile (ggui#1743)', () => {
+    expect(getBedrockModelId('anthropic/claude-haiku-5-5')).toBe('us.anthropic.claude-haiku-5-5');
+  });
+
   it('upcasts the dot-form short id (anthropic.claude-haiku-4-5) to the cross-region profile', () => {
     // Live-bug regression (2026-05-25): a route resolver that accepts a
     // `bedrock/<id>` opt-in

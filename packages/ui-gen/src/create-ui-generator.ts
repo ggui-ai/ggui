@@ -85,7 +85,9 @@ import type { AgentConfig } from "./harness/llm-router.js";
 
 /** The slug for the OSS default seed generator. */
 const DEFAULT_TIER: GeneratorTier = "default";
-const DEFAULT_MODEL: ModelRef = "anthropic/claude-haiku-4-5";
+// ggui#1743 — the self-hoster default moves to Haiku 5.5 on benchmark's stage-1 receipt (same-session A/B,
+// panel fixed: +3.07 score, lower bound +0.88; no rise in the ≥6-turn share; 0.18× the cost).
+const DEFAULT_MODEL: ModelRef = "anthropic/claude-haiku-5-5";
 
 export interface CreateUiGeneratorOptions {
   /**

@@ -29,6 +29,7 @@ import type { LlmRoute } from '@ggui-ai/protocol';
 export function getBedrockModelId(model: string): string {
   const BEDROCK_MAP: Record<string, string> = {
     'anthropic/claude-haiku-4-5': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'anthropic/claude-haiku-5-5': 'us.anthropic.claude-haiku-5-5', // listed ACTIVE in us-east-1 (ggui#1743)
     'anthropic/claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
     'anthropic/claude-opus-4-6': 'us.anthropic.claude-opus-4-6-v1:0',
     // Claude 5-family (ggui#706, strings verified 2026-09-02 against
