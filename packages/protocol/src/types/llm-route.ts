@@ -130,22 +130,46 @@ export const MODELS = {
   ],
   bedrock: [
     // TWO wire-id families, one per Bedrock endpoint — the namespaces
-    // are disjoint (live-probed 2026-08-13), and ui-gen's bedrock
-    // adapter routes each request by shape:
+    // are disjoint (live-probed 2026-08-13), and the id's SHAPE is the
+    // contract for which endpoint to call it on (ggui#1801):
     //
     //   - Region-prefixed cross-region inference-profile IDs
     //     (`us.` / `eu.` / `apac.` / `global.`) — served by the
-    //     bedrock-runtime endpoint. Each region is its own
-    //     wire-canonical entry; no `{region}` field on the route.
-    //     Per AWS docs the 4.6/4.7 generation dropped `-vN:0`;
-    //     Haiku 4.5 keeps it. Coverage per region varies per model —
-    //     verify on model card pages under
+    //     bedrock-runtime endpoint (`InvokeModel` / `Converse`,
+    //     `AnthropicBedrock`). Each region is its own wire-canonical
+    //     entry; no `{region}` field on the route. Per AWS docs the
+    //     4.6/4.7 generation dropped `-vN:0`; Haiku 4.5 keeps it.
+    //     Coverage per region varies per model — verify on model card
+    //     pages under
     //     docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html
     //     before locking expanded coverage.
     //   - Region-less `anthropic.*` IDs — served ONLY by the
-    //     Messages-API Bedrock endpoint (`AnthropicBedrockMantle`).
+    //     Messages-API Bedrock endpoint
+    //     (`bedrock-mantle.{region}.api.aws/anthropic/v1/messages`,
+    //     `AnthropicBedrockMantle`), whose model ids carry the
+    //     `anthropic.` prefix and no region. The vendor lists these same
+    //     models on bedrock-runtime as INFERENCE_PROFILE-only, so a bare
+    //     id sent to bedrock-runtime is REFUSED AT INVOKE with a
+    //     ValidationException of the "with on-demand throughput isn't
+    //     supported … retry with the ID or ARN of an inference profile"
+    //     family — it passes `isKnownModel` here, and fails at render
+    //     time. That is the defined failure mode of a wrong endpoint;
+    //     the registry cannot refuse the pairing because it never sees
+    //     which client a caller built.
+    //
+    //   The rule a caller follows: pick the endpoint by the id's shape —
+    //   `anthropic.*` → Messages-API, anything region-prefixed →
+    //   bedrock-runtime. `@ggui-ai/ui-gen`'s Bedrock adapter does exactly
+    //   that (`providers/bedrock.ts`, endpoint by `startsWith('anthropic.')`),
+    //   and its `getBedrockModelId` maps an `anthropic/…` registry route to
+    //   the `us.` profile for bedrock-runtime. A caller wiring its own
+    //   `BedrockRuntimeClient` from this list MUST take a profile id, never
+    //   a bare one. The test file pins every bare id here against the
+    //   vendor's Messages-API table, so a bare id that the Messages-API
+    //   endpoint does not serve cannot be listed.
+    //
     //     At the 2026-08-13 probe the Claude 5 family and Opus 4.8
-    //     existed ONLY in this family (per the Anthropic models doc).
+    //     existed ONLY in the bare family (per the Anthropic models doc).
     //     Not a rule for later releases: AWS's Opus 5.5 card lists
     //     region-prefixed profiles too (`us.` / `eu.` / `global.` …).
     //     Bedrock Opus 5.5 is NOT registered here (ggui#1251: model

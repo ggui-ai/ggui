@@ -71,6 +71,38 @@ describe('MODELS registry', () => {
     expect(MODELS.bedrock.filter((id) => id.includes('claude-sonnet-5-5'))).toEqual([]);
   });
 
+  it("every bare anthropic.* bedrock id is one the vendor's Messages-API endpoint serves (ggui#1801) — a bare id exists only there", () => {
+    // Hand-copied from the "Supported models" table of
+    // platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock,
+    // read 2026-10-10 — the Messages-API endpoint's model ids, which carry
+    // the `anthropic.` prefix and no region. On the bedrock-runtime endpoint
+    // these same strings are refused at invoke (the model is listed there as
+    // INFERENCE_PROFILE-only), so a bare id in this list is a promise that
+    // the Messages-API endpoint takes it, and nothing else.
+    const VENDOR_MESSAGES_API_IDS: readonly string[] = [
+      'anthropic.claude-fable-5-1',
+      'anthropic.claude-mythos-5-1',
+      'anthropic.claude-fable-5',
+      'anthropic.claude-mythos-5',
+      'anthropic.claude-mythos-preview',
+      'anthropic.claude-opus-5-5',
+      'anthropic.claude-opus-5',
+      'anthropic.claude-opus-4-8',
+      'anthropic.claude-opus-4-7',
+      'anthropic.claude-sonnet-5-5',
+      'anthropic.claude-sonnet-5',
+      'anthropic.claude-haiku-5-5',
+      'anthropic.claude-haiku-4-5',
+    ];
+    const bare = MODELS.bedrock.filter((id) => id.startsWith('anthropic.'));
+    expect(bare.length).toBeGreaterThan(0); // the walk is not vacuous
+    for (const id of bare) {
+      expect(VENDOR_MESSAGES_API_IDS, `bare bedrock id "${id}" is not in the vendor's Messages-API table`).toContain(id);
+    }
+    // Control: the table refuses an id the vendor never published.
+    expect(VENDOR_MESSAGES_API_IDS).not.toContain('anthropic.claude-haiku-9-9');
+  });
+
   it('openrouter autocomplete carries the four ids that passed the OpenRouter tools smoke (ggui#1267, founder D3)', () => {
     // 2026-09-26 clean smoke, fresh agent per call, tool_choice required:
     // 3/3 tool calls returned per id, 0 errors (ggui#1267). Opus 5.5 joined

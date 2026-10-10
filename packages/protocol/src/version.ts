@@ -6,6 +6,19 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `MODELS.bedrock`'s bare ids and their endpoint (2026-10-11, ggui#1801;
+ * comments + a test, no code): the list's docblock now states the
+ * contract its two id families carry — a region-less `anthropic.*` id is
+ * served ONLY by the Messages-API Bedrock endpoint, and the same string
+ * sent to bedrock-runtime is refused at invoke (INFERENCE_PROFILE-only
+ * there: "with on-demand throughput isn't supported … retry with … an
+ * inference profile"), which `isKnownModel` cannot see — so the rule a
+ * caller follows is endpoint-by-shape (bare → Messages-API, prefixed →
+ * bedrock-runtime), as `@ggui-ai/ui-gen`'s adapter does, and a caller
+ * wiring its own bedrock-runtime client takes a profile id. A pin keeps
+ * every bare id in the list inside the vendor's published Messages-API
+ * table. No wire change. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Erratum to the entry below (2026-10-10, ggui#1796; comments only): the
  * "live read on the account" that registered the three Haiku 5.5 Bedrock
  * ids was a LISTING receipt (`list-inference-profiles` /
