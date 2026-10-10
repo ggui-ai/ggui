@@ -14,7 +14,7 @@ import { anthropicRejectsForcedToolChoice } from '@ggui-ai/protocol';
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
 /** Default bench model — the model the `ui-gen-default` seed generator declares. */
-export const DEFAULT_MODEL = 'claude-haiku-4-5';
+export const DEFAULT_MODEL = 'claude-haiku-5-5';
 
 /** Haiku 4.5 token pricing (USD per token) for the cost report. */
 export const HAIKU_4_5_PRICE_INPUT_PER_TOKEN = 1.0 / 1_000_000;

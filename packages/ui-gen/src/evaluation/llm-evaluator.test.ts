@@ -744,7 +744,7 @@ export default function MyComponent({ title }: Props) {
 
     await runLLMEvaluation(context, { provider: 'claude' }, NO_DYNAMIC);
     const model = mockCallTools.mock.calls[0][0] as string;
-    expect(model).toBe('claude-haiku-4-5-20251001');
+    expect(model).toBe('claude-haiku-5-5');
   });
 
   it('uses custom model when provided', async () => {

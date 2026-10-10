@@ -3,7 +3,7 @@
  * Rerank quality probe CLI.
  *
  * Reads `~/.ggui/credentials.json` for the Anthropic API key, runs
- * the probe against `claude-haiku-4-5`, prints the report.
+ * the probe against `claude-haiku-5-5` (ggui#1804), prints the report. Its readings are not comparable to runs made before the switch.
  *
  * Usage:
  *   pnpm -F @ggui-ai/negotiator probe-rerank
@@ -21,7 +21,7 @@ import {
   resolveAnthropicKey,
 } from '../synth-bench/cli-llm.js';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+const DEFAULT_MODEL = 'claude-haiku-5-5';
 
 function parseArgs(argv: readonly string[]): { limit?: number; threshold?: number; model: string } {
   let limit: number | undefined;

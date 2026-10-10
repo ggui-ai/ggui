@@ -2004,7 +2004,7 @@ function parseCriteriaAnswers(raw: unknown): { answers?: CriteriaAnswer[]; count
 
 function getDefaultVisualModel(provider: 'claude' | 'google'): string {
   switch (provider) {
-    case 'claude': return 'claude-haiku-4-5-20251001';
+    case 'claude': return 'claude-haiku-5-5';
     case 'google': return 'gemini-3-flash-preview';
   }
 }
