@@ -11,6 +11,6 @@
     "mode": "dark"
   },
   "generation": {
-    "model": "anthropic:claude-haiku-5-5"
+    "model": "anthropic:claude-haiku-4-5-20251001"
   }
 }

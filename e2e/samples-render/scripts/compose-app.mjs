@@ -138,13 +138,13 @@ const COMPOSED_TODO_SOURCE = './servers/mcps/todo';
 // generation.model per SDK. Values are canonical `provider:model` routes from
 // @ggui-ai/protocol's MODELS registry (providers: anthropic | openai | google).
 const GGUI_GENERATION_MODEL = /** @type {const} */ ({
-  'claude-agent-sdk': 'anthropic:claude-haiku-5-5',
+  'claude-agent-sdk': 'anthropic:claude-haiku-4-5-20251001',
   'openai-agents-sdk': 'openai:gpt-5.6-luna',
   'google-adk': 'google:gemini-3.5-flash-lite',
   // with-guuey's agent half runs framework claude-agent-sdk (worker mode —
   // graceful `agent.entry` is google-adk-only under dev-serve), so the whole
   // lane stays on the ANTHROPIC_API_KEY family, like its claude sibling.
-  'with-guuey': 'anthropic:claude-haiku-5-5',
+  'with-guuey': 'anthropic:claude-haiku-4-5-20251001',
 });
 
 /**
