@@ -65,6 +65,29 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-11',
+    text:
+      'Arm change (internal issues #1743, #1803): from the first run on a runner image built ' +
+      'with this change, the fast Anthropic arm (claude-fast) runs Claude Haiku 5.5 instead of ' +
+      'Claude Haiku 4.5. The series continues across the change on a measured bridge, not just ' +
+      'a new label: on 2026-10-10 both models ran in the same session on this page\'s ten ' +
+      'prompts, three times each, judged by the same panel. Haiku 5.5 scored 3.1 points higher ' +
+      'on the paired per-prompt comparison (one-sided 95% lower bound +0.9). The share of runs ' +
+      'that needed six or more turns was the same (2 of 30 each), as were contract-behaviour ' +
+      'failures (2 of 30 each), and its cost per generation was about a fifth. That comparison ' +
+      'was judged by the current panel, whose Anthropic judge is Claude Haiku 4.5. Its ' +
+      'family-level excess (the 2026-10-10 entry) lifts both models of this pair equally and ' +
+      'cancels in the difference; what the comparison cannot exclude is an asymmetry between ' +
+      'the judge scoring its own exact model and its successor, a same-model effect whose ' +
+      'direction is unknown. That comparison ran on a laptop, so its timings are not comparable ' +
+      'to this page\'s; read latency on this arm afresh from the change on. Read claude-fast\'s ' +
+      'scores across the change with that +3.1 in mind: part of any step up on this arm at the ' +
+      'change is the model, measured. The judge panel is unchanged by this entry; its Anthropic ' +
+      'seat is still Claude Haiku 4.5 (see the 2026-10-10 entry), and moving it will be bridged ' +
+      'and announced separately. No other arm, prompt or scoring rule changes, and history is ' +
+      'not rewritten.',
+  },
+  {
     date: '2026-10-10',
     text:
       'Disclosure, no change (internal issue #1798): each judge scores its own provider\'s ' +
