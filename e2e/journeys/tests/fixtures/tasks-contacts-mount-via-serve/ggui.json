@@ -1,7 +1,7 @@
 {
   "schema": "1",
   "protocol": "draft-2026-09-10",
-  "generation": { "model": "anthropic:claude-haiku-4-5-20251001" },
+  "generation": { "model": "anthropic:claude-haiku-5-5" },
   "app": {
     "slug": "tasks-contacts-mount-via-serve",
     "name": "Tasks + Contacts Composition via ggui serve"
