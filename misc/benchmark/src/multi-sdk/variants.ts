@@ -28,7 +28,10 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'claude-fast',
       sdkName: 'claude',
       tier: 'fast',
-      modelId: 'anthropic/claude-haiku-4-5', // still the current Haiku (no 5)
+      // #1743 / #1803: Haiku 5.5 from the first nightly on an image built with this change (was claude-haiku-4-5).
+      // The series crosses on #1743 stage 1's same-session A/B (panel fixed): +3.07, one-sided 95% lower bound
+      // +0.88. See the methodology entry.
+      modelId: 'anthropic/claude-haiku-5-5',
     },
     {
       id: 'claude-balanced',
@@ -157,7 +160,7 @@ export function getSpeedVariants(): BenchmarkVariant[] {
       id: 'claude-haiku',
       sdkName: 'claude',
       tier: 'fast',
-      modelId: 'anthropic/claude-haiku-4-5',
+      modelId: 'anthropic/claude-haiku-5-5',
     },
   ];
 }
@@ -172,7 +175,7 @@ export function getHybridVariants(): BenchmarkVariant[] {
       sdkName: 'claude',
       tier: 'balanced',
       hybrid: {
-        draftModel: 'anthropic/claude-haiku-4-5',
+        draftModel: 'anthropic/claude-haiku-5-5',
         reviewModel: 'anthropic/claude-sonnet-5', // 2026-08-19: 4-6 → 5
       },
     },
@@ -250,7 +253,7 @@ export function getGeneratorVariants(): BenchmarkVariant[] {
       id: 'gen-default-haiku',
       sdkName: 'claude',
       tier: 'fast',
-      modelId: 'anthropic/claude-haiku-4-5',
+      modelId: 'anthropic/claude-haiku-5-5',
       generator: DEFAULT_GENERATOR_SLUG,
     },
     {
@@ -288,7 +291,7 @@ export function getCandidateVariants(): BenchmarkVariant[] {
       id: 'claude-fast-login',
       sdkName: 'claude',
       tier: 'fast',
-      modelId: 'anthropic/claude-haiku-4-5',
+      modelId: 'anthropic/claude-haiku-5-5',
       claudeCodeLogin: true,
     },
     {

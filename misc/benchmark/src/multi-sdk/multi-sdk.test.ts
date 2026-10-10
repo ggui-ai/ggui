@@ -497,8 +497,9 @@ describe('Candidate variants — named arms outside the public matrix (Exp 009 /
     expect(c.get('claude-sonnet-5-5')).toMatchObject({ sdkName: 'claude', tier: 'balanced', modelId: 'anthropic/claude-sonnet-5-5' });
     expect(c.get('gpt-6-1-sol')).toMatchObject({ sdkName: 'openai', tier: 'balanced', modelId: 'openai/gpt-6.1-sol' });
     expect(c.get('gemini-3-8-flash')).toMatchObject({ sdkName: 'google', tier: 'balanced', modelId: 'gemini/gemini-3.8-flash' });
-    // The controls: the default arms each candidate would replace, on the models they run today.
-    expect(d.get('claude-fast')?.modelId).toBe('anthropic/claude-haiku-4-5');
+    // The controls: the default arms each candidate would replace. claude-fast moved to the candidate's model on
+    // #1743 stage 1's receipt (#1803), so the candidate now duplicates it and stays only so stage 1 re-runs by id.
+    expect(d.get('claude-fast')?.modelId).toBe('anthropic/claude-haiku-5-5');
     expect(d.get('claude-balanced')?.modelId).toBe('anthropic/claude-sonnet-5');
     expect(d.get('openai-premium')?.modelId).toBe('openai/gpt-5.6-sol');
     expect(d.get('google-balanced')?.modelId).toBe('gemini/gemini-3.7-flash');

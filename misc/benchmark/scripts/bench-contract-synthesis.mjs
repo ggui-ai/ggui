@@ -81,7 +81,7 @@ Options:
 
 // Same three models as the ui-gen bench (DEFAULT_MODELS), in LlmRoute form.
 const MODELS = {
-  claude: 'anthropic/claude-haiku-4-5-20251001',
+  claude: 'anthropic/claude-haiku-5-5',
   openai: 'openai/gpt-5.4-mini',
   google: 'gemini/gemini-3.1-flash-lite',
 };
