@@ -3,9 +3,8 @@ import type {
   BlueprintProvider,
   LlmProvider,
 } from '@ggui-ai/mcp-server';
-import { DEFAULT_MODEL, isKnownModel, parseAnyLlmRoute } from '@ggui-ai/protocol';
+import { ZERO_CONFIG_ROUTE_BY_PROVIDER } from '@ggui-ai/protocol';
 import {
-  DEFAULT_ROUTE_BY_PROVIDER,
   PROVIDER_PROBE_ORDER,
   describeGenerationBinding,
   probeGenerationBinding,
@@ -70,7 +69,7 @@ describe('probeGenerationBinding', () => {
     });
     expect(binding.bootResolved).toBe(true);
     expect(binding.provider).toBe('openai');
-    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.openai.model);
+    expect(binding.model).toBe(ZERO_CONFIG_ROUTE_BY_PROVIDER.openai.model);
     expect(binding.keySource).toBe('env');
     expect(binding.keyEnvName).toBe('OPENAI_API_KEY');
     // Boot scan halted on the first hit.
@@ -87,7 +86,7 @@ describe('probeGenerationBinding', () => {
     // Default to anthropic / claude-haiku-5-5 — the OSS fall-back
     // provider that the Connect-Claude card flow steers users toward.
     expect(binding.provider).toBe('anthropic');
-    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.anthropic.model);
+    expect(binding.model).toBe(ZERO_CONFIG_ROUTE_BY_PROVIDER.anthropic.model);
     expect(binding.keySource).toBeUndefined();
     expect(binding.keyEnvName).toBeUndefined();
   });
@@ -112,7 +111,7 @@ describe('probeGenerationBinding', () => {
       blueprints: emptyBlueprints,
     });
     expect(binding.provider).toBe('anthropic');
-    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.anthropic.model);
+    expect(binding.model).toBe(ZERO_CONFIG_ROUTE_BY_PROVIDER.anthropic.model);
   });
 
   it('honors a custom providerOrder', async () => {
@@ -240,7 +239,7 @@ describe('probeGenerationBinding', () => {
       requestId: 'r',
     });
     expect(creds).toEqual({
-      selection: { provider: 'anthropic', model: DEFAULT_ROUTE_BY_PROVIDER.anthropic.model },
+      selection: { provider: 'anthropic', model: ZERO_CONFIG_ROUTE_BY_PROVIDER.anthropic.model },
       providerKey: { provider: 'anthropic', key: 'ant-k' },
     });
     // Boot scan called with no userScope; per-call resolveLlm
@@ -462,28 +461,13 @@ describe('describeGenerationBinding', () => {
 // ─── Locked constants ────────────────────────────────────────
 
 describe('locked constants', () => {
-  it('DEFAULT_ROUTE_BY_PROVIDER covers every non-bedrock LlmProvider in PROVIDER_PROBE_ORDER', () => {
+  it("every provider the boot scan probes has a zero-config route in the protocol's ZERO_CONFIG_ROUTE_BY_PROVIDER (ggui#1793)", () => {
     for (const provider of PROVIDER_PROBE_ORDER) {
-      const route = DEFAULT_ROUTE_BY_PROVIDER[provider];
+      const route = ZERO_CONFIG_ROUTE_BY_PROVIDER[provider];
       expect(route.provider).toBe(provider);
       expect(route.model).toBeTypeOf('string');
       expect(route.model.length).toBeGreaterThan(0);
     }
-  });
-
-  it('every default route is a registry-listed model: the zero-config path never hands out an id the protocol does not list', () => {
-    // isKnownModel, not isValidLlmRoute: an OpenRouter route is VALID for any well-shaped `vendor/model`
-    // (the catalog is open), but a default must be one the registry lists, i.e. one that passed its tools smoke.
-    for (const provider of PROVIDER_PROBE_ORDER) {
-      const route = DEFAULT_ROUTE_BY_PROVIDER[provider];
-      expect(isKnownModel(route.provider, route.model), `${route.provider}:${route.model}`).toBe(true);
-    }
-  });
-
-  it("the Anthropic default route is the protocol's DEFAULT_MODEL (ggui#1792): the CLI keeps its own table, so this pins it to the open-source default", () => {
-    const fromProtocol = parseAnyLlmRoute(DEFAULT_MODEL);
-    expect(fromProtocol?.provider).toBe('anthropic');
-    expect(DEFAULT_ROUTE_BY_PROVIDER.anthropic).toEqual(fromProtocol);
   });
 
   it('PROVIDER_PROBE_ORDER does not include bedrock (hosted-only auth chain)', () => {

@@ -19,8 +19,9 @@
  *      key via `/settings`, the resolver picks it up on the next
  *      `ggui_render`.
  *   3. **No-key default** — when the boot scan finds nothing, we
- *      STILL return a binding (provider=`anthropic`, model=
- *      `claude-haiku-5-5`). Generation stays wired; the
+ *      STILL return a binding: the Anthropic row of
+ *      `ZERO_CONFIG_ROUTE_BY_PROVIDER` from `@ggui-ai/protocol`, which
+ *      is the open-source default. Generation stays wired; the
  *      no-credentials path now produces a Connect-Claude card
  *      render via {@link GenerationDeps.onNoCredentials}
  *      instead of the broken `codeReady:false` placeholder.
@@ -50,46 +51,12 @@ import type {
   ProviderKeyRef,
   GguiSession,
 } from '@ggui-ai/mcp-server';
-import { parseAnyLlmRoute } from '@ggui-ai/protocol';
+import { parseAnyLlmRoute, ZERO_CONFIG_ROUTE_BY_PROVIDER } from '@ggui-ai/protocol';
 import { createUiGenerator } from '@ggui-ai/ui-gen';
 import type {
   ByokKeyResolution,
   ByokResolver,
 } from './byok-resolver.js';
-
-/**
- * Locked default model per provider for the OSS first-run path.
- *
- * These are the "sensible default for an operator who exported
- * `ANTHROPIC_API_KEY` without thinking about which model" — NOT
- * benchmark-tuned recommendations. A later slice wires
- * `ggui.json#generation.model` so operators can pick explicitly;
- * until then these keep the zero-config path honest.
- *
- * Notably absent: `bedrock`. AWS credentials flow through the SDK
- * chain, which the OSS BYOK resolver doesn't cover — the hosted runtime
- * binds Bedrock through its own `GenerationDeps` at the hosted
- * surface.
- */
-/**
- * Locked default route per provider, as a typed {@link LlmRoute}.
- * Model strings are bare wire-canonical IDs (registry KEY ==
- * what the provider's API expects on the wire) — there is no
- * transformation step downstream. `dispatchGeneration` sends
- * `route.model` verbatim.
- *
- * The Anthropic row is the protocol's `DEFAULT_MODEL` (the open-source
- * default), pinned by a test so the two cannot drift apart (ggui#1792).
- * The other rows are this CLI's own choice per provider.
- */
-export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
-  Record<Exclude<LlmProvider, 'bedrock'>, LlmRoute>
-> = {
-  anthropic: { provider: 'anthropic', model: 'claude-haiku-5-5' },
-  openai: { provider: 'openai', model: 'gpt-5.6-luna' },
-  google: { provider: 'google', model: 'gemini-3.5-flash-lite' },
-  openrouter: { provider: 'openrouter', model: 'anthropic/claude-haiku-5.5' },
-};
 
 /**
  * Priority order for BYOK provider probing. The first provider
@@ -162,7 +129,7 @@ export interface ProbeGenerationBindingOptions {
    *   - `configuredRoute.provider` becomes the boot-scan provider
    *     (overriding the priority chain).
    *   - `configuredRoute.model` is what flows to the dispatch path
-   *     (overriding `DEFAULT_ROUTE_BY_PROVIDER[provider]`).
+   *     (overriding `ZERO_CONFIG_ROUTE_BY_PROVIDER[provider]` from `@ggui-ai/protocol`).
    *
    * Absent → fall back to today's behavior: walk the priority chain,
    * use the per-provider default. The CLI hard-fails BEFORE reaching
@@ -267,7 +234,7 @@ export async function probeGenerationBinding(
       ? configured.provider
       : bootHit?.provider ?? 'anthropic';
   const defaultRoute: LlmRoute =
-    configured ?? DEFAULT_ROUTE_BY_PROVIDER[defaultProvider];
+    configured ?? ZERO_CONFIG_ROUTE_BY_PROVIDER[defaultProvider];
   const defaultModel = defaultRoute.model;
 
   // Full-harness wire-up: `createUiGenerator` runs the same

@@ -57,10 +57,10 @@ import {
 import type { ZodRawShape } from 'zod';
 import type { StorageConfig } from '@ggui-ai/project-config';
 import { InMemoryBlueprintProvider } from '@ggui-ai/mcp-server-core/in-memory';
+import { ZERO_CONFIG_ROUTE_BY_PROVIDER } from '@ggui-ai/protocol';
 import { createByokResolver } from './byok-resolver.js';
 import { isInstalledBlueprintPath } from './internal/artifact-install.js';
 import {
-  DEFAULT_ROUTE_BY_PROVIDER,
   GENERATION_MODEL_ENV,
   describeGenerationBinding,
   probeGenerationBinding,
@@ -709,7 +709,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         `  {\n` +
         `    "schema": "1",\n` +
         `    "generation": {\n` +
-        `      "model": "${generationBinding.provider}:${DEFAULT_ROUTE_BY_PROVIDER[generationBinding.provider as Exclude<LlmProvider, 'bedrock'>].model}"\n` +
+        `      "model": "${generationBinding.provider}:${ZERO_CONFIG_ROUTE_BY_PROVIDER[generationBinding.provider as Exclude<LlmProvider, 'bedrock'>].model}"\n` +
         `    }\n` +
         `  }\n` +
         `\n` +
