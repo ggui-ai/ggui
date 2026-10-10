@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/mcp-server-core",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Core interfaces and reference storage adapters for the GGUI MCP server — UiGenerator, GguiSessionStore, BlueprintProvider, AuthAdapter, plus in-memory and SQLite implementations. The pluggable seam layer @ggui-ai/mcp-server is built on.",
   "keywords": [
     "ggui",
