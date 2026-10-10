@@ -3,7 +3,7 @@ import type {
   BlueprintProvider,
   LlmProvider,
 } from '@ggui-ai/mcp-server';
-import { DEFAULT_MODEL, isValidLlmRoute, parseAnyLlmRoute } from '@ggui-ai/protocol';
+import { DEFAULT_MODEL, isKnownModel, parseAnyLlmRoute } from '@ggui-ai/protocol';
 import {
   DEFAULT_ROUTE_BY_PROVIDER,
   PROVIDER_PROBE_ORDER,
@@ -471,10 +471,12 @@ describe('locked constants', () => {
     }
   });
 
-  it('every default route is a registered route: the zero-config path never hands out an id the protocol does not know', () => {
+  it('every default route is a registry-listed model: the zero-config path never hands out an id the protocol does not list', () => {
+    // isKnownModel, not isValidLlmRoute: an OpenRouter route is VALID for any well-shaped `vendor/model`
+    // (the catalog is open), but a default must be one the registry lists, i.e. one that passed its tools smoke.
     for (const provider of PROVIDER_PROBE_ORDER) {
       const route = DEFAULT_ROUTE_BY_PROVIDER[provider];
-      expect(isValidLlmRoute(route.provider, route.model), `${route.provider}:${route.model}`).toBe(true);
+      expect(isKnownModel(route.provider, route.model), `${route.provider}:${route.model}`).toBe(true);
     }
   });
 
