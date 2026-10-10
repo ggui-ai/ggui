@@ -275,6 +275,12 @@ export function getGeneratorVariants(): BenchmarkVariant[] {
  * - `gpt-6-luna`, `gpt-6-sol`, `claude-opus-5-5` (Exp 010, ggui#1260): the
  *   candidate models, each on its registry id and registry tier; the control
  *   is the default `openai-fast` (`gpt-5.6-luna`).
+ * - `claude-haiku-5-5`, `claude-sonnet-5-5`, `gpt-6-1-sol`, `gemini-3-8-flash`
+ *   (#1743, the default-model switch): the latest model for each tier whose
+ *   default is not yet the latest, each on its registry id and registry tier.
+ *   Each arm's control is the default arm it would replace (`claude-fast`,
+ *   `claude-balanced`, `openai-premium`, `google-balanced`), run in the same
+ *   session.
  */
 export function getCandidateVariants(): BenchmarkVariant[] {
   return [
@@ -302,6 +308,30 @@ export function getCandidateVariants(): BenchmarkVariant[] {
       sdkName: 'claude',
       tier: 'premium',
       modelId: 'anthropic/claude-opus-5-5',
+    },
+    {
+      id: 'claude-haiku-5-5',
+      sdkName: 'claude',
+      tier: 'fast',
+      modelId: 'anthropic/claude-haiku-5-5',
+    },
+    {
+      id: 'claude-sonnet-5-5',
+      sdkName: 'claude',
+      tier: 'balanced',
+      modelId: 'anthropic/claude-sonnet-5-5',
+    },
+    {
+      id: 'gpt-6-1-sol',
+      sdkName: 'openai',
+      tier: 'balanced',
+      modelId: 'openai/gpt-6.1-sol',
+    },
+    {
+      id: 'gemini-3-8-flash',
+      sdkName: 'google',
+      tier: 'balanced',
+      modelId: 'gemini/gemini-3.8-flash',
     },
   ];
 }

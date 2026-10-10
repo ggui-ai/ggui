@@ -490,6 +490,20 @@ describe('Candidate variants — named arms outside the public matrix (Exp 009 /
     expect(getDefaultVariants().find((v) => v.id === 'openai-fast')?.modelId).toBe('openai/gpt-5.6-luna');
   });
 
+  it('the #1743 arms are candidates with their registry model ids, each beside the default arm it would replace', () => {
+    const c = new Map(getCandidateVariants().map((v) => [v.id, v] as const));
+    const d = new Map(getDefaultVariants().map((v) => [v.id, v] as const));
+    expect(c.get('claude-haiku-5-5')).toMatchObject({ sdkName: 'claude', tier: 'fast', modelId: 'anthropic/claude-haiku-5-5' });
+    expect(c.get('claude-sonnet-5-5')).toMatchObject({ sdkName: 'claude', tier: 'balanced', modelId: 'anthropic/claude-sonnet-5-5' });
+    expect(c.get('gpt-6-1-sol')).toMatchObject({ sdkName: 'openai', tier: 'balanced', modelId: 'openai/gpt-6.1-sol' });
+    expect(c.get('gemini-3-8-flash')).toMatchObject({ sdkName: 'google', tier: 'balanced', modelId: 'gemini/gemini-3.8-flash' });
+    // The controls: the default arms each candidate would replace, on the models they run today.
+    expect(d.get('claude-fast')?.modelId).toBe('anthropic/claude-haiku-4-5');
+    expect(d.get('claude-balanced')?.modelId).toBe('anthropic/claude-sonnet-5');
+    expect(d.get('openai-premium')?.modelId).toBe('openai/gpt-5.6-sol');
+    expect(d.get('google-balanced')?.modelId).toBe('gemini/gemini-3.7-flash');
+  });
+
   it('every candidate prices in MODEL_REGISTRY — an unknown id would price $0 and void the run\'s cost facts', () => {
     for (const v of getCandidateVariants()) {
       const row = Object.values(MODEL_REGISTRY).find((r) => r.id === v.modelId);
