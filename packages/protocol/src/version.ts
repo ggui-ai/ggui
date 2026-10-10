@@ -6,6 +6,20 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Erratum to the entry below (2026-10-10, ggui#1796; comments only): the
+ * "live read on the account" that registered the three Haiku 5.5 Bedrock
+ * ids was a LISTING receipt (`list-inference-profiles` /
+ * `list-foundation-models`: the model exists in the region), not a
+ * CALLABILITY one: that is `get-foundation-model-availability <id>` on the
+ * deploying AWS account, and until it reads `agreementAvailability:
+ * AVAILABLE` a `bedrock:` route to any of the three is refused with
+ * `AccessDeniedException`. The list's rule now tells REGISTERED (listed +
+ * priced) from CALLABLE (the deploying account's agreement AVAILABLE); the
+ * ids stay registered as identities, and a deployment's own agreement
+ * state is that deployment's to track (the hosted one on ggui#1796), never
+ * a sentence in this package. No code, no wire change. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `MODELS.bedrock` gains Claude Haiku 5.5 in three spellings (2026-10-10,
  * ggui#1796, additive — MINOR, same draft stamp): `anthropic.claude-haiku-5-5`
  * (Mantle), `us.anthropic.claude-haiku-5-5` and

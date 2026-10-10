@@ -152,12 +152,25 @@ export const MODELS = {
     //     access not open, no vendored LiteLLM Bedrock price row). Requires the AWS account to
     //     have enabled Claude in Amazon Bedrock; otherwise every id
     //     403s "not available for this account".
-    //     A 5.5-generation Bedrock id is registered on TWO receipts, never
-    //     on the docs page alone (its access column reads "See Access",
-    //     i.e. per account): a live read on this account's region
-    //     (`list-inference-profiles` / `list-foundation-models`) AND a
-    //     row in the vendored price table. Haiku 5.5 has both (ggui#1796,
-    //     below). Sonnet 5.5 has the price rows and no account read, so
+    //     REGISTERED is not CALLABLE. This list names ids a deployment may
+    //     configure; whether a given AWS account can invoke one is that
+    //     account's Bedrock agreement for the model, which the registry
+    //     cannot carry. A 5.5-generation Bedrock id is REGISTERED on two
+    //     receipts, never on the docs page alone (its access column reads
+    //     "See Access", i.e. per account): listed in the region
+    //     (`list-inference-profiles` / `list-foundation-models`, which
+    //     only says the model EXISTS there) AND a row in the vendored
+    //     price table. It is CALLABLE on a deployment only when that
+    //     account's `get-foundation-model-availability <id>` reads
+    //     `agreementAvailability: AVAILABLE`; before that every invoke —
+    //     profile or bare — is refused with `AccessDeniedException`, and
+    //     the first invoke auto-subscribes only for a caller holding
+    //     `aws-marketplace:Subscribe`, which no platform role should.
+    //     Acceptance is a per-account act of the account's owner; it is
+    //     not a registry fact, and a deployment reads its own. Haiku 5.5
+    //     has the two registration receipts (ggui#1796, below); the hosted
+    //     deployment's own agreement state is tracked on that row. Sonnet
+    //     5.5 has the price rows and no region read, so
     //     `anthropic.claude-sonnet-5-5` and its profiles stay unregistered
     //     until someone reads them.
 
@@ -167,17 +180,19 @@ export const MODELS = {
     'anthropic.claude-opus-5',
     'anthropic.claude-sonnet-5',
     'anthropic.claude-opus-4-8',
-    // Haiku 5.5 (ggui#1796, 2026-10-10): `anthropic.claude-haiku-5-5` read
-    // ACTIVE in `list-foundation-models` (us-east-1) by ggui-team-status;
-    // priced in the vendored table at Anthropic's own rate.
+    // Haiku 5.5 (ggui#1796, 2026-10-10): `anthropic.claude-haiku-5-5` listed
+    // ACTIVE in `list-foundation-models` (us-east-1); priced in the vendored
+    // table at Anthropic's own rate. Registered; callable on a deployment
+    // only with that account's agreement (rule above). The Messages-API
+    // endpoint is not assumed exempt from the agreement.
     'anthropic.claude-haiku-5-5',
 
-    // Haiku 5.5 profiles (ggui#1796, 2026-10-10): `us.` read ACTIVE in
+    // Haiku 5.5 profiles (ggui#1796, 2026-10-10): `us.` listed ACTIVE in
     // `list-inference-profiles` (us-east-1); `global.` is named for Claude
     // Haiku 5.5 on Anthropic's Bedrock page (global endpoint, no pricing
-    // premium). Both priced in the vendored table (regional +10 %). `eu.`
-    // and `apac.` are priced too but were not read on the account — add
-    // them on a read, per the rule above.
+    // premium). Both priced in the vendored table (regional +10 %). Same
+    // agreement rule as the bare id. `eu.` and `apac.` are priced too but
+    // were not listed on a read — add them on one, per the rule above.
     'us.anthropic.claude-haiku-5-5',
     'global.anthropic.claude-haiku-5-5',
 
