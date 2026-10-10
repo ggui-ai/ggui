@@ -40,7 +40,7 @@ import type {
   ModelRef,
   AppGenerationProfileEffort,
 } from "@ggui-ai/protocol";
-import { isGeneratorId, modelRefOfRoute } from "@ggui-ai/protocol";
+import { DEFAULT_MODEL as PROTOCOL_DEFAULT_MODEL, isGeneratorId, modelRefOfRoute } from "@ggui-ai/protocol";
 import type { GadgetCatalogAdapter } from "@ggui-ai/gadgets";
 import type {
   GenerationMetadata,
@@ -85,9 +85,9 @@ import type { AgentConfig } from "./harness/llm-router.js";
 
 /** The slug for the OSS default seed generator. */
 const DEFAULT_TIER: GeneratorTier = "default";
-// ggui#1743 — the self-hoster default moves to Haiku 5.5 on benchmark's stage-1 receipt (same-session A/B,
-// panel fixed: +3.07 score, lower bound +0.88; no rise in the ≥6-turn share; 0.18× the cost).
-const DEFAULT_MODEL: ModelRef = "anthropic/claude-haiku-5-5";
+// ggui#1794 — the open-source default is protocol's, one source: a default switch moves one constant
+// (`@ggui-ai/protocol` `DEFAULT_MODEL`), never two. ggui#1743 moved it to Haiku 5.5 on benchmark's receipt.
+const DEFAULT_MODEL: ModelRef = PROTOCOL_DEFAULT_MODEL;
 
 export interface CreateUiGeneratorOptions {
   /**
