@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/artifact-manifest",
   "version": "0.27.0",
-  "description": "Strict zod schemas + parsers for ggui marketplace artifact manifests — ggui.gadget.json (gadget bundles) and ggui.blueprint.json (cached UI blueprints).",
+  "description": "Strict zod schemas + parsers for GGUI marketplace artifact manifests — ggui.gadget.json (gadget bundles) and ggui.blueprint.json (cached UI blueprints).",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",

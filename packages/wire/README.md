@@ -1,6 +1,6 @@
 # @ggui-ai/wire
 
-Runtime React hooks that connect a ggui-generated component to its agent. This is the package the generated component code imports — `useAction` to send a user gesture, `useStream` to receive live updates — so the LLM never writes transport, polling, or event-handler glue.
+Runtime React hooks that connect a GGUI-generated component to its agent. This is the package the generated component code imports — `useAction` to send a user gesture, `useStream` to receive live updates — so the LLM never writes transport, polling, or event-handler glue.
 
 ```bash
 npm install @ggui-ai/wire

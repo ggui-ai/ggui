@@ -5,7 +5,7 @@
     "./dist/schemas/sync-check.js",
     "./dist/validation/ajv-runtime.js"
   ],
-  "description": "ggui protocol types — events, renders, WebSocket, MCP, LLM models",
+  "description": "GGUI protocol types — events, renders, WebSocket, MCP, LLM models",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
