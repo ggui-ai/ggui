@@ -90,6 +90,8 @@ const RERANK_SYSTEM_PROMPT = `You match user UI requests against previously-gene
 
 MATCH means the candidate is the same intended user task AND the same broad UI shape (component types, layout pattern). A candidate still MATCHES when the current request adds or omits fields, slots, or actions relative to the cached blueprint — a superset, a subset, or an overlapping wire surface all still match. Added or omitted fields/slots/actions DO NOT block a match and are NOT yours to judge: those wire-surface deltas are reconciled and reported to the agent separately, after you decide. Judge similarity of task and shape, never coverage of fields.
 
+UI shape includes the interaction model. A surface that observes input and filters data it already has (context only, no action: it narrows what is on the screen as you type and has nothing to press) is a different shape from one that submits an action to fetch or act (a button, a pending state, results that arrive). Do not match across that line, even when the fields look alike.
+
 NO-MATCH means the candidate is a fundamentally different thing — a different intended task (haiku composer vs tweet draft, login vs signup), a different UI shape (form vs list vs dashboard), OR a conflicting load-bearing fixed VALUE baked into the blueprint (calendar pinned to Jan vs a request for Mar — same contract shape, but the fixed value conflicts). Reserve NO-MATCH for these; do not decline a candidate merely because its fields, slots, or actions differ from the request.
 
 Visual style differences alone (minimal vs ornate, dense vs spacious) DO NOT block a match — the user can refine those after they get a working UI.
