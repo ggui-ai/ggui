@@ -3588,6 +3588,24 @@ export interface CreateGguiServerOptions {
  */
 export const DEFAULT_CLOSE_GRACE_MS = 5000;
 
+/**
+ * Idle timeouts {@link GguiServer.listen} sets on the `node:http` server it
+ * returns (ggui#1772). Node's own default is `keepAliveTimeout` 5 s, which
+ * is shorter than any proxy's pooled upstream keepalive (ingress-nginx
+ * defaults to `upstream-keepalive-timeout` 60 s): the proxy reuses a
+ * connection Node has just idle-closed, the request meets a TCP RST, and a
+ * non-idempotent POST — every `tools/call` — reaches the client as a 502.
+ * The rule is the standard one: the upstream's idle timeout must exceed
+ * the proxy's, so 65 s clears the 60 s default; and `headersTimeout` must
+ * exceed `keepAliveTimeout` (Node documents that order, and the default
+ * `requestTimeout`, 300 s, sits above both). A deployment whose proxy
+ * keeps connections longer than 60 s raises the proxy's side below these
+ * or sets its own values on the returned server after `listen()` resolves.
+ */
+export const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 65_000;
+/** See {@link DEFAULT_KEEP_ALIVE_TIMEOUT_MS}: strictly above it, as Node requires. */
+export const DEFAULT_HEADERS_TIMEOUT_MS = 66_000;
+
 export interface GguiServer {
   /**
    * The Express app. Mount it under your own parent router if you want
@@ -3596,7 +3614,10 @@ export interface GguiServer {
   readonly app: Express;
   /**
    * Bind the app to a port and return the underlying `node:http` server.
-   * Resolves once the listener is accepting connections.
+   * Resolves once the listener is accepting connections. The returned
+   * server carries {@link DEFAULT_KEEP_ALIVE_TIMEOUT_MS} and
+   * {@link DEFAULT_HEADERS_TIMEOUT_MS} (ggui#1772), so behind a proxy its
+   * idle connections outlive the proxy's pooled upstream keepalive.
    */
   listen(port?: number, host?: string): Promise<NodeHttpServer>;
   /**
@@ -6411,6 +6432,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           resolve(server);
         });
         server.on("error", reject);
+        // ggui#1772 — outlive any proxy's upstream keepalive; see the
+        // constants' docblock for the rule and the numbers.
+        server.keepAliveTimeout = DEFAULT_KEEP_ALIVE_TIMEOUT_MS;
+        server.headersTimeout = DEFAULT_HEADERS_TIMEOUT_MS;
         // Wire live-channel upgrade handling onto the same http server.
         // Only routes matching the channel path actually become WebSockets;
         // other paths (or a future second WS endpoint) are rejected.
