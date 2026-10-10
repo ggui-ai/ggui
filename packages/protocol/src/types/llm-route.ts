@@ -60,10 +60,13 @@ export const MODELS = {
     // Wire-canonical IDs accepted by api.anthropic.com/v1/messages.
     // Per Anthropic's official models doc (claude.com/docs/about-claude/models/overview):
     // the Claude 5 family (2026-07: Opus 5, Sonnet 5, and the
-    // Mythos-class Fable 5; 2026-09: Fable 5.1) and the 4.6–4.8 generation carry undated
-    // wire IDs; Haiku 4.5 still uses the dated form.
+    // Mythos-class Fable 5; 2026-09: Fable 5.1; 2026-09/10: Sonnet 5.5, Haiku 5.5)
+    // and the 4.6–4.8 generation carry undated wire IDs; Haiku 4.5 still uses
+    // the dated form (Haiku 5.5 is the first dateless Haiku).
     'claude-fable-5-1', // 2026-09 (ggui#706); dateless like the rest of the 5 family
     'claude-opus-5-5', // 2026-09-22 (ggui#1252); dateless — platform.claude.com model-deprecations: Active, retire ≥ 2027-09-22
+    'claude-sonnet-5-5', // 2026-10-10 (ggui#1743); dateless — platform.claude.com model-deprecations: Active, retire ≥ 2027-09-28
+    'claude-haiku-5-5', // 2026-10-10 (ggui#1743); dateless — platform.claude.com model-deprecations: Active, retire ≥ 2027-10-07
     'claude-fable-5',
     'claude-opus-5',
     'claude-sonnet-5',
@@ -86,6 +89,11 @@ export const MODELS = {
     // snapshot published ("Snapshot: gpt-6-sol" / "gpt-6-luna" on each model
     // page). Chat Completions tool calling requires `reasoning_effort: none`
     // on both (the model pages) — the adapter's concern, not the allowlist's.
+    // GPT-6.1 Sol (2026-10-10, ggui#1743): undated alias, the page's only
+    // snapshot ("Use `gpt-6.1-sol` to select this model"); `none`/`minimal`
+    // effort unsupported and "Use the Responses API for tool calling", so a
+    // Chat Completions caller has no function calling on it — same split.
+    'gpt-6.1-sol',
     'gpt-6-sol',
     'gpt-6-luna',
     'gpt-5.6',
@@ -109,6 +117,7 @@ export const MODELS = {
     // Stable + the commonly-used previews. The `-preview` suffix is
     // load-bearing on the wire for preview models — Gemini's API
     // rejects the bare name for those.
+    'gemini-3.8-flash', // 2026-10-10 (ggui#1743): stable on ai.google.dev/gemini-api/docs/models; 3.7 Flash is no longer listed there
     'gemini-3.7-flash',
     'gemini-3.6-flash',
     'gemini-3.5-flash',

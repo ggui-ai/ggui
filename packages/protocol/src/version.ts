@@ -6,6 +6,25 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Model registry: `anthropic/claude-haiku-5-5`, `anthropic/claude-sonnet-5-5`,
+ * `openai/gpt-6.1-sol`, `gemini/gemini-3.8-flash` (2026-10-10, additive,
+ * ggui#1743 — MINOR, same draft stamp; the protocol half of the latest-
+ * generation support rows, WITH the hosted pricing snapshot's re-vendor).
+ * Four `ModelId` rows + `MODELS.anthropic` / `MODELS.openai` / `MODELS.google`
+ * entries; all `active`, none in the lineup, no default moves — the switch
+ * is measured first. Haiku 5.5 0.1 / 0.5 / 0.125 / 0.01 (the ≤100k-prompt
+ * tier; the over-100k tier is 5× and not modelled), `retireNotBefore`
+ * 2027-10-07; Sonnet 5.5 2 / 10 / 2.5 / 0.1 (0.05× cache read),
+ * `retireNotBefore` 2027-09-28; both `maxTokens` 1000000. GPT-6.1 Sol 2 / 10,
+ * cache read 0.1, no cache-write price published, `maxTokens` 1050000, no
+ * floor. Gemini 3.8 Flash 0.75 / 3.75 / 0.075 (introductory through
+ * 2026-12-31), `maxTokens` 1048576. Every field quoted from the vendor page
+ * on the issue. Two rule predicates move with the rows, because the rows make
+ * the ids selectable: `anthropicRejectsForcedToolChoice` gains Sonnet 5.5
+ * (api/errors names it) and `anthropicRejectsSamplingParams` gains Haiku 5.5
+ * (its model page: non-default `temperature`/`top_p`/`top_k` → 400). No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `handshakeOutputSchema` is the wire (2026-10-09, ggui#1736: MINOR on
  * the published type, no byte on the wire changes, same draft stamp).
  * The server's handler kept its own mirror of this schema, and the two

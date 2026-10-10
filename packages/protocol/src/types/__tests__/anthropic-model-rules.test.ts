@@ -67,6 +67,25 @@ describe("anthropicRejectsSamplingParams — Opus 4.7+ and the 5-family", () => 
     // "opus-5" must not match "opus-50" and "fable-5" must not match "fable-55".
     expect(anthropicRejectsSamplingParams("claude-opus-50")).toBe(false);
     expect(anthropicRejectsSamplingParams("claude-fable-55")).toBe(false);
+    expect(anthropicRejectsSamplingParams("claude-haiku-50")).toBe(false);
+  });
+
+  // ggui#1743 — the first Haiku after the rule's line. models/haiku-5-5/overview
+  // (read 2026-10-10): "Omit `temperature`, `top_p`, and `top_k`. See Remove
+  // sampling parameters … for the values that return a 400 error."
+  // models/sonnet-5-5/overview: "Setting `temperature`, `top_p`, or `top_k` to a
+  // non-default value returns a 400 error." Haiku 4.5 is unchanged.
+  it.each([
+    "claude-haiku-5-5",
+    "anthropic/claude-haiku-5-5",
+    "anthropic.claude-haiku-5-5",
+    "global.anthropic.claude-haiku-5-5",
+    "bedrock/us.anthropic.claude-haiku-5-5",
+    "claude-sonnet-5-5",
+    "anthropic/claude-sonnet-5-5",
+    "us.anthropic.claude-sonnet-5-5",
+  ])("%s rejects sampling params (ggui#1743)", (id) => {
+    expect(anthropicRejectsSamplingParams(id)).toBe(true);
   });
 });
 
@@ -80,6 +99,47 @@ describe("anthropicRejectsForcedToolChoice — Fable 5.1 (ggui#706)", () => {
   it("does not flag Fable 5, Opus 5, Sonnet 5 or Haiku 4.5", () => {
     for (const id of ["claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]) {
       expect(anthropicRejectsForcedToolChoice(id)).toBe(false);
+    }
+  });
+});
+
+// ─── ggui#1743 — Sonnet 5.5 joins the forced-tool set; Haiku 5.5 does not ───
+
+/**
+ * platform.claude.com/docs/en/api/errors#forced-tool-use-not-supported, read
+ * 2026-10-10: "Claude Opus 5.5, Claude Sonnet 5.5, Claude Fable 5.1, and Claude
+ * Mythos 5.1 don't support forced tool use. Sending `tool_choice: {"type":
+ * "any"}` or `tool_choice: {"type": "tool", "name": "..."}` to any of these
+ * models … returns a 400 `invalid_request_error`". models/sonnet-5-5/overview
+ * lists "Forced tool use returns an error" among its five breaking changes.
+ * Haiku 5.5 is named nowhere on that page; a wrong `false` there would be the
+ * UNSAFE direction, so the vendor table below carries its receipt.
+ */
+describe("anthropicRejectsForcedToolChoice — Sonnet 5.5 and Haiku 5.5 (ggui#1743)", () => {
+  it("flags Sonnet 5.5 in every spelling — bare, anthropic/, anthropic., us., global., bedrock/, OpenRouter's dot", () => {
+    for (const id of [
+      "claude-sonnet-5-5",
+      "anthropic/claude-sonnet-5-5",
+      "anthropic.claude-sonnet-5-5",
+      "us.anthropic.claude-sonnet-5-5",
+      "global.anthropic.claude-sonnet-5-5",
+      "bedrock/apac.anthropic.claude-sonnet-5-5",
+      "anthropic/claude-sonnet-5.5",
+    ]) {
+      expect(anthropicRejectsForcedToolChoice(id), id).toBe(true);
+    }
+  });
+
+  it("does not flag Haiku 5.5 in any spelling, nor Sonnet 5, nor a longer Sonnet version", () => {
+    for (const id of [
+      "claude-haiku-5-5",
+      "anthropic/claude-haiku-5-5",
+      "global.anthropic.claude-haiku-5-5",
+      "anthropic/claude-haiku-5.5",
+      "claude-sonnet-5",
+      "claude-sonnet-5-50",
+    ]) {
+      expect(anthropicRejectsForcedToolChoice(id), id).toBe(false);
     }
   });
 });
@@ -172,6 +232,12 @@ describe("anthropicRejectsSamplingParams — Opus 5.5 pinned explicitly (ggui#12
  *       supports forced tool use. Where it isn't supported, …", naming exactly
  *       the three models in (A).
  *
+ * Re-read 2026-10-10 (ggui#1743): (A) now reads "Claude Opus 5.5, Claude
+ * Sonnet 5.5, Claude Fable 5.1, and Claude Mythos 5.1 don't support forced
+ * tool use"; (C)'s restriction row names the same four, and its thinking row
+ * says "models with thinking on by default, such as Claude Opus 5 and Claude
+ * Haiku 5.5, accept it". The two rows added that day cite (A) and (C) only.
+ *
  * Each `receipt` says which page decided the row and how: a row (B) lists, a
  * name (A) gives, or — only where (B) carries no row for the model — absence
  * from the restriction list (C) introduces as the exhaustive one.
@@ -195,7 +261,16 @@ const VENDOR_FORCED_TOOL_TABLE: Readonly<Record<string, VendorForcedToolRow>> = 
     receipt: "absent from (A) and from (C)'s restriction list; (B) has no Fable row",
   },
   "claude-opus-5": { rejectsForcedToolChoice: false, receipt: "(B) Claude Opus 5 = `auto`, `none` / `any`, `tool`" },
+  "claude-sonnet-5-5": {
+    rejectsForcedToolChoice: true,
+    receipt: "(A) names Claude Sonnet 5.5 (read 2026-10-10); (C)'s restriction row lists it",
+  },
   "claude-sonnet-5": { rejectsForcedToolChoice: false, receipt: "(B) Claude Sonnet 5 = `auto`, `none` / `any`, `tool`" },
+  "claude-haiku-5-5": {
+    rejectsForcedToolChoice: false,
+    receipt:
+      "absent from (A) and from (C)'s restriction row (read 2026-10-10); (C)'s thinking row names Claude Haiku 5.5 as accepting forced tool use",
+  },
   "claude-haiku-4-5-20251001": {
     rejectsForcedToolChoice: false,
     receipt: "(B) Claude Haiku 4.5 = `auto`, `none` / `any`, `tool`",
@@ -253,8 +328,8 @@ const ROUTABLE_ANTHROPIC_IDS: readonly string[] = [
 const ROUTABLE_NORMALIZED = [...new Set(ROUTABLE_ANTHROPIC_IDS.map(normalizeAnthropicModelId))].sort();
 
 describe("anthropicRejectsForcedToolChoice — pinned against the vendor over every routable Anthropic id (ggui#1268)", () => {
-  it("the routable union is 16 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
-    expect(ROUTABLE_NORMALIZED).toHaveLength(16);
+  it("the routable union is 18 distinct spellings — a new routable Anthropic id changes this number, and this name", () => {
+    expect(ROUTABLE_NORMALIZED).toHaveLength(18);
   });
 
   it("every routable Anthropic id has a vendor-quoted row — a new one without a receipt fails here", () => {
@@ -270,8 +345,8 @@ describe("anthropicRejectsForcedToolChoice — pinned against the vendor over ev
   it("the predicate agrees with the vendor on every routable spelling, in both directions", () => {
     const rows = Object.values(VENDOR_FORCED_TOOL_TABLE);
     // Both directions are exercised, not just one: the table holds both answers.
-    expect(rows.filter((r) => r.rejectsForcedToolChoice)).toHaveLength(3);
-    expect(rows.filter((r) => !r.rejectsForcedToolChoice)).toHaveLength(13);
+    expect(rows.filter((r) => r.rejectsForcedToolChoice)).toHaveLength(4);
+    expect(rows.filter((r) => !r.rejectsForcedToolChoice)).toHaveLength(14);
     for (const raw of ROUTABLE_ANTHROPIC_IDS) {
       const row = VENDOR_FORCED_TOOL_TABLE[normalizeAnthropicModelId(raw)];
       expect(row, raw).toBeDefined();

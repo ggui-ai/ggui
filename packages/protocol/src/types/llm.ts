@@ -210,6 +210,33 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
+  // ggui#1743 (2026-10-10) — strings quoted from platform.claude.com, read
+  // 2026-10-10: pricing "Claude Sonnet 5.5 | $2 / MTok | $2.50 / MTok | $4 /
+  // MTok | $0.10 / MTok | $10 / MTok", footnote 2 "Cache hits and refreshes on
+  // Claude Opus 5.5 and Claude Sonnet 5.5 are priced at 0.05x the base input
+  // price"; model-deprecations "claude-sonnet-5-5 | Active | N/A | Not sooner
+  // than September 28, 2027"; models/sonnet-5-5/overview: released 2026-09-28,
+  // 1M context, dateless id. Not in the lineup: support ships so the default
+  // switch can be measured, the switch itself is a separate decision.
+  "anthropic/claude-sonnet-5-5": {
+    id: "anthropic/claude-sonnet-5-5",
+    provider: "anthropic",
+    displayName: "Claude Sonnet 5.5",
+    tier: "balanced",
+    state: "active",
+    lineup: false,
+    retireNotBefore: "2027-09-28",
+    costs: {
+      inputPer1M: 2.0,
+      outputPer1M: 10.0,
+      // 5-minute cache write (1.25×); the 1h write ($4) is not modeled.
+      cacheWritePer1M: 2.5,
+      // NOT the usual 0.1× — footnote 2 (above): 0.05× the base input price.
+      cacheReadPer1M: 0.1,
+    },
+    maxTokens: 1000000,
+    supportsTools: true,
+  },
   // NOTE(pricing): $2/$10 launched as an introductory rate but is now
   // the PERMANENT standard price — Anthropic's pricing docs state the
   // scheduled 2026-09-01 increase to $3/$15 will not occur (verified
@@ -227,6 +254,35 @@ const MODEL_ROWS = defineModelRegistry({
       outputPer1M: 10.0,
       cacheWritePer1M: 2.5,
       cacheReadPer1M: 0.2,
+    },
+    maxTokens: 1000000,
+    supportsTools: true,
+  },
+  // ggui#1743 (2026-10-10) — strings quoted from platform.claude.com, read
+  // 2026-10-10. Haiku 5.5 is PRICED BY PROMPT LENGTH: "Claude Haiku 5.5 (for
+  // prompts up to 100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok
+  // | $0.01 / MTok | $0.50 / MTok" and "(for prompts over 100,000 tokens) |
+  // $0.50 | $0.625 | $1 | $0.05 | $2.50". This row carries the ≤100k tier — the
+  // one LiteLLM carries and the one a cost pin compares; a request whose
+  // prompt crosses 100k tokens costs 5× these figures, which the flat `costs`
+  // shape does not model (as it does not model the 1h cache write).
+  // model-deprecations "claude-haiku-5-5 | Active | N/A | Not sooner than
+  // October 7, 2027"; models/haiku-5-5/overview: released 2026-10-07, 1M
+  // context, the first dateless Haiku id. Not in the lineup, not the default:
+  // the switch is measured first (ggui#1743).
+  "anthropic/claude-haiku-5-5": {
+    id: "anthropic/claude-haiku-5-5",
+    provider: "anthropic",
+    displayName: "Claude Haiku 5.5",
+    tier: "fast",
+    state: "active",
+    lineup: false,
+    retireNotBefore: "2027-10-07",
+    costs: {
+      inputPer1M: 0.1,
+      outputPer1M: 0.5,
+      cacheWritePer1M: 0.125,
+      cacheReadPer1M: 0.01,
     },
     maxTokens: 1000000,
     supportsTools: true,
@@ -304,11 +360,29 @@ const MODEL_ROWS = defineModelRegistry({
   // (https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json);
   // host-side consumers may apply a more authoritative price table
   // if they ship one.
-  // NOTE(pricing): 3.7-flash and 3.6-flash are on Google's INTRODUCTORY
-  // rate ($0.75/$3.75) through 2026-12-31; both double to $1.50/$7.50 on
-  // 2027-01-01 (ai.google.dev/gemini-api/docs/pricing, 2026-08-19). The
-  // vendored snapshot carries the intro rate too, so the drift guard
-  // will not flag the increase for us — re-check these entries then.
+  // NOTE(pricing): 3.8-flash, 3.7-flash and 3.6-flash are on Google's
+  // INTRODUCTORY rate ($0.75/$3.75, cache read $0.075) through 2026-12-31;
+  // all double to $1.50/$7.50/$0.15 on 2027-01-01 (ai.google.dev/gemini-api/
+  // docs/pricing, 2026-08-19 for 3.7/3.6; 2026-10-10 for 3.8: "$0.75 through
+  // December 31, 2026. $1.50 starting January 1, 2027"). The vendored
+  // snapshot carries the intro rate too, so the drift guard will not flag
+  // the increase for us — re-check these entries then.
+  // ggui#1743 (2026-10-10): `gemini-3.8-flash` is listed as stable on
+  // ai.google.dev/gemini-api/docs/models ("Our most intelligent Flash model");
+  // 3.7 Flash no longer appears on that page or on the pricing page (both read
+  // 2026-10-10) — its row below is unchanged here and flagged on the issue.
+  "gemini/gemini-3.8-flash": {
+    id: "gemini/gemini-3.8-flash",
+    provider: "google",
+    displayName: "Gemini 3.8 Flash",
+    tier: "balanced",
+    state: "active",
+    lineup: false,
+    costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
+    maxTokens: 1048576,
+    supportsTools: true,
+    supportsCaching: true,
+  },
   "gemini/gemini-3.7-flash": {
     id: "gemini/gemini-3.7-flash",
     provider: "google",
@@ -420,6 +494,32 @@ const MODEL_ROWS = defineModelRegistry({
       cacheReadPer1M: 1.0,
     },
     maxTokens: 922000,
+    supportsTools: true,
+  },
+  // ggui#1743 (2026-10-10) — quoted from developers.openai.com/api/docs/models/
+  // gpt-6.1-sol, read 2026-10-10: "1,050,000 context window", "128,000 max
+  // output tokens", $2 input / $0.10 cached input / $10 output per 1M;
+  // Snapshots: "Use `gpt-6.1-sol` to select this model" — the alias is the only
+  // id, no dated snapshot, no retirement date → `retireNotBefore` unset. OpenAI
+  // publishes no cache-WRITE price (writes bill at the input rate), so
+  // `cacheWritePer1M` is unset and consumers fall back to `inputPer1M`. Tool
+  // calling on the page: "Use the Responses API for tool calling"; "The `none`
+  // and `minimal` reasoning efforts are not supported" — a Chat Completions
+  // caller gets no function calling on this model (the adapter's concern; the
+  // row states the model's capability). Not in the lineup (ggui#1743).
+  "openai/gpt-6.1-sol": {
+    id: "openai/gpt-6.1-sol",
+    provider: "openai",
+    displayName: "GPT-6.1 Sol",
+    tier: "balanced",
+    state: "active",
+    lineup: false,
+    costs: {
+      inputPer1M: 2.0,
+      outputPer1M: 10.0,
+      cacheReadPer1M: 0.1,
+    },
+    maxTokens: 1050000,
     supportsTools: true,
   },
   // ggui#1252 (2026-09-23) — quoted from developers.openai.com/api/docs/models

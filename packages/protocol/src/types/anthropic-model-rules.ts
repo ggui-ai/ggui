@@ -64,12 +64,16 @@ export function normalizeAnthropicModelId(model: string): string {
 
 /**
  * Models that reject non-default sampling parameters with HTTP 400:
- * Opus 4.7 and everything after it (Fable 5, Fable 5.1, Opus 5,
- * Sonnet 5). Haiku 4.5 (`claude-haiku-4-5*`) still accepts them.
- * Strings per ggui#706 (platform.claude.com, verified 2026-09-02).
+ * Opus 4.7 and everything after it (Fable 5, Fable 5.1, Opus 5, Opus 5.5,
+ * Sonnet 5, Sonnet 5.5, Haiku 5.5). Haiku 4.5 (`claude-haiku-4-5*`) still
+ * accepts them. Strings per ggui#706 (platform.claude.com, verified
+ * 2026-09-02); Haiku 5.5 per models/haiku-5-5/overview, read 2026-10-10
+ * (ggui#1743): "Omit `temperature`, `top_p`, and `top_k`. See Remove
+ * sampling parameters … for the values that return a 400 error." The
+ * `haiku-5` arm is the first Haiku on the rule's side of the line.
  */
 export function anthropicRejectsSamplingParams(model: string): boolean {
-  return /^claude-(?:opus-4-7|opus-5|sonnet-5|fable-5)(?:-|$)/.test(
+  return /^claude-(?:opus-4-7|opus-5|sonnet-5|haiku-5|fable-5)(?:-|$)/.test(
     normalizeAnthropicModelId(model)
   );
 }
@@ -77,16 +81,18 @@ export function anthropicRejectsSamplingParams(model: string): boolean {
 /**
  * Models that reject a FORCED tool choice (`tool_choice: any` / a named
  * tool) with HTTP 400. The API reference names Claude Opus 5.5, Claude
- * Fable 5.1 and Claude Mythos 5.1 ("Forced tool use not supported",
- * platform.claude.com/docs/en/api/errors, read 2026-09-23). Claude Mythos
- * Preview is matched too although that page does not name it: a wrong
- * `true` is the safe direction (above), and no allowlist carries it, so it
- * sits outside the ggui#1268 pin. Fable 5, Mythos 5 and Opus 5 still
- * accept it. `auto` is accepted by all. The version separator is `-` in API
- * and Bedrock ids and `.` in OpenRouter's (`claude-opus-5.5`).
+ * Sonnet 5.5, Claude Fable 5.1 and Claude Mythos 5.1 ("Forced tool use not
+ * supported", platform.claude.com/docs/en/api/errors, read 2026-09-23 and
+ * re-read 2026-10-10 when Sonnet 5.5 joined the list — ggui#1743). Claude
+ * Mythos Preview is matched too although that page does not name it: a
+ * wrong `true` is the safe direction (above), and no allowlist carries it,
+ * so it sits outside the ggui#1268 pin. Fable 5, Mythos 5, Opus 5, Sonnet 5
+ * and Haiku 5.5 still accept it (define-tools#forcing-tool-use names Haiku
+ * 5.5 as accepting). `auto` is accepted by all. The version separator is
+ * `-` in API and Bedrock ids and `.` in OpenRouter's (`claude-opus-5.5`).
  */
 export function anthropicRejectsForcedToolChoice(model: string): boolean {
-  return /^claude-(?:fable-5[-.]1|mythos-5[-.]1|opus-5[-.]5|mythos-preview)(?:-|$)/.test(
+  return /^claude-(?:fable-5[-.]1|mythos-5[-.]1|opus-5[-.]5|sonnet-5[-.]5|mythos-preview)(?:-|$)/.test(
     normalizeAnthropicModelId(model)
   );
 }

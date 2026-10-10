@@ -233,3 +233,113 @@ describe('MODEL_REGISTRY — the new-models support rows (ggui#1252)', () => {
     expect(DEFAULT_MODEL).toBe('anthropic/claude-haiku-4-5');
   });
 });
+
+/**
+ * ggui#1743 (2026-10-10) — the latest-generation rows, added so the default
+ * switch can be MEASURED before it is made: support ships, no default moves,
+ * none joins the lineup. Every number is quoted from the vendor page, read
+ * 2026-10-10:
+ *   - platform.claude.com pricing: "Claude Haiku 5.5 (for prompts up to
+ *     100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 /
+ *     MTok | $0.50 / MTok" — the row carries this tier; the over-100k tier
+ *     ($0.50 / $0.625 / $1 / $0.05 / $2.50) is not modelled, as the 1h cache
+ *     write is not. "Claude Sonnet 5.5 | $2 / MTok | $2.50 / MTok | $4 / MTok |
+ *     $0.10 / MTok | $10 / MTok", footnote 2: "Cache hits and refreshes on
+ *     Claude Opus 5.5 and Claude Sonnet 5.5 are priced at 0.05x the base input
+ *     price." model-deprecations: "claude-sonnet-5-5 | Active | N/A | Not
+ *     sooner than September 28, 2027"; "claude-haiku-5-5 | Active | N/A | Not
+ *     sooner than October 7, 2027". models/*-5-5/overview: 1M context, both
+ *     dateless ids (the first dateless Haiku).
+ *   - developers.openai.com models/gpt-6.1-sol: "1,050,000 context window",
+ *     $2 input / $0.10 cached input / $10 output per 1M, Snapshots lists only
+ *     `gpt-6.1-sol`, no retirement date. OpenAI publishes no cache-write
+ *     price, so `cacheWritePer1M` is unset (consumers fall back to input).
+ *   - ai.google.dev/gemini-api/docs/pricing: Gemini 3.8 Flash "$0.75 through
+ *     December 31, 2026. $1.50 starting January 1, 2027" / "$3.75 … $7.50" /
+ *     context caching "$0.075 … $0.15"; docs/models lists `gemini-3.8-flash`
+ *     as stable. Context 1,048,576 as on every Flash row.
+ */
+describe('MODEL_REGISTRY — the latest-generation rows (ggui#1743)', () => {
+  it('carries anthropic/claude-haiku-5-5 exactly as quoted (the ≤100k-prompt tier): 0.1 / 0.5, write 0.125, read 0.01, floor 2027-10-07, not lineup', () => {
+    expect(MODEL_REGISTRY['anthropic/claude-haiku-5-5']).toEqual({
+      id: 'anthropic/claude-haiku-5-5',
+      provider: 'anthropic',
+      displayName: 'Claude Haiku 5.5',
+      tier: 'fast',
+      state: 'active',
+      lineup: false,
+      retireNotBefore: '2027-10-07',
+      costs: { inputPer1M: 0.1, outputPer1M: 0.5, cacheWritePer1M: 0.125, cacheReadPer1M: 0.01 },
+      maxTokens: 1000000,
+      supportsTools: true,
+    });
+  });
+
+  it('carries anthropic/claude-sonnet-5-5 exactly as quoted: 2 / 10, write 2.5, read 0.1 (0.05×), floor 2027-09-28, not lineup', () => {
+    expect(MODEL_REGISTRY['anthropic/claude-sonnet-5-5']).toEqual({
+      id: 'anthropic/claude-sonnet-5-5',
+      provider: 'anthropic',
+      displayName: 'Claude Sonnet 5.5',
+      tier: 'balanced',
+      state: 'active',
+      lineup: false,
+      retireNotBefore: '2027-09-28',
+      costs: { inputPer1M: 2.0, outputPer1M: 10.0, cacheWritePer1M: 2.5, cacheReadPer1M: 0.1 },
+      maxTokens: 1000000,
+      supportsTools: true,
+    });
+  });
+
+  it('carries openai/gpt-6.1-sol exactly as quoted: 2 / 10, read 0.1, no cache-write price, 1,050,000 context, no floor, not lineup', () => {
+    expect(MODEL_REGISTRY['openai/gpt-6.1-sol']).toEqual({
+      id: 'openai/gpt-6.1-sol',
+      provider: 'openai',
+      displayName: 'GPT-6.1 Sol',
+      tier: 'balanced',
+      state: 'active',
+      lineup: false,
+      costs: { inputPer1M: 2.0, outputPer1M: 10.0, cacheReadPer1M: 0.1 },
+      maxTokens: 1050000,
+      supportsTools: true,
+    });
+  });
+
+  it('carries gemini/gemini-3.8-flash exactly as quoted (the introductory rate): 0.75 / 3.75, cache read 0.075, no floor, not lineup', () => {
+    expect(MODEL_REGISTRY['gemini/gemini-3.8-flash']).toEqual({
+      id: 'gemini/gemini-3.8-flash',
+      provider: 'google',
+      displayName: 'Gemini 3.8 Flash',
+      tier: 'balanced',
+      state: 'active',
+      lineup: false,
+      costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
+      maxTokens: 1048576,
+      supportsTools: true,
+      supportsCaching: true,
+    });
+  });
+
+  it('routes: each allowlist admits its id and the registry id is its ModelRef — the google ref carries the gemini/ prefix', () => {
+    const routes: readonly (readonly [LlmRoute, ModelId])[] = [
+      [{ provider: 'anthropic', model: 'claude-haiku-5-5' }, 'anthropic/claude-haiku-5-5'],
+      [{ provider: 'anthropic', model: 'claude-sonnet-5-5' }, 'anthropic/claude-sonnet-5-5'],
+      [{ provider: 'openai', model: 'gpt-6.1-sol' }, 'openai/gpt-6.1-sol'],
+      [{ provider: 'google', model: 'gemini-3.8-flash' }, 'gemini/gemini-3.8-flash'],
+    ];
+    for (const [route, expectedRef] of routes) {
+      expect(isValidLlmRoute(route.provider, route.model), `${route.provider}:${route.model}`).toBe(true);
+      const ref = modelRefOfRoute(route);
+      expect(ref).toBe(expectedRef);
+      if (!isModelId(ref)) throw new Error(`${ref} is not a registry ModelId`);
+      expect(isLineupModel(ref)).toBe(false);
+    }
+  });
+
+  it('neither DEFAULT_MODEL nor the lineup moves with the rows — the switch is a separate, measured decision', () => {
+    expect(DEFAULT_MODEL).toBe('anthropic/claude-haiku-4-5');
+    expect(MODEL_LINEUP).not.toContain('anthropic/claude-haiku-5-5');
+    expect(MODEL_LINEUP).not.toContain('anthropic/claude-sonnet-5-5');
+    expect(MODEL_LINEUP).not.toContain('openai/gpt-6.1-sol');
+    expect(MODEL_LINEUP).not.toContain('gemini/gemini-3.8-flash');
+  });
+});
