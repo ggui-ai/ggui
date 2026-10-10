@@ -250,8 +250,110 @@ export function getInitialValuePropNames(contract?: DataContract): string[] {
 // =============================================================================
 
 /**
+ * The top-level property keys of the object literal whose `{` is at `open`, read by
+ * walking brackets and skipping strings, so a nested object or a `}` inside a string
+ * neither ends the literal early nor contributes keys. `undefined` when `open` is not a `{`.
+ */
+function objectLiteralKeysAt(src: string, open: number): string[] | undefined {
+  if (src[open] !== "{") return undefined;
+  const keys: string[] = [];
+  let depth = 0;
+  let expectKey = true;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      // Skip the string; a quoted top-level key ("name": …) is a key too.
+      let j = i + 1;
+      while (j < src.length && src[j] !== c) j += src[j] === "\\" ? 2 : 1;
+      if (depth === 1 && expectKey && /^\s*:/.test(src.slice(j + 1))) keys.push(src.slice(i + 1, j));
+      i = j;
+      expectKey = false;
+      continue;
+    }
+    if (c === "{" || c === "[" || c === "(") {
+      depth++;
+      if (depth === 1) expectKey = true;
+      continue;
+    }
+    if (c === "}" || c === "]" || c === ")") {
+      depth--;
+      if (depth === 0) return keys;
+      continue;
+    }
+    if (depth !== 1) continue;
+    if (c === ",") {
+      expectKey = true;
+      continue;
+    }
+    if (expectKey && /[A-Za-z_$]/.test(c ?? "")) {
+      const m = /^([A-Za-z_$][\w$]*)\s*(:|,|\})/.exec(src.slice(i));
+      // `key: value`, or the shorthand `key,` / `key }`.
+      if (m !== null && m[1] !== undefined) keys.push(m[1]);
+      expectKey = false;
+    }
+  }
+  return keys;
+}
+
+/** The argument texts of the call whose `(` is at `open`, split on top-level commas. */
+function callArgsAt(src: string, open: number): string[] {
+  const args: string[] = [];
+  let depth = 0;
+  let start = open + 1;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1;
+      while (j < src.length && src[j] !== c) j += src[j] === "\\" ? 2 : 1;
+      i = j;
+      continue;
+    }
+    if (c === "(" || c === "{" || c === "[") depth++;
+    else if (c === ")" || c === "}" || c === "]") {
+      depth--;
+      if (depth === 0) {
+        args.push(src.slice(start, i));
+        return args;
+      }
+    } else if (c === "," && depth === 1) {
+      args.push(src.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return args;
+}
+
+/**
+ * The keys an initial-state argument provides: an object literal (`{ … }`), a lazy
+ * initializer returning one (`() => ({ … })`), or an identifier bound to one in the same
+ * file (`const INITIAL: Form = { … }`, also behind a lazy `() => INITIAL`).
+ */
+function initialStateKeys(src: string, argStart: number, argText: string): string[] {
+  const lead = argText.length - argText.trimStart().length;
+  let at = argStart + lead;
+  let text = argText.trim();
+  const lazy = /^\(\s*\)\s*=>\s*\(?\s*/.exec(text);
+  if (lazy !== null) {
+    at += lazy[0].length;
+    text = text.slice(lazy[0].length);
+  }
+  if (text.startsWith("{")) return objectLiteralKeysAt(src, at) ?? [];
+  const ident = /^([A-Za-z_$][\w$]*)\s*\)?\s*$/.exec(text);
+  if (ident === null || ident[1] === undefined) return [];
+  const decl = new RegExp(`(?:const|let|var)\\s+${ident[1]}\\s*(?::[^=]{1,200})?=\\s*`).exec(src);
+  if (decl === null) return [];
+  return objectLiteralKeysAt(src, decl.index + decl[0].length) ?? [];
+}
+
+/**
  * Collect all key names that appear as state slots — either keys inside a
  * `useState({ ... })` object literal, or standalone state variables.
+ *
+ * ggui#1790 — also the initial-state shapes the inline-literal patterns cannot see, each
+ * idiomatic React: `useState(INITIAL)` with `const INITIAL = { … }` in the file, a lazy
+ * initializer `useState(() => ({ … }))`, and `useReducer(reducer, { … } | INITIAL)`. Missing
+ * them made `state.payload.covers_submit` report every payload key missing on a form that held
+ * them all, and the model, with nothing real to fix, spent the turn cap rewording a comment.
  */
 export function collectStateKeys(src: string): Set<string> {
   const keys = new Set<string>();
@@ -266,6 +368,17 @@ export function collectStateKeys(src: string): Set<string> {
   for (const m of src.matchAll(defaultObjRe)) {
     const keyRe = /(?:^|,)\s*(\w+)\s*:/g;
     for (const km of m[1].matchAll(keyRe)) keys.add(km[1]);
+  }
+  // ggui#1790 — the initial-state argument, resolved: useState's first, useReducer's second.
+  for (const m of src.matchAll(/\b(useState|useReducer)\s*(?:<[^>]*>)?\s*\(/g)) {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const args = callArgsAt(src, open);
+    const which = m[1] === "useReducer" ? 1 : 0;
+    const arg = args[which];
+    if (arg === undefined) continue;
+    let argStart = open + 1;
+    for (let k = 0; k < which; k++) argStart += (args[k]?.length ?? 0) + 1;
+    for (const key of initialStateKeys(src, argStart, arg)) keys.add(key);
   }
   return keys;
 }
