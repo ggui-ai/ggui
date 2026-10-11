@@ -246,6 +246,21 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     expect("sameExchangeBreak" in r2).toBe(false);
   });
 
+  // ggui#1791 — the same-failure guard's record rides the result the same way.
+  it("carries sameFailureBreak when that guard ended the run, and no key otherwise", async () => {
+    const session = fakeSession();
+    const broke = createTelemetry();
+    broke.codingStartedAtMs = session.startedAtMs + 50;
+    broke.sameFailureBreak = { signature: "Self-check violations: [types] x", repeats: 5 };
+    const r1 = await assembleGenerationResult({ session, telemetry: broke, source: "" });
+    expect(r1.sameFailureBreak).toEqual({ signature: "Self-check violations: [types] x", repeats: 5 });
+
+    const clean = createTelemetry();
+    clean.codingStartedAtMs = session.startedAtMs + 50;
+    const r2 = await assembleGenerationResult({ session, telemetry: clean, source: "" });
+    expect("sameFailureBreak" in r2).toBe(false);
+  });
+
   it("leaves cache-token fields undefined when telemetry omits them (truthful absence)", async () => {
     const session = fakeSession();
     const telemetry = createTelemetry();

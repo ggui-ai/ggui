@@ -102,6 +102,11 @@ export interface DupeBreakState {
    *  information-free — the model learned nothing it didn't already
    *  have. 1 = first occurrence; 2 = one repeat (nudge); 3 = break. */
   consecutiveIdenticalExchanges: number;
+  /** ggui#1791 — for each failure signature ({@link failureSignatures}), how
+   *  many failed writes (`apply_changes` / `rewrite`) have reported it since
+   *  the last write that passed, whatever the patch and whatever failed in
+   *  between. Cleared when a write passes. */
+  failureCounts: Map<string, number>;
 }
 
 /**
@@ -147,6 +152,70 @@ export const SAME_EXCHANGE_NUDGE =
   "you already have and emit an apply_changes (or scoped) call now; one " +
   "more identical repeat terminates the run.";
 
+/**
+ * ggui#1791 — the failures a failed write reported, one signature per failing
+ * check, with what changes between two identical failures removed: every
+ * digit (line and column numbers, counts) and runs of whitespace.
+ *
+ * A self-check result lists its violations as `[category] description` lines;
+ * each one is its own signature, so a check that fails on every turn reads as
+ * the same failure whether or not another check fails beside it. A result with
+ * no violation line (a build error, a rejected patch) is one signature: its
+ * text without the `Committed <oid>: "<message>"` line, which carries a fresh
+ * oid and the model's own message every turn.
+ *
+ * The patch fingerprint above keys on the PATCH, so the same failure under a
+ * different patch each turn (a reworded comment, a moved line) never reads as
+ * stuck, and a run goes to the turn cap. These key on the FAILURE.
+ */
+export function failureSignatures(resultText: string): string[] {
+  const norm = (text: string): string => text.replace(/[0-9]+/g, "#").replace(/\s+/g, " ").trim();
+  const violations = [...resultText.matchAll(/^\[[^\]\n]+\] [^\n]+/gm)].map((m) => norm(m[0]));
+  if (violations.length > 0) return [...new Set(violations)];
+  const rest = norm(resultText.replace(/^Committed [^\n]*\n/, ""));
+  return rest.length > 0 ? [rest] : [];
+}
+
+/** The failure a write has reported most often since the last pass, and how often. */
+export interface RepeatedFailure {
+  readonly signature: string;
+  readonly repeats: number;
+}
+
+/**
+ * ggui#1791 — record one failed write: count each of its signatures once, and
+ * return the one now reported most often since the last passing write
+ * (undefined when the result carried no recognisable failure).
+ */
+export function recordWriteFailure(state: DupeBreakState, resultText: string): RepeatedFailure | undefined {
+  let top: RepeatedFailure | undefined;
+  for (const signature of failureSignatures(resultText)) {
+    const repeats = (state.failureCounts.get(signature) ?? 0) + 1;
+    state.failureCounts.set(signature, repeats);
+    if (top === undefined || repeats > top.repeats) top = { signature, repeats };
+  }
+  return top;
+}
+
+/** ggui#1791 — a write passed: every count starts over. */
+export function clearWriteFailures(state: DupeBreakState): void {
+  state.failureCounts.clear();
+}
+
+/** A failure reported for the third time since the last pass ⇒ one explicit nudge. */
+export const SAME_FAILURE_NUDGE_AT = 3;
+
+/** A failure reported for the fifth time since the last pass ⇒ the loop is not
+ *  converging; the caller ends the run, which ships what the turn cap would
+ *  have shipped. */
+export const SAME_FAILURE_BREAK_AT = 5;
+
+/** Appended to the tool result of the {@link SAME_FAILURE_NUDGE_AT}th identical failure. */
+export const SAME_FAILURE_NUDGE =
+  "\n\n[harness] This same failure has now been reported for three of your " +
+  "patches. Changing other code does not clear it: re-read that check above and " +
+  "change exactly what it names. Two more reports of it end the run.";
+
 export function createDupeBreakState(): DupeBreakState {
   return {
     lastFailedPatchFingerprint: null,
@@ -164,6 +233,7 @@ export function createDupeBreakState(): DupeBreakState {
     consecutiveNoToolCalls: 0,
     lastExchangeKey: null,
     consecutiveIdenticalExchanges: 0,
+    failureCounts: new Map(),
   };
 }
 

@@ -62,6 +62,16 @@ export interface SameExchangeBreak {
   readonly repeats: number;
 }
 
+/**
+ * ggui#1791 — the same-failure guard ended the run: one failing check
+ * (`signature`, its first 160 characters) was reported by this many failed
+ * writes since the last passing one, whatever the patch.
+ */
+export interface SameFailureBreak {
+  readonly signature: string;
+  readonly repeats: number;
+}
+
 export interface GenerationResult extends AdapterResult {
   /** Number of generation passes the harness performed */
   passesUsed: number;
@@ -77,6 +87,8 @@ export interface GenerationResult extends AdapterResult {
   inLoopVisualTokens?: VisualLegTokens;
   /** Set only when the same-exchange guard ended the run (ggui#404); no key otherwise. */
   sameExchangeBreak?: SameExchangeBreak;
+  /** ggui#1791 — set only when the same-failure guard ended the run. */
+  sameFailureBreak?: SameFailureBreak;
   /** Whether background improvement should be spawned (auto-improve mode) */
   needsBackgroundImprovement?: boolean;
   /** Whether at least one commit passed the self-check (compile + type check + lint) */

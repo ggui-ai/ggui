@@ -25,7 +25,7 @@ import {
 import { runEvalRound } from "./run-eval-round.js";
 import type { TokenUsage } from "./run-eval-round.js";
 import type { VisualLegTokens } from "../../evaluation/visual-evaluator.js";
-import type { SameExchangeBreak } from "../result-types.js";
+import type { SameExchangeBreak, SameFailureBreak } from "../result-types.js";
 
 type PreWarmedEvalContext =
   import("../../evaluation/llm-evaluator.js").PreWarmedEvalContext;
@@ -105,6 +105,8 @@ export interface GenerateTelemetry {
    * undefined unless that guard is what stopped the loop.
    */
   sameExchangeBreak: SameExchangeBreak | undefined;
+  /** ggui#1791 — set when the same-failure guard ended the run. */
+  sameFailureBreak: SameFailureBreak | undefined;
   /** Latest compiled code — empty string until the first self-check pass. */
   compiledCode: string;
   /**
@@ -147,6 +149,7 @@ export function createTelemetry(): GenerateTelemetry {
     probeRepairTrigger: undefined,
     contractFeedback: undefined,
     sameExchangeBreak: undefined,
+    sameFailureBreak: undefined,
     compiledCode: "",
     pairedSource: "",
     selfCheckPassed: false,
@@ -223,6 +226,7 @@ export function absorbTurn(telemetry: GenerateTelemetry, turn: CodingTurnResult)
     else telemetry.counters.outcomes.selfCheckFail++;
   }
   if (turn.sameExchangeBreak !== undefined) telemetry.sameExchangeBreak = turn.sameExchangeBreak;
+  if (turn.sameFailureBreak !== undefined) telemetry.sameFailureBreak = turn.sameFailureBreak;
 }
 
 export interface CreateGenerateRunnerInput {

@@ -80,11 +80,19 @@ describe("absorbTurn", () => {
     expect(t.sameExchangeBreak).toEqual({ tool: "get_available_icons", repeats: 3 });
   });
 
+  it("carries the same-failure guard's record when that guard ended the turn (ggui#1791)", () => {
+    const t = createTelemetry();
+    absorbTurn(t, turn({ control: "break", sameFailureBreak: { signature: "Self-check violations: [types] x", repeats: 5 } }));
+    expect(t.sameFailureBreak).toEqual({ signature: "Self-check violations: [types] x", repeats: 5 });
+    expect(t.sameExchangeBreak).toBeUndefined();
+  });
+
   it("a turn the guard did not end leaves it undefined — and still folds tokens, timings and counters", () => {
     const t = createTelemetry();
     absorbTurn(t, turn({ control: "proceed", outcome: "PASS", phase: "impl", cacheReadTokens: 900 }));
     absorbTurn(t, turn({ control: "break" }));
     expect(t.sameExchangeBreak).toBeUndefined();
+    expect(t.sameFailureBreak).toBeUndefined();
     expect(t.totalIn).toBe(20);
     expect(t.totalOut).toBe(10);
     expect(t.cacheReadTokens).toBe(900);

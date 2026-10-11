@@ -21,7 +21,7 @@ import { executeTool } from "../../coding-agent/tools.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
 import type { LLMAgent } from "../llm-router.js";
 import type { Harness } from "../types-public.js";
-import type { SameExchangeBreak } from "../result-types.js";
+import type { SameExchangeBreak, SameFailureBreak } from "../result-types.js";
 import {
   APPLY_CHANGES_HASHLINE_TOOL,
   APPLY_CHANGES_HASHLINE_TOOL_FLAT,
@@ -38,10 +38,16 @@ import {
 import { LUCIDE_ICON_NAMES } from "@ggui-ai/design";
 import { formatWithHashlines } from "../hashline.js";
 import {
+  clearWriteFailures,
   recordToolExchange,
+  recordWriteFailure,
   SAME_EXCHANGE_BREAK_AT,
   SAME_EXCHANGE_NUDGE,
+  SAME_FAILURE_BREAK_AT,
+  SAME_FAILURE_NUDGE,
+  SAME_FAILURE_NUDGE_AT,
 } from "./dupe-break.js";
+import type { RepeatedFailure } from "./dupe-break.js";
 
 /** Staged process-mode phase machine — also defined in runtime.ts. */
 export type A1Phase = "scaffold" | "fill" | "post";
@@ -254,6 +260,11 @@ export interface CodingTurnResult {
    * control value many exits share. No key on any other turn.
    */
   readonly sameExchangeBreak?: SameExchangeBreak;
+  /**
+   * Set only on the `break` the same-failure guard returns (ggui#1791). No
+   * key on any other turn.
+   */
+  readonly sameFailureBreak?: SameFailureBreak;
 }
 
 /**
@@ -952,6 +963,26 @@ ${closingInstruction}`;
     }
   }
 
+  // ggui#1791 same-failure guard — the patch fingerprint above keys on the
+  // PATCH, so the same failure under a different patch each turn (a reworded
+  // comment, a moved line) never counts as stuck. This keys on the FAILURE:
+  // each failing check a write reports is counted since the last passing
+  // write, whatever failed in between. The third report of one gets a nudge,
+  // the fifth ends the run. A passing write clears the counts; a non-write
+  // tool (cat, icons) changes nothing and leaves them as they were.
+  const isWrite = call.name === "apply_changes" || call.name === "rewrite";
+  let repeatedFailure: RepeatedFailure | undefined;
+  if (ctx.dupeBreak && isWrite) {
+    if (result.done) {
+      clearWriteFailures(ctx.dupeBreak);
+    } else {
+      repeatedFailure = recordWriteFailure(ctx.dupeBreak, result.result);
+      if (repeatedFailure?.repeats === SAME_FAILURE_NUDGE_AT) {
+        augmentedResultText += SAME_FAILURE_NUDGE;
+      }
+    }
+  }
+
   // Send tool result back to close the API contract (Google/OpenAI/OpenRouter)
   // This enables proper session chaining on the next callTools() invocation.
   await codingAgent.sendToolResult([{
@@ -981,6 +1012,30 @@ ${closingInstruction}`;
       iconNamesCache,
       preWarmedContext,
       sameExchangeBreak: { tool: call.name, repeats: sameExchangeRepeats },
+    };
+  }
+
+  if (repeatedFailure !== undefined && repeatedFailure.repeats >= SAME_FAILURE_BREAK_AT) {
+    const signature = repeatedFailure.signature.slice(0, 160);
+    console.log(
+      `[coding-agent] SAME_FAILURE_BREAK | tool=${call.name} | repeats=${repeatedFailure.repeats} | failure=${JSON.stringify(signature.slice(0, 80))} — terminating run (ggui#1791)`,
+    );
+    return {
+      control: "break",
+      compiledCode: "",
+      selfCheckPassed: false,
+      outcome: undefined,
+      phase: undefined,
+      tokens,
+      ...cacheTokens,
+      llmMs,
+      toolMs,
+      lastResultText: augmentedResultText,
+      lastDiffFailed: false,
+      isEvalFeedback: false,
+      iconNamesCache,
+      preWarmedContext,
+      sameFailureBreak: { signature, repeats: repeatedFailure.repeats },
     };
   }
 

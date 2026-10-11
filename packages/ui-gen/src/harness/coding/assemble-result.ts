@@ -132,6 +132,7 @@ export async function assembleGenerationResult(
         : telemetry.evalResult,
     // ggui#404 — present only when the same-exchange guard ended the run.
     ...(telemetry.sameExchangeBreak !== undefined ? { sameExchangeBreak: telemetry.sameExchangeBreak } : {}),
+    ...(telemetry.sameFailureBreak !== undefined ? { sameFailureBreak: telemetry.sameFailureBreak } : {}),
     needsBackgroundImprovement,
     selfCheckPassed: telemetry.selfCheckPassed,
     timing,
