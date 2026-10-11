@@ -33,6 +33,7 @@
  *   - Submit-action bridge (T2.5)
  *   - Host-shape configs (T2.7)
  */
+import diagnosticsChannel from "node:diagnostics_channel";
 import {
   MCP_APPS_UI_CAPABILITY,
   parseMcpAppAiGguiRenderMeta,
@@ -397,20 +398,7 @@ export class HostSimulator {
       // exactly once on tools/list and cache the bundle. We mirror
       // that so the test can assert pre-fetch happened.
       if (resourceUri && !this.prefetchedResources.has(resourceUri)) {
-        try {
-          const res = await this.client.readResource({ uri: resourceUri });
-          // Take the first text block — the App-spec ui:// resource
-          // is a single text resource (the iframe shell HTML or the
-          // bundle URL referenced inside).
-          const first = res.contents[0];
-          const text = first && "text" in first && typeof first.text === "string" ? first.text : "";
-          this.prefetchedResources.set(resourceUri, text);
-        } catch {
-          // Resource not readable — record an empty body so the
-          // tools/list call itself doesn't fail; the test can
-          // assert on `getPrefetchedResource` returning empty.
-          this.prefetchedResources.set(resourceUri, "");
-        }
+        this.prefetchedResources.set(resourceUri, await prefetchShell(this.client, resourceUri));
       }
     }
     this.cachedTools = entries;
@@ -891,4 +879,117 @@ export class HostSimulator {
     this.modelContext = null;
     this.consentLog.length = 0;
   }
+}
+
+/**
+ * ggui#1822 — read one tool's `ui://` resource for the tools/list prefetch,
+ * and say what happened. Each read logs one line on stderr when it is sent and
+ * one with its outcome, naming the runner (`RUNNER_NAME` on a CI runner), so a
+ * read that never reaches the server is visible in the job log. A failed read
+ * throws with the URI, the elapsed time and the underlying error chain: an
+ * empty shell used to stand in for it, and a gate then reported a missing
+ * shell instead of the failure.
+ */
+async function prefetchShell(client: Client, uri: string): Promise<string> {
+  const runner = process.env["RUNNER_NAME"] ?? "local";
+  const started = Date.now();
+  process.stderr.write(`[host-simulator] resources/read send uri=${uri} runner=${runner}\n`);
+  const trace = startNetTrace(started);
+  let res: Awaited<ReturnType<Client["readResource"]>>;
+  try {
+    res = await client.readResource({ uri });
+  } catch (err) {
+    const ms = Date.now() - started;
+    const detail = describeError(err);
+    const events = trace.stop();
+    process.stderr.write(
+      `[host-simulator] resources/read failed uri=${uri} runner=${runner} after ${ms} ms: ${detail}\n` +
+        `[host-simulator] network trace while it was in flight (undici; +ms):\n` +
+        (events.length > 0 ? events.map((e) => `  ${e}\n`).join("") : "  (no network event: the request never reached the HTTP client)\n"),
+    );
+    throw new Error(`host-simulator: resources/read ${uri} failed after ${ms} ms on runner ${runner}: ${detail}`, {
+      cause: err,
+    });
+  }
+  const events = trace.stop();
+  // The App-spec ui:// resource is a single text resource (the iframe shell HTML).
+  const first = res.contents[0];
+  const text = first && "text" in first && typeof first.text === "string" ? first.text : "";
+  process.stderr.write(
+    `[host-simulator] resources/read ok uri=${uri} runner=${runner} bytes=${text.length} after ${Date.now() - started} ms` +
+      ` (${events.some((e) => e.includes("connected")) ? "new connection" : "reused connection"})\n`,
+  );
+  return text;
+}
+
+/** The undici channels Node's fetch publishes, in request order. */
+const NET_TRACE_CHANNELS = [
+  "undici:request:create",
+  "undici:client:beforeConnect",
+  "undici:client:connected",
+  "undici:client:connectError",
+  "undici:client:sendHeaders",
+  "undici:request:bodySent",
+  "undici:request:headers",
+  "undici:request:error",
+] as const;
+
+interface NetTraceMessage {
+  readonly request?: { readonly method?: string; readonly path?: string };
+  readonly response?: { readonly statusCode?: number };
+  readonly socket?: { readonly localPort?: number; readonly remoteAddress?: string; readonly remotePort?: number };
+  readonly error?: unknown;
+}
+
+/**
+ * Record the undici events of every request made until `stop()`: whether a
+ * connection was opened or reused (local port), whether the headers were sent,
+ * and whether a response or an error came back. A read that never reaches the
+ * server shows here as a request with no `sendHeaders`, or headers sent on a
+ * reused connection and then nothing.
+ */
+function startNetTrace(started: number): { stop(): string[] } {
+  const events: string[] = [];
+  const handlers = NET_TRACE_CHANNELS.map((name) => {
+    const handler = (message: unknown): void => {
+      const m = (typeof message === "object" && message !== null ? message : {}) as NetTraceMessage;
+      const at = `+${Date.now() - started}`;
+      const req = m.request ? ` ${m.request.method ?? ""} ${m.request.path ?? ""}` : "";
+      const sock = m.socket
+        ? ` local=${m.socket.localPort ?? "?"} remote=${m.socket.remoteAddress ?? "?"}:${m.socket.remotePort ?? "?"}`
+        : "";
+      const status = m.response?.statusCode !== undefined ? ` status=${m.response.statusCode}` : "";
+      const error = m.error !== undefined ? ` error=${describeError(m.error)}` : "";
+      events.push(`${at} ${name.replace("undici:", "")}${req}${sock}${status}${error}`);
+    };
+    diagnosticsChannel.subscribe(name, handler);
+    return { name, handler };
+  });
+  return {
+    stop() {
+      for (const { name, handler } of handlers) diagnosticsChannel.unsubscribe(name, handler);
+      return events;
+    },
+  };
+}
+
+/**
+ * An error and its `cause` chain on one line: `Name: message (code) <- Name: message`.
+ * `code` is an HTTP status from the MCP transport, or a string such as an undici
+ * `UND_ERR_*` code from the network layer.
+ */
+function describeError(err: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; current !== undefined && current !== null && depth < 5; depth++) {
+    if (current instanceof Error) {
+      const code = (current as Error & { code?: unknown }).code;
+      parts.push(`${current.name}: ${current.message}${typeof code === "string" || typeof code === "number" ? ` (${code})` : ""}`);
+      current = current.cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join(" <- ");
 }
