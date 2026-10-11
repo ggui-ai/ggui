@@ -49,6 +49,14 @@ import {
   type SubmitActionUiMessageEnvelope,
   type SubmitActionUpdateContextEnvelope,
 } from "./submit-action.js";
+import {
+  FIRST_BYTE_TIMEOUT_MS,
+  ShellReadMeter,
+  describeShellRead,
+  readBodyTimeoutMs,
+  reportShellRead,
+  type ShellReadRecord,
+} from "./shell-read.js";
 
 export interface HostSimulatorOptions {
   /**
@@ -85,6 +93,14 @@ export interface HostSimulatorOptions {
    * for shape-comparison runs.
    */
   readonly clientInfo?: { name: string; version: string };
+
+  /**
+   * First-byte gate for `ui://` shell reads, in milliseconds. Defaults to
+   * {@link FIRST_BYTE_TIMEOUT_MS}; tests shorten it to exercise the gate. The
+   * whole-read budget is not an option: it comes from the environment
+   * (`GGUI_E2E_BODY_TIMEOUT_MS`, see `shell-read.ts`), set per runner class.
+   */
+  readonly firstByteTimeoutMs?: number;
 }
 
 /**
@@ -325,6 +341,8 @@ export class HostSimulator {
   private transport: StreamableHTTPClientTransport | null = null;
   private cachedTools: readonly ToolListEntry[] | null = null;
   private prefetchedResources = new Map<string, string>();
+  private readonly shellReadMeter = new ShellReadMeter();
+  private readonly shellReads: ShellReadRecord[] = [];
   /**
    * Latest `ui/update-model-context` envelope captured from a submit
    * action. Per spec §1099 each new envelope OVERWRITES the previous —
@@ -359,6 +377,7 @@ export class HostSimulator {
     }
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers },
+      fetch: this.shellReadMeter.fetch,
     });
     this.client = new Client(this.opts.clientInfo ?? { name: "host-simulator", version: "1.0" }, {
       capabilities: {
@@ -391,7 +410,11 @@ export class HostSimulator {
     if (options?.prefetchShells === true) {
       for (const { resourceUri } of entries) {
         if (resourceUri && !this.prefetchedResources.has(resourceUri)) {
-          this.prefetchedResources.set(resourceUri, await prefetchShell(this.client, resourceUri));
+          const res = await this.readShellResource(this.client, resourceUri);
+          // The App-spec ui:// resource is a single text resource (the iframe shell HTML).
+          const first = res.contents[0];
+          const text = first && "text" in first && typeof first.text === "string" ? first.text : "";
+          this.prefetchedResources.set(resourceUri, text);
         }
       }
     }
@@ -422,6 +445,73 @@ export class HostSimulator {
    */
   getPrefetchedResource(uri: string): string | undefined {
     return this.prefetchedResources.get(uri);
+  }
+
+  /**
+   * What each `ui://` shell read measured, in order: first byte, drain, bytes,
+   * content type and encoding (ggui#1822). Failed reads are included.
+   */
+  getShellReads(): readonly ShellReadRecord[] {
+    return this.shellReads;
+  }
+
+  /**
+   * ggui#1822 — one `resources/read` of a `ui://` shell, timed and gated.
+   *
+   * Two budgets: the first body byte must arrive within the first-byte gate
+   * (the server's own latency), and the whole read within the body budget
+   * from `GGUI_E2E_BODY_TIMEOUT_MS` (default 60 s), which is the only budget
+   * a slow path gets slack on. The measurements are reported on every
+   * outcome. Each read also logs one line on stderr when it is sent, naming
+   * the runner (`RUNNER_NAME` on a CI runner), and a failed read throws with
+   * the URI, the measurements, the undici network trace and the underlying
+   * error chain: an empty shell used to stand in for a failed read, and a gate
+   * then reported a missing shell instead of the failure.
+   */
+  private async readShellResource(
+    client: Client,
+    uri: string,
+  ): Promise<Awaited<ReturnType<Client["readResource"]>>> {
+    const runner = process.env["RUNNER_NAME"] ?? "local";
+    const bodyBudgetMs = readBodyTimeoutMs();
+    const firstByteMs = this.opts.firstByteTimeoutMs ?? FIRST_BYTE_TIMEOUT_MS;
+    const started = Date.now();
+    process.stderr.write(`[host-simulator] resources/read send uri=${uri} runner=${runner}\n`);
+    const trace = startNetTrace(started);
+    const probe = this.shellReadMeter.arm(firstByteMs, bodyBudgetMs);
+    try {
+      const res = await client.readResource({ uri }, { timeout: bodyBudgetMs, signal: probe.abort.signal });
+      const record = probe.finish(uri, runner, "ok");
+      const events = trace.stop();
+      this.shellReads.push(record);
+      reportShellRead(record);
+      process.stderr.write(
+        `[host-simulator] resources/read ok uri=${uri} runner=${runner} after ${record.totalMs} ms` +
+          ` (${events.some((e) => e.includes("connected")) ? "new connection" : "reused connection"})\n`,
+      );
+      return res;
+    } catch (err) {
+      const record = probe.finish(uri, runner, "failed");
+      this.shellReadMeter.disarm(probe);
+      // Release the connection: after a timeout the body may still be draining.
+      probe.abort.abort(new Error("shell read ended"));
+      const events = trace.stop();
+      this.shellReads.push(record);
+      reportShellRead(record);
+      const detail = describeError(err);
+      process.stderr.write(
+        `[host-simulator] resources/read failed uri=${uri} runner=${runner} after ${record.totalMs} ms: ${detail}\n` +
+          `[host-simulator] network trace while it was in flight (undici; +ms):\n` +
+          (events.length > 0
+            ? events.map((e) => `  ${e}\n`).join("")
+            : "  (no network event: the request never reached the HTTP client)\n"),
+      );
+      throw new Error(
+        `host-simulator: resources/read ${uri} failed after ${record.totalMs} ms on runner ${runner}` +
+          ` (${describeShellRead(record)}): ${detail}`,
+        { cause: err },
+      );
+    }
   }
 
   /**
@@ -516,7 +606,7 @@ export class HostSimulator {
     uri: string
   ): Promise<{ readonly html: string; readonly meta?: McpAppAiGguiRenderMeta }> {
     if (!this.client) throw new Error("connect() first");
-    const res = await this.client.readResource({ uri });
+    const res = await this.readShellResource(this.client, uri);
     const first = res.contents[0];
     const html = first && "text" in first && typeof first.text === "string" ? first.text : "";
     // The protocol's own inverse of `gguiShellHtml` — the same reader the
@@ -889,47 +979,6 @@ export class HostSimulator {
     this.modelContext = null;
     this.consentLog.length = 0;
   }
-}
-
-/**
- * ggui#1822 — read one tool's `ui://` resource for the tools/list prefetch,
- * and say what happened. Each read logs one line on stderr when it is sent and
- * one with its outcome, naming the runner (`RUNNER_NAME` on a CI runner), so a
- * read that never reaches the server is visible in the job log. A failed read
- * throws with the URI, the elapsed time and the underlying error chain: an
- * empty shell used to stand in for it, and a gate then reported a missing
- * shell instead of the failure.
- */
-async function prefetchShell(client: Client, uri: string): Promise<string> {
-  const runner = process.env["RUNNER_NAME"] ?? "local";
-  const started = Date.now();
-  process.stderr.write(`[host-simulator] resources/read send uri=${uri} runner=${runner}\n`);
-  const trace = startNetTrace(started);
-  let res: Awaited<ReturnType<Client["readResource"]>>;
-  try {
-    res = await client.readResource({ uri });
-  } catch (err) {
-    const ms = Date.now() - started;
-    const detail = describeError(err);
-    const events = trace.stop();
-    process.stderr.write(
-      `[host-simulator] resources/read failed uri=${uri} runner=${runner} after ${ms} ms: ${detail}\n` +
-        `[host-simulator] network trace while it was in flight (undici; +ms):\n` +
-        (events.length > 0 ? events.map((e) => `  ${e}\n`).join("") : "  (no network event: the request never reached the HTTP client)\n"),
-    );
-    throw new Error(`host-simulator: resources/read ${uri} failed after ${ms} ms on runner ${runner}: ${detail}`, {
-      cause: err,
-    });
-  }
-  const events = trace.stop();
-  // The App-spec ui:// resource is a single text resource (the iframe shell HTML).
-  const first = res.contents[0];
-  const text = first && "text" in first && typeof first.text === "string" ? first.text : "";
-  process.stderr.write(
-    `[host-simulator] resources/read ok uri=${uri} runner=${runner} bytes=${text.length} after ${Date.now() - started} ms` +
-      ` (${events.some((e) => e.includes("connected")) ? "new connection" : "reused connection"})\n`,
-  );
-  return text;
 }
 
 /** The undici channels Node's fetch publishes, in request order. */
