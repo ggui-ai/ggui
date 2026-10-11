@@ -57,7 +57,7 @@ function runNoHardcodedEntities(input: AxisCheckInput): EvalIssue[] {
       mkIssue(
         "state.merge.no_hardcoded_entities",
         `Hardcoded entity array literal (multiple objects with "${idField}") in the component — entity data should come from state/props.`,
-        `Remove the literal array. Seed state from props.{entityProp} and merge updates via stream.`,
+        `Remove the literal array: this data comes from ${all.filter((e) => e.idField === idField).map((e) => `props.${e.name}`).join(" / ") || "props"}. Read it there (\`?? []\` for an absent value, never a literal default), seed state from it, and merge updates via stream.`,
       ),
     );
   }
