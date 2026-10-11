@@ -65,6 +65,27 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-12',
+    text:
+      'Generator change (internal issue #1791): from the first run on a runner image built ' +
+      'with this change, two things change in the generator\'s own self-check loop, and both ' +
+      'can move turn counts, cost and scores. First, the check that a form\'s state covers ' +
+      'every field its submit action sends now counts fields the contract declares as shared ' +
+      'context slots. The generator is told not to copy those slots into local state, so before ' +
+      'this change a model that followed that instruction failed the check on every turn until ' +
+      'the turn cap, while one that ignored it passed. Second, a generation now ends early ' +
+      'when the same self-check has failed five times since the last write that passed, ' +
+      'instead of running on to the turn cap. It ships what the cap would have shipped: the ' +
+      'last version that passed self-check, or failing that, the last that built. None of this ' +
+      'page\'s prompts declares context slots, so the first change should not move them; the ' +
+      'second can end any looping run sooner, so expect fewer runs at six or more turns and ' +
+      'lower cost and latency on the runs that looped. That is a cost and latency change, not ' +
+      'a quality one: a run the guard ends is still a run whose last write failed, shipping its ' +
+      'fallback, and each such run is marked in its result. Runs before this entry were measured ' +
+      'without either change. No arm, prompt, judge or scoring rule changes, and history is ' +
+      'not rewritten.',
+  },
+  {
     date: '2026-10-11',
     text:
       'Arm change (internal issues #1743, #1803): from the first run on a runner image built ' +
