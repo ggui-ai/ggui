@@ -45,3 +45,28 @@ describe('collectStateKeys (ggui#1790)', () => {
     expect(missing(`const [data, setData] = useState(loadFromProps(props));`)).toEqual(KEYS);
   });
 });
+
+// ggui#1791 — on the served path a contract whose form fields are contextSpec slots gets those
+// slots bound in the boilerplate as `useGguiContext`, under a DO-NOT-EDIT banner. The scan saw
+// only useState/useReducer, so every payload key read as uncovered on every turn, the model
+// could not move the locked bindings, and the generation ran to the turn cap.
+describe('collectStateKeys reads contextSpec slots (ggui#1791)', () => {
+  const slots = (pairs: readonly (readonly [string, string])[]): string =>
+    pairs.map(([v, slot]) => `const [${v}, set_${v}] = useGguiContext<string>('${slot}');`).join('\n');
+
+  it('covers every key bound as a context slot, typed or not', () => {
+    expect(missing(slots(KEYS.map((k) => [k, k] as const)))).toEqual([]);
+    expect(missing(KEYS.map((k) => `const [${k}, set_${k}] = useGguiContext('${k}');`).join('\n'))).toEqual([]);
+    expect(missing(`const [features, setFeatures] = useGguiContext<string[]>("features");`)).toEqual(
+      KEYS.filter((k) => k !== 'features'),
+    );
+  });
+
+  it("counts the slot's name even when the binding is named differently", () => {
+    expect(missing(slots(KEYS.map((k) => [`${k}Value`, k] as const)))).toEqual([]);
+  });
+
+  it('control: a slot the payload needs but the file never binds is still reported missing', () => {
+    expect(missing(slots(KEYS.filter((k) => k !== 'comments').map((k) => [k, k] as const)))).toEqual(['comments']);
+  });
+});

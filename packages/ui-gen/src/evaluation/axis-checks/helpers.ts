@@ -362,6 +362,15 @@ export function collectStateKeys(src: string): Set<string> {
   const keys = new Set<string>();
   const varRe = /const\s*\[\s*(\w+)\s*,\s*(\w+)\s*\]\s*=\s*useState/g;
   for (const m of src.matchAll(varRe)) keys.add(m[1]);
+  // ggui#1791 — a contextSpec slot is state too: the boilerplate binds each slot as
+  // `const [x, setX] = useGguiContext<T>('x')` under a DO-NOT-EDIT banner, so a form
+  // whose fields are context slots holds every payload key there and cannot move them
+  // into useState. Both the binding's name and the slot's name count.
+  const contextRe = /const\s*\[\s*(\w+)\s*,\s*\w+\s*\]\s*=\s*useGguiContext\s*(?:<[^>]*>)?\s*\(\s*['"`](\w+)['"`]/g;
+  for (const m of src.matchAll(contextRe)) {
+    keys.add(m[1]);
+    keys.add(m[2]);
+  }
   const objRe = /useState(?:<[^>]*>)?\s*\(\s*\{([\s\S]*?)\}\s*\)/g;
   for (const m of src.matchAll(objRe)) {
     const keyRe = /(?:^|,)\s*(\w+)\s*:/g;
