@@ -1,8 +1,10 @@
 /**
- * ggui#1822 — a `ui://` shell prefetch that fails is an error, not an empty
- * shell. `listTools()` reads each tool's resourceUri after `tools/list`; when
- * that read fails, the call rejects with the URI, the elapsed time and the
- * underlying error, so a gate says what broke instead of asserting on "".
+ * ggui#1822 — the `ui://` shell prefetch is opt-in, and a failed one is an
+ * error, not an empty shell. `listTools({ prefetchShells: true })` reads each
+ * tool's resourceUri after `tools/list`; when that read fails, the call rejects
+ * with the URI, the elapsed time and the underlying error. A plain
+ * `listTools()` reads no shell, so a test of the tool surface never fails on
+ * the shell read.
  *
  * A proxy in front of a real OSS server forwards every request except
  * `resources/read`, which it answers with HTTP 500.
@@ -60,6 +62,19 @@ describe('host-simulator: a failed shell prefetch is an error (ggui#1822)', () =
     fixture = null;
   });
 
+  it('a plain listTools reads no shell: a test of the tool surface does not depend on the shell read', async () => {
+    fixture = await bootOssServer();
+    const p = await failingReadProxy(fixture.url);
+    proxy = p.server;
+    host = new HostSimulator({ url: p.url, bearer: 'host-simulator-test' });
+    await host.connect();
+
+    const tools = await host.listTools();
+    const render = tools.find((t) => t.name === 'ggui_render');
+    expect(render?.resourceUri).toMatch(/^ui:\/\//);
+    expect(host.getPrefetchedResource(render!.resourceUri!)).toBeUndefined();
+  });
+
   it('listTools rejects naming the resource URI and the underlying error, never caching an empty shell', async () => {
     fixture = await bootOssServer();
     const p = await failingReadProxy(fixture.url);
@@ -67,7 +82,7 @@ describe('host-simulator: a failed shell prefetch is an error (ggui#1822)', () =
     host = new HostSimulator({ url: p.url, bearer: 'host-simulator-test' });
     await host.connect();
 
-    const err = await host.listTools().then(
+    const err = await host.listTools({ prefetchShells: true }).then(
       () => null,
       (e: unknown) => e,
     );

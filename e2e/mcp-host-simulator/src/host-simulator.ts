@@ -323,7 +323,7 @@ export interface SimulateSubmitActionResult {
 export class HostSimulator {
   private client: Client | null = null;
   private transport: StreamableHTTPClientTransport | null = null;
-  private cachedTools: ToolListEntry[] | null = null;
+  private cachedTools: readonly ToolListEntry[] | null = null;
   private prefetchedResources = new Map<string, string>();
   /**
    * Latest `ui/update-model-context` envelope captured from a submit
@@ -371,19 +371,36 @@ export class HostSimulator {
   }
 
   /**
-   * `tools/list` + RFC-9708 / App-spec pre-fetch. The host caches
-   * each tool's resourceUri body so a subsequent `tools/call`
-   * doesn't pay the bundle round-trip on top of the tool latency.
+   * `tools/list`, and with `prefetchShells` the App-spec pre-fetch a host
+   * does: read each tool's `ui://` resourceUri once and cache the body, so a
+   * subsequent `tools/call` doesn't pay the round-trip on top of the tool
+   * latency. The prefetch is opt-in (ggui#1822): a test of the tool surface
+   * lists without it, so it never fails on a shell read it does not assert.
+   * A test that asserts the shell passes `{ prefetchShells: true }` and reads
+   * it back with {@link getPrefetchedResource}.
    *
    * Returns the slim `{name, description, resourceUri}` entries the
    * simulator carries — full Tool objects from the SDK are
    * verbose + carry input/outputSchema we don't need at the host
    * boundary.
    */
-  async listTools(): Promise<readonly ToolListEntry[]> {
+  async listTools(options?: { readonly prefetchShells?: boolean }): Promise<readonly ToolListEntry[]> {
     if (!this.client) throw new Error("connect() first");
-    if (this.cachedTools) return this.cachedTools;
-    const result = await this.client.listTools();
+    const entries = this.cachedTools ?? (await this.fetchToolList(this.client));
+    this.cachedTools = entries;
+    if (options?.prefetchShells === true) {
+      for (const { resourceUri } of entries) {
+        if (resourceUri && !this.prefetchedResources.has(resourceUri)) {
+          this.prefetchedResources.set(resourceUri, await prefetchShell(this.client, resourceUri));
+        }
+      }
+    }
+    return entries;
+  }
+
+  /** One `tools/list`, slimmed to the entries the simulator carries. */
+  private async fetchToolList(client: Client): Promise<readonly ToolListEntry[]> {
+    const result = await client.listTools();
     const entries: ToolListEntry[] = [];
     for (const tool of result.tools) {
       const meta = (tool as { _meta?: unknown })._meta;
@@ -394,20 +411,13 @@ export class HostSimulator {
         ...(tool.description !== undefined ? { description: tool.description } : {}),
         ...(resourceUri !== undefined ? { resourceUri } : {}),
       });
-      // App-spec pre-fetch: real hosts read each unique resourceUri
-      // exactly once on tools/list and cache the bundle. We mirror
-      // that so the test can assert pre-fetch happened.
-      if (resourceUri && !this.prefetchedResources.has(resourceUri)) {
-        this.prefetchedResources.set(resourceUri, await prefetchShell(this.client, resourceUri));
-      }
     }
-    this.cachedTools = entries;
     return entries;
   }
 
   /**
    * Read the cached body of a pre-fetched resource. Returns
-   * `undefined` when {@link listTools} hasn't been called yet OR
+   * `undefined` until {@link listTools} has run with `prefetchShells`, or
    * when no tool declared this resourceUri.
    */
   getPrefetchedResource(uri: string): string | undefined {

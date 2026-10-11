@@ -48,7 +48,7 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     await host.connect();
 
     // 1. tools/list with pre-fetch.
-    const tools = await host.listTools();
+    const tools = await host.listTools({ prefetchShells: true });
     const render = tools.find((t) => t.name === 'ggui_render');
     expect(render, 'ggui_render must be in tools/list').toBeDefined();
     // Content-addressed since the stale-shell bust (2026-08-12): the
