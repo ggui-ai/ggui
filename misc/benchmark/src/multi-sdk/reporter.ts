@@ -13,7 +13,7 @@ import type {
   VisualCanvasArtefactDisplay,
 } from '@ggui-ai/shared';
 import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
-import type { CanvasClass, DesignMode, SameExchangeBreak } from '@ggui-ai/ui-gen';
+import type { CanvasClass, DesignMode, SameExchangeBreak, SameFailureBreak } from '@ggui-ai/ui-gen';
 import type { JudgeDisclosureDisplay } from '@ggui-ai/shared';
 import type { JudgeSampling } from './post-eval.js';
 import type {
@@ -780,6 +780,12 @@ function mapGeneration(r: BenchmarkRunResult): GenerationResultDisplay | null {
   if ('sameExchangeBreak' in gen && gen.sameExchangeBreak !== undefined) {
     result.sameExchangeBreak = { tool: gen.sameExchangeBreak.tool, repeats: gen.sameExchangeBreak.repeats };
   }
+  // ggui#1791: the same-failure guard ended the run — present only then. The
+  // fallback can ship an earlier passing build, so without this key a cell the
+  // guard ended reads like a healthy cell that took fewer turns.
+  if ('sameFailureBreak' in gen && gen.sameFailureBreak !== undefined) {
+    result.sameFailureBreak = { signature: gen.sameFailureBreak.signature, repeats: gen.sameFailureBreak.repeats };
+  }
   return result;
 }
 
@@ -800,6 +806,12 @@ const _canvasClassVocabularyPinned: CanvasClass extends NonNullable<GenerationRe
 // change there fails here instead of dropping the field silently.
 const _sameExchangeBreakShapePinned: SameExchangeBreak extends NonNullable<
   GenerationResultDisplay['sameExchangeBreak']
+>
+  ? true
+  : never = true;
+// ggui#1791: the same pin for the same-failure guard's record.
+const _sameFailureBreakShapePinned: SameFailureBreak extends NonNullable<
+  GenerationResultDisplay['sameFailureBreak']
 >
   ? true
   : never = true;

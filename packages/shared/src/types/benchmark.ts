@@ -210,6 +210,17 @@ export interface GenerationResultDisplay {
    * in the benchmark reporter).
    */
   sameExchangeBreak?: { tool: string; repeats: number };
+  /**
+   * Present only when the harness's same-failure guard (ggui#1791) ended the
+   * coding loop — the failing check's signature and how many failed writes
+   * since the last passing one reported it; no key otherwise. Reported, never
+   * scored. The loop ships its fallback (the last build that passed
+   * self-check, else the last that built), so a cell carrying this key can
+   * still read as self-check passed with fewer turns than the cap: this key is
+   * what says the guard ended it. Mirrors `SameFailureBreak` in
+   * `@ggui-ai/ui-gen` (pinned at compile time in the benchmark reporter).
+   */
+  sameFailureBreak?: { signature: string; repeats: number };
 }
 
 /**

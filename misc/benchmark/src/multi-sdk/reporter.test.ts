@@ -387,6 +387,32 @@ describe('toDisplayReport — ggui#404 same-exchange break', () => {
   });
 });
 
+describe('toDisplayReport — ggui#1791 same-failure break', () => {
+  it('carries sameFailureBreak on a cell the guard ended, and no key on a cell it did not', () => {
+    const base = generatedRun('looped', null);
+    const looped: BenchmarkRunResult = {
+      ...base,
+      generation: {
+        compiledCode: '',
+        sourceCode: '',
+        tokens: { input: 1, output: 1, total: 2 },
+        generationTimeMs: 2700,
+        turnsUsed: 5,
+        passesUsed: 1,
+        sameFailureBreak: { signature: '[mode] Submit action submit but state does not cover: name', repeats: 5 },
+      },
+    };
+    const d = toDisplayReport(generateReport([looped, generatedRun('fine', null)], 0), 'rep-1', 'test');
+    const byCommit = new Map(d.results.map((r) => [r.commit.id, r]));
+    expect(byCommit.get('looped')?.generation?.sameFailureBreak).toEqual({
+      signature: '[mode] Submit action submit but state does not cover: name',
+      repeats: 5,
+    });
+    expect(byCommit.get('looped')?.generation).not.toHaveProperty('sameExchangeBreak');
+    expect(byCommit.get('fine')?.generation).not.toHaveProperty('sameFailureBreak');
+  });
+});
+
 describe('toDisplayReport — #1398 pending-affordance reading', () => {
   it('carries runtimeProbePendingAffordance on a cell that has one, as a copy, and no key on a cell that does not', () => {
     const reading = { dispatched: 2, visible: 1, missing: ['submit'], gone: ['help'] };
