@@ -72,34 +72,52 @@ export interface ShellReadRecord {
   readonly bodyBudgetMs: number;
 }
 
-/** One armed read: the timestamps the fetch wrapper fills in. */
-export class ShellReadProbe {
+/**
+ * One MCP POST as the fetch wrapper saw it: when the headers, the first body
+ * byte and the last body byte arrived, and how many bytes. A probe the
+ * simulator arms for a shell read also carries the first-byte gate: it aborts
+ * the request when no body byte has arrived in time. Every other request gets
+ * a passive probe, which measures and never aborts.
+ */
+export class RequestProbe {
   readonly abort = new AbortController();
-  private readonly sentAt = Date.now();
+  readonly sentAt = Date.now();
   private headersAt: number | null = null;
   private firstByteAt: number | null = null;
   private lastByteAt: number | null = null;
   private bytes = 0;
   private contentType: string | null = null;
   private contentEncoding: string | null = null;
-  private readonly firstByteTimer: ReturnType<typeof setTimeout>;
+  private status: number | null = null;
+  private endedAt: number | null = null;
+  private endError: unknown = undefined;
+  private readonly firstByteTimer: ReturnType<typeof setTimeout> | null;
 
   constructor(
-    readonly firstByteBudgetMs: number,
-    readonly bodyBudgetMs: number,
+    /** The JSON-RPC method, or `"(unparsed)"` when the body was not one request. */
+    readonly method: string,
+    /** The first-byte gate in ms, or `null` for a passive probe. */
+    readonly firstByteBudgetMs: number | null,
+    readonly bodyBudgetMs: number | null,
   ) {
-    this.firstByteTimer = setTimeout(() => {
-      this.abort.abort(
-        new Error(
-          `no response body byte within the ${firstByteBudgetMs} ms first-byte gate` +
-            (this.headersAt === null ? " (no response headers either)" : ` (headers after ${this.headersAt - this.sentAt} ms)`),
-        ),
-      );
-    }, firstByteBudgetMs);
+    this.firstByteTimer =
+      firstByteBudgetMs === null
+        ? null
+        : setTimeout(() => {
+            this.abort.abort(
+              new Error(
+                `no response body byte within the ${firstByteBudgetMs} ms first-byte gate` +
+                  (this.headersAt === null
+                    ? " (no response headers either)"
+                    : ` (headers after ${this.headersAt - this.sentAt} ms)`),
+              ),
+            );
+          }, firstByteBudgetMs);
   }
 
   onHeaders(res: Response): void {
     this.headersAt = Date.now();
+    this.status = res.status;
     this.contentType = res.headers.get("content-type");
     this.contentEncoding = res.headers.get("content-encoding");
   }
@@ -108,15 +126,36 @@ export class ShellReadProbe {
     const now = Date.now();
     if (this.firstByteAt === null) {
       this.firstByteAt = now;
-      clearTimeout(this.firstByteTimer);
+      if (this.firstByteTimer !== null) clearTimeout(this.firstByteTimer);
     }
     this.lastByteAt = now;
     this.bytes += byteLength;
   }
 
+  /** The body ended (`error` undefined) or failed. */
+  onEnd(error?: unknown): void {
+    if (this.endedAt !== null) return;
+    this.endedAt = Date.now();
+    this.endError = error;
+    if (this.firstByteTimer !== null) clearTimeout(this.firstByteTimer);
+  }
+
+  get ended(): boolean {
+    return this.endedAt !== null;
+  }
+
+  get error(): unknown {
+    return this.endError;
+  }
+
+  /** The HTTP status, or `null` before the headers arrived. */
+  get httpStatus(): number | null {
+    return this.status;
+  }
+
   /** Stop the first-byte timer and say what was measured. */
   finish(uri: string, runner: string, outcome: "ok" | "failed"): ShellReadRecord {
-    clearTimeout(this.firstByteTimer);
+    if (this.firstByteTimer !== null) clearTimeout(this.firstByteTimer);
     const since = (t: number | null): number | null => (t === null ? null : t - this.sentAt);
     return {
       uri,
@@ -129,57 +168,140 @@ export class ShellReadProbe {
       bytes: this.bytes,
       contentType: this.contentType,
       contentEncoding: this.contentEncoding,
-      firstByteBudgetMs: this.firstByteBudgetMs,
-      bodyBudgetMs: this.bodyBudgetMs,
+      firstByteBudgetMs: this.firstByteBudgetMs ?? FIRST_BYTE_TIMEOUT_MS,
+      bodyBudgetMs: this.bodyBudgetMs ?? DEFAULT_BODY_TIMEOUT_MS,
     };
+  }
+
+  /**
+   * How far the request got, on one line: `tools/list +61012 ms: headers +140 ms
+   * (text/event-stream), no body byte`. The phase it stopped in is what tells a
+   * request that never reached the server from an answer that never finished.
+   */
+  describeProgress(now: number = Date.now()): string {
+    const at = (t: number | null): string => (t === null ? "none" : `+${t - this.sentAt} ms`);
+    const body =
+      this.firstByteAt === null
+        ? "no body byte"
+        : `first body byte ${at(this.firstByteAt)}, ${this.bytes} bytes, last byte ${at(this.lastByteAt)}`;
+    const end =
+      this.endedAt === null
+        ? "still open"
+        : this.endError === undefined
+          ? `ended ${at(this.endedAt)}`
+          : `failed ${at(this.endedAt)}`;
+    return (
+      `${this.method} sent ${now - this.sentAt} ms ago: headers ${at(this.headersAt)}` +
+      `${this.contentType === null ? "" : ` (${this.contentType})`}, ${body}, ${end}`
+    );
   }
 }
 
 /**
- * The fetch the simulator's MCP transport uses. It passes every request
- * through unchanged, except the one `resources/read` POST a probe is armed for:
- * that one gets the probe's abort signal and a body that is counted as it
- * streams.
+ * The fetch the simulator's MCP transport uses. Every POST passes through with
+ * its body counted as it streams, and is timed by a probe: the probe armed for
+ * the next `resources/read` (with its abort signal and first-byte gate), or a
+ * passive one. Each finished POST other than an armed read logs one timing
+ * line; the requests still in flight can be described when a call times out.
  */
-export class ShellReadMeter {
-  private armed: ShellReadProbe | null = null;
+export class RequestMeter {
+  private armed: RequestProbe | null = null;
+  private readonly inFlight = new Set<RequestProbe>();
 
   /** Arm a probe for the next `resources/read` request. */
-  arm(firstByteBudgetMs: number, bodyBudgetMs: number): ShellReadProbe {
-    const probe = new ShellReadProbe(firstByteBudgetMs, bodyBudgetMs);
+  arm(firstByteBudgetMs: number, bodyBudgetMs: number): RequestProbe {
+    const probe = new RequestProbe("resources/read", firstByteBudgetMs, bodyBudgetMs);
     this.armed = probe;
     return probe;
   }
 
-  disarm(probe: ShellReadProbe): void {
+  disarm(probe: RequestProbe): void {
     if (this.armed === probe) this.armed = null;
   }
 
+  /** One line per POST still open, oldest first; empty when none is. */
+  describeInFlight(): string[] {
+    const now = Date.now();
+    return [...this.inFlight].map((p) => p.describeProgress(now));
+  }
+
   readonly fetch: FetchLike = async (url, init) => {
-    const probe = this.armed;
-    if (probe === null || !isResourcesRead(init)) return fetch(url, init);
-    this.armed = null;
-    const signal = init?.signal ? AbortSignal.any([init.signal, probe.abort.signal]) : probe.abort.signal;
-    const res = await fetch(url, { ...init, signal });
+    if (init?.method !== "POST") return fetch(url, init);
+    const method = jsonRpcMethod(init.body);
+    const armed = method === "resources/read" ? this.armed : null;
+    if (armed !== null) this.armed = null;
+    const probe = armed ?? new RequestProbe(method, null, null);
+    const passive = armed === null;
+    const signal =
+      armed === null ? init.signal : init.signal ? AbortSignal.any([init.signal, armed.abort.signal]) : armed.abort.signal;
+    this.inFlight.add(probe);
+    const done = (error?: unknown): void => {
+      probe.onEnd(error);
+      this.inFlight.delete(probe);
+      if (passive) reportRequest(probe);
+    };
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, ...(signal ? { signal } : {}) });
+    } catch (err) {
+      done(err);
+      throw err;
+    }
     probe.onHeaders(res);
-    if (res.body === null) return res;
-    const counted = res.body.pipeThrough(
-      new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          probe.onChunk(chunk.byteLength);
-          controller.enqueue(chunk);
-        },
-      }),
-    );
+    if (res.body === null) {
+      done();
+      return res;
+    }
+    const reader = res.body.getReader();
+    const counted = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (err) {
+          done(err);
+          controller.error(err);
+          return;
+        }
+        if (chunk.done) {
+          done();
+          controller.close();
+          return;
+        }
+        probe.onChunk(chunk.value.byteLength);
+        controller.enqueue(chunk.value);
+      },
+      cancel(reason) {
+        done(reason ?? new Error("cancelled"));
+        return reader.cancel(reason);
+      },
+    });
     return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
   };
 }
 
-/** The transport sends one JSON-RPC message per POST, serialized by itself. */
-function isResourcesRead(init: RequestInit | undefined): boolean {
-  if (init?.method !== "POST" || typeof init.body !== "string") return false;
-  const message: unknown = JSON.parse(init.body);
-  return typeof message === "object" && message !== null && (message as { method?: unknown }).method === "resources/read";
+/** The JSON-RPC method of a POST body the transport serialized itself; one message per POST. */
+function jsonRpcMethod(body: RequestInit["body"]): string {
+  if (typeof body !== "string") return "(unparsed)";
+  const message: unknown = JSON.parse(body);
+  if (typeof message !== "object" || message === null || Array.isArray(message)) return "(batch)";
+  const method = (message as { method?: unknown }).method;
+  return typeof method === "string" ? method : "(response)";
+}
+
+/**
+ * One stderr line per finished POST: the method, the HTTP status, the phases'
+ * times, the bytes and the content type. `outcome` is the transfer's: `ok` when
+ * the body ended, `failed` when it broke off or the request never got headers.
+ */
+function reportRequest(p: RequestProbe): void {
+  const r = p.finish("", process.env["RUNNER_NAME"] ?? "local", p.error === undefined ? "ok" : "failed");
+  process.stderr.write(
+    `[host-simulator] request timing method=${p.method} runner=${r.runner} outcome=${r.outcome}` +
+      ` status=${p.httpStatus ?? "none"} headers_ms=${r.headersMs ?? "none"} first_byte_ms=${r.firstByteMs ?? "none"} drain_ms=${r.drainMs ?? "none"}` +
+      ` total_ms=${r.totalMs} bytes=${r.bytes} content_type=${r.contentType ?? "none"}` +
+      ` content_encoding=${r.contentEncoding ?? "none"}\n`,
+  );
 }
 
 /** `first byte 312 ms, drain 2140 ms, 1235392 bytes, gzip` — the record on one line. */
@@ -207,5 +329,25 @@ export function reportShellRead(r: ShellReadRecord): void {
   const summary = process.env["GITHUB_STEP_SUMMARY"];
   if (summary !== undefined && summary !== "") {
     appendFileSync(summary, `- shell read \`${r.uri}\` on ${r.runner}, ${r.outcome}: ${describeShellRead(r)}\n`);
+  }
+}
+
+/**
+ * A failed MCP call and the POSTs still in flight when it failed, on stderr
+ * and, on a GitHub Actions runner, in the step summary.
+ */
+export function reportInFlight(call: string, error: string, inFlight: readonly string[]): void {
+  const runner = process.env["RUNNER_NAME"] ?? "local";
+  const lines = inFlight.length > 0 ? inFlight : ["(no MCP POST in flight)"];
+  process.stderr.write(
+    `[host-simulator] ${call} failed on runner ${runner}: ${error}\n` +
+      lines.map((l) => `[host-simulator]   in flight: ${l}\n`).join(""),
+  );
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary !== undefined && summary !== "") {
+    appendFileSync(
+      summary,
+      `- MCP \`${call}\` failed on ${runner}: ${error}\n` + lines.map((l) => `  - in flight: ${l}\n`).join(""),
+    );
   }
 }

@@ -51,7 +51,8 @@ import {
 } from "./submit-action.js";
 import {
   FIRST_BYTE_TIMEOUT_MS,
-  ShellReadMeter,
+  RequestMeter,
+  reportInFlight,
   describeShellRead,
   readBodyTimeoutMs,
   reportShellRead,
@@ -341,7 +342,7 @@ export class HostSimulator {
   private transport: StreamableHTTPClientTransport | null = null;
   private cachedTools: readonly ToolListEntry[] | null = null;
   private prefetchedResources = new Map<string, string>();
-  private readonly shellReadMeter = new ShellReadMeter();
+  private readonly meter = new RequestMeter();
   private readonly shellReads: ShellReadRecord[] = [];
   /**
    * Latest `ui/update-model-context` envelope captured from a submit
@@ -377,7 +378,7 @@ export class HostSimulator {
     }
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers },
-      fetch: this.shellReadMeter.fetch,
+      fetch: this.meter.fetch,
     });
     this.client = new Client(this.opts.clientInfo ?? { name: "host-simulator", version: "1.0" }, {
       capabilities: {
@@ -386,7 +387,23 @@ export class HostSimulator {
         experimental: { [MCP_APPS_UI_CAPABILITY]: {} },
       },
     });
-    await this.client.connect(this.transport);
+    await this.explainFailure("initialize", this.client.connect(this.transport));
+  }
+
+  /**
+   * ggui#1822 — when an MCP call fails (a `-32001` timeout fires on the missing
+   * result, so it cannot say why), report every POST still in flight and how
+   * far it got, then rethrow the original error unchanged. "No headers" points
+   * at the path or a request that never arrived; "headers, no result" at the
+   * server. Every finished POST is also timed on stderr by the meter.
+   */
+  private async explainFailure<T>(call: string, pending: Promise<T>): Promise<T> {
+    try {
+      return await pending;
+    } catch (err) {
+      reportInFlight(call, describeError(err), this.meter.describeInFlight());
+      throw err;
+    }
   }
 
   /**
@@ -423,7 +440,7 @@ export class HostSimulator {
 
   /** One `tools/list`, slimmed to the entries the simulator carries. */
   private async fetchToolList(client: Client): Promise<readonly ToolListEntry[]> {
-    const result = await client.listTools();
+    const result = await this.explainFailure("tools/list", client.listTools());
     const entries: ToolListEntry[] = [];
     for (const tool of result.tools) {
       const meta = (tool as { _meta?: unknown })._meta;
@@ -478,7 +495,7 @@ export class HostSimulator {
     const started = Date.now();
     process.stderr.write(`[host-simulator] resources/read send uri=${uri} runner=${runner}\n`);
     const trace = startNetTrace(started);
-    const probe = this.shellReadMeter.arm(firstByteMs, bodyBudgetMs);
+    const probe = this.meter.arm(firstByteMs, bodyBudgetMs);
     try {
       const res = await client.readResource({ uri }, { timeout: bodyBudgetMs, signal: probe.abort.signal });
       const record = probe.finish(uri, runner, "ok");
@@ -492,7 +509,7 @@ export class HostSimulator {
       return res;
     } catch (err) {
       const record = probe.finish(uri, runner, "failed");
-      this.shellReadMeter.disarm(probe);
+      this.meter.disarm(probe);
       // Release the connection: after a timeout the body may still be draining.
       probe.abort.abort(new Error("shell read ended"));
       const events = trace.stop();
@@ -538,10 +555,13 @@ export class HostSimulator {
     const tools = await this.listTools();
     const toolEntry = tools.find((t) => t.name === name);
 
-    const result = await this.client.callTool(
-      { name, arguments: args },
-      undefined,
-      options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : undefined
+    const result = await this.explainFailure(
+      `tools/call ${name}`,
+      this.client.callTool(
+        { name, arguments: args },
+        undefined,
+        options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : undefined
+      ),
     );
     const rawMeta = (result as { _meta?: unknown })._meta;
     const parsed = parseMcpAppAiGguiRenderMeta(rawMeta);
@@ -925,10 +945,13 @@ export class HostSimulator {
 
     // (1) Fire the gateway tool over the real MCP transport — this
     // is the only envelope that crosses the wire to the server.
-    const toolResult = await this.client.callTool({
-      name: built.toolsCall.params.name,
-      arguments: { ...built.toolsCall.params.arguments },
-    });
+    const toolResult = await this.explainFailure(
+      `tools/call ${built.toolsCall.params.name}`,
+      this.client.callTool({
+        name: built.toolsCall.params.name,
+        arguments: { ...built.toolsCall.params.arguments },
+      }),
+    );
     const gatewayResult: unknown = (toolResult as { structuredContent?: unknown })
       .structuredContent;
 
