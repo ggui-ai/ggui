@@ -697,3 +697,71 @@ describe('mcp_client_aborted (ggui#1028) — the client closes before the respon
     expect(cap.warns.filter((w) => w.event === 'mcp_client_aborted')).toEqual([]);
   });
 });
+
+// #1828 — a resource read has nothing to stream, so the route answers it as
+// `application/json`, which a proxy in front of the server can compress. A tool
+// call keeps the SSE stream: its headers go out at once, so a long call never
+// waits on a time-to-first-byte limit between the host and the server.
+describe('mcp-endpoint-routes — a resources/read is answered as JSON, a tools/call as a stream (#1828)', () => {
+  let fx: BootedFixture;
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  // The `ui://ggui/render` shell is served when MCP Apps support is on.
+  const bootWithApps = (): Promise<BootedFixture> =>
+    boot({
+      renderChannel: true,
+      mcpApps: { wsUrl: 'ws://127.0.0.1/ws' },
+      wsTokenSecret: 'test-json-answer-secret-32-bytes',
+    });
+
+  async function post(url: string, message: Record<string, unknown>): Promise<Response> {
+    return fetch(`${url}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: 'Bearer any',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, ...message }),
+    });
+  }
+
+  it('answers resources/read with application/json carrying the resource', async () => {
+    fx = await bootWithApps();
+    const res = await post(fx.url, { method: 'resources/read', params: { uri: 'ui://ggui/render' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { result?: { contents?: Array<{ uri?: string; text?: string }> } };
+    expect(body.result?.contents?.[0]?.uri).toBe('ui://ggui/render');
+    expect(body.result?.contents?.[0]?.text).toMatch(/<html/i);
+  });
+
+  it('answers tools/call and tools/list with text/event-stream', async () => {
+    fx = await bootWithApps();
+    const call = await post(fx.url, { method: 'tools/call', params: { name: 'no_such_tool', arguments: {} } });
+    expect(call.headers.get('content-type')).toContain('text/event-stream');
+    await call.text();
+    const list = await post(fx.url, { method: 'tools/list', params: {} });
+    expect(list.headers.get('content-type')).toContain('text/event-stream');
+    await list.text();
+  });
+
+  it('the MCP SDK client reads the JSON answer as before', async () => {
+    fx = await bootWithApps();
+    const client = new Client({ name: 'json-read-test', version: '1.0' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${fx.url}/mcp`), {
+        requestInit: { headers: { authorization: 'Bearer any' } },
+      }),
+    );
+    try {
+      const res = await client.readResource({ uri: 'ui://ggui/render' });
+      const first = res.contents[0];
+      expect(first && 'text' in first ? first.text : '').toMatch(/<html/i);
+    } finally {
+      await client.close();
+    }
+  });
+});

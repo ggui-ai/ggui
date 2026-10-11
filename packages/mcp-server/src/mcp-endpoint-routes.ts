@@ -544,6 +544,8 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
+        // #1828 — see `answersAsJson`.
+        enableJsonResponse: answersAsJson(req.body),
       });
 
       res.on("close", () => {
@@ -716,4 +718,25 @@ export function mountMcpEndpoints(opts: MountOptions): void {
 
   app.get(universalMcpPath, methodNotAllowed);
   app.delete(universalMcpPath, methodNotAllowed);
+}
+
+/**
+ * The methods whose POST the route answers as `application/json` rather than
+ * as an SSE stream (#1828). Streamable HTTP lets a server pick either for any
+ * request, and a client must accept both.
+ *
+ * A resource read has nothing to stream: the answer is one message, and as
+ * JSON a proxy in front of the server can compress it, which matters for a
+ * ~1 MB `ui://` shell on a long path. Every other method keeps the stream: a
+ * tool call's headers go out at once, so a long call never waits on a
+ * time-to-first-byte limit somewhere between the host and the server. In JSON
+ * mode the headers would wait for the result.
+ */
+const JSON_ANSWERED_METHODS: ReadonlySet<string> = new Set(["resources/read"]);
+
+/** Whether this POST body is a single JSON-RPC request for a {@link JSON_ANSWERED_METHODS} method. */
+function answersAsJson(body: unknown): boolean {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  const method = (body as { method?: unknown }).method;
+  return typeof method === "string" && JSON_ANSWERED_METHODS.has(method);
 }
