@@ -67,6 +67,18 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-12',
     text:
+      'Reading note, not a method change: the first run after the early-ending change (internal ' +
+      'issue #1791, 2026-10-12) had fewer generations at six or more turns than the run before ' +
+      'it (4 against 7) and no generation marked as ended early. Those two facts are ' +
+      'consistent: the early-ending rule ended no generation that night, so the drop is not its ' +
+      'work. The cells that left the six-or-more group finished in one to three turns, too few ' +
+      'for the rule to have ended them, and over the eleven published runs before it the count of such ' +
+      'generations ranged from 3 to 11 a night, so 4 is within the usual night-to-night spread. ' +
+      'One night is not a trend; read the rule\'s effect from the runs it marks.',
+  },
+  {
+    date: '2026-10-12',
+    text:
       'Generator change (internal issue #1761), separate from the change announced below it: ' +
       'from the first run on a runner image built with this change, the repair advice the ' +
       'generator reads when its self-check finds a hard-coded list of records now names the ' +
