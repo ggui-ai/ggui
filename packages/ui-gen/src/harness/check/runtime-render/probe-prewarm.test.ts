@@ -121,3 +121,58 @@ describe("warmupRuntimeRenderWorker — one real worker run at boot (ggui#1380 C
     if (warm.ok === false) expect(warm.reason).toContain("spawn ENOENT");
   });
 });
+
+// ggui#1839 — a boot sequence routes a failed warm-up by WHY it failed: a
+// check that ran out of its bound on a cold machine is not a worker that
+// cannot run. Each `ok: false` exit carries its own `kind`; the reason text
+// stays prose for a human and is never what a caller branches on.
+describe("warmupRuntimeRenderWorker — every failure names its kind (ggui#1839)", () => {
+  const sandboxResult = (over: Partial<SandboxResult>): SandboxResult => ({
+    outcome: "exit",
+    exitCode: 0,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    durationMs: 40,
+    stdoutTruncated: false,
+    stderrTruncated: false,
+    cwd: "/tmp",
+    cwdOwnedBySandbox: false,
+    nodeHeapMbApplied: true,
+    errorMessage: "",
+    ...over,
+  });
+
+  beforeEach(() => {
+    sandbox.runSandboxed.mockClear();
+  });
+
+  it("a check that ran out of its bound is kind 'incomplete'", async () => {
+    sandbox.runSandboxed.mockImplementationOnce(() =>
+      Promise.resolve(sandboxResult({ outcome: "timeout", exitCode: null, signal: "SIGKILL", durationMs: 15_000 }))
+    );
+    const warm = await warmupRuntimeRenderWorker({ timeoutMs: 15_000 });
+    expect(warm).toMatchObject({ ok: false, kind: "incomplete" });
+    if (warm.ok === false) expect(warm.reason).toContain("did not finish within 15000 ms");
+  });
+
+  it("a check that ran and reported a blocking issue is kind 'blocking'", async () => {
+    sandbox.runSandboxed.mockImplementationOnce(() =>
+      Promise.resolve(sandboxResult({ exitCode: 1, stderr: "Cannot find module 'react-dom'" }))
+    );
+    const warm = await warmupRuntimeRenderWorker();
+    expect(warm).toMatchObject({ ok: false, kind: "blocking" });
+    if (warm.ok === false) expect(warm.reason).toContain("render-no-throw unverified");
+  });
+
+  it("a spawn layer that refuses to run is kind 'spawn'", async () => {
+    sandbox.runSandboxed.mockImplementationOnce(() => Promise.reject(new Error("spawn ENOENT")));
+    const warm = await warmupRuntimeRenderWorker();
+    expect(warm).toMatchObject({ ok: false, kind: "spawn" });
+  });
+
+  it("a worker that runs clean carries no kind", async () => {
+    const warm = await warmupRuntimeRenderWorker();
+    expect(warm).toEqual({ ok: true, ms: warm.ms });
+  });
+});

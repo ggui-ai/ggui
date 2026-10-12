@@ -91,6 +91,28 @@ export async function warmupRuntimeRenderProbe(): Promise<{
 const WARMUP_COMPONENT = "export default function Warmup() { return <div>warm</div>; }";
 
 /**
+ * Why a worker warm-up failed (ggui#1839), one kind per exit of
+ * {@link warmupRuntimeRenderWorker}:
+ *
+ * - `incomplete`: the check started and ran out of its bound before it
+ *   finished. The worker may be fine and the machine slow (a cold node's
+ *   first spawn); it says nothing about whether a check can pass.
+ * - `blocking`: the check ran to an end and reported a `failed` or
+ *   `unverified` issue: the worker cannot render a trivial component.
+ * - `spawn`: the spawn layer refused to run the worker at all (an invalid
+ *   bound, a missing binary).
+ *
+ * Branch on this, never on `reason`, which is prose for a human.
+ */
+export const RUNTIME_RENDER_WARMUP_FAILURE_KINDS = ["incomplete", "blocking", "spawn"] as const;
+export type RuntimeRenderWarmupFailureKind = (typeof RUNTIME_RENDER_WARMUP_FAILURE_KINDS)[number];
+
+/** The result of {@link warmupRuntimeRenderWorker}. */
+export type RuntimeRenderWorkerWarmup =
+  | { ok: true; ms: number }
+  | { ok: false; ms: number; kind: RuntimeRenderWarmupFailureKind; reason: string };
+
+/**
  * Warm the PROCESS that runs every probe (ggui#1380): spawn one real check
  * worker on a trivial component through the same host every probe uses.
  * Afterwards the node binary, the worker's module tree and esbuild's
@@ -100,12 +122,12 @@ const WARMUP_COMPONENT = "export default function Warmup() { return <div>warm</d
  *
  * `bounds` are the subprocess bounds for the one run; a serving deployment
  * passes the same bounds it will probe with. Never throws: a worker that
- * cannot run is `{ ok: false, reason }`, so a boot sequence can log it and
- * decide, instead of dying in a fire-and-forget.
+ * cannot run is `{ ok: false, kind, reason }`, so a boot sequence can log
+ * it and decide by `kind`, instead of dying in a fire-and-forget.
  */
 export async function warmupRuntimeRenderWorker(
   bounds?: Partial<RenderCheckHostBounds>
-): Promise<{ ok: true; ms: number } | { ok: false; ms: number; reason: string }> {
+): Promise<RuntimeRenderWorkerWarmup> {
   const start = Date.now();
   try {
     // Lazy: the host pulls `@ggui-ai/sandbox` (spawn machinery); keep it off
@@ -120,6 +142,7 @@ export async function warmupRuntimeRenderWorker(
       return {
         ok: false,
         ms,
+        kind: "incomplete",
         reason: `the warm-up check did not finish within ${result.incomplete.boundMs} ms (stopped at ${result.incomplete.elapsedMs} ms)`,
       };
     }
@@ -127,7 +150,7 @@ export async function warmupRuntimeRenderWorker(
       (i) => i.outcome === "failed" || i.outcome === "unverified"
     );
     if (blocking !== undefined) {
-      return { ok: false, ms, reason: `${blocking.check} ${blocking.outcome}: ${blocking.reason}` };
+      return { ok: false, ms, kind: "blocking", reason: `${blocking.check} ${blocking.outcome}: ${blocking.reason}` };
     }
     return { ok: true, ms };
   } catch (err) {
@@ -136,6 +159,7 @@ export async function warmupRuntimeRenderWorker(
     return {
       ok: false,
       ms: Date.now() - start,
+      kind: "spawn",
       reason: err instanceof Error ? err.message : String(err),
     };
   }
