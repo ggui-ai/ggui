@@ -67,6 +67,20 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-12',
     text:
+      'Generator change (internal issue #1761), separate from the change announced below it: ' +
+      'from the first run on a runner image built with this change, the repair advice the ' +
+      'generator reads when its self-check finds a hard-coded list of records now names the ' +
+      'contract fields that data should come from (for the kanban board, its tasks and ' +
+      'columns) and says to read an absent value as an empty list. Before, the advice pointed ' +
+      'at a field it never named. When the check fires is unchanged; only what the generator is ' +
+      'told to do about it changes. That can move turn counts, cost and scores on prompts whose ' +
+      'generations trip this check, and leaves the others as they were. It ships one nightly ' +
+      'run after the previous change, so the two can be read apart. No arm, prompt, judge or ' +
+      'scoring rule changes, and history is not rewritten.',
+  },
+  {
+    date: '2026-10-12',
+    text:
       'Generator change (internal issue #1791): from the first run on a runner image built ' +
       'with this change, two things change in the generator\'s own self-check loop, and both ' +
       'can move turn counts, cost and scores. First, the check that a form\'s state covers ' +
