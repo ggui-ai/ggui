@@ -43,6 +43,12 @@
  * Each callsite that wants auto-derive opts in explicitly via
  * `resolvePublicBaseUrl(configuredOrUndefined)`. Everything not opting
  * in stays static-config-only.
+ *
+ * `userAgent` is the other kind of field: the raw `User-Agent` header,
+ * set by whatever client sent the request, from any peer. It is for
+ * attribution only (a log line can say which client it served). It is
+ * never an auth, trust or routing input, it sits outside the loopback
+ * gate, and nothing is derived from it.
  */
 
 import type { NextFunction, Request, Response } from 'express';
@@ -66,6 +72,11 @@ export interface RequestContext {
    *  value) requires both — direct localhost browser hits don't get
    *  their URLs rewritten, only proxy-fronted ones do. */
   readonly forwardedHostHonored: boolean;
+  /** The request's raw `User-Agent` header, or undefined when it sent
+   *  none. CLIENT-SET AND UNTRUSTED: any caller can send any value, so
+   *  read it for attribution only, never for auth, trust or routing.
+   *  See the file header. */
+  readonly userAgent: string | undefined;
 }
 
 export const requestContextStore = new AsyncLocalStorage<RequestContext>();
@@ -121,7 +132,7 @@ export function buildRequestContextMiddleware() {
     }
 
     requestContextStore.run(
-      { proto, host, peerIsLocal, forwardedHostHonored },
+      { proto, host, peerIsLocal, forwardedHostHonored, userAgent: req.get('user-agent') },
       next,
     );
   };
@@ -131,6 +142,17 @@ export function buildRequestContextMiddleware() {
  *  when called outside any request (background workers, boot setup). */
 export function getRequestContext(): RequestContext | undefined {
   return requestContextStore.getStore();
+}
+
+/**
+ * The `User-Agent` of the request this code is running for, or undefined
+ * outside any request (boot, background work) or when the client sent
+ * none. For attribution only, such as marking a log line with the client
+ * that caused it: the value is client-set, so it never decides auth,
+ * trust or routing.
+ */
+export function currentRequestUserAgent(): string | undefined {
+  return getRequestContext()?.userAgent;
 }
 
 /**

@@ -155,6 +155,9 @@ export {
 } from './auth.js';
 export { createConsoleLogger } from './logger.js';
 export type { Logger } from './logger.js';
+// The client-set User-Agent of the request in progress, for attribution
+// only (e.g. marking a log line); never an auth, trust or routing input.
+export { currentRequestUserAgent } from './request-context.js';
 export {
   ChannelSessionNotFoundError,
   createGguiSessionChannelServer,

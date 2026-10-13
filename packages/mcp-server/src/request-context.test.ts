@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import express from 'express';
+import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   buildRequestContextMiddleware,
+  currentRequestUserAgent,
   getRequestContext,
   resolvePublicBaseUrl,
   resolveRuntimeUrl,
@@ -181,6 +183,7 @@ describe('non-loopback peer is NOT trusted (trust gate)', () => {
         host: 'attacker.example.com',
         peerIsLocal: false,
         forwardedHostHonored: false,
+        userAgent: undefined,
       },
       () => {
         expect(resolvePublicBaseUrl()).toBeUndefined();
@@ -195,6 +198,7 @@ describe('non-loopback peer is NOT trusted (trust gate)', () => {
         host: 'attacker.example.com',
         peerIsLocal: false,
         forwardedHostHonored: false,
+        userAgent: undefined,
       },
       () => {
         expect(resolvePublicBaseUrl('https://config.test')).toBe(
@@ -202,5 +206,68 @@ describe('non-loopback peer is NOT trusted (trust gate)', () => {
         );
       },
     );
+  });
+});
+
+// ggui#1843 — the request's `User-Agent` rides the context for attribution
+// only (a log line can say which client sent the request). It is client-set,
+// so it is never an auth, trust or routing input.
+describe('request-context: the client-set User-Agent, for attribution only', () => {
+  /** One raw `GET /probe`: node:http sends exactly the headers given, so an
+   *  absent User-Agent is really absent (fetch always sends one). */
+  async function probeUserAgent(headers: Record<string, string>): Promise<{
+    inContext: string | undefined;
+    viaReader: string | undefined;
+  }> {
+    const app = express();
+    app.use(buildRequestContextMiddleware());
+    let seen: { inContext: string | undefined; viaReader: string | undefined } | undefined;
+    app.get('/probe', (_req, res) => {
+      seen = { inContext: getRequestContext()?.userAgent, viaReader: currentRequestUserAgent() };
+      res.end('ok');
+    });
+    const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
+      await new Promise<void>((resolve, reject) => {
+        const req = httpRequest({ host: '127.0.0.1', port, path: '/probe', headers }, (res) => {
+          res.resume();
+          res.on('end', resolve);
+        });
+        req.on('error', reject);
+        req.end();
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+    if (seen === undefined) throw new Error('probe handler never ran');
+    return seen;
+  }
+
+  it('carries the header verbatim when the client sends one', async () => {
+    const seen = await probeUserAgent({ 'user-agent': 'example-client/1.2 (run 42)' });
+    expect(seen).toEqual({
+      inContext: 'example-client/1.2 (run 42)',
+      viaReader: 'example-client/1.2 (run 42)',
+    });
+  });
+
+  it('is undefined when the client sends none', async () => {
+    expect(await probeUserAgent({})).toEqual({ inContext: undefined, viaReader: undefined });
+  });
+
+  it('is undefined outside any request', () => {
+    expect(getRequestContext()).toBeUndefined();
+    expect(currentRequestUserAgent()).toBeUndefined();
+  });
+
+  it('is exported from the package entry', async () => {
+    const entry = await import('./index.js');
+    expect(typeof entry.currentRequestUserAgent).toBe('function');
+    expect(entry.currentRequestUserAgent).toBe(currentRequestUserAgent);
   });
 });
