@@ -28,7 +28,8 @@
  *      server validates PKCE, returns the user's `ggui_user_*` key as
  *      the `access_token`.
  *   8. Client retries `/mcp` with `Authorization: Bearer ggui_user_*`
- *      → existing `ApiKeyAuthAdapter` accepts it. ✅
+ *      → the configured {@link AuthAdapter} accepts it, as it would
+ *      any bearer it issued. ✅
  *
  * ## Why the access token IS the API key
  *
@@ -48,13 +49,14 @@
  *
  * ## Storage
  *
- * Auth codes + DCR clients live in-memory ({@link InMemoryOAuthStorage}).
- * For multi-replica deployments (2+ processes behind one load
- * balancer), either:
- *   - Use sticky sessions at your load balancer / reverse proxy so the
- *     same replica handles both `/oauth/authorize` and `/oauth/token`.
- *   - Plug a Redis-backed {@link OAuthStorage} via the
- *     `oauth.storage` config option (production posture).
+ * Auth codes + DCR clients live in-memory ({@link InMemoryOAuthStorage}),
+ * which is correct for a single replica. With more than one replica
+ * (2+ processes behind one load balancer), one sign-in's requests can
+ * reach different replicas: the client registers and exchanges the code,
+ * while the user's browser approves at `/oauth/authorize`. Sticky
+ * sessions do not help, because those are two different clients. Pass a
+ * shared {@link OAuthStorage} (one every replica reads) through the
+ * `oauth.storage` config option.
  *
  * DCR clients are short-lived in practice — Claude Desktop registers
  * once per install + caches the `client_id`. A server restart drops all
@@ -673,9 +675,8 @@ export async function handleAuthorizeGet(
  * Validation flow:
  *   1. Re-validate the OAuth params (defense — caller could skip /GET).
  *   2. Resolve the pasted key through `auth.authenticate()` — accepts
- *      any key the adapter accepts. For ggui this means `ggui_user_*`
- *      keys validated against `GguiUserApiKey` table via the existing
- *      `lookupUser` binding.
+ *      any key the configured adapter accepts, e.g. a `ggui_user_*` key
+ *      it issued.
  *   3. On success: write {code, accessToken=key, codeChallenge,
  *      redirectUri, clientId} to storage. 5-minute TTL.
  *   4. Redirect to `redirect_uri?code=<code>&state=<state>&iss=<issuer>`
@@ -775,7 +776,7 @@ export async function handleAuthorizePost(
   });
 
   // Snapshot the resource + authorize timestamp onto the client
-  // record (Q7 RESOLVED 2026-05-06). Lets the operator's Connected
+  // record. Lets the operator's Connected
   // Apps console surface "Connected to: <App>" without the
   // listClients caller having to join against the auth-code table
   // (which is short-lived; codes have already been consumed by the
