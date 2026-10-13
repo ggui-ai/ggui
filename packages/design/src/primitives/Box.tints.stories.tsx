@@ -108,7 +108,8 @@ function Scheme({ mode }: { mode: 'light' | 'dark' }) {
 
 export const PeriodicTable: StoryObj = {
   render: () => (
-    <div style={{ display: 'grid', gap: 0 }}>
+    // Block layout, so each scheme is as wide as the pane and the table scrolls inside its card.
+    <div>
       <Scheme mode="light" />
       <Scheme mode="dark" />
     </div>
