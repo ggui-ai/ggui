@@ -65,6 +65,23 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-13',
+    text:
+      'Generator change (internal issue #1849): from the first run on a runner image built ' +
+      'with this change, the generator\'s own type check again sees the types of the props it ' +
+      'passes to the design system\'s components. It had silently stopped seeing them, so a ' +
+      'wrong prop on a component passed the check; now it fails the check and the generator ' +
+      'is asked to fix it. That can raise turn counts and cost, and lower how often a ' +
+      'generation passes its own check, on any prompt. Re-checking 173 previously generated ' +
+      'components that we kept, 9 gain such an error, and each is a real defect the old check ' +
+      'let through (a ref the component drops, a prop value it does not have, an unchecked ' +
+      'case of a union). So the move should be small, but it is read from the published runs, ' +
+      'not assumed. One night can rule out a large move, not a ' +
+      'small one: the count of generations at six or more turns already varies from 3 to 11 ' +
+      'between nights, so a shift of one or two would not show. No arm, prompt, judge or scoring rule ' +
+      'changes, and history is not rewritten.',
+  },
+  {
     date: '2026-10-12',
     text:
       'Reading note, not a method change: the first run after the early-ending change (internal ' +
