@@ -101,3 +101,8 @@ export type {
   AccordionProps,
   AccordionItem,
 } from './types';
+
+// ggui#1847 — the eight categorical tint names, one source for the kit, the
+// prompt that teaches them and the check that reads them.
+export { TINT_STEPS } from './color-slots';
+export type { TintStep } from './color-slots';

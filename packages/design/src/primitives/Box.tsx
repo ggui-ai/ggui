@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BoxProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, withoutBackground } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, resolveTintCss, TINT_ON_COLOR_CSS, withoutBackground } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -22,6 +22,7 @@ export function Box(props: WithTrait<BoxProps>) {
     paddingY,
     margin,
     surface,
+    tint,
     assetColor,
     assetSemantic,
     radius,
@@ -32,7 +33,8 @@ export function Box(props: WithTrait<BoxProps>) {
     ...traitProps
   } = props;
   // ggui#1083 — a Box with a painted surface IS a surface; `bleed` may ride any Box.
-  const markedSurface = surface !== undefined && surface !== 'transparent' ? surface : undefined;
+  // A tinted Box (ggui#1847) is a painted surface too, marked with its step.
+  const markedSurface = tint !== undefined ? tint : surface !== undefined && surface !== 'transparent' ? surface : undefined;
   const frame =
     markedSurface === undefined && bleed !== true
       ? undefined
@@ -61,18 +63,24 @@ export function Box(props: WithTrait<BoxProps>) {
     assetSemantic.length > 0
       ? assetColor
       : undefined;
+  // A categorical `tint` (ggui#1847) is the fill when no asset colour is, and
+  // it replaces `surface`'s fill, ink and scope: a tinted Box reads the
+  // theme's ink, which the derivation keeps at ≥ 4.5:1 on every tint.
+  const tinted = !validAsset && tint !== undefined;
   const resolvedBackground = validAsset
     ? validAsset
-    : surface
-      ? resolveSurfaceCss(surface)
-      : undefined;
+    : tint !== undefined
+      ? resolveTintCss(tint)
+      : surface
+        ? resolveSurfaceCss(surface)
+        : undefined;
 
   // The surface owns its on-colour (ggui#1019): an `inverted` surface sets
   // the `inverse` ink on its root; an asset fill keeps the page ink.
-  const resolvedOnColor = !validAsset && surface ? resolveSurfaceOnColorCss(surface) : undefined;
+  const resolvedOnColor = tinted ? TINT_ON_COLOR_CSS : !validAsset && surface ? resolveSurfaceOnColorCss(surface) : undefined;
 
   // An inverted surface owns ALL its on-colours (ggui#1024) — see Card.
-  const scope = !validAsset && surface ? resolveSurfaceScope(surface) : undefined;
+  const scope = !validAsset && !tinted && surface ? resolveSurfaceScope(surface) : undefined;
   // A scoped surface owns its ground too — the author's style may not repaint it (see Card).
   const authorStyle = scope !== undefined ? withoutBackground(style) : style;
 

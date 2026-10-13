@@ -29,6 +29,11 @@
  *   - `onX` is the one of `#ffffff` / `#000000` with the higher WCAG
  *     contrast against `X-500`; `XContainer` / `onXContainer` are the
  *     family's 100 / 900 stops (light) or 800 / 100 (dark).
+ *   - `tint-1` … `tint-8` are never authored (ggui#1847): eight categorical
+ *     fills at one lightness and chroma, hues `base + 45k`, by
+ *     {@link deriveTints} from the container, its ink and the state
+ *     containers — the recipe where it clears the floors, else the closest
+ *     point that does.
  *   - flat `error` = `error-500`; `link` = the stated link, else
  *     `primary-600` — stated wins, an alias is never appended over it.
  *   - motion (ggui#1106): `--ggui-motion-duration-{fast,base,slow}` and
@@ -59,6 +64,7 @@ import { NON_THEME_DEFINABLE_TOKENS } from './validate-overlay-coverage';
 import { fontFamily, fontSize, fontWeight, lineHeight } from '../tokens/typography';
 import { spacing as spacingLadder, radius as radiusLadder, shadow as shadowLadder } from '../tokens/spacing';
 import { duration, easing } from '../tokens/transitions.js';
+import { TINT_STEPS } from '../primitives/color-slots';
 
 /** The projected variable set: `--ggui-*` name → CSS value. */
 export type ThemeVariableMap = Readonly<Record<string, string>>;
@@ -193,6 +199,136 @@ export function contrastRatio(a: string, b: string): number {
   const lb = relativeLuminance(b);
   const [hi, lo] = la > lb ? [la, lb] : [lb, la];
   return (hi + 0.05) / (lo + 0.05);
+}
+
+/** OKLab distance × 100 between two hex colours (the ΔE the tint floors are stated in). */
+export function deltaEOk(a: string, b: string): number {
+  const lab = (hex: string): readonly [number, number, number] => {
+    const o = hexToOklch(hex);
+    const r = (o.h * Math.PI) / 180;
+    return [o.l, o.c * Math.cos(r), o.c * Math.sin(r)];
+  };
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, b2] = lab(b);
+  return 100 * Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+// ───── categorical tints (ggui#1847) ─────
+
+/**
+ * The tint recipe: eight hues `hueBase + 45k`, one lightness and one chroma.
+ * `lightL` on a light container (OKLCH L ≥ 0.5), `darkL` on a dark one — the
+ * side follows the container's darkness, not the mode's name.
+ */
+export const TINT_RECIPE = { lightL: 0.87, darkL: 0.34, chroma: 0.06, hueBase: 42, hueStep: 45 } as const;
+
+/**
+ * Where the walk may move a theme that cannot hold the recipe, and on what
+ * grid: one L, one C and one hue base for all eight tints (a categorical ring
+ * holds one lightness, so no category reads as ranked above another).
+ */
+export const TINT_SEARCH = {
+  lightL: [0.8, 0.92],
+  darkL: [0.26, 0.5],
+  chroma: [0.04, 0.08],
+  hueSpread: 22,
+  lStep: 0.01,
+  cStep: 0.01,
+  hueStepDeg: 2,
+} as const;
+
+/**
+ * The floors every tint set must clear: the theme's ink on every tint (WCAG
+ * contrast), and OKLab ΔE × 100 from the container, between any two tints, and
+ * from every state container the theme defines.
+ */
+export const TINT_FLOORS = { ink: 4.5, container: 8, pairwise: 4, state: 4 } as const;
+
+/** The state containers a tint must never be mistaken for. */
+export const TINT_STATE_CONTAINERS = [
+  'errorContainer',
+  'warningContainer',
+  'successContainer',
+  'infoContainer',
+  'tertiaryContainer',
+  'primaryContainer',
+] as const;
+
+/** What the walk chose for one theme and scheme, and the floors it reached. */
+export interface TintDerivation {
+  readonly tints: readonly string[];
+  readonly l: number;
+  readonly c: number;
+  readonly hueBase: number;
+  /** True when every floor in {@link TINT_FLOORS} holds. */
+  readonly clears: boolean;
+  readonly reached: { readonly ink: number; readonly container: number; readonly pairwise: number; readonly state: number };
+}
+
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+function tintSetAt(l: number, c: number, hueBase: number): string[] {
+  return TINT_STEPS.map((_, k) => oklchToHex({ l, c, h: hueBase + TINT_RECIPE.hueStep * k }));
+}
+
+function tintFloorsOf(tints: readonly string[], container: string, onContainer: string, states: readonly string[]): TintDerivation['reached'] {
+  let pairwise = Infinity;
+  for (let i = 0; i < tints.length; i++) for (let j = i + 1; j < tints.length; j++) pairwise = Math.min(pairwise, deltaEOk(tints[i]!, tints[j]!));
+  let state = Infinity;
+  for (const s of states) for (const t of tints) state = Math.min(state, deltaEOk(t, s));
+  return {
+    ink: Math.min(...tints.map((t) => contrastRatio(onContainer, t))),
+    container: Math.min(...tints.map((t) => deltaEOk(t, container))),
+    pairwise,
+    state,
+  };
+}
+
+/**
+ * Derive a theme's eight categorical tints (ggui#1847). The recipe is the
+ * look and the walk is a repair: a theme that holds the recipe gets it
+ * exactly; one that cannot gets the clearing point closest to it on the
+ * {@link TINT_SEARCH} grid, by grid steps (|ΔL| / lStep + |ΔC| / cStep +
+ * |Δhue| / hueStepDeg; ties go to the lower L, then the lower C, then the
+ * lower hue). If no point clears, the theme gets the point with the largest
+ * state separation among those that hold the other three floors, else the
+ * recipe — the kit never refuses a theme; `clears` says which it was.
+ */
+export function deriveTints(container: string, onContainer: string, stateContainers: readonly string[]): TintDerivation {
+  const lightSide = hexToOklch(container).l >= 0.5;
+  const l0 = lightSide ? TINT_RECIPE.lightL : TINT_RECIPE.darkL;
+  const [lMin, lMax] = lightSide ? TINT_SEARCH.lightL : TINT_SEARCH.darkL;
+  const [cMin, cMax] = TINT_SEARCH.chroma;
+  const candidates: { l: number; c: number; hueBase: number; d: number }[] = [];
+  const lCount = Math.round((lMax - lMin) / TINT_SEARCH.lStep);
+  const cCount = Math.round((cMax - cMin) / TINT_SEARCH.cStep);
+  const hCount = Math.round(TINT_SEARCH.hueSpread / TINT_SEARCH.hueStepDeg);
+  for (let i = 0; i <= lCount; i++) {
+    const l = round2(lMin + i * TINT_SEARCH.lStep);
+    for (let j = 0; j <= cCount; j++) {
+      const c = round2(cMin + j * TINT_SEARCH.cStep);
+      for (let k = -hCount; k <= hCount; k++) {
+        const dh = k * TINT_SEARCH.hueStepDeg;
+        const d = Math.round(Math.abs(l - l0) / TINT_SEARCH.lStep) + Math.round(Math.abs(c - TINT_RECIPE.chroma) / TINT_SEARCH.cStep) + Math.abs(k);
+        candidates.push({ l, c, hueBase: TINT_RECIPE.hueBase + dh, d });
+      }
+    }
+  }
+  // Stable: generation order (L, then C, then hue, each ascending) breaks ties.
+  candidates.sort((a, b) => a.d - b.d);
+  let best: TintDerivation | undefined;
+  for (const cand of candidates) {
+    const tints = tintSetAt(cand.l, cand.c, cand.hueBase);
+    const reached = tintFloorsOf(tints, container, onContainer, stateContainers);
+    const others = reached.ink >= TINT_FLOORS.ink && reached.container >= TINT_FLOORS.container && reached.pairwise >= TINT_FLOORS.pairwise;
+    if (!others) continue;
+    const found: TintDerivation = { tints, l: cand.l, c: cand.c, hueBase: cand.hueBase, clears: reached.state >= TINT_FLOORS.state, reached };
+    if (found.clears) return found;
+    if (best === undefined || reached.state > best.reached.state) best = found;
+  }
+  if (best !== undefined) return best;
+  const tints = tintSetAt(l0, TINT_RECIPE.chroma, TINT_RECIPE.hueBase);
+  return { tints, l: l0, c: TINT_RECIPE.chroma, hueBase: TINT_RECIPE.hueBase, clears: false, reached: tintFloorsOf(tints, container, onContainer, stateContainers) };
 }
 
 // ───── the derivation ─────
@@ -504,6 +640,11 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   // stay the decorative hairlines. New keys, so a stored projection lacks them and completion fills them at read.
   V['--ggui-color-controlOutline'] = readableOutline(container, onContainer);
   V['--ggui-color-controlAccentOutline'] = readableAccent(V, container, onContainer, 3);
+  // ggui#1847 — the eight categorical tints, derived from the surfaces and state containers above.
+  const tintSet = deriveTints(container, onContainer, TINT_STATE_CONTAINERS.map((n) => V[`--ggui-color-${n}`]).filter((v): v is string => v !== undefined));
+  TINT_STEPS.forEach((step, i) => {
+    V[`--ggui-color-${step}`] = tintSet.tints[i]!;
+  });
 
   // Typography.
   const family = doc.font.family;
@@ -724,5 +865,10 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
   // ggui#1494 — a stored projection predates the control boundaries: fill them here, so every saved theme reads them.
   put('controlOutline', readableOutline(container, onContainer));
   put('controlAccentOutline', readableAccent(V, container, onContainer, 3));
+  // ggui#1847 — a stored projection predates the tints: derive them from what it carries.
+  if (TINT_STEPS.some((step) => get(step) === undefined)) {
+    const tintSet = deriveTints(container, onContainer, TINT_STATE_CONTAINERS.map((n) => get(n)).filter((v): v is string => v !== undefined));
+    TINT_STEPS.forEach((step, i) => put(step, tintSet.tints[i]!));
+  }
   return V;
 }

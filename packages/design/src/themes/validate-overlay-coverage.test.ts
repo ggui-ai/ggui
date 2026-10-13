@@ -139,6 +139,15 @@ describe('N−1: the manifest grows only with a completion rule or a floor entry
       // ggui#1494 — the control edges: both complete from the overlay's own container pair.
       '--ggui-color-controlAccentOutline',
       '--ggui-color-controlOutline',
+      // ggui#1847 — the categorical tints: all eight complete from the overlay's container pair and state containers.
+      '--ggui-color-tint-1',
+      '--ggui-color-tint-2',
+      '--ggui-color-tint-3',
+      '--ggui-color-tint-4',
+      '--ggui-color-tint-5',
+      '--ggui-color-tint-6',
+      '--ggui-color-tint-7',
+      '--ggui-color-tint-8',
       '--ggui-motion-duration-base',
       '--ggui-motion-duration-fast',
       '--ggui-motion-duration-slow',

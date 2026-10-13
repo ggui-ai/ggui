@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CardProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
-import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, withoutBackground } from './color-slots';
+import { resolveSurfaceCss, resolveSurfaceOnColorCss, resolveSurfaceScope, resolveTintCss, TINT_ON_COLOR_CSS, withoutBackground } from './color-slots';
 import { resolveSpacing } from './spacing-scale';
 import { resolveRadius } from './radius-scale';
 
@@ -40,6 +40,7 @@ export function Card(props: WithTrait<CardProps>) {
     border = true,
     radius = 'lg',
     surface,
+    tint,
     style,
     className,
     bleed,
@@ -47,8 +48,9 @@ export function Card(props: WithTrait<CardProps>) {
     ...traitProps
   } = props;
   // ggui#1083 — a painted Card is a surface; the fill rule reads the marks.
+  // A tinted Card (ggui#1847) is a painted surface, marked with its step.
   const frame = {
-    ...(surface !== 'transparent' ? { surface: surface ?? 'default' } : {}),
+    ...(tint !== undefined ? { surface: tint } : surface !== 'transparent' ? { surface: surface ?? 'default' } : {}),
     ...(bleed === true ? { bleed: true } : {}),
   };
 
@@ -58,16 +60,18 @@ export function Card(props: WithTrait<CardProps>) {
   // 'inverted' for testimonial-style dark cards on a light theme,
   // 'accent' for branded fills, etc. Default = 'default' = the theme's
   // `--ggui-color-container`.
-  const resolvedSurface = resolveSurfaceCss(surface ?? 'default');
+  // A categorical `tint` (ggui#1847) replaces the surface's fill, ink and scope:
+  // a tinted card reads the theme's ink, kept at ≥ 4.5:1 on every tint.
+  const resolvedSurface = tint !== undefined ? resolveTintCss(tint) : resolveSurfaceCss(surface ?? 'default');
   // The surface owns its on-colour (ggui#1019): `inverted` sets the
   // `inverse` ink on its root so inherited text is never ink-on-ink.
-  const resolvedOnColor = resolveSurfaceOnColorCss(surface ?? 'default');
+  const resolvedOnColor = tint !== undefined ? TINT_ON_COLOR_CSS : resolveSurfaceOnColorCss(surface ?? 'default');
 
   // An inverted surface owns ALL its on-colours (ggui#1024): the root
   // carries the scope class and co-renders the remap rule for its
   // subtree, so `muted` labels, chips and outlines inside it read
   // inverse-derived inks instead of the light-surface tokens.
-  const scope = resolveSurfaceScope(surface ?? 'default');
+  const scope = tint !== undefined ? undefined : resolveSurfaceScope(surface ?? 'default');
 
   // A scoped surface owns its GROUND too (ggui#1047): the author's style may
   // not repaint it — a generated `background: var(--ggui-color-ground)` on an

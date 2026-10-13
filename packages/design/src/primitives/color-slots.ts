@@ -366,3 +366,57 @@ export function resolveSurfaceCss(surface: SurfaceSlot): string {
       return 'transparent';
   }
 }
+
+/**
+ * Categorical tints (ggui#1847): the kit's fill for DATA CATEGORIES (series,
+ * lanes, kinds, tags, cells). Eight layer-1 names with no meaning beyond
+ * "category k": `tint-1` … `tint-8`. Each theme carries eight values per
+ * scheme (layer 2), derived from that theme's own surfaces by
+ * `deriveThemeVariables` so that the theme's ink reads on every tint and no
+ * tint is mistaken for a state container. A tint is never a state colour and
+ * never decoration, and the category is always also said in words (a label or
+ * a legend), so colour is never the only carrier.
+ *
+ * @public
+ */
+export const TINT_STEPS = ['tint-1', 'tint-2', 'tint-3', 'tint-4', 'tint-5', 'tint-6', 'tint-7', 'tint-8'] as const;
+
+/** One of the eight categorical tints, {@link TINT_STEPS}. @public */
+export type TintStep = (typeof TINT_STEPS)[number];
+
+/**
+ * Resolve a {@link TintStep} to its fill: `var(--ggui-color-tint-N, <fallback>)`.
+ * The fallback is the ggui theme's light value, for an un-themed context. Each
+ * case is a literal so the consumed-token manifest sees every name.
+ *
+ * @public
+ */
+export function resolveTintCss(step: TintStep): string {
+  switch (step) {
+    case 'tint-1':
+      return 'var(--ggui-color-tint-1, #f4c5b3)';
+    case 'tint-2':
+      return 'var(--ggui-color-tint-2, #e2cfa5)';
+    case 'tint-3':
+      return 'var(--ggui-color-tint-3, #c3dab1)';
+    case 'tint-4':
+      return 'var(--ggui-color-tint-4, #a7ded0)';
+    case 'tint-5':
+      return 'var(--ggui-color-tint-5, #a6dbed)';
+    case 'tint-6':
+      return 'var(--ggui-color-tint-6, #bfd1f9)';
+    case 'tint-7':
+      return 'var(--ggui-color-tint-7, #dec6ee)';
+    case 'tint-8':
+      return 'var(--ggui-color-tint-8, #f3c1d1)';
+  }
+}
+
+/**
+ * The ink a tinted surface sets on its root: the theme's container ink, which
+ * the derivation guarantees at ≥ 4.5:1 on every tint. One short line of text
+ * (a cell label) sits on a tint; secondary text sits beside it.
+ *
+ * @public
+ */
+export const TINT_ON_COLOR_CSS = resolveToneCss('default');

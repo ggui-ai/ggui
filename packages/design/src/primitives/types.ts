@@ -139,6 +139,20 @@ export interface CardProps extends BaseProps {
    */
   surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'hero' | 'transparent';
   /**
+   * Categorical tint (ggui#1847): fill this card with one of eight theme
+   * colours that encode a DATA CATEGORY ("category k": a series, a lane, a
+   * kind, an element class). `tint-1` … `tint-8` carry no meaning beyond the
+   * category; the theme picks eight values per scheme that its ink reads on
+   * and that never match a state container. Say the category in words too,
+   * on the card or in a legend. Not for state (use the state tones) and not
+   * for decoration. When set, the tint is the fill and the theme's ink is the
+   * text colour, whatever `surface` says.
+   *
+   * @default undefined
+   */
+  // Spelled out so the generated reference shows the names; pinned equal to `TintStep` in tint.types.test.ts.
+  tint?: 'tint-1' | 'tint-2' | 'tint-3' | 'tint-4' | 'tint-5' | 'tint-6' | 'tint-7' | 'tint-8';
+  /**
    * Span the expanded frame's inset edge to edge (ggui#1083). In a host's
    * fullscreen canvas the frame gives the root a 16 px content inset; a
    * `bleed` element (a full-width row the design means to touch the panel's
@@ -411,6 +425,20 @@ export interface BoxProps extends BaseProps {
    * @default undefined (transparent)
    */
   surface?: 'default' | 'elevated' | 'sunken' | 'accent' | 'inverted' | 'hero' | 'transparent';
+  /**
+   * Categorical tint (ggui#1847): fill this box with one of eight theme
+   * colours that encode a DATA CATEGORY ("category k": a series, a lane, a
+   * kind, an element class). `tint-1` … `tint-8` carry no meaning beyond the
+   * category; the theme picks eight values per scheme that its ink reads on
+   * and that never match a state container. Say the category in words too,
+   * on the box or in a legend. Not for state (use the state tones) and not
+   * for decoration. When set, the tint is the fill and the theme's ink is the
+   * text colour, whatever `surface` says.
+   *
+   * @default undefined
+   */
+  // Spelled out so the generated reference shows the names; pinned equal to `TintStep` in tint.types.test.ts.
+  tint?: 'tint-1' | 'tint-2' | 'tint-3' | 'tint-4' | 'tint-5' | 'tint-6' | 'tint-7' | 'tint-8';
   /**
    * Span the expanded frame's inset edge to edge (ggui#1083). In a host's
    * fullscreen canvas the frame gives the root a 16 px content inset; a

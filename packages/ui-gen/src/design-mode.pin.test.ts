@@ -232,8 +232,13 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // arm's taught vocabulary names them. Both prompt digests move; the boilerplate digests are byte-stable.
 // Constrained 6781d3af… → d7bb8aab…, free cb86afa4… → 0442fdd4…. Receipt: with the three edited files put back
 // to their previous text, all four digests returned to their constants.
+// Re-recorded 2026-10-13 for ggui#1847 (a categorical `tint` prop on Box and Card): the primitives catalog
+// gains the `tint` row, with its eight names, on Box and on Card, and the primitives shim lists `TINT_STEPS`.
+// Both prompt digests move; the boilerplate digests are byte-stable. Constrained d7bb8aab… → 4929db8c…,
+// free 0442fdd4… → ab423254…. Receipt: with the design sources and the two generated references put back to
+// their previous text and the design dist rebuilt, all four digests returned to their constants.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "d7bb8aab13f0b319b323df3b104991044adf5f47b89759f50284e1c6b2f605d4";
+  "4929db8ce410214a79801ac4e89158ec4512d0f233426cad41dc19bb349f8794";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1a1346a2f1886b72a066cec3b299115fdaffff6a2935c61a5f91d708b7a42e60';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -293,8 +298,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-29 for ggui#1556 A — see the constrained note (the one reading column).
 // Re-recorded 2026-09-30 for ggui#1569 — see the constrained note (the Select catalog lines).
 // Re-recorded 2026-10-03 for ggui#1697 — see the constrained note (a control's boundary).
+// Re-recorded 2026-10-13 for ggui#1847 — see the constrained note (the `tint` prop).
 export const FREE_PROMPT_SHA256 =
-  "0442fdd4d4f77a3a12edcb1f210a46c199a2bb0008c5e3ff95e61789d66eaba2";
+  "ab42325417a2553fa7f781940590e20d4c405ab29db2642a7921f600223be4a4";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =

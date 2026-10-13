@@ -123,6 +123,8 @@ export const PRIMITIVES_EXPORTS = [
   'Alert', 'Progress', 'Image', 'Icon', 'Link', 'Tooltip',
   'Table', 'Tabs', 'Toast', 'Accordion',
   'MotionKeyframes', 'useMotion', 'useAnimationKey',
+  // ggui#1847 — the eight categorical tint names, so a card can map categories to `tint` in order.
+  'TINT_STEPS',
 ] as const;
 
 /** Known exports from @ggui-ai/design/components */

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { NEUTRAL_ANCHOR_CHROMA, deriveThemeVariables, hexToOklch } from './derive-theme-variables';
 import { getRawTheme, getThemeIds } from './registry';
 import type { DtcgTheme, DtcgToken } from './types';
+import { TINT_STEPS } from '../primitives/color-slots';
 
 const tok = (hex: string): DtcgToken => ({ $value: hex, $type: 'color' });
 const hueGap = (a: number, b: number): number => {
@@ -98,8 +99,13 @@ describe('ggui#1495 — a near-neutral anchor takes the host\'s temperature', ()
       'guuey-brand-v1/dark': '46cbd49635b8a0b0',
     };
     // Keys added AFTER these digests were taken are left out, so the pin keeps its question — did any
-    // key that existed then move? — and each new key carries its own pin (ggui#1494: control-outline.test.ts).
-    const ADDED_SINCE = new Set(['--ggui-color-controlOutline', '--ggui-color-controlAccentOutline']);
+    // key that existed then move? — and each new key carries its own pin (ggui#1494: control-outline.test.ts;
+    // ggui#1847: tints.floors.test.ts).
+    const ADDED_SINCE = new Set([
+      '--ggui-color-controlOutline',
+      '--ggui-color-controlAccentOutline',
+      ...TINT_STEPS.map((step) => `--ggui-color-${step}`),
+    ]);
     const now: Record<string, string> = {};
     for (const id of getThemeIds()) {
       for (const mode of ['light', 'dark'] as const) {
