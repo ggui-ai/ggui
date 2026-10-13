@@ -2211,15 +2211,6 @@ packages:
       '@modelcontextprotocol/sdk': 1.30.0
       zod: ^4.4.3
 
-  '@anthropic-ai/sdk@0.116.0':
-    resolution: {integrity: sha512-4UEapYQ+epLEMsAuLZDvW8ExVSOtHD8a7zTyLzhw0H9RXJ1eilPgmqhjwgcdg22diwx13spw6fJ4rONZ+bS7Ww==}
-    hasBin: true
-    peerDependencies:
-      zod: ^4.4.3
-    peerDependenciesMeta:
-      zod:
-        optional: true
-
   '@anthropic-ai/sdk@0.123.0':
     resolution: {integrity: sha512-Y9oX9mPNGZClHQOFqrWRk43Srcu/UHuPq3rfxxOq7JgW0gi+lJA2MAOK4Ul3k/+AUrwRWFJvd0tK3oC0Pw25dw==}
     hasBin: true
@@ -10052,7 +10043,7 @@ snapshots:
 
   '@anthropic-ai/bedrock-sdk@0.33.3(zod@4.4.3)':
     dependencies:
-      '@anthropic-ai/sdk': 0.116.0(zod@4.4.3)
+      '@anthropic-ai/sdk': 0.123.0(zod@4.4.3)
       '@aws-crypto/sha256-js': 4.0.0
       '@aws-sdk/client-bedrock-runtime': 3.1102.0
       '@aws-sdk/credential-providers': 3.1102.0
@@ -10118,13 +10109,6 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.229
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.229
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.229
-
-  '@anthropic-ai/sdk@0.116.0(zod@4.4.3)':
-    dependencies:
-      json-schema-to-ts: 3.1.1
-      standardwebhooks: 1.0.0
-    optionalDependencies:
-      zod: 4.4.3
 
   '@anthropic-ai/sdk@0.123.0(zod@4.4.3)':
     dependencies:
