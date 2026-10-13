@@ -204,14 +204,19 @@ function walkDir(dir: string, filter: (f: string) => boolean): string[] {
  * walk lands in the wrong place).
  */
 function findReactTypesDir(): string | null {
-  try {
-    // `@types/react` doesn't expose `package.json` as a public subpath,
-    // so resolve via the always-present `index.d.ts`.
-    const indexDts = createRequire(import.meta.url).resolve('@types/react/index.d.ts');
-    return path.dirname(indexDts);
-  } catch {
-    return null;
+  // `@types/react` (19.2+) declares an `exports` map whose entries carry only
+  // `types` conditions, so `require.resolve` refuses every subpath of it —
+  // `@types/react/index.d.ts` included. That made this function return null
+  // and the sandbox ran WITHOUT React's types: every JSX prop degraded to
+  // `any` and no primitive's prop was checked (ggui#1849). Walk Node's own
+  // lookup paths for the package directory instead; `resolve.paths` applies no
+  // `exports` restriction, and the index file is checked on disk.
+  const lookup = createRequire(import.meta.url).resolve.paths('@types/react') ?? [];
+  for (const dir of lookup) {
+    const candidate = path.join(dir, '@types', 'react');
+    if (fs.existsSync(path.join(candidate, 'index.d.ts'))) return candidate;
   }
+  return null;
 }
 
 /**
