@@ -703,6 +703,27 @@ export async function runTier0Checks(
     const assetSemanticAttr = tagAttrs.match(/\bassetSemantic\s*=\s*["']([^"']*)["']/);
     const startLine = sourceCode.slice(0, match.index ?? 0).split('\n').length;
     const tagLineCount = match[0].split('\n').length;
+    // ggui#1846 — the escape is for an exact EXTERNAL brand colour. A theme
+    // token through it (`assetColor="var(--ggui-…)"`, or an expression whose
+    // text carries one) bypasses the door the theme already has: a categorical
+    // fill is `tint`, a theme-tracking fill is `surface`. Deterministic from the
+    // tag's own text, and always satisfiable, so it fails.
+    if (/var\(\s*--ggui-/.test(assetColorAttr[0])) {
+      issues.push({
+        tier: 0,
+        result: 'fail',
+        category: 'tokens',
+        subcategory: 'asset-color-theme-token',
+        severity: 'critical',
+        description:
+          'Box `assetColor` carries a theme token (`var(--ggui-…)`) — the brand-color escape is only for an exact external brand hex, and the theme already has its own doors.',
+        fix:
+          'To colour by a data category, use `tint="tint-1"` … `tint="tint-8"` (one step per category, in the data\'s order). ' +
+          'For a theme-tracking fill, use `surface="..."`. Drop `assetColor` and `assetSemantic`.',
+        line: startLine,
+      });
+      continue;
+    }
     // Both attributes must be present, AND assetSemantic must be a
     // non-empty string literal. A `{expr}` value for assetSemantic is
     // treated as not-statically-verifiable; the escape is opt-in
@@ -722,8 +743,8 @@ export async function runTier0Checks(
           '`assetSemantic` is a human-readable label that documents why this color bypasses the theme.',
         fix:
           'Pair the `assetColor` with a non-empty `assetSemantic` literal, e.g. ' +
-          '`<Box assetColor="#635BFF" assetSemantic="stripe-brand-purple">`. Reach for `surface="..."` first ' +
-          'whenever the color SHOULD track the operator\'s theme.',
+          '`<Box assetColor="#635BFF" assetSemantic="stripe-brand-purple">`. The escape is only for an exact external brand hex: ' +
+          'to colour by a data category use `tint="tint-1"` … `tint="tint-8"`, and use `surface="..."` whenever the color SHOULD track the operator\'s theme.',
         line: startLine,
       });
       continue;

@@ -96,6 +96,13 @@ const SEMANTIC_ROLES: ReadonlyArray<{ readonly names: readonly string[]; readonl
   { names: ["onPrimary"], role: "text on the brand color" },
   { names: ["outline", "outlineVariant"], role: "borders + dividers" },
   { names: ["onError"], role: "text on an error fill" },
+  {
+    names: ["tint-1", "tint-2", "tint-3", "tint-4", "tint-5", "tint-6", "tint-7", "tint-8"],
+    role:
+      "categorical fills for DATA categories only (series, lanes, kinds, element groups) — never for state, never as decoration; " +
+      "the text on a tint is `onContainer` only, one short line, never muted text; the category is always also in words (a label or a legend); " +
+      "a category keeps its tint for the life of the card (assign from the data's order, never render order); more than eight categories: group to eight, or words only",
+  },
 ];
 
 /** Split the manifest's `--ggui-color-*` names into ramps (family + numeric steps) and semantic roles. */

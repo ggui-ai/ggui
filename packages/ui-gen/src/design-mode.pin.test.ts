@@ -237,8 +237,12 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // Both prompt digests move; the boilerplate digests are byte-stable. Constrained d7bb8aab… → 4929db8c…,
 // free 0442fdd4… → ab423254…. Receipt: with the design sources and the two generated references put back to
 // their previous text and the design dist rebuilt, all four digests returned to their constants.
+// Re-recorded 2026-10-13 for ggui#1846 (the generator is taught the categorical `tint`): the Box line names
+// `tint` beside `surface` as the theme-tracking fills, and a "Categorical tint" paragraph carries its rules
+// (data categories only; the category also in words; ink-only text, one short line; a category keeps its tint;
+// group to eight). The boilerplate is byte-stable.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "4929db8ce410214a79801ac4e89158ec4512d0f233426cad41dc19bb349f8794";
+  "32cedfa65cecd24f0cd3ca756df61f4a0e692125ee78fc9f7d9bb220c377911b";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '1a1346a2f1886b72a066cec3b299115fdaffff6a2935c61a5f91d708b7a42e60';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -299,8 +303,10 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-09-30 for ggui#1569 — see the constrained note (the Select catalog lines).
 // Re-recorded 2026-10-03 for ggui#1697 — see the constrained note (a control's boundary).
 // Re-recorded 2026-10-13 for ggui#1847 — see the constrained note (the `tint` prop).
+// Re-recorded 2026-10-13 for ggui#1846: the colour rule's role list names `tint-1` … `tint-8` as the categorical
+// fills, with the same rules as the constrained prompt in token terms (text on a tint is `onContainer`).
 export const FREE_PROMPT_SHA256 =
-  "ab42325417a2553fa7f781940590e20d4c405ab29db2642a7921f600223be4a4";
+  "d212b4b2093c6ee18d0b0232a59bd5be96d1c420f2fc684a074f2fc90b15346d";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
