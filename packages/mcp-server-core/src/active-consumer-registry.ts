@@ -33,8 +33,10 @@
  *
  * **Why a separate seam, not a `PendingEventConsumer` method.** Mirrors
  * the established optional-seam pattern (`DrainAckNotifier`, `ObserverNotifier`,
- * `ConsumeLogger`) — keeps the queue contract narrow + lets cloud wire
- * a Redis-backed registry without touching the DDB UpdateItem path.
+ * `ConsumeLogger`) — keeps the queue contract narrow, so a deployment can
+ * supply its own shared registry (one every replica reads; see
+ * `InMemoryActiveConsumerRegistry` for why one replica's counts are not
+ * enough) without touching how the queue stores events.
  *
  * **Counting semantics.** Multiple concurrent long-polls on the same
  * `sessionId` are valid (rare, but possible — e.g. a debugging tool

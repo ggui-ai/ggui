@@ -1,11 +1,13 @@
 /**
  * In-process reference-count `ActiveConsumerRegistry` implementation.
- * Single-instance per server process — fine for a single-process server
- * and for a multi-replica deployment whose session affinity keeps one
- * render's traffic on one replica.
- * Multi-replica deployments that need cross-instance consumer awareness
- * should wire a Redis-backed implementation against the same
- * interface.
+ * Its counts live in this server process, so it is correct for a single
+ * replica. With more than one replica, a `ggui_consume` and the
+ * `ggui_runtime_submit_action` that should observe it can land on
+ * different replicas, and the submit then reads no consumer while one is
+ * waiting. A multi-replica deployment must therefore provide a shared
+ * implementation of `ActiveConsumerRegistry`. Session affinity does not
+ * help: the consume is called by the agent's host and the submit by the
+ * card's runtime, two different clients.
  *
  * Operations are O(1) (Map.get / set / delete); `exit` is amortized
  * O(1), because its pruning deletes each stamp at most once. Not thread-safe by
