@@ -283,6 +283,11 @@ export type { GoogleLoginProviderOptions } from './oauth-providers/google.js';
 export { githubLoginProvider } from './oauth-providers/github.js';
 export type { GithubLoginProviderOptions } from './oauth-providers/github.js';
 export { createOAuthProvidersStore } from './oauth-providers-store.js';
+// The OAuth authorization server's storage seam (`OAuthConfig.storage`, taken
+// by `createGguiServer({ oauth })`): the types a deployment implements a shared
+// store against, and the in-process reference implementation.
+export type { OAuthConfig, OAuthStorage, AuthCodeRecord, ClientRecord } from './oauth.js';
+export { InMemoryOAuthStorage } from './oauth.js';
 export type {
   OAuthProvidersStore,
   OAuthProvidersStoreOptions,

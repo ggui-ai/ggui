@@ -83,9 +83,13 @@ export interface OAuthConfig {
 
   /**
    * Storage seam for auth codes + DCR clients. Defaults to
-   * {@link InMemoryOAuthStorage} — works for single-replica dev + any
-   * deployment with sticky sessions. Replace with a Redis/DDB-backed
-   * implementation for stateless multi-replica deployments.
+   * {@link InMemoryOAuthStorage}, which holds them in this server
+   * process: correct for a single replica. With more than one replica,
+   * one sign-in's requests can land on different replicas (the client
+   * registers and exchanges the code, the user's browser approves), so a
+   * multi-replica deployment must provide a shared implementation of
+   * {@link OAuthStorage}. Session affinity does not help: the browser and
+   * the client are different clients.
    */
   readonly storage?: OAuthStorage;
 
@@ -98,7 +102,7 @@ export interface OAuthConfig {
    * user's chosen `api_key`.
    *
    * Trade-off: the consent UI sees every OAuth param + the user's
-   * Cognito session — it MUST be operator-controlled (same trust
+   * signed-in session — it MUST be operator-controlled (same trust
    * boundary as the MCP server itself). Cross-origin POST is fine
    * (form-encoded → no CORS preflight); the response is a 302 to the
    * client's `redirect_uri` which the browser follows transparently.
@@ -167,8 +171,7 @@ export interface AuthCodeRecord {
    * issued by /token are opaque static keys (`ggui_user_*`); the
    * appId-from-resource binding is enforced at the auth-code →
    * token boundary, not via JWT claims. Runtime appId resolution
-   * keeps reading the key shape (`UserKey.appId` from the
-   * `GguiUserApiKey` row).
+   * keeps reading it from the key itself.
    */
   readonly resource?: string;
 }
@@ -182,7 +185,7 @@ export interface ClientRecord {
   readonly createdAt: number;
   /**
    * RFC 8707 resource indicator from this client's most recent
-   * `/oauth/authorize` request (Q7 RESOLVED 2026-05-06). Captured
+   * `/oauth/authorize` request. Captured
    * each time `handleAuthorizePost` consumes the params — surfaces
    * "Connected to: <App>" on the operator's Connected Apps console
    * once that surface goes live. DCR itself doesn't carry resource
