@@ -27,8 +27,11 @@
  *     the anchor's hue, fixed lightness targets, chroma scaled per stop;
  *     `tertiary` defaults to `primary`.
  *   - `onX` is the one of `#ffffff` / `#000000` with the higher WCAG
- *     contrast against `X-500`; `XContainer` / `onXContainer` are the
- *     family's 100 / 900 stops (light) or 800 / 100 (dark).
+ *     contrast against `X-500`; `XContainer` / `onXContainer` sit on the
+ *     container's side (ggui#1848): the container is whichever of the 100 /
+ *     800 stops shares the container's darkness (100 first on a light
+ *     container, 800 first on a dark one), its ink the opposite end — so a
+ *     ramp written either way round derives a dark chip on a dark page.
  *   - `tint-1` … `tint-8` are never authored (ggui#1847): eight categorical
  *     fills at one lightness and chroma, hues `base + 45k`, by
  *     {@link deriveTints} from the container, its ink and the state
@@ -211,6 +214,23 @@ export function deltaEOk(a: string, b: string): number {
   const [l1, a1, b1] = lab(a);
   const [l2, a2, b2] = lab(b);
   return 100 * Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+/**
+ * A state family's container pair on a container of the given side (ggui#1848).
+ * Ramps are written both ways round: a synthesised or light-scheme ramp runs light
+ * at 100 to dark at 900, while a dark scheme may write its own the other way (100
+ * dark, 800 light). The container is the first of the conventional stops that
+ * shares the container's darkness, and its ink is the first stop at the opposite
+ * end on the other side; where nothing matches, the conventional stop stands.
+ */
+function stateContainerPair(ramp: Readonly<Record<string, string>>, lightSide: boolean): { readonly container: string; readonly ink: string } {
+  const light = (hex: string): boolean => hexToOklch(hex).l >= 0.5;
+  const order = lightSide ? (['100', '800'] as const) : (['800', '100'] as const);
+  const cStop = order.find((stop) => light(ramp[stop]!) === lightSide) ?? order[0];
+  const inkOrder = cStop === '100' ? (lightSide ? ['900', '800'] : ['800', '900']) : ['100', '50'];
+  const inkStop = inkOrder.find((stop) => light(ramp[stop]!) !== lightSide) ?? inkOrder[0]!;
+  return { container: ramp[cStop]!, ink: ramp[inkStop]! };
 }
 
 // ───── categorical tints (ggui#1847) ─────
@@ -608,8 +628,10 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
     for (const stop of STOPS) V[`--ggui-color-${fam}-${stop}`] = ramp[stop]!;
     const cap = fam[0]!.toUpperCase() + fam.slice(1);
     V[`--ggui-color-on${cap}`] = single(`on${cap}`) ?? onColourFor(ramp['500']!);
-    V[`--ggui-color-${fam}Container`] = single(`${fam}Container`) ?? (mode === 'light' ? ramp['100']! : ramp['800']!);
-    V[`--ggui-color-on${cap}Container`] = single(`on${cap}Container`) ?? (mode === 'light' ? ramp['900']! : ramp['100']!);
+    // ggui#1848 — an unstated container pair sits on the container's side, whichever way the ramp runs.
+    const pair = stateContainerPair(ramp, hexToOklch(container).l >= 0.5);
+    V[`--ggui-color-${fam}Container`] = single(`${fam}Container`) ?? pair.container;
+    V[`--ggui-color-on${cap}Container`] = single(`on${cap}Container`) ?? pair.ink;
   }
   V['--ggui-color-error'] = V['--ggui-color-error-500']!;
   // Accent text reads on its surface (ggui#1035): a stated `link` is honoured
@@ -838,8 +860,9 @@ export function completeThemeVariables(vars: Readonly<Record<string, string>>, m
     for (const stop of STOPS) put(`${fam}-${stop}`, ramp[stop]!);
     const cap = fam[0]!.toUpperCase() + fam.slice(1);
     put(`on${cap}`, onColourFor(ramp['500']!));
-    put(`${fam}Container`, mode === 'light' ? ramp['100']! : ramp['800']!);
-    put(`on${cap}Container`, mode === 'light' ? ramp['900']! : ramp['100']!);
+    const pair = stateContainerPair(ramp, hexToOklch(container).l >= 0.5);
+    put(`${fam}Container`, pair.container);
+    put(`on${cap}Container`, pair.ink);
   }
   const error500 = get('error-500');
   if (error500 !== undefined) put('error', error500);

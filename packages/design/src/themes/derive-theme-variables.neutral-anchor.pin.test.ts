@@ -80,23 +80,26 @@ describe('ggui#1495 — a near-neutral anchor takes the host\'s temperature', ()
   });
 
   it('every stock theme derives byte for byte as it did before the rule (digests taken on the derivation before ggui#1495)', () => {
+    // Re-recorded 2026-10-13 for ggui#1848 (unstated state container pairs sit on the container's side): nine
+    // entries, marked, move, and in each only `{success,warning,info}Container` and their `on…Container` inks
+    // moved (neon-noir light: the three inks only, which read 1.7:1 before). Every other key is byte-identical.
     const BEFORE: Readonly<Record<string, string>> = {
       'ggui/light': '61d4bf60aa9b21ad',
-      'ggui/dark': '53b744d3c0385984',
+      'ggui/dark': '22562b54e1e6e3f5' /* ggui#1848 */,
       'indigo/light': 'd1dec01a72b2cecb',
-      'indigo/dark': '8920e633d8261da6',
+      'indigo/dark': 'a91fab621fdc7529' /* ggui#1848 */,
       'claudic/light': 'f6d559f50e5b058a',
-      'claudic/dark': '9cd34886e8315b3f',
-      'premium-cyberpunk/light': '682e546e2d0939c3',
+      'claudic/dark': '5e64b9389a15f7e2' /* ggui#1848 */,
+      'premium-cyberpunk/light': '202e6dd0cbf60f47' /* ggui#1848 */,
       'premium-cyberpunk/dark': '7200d5bf1d46aac9',
       'premium-zen/light': '29069da50acdf22c',
-      'premium-zen/dark': 'd2a8cd2a6958d550',
-      'premium-neon-noir/light': '3f15329cc9e7031b',
-      'premium-neon-noir/dark': 'f45220405a05078e',
+      'premium-zen/dark': '1c86f800de2ee241' /* ggui#1848 */,
+      'premium-neon-noir/light': '229d181240aec26c' /* ggui#1848 */,
+      'premium-neon-noir/dark': '01bf8a7e065b4760' /* ggui#1848 */,
       'premium-botanical/light': 'f39c69dd44657323',
-      'premium-botanical/dark': '658f4803ea05c3e6',
+      'premium-botanical/dark': '89aa7a1c72b23b12' /* ggui#1848 */,
       'guuey-brand-v1/light': 'd13384d05e11ee3a',
-      'guuey-brand-v1/dark': '46cbd49635b8a0b0',
+      'guuey-brand-v1/dark': '45d86c15bf7f433f' /* ggui#1848 */,
     };
     // Keys added AFTER these digests were taken are left out, so the pin keeps its question — did any
     // key that existed then move? — and each new key carries its own pin (ggui#1494: control-outline.test.ts;
