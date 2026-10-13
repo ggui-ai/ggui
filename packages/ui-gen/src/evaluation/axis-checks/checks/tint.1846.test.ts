@@ -26,6 +26,27 @@ describe('findTintedElements', () => {
   });
 });
 
+describe('findTintedElements reads real generated tags (ggui#1846, from the pre-landing runs)', () => {
+  it('an arrow function before `tint` does not end the tag: the tile is found', () => {
+    const src = '<Box key={k} as={Clickable} onClick={() => pick(el.n)} tint={tintFor(el.category)} padding="xs">\n  <Text size="lg">{el.symbol}</Text>\n</Box>';
+    const els = findTintedElements(src);
+    expect(els.map((e) => e.tint)).toEqual(['{tintFor(el.category)}']);
+    expect(els[0]?.inner.trim()).toBe('<Text size="lg">{el.symbol}</Text>');
+  });
+  it('an arrow function after `tint` stays in the attributes, not the inner JSX', () => {
+    const src = '<Box tint={tintFor(el.category)} onClick={() => pick(el.n)} style={{ minHeight: 48 }}><Text>{el.symbol}</Text></Box>';
+    expect(findTintedElements(src)[0]?.inner).toBe('<Text>{el.symbol}</Text>');
+  });
+  it('a nested Box with an arrow in its attributes does not unbalance the close walk', () => {
+    const src = '<Box tint="tint-2"><Box onClick={() => go()}><Text>a</Text></Box><Text tone="subtle">b</Text></Box><Text tone="subtle">out</Text>';
+    expect(findTintedElements(src)[0]?.inner).toBe('<Box onClick={() => go()}><Text>a</Text></Box><Text tone="subtle">b</Text>');
+  });
+  it('control: a swatch labelled by its next sibling is in words, with no legend word on the card', () => {
+    const src = '<Row gap="xs">\n  <Box tint={tintFor(cat)} radius="sm" style={{ width: 16, height: 16 }} />\n  <Text size="xs">{labelFor(cat)}</Text>\n</Row>';
+    expect(run('universal.tint_category_in_words', src)).toEqual([]);
+  });
+});
+
 describe('the tint WARNs (ggui#1846)', () => {
   it('tint bound to a state warns, in the repair voice', () => {
     const issues = run('universal.tint_state_bound', '<Box tint={item.isLive ? "tint-1" : "tint-2"}><Text>x</Text></Box>');

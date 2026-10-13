@@ -24,36 +24,114 @@ const ALL_RENDER_VALUES = [
 export interface TintedElement {
   readonly tag: "Box" | "Card";
   readonly tint: string;
+  /** The JSX between the open and close tag; empty when self-closing. */
   readonly inner: string;
+  /** For a self-closing element, its following siblings up to the next close tag (a swatch's label); else empty. */
+  readonly next: string;
 }
 
-const OPEN_TINTED_RX = /<(Box|Card)\b([^<>]*?)\btint\s*=\s*(\{[^{}]*\}|"[^"]*"|'[^']*')([^<>]*?)(\/?)>/g;
+interface OpenTag {
+  readonly attrs: string;
+  readonly end: number;
+  readonly selfClosing: boolean;
+}
+
+/**
+ * Read a JSX open tag whose `<Name` starts at `from`. Braces and string
+ * literals are skipped as units, so an `onClick={() => …}` arrow does not end
+ * the tag the way a `[^<>]` pattern would.
+ */
+function scanOpenTag(src: string, from: number, nameLength: number): OpenTag | null {
+  let depth = 0;
+  let quote = "";
+  for (let i = from + 1 + nameLength; i < src.length; i++) {
+    const ch = src[i];
+    if (quote !== "") {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+    } else if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+    } else if (ch === ">" && depth === 0) {
+      const attrs = src.slice(from + 1 + nameLength, i);
+      return { attrs, end: i + 1, selfClosing: attrs.trimEnd().endsWith("/") };
+    }
+  }
+  return null;
+}
+
+/** The value of a top-level `tint=` attribute, braces or quotes included; null when absent. */
+function readTintAttr(attrs: string): string | null {
+  let depth = 0;
+  let quote = "";
+  for (let i = 0; i < attrs.length; i++) {
+    const ch = attrs[i];
+    if (quote !== "") {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (depth === 0 && /\s/.test(attrs[i - 1] ?? " ")) {
+      const m = /^tint\s*=\s*/.exec(attrs.slice(i));
+      if (m === null) continue;
+      const v = i + m[0].length;
+      const open = attrs[v];
+      if (open === '"' || open === "'") {
+        const close = attrs.indexOf(open, v + 1);
+        return close < 0 ? null : attrs.slice(v, close + 1);
+      }
+      if (open !== "{") return null;
+      let d = 0;
+      for (let j = v; j < attrs.length; j++) {
+        if (attrs[j] === "{") d++;
+        else if (attrs[j] === "}" && --d === 0) return attrs.slice(v, j + 1);
+      }
+      return null;
+    }
+  }
+  return null;
+}
 
 /** Every tinted `Box` / `Card` in the source, with its inner JSX (empty when self-closing). */
 export function findTintedElements(sourceCode: string): TintedElement[] {
   const found: TintedElement[] = [];
-  for (const m of sourceCode.matchAll(OPEN_TINTED_RX)) {
+  for (const m of sourceCode.matchAll(/<(Box|Card)\b/g)) {
     const tag = m[1] === "Card" ? "Card" : "Box";
-    const tint = m[3] ?? "";
-    if (m[5] === "/") {
-      found.push({ tag, tint, inner: "" });
+    const from = m.index ?? 0;
+    const open = scanOpenTag(sourceCode, from, tag.length);
+    if (open === null) continue;
+    const tint = readTintAttr(open.attrs);
+    if (tint === null) continue;
+    if (open.selfClosing) {
+      const close = sourceCode.indexOf("</", open.end);
+      found.push({ tag, tint, inner: "", next: sourceCode.slice(open.end, close < 0 ? sourceCode.length : close) });
       continue;
     }
     // Walk to the matching close tag, counting nested opens of the same name.
-    const start = (m.index ?? 0) + m[0].length;
-    const tagRx = new RegExp(`<(/?)${tag}\\b[^<>]*?(/?)>`, "g");
-    tagRx.lastIndex = start;
+    const tagRx = new RegExp(`<(/?)${tag}\\b`, "g");
+    tagRx.lastIndex = open.end;
     let depth = 1;
     let end = sourceCode.length;
     for (let t = tagRx.exec(sourceCode); t !== null; t = tagRx.exec(sourceCode)) {
-      if (t[2] === "/") continue; // self-closing nested tag
-      depth += t[1] === "/" ? -1 : 1;
-      if (depth === 0) {
-        end = t.index;
-        break;
+      if (t[1] === "/") {
+        if (--depth === 0) {
+          end = t.index;
+          break;
+        }
+        continue;
       }
+      const nested = scanOpenTag(sourceCode, t.index, tag.length);
+      if (nested === null) break;
+      tagRx.lastIndex = nested.end;
+      if (!nested.selfClosing) depth++;
     }
-    found.push({ tag, tint, inner: sourceCode.slice(start, end) });
+    found.push({ tag, tint, inner: sourceCode.slice(open.end, end), next: "" });
   }
   return found;
 }
@@ -86,7 +164,7 @@ function runTintCategoryInWords(input: AxisCheckInput): EvalIssue[] {
   const tinted = findTintedElements(input.sourceCode);
   if (tinted.length === 0) return [];
   if (/\blegend\b/i.test(input.sourceCode)) return [];
-  if (tinted.every((e) => hasWords(e.inner))) return [];
+  if (tinted.every((e) => hasWords(e.inner) || hasWords(e.next))) return [];
   return [
     mkIssue(
       "universal.tint_category_in_words",
