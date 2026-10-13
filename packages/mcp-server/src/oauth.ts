@@ -755,14 +755,40 @@ export async function handleAuthorizePost(
     throw err;
   }
 
-  // Mint auth code. 32 bytes random → base64url ≈ 43 chars.
-  const code = randomBytes(32).toString('base64url');
-  const FIVE_MINUTES_MS = 5 * 60 * 1000;
   // RFC 8707 §2 — capture the resource indicator so /token can
   // enforce the same target on exchange. Absence is permitted (the
   // record's `resource` stays undefined; tokens issued under that
   // code carry universal scoping).
   const resource = params['resource'];
+
+  // Record this authorize on the client (its latest resource and time)
+  // BEFORE any code is minted. The stamp is load-bearing: a shared store
+  // may key a client's lifetime on it (a short life from registration,
+  // extended once the client authorizes), and the operator's Connected
+  // Apps view reads it. A store that cannot record the authorize must
+  // throw; the authorize then fails closed: no code is issued, and the
+  // user sees an error page and can try again. A code issued for an
+  // authorize the store did not record would work now and fail later,
+  // when the client's registration lapses, with nothing to show why.
+  try {
+    await storage.putClient({
+      ...validation.client,
+      lastAuthorizeAt: Date.now(),
+      ...(typeof resource === 'string' && resource.length > 0
+        ? { lastResource: resource }
+        : {}),
+    });
+  } catch {
+    res
+      .status(503)
+      .type('html')
+      .send(renderErrorPage('This sign-in could not be recorded. Please try again.'));
+    return;
+  }
+
+  // Mint auth code. 32 bytes random → base64url ≈ 43 chars.
+  const code = randomBytes(32).toString('base64url');
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
   await storage.putAuthCode({
     code,
     accessToken: apiKey,
@@ -774,31 +800,6 @@ export async function handleAuthorizePost(
       ? { resource }
       : {}),
   });
-
-  // Snapshot the resource + authorize timestamp onto the client
-  // record. Lets the operator's Connected
-  // Apps console surface "Connected to: <App>" without the
-  // listClients caller having to join against the auth-code table
-  // (which is short-lived; codes have already been consumed by the
-  // time the operator opens the page). Best-effort — failure to
-  // snapshot doesn't fail the authorize flow; the client just
-  // shows "Universal" in the UI until the next authorize.
-  try {
-    const client = await storage.getClient(params['client_id']!);
-    if (client) {
-      await storage.putClient({
-        ...client,
-        lastAuthorizeAt: Date.now(),
-        ...(typeof resource === 'string' && resource.length > 0
-          ? { lastResource: resource }
-          : {}),
-      });
-    }
-  } catch {
-    // Swallow — auth flow stays green even if the client-record
-    // snapshot fails. The user gets their token; UI display is the
-    // only thing that lags.
-  }
 
   // Build redirect URL — preserve the client's `state`, and name the
   // issuer (RFC 9207, ggui#1270): the SAME `resolveIssuerUrl` value the
@@ -1156,7 +1157,8 @@ ${hiddenFields}
   );
 }
 
-function renderErrorPage(message: string): string {
+/** The OAuth routes' HTML error page (also used by the routes' failure handler). */
+export function renderErrorPage(message: string): string {
   const body = `<div class="ggui-card"><div class="ggui-stack">
 <div class="ggui-callout"><span class="ggui-callout__label">error</span><span>${escapeHtml(message)}</span></div>
 <p class="ggui-muted">Close this tab and retry from your client. If the problem persists, the request was rejected before reaching the consent step.</p>

@@ -18,7 +18,7 @@
  */
 
 import type { AuthAdapter, PairingService } from "@ggui-ai/mcp-server-core";
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { ParamsDictionary } from "express-serve-static-core";
 import {
   handleAuthorizationServerMetadata,
@@ -27,9 +27,11 @@ import {
   handleProtectedResourceMetadata,
   handleRegister,
   handleToken,
+  renderErrorPage,
   type OAuthConfig,
   type OAuthStorage,
 } from "./oauth.js";
+import type { Logger } from "./logger.js";
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -70,6 +72,8 @@ interface MountOptions {
    * `listen()`, which is strictly after composition completes.
    */
   readonly getPairingService: () => PairingService | null;
+  /** Where a failed OAuth route logs its error (the response never carries it). */
+  readonly logger: Logger;
 }
 
 /**
@@ -201,16 +205,25 @@ export function mountOAuthAuthorizationServerRoutes(opts: MountOptions): void {
   app.get("/.well-known/oauth-authorization-server", (req, res) =>
     handleAuthorizationServerMetadata(req, res, oauthConfig)
   );
-  app.post("/oauth/register", (req, res) => {
-    void handleRegister(req, res, oauthConfig, oauthStorage);
-  });
-  app.get("/oauth/authorize", (req, res) => {
-    void handleAuthorizeGet(req, res, oauthConfig, oauthStorage);
-  });
-  app.post("/oauth/authorize", (req, res) => {
-    void handleAuthorizePost(req, res, oauthConfig, oauthStorage, auth, getPairingService());
-  });
-  app.post("/oauth/token", (req, res) => {
-    void handleToken(req, res, oauthStorage);
-  });
+  // A handler that throws (a storage that fails) answers a defined error,
+  // never a hung request, and never the error itself: the browser routes get
+  // the generic error page, the JSON routes RFC 6749 / 7591's `server_error`,
+  // and the error goes to the server log.
+  const failClosed =
+    (route: string, shape: "html" | "json", handler: (req: Request, res: Response) => Promise<void>) =>
+    (req: Request, res: Response): void => {
+      handler(req, res).catch((err: unknown) => {
+        opts.logger.error("oauth_route_failed", { route, error: err instanceof Error ? err.message : String(err) });
+        if (res.headersSent) return;
+        if (shape === "html") res.status(500).type("html").send(renderErrorPage("Something went wrong on the server. Please try again."));
+        else res.status(500).json({ error: "server_error", error_description: "The authorization server could not complete the request." });
+      });
+    };
+  app.post("/oauth/register", failClosed("register", "json", (req, res) => handleRegister(req, res, oauthConfig, oauthStorage)));
+  app.get("/oauth/authorize", failClosed("authorize", "html", (req, res) => handleAuthorizeGet(req, res, oauthConfig, oauthStorage)));
+  app.post(
+    "/oauth/authorize",
+    failClosed("authorize", "html", (req, res) => handleAuthorizePost(req, res, oauthConfig, oauthStorage, auth, getPairingService())),
+  );
+  app.post("/oauth/token", failClosed("token", "json", (req, res) => handleToken(req, res, oauthStorage)));
 }

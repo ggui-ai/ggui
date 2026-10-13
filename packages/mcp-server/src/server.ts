@@ -5146,6 +5146,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         : {}),
       auth,
       getPairingService: () => pairingService,
+      logger,
     });
   }
 
