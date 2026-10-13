@@ -83,11 +83,12 @@ export interface TypeCheckResult {
 
 const BLOCKING_CODES = new Set([
   2304, // Cannot find name
-  // 2307 (Cannot find module) is NOT blocking — Lambda bundles code without
-  // type declarations, so the VFS can't resolve react/@ggui-ai/design.
-  // Forbidden imports are caught by runSelfChecks regex instead.
+  // 2307 (Cannot find module) is NOT blocking: a third-party gadget package
+  // with no `.d.ts` overlay can't be resolved by design, and forbidden imports
+  // are caught by runSelfChecks regex instead.
   2305, // Module has no exported member
   2322, // Type not assignable
+  2820, // Type not assignable — the "did you mean '…'?" form of 2322, for a near-miss literal (ggui#1849)
   2339, // Property does not exist on type
   2741, // Missing required property
   2769, // No overload matches this call
@@ -136,6 +137,7 @@ function generateFix(code: number, message?: string, sourceLine?: string): strin
     case 2307:
       return `Only these imports are allowed: ${describeAllowedImports()}${sourceHint}`;
     case 2322:
+    case 2820:
     case 2769:
       return `Type mismatch on this expression. Check the offending line below — the prop name in JSX is what TypeScript is rejecting; the message tells you the expected type.${sourceHint}`;
     case 2339:
