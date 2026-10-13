@@ -254,11 +254,13 @@ async function loadVfs(): Promise<Map<string, VfsEntry>> {
   }
 
   // ---- 2. React types ----
-  // Resolved through `createRequire(import.meta.url).resolve('@types/
-  // react/index.d.ts')` — position-independent. Works the same in
-  // monorepo (hoisted to root) and in standalone `packages/`-only
-  // installs (the projected public OSS repo strips the `packages/`
-  // prefix, so a hardcoded `../../../..` walk would miss).
+  // Found by `findReactTypesDir` (Node's lookup paths, no `exports`
+  // restriction) — position-independent: the same in the monorepo
+  // (hoisted to root), in a deployed closure, and in standalone
+  // `packages/`-only installs. `@types/react` is a runtime DEPENDENCY of
+  // this package, not a dev one (ggui#1849): a deployed closure never
+  // installs devDependencies, and without these types every JSX prop
+  // degrades to `any`.
   const reactDir = findReactTypesDir();
   if (reactDir) {
     const reactDts = fs.readdirSync(reactDir).filter((f) => f.endsWith('.d.ts'));
