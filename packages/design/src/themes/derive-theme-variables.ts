@@ -206,14 +206,19 @@ export function contrastRatio(a: string, b: string): number {
 
 /** OKLab distance × 100 between two hex colours (the ΔE the tint floors are stated in). */
 export function deltaEOk(a: string, b: string): number {
-  const lab = (hex: string): readonly [number, number, number] => {
-    const o = hexToOklch(hex);
-    const r = (o.h * Math.PI) / 180;
-    return [o.l, o.c * Math.cos(r), o.c * Math.sin(r)];
-  };
-  const [l1, a1, b1] = lab(a);
-  const [l2, a2, b2] = lab(b);
-  return 100 * Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+  return labDistance(oklab(a), oklab(b));
+}
+
+type Lab = readonly [number, number, number];
+
+function oklab(hex: string): Lab {
+  const o = hexToOklch(hex);
+  const r = (o.h * Math.PI) / 180;
+  return [o.l, o.c * Math.cos(r), o.c * Math.sin(r)];
+}
+
+function labDistance(x: Lab, y: Lab): number {
+  return 100 * Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
 }
 
 /**
@@ -292,17 +297,27 @@ function tintSetAt(l: number, c: number, hueBase: number): string[] {
 }
 
 function tintFloorsOf(tints: readonly string[], container: string, onContainer: string, states: readonly string[]): TintDerivation['reached'] {
+  return measureTints(tints, tints.map(oklab), oklab(container), onContainer, states.map(oklab));
+}
+
+function measureTints(tints: readonly string[], labs: readonly Lab[], container: Lab, onContainer: string, states: readonly Lab[]): TintDerivation['reached'] {
   let pairwise = Infinity;
-  for (let i = 0; i < tints.length; i++) for (let j = i + 1; j < tints.length; j++) pairwise = Math.min(pairwise, deltaEOk(tints[i]!, tints[j]!));
+  for (let i = 0; i < labs.length; i++) for (let j = i + 1; j < labs.length; j++) pairwise = Math.min(pairwise, labDistance(labs[i]!, labs[j]!));
   let state = Infinity;
-  for (const s of states) for (const t of tints) state = Math.min(state, deltaEOk(t, s));
+  for (const s of states) for (const t of labs) state = Math.min(state, labDistance(t, s));
   return {
     ink: Math.min(...tints.map((t) => contrastRatio(onContainer, t))),
-    container: Math.min(...tints.map((t) => deltaEOk(t, container))),
+    container: Math.min(...labs.map((t) => labDistance(t, container))),
     pairwise,
     state,
   };
 }
+
+/** One walk per surface set: a page that projects the same theme again reads it back. Bounded, so a host cycling many themes cannot grow it. */
+const tintMemo = new Map<string, TintDerivation>();
+const TINT_MEMO_MAX = 64;
+/** How far (ΔE × 100) an in-gamut tint's emitted hex can sit from its OKLCH coordinates (8-bit rounding); the screen's slack. */
+export const TINT_SCREEN_MARGIN = 1;
 
 /**
  * Derive a theme's eight categorical tints (ggui#1847). The recipe is the
@@ -315,6 +330,24 @@ function tintFloorsOf(tints: readonly string[], container: string, onContainer: 
  * recipe — the kit never refuses a theme; `clears` says which it was.
  */
 export function deriveTints(container: string, onContainer: string, stateContainers: readonly string[]): TintDerivation {
+  const key = `${container} ${onContainer} ${stateContainers.join(' ')}`;
+  const memo = tintMemo.get(key);
+  if (memo !== undefined) return memo;
+  const found = walkTints(container, onContainer, stateContainers);
+  if (tintMemo.size >= TINT_MEMO_MAX) tintMemo.clear();
+  tintMemo.set(key, found);
+  return found;
+}
+
+/** True when a ring point is inside sRGB, so its hex is its coordinates rounded and never clamped. */
+export function tintPointInGamut(l: number, c: number, hDeg: number): boolean {
+  const h = (hDeg * Math.PI) / 180;
+  return inGamut(oklabToLinear(l, c * Math.cos(h), c * Math.sin(h)));
+}
+
+function walkTints(container: string, onContainer: string, stateContainers: readonly string[]): TintDerivation {
+  const containerLab = oklab(container);
+  const stateLabs = stateContainers.map(oklab);
   const lightSide = hexToOklch(container).l >= 0.5;
   const l0 = lightSide ? TINT_RECIPE.lightL : TINT_RECIPE.darkL;
   const [lMin, lMax] = lightSide ? TINT_SEARCH.lightL : TINT_SEARCH.darkL;
@@ -338,10 +371,29 @@ export function deriveTints(container: string, onContainer: string, stateContain
   candidates.sort((a, b) => a.d - b.d);
   let best: TintDerivation | undefined;
   for (const cand of candidates) {
+    // A screen in OKLab before any hex: the ring's own coordinates. Where every
+    // point of the ring is inside sRGB, the emitted hexes differ from them only by
+    // 8-bit rounding, within TINT_SCREEN_MARGIN; a ring with a point outside is
+    // clamped on emission and is never screened. The screen only REJECTS, and only
+    // when even the margin cannot save the point, so the walk's answer is the one
+    // the exact floors give.
+    if (best !== undefined && stateLabs.length > 0) {
+      let near = Infinity;
+      let screenable = true;
+      for (let k = 0; k < TINT_STEPS.length && screenable && near >= TINT_FLOORS.state - TINT_SCREEN_MARGIN; k++) {
+        const h = ((cand.hueBase + TINT_RECIPE.hueStep * k) * Math.PI) / 180;
+        const lab: Lab = [cand.l, cand.c * Math.cos(h), cand.c * Math.sin(h)];
+        if (!inGamut(oklabToLinear(lab[0], lab[1], lab[2]))) screenable = false;
+        else for (const st of stateLabs) near = Math.min(near, labDistance(lab, st));
+      }
+      // Rejected only if it cannot clear the state floor AND cannot beat the best partial point.
+      if (screenable && near < TINT_FLOORS.state - TINT_SCREEN_MARGIN && near + TINT_SCREEN_MARGIN <= best.reached.state) continue;
+    }
     const tints = tintSetAt(cand.l, cand.c, cand.hueBase);
-    const reached = tintFloorsOf(tints, container, onContainer, stateContainers);
-    const others = reached.ink >= TINT_FLOORS.ink && reached.container >= TINT_FLOORS.container && reached.pairwise >= TINT_FLOORS.pairwise;
-    if (!others) continue;
+    // Cheapest floor first: a candidate the ink fails never pays for the ΔE work.
+    if (tints.some((t) => contrastRatio(onContainer, t) < TINT_FLOORS.ink)) continue;
+    const reached = measureTints(tints, tints.map(oklab), containerLab, onContainer, stateLabs);
+    if (reached.container < TINT_FLOORS.container || reached.pairwise < TINT_FLOORS.pairwise) continue;
     const found: TintDerivation = { tints, l: cand.l, c: cand.c, hueBase: cand.hueBase, clears: reached.state >= TINT_FLOORS.state, reached };
     if (found.clears) return found;
     if (best === undefined || reached.state > best.reached.state) best = found;
