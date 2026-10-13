@@ -30,6 +30,22 @@ import {
   toolVisibleToModel,
   type McpAppsToolVisibility,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { ResolvedMcpServer } from './types.js';
+
+/**
+ * The headers of one MCP POST: the operator's extra headers for the
+ * server, then the library's own. Extra headers never name one of the
+ * library's (`startAgentServer` refuses that), so nothing here is
+ * overridden by spelling.
+ */
+function mcpPostHeaders(server: Pick<ResolvedMcpServer, 'bearer' | 'headers'>): Record<string, string> {
+  return {
+    ...server.headers,
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    Authorization: `Bearer ${server.bearer}`,
+  };
+}
 
 /**
  * Parse a streamable-HTTP MCP response body. Returns the inner
@@ -97,6 +113,7 @@ let nextRpcId = 1;
 export async function callMcpResourcesRead(args: {
   readonly url: string;
   readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly uri: string;
   readonly signal?: AbortSignal;
 }): Promise<{
@@ -111,11 +128,7 @@ export async function callMcpResourcesRead(args: {
   const rpcId = nextRpcId++;
   const response = await fetch(args.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${args.bearer}`,
-    },
+    headers: mcpPostHeaders(args),
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: rpcId,
@@ -244,6 +257,7 @@ const RELAY_ATTEMPT_TIMEOUT_MS = 20_000;
 export async function callMcpToolsCall(args: {
   readonly url: string;
   readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly name: string;
   readonly arguments: Record<string, unknown>;
   readonly meta?: Record<string, unknown>;
@@ -274,11 +288,7 @@ export async function callMcpToolsCall(args: {
     try {
       const response = await fetch(args.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${args.bearer}`,
-        },
+        headers: mcpPostHeaders(args),
         body,
         signal: AbortSignal.any(signals),
       });
@@ -332,16 +342,13 @@ export const AGENT_SERVER_CLIENT_VERSION = CLIENT_INFO.version;
 export async function callMcpInitialize(args: {
   readonly url: string;
   readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
 }): Promise<{ name: string; version: string }> {
   const rpcId = nextRpcId++;
   const response = await fetch(args.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${args.bearer}`,
-    },
+    headers: mcpPostHeaders(args),
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: rpcId,
@@ -421,16 +428,13 @@ function readToolVisibility(meta: unknown): readonly McpAppsToolVisibility[] | u
 export async function callMcpToolsList(args: {
   readonly url: string;
   readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
 }): Promise<McpListedTool[]> {
   const rpcId = nextRpcId++;
   const response = await fetch(args.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${args.bearer}`,
-    },
+    headers: mcpPostHeaders(args),
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: rpcId,
@@ -503,13 +507,13 @@ export async function callMcpToolsList(args: {
  * single down server degrades ALL tools, not just that server's.
  */
 export async function buildAgentCatalog(
-  servers: Record<string, { url: string; bearer: string }>,
+  servers: Record<string, ResolvedMcpServer>,
 ): Promise<Record<string, AgentToolEntry>> {
   const perServer = await Promise.all(
     Object.entries(servers).map(async ([key, cfg]) => {
       const [serverInfo, tools] = await Promise.all([
-        callMcpInitialize({ url: cfg.url, bearer: cfg.bearer }),
-        callMcpToolsList({ url: cfg.url, bearer: cfg.bearer }),
+        callMcpInitialize(cfg),
+        callMcpToolsList(cfg),
       ]);
       return { key, serverInfo, tools };
     }),
@@ -549,6 +553,7 @@ export async function buildAgentCatalog(
 export async function listModelVisibleTools(server: {
   readonly url: string;
   readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
 }): Promise<ReadonlySet<string>> {
   const tools = await callMcpToolsList(server);
@@ -569,7 +574,7 @@ export type ToolVisibilityLookup =
   | { readonly kind: 'unavailable'; readonly error: string };
 
 export interface ToolVisibilityCache {
-  lookup(serverKey: string, server: { readonly url: string; readonly bearer: string }, name: string): Promise<ToolVisibilityLookup>;
+  lookup(serverKey: string, server: ResolvedMcpServer, name: string): Promise<ToolVisibilityLookup>;
 }
 
 export interface ToolVisibilityCacheOptions {
@@ -580,7 +585,7 @@ export interface ToolVisibilityCacheOptions {
   /** The least time between reads prompted by a name the list does not have. Default 30 s. */
   readonly refreshMinMs?: number;
   /** Reads one server's tools. Defaults to {@link callMcpToolsList}. */
-  readonly listTools?: (server: { readonly url: string; readonly bearer: string }) => Promise<McpListedTool[]>;
+  readonly listTools?: (server: ResolvedMcpServer) => Promise<McpListedTool[]>;
   /** Called when a list older than its TTL answers because a re-read failed. */
   readonly onStale?: (info: { readonly server: string; readonly ageSec: number }) => void;
 }
@@ -610,7 +615,7 @@ export function createToolVisibilityCache(opts: ToolVisibilityCacheOptions = {})
   const inflight = new Map<string, Promise<Entry | string>>();
 
   /** Read the list again: the new entry, or the read's error text. */
-  const reread = (serverKey: string, server: { readonly url: string; readonly bearer: string }): Promise<Entry | string> => {
+  const reread = (serverKey: string, server: ResolvedMcpServer): Promise<Entry | string> => {
     const pending = inflight.get(serverKey);
     if (pending !== undefined) return pending;
     const read = listTools(server)

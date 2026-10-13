@@ -17,7 +17,8 @@ import {
 } from './sandbox-proxy.js';
 import { createGuestTokenAuth, type AuthAdapter } from './auth.js';
 import { createInMemoryChatStore, type ChatStore } from './chat-store.js';
-import type { AgentAdapter, McpServerConfig } from './types.js';
+import type { AgentAdapter, McpServerConfig, ResolvedMcpServer } from './types.js';
+import { checkMcpHeaders } from './mcp-headers.js';
 
 /**
  * Options for {@link startAgentServer}.
@@ -117,11 +118,11 @@ export async function startAgentServer(
   }
   const bearer =
     opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
-  const resolvedServers = Object.fromEntries(
-    Object.entries(opts.mcpServers).map(([name, cfg]) => [
-      name,
-      { url: cfg.url, bearer },
-    ]),
+  const resolvedServers: Record<string, ResolvedMcpServer> = Object.fromEntries(
+    Object.entries(opts.mcpServers).map(([name, cfg]): [string, ResolvedMcpServer] => {
+      if (cfg.headers !== undefined) checkMcpHeaders(name, cfg.headers);
+      return [name, { url: cfg.url, bearer, ...(cfg.headers !== undefined ? { headers: cfg.headers } : {}) }];
+    }),
   );
   const log = opts.log ?? ((line: string): void => console.log(line));
   const chatStore = opts.chatStore ?? createInMemoryChatStore();

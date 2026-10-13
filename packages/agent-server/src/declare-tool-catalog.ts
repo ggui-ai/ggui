@@ -17,6 +17,7 @@
  */
 import type { AgentToolEntry } from '@ggui-ai/protocol';
 import { callMcpToolsCall } from './mcp-client.js';
+import type { ResolvedMcpServer } from './types.js';
 
 /**
  * Canonical serverInfo identity declared per bare tool name — the value
@@ -65,7 +66,7 @@ type ToolsCall = typeof callMcpToolsCall;
  * best-effort enhancement, so a failure must not break the agent run.
  */
 export async function declareToolCatalog(args: {
-  readonly ggui: { readonly url: string; readonly bearer: string };
+  readonly ggui: ResolvedMcpServer;
   readonly catalog: Record<string, AgentToolEntry>;
   readonly call?: ToolsCall;
   readonly log?: (line: string) => void;
@@ -75,8 +76,7 @@ export async function declareToolCatalog(args: {
   const toolCatalog = toDeclarationCatalog(args.catalog);
   try {
     const rpc = await call({
-      url: args.ggui.url,
-      bearer: args.ggui.bearer,
+      ...args.ggui,
       name: 'ggui_runtime_declare_tool_catalog',
       arguments: { toolCatalog },
     });

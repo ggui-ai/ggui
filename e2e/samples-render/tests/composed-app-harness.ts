@@ -131,7 +131,8 @@ async function assertPortsFree(remoteGgui = false): Promise<void> {
   }
 }
 
-export async function spawnComposedApp(opts: {
+/** The options {@link spawnComposedApp} takes. */
+export interface ComposedAppOptions {
   sdk: SdkId;
   /**
    * When true, the composed ggui server is configured with a persistent
@@ -158,7 +159,47 @@ export async function spawnComposedApp(opts: {
    * Default: unset → boots a local ggui (existing behavior, unchanged).
    */
   cloudGgui?: { readonly mcpUrl: string; readonly bearer: string };
-}): Promise<ComposedAppHandle> {
+  /**
+   * Extra environment variables for the composed app's processes, e.g. a
+   * sample's `GGUI_MCP_HEADERS`. A key the harness sets itself is refused
+   * rather than overridden, so the boot wiring cannot be replaced by accident.
+   */
+  extraEnv?: Readonly<Record<string, string>>;
+}
+
+/**
+ * The environment the composed app boots with: the caller's process env, any
+ * `extraEnv`, then the keys the harness owns. Throws if `extraEnv` names one of
+ * the harness's keys.
+ */
+export function composedAppEnv(opts: ComposedAppOptions, appDir: string, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const remote = opts.cloudGgui;
+  const owned: Record<string, string> = {
+    SDK: opts.sdk,
+    APP_DIR: appDir,
+    REGISTRY,
+    // Slice-1 measurement: emit [ggui:agentcaps] lines so render.spec can classify per-SDK serverInfo authoring.
+    GGUI_AGENTCAPS_STDERR: '1',
+    // Cross-deployment seed-pool e2e (env-gated; unset → identical behavior
+    // for existing callers). compose-and-boot.sh reads these to (a) wire a
+    // persistent sqlite vectors store + better-sqlite3, and (b) append
+    // `--seed-pool <dir>` to the ggui start script.
+    ...(opts.sqliteVectors ? { GGUI_STORAGE_SQLITE: '1' } : {}),
+    ...(opts.seedPoolDir !== undefined ? { GGUI_SEED_POOL: opts.seedPoolDir } : {}),
+    // Cross-deployment cloud-render capstone (env-gated; unset → local ggui).
+    // compose-and-boot.sh writes these to .env.local; the shell dev.mjs's
+    // isRemoteGguiUrl skips the local ggui service and the agent (which reads
+    // GGUI_MCP_BEARER) authenticates to the remote server. Pass them as real env
+    // vars too so dev.mjs (which reads process.env.GGUI_MCP_URL) sees them.
+    ...(remote ? { GGUI_MCP_URL: remote.mcpUrl, GGUI_MCP_BEARER: remote.bearer } : {}),
+  };
+  const extra = opts.extraEnv ?? {};
+  const clash = Object.keys(extra).filter((k) => k in owned);
+  if (clash.length > 0) throw new Error(`spawnComposedApp: extraEnv may not set ${clash.join(', ')}, which the harness sets itself`);
+  return { ...base, ...extra, ...owned };
+}
+
+export async function spawnComposedApp(opts: ComposedAppOptions): Promise<ComposedAppHandle> {
   const remote = opts.cloudGgui;
   await assertPortsFree(remote !== undefined);
   await ensureSetup();
@@ -167,26 +208,7 @@ export async function spawnComposedApp(opts: {
   const appDir = join(appBase, 'app');
   let buf = '';
   const child: ChildProcess = spawn('bash', [BOOT], {
-    env: {
-      ...process.env,
-      SDK: opts.sdk,
-      APP_DIR: appDir,
-      REGISTRY,
-      // Slice-1 measurement: emit [ggui:agentcaps] lines so render.spec can classify per-SDK serverInfo authoring.
-      GGUI_AGENTCAPS_STDERR: '1',
-      // Cross-deployment seed-pool e2e (env-gated; unset → identical behavior
-      // for existing callers). compose-and-boot.sh reads these to (a) wire a
-      // persistent sqlite vectors store + better-sqlite3, and (b) append
-      // `--seed-pool <dir>` to the ggui start script.
-      ...(opts.sqliteVectors ? { GGUI_STORAGE_SQLITE: '1' } : {}),
-      ...(opts.seedPoolDir !== undefined ? { GGUI_SEED_POOL: opts.seedPoolDir } : {}),
-      // Cross-deployment cloud-render capstone (env-gated; unset → local ggui).
-      // compose-and-boot.sh writes these to .env.local; the shell dev.mjs's
-      // isRemoteGguiUrl skips the local ggui service and the agent (which reads
-      // GGUI_MCP_BEARER) authenticates to the remote pod. Pass them as real env
-      // vars too so dev.mjs (which reads process.env.GGUI_MCP_URL) sees them.
-      ...(remote ? { GGUI_MCP_URL: remote.mcpUrl, GGUI_MCP_BEARER: remote.bearer } : {}),
-    },
+    env: composedAppEnv(opts, appDir),
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });

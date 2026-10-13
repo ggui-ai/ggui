@@ -10,6 +10,12 @@
  *                       (default http://localhost:6781/mcp)
  *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
  *                       Omitted by default — the agent runs ggui-only.
+ *   GGUI_MCP_HEADERS    Optional extra headers for the ggui server, as a JSON
+ *                       object, e.g. {"X-Request-Source":"docs"}. GGUI_<NAME>_MCP_HEADERS
+ *                       does the same for a discovered server. A malformed
+ *                       value, or a header the library sets itself
+ *                       (Authorization, Content-Type, Accept, Mcp-*), stops
+ *                       startup with the variable named.
  *   MODEL               Override the default Claude model (default
  *                       `claude-sonnet-4-6` — see agent.ts)
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
@@ -37,7 +43,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
-import type { McpServerConfig } from '@ggui-ai/agent-server';
+import { parseMcpHeadersEnv, type McpServerConfig } from '@ggui-ai/agent-server';
 import { startServer } from './server.js';
 
 // Walk up looking for the nearest `.env.local`. Picks up the
@@ -95,12 +101,20 @@ const systemPrompt =
 // domain server discovered from the env: any `GGUI_<NAME>_MCP_URL` registers as
 // `<name>`, so adding an MCP server needs no change here — just the env var
 // (e.g. `GGUI_TODO_MCP_URL` → `todo`, `GGUI_ORDERS_MCP_URL` → `orders`).
+// Each server may also carry extra headers (a gateway's auth header or a
+// tracing header): `GGUI_MCP_HEADERS` for `ggui`, `GGUI_<NAME>_MCP_HEADERS` for a
+// discovered server, each a JSON object of header name → string. A malformed
+// value stops the server at startup, naming the variable.
+const withHeaders = (url: string, headersVar: string): McpServerConfig => {
+  const headers = parseMcpHeadersEnv(headersVar, process.env[headersVar]);
+  return headers !== undefined ? { url, headers } : { url };
+};
 const mcpServers: Record<string, McpServerConfig> = {
-  ggui: { url: process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp' },
+  ggui: withHeaders(process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp', 'GGUI_MCP_HEADERS'),
 };
 for (const [key, url] of Object.entries(process.env)) {
   const match = /^GGUI_(.+)_MCP_URL$/.exec(key);
-  if (match && url) mcpServers[match[1].toLowerCase()] = { url };
+  if (match && url) mcpServers[match[1].toLowerCase()] = withHeaders(url, `GGUI_${match[1]}_MCP_HEADERS`);
 }
 
 startServer({

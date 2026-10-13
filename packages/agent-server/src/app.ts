@@ -67,7 +67,7 @@ import { buildAgentCatalog, callMcpToolsCall, createToolVisibilityCache } from '
 import { declareToolCatalog } from './declare-tool-catalog.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import { mintChatId, type ChatStore } from './chat-store.js';
-import type { AgentAdapter, McpServerConfig } from './types.js';
+import type { AgentAdapter, McpServerConfig, ResolvedMcpServer } from './types.js';
 
 /**
  * Per-request dependencies the route handlers reach for. Constructed
@@ -80,13 +80,10 @@ export interface AgentAppDeps {
   readonly auth: AuthAdapter;
   /**
    * Already-resolved MCP-server map keyed by operator-chosen name.
-   * Each entry includes the bearer the library will thread through
-   * on every MCP call (`tools/call`, `resources/read`).
+   * Each entry includes the bearer and the extra headers the library
+   * sends on every MCP call (`tools/call`, `resources/read`).
    */
-  readonly mcpServers: Record<
-    string,
-    { readonly url: string; readonly bearer: string }
-  >;
+  readonly mcpServers: Record<string, ResolvedMcpServer>;
   /**
    * System prompt the operator configured, as a three-way the adapter
    * MUST honor:
@@ -185,7 +182,7 @@ export function createAgentApp(
           void built.then(
             (catalog) =>
               declareToolCatalog({
-                ggui: { url: ggui.url, bearer: ggui.bearer },
+                ggui,
                 catalog,
                 log,
               }),
@@ -385,8 +382,7 @@ export function createAgentApp(
         // tools/call is its own request, so the view's progressToken is not.
         const proof = viewProofOf(body.meta);
         const rpc = await callMcpToolsCall({
-          url: primary.url,
-          bearer: primary.bearer,
+          ...primary,
           name: body.name,
           arguments: args,
           ...(proof !== undefined ? { meta: { [MCP_APP_AI_GGUI_VIEW_META_KEY]: proof } } : {}),

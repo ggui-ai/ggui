@@ -110,12 +110,14 @@ export function createGoogleAdkAdapter(
               type: 'StreamableHTTPConnectionParams',
               url: cfg.url,
               header: {
+                // The operator's extra headers; the library refuses any that name one of these three.
+                ...cfg.headers,
                 Authorization: `Bearer ${cfg.bearer}`,
                 'Content-Type': 'application/json',
                 Accept: 'application/json, text/event-stream',
               },
             },
-            [...(await listModelVisibleTools({ url: cfg.url, bearer: cfg.bearer }))],
+            [...(await listModelVisibleTools(cfg))],
           ),
       ),
     );

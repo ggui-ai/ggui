@@ -83,6 +83,7 @@ async function* runOnce(args: {
         url: cfg.url,
         name,
         bearer: cfg.bearer,
+        ...(cfg.headers !== undefined ? { headers: cfg.headers } : {}),
       }),
     );
   }

@@ -98,16 +98,17 @@ VITE_AGENT_ENDPOINT_URL=http://localhost:6790 \
 
 ### Env vars
 
-| Var                  | Default                     | Purpose                                                  |
-| -------------------- | --------------------------- | -------------------------------------------------------- |
-| `PORT`               | `6790`                      | Chat backend HTTP port                                   |
-| `SANDBOX_PROXY_PORT` | `7790`                      | Spec-mandated second-origin sandbox port                 |
-| `GGUI_MCP_URL`       | `http://localhost:6781/mcp` | Primary ggui MCP endpoint                                |
-| `GGUI_TODO_MCP_URL`  | —                           | Optional second MCP for domain tools (todo demo)         |
-| `GGUI_MCP_BEARER`    | `dev`                       | Sent as `Authorization: Bearer <token>` on every MCP req |
-| `MODEL`              | `claude-sonnet-4-6`         | Claude model id                                          |
-| `SYSTEM_PROMPT`      | (canonical posture prompt)  | Override the default; set `none` to disable              |
-| `ANTHROPIC_API_KEY`  | —                           | Required; the agent fails fast at boot if absent         |
+| Var                  | Default                     | Purpose                                                                                                                                                                                                                                                                 |
+| -------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`               | `6790`                      | Chat backend HTTP port                                                                                                                                                                                                                                                  |
+| `SANDBOX_PROXY_PORT` | `7790`                      | Spec-mandated second-origin sandbox port                                                                                                                                                                                                                                |
+| `GGUI_MCP_URL`       | `http://localhost:6781/mcp` | Primary ggui MCP endpoint                                                                                                                                                                                                                                               |
+| `GGUI_TODO_MCP_URL`  | —                           | Optional second MCP for domain tools (todo demo)                                                                                                                                                                                                                        |
+| `GGUI_MCP_HEADERS`   | —                           | Extra headers for the ggui server, as a JSON object (e.g. `{"X-Request-Source":"docs"}`); `GGUI_<NAME>_MCP_HEADERS` for a discovered server. A malformed value, or one of the library's own headers (`Authorization`, `Content-Type`, `Accept`, `Mcp-*`), stops startup |
+| `GGUI_MCP_BEARER`    | `dev`                       | Sent as `Authorization: Bearer <token>` on every MCP req                                                                                                                                                                                                                |
+| `MODEL`              | `claude-sonnet-4-6`         | Claude model id                                                                                                                                                                                                                                                         |
+| `SYSTEM_PROMPT`      | (canonical posture prompt)  | Override the default; set `none` to disable                                                                                                                                                                                                                             |
+| `ANTHROPIC_API_KEY`  | —                           | Required; the agent fails fast at boot if absent                                                                                                                                                                                                                        |
 
 ## Adding another MCP server
 

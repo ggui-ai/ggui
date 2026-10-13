@@ -38,18 +38,15 @@
  */
 
 import { callMcpResourcesRead } from './mcp-client.js';
-import type { McpCallToolResult, NormalizedMessage } from './types.js';
+import type { McpCallToolResult, NormalizedMessage, ResolvedMcpServer } from './types.js';
 
 /**
  * Per-server context the interceptor needs to map a resource URI
  * back to an MCP endpoint. Each entry pairs the MCP URL with the
- * bearer the library resolved for it.
+ * bearer the library resolved for it, and the operator's extra headers.
  */
 export interface InterceptorMcpServers {
-  readonly [name: string]: {
-    readonly url: string;
-    readonly bearer: string;
-  };
+  readonly [name: string]: ResolvedMcpServer;
 }
 
 /**
@@ -97,7 +94,7 @@ export function toolResultCarriesUiResource(result: unknown): boolean {
 export function selectMcpServerForResource(
   resourceUri: string,
   servers: InterceptorMcpServers,
-): { readonly url: string; readonly bearer: string } | undefined {
+): ResolvedMcpServer | undefined {
   const entries = Object.entries(servers);
   if (entries.length === 0) return undefined;
   // ui:// URIs carry their server hint in the host component, e.g.
@@ -191,8 +188,7 @@ export async function interceptToolResult(args: {
 
   try {
     const read = await callMcpResourcesRead({
-      url: server.url,
-      bearer: server.bearer,
+      ...server,
       uri,
       ...(signal ? { signal } : {}),
     });

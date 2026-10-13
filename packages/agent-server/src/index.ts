@@ -43,10 +43,13 @@ export type {
   AgentAdapter,
   AgentInput,
   McpServerConfig,
+  ResolvedMcpServer,
   NormalizedMessage,
   McpCallToolResult,
   ChatStateSnapshot,
 } from './types.js';
+export { RESERVED_MCP_HEADER_NAMES } from './types.js';
+export { checkMcpHeaders, parseMcpHeadersEnv } from './mcp-headers.js';
 
 export {
   interceptToolResult,

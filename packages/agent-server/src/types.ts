@@ -24,7 +24,41 @@ import type { AgentToolEntry } from '@ggui-ai/protocol';
  */
 export interface McpServerConfig {
   readonly url: string;
+  /**
+   * Extra HTTP headers sent on every request to this server, by the
+   * library and by the adapter: a gateway's own auth header or a
+   * tracing header. The library's own headers are not
+   * overridable here: `Authorization` (the bearer the library resolved),
+   * `Content-Type`, `Accept`, `Mcp-Session-Id` and `Mcp-Protocol-Version`
+   * are refused, in any letter case, when the server starts
+   * ({@link RESERVED_MCP_HEADER_NAMES}).
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
+
+/**
+ * An MCP server as the library and the adapters reach it: the operator's
+ * URL and extra headers, and the bearer the library resolved.
+ */
+export interface ResolvedMcpServer {
+  readonly url: string;
+  readonly bearer: string;
+  readonly headers?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Header names an operator's `McpServerConfig.headers` may not set,
+ * compared case-insensitively. The library sets each of these itself on
+ * an MCP request; two spellings of one name would reach the server as
+ * two headers, and which one wins would depend on the runtime.
+ */
+export const RESERVED_MCP_HEADER_NAMES: readonly string[] = [
+  'authorization',
+  'content-type',
+  'accept',
+  'mcp-session-id',
+  'mcp-protocol-version',
+];
 
 /**
  * Subset of the MCP `CallToolResult` shape this library reads from /
@@ -121,13 +155,12 @@ export interface AgentInput {
   /**
    * MCP servers the LLM is allowed to call into. Keys are operator-
    * chosen names; `ggui` is conventional for the primary ggui MCP.
-   * Each entry carries the URL + the bearer the library resolved
-   * (`process.env.GGUI_MCP_BEARER` or the adapter-provided default).
+   * Each entry carries the URL, the bearer the library resolved
+   * (`process.env.GGUI_MCP_BEARER` or the adapter-provided default) and
+   * the operator's extra headers, which the adapter sends on every
+   * request to that server alongside the bearer.
    */
-  readonly mcpServers: Record<
-    string,
-    { readonly url: string; readonly bearer: string }
-  >;
+  readonly mcpServers: Record<string, ResolvedMcpServer>;
   /**
    * System prompt the operator configured, as a three-way the adapter
    * MUST honor:

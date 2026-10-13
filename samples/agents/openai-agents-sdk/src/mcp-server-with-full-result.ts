@@ -91,6 +91,8 @@ export interface FullResultServerOptions {
   readonly url: string;
   readonly name: string;
   readonly bearer: string;
+  /** The operator's extra headers, sent on every request beside the bearer. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -103,6 +105,7 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
   private readonly serverName: string;
   private readonly authHeader: string;
   private readonly bearer: string;
+  private readonly extraHeaders: Readonly<Record<string, string>> | undefined;
   /**
    * Monotonically-increasing JSON-RPC id per instance. Started at a
    * large arbitrary offset so collisions with the SDK's own
@@ -117,8 +120,9 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
     super({
       url: opts.url,
       name: opts.name,
-      requestInit: { headers: { Authorization: `Bearer ${opts.bearer}` } },
+      requestInit: { headers: { ...opts.headers, Authorization: `Bearer ${opts.bearer}` } },
     });
+    this.extraHeaders = opts.headers;
     this.fetchUrl = opts.url;
     this.serverName = opts.name;
     this.authHeader = `Bearer ${opts.bearer}`;
@@ -135,7 +139,7 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
   override async listTools(): ReturnType<MCPServerStreamableHttp['listTools']> {
     const [tools, visible] = await Promise.all([
       super.listTools(),
-      listModelVisibleTools({ url: this.fetchUrl, bearer: this.bearer }),
+      listModelVisibleTools({ url: this.fetchUrl, bearer: this.bearer, ...(this.extraHeaders !== undefined ? { headers: this.extraHeaders } : {}) }),
     ]);
     return tools.filter((tool) => visible.has(tool.name));
   }
@@ -170,6 +174,7 @@ export class FullResultMcpServerStreamableHttp extends MCPServerStreamableHttp {
     const response = await fetch(this.fetchUrl, {
       method: 'POST',
       headers: {
+        ...this.extraHeaders,
         'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream',
         Authorization: this.authHeader,

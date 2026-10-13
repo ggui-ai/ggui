@@ -179,7 +179,7 @@ export function createClaudeAgentSdkAdapter(
     if (!modelVisibleAllowed) {
       const init = Promise.all(
         Object.entries(input.mcpServers).map(async ([name, cfg]) =>
-          [...(await listModelVisibleTools({ url: cfg.url, bearer: cfg.bearer }))].map(
+          [...(await listModelVisibleTools(cfg))].map(
             (tool) => `mcp__${name}__${tool}`,
           ),
         ),
@@ -221,7 +221,9 @@ async function* runOnce(args: {
       : (input.systemPrompt ?? GGUI_AGENT_SYSTEM_PROMPT);
 
   // Translate the library's brand-agnostic mcpServers map into the
-  // SDK's native shape. Bearer is the library-resolved one.
+  // SDK's native shape. Bearer is the library-resolved one; the operator's
+  // extra headers ride beside it (the library refuses any that would
+  // name `Authorization`).
   const sdkMcpServers: Record<
     string,
     { type: 'http'; url: string; headers?: Record<string, string> }
@@ -230,7 +232,7 @@ async function* runOnce(args: {
     sdkMcpServers[name] = {
       type: 'http',
       url: cfg.url,
-      headers: { Authorization: `Bearer ${cfg.bearer}` },
+      headers: { ...cfg.headers, Authorization: `Bearer ${cfg.bearer}` },
     };
   }
 
