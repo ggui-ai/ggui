@@ -411,6 +411,78 @@ export function isMultiStepPrompt(prompt: string): boolean {
 // Issue factory
 // =============================================================================
 
+/**
+ * Whether a `useState` initializer reads `props.<name>`: directly, or through a local bound from
+ * it (`const initial = normalize(props.initialProfile)` then `useState(initial.name)`, or a
+ * destructure `const { name } = props.initialProfile ?? {}` then `useState(name)`). The property
+ * this check guards is "form state is seeded from the prop", not a spelling: ggui#1261's Exp 011
+ * cell re-seeded correctly through a normalized local, was refused, and spent a turn restoring
+ * the literal form. ggui#1869: a nested generic (`useState<Array<Task>>(…)`), `props?.`,
+ * destructured props and destructured component parameters are all correct seeding too, and
+ * `state.merge.seeded_from_props` — a FAIL — refused them.
+ */
+export function seedsFromProp(src: string, name: string): boolean {
+  const propRef = `props\\??\\.${name}\\b`;
+  const inits = useStateInitializers(src);
+  const anyInitReads = (rx: RegExp): boolean => inits.some((t) => rx.test(t));
+  if (anyInitReads(new RegExp(`\\b${propRef}`))) return true;
+  const locals = new Set<string>();
+  for (const m of src.matchAll(new RegExp(`(?:const|let|var)\\s+(\\w+)\\s*(?::[^=]{1,80})?=\\s*[^;]{0,300}?\\b${propRef}`, "g"))) {
+    const id = m[1];
+    if (id !== undefined) locals.add(id);
+  }
+  // `const { a, b } = props.<name> ?? {}` — every name bound reads the prop.
+  for (const m of src.matchAll(new RegExp(`(?:const|let|var)\\s*\\{([^}]{1,400})\\}\\s*=\\s*[^;]{0,300}?\\b${propRef}`, "g"))) {
+    for (const part of (m[1] ?? "").split(",")) {
+      const id = part.split(":").pop()?.split("=")[0]?.trim();
+      if (id !== undefined && /^\w+$/.test(id)) locals.add(id);
+    }
+  }
+  // `const { <name>: alias } = props` and `function Component({ <name>: alias }: Props)` — only the binding of <name>.
+  const fromProps = /(?:const|let|var)\s*\{([^}]{1,400})\}\s*(?::[^=]{1,200})?=\s*props\b(?!\s*\??\.)|function\s*\w*\s*\(\s*\{([^}]{1,400})\}/g;
+  for (const m of src.matchAll(fromProps)) {
+    for (const part of (m[1] ?? m[2] ?? "").split(",")) {
+      const [key, alias] = part.split(":");
+      if (key?.split("=")[0]?.trim() !== name) continue;
+      const id = (alias ?? key).split("=")[0]?.trim();
+      if (id !== undefined && /^\w+$/.test(id)) locals.add(id);
+    }
+  }
+  for (const id of locals) if (anyInitReads(new RegExp(`\\b${id}\\b`))) return true;
+  return false;
+}
+
+/**
+ * The argument text of every `useState(...)` call. A type argument is skipped with its angle
+ * brackets balanced (`useState<Record<string, Task[]>>(…)`; an arrow's `=>` inside it is not a
+ * close), and the argument runs to its matching paren.
+ */
+function useStateInitializers(src: string): string[] {
+  const out: string[] = [];
+  for (const m of src.matchAll(/\buseState\b/g)) {
+    let i = (m.index ?? 0) + m[0].length;
+    while (/\s/.test(src[i] ?? "")) i++;
+    if (src[i] === "<") {
+      let depth = 0;
+      for (; i < src.length; i++) {
+        if (src[i] === "<") depth++;
+        else if (src[i] === ">" && src[i - 1] !== "=" && --depth === 0) break;
+      }
+      i++;
+      while (/\s/.test(src[i] ?? "")) i++;
+    }
+    if (src[i] !== "(") continue;
+    const start = i + 1;
+    let depth = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === "(") depth++;
+      else if (src[i] === ")" && --depth === 0) break;
+    }
+    out.push(src.slice(start, i));
+  }
+  return out;
+}
+
 export function mkIssue(
   subcategory: string,
   description: string,

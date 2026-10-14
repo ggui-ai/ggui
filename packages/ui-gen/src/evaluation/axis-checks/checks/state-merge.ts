@@ -12,6 +12,7 @@ import {
   getEntityCollections,
   getMutatedEntityCollections,
   mkIssue,
+  seedsFromProp,
 } from "../helpers.js";
 
 function runStateSeededFromProps(input: AxisCheckInput): EvalIssue[] {
@@ -21,10 +22,7 @@ function runStateSeededFromProps(input: AxisCheckInput): EvalIssue[] {
   const entities = getMutatedEntityCollections(input.contract, all);
   const issues: EvalIssue[] = [];
   for (const e of entities) {
-    const re = new RegExp(
-      `useState(?:<[^>]*>)?\\s*\\([\\s\\S]{0,400}?props\\.${e.name}\\b`,
-    );
-    if (re.test(src)) continue;
+    if (seedsFromProp(src, e.name)) continue;
     issues.push(
       mkIssue(
         "state.merge.seeded_from_props",
