@@ -209,8 +209,12 @@ function findReactTypesDir(): string | null {
   // `@types/react` (19.2+) declares an `exports` map whose entries carry only
   // `types` conditions, so `require.resolve` refuses every subpath of it —
   // `@types/react/index.d.ts` included. That made this function return null
-  // and the sandbox ran WITHOUT React's types: every JSX prop degraded to
-  // `any` and no primitive's prop was checked (ggui#1849). Walk Node's own
+  // and the sandbox ran WITHOUT React's types (ggui#1849). Plain components
+  // kept their own props through the global JSX shim, but every prop typed
+  // through React (`ref`, `style`, handlers) degraded to `any`, and so did every
+  // prop of the trait-composed primitives (Box, Card, Grid, Row, Stack): their
+  // `WithTrait` union has an arm built from React's types, and a union with an
+  // `any` arm is `any`. Walk Node's own
   // lookup paths for the package directory instead; `resolve.paths` applies no
   // `exports` restriction, and the index file is checked on disk.
   const lookup = createRequire(import.meta.url).resolve.paths('@types/react') ?? [];
