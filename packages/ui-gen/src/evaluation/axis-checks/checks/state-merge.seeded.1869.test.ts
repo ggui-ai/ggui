@@ -71,6 +71,17 @@ describe('state.merge.seeded_from_props accepts every correct seeding shape (ggu
   it('a prop read outside any useState does not count as seeding', () => {
     expect(run(both('const visible = (props.tasks ?? []).filter(isOpen);\nconst [tasks, setTasks] = useState<Task[]>([]);'))).toHaveLength(1);
   });
+  it("a helper's destructured parameter is not the component's props", () => {
+    expect(
+      run(both('function sortTasks({ tasks }: Sorted) { return tasks; }\nconst tasks0: Task[] = [];\nconst [list, setList] = useState(tasks0);')),
+    ).toHaveLength(1);
+    expect(
+      run(both('function sortTasks({ tasks }: Sorted) { return tasks; }\nconst [list, setList] = useState<Task[]>(() => sortTasks({ tasks: [] }));')),
+    ).toHaveLength(1);
+  });
+  it('a `(` inside a string in the initializer does not stretch it over a later read', () => {
+    expect(run(both('const [label, setLabel] = useState(() => fmt("("));\nconst visible = props.tasks ?? [];\nconst [tasks, setTasks] = useState<Task[]>([]);'))).toHaveLength(1);
+  });
   it('an alias of a different prop does not count', () => {
     expect(run(both('const seed = props.columns ?? [];\nconst [tasks, setTasks] = useState(seed);'))).toHaveLength(1);
   });

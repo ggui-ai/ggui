@@ -438,8 +438,9 @@ export function seedsFromProp(src: string, name: string): boolean {
       if (id !== undefined && /^\w+$/.test(id)) locals.add(id);
     }
   }
-  // `const { <name>: alias } = props` and `function Component({ <name>: alias }: Props)` — only the binding of <name>.
-  const fromProps = /(?:const|let|var)\s*\{([^}]{1,400})\}\s*(?::[^=]{1,200})?=\s*props\b(?!\s*\??\.)|function\s*\w*\s*\(\s*\{([^}]{1,400})\}/g;
+  // `const { <name>: alias } = props` and `export default function Component({ <name>: alias }: Props)` — only the
+  // binding of <name>, and only the component's own parameter (a helper's destructured parameter is not its props).
+  const fromProps = /(?:const|let|var)\s*\{([^}]{1,400})\}\s*(?::[^=]{1,200})?=\s*props\b(?!\s*\??\.)|export\s+default\s+function\s*\w*\s*\(\s*\{([^}]{1,400})\}/g;
   for (const m of src.matchAll(fromProps)) {
     for (const part of (m[1] ?? m[2] ?? "").split(",")) {
       const [key, alias] = part.split(":");
@@ -455,7 +456,7 @@ export function seedsFromProp(src: string, name: string): boolean {
 /**
  * The argument text of every `useState(...)` call. A type argument is skipped with its angle
  * brackets balanced (`useState<Record<string, Task[]>>(…)`; an arrow's `=>` inside it is not a
- * close), and the argument runs to its matching paren.
+ * close), and the argument runs to its matching paren, string literals skipped as units.
  */
 function useStateInitializers(src: string): string[] {
   const out: string[] = [];
@@ -474,9 +475,15 @@ function useStateInitializers(src: string): string[] {
     if (src[i] !== "(") continue;
     const start = i + 1;
     let depth = 0;
+    let quote = "";
     for (; i < src.length; i++) {
-      if (src[i] === "(") depth++;
-      else if (src[i] === ")" && --depth === 0) break;
+      const ch = src[i];
+      if (quote !== "") {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = "";
+      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")" && --depth === 0) break;
     }
     out.push(src.slice(start, i));
   }

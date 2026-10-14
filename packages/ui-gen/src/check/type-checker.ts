@@ -211,7 +211,8 @@ function findReactTypesDir(): string | null {
   // `@types/react/index.d.ts` included. That made this function return null
   // and the sandbox ran WITHOUT React's types (ggui#1849). Plain components
   // kept their own props through the global JSX shim, but every prop typed
-  // through React (`ref`, `style`, handlers) degraded to `any`, and so did every
+  // through React (`ref`, `style`, handlers) degraded to `any` (`style` stays
+  // `any` until `csstype` loads too — ggui#1871), and so did every
   // prop of the trait-composed primitives (Box, Card, Grid, Row, Stack): their
   // `WithTrait` union has an arm built from React's types, and a union with an
   // `any` arm is `any`. Walk Node's own
