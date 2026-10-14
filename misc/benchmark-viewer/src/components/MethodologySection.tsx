@@ -65,6 +65,23 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-14',
+    text:
+      'Correction to the 2026-10-13 entry on the generator\'s type check (internal issue #1849): ' +
+      'it said the check had silently stopped seeing the types of all the props passed to the ' +
+      'design system\'s components. That was too broad. Before that change the check still saw ' +
+      'the props of the simpler components, such as text, headings and badges, so a wrong value ' +
+      'there already failed. What it could not see were the props of the five layout components ' +
+      '(box, card, grid, row and stack), whose prop types are built partly from React\'s, and ' +
+      'any prop typed through React itself: inline styles, children, event handlers, element ' +
+      'references, and the attributes of raw HTML elements. Logs from a second runner on the ' +
+      'same images show it: failures on a layout component\'s props read none on each of the ' +
+      'four nights before the change and 22 on the first night after it, while failures on the ' +
+      'simpler components\' props stayed between 35 and 65 a night throughout. The earlier ' +
+      'entry\'s other statements stand: the change can raise turn counts and cost, and its ' +
+      'effect is read from the published runs.',
+  },
+  {
     date: '2026-10-13',
     text:
       'Generator change (internal issue #1849): from the first run on a runner image built ' +
