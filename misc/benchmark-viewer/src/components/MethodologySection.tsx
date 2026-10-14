@@ -67,6 +67,25 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-14',
     text:
+      'Design and generator change (internal issues #1846, #1847, #1848): from the first run on ' +
+      'a runner image built with this change, three things change together. First, the design ' +
+      'system\'s box and card components gain a categorical fill: eight colours derived from ' +
+      'each theme for telling categories of data apart, such as the element groups of a ' +
+      'periodic table, and the generator is taught to use them for data categories only, with ' +
+      'every category also named in words. Second, the generator\'s self-check gains rules for ' +
+      'it: a theme colour forced through the exact-brand-colour escape now fails, a fill outside ' +
+      'the eight fails, and three softer warnings flag a fill used for state, a filled cell with ' +
+      'no label or legend, and faint text on a fill. Third, in the colour schemes where the ' +
+      'success, warning and information chips had been derived on the wrong side of the page, ' +
+      'for example light chips on a dark page, they now sit on the theme\'s own side. This can ' +
+      'move scores, turns and cost on prompts that tell categories apart, the periodic table ' +
+      'above all, and what the judges see in the affected colour schemes; the judges\' own ' +
+      'instructions are unchanged. The benchmark\'s prompts, arms, judges and scoring rules do ' +
+      'not change, and history is not rewritten.',
+  },
+  {
+    date: '2026-10-14',
+    text:
       'Correction to the 2026-10-13 entry on the generator\'s type check (internal issue #1849): ' +
       'it said the check had silently stopped seeing the types of all the props passed to the ' +
       'design system\'s components. That was too broad. Before that change the check still saw ' +
