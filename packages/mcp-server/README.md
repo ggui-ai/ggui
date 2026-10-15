@@ -47,9 +47,11 @@ separate packages and protocol flows.
 
 ### `tsc` under `moduleResolution: NodeNext` reports errors inside `node_modules/@modelcontextprotocol/ext-apps`
 
-Your own code is fine; the errors sit in a dependency's declarations. With `moduleResolution: "NodeNext"` (or `Node16`), `tsc` reports TS2834 and TS2339 inside `node_modules/@modelcontextprotocol/ext-apps/dist/src/app.d.ts`, and TS2305 / TS2460 on `@ggui-ai/protocol`'s `host-context.d.ts` for the three names it re-exports from there (`McpUiDisplayMode`, `McpUiHostContext`, `McpUiHostCapabilities`).
+Your own code is fine; the errors sit in a dependency's declarations. With `moduleResolution: "NodeNext"` (or `Node16`), `tsc` reports TS2834 and TS2339 inside `node_modules/@modelcontextprotocol/ext-apps/dist/src/app.d.ts`, and, before #847, TS2305 / TS2460 on `@ggui-ai/protocol`'s `host-context.d.ts` for the three names it then re-exported from there.
 
-**Cause.** `@modelcontextprotocol/ext-apps` 1.7.5 ships extensionless relative specifiers in its own `.d.ts` files — a defect in the published package, tracked upstream at [modelcontextprotocol/ext-apps#704](https://github.com/modelcontextprotocol/ext-apps/issues/704). `@ggui-ai/*` re-exports those names rather than forking a frozen spec surface, so the defect surfaces on our line. Every `@ggui-ai/*` declaration itself carries explicit `.js` extensions since 0.15.0.
+**Cause.** `@modelcontextprotocol/ext-apps` 1.7.5 ships extensionless relative specifiers in its own `.d.ts` files — a defect in the published package, tracked upstream at [modelcontextprotocol/ext-apps#704](https://github.com/modelcontextprotocol/ext-apps/issues/704). `@ggui-ai/mcp-server` and `@ggui-ai/iframe-runtime` depend on ext-apps, so the defect surfaces in a program that includes them (`@ggui-ai/protocol` alone no longer references ext-apps, #847). Every `@ggui-ai/*` declaration itself carries explicit `.js` extensions since 0.15.0.
+
+**Scope.** The errors come from ext-apps' own declarations, which this package (and `@ggui-ai/iframe-runtime`) depends on. `@ggui-ai/protocol` alone does not: its declarations reference nothing from ext-apps, so a NodeNext consumer of the protocol package typechecks clean without the switch.
 
 **Fix.** Until ext-apps ships the upstream fix, set the TypeScript switch for third-party declaration defects in your `tsconfig.json`:
 

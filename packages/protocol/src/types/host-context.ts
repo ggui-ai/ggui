@@ -44,36 +44,54 @@
 import type { JsonValue } from './data-contract';
 
 // =============================================================================
-// Spec types — re-exported from `@modelcontextprotocol/ext-apps`.
+// The spec's display-mode vocabulary — DECLARED here, pinned equal to
+// `@modelcontextprotocol/ext-apps` (ggui#847).
 //
 // The protocol package owns ggui's TRIMMED projection
-// ({@link HostContextProjection}); it re-exports the raw spec types
-// {@link McpUiDisplayMode} / {@link McpUiHostContext} /
-// {@link McpUiHostCapabilities} so downstream consumers (iframe-runtime,
-// cloud, etc.) can import them through one path without each pulling a
-// direct dep on the SDK. Re-exporting (not re-declaring) is the
-// drift-proof posture — when the spec widens a literal or adds a field,
-// every consumer sees it the next time the SDK version bumps. Pre-1.19b
-// this module re-declared `McpUiDisplayMode` to keep the protocol
-// package SDK-free; the SDK is small and tree-shakes cleanly on the
-// type-only path, so the dep is worth the structural guarantee.
+// ({@link HostContextProjection}). From 1.19b to ggui#847 this module
+// RE-EXPORTED the raw spec types (`McpUiDisplayMode`, `McpUiHostContext`,
+// `McpUiHostCapabilities`) from ext-apps, so a consumer could import them
+// through one path and a spec widening reached every consumer at the next
+// dependency bump. That posture is reversed here, deliberately: ext-apps
+// 1.x ships extensionless relative specifiers in its own `.d.ts`, so any
+// declaration of ours that referenced it made a NodeNext consumer of
+// `@ggui-ai/protocol` with `skipLibCheck: false` red on OUR line (four
+// TS2305/TS2460 cascades, ggui#847) — and the only shape of ours that
+// protocol itself reads is the display-mode vocabulary. So:
+//
+//   - `McpUiDisplayMode` is declared below, and `host-context.test-d.ts`
+//     holds it EQUAL (not merely assignable) to ext-apps' type, so a
+//     widening of the spec's vocabulary is a compile error at the next
+//     bump, never a silent drift — the drift guarantee the re-export gave,
+//     without the dependency.
+//   - `McpUiHostContext` / `McpUiHostCapabilities` are no longer
+//     re-exported: protocol never read them, and every consumer that does
+//     (iframe-runtime, the host helpers) already imports them from ext-apps.
+//   - `@modelcontextprotocol/ext-apps` is a devDependency of this package
+//     (the pin), not a dependency: a NodeNext consumer of protocol alone no
+//     longer loads ext-apps' declarations at all.
+//
+// EXIT CONDITION: the re-export returns when this package can depend on an
+// ext-apps whose declarations resolve under NodeNext — ext-apps 2.x, which
+// moves to the MCP SDK 2.0 split packages and is its own row.
 // =============================================================================
 
-export type {
-  McpUiDisplayMode,
-  McpUiHostContext,
-  McpUiHostCapabilities,
-} from '@modelcontextprotocol/ext-apps';
+/**
+ * The MCP Apps display modes (`McpUiDisplayMode` in
+ * `@modelcontextprotocol/ext-apps`), declared here and pinned equal to the
+ * spec's type in `host-context.test-d.ts` (ggui#847, see above).
+ */
+export type McpUiDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
-import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import type { z } from 'zod';
 import type { hostContextProjectionSchema, mcpUiDisplayModeSchema } from '../schemas/mcp';
 import type { DeepReadonly } from './readonly';
 
 /**
- * The wire enum is assignable to ext-apps' `McpUiDisplayMode` — checked at
- * compile time, so a display mode the host SDK adds is a protocol change
- * here, never a silent widening.
+ * The wire enum is assignable to {@link McpUiDisplayMode} — checked at
+ * compile time, so a display mode the spec adds (which the test-d pin
+ * surfaces at the next ext-apps bump) is a protocol change here, never a
+ * silent widening.
  */
 export type HostContextDisplayModeIsExtApps =
   z.infer<typeof mcpUiDisplayModeSchema> extends McpUiDisplayMode ? true : never;

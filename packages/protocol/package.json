@@ -28,6 +28,8 @@
     "!**/*.test.js.map",
     "!**/*.test-d.js",
     "!**/*.test-d.d.ts",
+    "!**/*.test-d.js.map",
+    "!**/*.test-d.d.ts.map",
     "!**/__tests__/**",
     "!**/*.spec.ts",
     "!**/*.spec.tsx"
@@ -118,6 +120,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
@@ -132,7 +135,6 @@
     "url": "https://github.com/ggui-ai/ggui/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "canonicalize": "^2.0.0",
