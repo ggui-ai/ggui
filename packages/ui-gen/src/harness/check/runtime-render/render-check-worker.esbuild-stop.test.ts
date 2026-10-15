@@ -10,7 +10,7 @@
 // mocked with its real surface plus a spied `stop`; the check itself is
 // stubbed so nothing renders here. Importing `workerMain` must not read
 // stdin — the process-entry guard is what keeps this import inert.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RenderCheckResult } from './render-check.js';
 import { parseVerdictLine } from '../../../internal/verdict-line.js';
 
@@ -53,6 +53,14 @@ function spyStdoutWrite() {
 
 describe('render-check-worker — esbuild.stop() after the verdict (ggui#1380 C2)', () => {
   let write: ReturnType<typeof spyStdoutWrite>;
+
+  // vitest 4's `vi.spyOn` returns the EXISTING spy when the method is already
+  // spied, so without a restore each test would see every earlier test's writes.
+  // `restoreAllMocks` touches only `spyOn` spies in vitest 4 — `esbuildStop`
+  // (a `vi.fn`) keeps its implementation and is cleared by the hook below.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   beforeEach(() => {
     esbuildStop.mockClear();

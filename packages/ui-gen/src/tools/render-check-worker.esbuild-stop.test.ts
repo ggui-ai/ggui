@@ -6,7 +6,7 @@
 // whose write throws (a closed pipe) still stops the service. The compile
 // is real (esbuild's real `transform` under a spied `stop`); the render is
 // `react-dom/server`'s.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseVerdictLine } from '../internal/verdict-line.js';
 
 const esbuildStop = vi.hoisted(() => vi.fn(async (): Promise<void> => {}));
@@ -30,6 +30,14 @@ function spyStdoutWrite() {
 
 describe('tools/render-check-worker — esbuild.stop() after the verdict (ggui#1380 C2)', () => {
   let write: ReturnType<typeof spyStdoutWrite>;
+
+  // vitest 4's `vi.spyOn` returns the EXISTING spy when the method is already
+  // spied, so without a restore each test would see every earlier test's writes.
+  // `restoreAllMocks` touches only `spyOn` spies in vitest 4 — `esbuildStop`
+  // (a `vi.fn`) keeps its implementation and is cleared by the hook below.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   beforeEach(() => {
     esbuildStop.mockClear();

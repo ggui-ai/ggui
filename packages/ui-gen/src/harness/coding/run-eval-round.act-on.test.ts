@@ -6,7 +6,7 @@
 //   - the text evaluator's warns never count, even one in the `visual` category (it has a tier-2 visual criterion);
 //   - the fit measurement's warn-level overflow never counts (fit is its own feedback source, judge or no judge);
 //   - the other quality modes are unchanged (every warn already continues there).
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { AgentWorkspace } from "../../coding-agent/workspace.js";
 import { CostTracker } from "../../evaluation/cost-tracker.js";
 import { classifyAxes } from "../../classifier/classifier.js";
@@ -128,7 +128,7 @@ async function buildCtx(opts: {
 }
 
 describe("visualEvaluation.actOn — the visual leg’s majors may start a round in fast mode (ggui#1542)", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
   const reasonLines = (): string[] =>
     logSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("continuing: fails="));
   beforeEach(() => {

@@ -8,6 +8,9 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
+    // One test file at a time, each in a fresh process (vitest 4 removed
+    // `poolOptions.forks.singleFork`; `isolate` stays at its default `true`, so
+    // module state never carries from one file into the next).
+    maxWorkers: 1,
   },
 });

@@ -29,7 +29,7 @@
  * ADAPTER: CSP-precompiled validation, violation dual-emission, and
  * the tools/call-vs-WS transport seam.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 const posted = vi.hoisted((): unknown[] => []);
 vi.mock('../observability.js', async (importOriginal) => ({
@@ -48,6 +48,7 @@ import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import {
   buildRootWireConfig,
   StreamBus,
+  type RendererSendSurface,
 } from '../wire-config.js';
 
 function makeRender(
@@ -68,11 +69,11 @@ function makeRender(
 }
 
 function makeFakeManager(): {
-  send: ReturnType<typeof vi.fn>;
+  send: Mock<RendererSendSurface['send']>;
   messages: WebSocketMessage[];
 } {
   const messages: WebSocketMessage[] = [];
-  const send = vi.fn((msg: WebSocketMessage) => {
+  const send = vi.fn<RendererSendSurface['send']>((msg: WebSocketMessage) => {
     messages.push(msg);
   });
   return { send, messages };

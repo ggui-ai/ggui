@@ -123,7 +123,7 @@
     "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "repository": {
     "type": "git",

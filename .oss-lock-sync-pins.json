@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T13:04:12.071Z",
+  "generatedAt": "2026-10-15T13:59:40.726Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -205,6 +205,7 @@
     "devtools-protocol",
     "electron-to-chromium",
     "es-iterator-helpers",
+    "es-module-lexer",
     "es-object-atoms",
     "es-to-primitive",
     "esbuild",
@@ -544,6 +545,7 @@
     "devtools-protocol",
     "electron-to-chromium",
     "es-iterator-helpers",
+    "es-module-lexer",
     "es-object-atoms",
     "es-to-primitive",
     "esbuild@0.25.x",

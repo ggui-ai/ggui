@@ -6,9 +6,11 @@ import { z } from 'zod';
 // Mock the client module
 const mockChatCompletion = vi.fn();
 vi.mock('./client', () => ({
-  OpenRouterClient: vi.fn().mockImplementation(() => ({
-    chatCompletion: mockChatCompletion,
-  })),
+  // A `function` implementation: the adapter calls `new OpenRouterClient()`,
+  // and vitest 4 cannot `new` an arrow.
+  OpenRouterClient: vi.fn(function () {
+    return { chatCompletion: mockChatCompletion };
+  }),
 }));
 
 function makeCompileTool(): ToolDefinition {

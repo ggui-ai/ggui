@@ -57,12 +57,13 @@ function armBuilder(): ReturnType<typeof vi.fn> {
   const create = vi
     .fn()
     .mockResolvedValue(bundleFromJSON(JSON.parse(buildFakeBundleJSON())));
-  MockedBundleBuilder.mockImplementation(
-    () =>
-      ({ create }) as unknown as InstanceType<
-        typeof signModule.MessageSignatureBundleBuilder
-      >,
-  );
+  // A `function` implementation: vitest 4 calls a mock's implementation
+  // with `new` when the code under test does, and an arrow cannot be.
+  MockedBundleBuilder.mockImplementation(function () {
+    return { create } as unknown as InstanceType<
+      typeof signModule.MessageSignatureBundleBuilder
+    >;
+  });
   return create;
 }
 

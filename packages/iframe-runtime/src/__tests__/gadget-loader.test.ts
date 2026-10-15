@@ -12,7 +12,7 @@
 //   - `bundleUrl` wins over `package` as the load source
 //   - `bundleSri` + `bundleUrl` routes through the integrity loader
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import {
   loadGadgetRegistry,
   type DynamicImporter,
@@ -34,8 +34,11 @@ function makeImporter(
   };
 }
 
-function makeLogger(): { warn: ReturnType<typeof vi.fn> } {
-  return { warn: vi.fn() };
+/** The loader's `opts.logger` slot, derived from its signature. */
+type LoaderLogger = NonNullable<NonNullable<Parameters<typeof loadGadgetRegistry>[2]>['logger']>;
+
+function makeLogger(): { warn: Mock<LoaderLogger['warn']> } {
+  return { warn: vi.fn<LoaderLogger['warn']>() };
 }
 
 describe('loadGadgetRegistry', () => {

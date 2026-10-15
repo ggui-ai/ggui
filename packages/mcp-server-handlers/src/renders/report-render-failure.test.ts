@@ -6,7 +6,7 @@
  */
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { GguiSessionStore, ViewProofVerdict } from '@ggui-ai/mcp-server-core';
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi, type MockInstance } from 'vitest';
 import { reportRenderFailureInputShape } from '@ggui-ai/protocol';
 import type { HandlerContext } from '../types.js';
 import {
@@ -39,15 +39,15 @@ function ctx(viewProof?: ViewProofVerdict): HandlerContext {
 }
 
 /** The structured lines the handler printed, parsed back: `[ggui] <event> {json}`. */
-function lines(spy: ReturnType<typeof vi.spyOn>, event: string): Record<string, unknown>[] {
+function lines(spy: MockInstance<typeof console.log>, event: string): Record<string, unknown>[] {
   return spy.mock.calls
     .map(([first]) => (typeof first === 'string' ? first : ''))
     .filter((l) => l.startsWith(`[ggui] ${event} `))
     .map((l) => JSON.parse(l.slice(`[ggui] ${event} `.length)) as Record<string, unknown>);
 }
 
-let info: ReturnType<typeof vi.spyOn>;
-let warn: ReturnType<typeof vi.spyOn>;
+let info: MockInstance<typeof console.info>;
+let warn: MockInstance<typeof console.warn>;
 beforeEach(() => {
   info = vi.spyOn(console, 'info').mockImplementation(() => {});
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

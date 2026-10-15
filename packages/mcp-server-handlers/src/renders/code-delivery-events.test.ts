@@ -30,6 +30,9 @@ function emitAndRead(
   readonly errorName?: string;
 } {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  // vitest 4 hands back the SAME spy when `console.warn` is already spied
+  // (a second call in one test), so clear it: calls[0] is this emit's line.
+  warn.mockClear();
   reportRenderCodeWriteFailed(failure);
   const [line] = warn.mock.calls[0] ?? [];
   if (typeof line !== 'string') {

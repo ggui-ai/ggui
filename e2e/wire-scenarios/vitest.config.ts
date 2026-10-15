@@ -28,7 +28,10 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 30_000,
     pool: 'forks', // Each scenario file gets its own process — services hold global state.
-    poolOptions: { forks: { singleFork: true } },
+    // One test file at a time, each in a fresh process (vitest 4 removed
+    // `poolOptions.forks.singleFork`; `isolate` stays at its default `true`, so
+    // module state never carries from one file into the next).
+    maxWorkers: 1,
     globalSetup: ['./fixtures/global-setup.ts'],
     reporters: ['default'],
   },

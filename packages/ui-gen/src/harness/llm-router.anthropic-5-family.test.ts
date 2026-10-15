@@ -49,47 +49,105 @@ describe('resolveAnthropicSampling', () => {
 
 // ─── Adapter behaviour against a fake SDK client ────────────────────────
 
-interface FakeCreateArgs {
+/** The request-body fields these tests read, parsed off the wire. */
+interface SentMessagesBody {
   model: string;
   temperature?: number;
+  tool_choice?: { type: 'any' | 'auto' };
+  stream?: boolean;
 }
-interface FakeStreamArgs {
-  model: string;
-  tool_choice: { type: 'any' | 'auto' };
+
+function isSentMessagesBody(v: unknown): v is SentMessagesBody {
+  return typeof v === 'object' && v !== null && 'model' in v && typeof v.model === 'string';
+}
+
+const USAGE = { input_tokens: 10, output_tokens: 5 };
+
+/** One Server-Sent Event, in the framing the SDK's stream reader parses. */
+function sse(event: string, data: object): string {
+  return `event: ${event}\ndata: ${JSON.stringify({ type: event, ...data })}\n\n`;
 }
 
 /**
- * AnthropicAgent whose client is a REAL SDK instance with
- * `messages.create` / `messages.stream` replaced by recording fakes —
- * the same technique as `llm-router.call-vision.test.ts`, so no cast is
- * needed to satisfy `createClient(): Promise<Anthropic>`.
+ * AnthropicAgent whose client is a REAL SDK instance pointed at a fake
+ * `fetch` — the SDK builds the request and parses the response itself, so
+ * nothing is cast to an SDK return type (`APIPromise`, `MessageStream`)
+ * that a test cannot construct. `create` / `stream` record each request
+ * body by the route the SDK chose: a non-streaming `messages.create`, or a
+ * streaming `messages.stream` (`stream: true`, answered as SSE).
  */
 class FakeClientAgent extends AnthropicAgent {
-  readonly create: ReturnType<typeof vi.fn>;
-  readonly stream: ReturnType<typeof vi.fn>;
+  readonly create = vi.fn<(body: SentMessagesBody) => void>();
+  readonly stream = vi.fn<(body: SentMessagesBody) => void>();
   private readonly sdkClient: Anthropic;
 
   constructor() {
     super();
-    this.sdkClient = new Anthropic({ apiKey: 'test-key' });
-    this.create = vi.fn().mockImplementation((args: FakeCreateArgs) =>
-      Promise.resolve({
-        usage: { input_tokens: 10, output_tokens: 5 },
-        content: [{ type: 'text', text: `ok:${args.model}` }],
+    this.sdkClient = new Anthropic({
+      apiKey: 'test-key',
+      maxRetries: 0,
+      fetch: async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        if (!isSentMessagesBody(body)) throw new Error('fake fetch: not a messages request');
+        if (body.stream === true) {
+          this.stream(body);
+          return new Response(this.streamed(body), {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }
+        this.create(body);
+        return Response.json({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: body.model,
+          content: [{ type: 'text', text: `ok:${body.model}` }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: USAGE,
+        });
+      },
+    });
+  }
+
+  /** A tool call under a forced choice (`any`), plain text under `auto`. */
+  private streamed(body: SentMessagesBody): string {
+    const forced = body.tool_choice?.type === 'any';
+    return [
+      sse('message_start', {
+        message: {
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: body.model,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: USAGE.input_tokens, output_tokens: 0 },
+        },
       }),
-    );
-    this.stream = vi.fn().mockImplementation((args: FakeStreamArgs) => ({
-      finalMessage: () =>
-        Promise.resolve({
-          usage: { input_tokens: 10, output_tokens: 5 },
-          content:
-            args.tool_choice.type === 'any'
-              ? [{ type: 'tool_use', id: 't1', name: 'evaluate_x', input: { pass: true } }]
-              : [{ type: 'text', text: 'no tool call under auto' }],
-        }),
-    }));
-    vi.spyOn(this.sdkClient.messages, 'create').mockImplementation(this.create);
-    vi.spyOn(this.sdkClient.messages, 'stream').mockImplementation(this.stream);
+      forced
+        ? sse('content_block_start', {
+            index: 0,
+            content_block: { type: 'tool_use', id: 't1', name: 'evaluate_x', input: {} },
+          })
+        : sse('content_block_start', { index: 0, content_block: { type: 'text', text: '' } }),
+      forced
+        ? sse('content_block_delta', {
+            index: 0,
+            delta: { type: 'input_json_delta', partial_json: JSON.stringify({ pass: true }) },
+          })
+        : sse('content_block_delta', {
+            index: 0,
+            delta: { type: 'text_delta', text: 'no tool call under auto' },
+          }),
+      sse('content_block_stop', { index: 0 }),
+      sse('message_delta', {
+        delta: { stop_reason: forced ? 'tool_use' : 'end_turn', stop_sequence: null },
+        usage: { output_tokens: USAGE.output_tokens },
+      }),
+      sse('message_stop', {}),
+    ].join('');
   }
 
   protected async createClient(): Promise<Anthropic> {

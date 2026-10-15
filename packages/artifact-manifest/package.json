@@ -39,7 +39,7 @@
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",
     "typescript": "^5.0.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "repository": {
     "type": "git",

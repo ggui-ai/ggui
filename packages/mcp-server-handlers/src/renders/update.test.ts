@@ -9,7 +9,7 @@
  * `StackItemNotFoundError` matrix collapsed to one
  * `GguiSessionNotFoundError`.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 import {
   ContractViolationError,
   type ComponentGguiSession,
@@ -769,7 +769,7 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
 
   /** Structured single-line events this module emits, parsed back. */
   function namedEvents<T>(
-    warn: ReturnType<typeof vi.spyOn>,
+    warn: MockInstance<typeof console.warn>,
     event: string,
   ): readonly T[] {
     return warn.mock.calls

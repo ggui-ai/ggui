@@ -25,7 +25,7 @@
  * `connectViaRegistry` against a MockWebSocket for the typed-emission
  * branches.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
   CLIENT_SUPPORTED_VERSIONS,
   UPGRADE_REQUIRED,
@@ -43,6 +43,7 @@ import {
 import {
   buildRootWireConfig,
   StreamBus,
+  type RendererSendSurface,
 } from '../wire-config.js';
 import { connectViaRegistry, type ConnectFn } from '../registry-subscribe.js';
 import { bootSequence } from '../runtime.js';
@@ -186,8 +187,8 @@ function makeRender(id: string, overrides: Partial<GguiSession> = {}): GguiSessi
   } as GguiSession;
 }
 
-function makeFakeManager(): { send: ReturnType<typeof vi.fn> } {
-  return { send: vi.fn() };
+function makeFakeManager(): { send: Mock<RendererSendSurface['send']> } {
+  return { send: vi.fn<RendererSendSurface['send']>() };
 }
 
 describe('buildRootWireConfig — onProtocolError', () => {

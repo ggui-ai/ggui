@@ -8,7 +8,7 @@
  * fail, asserting on retry counts, observer emissions, and model
  * resolution rather than on mocked response internals.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import {
@@ -51,13 +51,13 @@ function makeSdkErrorNoHeaders(status: number): Error & { status: number } {
 
 /** AnthropicAgent whose client is a real SDK instance with `messages.create` forced to reject. */
 class RateLimitedAnthropicAgent extends AnthropicAgent {
-  readonly createSpy: ReturnType<typeof vi.fn>;
+  readonly createSpy: Mock<Anthropic['messages']['create']>;
   private readonly sdkClient: Anthropic;
 
   constructor(error: Error, onRetry?: AgentConfig['onRetry']) {
     super(undefined, onRetry);
     this.sdkClient = new Anthropic({ apiKey: 'test-key' });
-    this.createSpy = vi.fn().mockRejectedValue(error);
+    this.createSpy = vi.fn<Anthropic['messages']['create']>().mockRejectedValue(error);
     vi.spyOn(this.sdkClient.messages, 'create').mockImplementation(this.createSpy);
   }
 
@@ -68,13 +68,13 @@ class RateLimitedAnthropicAgent extends AnthropicAgent {
 
 /** GoogleAgent whose client is a real SDK instance with `models.generateContent` forced to reject. */
 class RateLimitedGoogleAgent extends GoogleAgent {
-  readonly createSpy: ReturnType<typeof vi.fn>;
+  readonly createSpy: Mock<GoogleGenAI['models']['generateContent']>;
   private readonly sdkClient: GoogleGenAI;
 
   constructor(error: Error, onRetry?: AgentConfig['onRetry']) {
     super(undefined, onRetry);
     this.sdkClient = new GoogleGenAI({ apiKey: 'test-key' });
-    this.createSpy = vi.fn().mockRejectedValue(error);
+    this.createSpy = vi.fn<GoogleGenAI['models']['generateContent']>().mockRejectedValue(error);
     vi.spyOn(this.sdkClient.models, 'generateContent').mockImplementation(this.createSpy);
   }
 
