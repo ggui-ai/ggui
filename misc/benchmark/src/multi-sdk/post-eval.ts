@@ -292,6 +292,11 @@ export function createLimiter(max: number): <T>(fn: () => Promise<T>) => Promise
 // Exp 013's measured candidate; on 96 re-judged generations: designTokens +3.2,
 // score +1.0, dataPresentation +0.9, 0 pass flips. Announced on the page;
 // designTokens and score are not comparable across it.
+// Google seat label (2026-10-16, #1889): gemini-3.5-flash → gemini-3.6-flash. NOT a panel change: Google has
+// answered gemini-3.5-flash with gemini-3.6-flash since ~2026-10-10 (its 2026-10-08 release notes; our
+// model-echo calls on #1889), so this names the judge that has been scoring since then. No behaviour changes,
+// so the version stays v4. The scores did step at 10-10 (Gemini seat about −1, about −0.4 of the panel mean on
+// its own); the page announces that step, and a Gemini-seat call is now priced at the model that answers.
 export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v4-panel';
 
 /** One judge's contribution to a panel. */
@@ -326,7 +331,7 @@ export interface PanelEvalResult {
 const PANEL = [
   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   { provider: 'openai', model: 'gpt-5.4-mini' },
-  { provider: 'google', model: 'gemini-3.5-flash' },
+  { provider: 'google', model: 'gemini-3.6-flash' },
 ] as const;
 
 /**
