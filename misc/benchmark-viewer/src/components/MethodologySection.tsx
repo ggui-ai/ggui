@@ -65,6 +65,27 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-15',
+    text:
+      'Runner change (internal issue #1853): from the first run on a runner image built with ' +
+      'this change, the software packages the benchmark runs on come exactly from the ' +
+      'repository\'s lockfile, the set the hosted service ships and its tests run. Until now ' +
+      'the runner re-resolved them to newer releases each time its image was built, and over ' +
+      'time it had moved well ahead of what ships: on the generation path, the OpenAI client ' +
+      'library was 7.32 where the service runs 7.9, React was 19.3 where it runs 19.2, and the ' +
+      'schema library was 4.6 where it runs 4.4, among about two hundred others. The library ' +
+      'that drives the browser for the contract check moves with them, from 1.64 to 1.62, and ' +
+      'drives the same browser as before. So the results ' +
+      'published before this entry measured the generator on library versions newer than the ' +
+      'ones it is served on; from this entry on they measure it on the same ones. That is a ' +
+      'correction of the instrument, not of the generator, and it can move any score, latency ' +
+      'or cost, on any arm. A change to those packages now moves the image\'s source hash, and ' +
+      'the image records every package it carries. What it does not yet fix are the operating ' +
+      'system\'s own packages, which come from the base image\'s package manager when the ' +
+      'image is built; they are recorded, not pinned. No prompt, arm, judge or scoring rule changes, the browser and fonts ' +
+      'are unchanged by this entry, and history is not rewritten.',
+  },
+  {
     date: '2026-10-14',
     text:
       'Design and generator change (internal issues #1846, #1847, #1848): from the first run on ' +
@@ -99,27 +120,6 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'simpler components\' props stayed between 35 and 65 a night throughout. The earlier ' +
       'entry\'s other statements stand: the change can raise turn counts and cost, and its ' +
       'effect is read from the published runs.',
-  },
-  {
-    date: '2026-10-13',
-    text:
-      'Runner change (internal issue #1853): from the first run on a runner image built with ' +
-      'this change, the software packages the benchmark runs on come exactly from the ' +
-      'repository\'s lockfile, the set the hosted service ships and its tests run. Until now ' +
-      'the runner re-resolved them to newer releases each time its image was built, and over ' +
-      'time it had moved well ahead of what ships: on the generation path, the OpenAI client ' +
-      'library was 7.32 where the service runs 7.9, React was 19.3 where it runs 19.2, and the ' +
-      'schema library was 4.6 where it runs 4.4, among about two hundred others. The library ' +
-      'that drives the browser for the contract check moves with them, from 1.64 to 1.62, and ' +
-      'drives the same browser as before. So the results ' +
-      'published before this entry measured the generator on library versions newer than the ' +
-      'ones it is served on; from this entry on they measure it on the same ones. That is a ' +
-      'correction of the instrument, not of the generator, and it can move any score, latency ' +
-      'or cost, on any arm. A change to those packages now moves the image\'s source hash, and ' +
-      'the image records every package it carries. What it does not yet fix are the operating ' +
-      'system\'s own packages, which come from the base image\'s package manager when the ' +
-      'image is built; they are recorded, not pinned. No prompt, arm, judge or scoring rule changes, the browser and fonts ' +
-      'are unchanged by this entry, and history is not rewritten.',
   },
   {
     date: '2026-10-13',
