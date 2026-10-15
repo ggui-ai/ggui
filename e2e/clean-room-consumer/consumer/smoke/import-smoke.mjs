@@ -20,10 +20,17 @@
  * corpora) are verified installed-only — they expose nothing to
  * `import` by design.
  *
- * A DOM/React-Native-only package may legitimately throw in plain
- * Node (`window is not defined`, raw-TS entry for Metro, …). Those are
- * reported as warnings, not gate failures — real runtime exercise of
- * browser packages is the Playwright e2e lane (see ../../README.md).
+ * A package that declares `react-native` as a peer is a React Native
+ * host helper. Plain Node cannot run React Native itself (its source is
+ * Flow, not JavaScript), so that package's `.` entry is resolved, never
+ * loaded. A resolve still fails a missing or mis-pointed entry. Whether
+ * a React Native app can bundle the package is a separate question,
+ * answered by bundling it with Metro.
+ *
+ * A DOM-only package may legitimately throw in plain Node
+ * (`window is not defined`). Those are reported as warnings, not gate
+ * failures — real runtime exercise of browser packages is the
+ * Playwright e2e lane (see ../../README.md).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -47,11 +54,10 @@ function hasDotEntry(meta) {
   return Boolean(meta.main || meta.module);
 }
 
-// Error signatures that mean "fine for its real target, just not plain
-// Node" — browser globals + React-Native's raw-TS-for-Metro entry.
+// Error signature that means "fine for its real target, just not plain
+// Node": a browser global.
 const SOFT = [
   /\bis not defined\b/, // window / document / self / navigator
-  /Stripping types is currently unsupported/, // RN ships src/*.ts for Metro
 ];
 
 let hardFail = 0;
@@ -68,6 +74,24 @@ for (const name of names) {
 
   if (!hasDotEntry(meta)) {
     console.log(`  ok    ${name}  — installed (no '.' entry: bin / app / asset, by design)`);
+    continue;
+  }
+
+  if (meta.peerDependencies && 'react-native' in meta.peerDependencies) {
+    let entry;
+    try {
+      entry = fileURLToPath(import.meta.resolve(name));
+    } catch (err) {
+      hardFail++;
+      console.error(`  FAIL  ${name}  — '.' entry does not resolve: ${String(err && err.message)}`);
+      continue;
+    }
+    if (!existsSync(entry)) {
+      hardFail++;
+      console.error(`  FAIL  ${name}  — '.' entry resolves to a missing file: ${entry}`);
+      continue;
+    }
+    console.log(`  ok    ${name}  — React Native host helper: '.' entry resolves, not loaded in plain Node`);
     continue;
   }
 
@@ -89,7 +113,7 @@ for (const name of names) {
 console.log('');
 console.log(
   `  ${names.length - hardFail}/${names.length} packages passed` +
-    (softWarn ? `  (${softWarn} browser/RN warning${softWarn > 1 ? 's' : ''})` : ''),
+    (softWarn ? `  (${softWarn} browser warning${softWarn > 1 ? 's' : ''})` : ''),
 );
 
 if (hardFail > 0) {
