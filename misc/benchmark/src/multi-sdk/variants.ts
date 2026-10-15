@@ -37,13 +37,17 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'claude-balanced',
       sdkName: 'claude',
       tier: 'balanced',
-      modelId: 'anthropic/claude-sonnet-5',
+      // #1743 stage 2: from the first nightly on an image built with this change (was anthropic/claude-sonnet-5). The series crosses on
+      // the same-session A/B (panel fixed) posted on #1743. See the methodology entry.
+      modelId: 'anthropic/claude-sonnet-5-5',
     },
     {
       id: 'claude-premium',
       sdkName: 'claude',
       tier: 'premium',
-      modelId: 'anthropic/claude-opus-5',
+      // #1743 stage 2: from the first nightly on an image built with this change (was anthropic/claude-opus-5). The series crosses on
+      // the same-session A/B (panel fixed) posted on #1743. See the methodology entry.
+      modelId: 'anthropic/claude-opus-5-5',
     },
     {
       // Frontier SKU (Claude Fable 5.1, $10/$50 per MTok, registry row
@@ -66,7 +70,9 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       // Fast-tier refresh (Exp 52a follow-up, 2026-08-08): luna replaces
       // the retired-from-rotation 5.4-nano as the openai fast SKU. Still
       // current 2026-08-19 (cheapest 5.6-family SKU after the Jul 30 cut).
-      modelId: 'openai/gpt-5.6-luna',
+      // #1743 stage 2: from the first nightly on an image built with this change (was openai/gpt-5.6-luna). The series crosses on
+      // the same-session A/B (panel fixed) posted on #1743. See the methodology entry.
+      modelId: 'openai/gpt-6-luna',
     },
     {
       id: 'openai-balanced',
@@ -78,7 +84,9 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'openai-premium',
       sdkName: 'openai',
       tier: 'premium',
-      modelId: 'openai/gpt-5.6-sol',
+      // #1743 stage 2: from the first nightly on an image built with this change (was openai/gpt-5.6-sol). The series crosses on
+      // the same-session A/B (panel fixed) posted on #1743. See the methodology entry.
+      modelId: 'openai/gpt-6.1-sol',
     },
     {
       // Founder ruling 2026-09-09 (#972/#973, picker verbatim: "Add astra as
@@ -109,7 +117,10 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       // Matrix refresh 2026-08-19: 3.7-flash (GA 2026-08-13, Google's
       // "workhorse model for coding and agents") replaces 3.1-pro-preview
       // in the balanced slot — newer and ~60% cheaper.
-      modelId: 'gemini/gemini-3.7-flash',
+      // #1743 / #1889: a LABEL correction, not a model change. Google has answered gemini-3.7-flash with
+      // gemini-3.8-flash since ~2026-10-10 (its 2026-10-08 release notes; our model-echo calls on #1889), so this
+      // arm has been 3.8 since then. Stage 2's pair here was 3.8 vs 3.8, the run's same-model noise floor.
+      modelId: 'gemini/gemini-3.8-flash',
     },
     {
       id: 'google-premium',
