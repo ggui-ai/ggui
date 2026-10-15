@@ -1283,9 +1283,6 @@ importers:
 
   packages/mcp-apps-react-native:
     dependencies:
-      '@ggui-ai/design':
-        specifier: workspace:*
-        version: link:../design
       '@ggui-ai/iframe-runtime':
         specifier: workspace:*
         version: link:../iframe-runtime
@@ -1296,6 +1293,9 @@ importers:
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
     devDependencies:
+      '@ggui-ai/design':
+        specifier: workspace:*
+        version: link:../design
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)

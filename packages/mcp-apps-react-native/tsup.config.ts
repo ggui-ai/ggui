@@ -14,6 +14,10 @@ export default defineConfig({
   dts: true,
   // Wipe dist on every build, so a retired entry's output never keeps shipping.
   clean: true,
-  // Dependencies and peers (react, react-native, react-native-webview,
-  // @ggui-ai/*) stay external: tsup leaves every name in package.json alone.
+  // Bundle @ggui-ai/design: its export map has only `import` targets, so the
+  // CommonJS build (`main`, the `require` condition) could not `require` it.
+  // A consumer's Jest resolves `require`. Every other dependency and peer
+  // (react, react-native, react-native-webview, @ggui-ai/protocol,
+  // @ggui-ai/iframe-runtime) stays external and offers a CommonJS entry.
+  noExternal: ['@ggui-ai/design'],
 });

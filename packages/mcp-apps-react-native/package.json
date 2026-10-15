@@ -54,12 +54,12 @@
     "react-native-webview": "^13.0.0"
   },
   "dependencies": {
-    "@ggui-ai/design": "workspace:*",
     "@ggui-ai/iframe-runtime": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@modelcontextprotocol/ext-apps": "^1.7.2"
   },
   "devDependencies": {
+    "@ggui-ai/design": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "@types/react": "^19.0.0",
     "react": "19.0.0",
