@@ -65,6 +65,54 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-16',
+    text:
+      'Arm change (internal issue #1743): from the first run on a runner image built with this ' +
+      'change, four arms move to their provider\'s latest model: claude-balanced from Claude ' +
+      'Sonnet 5 to Sonnet 5.5, claude-premium from Claude Opus 5 to Opus 5.5, openai-fast from ' +
+      'GPT-5.6 Luna to GPT-6 Luna, and openai-premium from GPT-5.6 Sol to GPT-6.1 Sol. Each ' +
+      'move crossed a same-session comparison first: 10 prompts, run twice, with the judge ' +
+      'panel unchanged. Three bars were set before the run, each a set margin: on score, on ' +
+      'the share of runs needing six or more turns, and on contract failures. Each new ' +
+      'model met all three, and none needed six or more turns, or failed its contract, more ' +
+      'often than the model it replaces. The new models scored between 0.6 points lower ' +
+      'and 1.6 points higher. A control pair of one model against itself spread about as ' +
+      'wide as the score margin, so meeting the bar at this size means "not shown worse", ' +
+      'not "shown equal". On generation cost per run, Sonnet 5.5 cost about the same, Opus 5.5 0.73 ' +
+      'times as much, GPT-6 Luna 0.61 times and GPT-6.1 Sol 0.33 times. google-balanced is ' +
+      'relabelled from Gemini 3.7 Flash to Gemini 3.8 Flash, which is the model that has ' +
+      'actually answered it since about 10 October (see the next entry); its results do not ' +
+      'change. Each of these arms starts a new series here. The six other arms keep their ' +
+      'models. The same image also carries a fix to the generator\'s self-check: a form that ' +
+      'pre-fills its fields from the data it is given now counts as pre-filled in the ways ' +
+      'it is written in practice, where it was refused in several. That can lower turns on ' +
+      'every arm, on prompts that pre-fill a form or seed a list from data. Several other ' +
+      'changes in this image only change its source hash, and nothing the benchmark runs. No ' +
+      'prompt, judge instruction or scoring rule changes, and history is not rewritten.',
+  },
+  {
+    date: '2026-10-16',
+    text:
+      'Disclosure, provider change (internal issue #1889): Google retired two model names we ' +
+      'use and, from about 10 October, answered requests for them with newer models, without ' +
+      'an error. Its release notes are dated 8 October. Requests for Gemini 3.5 Flash, our ' +
+      'judge panel\'s Google seat, have been answered by Gemini 3.6 Flash, and requests for ' +
+      'Gemini 3.7 Flash, the google-balanced arm, by Gemini 3.8 Flash. We confirmed both with ' +
+      'our own calls, which report the model that answered, and our published results show ' +
+      'the change from the 10 October run on. The Google judge\'s scores step down by about ' +
+      'one point, which on its own lowers the published score by about 0.4. The Anthropic ' +
+      'and OpenAI judges\' scores do not step, but the OpenAI judge\'s rose at the same time, ' +
+      'so the published score moved less than that across the same boundary. Score ' +
+      'comparisons across 10 October are not exact. The results published from 10 to 15 October name the model we asked for, not ' +
+      'the one that answered, and they priced each Google judge call at the retired model\'s ' +
+      'rates, two to 2.4 times what it cost. ' +
+      'From this entry on, the panel names Gemini 3.6 Flash, the judge that has been scoring ' +
+      'since 10 October, and prices it as such. That is a label correction: the panel\'s ' +
+      'behaviour and version are unchanged. We will record the model that answers every call from a ' +
+      'later run on, so a change like this shows on the day it happens. History is not ' +
+      'rewritten.',
+  },
+  {
     date: '2026-10-15',
     text:
       'Runner change (internal issue #1853): from the first run on a runner image built with ' +
