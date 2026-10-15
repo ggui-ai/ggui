@@ -450,6 +450,39 @@ export function seedsFromProp(src: string, name: string): boolean {
     }
   }
   for (const id of locals) if (anyInitReads(new RegExp(`\\b${id}\\b`))) return true;
+  return seedsContextSlotFromProp(src, [new RegExp(`\\b${propRef}`), ...[...locals].map((id) => new RegExp(`\\b${id}\\b`))]);
+}
+
+/**
+ * ggui#1869 — a generated context slot is seeded without any `useState`. The boilerplate
+ * declares each slot as `const [value, setValue] = useGguiContext<T>('key')`, the runtime owns
+ * its state, and the hook takes no initial value, so a form built on slots can only pre-fill in
+ * two ways, and both count:
+ * - an effect calls a slot setter with an argument that reads the prop
+ *   (`useEffect(() => { if (p.name && !name) setName(p.name); }, [props.initialProfile])`);
+ * - a slot's value falls back to the prop (`const nameValue = name ?? props.initialProfile?.name`).
+ * A setter called from an event handler is not seeding (it runs on a click, not on mount), and a
+ * prop read that is merely near a slot is not one either.
+ */
+function seedsContextSlotFromProp(src: string, readsProp: readonly RegExp[]): boolean {
+  const reads = (text: string): boolean => readsProp.some((rx) => rx.test(text));
+  const values: string[] = [];
+  const setters: string[] = [];
+  for (const m of src.matchAll(/(?:const|let|var)\s*\[\s*(\w+)\s*,\s*(\w+)\s*\]\s*=\s*useGguiContext\b/g)) {
+    if (m[1] !== undefined) values.push(m[1]);
+    if (m[2] !== undefined) setters.push(m[2]);
+  }
+  if (values.length === 0) return false;
+  for (const v of values) {
+    for (const m of src.matchAll(new RegExp(`(?<![.\\w$])${v}\\s*\\?\\?\\s*([^;\\n]{1,200})`, "g"))) {
+      if (reads(m[1] ?? "")) return true;
+    }
+  }
+  for (const body of callArguments(src, /\buse(?:Layout)?Effect\b/g)) {
+    for (const setter of setters) {
+      for (const arg of callArguments(body, new RegExp(`\\b${setter}\\b`, "g"))) if (reads(arg)) return true;
+    }
+  }
   return false;
 }
 
@@ -459,8 +492,17 @@ export function seedsFromProp(src: string, name: string): boolean {
  * close), and the argument runs to its matching paren, string literals skipped as units.
  */
 function useStateInitializers(src: string): string[] {
+  return callArguments(src, /\buseState\b/g);
+}
+
+/**
+ * The argument text of every call to a name `callee` matches (a global regex). A type argument is
+ * skipped with its angle brackets balanced, and the argument runs to its matching paren, string
+ * literals skipped as units. A match not followed by `(` is not a call and is skipped.
+ */
+function callArguments(src: string, callee: RegExp): string[] {
   const out: string[] = [];
-  for (const m of src.matchAll(/\buseState\b/g)) {
+  for (const m of src.matchAll(callee)) {
     let i = (m.index ?? 0) + m[0].length;
     while (/\s/.test(src[i] ?? "")) i++;
     if (src[i] === "<") {

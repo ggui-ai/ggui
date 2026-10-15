@@ -79,10 +79,23 @@ describe('state.merge.seeded_from_props accepts every correct seeding shape (ggu
       run(both('function sortTasks({ tasks }: Sorted) { return tasks; }\nconst [list, setList] = useState<Task[]>(() => sortTasks({ tasks: [] }));')),
     ).toHaveLength(1);
   });
+  // The control is `"("`, not `")"`: a `")"` in the string passed before the string-skip fix too, so it
+  // controlled nothing; an unmatched `(` is what stretched the old initializer over the later read.
   it('a `(` inside a string in the initializer does not stretch it over a later read', () => {
     expect(run(both('const [label, setLabel] = useState(() => fmt("("));\nconst visible = props.tasks ?? [];\nconst [tasks, setTasks] = useState<Task[]>([]);'))).toHaveLength(1);
   });
   it('an alias of a different prop does not count', () => {
     expect(run(both('const seed = props.columns ?? [];\nconst [tasks, setTasks] = useState(seed);'))).toHaveLength(1);
+  });
+  // The same reader decides both ids, so a collection kept in a generated context slot (no useState;
+  // the hook takes no initial value) is seeded by an effect feeding its setter, or a fallback to the prop.
+  it('a context slot seeded by an effect, or falling back to the prop, passes', () => {
+    const slot = "const [tasks, setTasks] = useGguiContext<Task[]>('tasks'); // DO NOT EDIT\n";
+    expect(run(both(slot + 'useEffect(() => { if (!tasks?.length) setTasks(props.tasks ?? []); }, [props.tasks]);'))).toEqual([]);
+    expect(run(both(slot + 'const shown = tasks ?? props.tasks ?? [];'))).toEqual([]);
+  });
+  it('a context slot set from the prop only in a click handler still fails', () => {
+    const slot = "const [tasks, setTasks] = useGguiContext<Task[]>('tasks'); // DO NOT EDIT\n";
+    expect(run(both(slot + 'return <Button onClick={() => setTasks(props.tasks)}>Reset</Button>;'))).toHaveLength(1);
   });
 });

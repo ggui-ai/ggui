@@ -56,9 +56,19 @@ describe("state.payload.initial_values_seeded (ggui#1261)", () => {
     ).toEqual([]);
   });
 
-  // The check's window is deliberately as loose as before (any useState( within 400 characters
-  // ahead of the reference): tightening it would ADD self-check fails, the opposite of ggui#1261.
-  // So the "still flags" cases carry no useState near the prop at all.
+  // ggui#1869: the reader takes each useState initializer whole, to its matching paren. The old
+  // reader matched any `useState(` within 400 characters ahead of the reference, so a prop read that
+  // merely sat near an unrelated useState passed as a seed (the over-match case below).
+  it("flags a prop read that only sits near an unrelated useState, with the real state seeded from nothing", () => {
+    expect(
+      run(`
+        const [name, setName] = useState('');
+        const [step, setStep] = useState(0);
+        return <p>Editing {props.initialProfile?.name} — step {step}</p>;
+      `),
+    ).toHaveLength(1);
+  });
+
   it("still flags a prop that is only rendered, with no useState seeding anything", () => {
     expect(run(`return <p>{props.initialProfile?.name}</p>;`)).toHaveLength(1);
   });
@@ -68,6 +78,79 @@ describe("state.payload.initial_values_seeded (ggui#1261)", () => {
       run(`
         const initial = normalizeProfile(props.initialProfile);
         return <p>{initial.name}</p>;
+      `),
+    ).toHaveLength(1);
+  });
+});
+
+// ggui#1869 — a form built on generated context slots has no useState to seed: the boilerplate
+// declares `const [name, setName] = useGguiContext<string>('name')`, the runtime owns the state,
+// and the hook takes no initial value. Seeding is a setter fed from the prop in an effect, or the
+// slot's value falling back to the prop. A replayed model cell did both and was refused.
+describe("state.payload.initial_values_seeded on context slots (ggui#1869)", () => {
+  const SLOTS = `
+    const [name, setName] = useGguiContext<string>('name'); // DO NOT EDIT
+    const [email, setEmail] = useGguiContext<string>('email'); // DO NOT EDIT
+  `;
+
+  it("passes the replayed cell's shape: an effect seeding the slots, and fallbacks to the prop", () => {
+    expect(
+      run(`${SLOTS}
+        useEffect(() => {
+          const p = props.initialProfile;
+          if (!p) return;
+          if (p.name && !name) setName(p.name);
+          if (p.email && !email) setEmail(p.email);
+        }, [props.initialProfile]);
+        const nameValue = name ?? props.initialProfile?.name ?? '';
+        return <TextField value={nameValue} onChange={setName} />;
+      `),
+    ).toEqual([]);
+  });
+
+  it("passes an effect that feeds a slot setter straight from the prop", () => {
+    expect(
+      run(`${SLOTS}
+        useEffect(() => { setName(props.initialProfile?.name ?? ''); }, []);
+      `),
+    ).toEqual([]);
+  });
+
+  it("passes a slot value that falls back to the prop, with no effect", () => {
+    expect(run(`${SLOTS} const shown = email ?? props.initialProfile?.email;`)).toEqual([]);
+  });
+
+  it("flags a slot setter fed from the prop only in an event handler (a click is not a mount)", () => {
+    expect(
+      run(`${SLOTS}
+        return <Button onClick={() => setName(props.initialProfile?.name ?? '')}>Reset</Button>;
+      `),
+    ).toHaveLength(1);
+  });
+
+  it("flags an effect that names the prop only in its deps and sets the slot from a literal", () => {
+    expect(
+      run(`${SLOTS}
+        useEffect(() => { setName(''); }, [props.initialProfile]);
+        return <p>{props.initialProfile?.name}</p>;
+      `),
+    ).toHaveLength(1);
+  });
+
+  it("flags a slot that falls back to a literal while the prop is only rendered", () => {
+    expect(
+      run(`${SLOTS}
+        const shown = name ?? '';
+        return <p>{shown} / {props.initialProfile?.name}</p>;
+      `),
+    ).toHaveLength(1);
+  });
+
+  it("does not take a member access named like a slot for the slot (`p.name ?? props…`)", () => {
+    expect(
+      run(`${SLOTS}
+        const label = user.name ?? props.initialProfile?.name;
+        return <p>{label}</p>;
       `),
     ).toHaveLength(1);
   });
