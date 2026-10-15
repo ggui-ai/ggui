@@ -112,7 +112,9 @@ export interface ModelConfigBase {
  * definer forces every row's `id` to equal its key at the type level.
  */
 function defineModelRegistry<
-  const T extends { readonly [K in keyof T]: ModelConfigBase & { readonly id: K } },
+  const T extends {
+    readonly [K in keyof T]: ModelConfigBase & { readonly id: K; readonly answeredBy?: keyof T };
+  },
 >(rows: T): T {
   return rows;
 }
@@ -416,13 +418,20 @@ const MODEL_ROWS = defineModelRegistry({
     supportsTools: true,
     supportsCaching: true,
   },
+  // ggui#1889: Google's 2026-10-08 changelog — "`gemini-3.7-flash` is
+  // deprecated and has been replaced by `gemini-3.8-flash`." / "API requests
+  // to `gemini-3.7-flash` are automatically routed to `gemini-3.8-flash`."
+  // Confirmed by a live call (ggui#1889, 2026-10-15 14:04:02Z: response
+  // model `gemini-3.8-flash`). The row stays for persisted ids; it is legacy,
+  // answered by 3.8, and priced as 3.8 (the same rate).
   "gemini/gemini-3.7-flash": {
     id: "gemini/gemini-3.7-flash",
     provider: "google",
     displayName: "Gemini 3.7 Flash",
     tier: "balanced",
-    state: "active",
+    state: "legacy",
     lineup: false,
+    answeredBy: "gemini/gemini-3.8-flash",
     costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
     maxTokens: 1048576,
     supportsTools: true,
@@ -442,14 +451,22 @@ const MODEL_ROWS = defineModelRegistry({
     supportsTools: true,
     supportsCaching: true,
   },
+  // ggui#1889: Google's 2026-10-08 changelog — "`gemini-3.5-flash` is
+  // deprecated and has been replaced by `gemini-3.6-flash`." / "API requests
+  // to `gemini-3.5-flash` are automatically routed to `gemini-3.6-flash`."
+  // Confirmed by a live call (ggui#1889, 2026-10-15 14:04:41Z: response
+  // model `gemini-3.6-flash`). The row stays for persisted ids; it is legacy,
+  // answered by 3.6, and priced as 3.6 (was $1.50 / $9.00 — the id's own
+  // former rate, about 2× what the answering model costs).
   "gemini/gemini-3.5-flash": {
     id: "gemini/gemini-3.5-flash",
     provider: "google",
     displayName: "Gemini 3.5 Flash",
     tier: "fast",
-    state: "active",
+    state: "legacy",
     lineup: false,
-    costs: { inputPer1M: 1.5, outputPer1M: 9.0 },
+    answeredBy: "gemini/gemini-3.6-flash",
+    costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
     maxTokens: 1048576,
     supportsTools: true,
     supportsCaching: true,
@@ -719,6 +736,17 @@ export type ModelId = keyof typeof MODEL_ROWS;
 /** A registry row, as consumers read it. */
 export interface ModelConfig extends ModelConfigBase {
   id: ModelId;
+  /**
+   * The row the provider ANSWERS this id with, when a request for this id is
+   * served by another model (ggui#1889): Google's 2026-10-08 changelog —
+   * "API requests to `gemini-3.5-flash` are automatically routed to
+   * `gemini-3.6-flash`", and the same for 3.7-flash → 3.8-flash. A row that
+   * carries it is `legacy` and priced exactly as its target, so a cost
+   * reader that resolves through {@link answeringModelOf} charges what ran.
+   * The row itself stays — a persisted id keeps its row and its picker
+   * entry — because the vendor still accepts the id on the wire.
+   */
+  readonly answeredBy?: ModelId;
 }
 
 /**
@@ -729,6 +757,15 @@ export interface ModelConfig extends ModelConfigBase {
  * {@link ModelId} and enforce `id === key`.
  */
 export const MODEL_REGISTRY: Readonly<Record<ModelId, ModelConfig>> = MODEL_ROWS;
+
+/**
+ * The row that answers a request for `id` (ggui#1889): its `answeredBy`
+ * target when the provider reroutes it, else itself. The one door a cost or
+ * capability reader resolves through, so a rerouted id is read as what ran.
+ */
+export function answeringModelOf(id: ModelId): ModelId {
+  return MODEL_REGISTRY[id].answeredBy ?? id;
+}
 
 /** Whether `value` is a registry model id — provider-qualified, e.g. `anthropic/claude-haiku-4-5`. */
 export function isModelId(value: string): value is ModelId {

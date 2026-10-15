@@ -11,6 +11,7 @@ import {
   DEFAULT_MODEL,
   MODEL_LINEUP,
   MODEL_REGISTRY,
+  answeringModelOf,
   isLineupModel,
   isModelId,
   type ModelConfig,
@@ -62,7 +63,7 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
 });
 
 describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
-  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6 — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)")', () => {
+  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Gemini 3.5 Flash, Gemini 3.7 Flash — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)"; ggui#1889: the two rerouted Gemini ids)', () => {
     const legacy = ids().filter((id) => MODEL_REGISTRY[id].state === 'legacy');
     expect(legacy).toEqual([
       'anthropic/claude-fable-5',
@@ -72,6 +73,8 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
       'anthropic/claude-opus-4-8',
       'anthropic/claude-opus-5',
       'anthropic/claude-sonnet-4-6',
+      'gemini/gemini-3.5-flash',
+      'gemini/gemini-3.7-flash',
     ]);
     for (const id of ids()) {
       expect(['active', 'legacy'], id).toContain(MODEL_REGISTRY[id].state);
@@ -104,6 +107,64 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
     expect(DEFAULT_MODEL).toBe('anthropic/claude-haiku-5-5');
     expect(isLineupModel(DEFAULT_MODEL)).toBe(true);
     expect(MODEL_REGISTRY[DEFAULT_MODEL].state).toBe('active');
+  });
+});
+
+/**
+ * ggui#1889 — a row says what ANSWERS it. Google's 2026-10-08 changelog:
+ * "API requests to `gemini-3.5-flash` are automatically routed to
+ * `gemini-3.6-flash`", and 3.7-flash → 3.8-flash; benchmark's live calls on
+ * the row (2026-10-15 14:04:41Z and 14:04:02Z) read the answering model off
+ * the response. The rows stay — a persisted id keeps its row — as legacy,
+ * priced exactly as the row that answers, so a cost reader resolving through
+ * `answeringModelOf` charges what ran (3.5-flash's own former rate, $1.50 /
+ * $9.00, was about 2× the answering model's).
+ */
+describe('MODEL_REGISTRY — answeredBy: a rerouted id is legacy, priced as the row that answers (ggui#1889)', () => {
+  const rerouted = (): ModelId[] => ids().filter((id) => MODEL_REGISTRY[id].answeredBy !== undefined);
+
+  it('exactly the two Gemini ids Google reroutes carry answeredBy, to the models that answer', () => {
+    expect(rerouted()).toEqual(['gemini/gemini-3.5-flash', 'gemini/gemini-3.7-flash']);
+    expect(MODEL_REGISTRY['gemini/gemini-3.5-flash'].answeredBy).toBe('gemini/gemini-3.6-flash');
+    expect(MODEL_REGISTRY['gemini/gemini-3.7-flash'].answeredBy).toBe('gemini/gemini-3.8-flash');
+  });
+
+  it('every rerouted row is legacy, off the lineup, and priced exactly as its answering row', () => {
+    for (const id of rerouted()) {
+      const row = MODEL_REGISTRY[id];
+      const target = row.answeredBy;
+      if (target === undefined) throw new Error(`${id} lost its answeredBy between two reads`);
+      expect(row.state, id).toBe('legacy');
+      expect(row.lineup, id).toBe(false);
+      expect(row.costs, id).toEqual(MODEL_REGISTRY[target].costs);
+    }
+  });
+
+  it('every answering row is active and answers for itself (no chain)', () => {
+    for (const id of rerouted()) {
+      const target = MODEL_REGISTRY[id].answeredBy;
+      if (target === undefined) throw new Error(`${id} lost its answeredBy between two reads`);
+      expect(MODEL_REGISTRY[target].state, target).toBe('active');
+      expect(MODEL_REGISTRY[target].answeredBy, target).toBeUndefined();
+      expect(answeringModelOf(target)).toBe(target);
+    }
+  });
+
+  it('answeringModelOf resolves a rerouted id to its target and every other id to itself', () => {
+    expect(answeringModelOf('gemini/gemini-3.5-flash')).toBe('gemini/gemini-3.6-flash');
+    expect(answeringModelOf('gemini/gemini-3.7-flash')).toBe('gemini/gemini-3.8-flash');
+    for (const id of ids().filter((i) => !rerouted().includes(i))) expect(answeringModelOf(id), id).toBe(id);
+  });
+
+  it('N−1: a caller naming either rerouted id still has a route and a row — nothing persisted is refused', () => {
+    for (const [provider, model, id] of [
+      ['google', 'gemini-3.5-flash', 'gemini/gemini-3.5-flash'],
+      ['google', 'gemini-3.7-flash', 'gemini/gemini-3.7-flash'],
+    ] as const) {
+      expect(isValidLlmRoute(provider, model)).toBe(true);
+      expect(modelRefOfRoute({ provider, model })).toBe(id);
+      expect(isModelId(id)).toBe(true);
+    }
   });
 });
 
