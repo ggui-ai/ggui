@@ -45,9 +45,12 @@ services:
         condition: service_healthy
     environment:
       VERDACCIO_URL: http://verdaccio:4873
+      # 0 skips the Expo export smoke (step 6). Unset runs it.
+      EXPO_FIXTURE: ${EXPO_FIXTURE:-1}
     volumes:
       # Gate logic is bind-mounted (not baked) so it iterates without
       # an image rebuild. None of this is the consumer's node_modules —
       # that is created fresh inside the container from Verdaccio.
       - ./scripts:/gate/scripts:ro
       - ./consumer:/gate/consumer-template:ro
+      - ./expo-fixture:/gate/expo-fixture:ro

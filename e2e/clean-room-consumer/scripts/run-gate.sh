@@ -8,6 +8,11 @@
 #       registry pinned to Verdaccio, ZERO workspace linkage
 #   [4] run packaging smokes against the installed artifacts: the
 #       published shape of every package, then imports and the CLI
+#   [5] run the serve smoke
+#   [6] bundle a stock Expo app that depends on the React Native host
+#       helper (skipped when EXPO_FIXTURE=0: the monorepo workflow sets
+#       it when a change cannot reach that package; every other run,
+#       the release gate included, runs it)
 #
 # Any failing step aborts (set -e) → non-zero exit → the gate blocks.
 set -euo pipefail
@@ -22,7 +27,7 @@ echo "  ggui clean-room consumer"
 echo "════════════════════════════════════════════════════════════"
 
 echo
-echo "[1/4] Waiting for Verdaccio at $REGISTRY"
+echo "[1/6] Waiting for Verdaccio at $REGISTRY"
 for _ in $(seq 1 60); do
   curl -sf "$REGISTRY/-/ping" >/dev/null 2>&1 && break
   sleep 1
@@ -34,11 +39,11 @@ curl -sf "$REGISTRY/-/ping" >/dev/null 2>&1 || {
 echo "  Verdaccio is up"
 
 echo
-echo "[2/4] Publishing @ggui-ai/* packages to Verdaccio"
+echo "[2/6] Publishing @ggui-ai/* packages to Verdaccio"
 bash "$GATE/scripts/publish-all.sh" "$PACKAGES_ROOT" "$REGISTRY"
 
 echo
-echo "[3/4] Installing into a clean-room consumer (zero workspace linkage)"
+echo "[3/6] Installing into a clean-room consumer (zero workspace linkage)"
 rm -rf "$CONSUMER"
 mkdir -p "$CONSUMER"
 node "$GATE/scripts/compute-order.mjs" "$PACKAGES_ROOT" --consumer-pkg \
@@ -53,7 +58,7 @@ npm install --no-audit --no-fund --loglevel=error
 echo "  installed $(node -pe 'Object.keys(require("./package.json").dependencies).length') deps from Verdaccio"
 
 echo
-echo "[4/5] Running packaging + CLI smokes"
+echo "[4/6] Running packaging + CLI smokes"
 # The shape smoke parses shipped JS with acorn. It is installed into its
 # own prefix, never the consumer, so the consumer's dependency tree stays
 # exactly what the packages declare.
@@ -64,8 +69,16 @@ node smoke/import-smoke.mjs
 node smoke/cli-smoke.mjs
 
 echo
-echo "[5/5] Running serve smoke"
+echo "[5/6] Running serve smoke"
 node smoke/serve-smoke.mjs
+
+echo
+if [ "${EXPO_FIXTURE:-1}" = "0" ]; then
+  echo "[6/6] Expo export smoke: skipped (EXPO_FIXTURE=0, the change cannot reach @ggui-ai/mcp-apps-react-native)"
+else
+  echo "[6/6] Running Expo export smoke"
+  bash "$GATE/scripts/expo-export.sh" "$PACKAGES_ROOT" "$REGISTRY" "$GATE/expo-fixture"
+fi
 
 echo
 echo "════════════════════════════════════════════════════════════"

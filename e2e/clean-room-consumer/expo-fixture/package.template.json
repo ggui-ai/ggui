@@ -1,0 +1,14 @@
+{
+  "name": "ggui-expo-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@ggui-ai/mcp-apps-react-native": "__GGUI_VERSION__",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "expo": "55.0.31",
+    "react": "19.2.0",
+    "react-native": "0.83.10",
+    "react-native-webview": "13.16.0"
+  }
+}

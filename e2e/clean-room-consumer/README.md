@@ -35,6 +35,15 @@ packaging breakage that the next subtree sync would surface — a silent
 gate per
 [Test Placement § Tests not in any CI tier](../../../docs/principles/test-placement.md#tests-not-in-any-ci-tier).
 
+Stage 6, the Expo export smoke, adds a few minutes, so the monorepo
+workflow runs it only when a change can reach what it bundles:
+`@ggui-ai/mcp-apps-react-native`, the `@ggui-ai/*` packages it reaches
+(read from the package.json files by `scripts/expo-fixture-scope.mjs`,
+so there is no list to keep), the lockfile and workspace manifest, or
+this directory. It sets `EXPO_FIXTURE=0` otherwise. Every other run,
+`make test-clean-room-consumer` and the subtree's `publish-gate.yml`
+included, runs stage 6.
+
 ---
 
 ## Why this exists
@@ -103,7 +112,7 @@ fails — that is precisely the bug class the gate exists for.
    └───────────────────────────────────────────────────┘
 ```
 
-Five stages, orchestrated by `scripts/run-gate.sh`:
+Six stages, orchestrated by `scripts/run-gate.sh`:
 
 1. **Wait** — block until Verdaccio is healthy.
 2. **Publish** — `pnpm publish` every publishable `@ggui-ai/*` package
@@ -116,6 +125,11 @@ Five stages, orchestrated by `scripts/run-gate.sh`:
    workspace-rescue paths that would hide publish-shape breakage.
 4. **Packaging + CLI smokes** — `shape-smoke` + `import-smoke` + `cli-smoke`.
 5. **Serve smoke** — boot the `ggui` binary as a real server.
+6. **Expo export smoke** — `scripts/expo-export.sh` installs a stock
+   Expo app (`expo-fixture/`: no `metro.config.js`, no
+   `babel.config.js`) that imports both entries of
+   `@ggui-ai/mcp-apps-react-native` from Verdaccio, then runs
+   `expo export` for android and ios. Skipped when `EXPO_FIXTURE=0`.
 
 ### What the smokes assert
 
@@ -125,6 +139,7 @@ Five stages, orchestrated by `scripts/run-gate.sh`:
 | `import-smoke.mjs` | every package installed; each package with a `.` entry loads via ESM `import()`; a React Native host helper's `.` entry resolves to a shipped file (plain Node cannot run React Native, so it is not loaded)                                                                                                                                            | bin/app/asset packages (no `.` entry) are install-checked only; DOM packages may throw in plain Node → warning |
 | `cli-smoke.mjs`    | every `ggui` subcommand — `--version`, `--help`, `gadget create`, `blueprint create`, `login`, `whoami`, `keys list` (cloud + `--keys-file`), `logout` — exits 0; `dev` loads without a module crash                                                                                                                                                    | —                                                                                                              |
 | `serve-smoke.mjs`  | `ggui serve --mcp-only` binds its port, logs a listening banner, and shuts down cleanly on SIGTERM                                                                                                                                                                                                                                                      | HTTP probes of `/health` + `/mcp` (routes vary by mode)                                                        |
+| `expo-export.sh`   | a stock Expo app that imports `@ggui-ai/mcp-apps-react-native` (`.` and `./chat-helpers`) installs from the registry; `expo export` exits 0 for android and ios, and each bundle carries `McpAppIframe` and `extractRenderFromToolResult`                                                                                                               | —                                                                                                              |
 
 The auth commands run against an in-process **mock auth server**
 (`mock-auth-server.mjs`) with an isolated `HOME`, so `login` / `whoami`
@@ -149,7 +164,14 @@ e2e/clean-room-consumer/
 ├── scripts/
 │   ├── compute-order.mjs — leaf-first topo sort of the dep graph
 │   ├── publish-all.sh    — pnpm publish loop → Verdaccio
-│   └── run-gate.sh       — 5-stage orchestrator
+│   ├── run-gate.sh       — 6-stage orchestrator
+│   ├── expo-export.sh    — stage 6: bundle the Expo fixture
+│   └── expo-fixture-scope.mjs — whether a change reaches stage 6
+├── expo-fixture/         — a stock Expo app that imports the RN host helper
+│   ├── package.template.json — exact pins; the helper's version is filled in
+│   ├── app.json
+│   ├── index.js
+│   └── App.js
 └── consumer/             — clean-room consumer template
     ├── npmrc             — registry pin (copied to .npmrc at runtime)
     └── smoke/

@@ -8,7 +8,7 @@ name: Publish Gate
 #   - PACKAGING verification — the clean-room-consumer registry
 #     round-trip: build tarballs, publish to a throwaway Verdaccio,
 #     install into a fresh consumer with zero workspace linkage, run
-#     shape / import / cli / serve smokes. This is the ONLY check that
+#     shape / import / cli / serve / Expo export smokes. This is the ONLY check that
 #     exercises the published artifacts; source build/test cannot
 #     catch packaging bugs.
 #
