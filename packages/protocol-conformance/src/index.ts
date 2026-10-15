@@ -361,4 +361,17 @@ export type {
 
 // ── n1-compat (ggui#1014 §3.6 — previous-release payloads against today's parsers; ggui#1093 — a later release's payload against today's READ door) ──
 export { N1_COMPAT_CASES, N1_COMPAT_DIRECTIONS, N1_COMPAT_WIRES, runN1CompatConformance } from './n1-compat-conformance/index.js';
+
+// Output-schema catalog (SPEC §7.9 "Advertised output objects", ggui#1333):
+// an advertised output object MUST NOT be closed — graded on the served
+// `tools/list` document.
+export {
+  OUTPUT_SCHEMA_OPEN_DESCRIPTION,
+  closedObjectsIn,
+  runOutputSchemaConformance,
+  type AdvertisedToolView,
+  type AdvertisedToolsListView,
+  type OutputSchemaConformanceResult,
+  type OutputSchemaViolation,
+} from './output-schema-conformance/index.js';
 export type { N1CompatCase, N1CompatDirection, N1CompatRelease, N1CompatResult, N1CompatWire } from './n1-compat-conformance/index.js';

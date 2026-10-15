@@ -1,0 +1,45 @@
+{
+  "name": "reject-closed-nested-only",
+  "description": "An open top level does not discharge the obligation: one closed object three levels down — inside an array item under a nested property — is reported with its path, and a second tool that is open passes beside it.",
+  "toolsList": {
+    "tools": [
+      {
+        "name": "fine_tool",
+        "outputSchema": {
+          "type": "object",
+          "additionalProperties": {},
+          "properties": { "ok": { "type": "boolean" } }
+        }
+      },
+      {
+        "name": "deep_closed_tool",
+        "outputSchema": {
+          "type": "object",
+          "additionalProperties": {},
+          "properties": {
+            "nested": {
+              "type": "object",
+              "additionalProperties": {},
+              "properties": {
+                "list": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": { "item": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "passed": ["fine_tool"],
+    "failed": [
+      { "name": "deep_closed_tool", "violations": ["$.properties.nested.properties.list.items"] }
+    ]
+  }
+}

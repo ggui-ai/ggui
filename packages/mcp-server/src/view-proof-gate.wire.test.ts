@@ -3,7 +3,8 @@
  * in-memory transport: what a previous-release view sends (no `_meta`, or
  * `_meta` without the proof's key) is accepted exactly as before and read
  * `missing`; a view that signs with its view key reads `valid`; and the
- * served `tools/list` names the declared code on both closed outputs. The
+ * served `tools/list` names the declared code on both outputs (open since
+ * ggui#1333). The
  * gate never changes an answer.
  */
 import { createHmac } from 'node:crypto';
@@ -302,12 +303,12 @@ describe('the view-proof measuring gate over a real SDK client (ggui#1415)', () 
     });
   });
 
-  it('the served tools/list names VIEW_ORIGIN_UNPROVEN on both closed outputs', async () => {
+  it('the served tools/list names VIEW_ORIGIN_UNPROVEN on both outputs (open since ggui#1333)', async () => {
     await withServer(async (client) => {
       const { tools } = await client.listTools();
       const codeEnum = z.object({
         outputSchema: z.object({
-          additionalProperties: z.literal(false),
+          additionalProperties: z.object({}),
           properties: z.object({ code: z.object({ enum: z.array(z.string()) }) }),
         }),
       });

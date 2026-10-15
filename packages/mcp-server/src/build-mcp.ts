@@ -28,6 +28,141 @@ import {
 } from './mcp-apps-outbound.js';
 import { runViewProofGate, type ViewProofGate } from './view-proof-gate.js';
 
+// =============================================================================
+// Advertised output objects are OPEN (ggui#1333)
+//
+// The SDK projects a tool's registered output object into `tools/list` in
+// zod's OUTPUT mode, which closes every object (`additionalProperties:
+// false`) whether or not the zod object is strict. A host that caches that
+// document and validates results — the TS SDK client does — then refuses a
+// result carrying a member it does not name, so an optional output field
+// added in release N failed every host that listed tools against N−1, and
+// an additive field could only ship by declaring it one release before
+// emitting it (ggui#1336). The MUST this section enforces: an advertised
+// output object MUST NOT be closed, at any depth.
+//
+// The ADVERTISED document is therefore decoupled from the PARSE: what the
+// server registers is an open derivation of the handler's shape (every
+// object node loose, the top level included), while
+// {@link validateOutputPayload} keeps validating with the handler's own
+// shape, so an undeclared member is still stripped before the wire. The SDK's
+// own output validation runs the loose object over the already-stripped
+// payload and passes. `assertAdvertisedOpen` makes the obligation
+// self-enforcing at server build — a node kind the derivation does not open
+// fails loudly here, never silently as a closed object on the wire.
+// =============================================================================
+
+/**
+ * A node reached through a schema's definition is typed as zod's CORE
+ * `$ZodType`; every schema a handler builds with `z.*` is a classic
+ * `ZodType` instance, so this is a real check at the one place a core node
+ * is handed back, and a non-classic node is a definition-site bug.
+ */
+function asClassic(node: z.core.$ZodType): z.ZodType {
+  if (node instanceof z.ZodType) return node;
+  throw new Error('a tool output shape holds a schema node that is not a zod classic ZodType');
+}
+
+/**
+ * One open derivation per source node (ggui#1333): the memo is what keeps a
+ * recursive schema (`z.lazy`) from looping, and it keeps a node shared by two
+ * fields shared in the derivation too.
+ */
+const OPENED = new WeakMap<z.ZodType, z.ZodType>();
+
+/** The open derivation of one node: every object under it becomes loose. */
+function openNode(schema: z.ZodType): z.ZodType {
+  const seen = OPENED.get(schema);
+  if (seen !== undefined) return seen;
+  const meta = z.globalRegistry.get(schema);
+  const unmetered = openNodeUnmetered(schema);
+  const opened = unmetered === schema || meta === undefined ? unmetered : unmetered.meta(meta);
+  OPENED.set(schema, opened);
+  return opened;
+}
+
+function openNodes(nodes: readonly z.core.$ZodType[]): z.ZodType[] {
+  return nodes.map((node) => openNode(asClassic(node)));
+}
+
+/** The inner node of a wrapper, as the classic type the derivation rebuilds with. */
+function inner(node: z.core.$ZodType): z.ZodType {
+  return openNode(asClassic(node));
+}
+
+function openNodeUnmetered(schema: z.ZodType): z.ZodType {
+  if (schema instanceof z.ZodObject) return z.looseObject(openShape(schema.shape));
+  if (schema instanceof z.ZodArray) return z.array(inner(schema.element));
+  // A discriminated union is a union in the projection (`anyOf`); the
+  // discriminator only speeds the parse, which stays on the original.
+  if (schema instanceof z.ZodUnion) {
+    const [first, ...rest] = openNodes(schema.options);
+    if (first === undefined) return schema;
+    return z.union([first, ...rest]);
+  }
+  if (schema instanceof z.ZodIntersection) {
+    const { left, right } = schema._zod.def;
+    return z.intersection(inner(left), inner(right));
+  }
+  if (schema instanceof z.ZodTuple) {
+    const { items, rest } = schema._zod.def;
+    const [first, ...others] = openNodes(items);
+    if (first === undefined) return rest === null ? z.tuple([]) : schema;
+    return rest === null ? z.tuple([first, ...others]) : z.tuple([first, ...others], inner(rest));
+  }
+  if (schema instanceof z.ZodRecord) return z.record(schema.keyType, inner(schema.valueType));
+  if (schema instanceof z.ZodOptional) return inner(schema.unwrap()).optional();
+  if (schema instanceof z.ZodNullable) return inner(schema.unwrap()).nullable();
+  if (schema instanceof z.ZodNonOptional) return inner(schema.unwrap()).nonoptional();
+  if (schema instanceof z.ZodReadonly) return inner(schema.unwrap()).readonly();
+  if (schema instanceof z.ZodDefault) {
+    return inner(schema.unwrap()).default(schema._zod.def.defaultValue);
+  }
+  if (schema instanceof z.ZodCatch) {
+    return inner(schema.unwrap()).catch(schema._zod.def.catchValue);
+  }
+  if (schema instanceof z.ZodLazy) return z.lazy(() => inner(schema.unwrap()));
+  if (schema instanceof z.ZodPipe) return z.pipe(schema.in, inner(schema.out));
+  return schema;
+}
+
+function openShape(shape: ZodRawShape): ZodRawShape {
+  return Object.fromEntries(Object.entries(shape).map(([key, member]) => [key, inner(member)]));
+}
+
+/** Every `additionalProperties: false` under a JSON Schema document, by path. */
+function closedObjectsIn(node: unknown, path: string): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((item, i) => closedObjectsIn(item, `${path}[${i}]`));
+  }
+  if (!isRecord(node)) return [];
+  const closed: string[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'additionalProperties' && value === false) closed.push(path);
+    closed.push(...closedObjectsIn(value, `${path}.${key}`));
+  }
+  return closed;
+}
+
+/**
+ * The output object a tool ADVERTISES in `tools/list` (ggui#1333): the
+ * handler's shape with every object node open. Throws at server build if
+ * the derivation left a closed object anywhere in the projection the SDK
+ * will publish — the MUST is enforced where the document is made, not
+ * only where a test happens to look.
+ */
+export function openOutputObject(toolName: string, shape: ZodRawShape): z.ZodObject {
+  const advertised = z.looseObject(openShape(shape));
+  const closed = closedObjectsIn(z.toJSONSchema(advertised, { io: 'output' }), '$');
+  if (closed.length > 0) {
+    throw new Error(
+      `Tool ${toolName} would advertise a closed output object at ${closed.join(', ')} — ` +
+        `an advertised output object MUST NOT be closed (ggui#1333); extend openNode for this node kind.`,
+    );
+  }
+  return advertised;
+}
+
 export interface ServerInfo {
   readonly name: string;
   readonly version: string;
@@ -688,7 +823,9 @@ export function buildMcpServer(
       ...(handler.title ? { title: handler.title } : {}),
       description: handler.description,
       inputSchema: handler.inputSchema,
-      outputSchema: handler.outputSchema,
+      // Advertised OPEN (ggui#1333); the parse stays the handler's own shape
+      // in `validateOutputPayload`.
+      outputSchema: openOutputObject(handler.name, handler.outputSchema),
     };
 
     // Dispatch on declaration-level UI meta presence. `registerAppTool`

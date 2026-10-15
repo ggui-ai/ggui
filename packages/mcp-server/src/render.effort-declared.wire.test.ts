@@ -1,11 +1,13 @@
 /**
  * ggui#1459 (declare step) — the `ggui_render` output schema a REAL MCP SDK
- * client caches at `tools/list` is CLOSED and names `effort` with the profile
- * vocabulary. Closedness is what makes a new member a two-step (declare one
- * release, emit the next): a server that sent `effort` to a host holding the
- * previous, closed schema would have every render refused. This test turns
- * "closed" from a premise into a receipt, so the next change to this output
- * reads its need for the two-step here.
+ * client caches at `tools/list` names `effort` with the profile vocabulary.
+ * Closedness was what made a new member a two-step (declare one release,
+ * emit the next): a server that sent `effort` to a host holding the previous,
+ * closed schema would have every render refused. Since ggui#1333 the
+ * advertised object is OPEN (`additionalProperties: {}` at every depth), so
+ * the two-step retires for the members that follow; this test turns "open"
+ * from a premise into a receipt, so the next change to this output reads
+ * here that it is one step.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -25,13 +27,13 @@ const silentLogger = {
 
 /** The advertised output schema, in the exact JSON the SDK projects and the client caches. */
 const advertisedRenderOutput = z.object({
-  additionalProperties: z.literal(false),
+  additionalProperties: z.object({}),
   properties: z.object({
     effort: z.object({ type: z.literal('string'), enum: z.array(z.string()) }),
   }),
 });
 
-describe('ggui_render over a real SDK client — the output schema is closed and declares `effort` (#1459)', () => {
+describe('ggui_render over a real SDK client — the output schema is open and declares `effort` (#1459, #1333)', () => {
   let server: GguiServer | undefined;
   let client: Client | undefined;
   afterEach(async () => {
@@ -39,7 +41,7 @@ describe('ggui_render over a real SDK client — the output schema is closed and
     await server?.close();
   });
 
-  it('the cached schema is closed, and `effort` lists exactly the profile vocabulary', async () => {
+  it('the cached schema is open, and `effort` lists exactly the profile vocabulary', async () => {
     server = createGguiServer({
       logger: silentLogger,
       renderChannel: true,

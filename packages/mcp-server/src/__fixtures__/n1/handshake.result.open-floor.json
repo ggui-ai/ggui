@@ -1,0 +1,23 @@
+{
+  "tool": "ggui_handshake",
+  "capturedBy": "src/__fixtures__/n1/capture-handshake-floor.ts (ggui#1333, the first open release)",
+  "structuredContent": {
+    "handshakeId": "1f5baa34-51cc-4c9d-9737-2f09f9b5a138",
+    "action": "reuse",
+    "suggestion": {
+      "origin": "cache",
+      "rationale": "capture",
+      "blueprintMeta": {
+        "blueprintId": "bp_capture",
+        "contractHash": "hash_capture",
+        "variance": {}
+      }
+    },
+    "propsSchemaHash": "d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
+    "propsSchemaProfile": "grammar-safe",
+    "nextStep": {
+      "tool": "ggui_render",
+      "example": "ggui_render({\"handshakeId\":\"1f5baa34-51cc-4c9d-9737-2f09f9b5a138\",\"props\":{}})"
+    }
+  }
+}

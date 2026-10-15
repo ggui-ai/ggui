@@ -69,6 +69,7 @@ import type {
   TransportRefusalInput,
 } from './transport-refusal-conformance/index.js';
 import type { AuthConfig } from './types.js';
+import type { AdvertisedToolsListView } from './output-schema-conformance/index.js';
 
 // =============================================================================
 // Arg parser (hand-rolled — no dep)
@@ -87,6 +88,8 @@ interface ParsedArgs {
   readonly transportProjector?: string;
   /** Path to an ES module exporting a `tools/call` driver (SPEC §7.9 Plane 2, ggui#880). */
   readonly toolCallDriver?: string;
+  /** Path to a JSON file holding the deployment's served `tools/list` document (SPEC §7.9 "Advertised output objects", ggui#1333). */
+  readonly toolsList?: string;
   readonly verbose: boolean;
   readonly help: boolean;
 }
@@ -97,6 +100,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   const only: string[] = [];
   let timeoutMs: number | undefined;
   let registry: string | undefined;
+  let toolsList: string | undefined;
   let projector: string | undefined;
   let toolCallDriver: string | undefined;
   let transportProjector: string | undefined;
@@ -130,6 +134,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case '--registry':
         registry = next();
         break;
+      case '--tools-list':
+        toolsList = next();
+        break;
       case '--projector':
         projector = next();
         break;
@@ -152,7 +159,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     }
   }
 
-  return { url, auth, only, timeoutMs, registry, projector, transportProjector, toolCallDriver, verbose, help };
+  return { url, auth, only, timeoutMs, registry, toolsList, projector, transportProjector, toolCallDriver, verbose, help };
 }
 
 /** The message of a thrown value, without pretending every throw is an Error. */
@@ -181,12 +188,13 @@ function parseAuth(spec: string): AuthConfig {
 /** The three optional inputs a CLI run can hand the pure-function catalogs. */
 export type CatalogInputs = Pick<
   RunConformanceConfig,
-  'refusalRegistry' | 'refusalProjector' | 'transportRefusalProjector' | 'toolCallDriver'
+  'refusalRegistry' | 'refusalProjector' | 'transportRefusalProjector' | 'toolCallDriver' | 'toolsList'
 >;
 
 /** The flag values that name where each catalog input comes from. */
 export interface CatalogInputPaths {
   readonly registry?: string | undefined;
+  readonly toolsList?: string | undefined;
   readonly projector?: string | undefined;
   readonly transportProjector?: string | undefined;
   readonly toolCallDriver?: string | undefined;
@@ -198,6 +206,31 @@ function isRecord(value: unknown): value is { readonly [key: string]: unknown } 
 
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+/**
+ * The runtime twin of {@link AdvertisedToolsListView} — a served `tools/list`
+ * document as the output-schema catalog reads it: `tools[]`, each with a
+ * string `name` and, optionally, an `outputSchema` of any shape (the walk
+ * grades it; a non-object there is simply a document with no closed object).
+ */
+function isToolsListView(value: unknown): value is AdvertisedToolsListView {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.tools) &&
+    value.tools.every((tool: unknown) => isRecord(tool) && typeof tool.name === 'string')
+  );
+}
+function parseToolsListView(text: string, path: string): AdvertisedToolsListView {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`--tools-list ${path} is not JSON: ${errorMessage(err)}`);
+  }
+  if (!isToolsListView(parsed)) {
+    throw new Error(`--tools-list ${path} must be a tools/list document: { tools: [{ name, outputSchema? }, …] }`);
+  }
+  return parsed;
 }
 
 /**
@@ -373,6 +406,7 @@ async function loadDriver<I, O>(
 export async function loadCatalogInputs(paths: CatalogInputPaths): Promise<CatalogInputs> {
   const inputs: {
     refusalRegistry?: RefusalRegistryView;
+    toolsList?: AdvertisedToolsListView;
     refusalProjector?: RunConformanceConfig['refusalProjector'];
     transportRefusalProjector?: RunConformanceConfig['transportRefusalProjector'];
     toolCallDriver?: RunConformanceConfig['toolCallDriver'];
@@ -385,6 +419,15 @@ export async function loadCatalogInputs(paths: CatalogInputPaths): Promise<Catal
       throw new Error(`--registry ${paths.registry} could not be read: ${errorMessage(err)}`);
     }
     inputs.refusalRegistry = parseRegistryView(text, paths.registry);
+  }
+  if (paths.toolsList !== undefined) {
+    let text: string;
+    try {
+      text = await readFile(resolve(paths.toolsList), 'utf8');
+    } catch (err) {
+      throw new Error(`--tools-list ${paths.toolsList} could not be read: ${errorMessage(err)}`);
+    }
+    inputs.toolsList = parseToolsListView(text, paths.toolsList);
   }
   if (paths.projector !== undefined) {
     inputs.refusalProjector = await loadProjector<PreGenerationRefusalInput, ProjectedRefusalResult>(
@@ -436,6 +479,10 @@ Options:
   --timeout-ms <N>         Per-fixture observation window. Default 2000.
   --registry <file.json>   The deployment's refusal-code registry, a JSON
                            object keyed by code (grades registry-completeness).
+  --tools-list <file.json> The deployment's served tools/list document, as a
+                           client receives it (grades output-schema: every
+                           advertised output object is open — SPEC §7.9,
+                           ggui#1333).
   --projector <module>     ES module whose \`project(refusal)\` — a named or
                            default export — returns the SPEC §7.1 tool result
                            for a refusal, or null when the code has no

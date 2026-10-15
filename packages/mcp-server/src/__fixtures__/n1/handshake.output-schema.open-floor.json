@@ -1,0 +1,365 @@
+{
+  "tool": "ggui_handshake",
+  "capturedBy": "src/__fixtures__/n1/capture-handshake-floor.ts (ggui#1333, the first open release)",
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "handshakeId": {
+        "type": "string"
+      },
+      "action": {
+        "type": "string",
+        "enum": ["create", "reuse", "update", "replace", "declined"]
+      },
+      "suggestion": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string",
+            "enum": ["cache", "agent", "synth"]
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "blueprintMeta": {
+            "type": "object",
+            "properties": {
+              "blueprintId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "contractHash": {
+                "type": "string",
+                "minLength": 1
+              },
+              "codeHash": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "llm"
+                      },
+                      "generator": {
+                        "type": "string",
+                        "pattern": "^ui-gen-[\\s\\S]{0,}$"
+                      },
+                      "model": {
+                        "type": "string",
+                        "pattern": "^(anthropic|gemini|openai|bedrock|openrouter)\\/[\\s\\S]{0,}$"
+                      }
+                    },
+                    "required": ["kind", "generator", "model"],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "user"
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "curated"
+                      }
+                    },
+                    "required": ["kind"],
+                    "additionalProperties": {}
+                  }
+                ]
+              },
+              "variance": {
+                "type": "object",
+                "properties": {
+                  "persona": {
+                    "description": "Design persona, e.g. \"minimalist\" / \"data-dense\". Part of cache identity.",
+                    "type": "string"
+                  },
+                  "aesthetic": {
+                    "description": "Visual aesthetic, e.g. \"calm\" / \"ornate\". Part of cache identity.",
+                    "type": "string"
+                  },
+                  "context": {
+                    "description": "Deliberate design-shaping signals (e.g. {situation:\"sad\"}) — part of cache identity. NOT for per-user runtime data; put that in propsSpec/contextSpec.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/definitions/__schema0"
+                    }
+                  },
+                  "seedPrompt": {
+                    "description": "Generation seed directive. Part of cache identity.",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": {}
+              },
+              "selectedReason": {
+                "type": "string"
+              },
+              "matchedIntent": {
+                "description": "The stored purpose of the saved interface this suggestion proposes, as the reuse judge read it (at most 280 characters). Present only when the judge picked a saved interface from this app's own pool; absent on an exact match, on agent/synth proposals, and on any interface from a pool shared across apps. Compare it with your intent — if it names a different task, call ggui_handshake again with forceCreate: true.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280
+              }
+            },
+            "required": ["contractHash", "variance"],
+            "additionalProperties": {}
+          },
+          "proposedContractSummary": {
+            "type": "string"
+          },
+          "amendments": {
+            "type": "object",
+            "properties": {
+              "contractDiff": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "type": "string",
+                          "const": "add"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "$ref": "#/definitions/__schema0"
+                        }
+                      },
+                      "required": ["op", "path", "value"],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "type": "string",
+                          "const": "remove"
+                        },
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["op", "path"],
+                      "additionalProperties": {}
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "type": "string",
+                          "const": "replace"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "$ref": "#/definitions/__schema0"
+                        }
+                      },
+                      "required": ["op", "path", "value"],
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
+              },
+              "reasoning": {
+                "type": "string"
+              }
+            },
+            "required": ["contractDiff", "reasoning"],
+            "additionalProperties": {}
+          },
+          "validationFindings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": ["error", "warn"]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": ["code", "severity", "path", "message"],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": ["origin", "rationale", "blueprintMeta"],
+        "additionalProperties": {}
+      },
+      "propsSchema": {
+        "description": "The exact JSON Schema the paired ggui_render enforces for this handshakeId — generate props that satisfy it (enum fields list their full legal vocabulary). Present when the agreed contract differs from your draft; when absent, your draft propsSpec is agreed verbatim. Advisory: no agent obligation attaches to reading it; runtimes MAY compile it for constrained argument generation.",
+        "allOf": [
+          {
+            "$ref": "#/definitions/__schema1"
+          }
+        ]
+      },
+      "propsSchemaHash": {
+        "description": "sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema. Present on every non-declined handshake. A later contract_violation carries the hash of the schema it enforced — equal hashes mean the props were at fault.",
+        "type": "string"
+      },
+      "propsSchemaProfile": {
+        "description": "Grammar profile of the enforced props schema: 'grammar-safe' (every keyword is in the enumerated core — a runtime can compile the schema into a decoding grammar) or 'full' (read the schema as context instead). Treat unrecognized values as 'full'; the set may grow in minor versions.",
+        "type": "string"
+      },
+      "nextStep": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "const": "ggui_render"
+          },
+          "example": {
+            "type": "string"
+          }
+        },
+        "required": ["tool", "example"],
+        "additionalProperties": {}
+      }
+    },
+    "required": ["handshakeId", "action", "suggestion"],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {},
+    "definitions": {
+      "__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/__schema0"
+            }
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        ]
+      },
+      "__schema1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["string", "number", "integer", "boolean", "array", "object", "null"]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["string", "number", "integer", "boolean", "array", "object", "null"]
+                }
+              }
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "enum": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/__schema0"
+            }
+          },
+          "default": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/__schema0"
+              }
+            ]
+          },
+          "example": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/__schema0"
+              }
+            ]
+          },
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/__schema1"
+              }
+            ]
+          },
+          "properties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/definitions/__schema1"
+            }
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/__schema1"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "format": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {}
+      }
+    }
+  }
+}

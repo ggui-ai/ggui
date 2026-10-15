@@ -1,0 +1,6 @@
+{
+  "name": "accept-no-output-schema",
+  "description": "A tool that advertises no outputSchema has no object to be closed and contributes no row — the catalog never grades what a server does not advertise.",
+  "toolsList": { "tools": [{ "name": "text_only_tool" }] },
+  "expect": { "passed": [], "failed": [] }
+}

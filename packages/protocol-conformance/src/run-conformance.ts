@@ -104,6 +104,10 @@ import {
 import { runThemeBindingConformance } from './theme-binding-conformance/index.js';
 import { runN1CompatConformance } from './n1-compat-conformance/index.js';
 import {
+  runOutputSchemaConformance,
+  type AdvertisedToolsListView,
+} from './output-schema-conformance/index.js';
+import {
   domainErrorCases,
   runDomainErrorConformance,
   type ToolCallDriver,
@@ -159,6 +163,13 @@ export interface RunConformanceConfig {
    */
   readonly refusalRegistry?: RefusalRegistryView;
   /**
+   * The deployment's served `tools/list` document, for the `output-schema`
+   * catalog (SPEC §7.9 "Advertised output objects", ggui#1333): every tool
+   * that advertises an `outputSchema` is one row, failing with the path of
+   * every closed object. Omitted ⇒ the catalog is SKIPPED, named.
+   */
+  readonly toolsList?: AdvertisedToolsListView;
+  /**
    * The deployment's PER-APP ENDPOINT refusal projector (SPEC §7.1's
    * endpoint-level refusal, ggui#825): given a registry refusal, return
    * the HTTP status + JSON-RPC error object the endpoint answers with, or
@@ -192,6 +203,7 @@ export const PURE_FUNCTION_CATALOG_SLUGS = [
   'domain-error',
   'theme-binding',
   'n1-compat',
+  'output-schema',
 ] as const;
 
 /** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
@@ -450,6 +462,29 @@ async function runPureFunctionCatalogs(
     }
   }
 
+  // ── output-schema (ggui#1333) ──
+  // Graded on the served `tools/list` document the adopter supplies; every
+  // tool advertising an `outputSchema` is one row. Absent input ⇒ one named
+  // SKIP row, so the catalog is never silently not run.
+  const toolsList = config.toolsList;
+  if (toolsList === undefined) {
+    skip(
+      'output-schema/advertised-output-objects-open',
+      'no `toolsList` supplied — pass the deployment’s served tools/list document to runConformance(), or `--tools-list <file.json>` on the CLI, to grade that every advertised output object is open (SPEC §7.9, ggui#1333)',
+    );
+  } else {
+    const outputSchemas = runOutputSchemaConformance(toolsList);
+    for (const name of outputSchemas.passed) pass(`output-schema/${name}`);
+    for (const violation of outputSchemas.failed) {
+      fail({
+        name: `output-schema/${violation.name}`,
+        criterion: 'advertised output objects are open (SPEC §7.9 "Advertised output objects", ggui#1333)',
+        expected: violation.description,
+        received: violation.violations,
+        message: `${String(violation.violations.length)} closed object(s) under the advertised outputSchema: ${violation.violations.join(', ')}`,
+      });
+    }
+  }
   // ── theme-binding (ggui#987) ──
   // The theming wave's arbiter: graded against the protocol's own functions
   // (`appThemeSchema`, `effectiveThemeMode`, `canonicalOverlayHash`), so

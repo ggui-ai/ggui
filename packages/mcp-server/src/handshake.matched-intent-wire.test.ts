@@ -5,11 +5,16 @@
  * The SDK client builds and caches a validator for each tool's advertised
  * `outputSchema` at `listTools`, and validates every `callTool` result's
  * `structuredContent` against that cache. Step A declared
- * `blueprintMeta.matchedIntent` on the (closed) advertised schema; step B
- * emits it on a judged hit. This pins two things a unit test of the handler
- * cannot: the schema the client actually caches is CLOSED and names the
- * member with its cap, and a client holding that schema accepts the
- * emission without a validation error.
+ * `blueprintMeta.matchedIntent` on the advertised schema; step B emits it on
+ * a judged hit. This pins two things a unit test of the handler cannot: the
+ * schema the client actually caches names the member with its cap, and a
+ * client holding that schema accepts the emission without a validation error.
+ *
+ * Since ggui#1333 the advertised object is OPEN (`additionalProperties: {}`
+ * at every depth), which is what retires the declare-then-emit staging for
+ * the fields that follow: a host caching this release's schema accepts a
+ * later release's added member. The cap and the member name are still the
+ * declaration a host reads here.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -42,15 +47,15 @@ const ctx: HandlerContext = { appId: 'app-1', requestId: 'r-1' };
 
 /**
  * The advertised output schema, in the exact JSON the SDK projects and the
- * client caches. The parse IS the assertion: `blueprintMeta` is closed and
- * names `matchedIntent` as a string capped at 280.
+ * client caches. The parse IS the assertion: `blueprintMeta` is open
+ * (ggui#1333) and names `matchedIntent` as a string capped at 280.
  */
 const advertisedHandshakeOutput = z.object({
   properties: z.object({
     suggestion: z.object({
       properties: z.object({
         blueprintMeta: z.object({
-          additionalProperties: z.literal(false),
+          additionalProperties: z.object({}),
           properties: z.object({
             matchedIntent: z.object({
               type: z.literal('string'),
@@ -64,7 +69,7 @@ const advertisedHandshakeOutput = z.object({
 });
 
 describe('ggui_handshake over a real SDK client — blueprintMeta.matchedIntent (#1336, #1333)', () => {
-  it('the client caches a CLOSED output schema that names the member, and accepts a judged hit that carries it', async () => {
+  it('the client caches an OPEN output schema that names the member, and accepts a judged hit that carries it', async () => {
     const judged: HandshakeSuggestion = {
       origin: 'cache',
       rationale: 'match-semantic: a saved interface matches this intent — reusing it',

@@ -1,0 +1,17 @@
+{
+  "name": "reject-closed-top-level",
+  "description": "The projection every release before ggui#1333 served: the top-level object closed. A host caching it refuses a later release's added top-level member.",
+  "toolsList": {
+    "tools": [
+      {
+        "name": "closed_tool",
+        "outputSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "ok": { "type": "boolean" } }
+        }
+      }
+    ]
+  },
+  "expect": { "passed": [], "failed": [{ "name": "closed_tool", "violations": ["$"] }] }
+}

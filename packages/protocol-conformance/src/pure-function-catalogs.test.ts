@@ -81,6 +81,8 @@ const THEME_ROWS = [...THEME_MODE_CASES, ...APP_THEME_CASES, ...OVERLAY_HASH_CAS
 );
 /** Row names the n1-compat catalog contributes (ggui#1014 §3.6) — no adopter input, graded on every run. */
 const N1_ROWS = N1_COMPAT_CASES.map((c) => `n1-compat/${c.name}`);
+/** The one row the output-schema catalog contributes when no `toolsList` is supplied (ggui#1333): a named SKIP. */
+const OUTPUT_SCHEMA_SKIP_ROW = 'output-schema/advertised-output-objects-open';
 
 /** A conformant tools/call driver, built from the catalog's own cases. */
 function catalogToolCallDriver(scenario: ToolCallScenario): RawToolCallResult | null {
@@ -202,12 +204,48 @@ describe('runConformance — pure-function catalog fold', () => {
 
   it('prints every pure-function catalog on the scorecard, skipped rows included', async () => {
     const result = await run({
-      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS, ...THEME_ROWS, ...N1_ROWS],
+      only: [...ENVELOPE_ROWS, ...REGISTRY_ROWS, ...TRANSPORT_ROWS, ...DOMAIN_ROWS, ...THEME_ROWS, ...N1_ROWS, OUTPUT_SCHEMA_SKIP_ROW],
     });
     const scorecard = formatScorecard(result);
     for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
       expect(scorecard).toContain(slug);
     }
+  });
+});
+
+describe('runConformance — output-schema catalog fold (ggui#1333)', () => {
+  it('reports one SKIPPED row naming toolsList when no tools/list document is supplied', async () => {
+    const result = await run({ only: [OUTPUT_SCHEMA_SKIP_ROW] });
+    expect(result.passed).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.skipped.map((s) => s.name)).toEqual([OUTPUT_SCHEMA_SKIP_ROW]);
+    expect(result.skipped[0]?.reason).toMatch(/toolsList/);
+    expect(result.skipped[0]?.reason).toMatch(/--tools-list/);
+  });
+
+  it('grades one row per advertised outputSchema when a tools/list document is supplied: open passes, closed fails with every path', async () => {
+    const result = await run({
+      only: ['output-schema/open_tool', 'output-schema/closed_tool'],
+      toolsList: {
+        tools: [
+          { name: 'open_tool', outputSchema: { type: 'object', additionalProperties: {}, properties: {} } },
+          { name: 'text_only_tool' },
+          {
+            name: 'closed_tool',
+            outputSchema: {
+              type: 'object',
+              additionalProperties: {},
+              properties: { nested: { type: 'object', additionalProperties: false } },
+            },
+          },
+        ],
+      },
+    });
+    expect(result.skipped).toEqual([]);
+    expect(result.passed).toEqual(['output-schema/open_tool']);
+    expect(result.failed.map((f) => f.name)).toEqual(['output-schema/closed_tool']);
+    expect(result.failed[0]?.received).toEqual(['$.properties.nested']);
+    expect(result.failed[0]?.message).toContain('$.properties.nested');
   });
 });
 

@@ -272,6 +272,13 @@ const EXPECTED_SKIPPED: Readonly<Record<string, string>> = {
   // named, never silently absent.
   'transport-refusal/refuse-deprovisioned-endpoint': 'transportRefusalProjector',
   'transport-refusal/refuse-render-only-code': 'transportRefusalProjector',
+  // `output-schema/*` (ggui#1333): the kit grades a served `tools/list`
+  // document — every advertised output object open. This harness serves
+  // the LIVE CHANNEL only (no `/mcp`), so it has no `tools/list` to supply.
+  // The family is graded against the shipping OSS server, Streamable HTTP
+  // end to end, by `output-schema.conformance.test.ts` in this package.
+  // Pinned here as skipped so the absence is named, never silent.
+  'output-schema/advertised-output-objects-open': 'toolsList',
   'version-mismatch': 'server-version-override',
 };
 

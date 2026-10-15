@@ -1,0 +1,49 @@
+{
+  "name": "accept-open-at-every-depth",
+  "description": "A tools/list document whose one outputSchema is open at the top level and in a nested object, an array item, a union arm and a record value — the kit's own projection of a loose zod object, where every object carries `additionalProperties: {}`.",
+  "toolsList": {
+    "tools": [
+      {
+        "name": "open_tool",
+        "outputSchema": {
+          "type": "object",
+          "additionalProperties": {},
+          "properties": {
+            "nested": {
+              "type": "object",
+              "additionalProperties": {},
+              "properties": { "a": { "type": "number" } }
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {},
+                "properties": { "item": { "type": "string" } }
+              }
+            },
+            "arm": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": { "kind": { "const": "x" } }
+                },
+                { "type": "string" }
+              ]
+            },
+            "byKey": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {},
+                "properties": { "e": { "type": "number" } }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": { "passed": ["open_tool"], "failed": [] }
+}

@@ -838,9 +838,11 @@ describe('nextStep → ggui_amend on the advertised output (ggui#1399: declared 
       renderStore: new InMemoryGguiSessionStore(),
     });
     const projected = z.toJSONSchema(z.object(h.outputSchema), { io: 'output' });
-    // The parse IS the assertion: the object is closed (#1333) and carries
-    // an optional nextStep whose tool is the single literal ggui_amend and
-    // whose args require the session id.
+    // The parse IS the assertion: the handler's OWN shape projects closed —
+    // this is the parse/strip gate, not what a client caches (since ggui#1333
+    // the server advertises an open derivation of it in tools/list) — and it
+    // carries an optional nextStep whose tool is the single literal
+    // ggui_amend and whose args require the session id.
     z.object({
       additionalProperties: z.literal(false),
       required: z.array(z.string()).refine((r) => !r.includes('nextStep')),
