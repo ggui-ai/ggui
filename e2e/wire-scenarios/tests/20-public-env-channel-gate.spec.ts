@@ -4,8 +4,11 @@
  *
  * Companion to Scenario 19 (gadget registry gate). Where 19
  * pins the membership gate (`assertGadgetsRegistered`), this
- * scenario pins the env-channel gate (`assertPublicEnvSatisfied`) and
- * the union-filtered bootstrap projection (`derivePublicEnvProjection`).
+ * scenario pins the env-channel gate (`assertPublicEnvSatisfied`) over
+ * the wire, against key-less fixture servers. A key-less server never
+ * generates, so the union-filtered projection a generated component
+ * carries (`derivePublicEnvProjection`) is pinned in `@ggui-ai/mcp-server`'s
+ * `public-env-projection.server.test.ts` instead (ggui#1892).
  *
  * The bootstrap on a successful render lands on
  * `result._meta.ggui.bootstrap` per the MCP Apps spec. Tests against
@@ -126,11 +129,20 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     expect(mapbox?.requires).toEqual(['GGUI_PUBLIC_APP_MAPBOX_TOKEN']);
   });
 
-  test('render with satisfied requires succeeds + bootstrap carries projected publicEnv', async () => {
+  test('render with satisfied requires passes the env gate; the committed session carries exactly the public env it needs', async () => {
     // Contract uses useMapbox. The wrapper's `requires` is
     // GGUI_PUBLIC_APP_MAPBOX_TOKEN; the demo's App.publicEnv carries
-    // that key (placeholder value). The gate accepts; the bootstrap
-    // projection includes the key in the iframe envelope.
+    // that key (placeholder value), so the env gate accepts.
+    //
+    // What the render commits depends on the server's credentials:
+    //   - key-less (the CI sweep): after the gates pass it commits the
+    //     Connect-Claude no-credentials card. That card runs no gadget
+    //     code, so it gets NO public env (minimum disclosure).
+    //   - with a provider key (a local `.env.local`): it generates a
+    //     component, which gets the token its gadget requires.
+    // The generated case is also pinned key-free, with a stub generator,
+    // in `@ggui-ai/mcp-server`'s `public-env-projection.server.test.ts`
+    // (ggui#1892).
     const contract = {
       propsSpec: {
         description: 'scenario 20 — Mapbox happy path',
@@ -159,29 +171,25 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
       result?: { structuredContent?: { sessionId?: string } };
     }).result?.structuredContent;
     expect(structured?.sessionId).toBeTypeOf('string');
-    // Bootstrap carries the projected publicEnv. Slice 2.2 — the
-    // server filters App.publicEnv to the union of declared wrappers'
-    // `requires`, so only the Mapbox token is forwarded (any other
-    // operator-stamped keys would be omitted here).
     const bootstrap = readBootstrap(renderResp);
     expect(bootstrap).toBeDefined();
-    expect(bootstrap?.publicEnv).toBeDefined();
-    expect(Object.keys(bootstrap?.publicEnv ?? {})).toEqual([
-      'GGUI_PUBLIC_APP_MAPBOX_TOKEN',
-    ]);
-    // Value passes through verbatim — gate only checks presence,
-    // not validity. Placeholder is the deliberate stand-in for "real
-    // token would go here"; the wrapper-side Mapbox SDK is what
-    // ultimately consumes / rejects the value.
-    expect(
-      typeof bootstrap?.publicEnv?.['GGUI_PUBLIC_APP_MAPBOX_TOKEN'],
-    ).toBe('string');
-    // And the gadget catalog itself rides on the bootstrap (per-package
-    // since GG.8.2), so the iframe runtime can dynamic-import the
-    // operator's gadget package. `toContain` keeps the assertion
-    // permissive if future slices project more.
-    const bootstrapPackages = bootstrap?.gadgets?.map((g) => g.package);
-    expect(bootstrapPackages).toContain('@ggui-samples/gadget-mapbox');
+    if (bootstrap?.kind === 'no-credentials') {
+      // No gadget runs on the card: neither the public env nor the
+      // gadget catalog reaches it.
+      expect(bootstrap.publicEnv).toBeUndefined();
+      expect(bootstrap.gadgets).toBeUndefined();
+    } else {
+      // A generated component: App.publicEnv filtered to the union of
+      // its gadgets' `requires`, the value passed through verbatim (the
+      // gate checks presence; Mapbox's own SDK judges validity), and the
+      // gadget catalog the iframe runtime loads the package from.
+      expect(bootstrap?.publicEnv).toEqual({
+        GGUI_PUBLIC_APP_MAPBOX_TOKEN: '<set-me-before-running>',
+      });
+      expect(bootstrap?.gadgets?.map((g) => g.package)).toContain(
+        '@ggui-samples/gadget-mapbox',
+      );
+    }
   });
 
   // Slice 2.1 — load-bearing assertion of the env gate. Mirrors the
