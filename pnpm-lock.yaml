@@ -1474,6 +1474,9 @@ importers:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
+      '@ggui-ai/ui-gen':
+        specifier: workspace:*
+        version: link:../ui-gen
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2

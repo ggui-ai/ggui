@@ -9,6 +9,7 @@
  * judge's decision instead.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AnthropicStructuredCallError } from "@ggui-ai/ui-gen/providers";
 import { anthropicProbeJudge } from "./probe-anthropic-judge.js";
 
 const TOOL = {
@@ -69,5 +70,14 @@ describe("anthropicProbeJudge", () => {
     await expect(
       anthropicProbeJudge("sk", "claude-fable-5-1").callStructured?.("sys", "u", TOOL)
     ).rejects.toThrow(/stop_reason=max_tokens/);
+  });
+
+  it("the failure is the shared named error (ggui#1271), the kind in the message", async () => {
+    replyBody = { content: [{ type: "text", text: "bp-1" }], stop_reason: "end_turn" };
+    const err: unknown = await anthropicProbeJudge("sk", "claude-fable-5-1")
+      .callStructured?.("sys", "u", TOOL)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AnthropicStructuredCallError);
+    expect(err).toMatchObject({ kind: "no_tool_call", message: expect.stringContaining("[no_tool_call]") });
   });
 });

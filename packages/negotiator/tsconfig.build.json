@@ -1,4 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/synth-bench/cli-llm.ts",
+    "src/synth-bench/run-bench-cli.ts",
+    "src/synth-bench/run-repair-bench-cli.ts",
+    "src/synth-bench/cache-key-probe.ts",
+    "src/rerank-eval/run-probe-cli.ts"
+  ]
 }

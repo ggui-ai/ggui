@@ -7,7 +7,8 @@
  * `anthropicRejectsForcedToolChoice`) answer a forced tool with HTTP 400.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildAnthropicLlmCaller } from "./cli-llm.js";
+import { AnthropicStructuredCallError } from "@ggui-ai/ui-gen/providers";
+import { buildAnthropicLlmCaller, getTokenUsage } from "./cli-llm.js";
 
 const TOOL = {
   name: "submit_contract",
@@ -69,5 +70,28 @@ describe("buildAnthropicLlmCaller — forced tool only where the model accepts i
     await expect(
       buildAnthropicLlmCaller("sk", "claude-fable-5-1").callStructured?.("sys", "u", TOOL, 512)
     ).rejects.toThrow(/stop_reason=max_tokens/);
+  });
+
+  it("the failure is the shared named error (ggui#1271), the kind in the message", async () => {
+    replyBody = { content: [], stop_reason: "refusal" };
+    const err: unknown = await buildAnthropicLlmCaller("sk", "claude-haiku-4-5")
+      .callStructured?.("sys", "u", TOOL, 512)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AnthropicStructuredCallError);
+    expect(err).toMatchObject({ kind: "refusal", message: expect.stringContaining("[refusal]") });
+  });
+
+  it("a tool_use block for another tool is not the answer", async () => {
+    replyBody = { content: [{ ...TOOL_USE, name: "other_tool" }], stop_reason: "tool_use" };
+    await expect(
+      buildAnthropicLlmCaller("sk", "claude-haiku-4-5").callStructured?.("sys", "u", TOOL, 512)
+    ).rejects.toMatchObject({ kind: "no_tool_call" });
+  });
+
+  it("accumulates the reported usage for the run's cost line", async () => {
+    const before = getTokenUsage();
+    replyBody = { content: [TOOL_USE], stop_reason: "tool_use", usage: { input_tokens: 7, output_tokens: 3 } };
+    await buildAnthropicLlmCaller("sk", "claude-haiku-4-5").callStructured?.("sys", "u", TOOL, 512);
+    expect(getTokenUsage()).toEqual({ input: before.input + 7, output: before.output + 3 });
   });
 });

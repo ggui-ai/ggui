@@ -35,7 +35,12 @@
     "!**/*.test-d.d.ts",
     "!**/__tests__/**",
     "!**/*.spec.ts",
-    "!**/*.spec.tsx"
+    "!**/*.spec.tsx",
+    "!src/synth-bench/cli-llm.ts",
+    "!src/synth-bench/run-bench-cli.ts",
+    "!src/synth-bench/run-repair-bench-cli.ts",
+    "!src/synth-bench/cache-key-probe.ts",
+    "!src/rerank-eval/run-probe-cli.ts"
   ],
   "type": "module",
   "main": "dist/index.js",
@@ -62,6 +67,7 @@
     "@ggui-ai/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@ggui-ai/ui-gen": "workspace:*",
     "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"

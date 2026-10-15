@@ -35,13 +35,13 @@ import {
   type RerankCandidate,
   type RerankQuery,
 } from './llm-rerank.js';
+import { anthropicToolCall } from '@ggui-ai/ui-gen/providers';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 
 // Mirrors the matcher's DEFAULT_JUDGE_THRESHOLD — a MATCH must clear
 // this confidence; a NO-MATCH must land below it (or return null).
 const JUDGE_THRESHOLD = 0.5; // mirrors matcher DEFAULT_JUDGE_THRESHOLD
 
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const HAIKU_MODEL = 'claude-haiku-4-5';
 
 // One Haiku call ≈ 1–2s; allow generous headroom for cold connections.
@@ -49,24 +49,11 @@ const CALL_TIMEOUT_MS = 30_000;
 
 // ─── Real Anthropic LLMCaller (key-gated) ──────────────────────────
 //
-// Built INSIDE this file — the CLI's builder (`run-probe-cli.ts`) has
-// module-level token counters + a `main()`, neither of which we want
-// in a test process. The key is read from `process.env` ONLY (never a
-// secret file) and is never printed.
-
-interface AnthropicContentBlock {
-  type: string;
-  name?: string;
-  input?: unknown;
-  text?: string;
-}
-
-interface AnthropicResponse {
-  content?: AnthropicContentBlock[];
-  usage?: { input_tokens?: number; output_tokens?: number };
-  stop_reason?: string;
-  error?: { type?: string; message?: string };
-}
+// A thin caller over the shared structured call (`anthropicToolCall` in
+// `@ggui-ai/ui-gen/providers`, ggui#1271), built here rather than taken
+// from the CLI's builder (`synth-bench/cli-llm.ts`), whose module-level
+// token counters we don't want in a test process. The key is read from
+// `process.env` ONLY (never a secret file) and is never printed.
 
 function buildAnthropicLlmCaller(apiKey: string): LLMCaller {
   return {
@@ -79,42 +66,15 @@ function buildAnthropicLlmCaller(apiKey: string): LLMCaller {
       tool: ToolSchema,
       maxTokens?: number,
     ): Promise<unknown> {
-      const body = {
+      const result = await anthropicToolCall({
+        apiKey,
         model: HAIKU_MODEL,
-        max_tokens: maxTokens ?? 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-        tools: [
-          {
-            name: tool.name,
-            description: tool.description,
-            input_schema: tool.input_schema,
-          },
-        ],
-        tool_choice: { type: 'tool', name: tool.name },
-      };
-      const res = await fetch(ANTHROPIC_API, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
+        systemPrompt,
+        userPrompt: userMessage,
+        tool,
+        ...(maxTokens !== undefined ? { maxTokens } : {}),
       });
-      const json = (await res.json()) as AnthropicResponse;
-      if (!res.ok) {
-        const errType = json.error?.type ?? 'unknown';
-        const errMsg = json.error?.message ?? `HTTP ${res.status}`;
-        throw new Error(`anthropic ${errType}: ${errMsg}`);
-      }
-      const toolBlock = json.content?.find((b) => b.type === 'tool_use');
-      if (!toolBlock || toolBlock.input === undefined) {
-        throw new Error(
-          `anthropic: no tool_use block in response (stop_reason=${json.stop_reason ?? 'unknown'})`,
-        );
-      }
-      return toolBlock.input;
+      return result.input;
     },
   };
 }

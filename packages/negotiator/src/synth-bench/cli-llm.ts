@@ -1,17 +1,17 @@
 /**
  * Shared CLI LLM plumbing for the synth-bench family of live probes
- * (bench-synth, bench-repair). Builds an Anthropic-backed
- * {@link LLMCaller} with forced tool-use, resolves the API key from env
- * or `~/.ggui/credentials.json`, and accumulates token usage for the
- * per-run cost line. Bench-only — not exported from the package index.
+ * (bench-synth, bench-repair) and the rerank probe CLI. Builds an
+ * Anthropic-backed {@link LLMCaller} over the shared structured call,
+ * resolves the API key from env or `~/.ggui/credentials.json`, and
+ * accumulates token usage for the per-run cost line. Dev tooling run
+ * from source: not exported from the package index and not in the
+ * published package, so `@ggui-ai/ui-gen` is a devDependency.
  */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve as pathResolve } from 'node:path';
 import type { LLMCaller, ToolSchema } from '../llm-caller.js';
-import { anthropicRejectsForcedToolChoice } from '@ggui-ai/protocol';
-
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
+import { anthropicToolCall } from '@ggui-ai/ui-gen/providers';
 
 /** Default bench model — the model the `ui-gen-default` seed generator declares. */
 export const DEFAULT_MODEL = 'claude-haiku-5-5';
@@ -50,20 +50,6 @@ export function resolveAnthropicKey(scriptName: string): string {
   return key;
 }
 
-interface AnthropicContentBlock {
-  type: string;
-  name?: string;
-  input?: unknown;
-  text?: string;
-}
-
-interface AnthropicResponse {
-  content?: AnthropicContentBlock[];
-  usage?: { input_tokens?: number; output_tokens?: number };
-  stop_reason?: string;
-  error?: { type?: string; message?: string };
-}
-
 let totalInputTokens = 0;
 let totalOutputTokens = 0;
 
@@ -77,17 +63,11 @@ export function getTokenUsage(): {
 }
 
 /**
- * Thinking budget added to the caller's answer budget for a model that
- * refuses a forced tool (ggui#1264). Same value and reason as the
- * negotiator's production caller in `@ggui-ai/mcp-server`; the three
- * copies are consolidated under ggui#1271.
- */
-const ALWAYS_THINKING_HEADROOM_TOKENS = 16_000;
-
-/**
  * The dev caller the synth benches and the rerank probe CLI share
  * (Haiku-pinned by default; every CLI takes `--model`). Text mode is not
- * exercised — every consumer uses `callStructured`.
+ * exercised — every consumer uses `callStructured`. The request shape
+ * and the named failures are the shared structured call's
+ * (`anthropicToolCall` in `@ggui-ai/ui-gen/providers`, ggui#1271).
  */
 export function buildAnthropicLlmCaller(
   apiKey: string,
@@ -105,64 +85,19 @@ export function buildAnthropicLlmCaller(
       tool: ToolSchema,
       maxTokens?: number,
     ): Promise<unknown> {
-      // `temperature` deprecated on Haiku 4.5+ — Anthropic rejects with
-      // HTTP 400. Residual stochasticity stays bounded via canonical-key
-      // normalization downstream.
-      //
-      // ggui#1264 — a forced `tool_choice` only where the model accepts
-      // one. The always-thinking models (`@ggui-ai/protocol`
-      // `anthropicRejectsForcedToolChoice`) 400 on it, so they get
-      // `auto` + at most one call + the tool named in the system prompt,
-      // and thinking headroom on top of the answer budget (their thinking
-      // counts against `max_tokens` and comes first).
-      const refusesForcedTool = anthropicRejectsForcedToolChoice(model);
-      const answerBudget = maxTokens ?? 1024;
-      const body = {
+      const result = await anthropicToolCall({
+        apiKey,
         model,
-        max_tokens: refusesForcedTool
-          ? answerBudget + ALWAYS_THINKING_HEADROOM_TOKENS
-          : answerBudget,
-        system: refusesForcedTool
-          ? `${systemPrompt}\n\nAnswer by calling the \`${tool.name}\` tool exactly once. Do not answer in text.`
-          : systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-        tools: [
-          {
-            name: tool.name,
-            description: tool.description,
-            input_schema: tool.input_schema,
-          },
-        ],
-        tool_choice: refusesForcedTool
-          ? { type: 'auto', disable_parallel_tool_use: true }
-          : { type: 'tool', name: tool.name },
-      };
-      const res = await fetch(ANTHROPIC_API, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
+        systemPrompt,
+        userPrompt: userMessage,
+        tool,
+        ...(maxTokens !== undefined ? { maxTokens } : {}),
       });
-      const json = (await res.json()) as AnthropicResponse;
-      if (!res.ok) {
-        const errType = json.error?.type ?? 'unknown';
-        const errMsg = json.error?.message ?? `HTTP ${res.status}`;
-        throw new Error(`anthropic ${errType}: ${errMsg}`);
+      if (result.usage) {
+        totalInputTokens += result.usage.input;
+        totalOutputTokens += result.usage.output;
       }
-      if (json.usage) {
-        totalInputTokens += json.usage.input_tokens ?? 0;
-        totalOutputTokens += json.usage.output_tokens ?? 0;
-      }
-      const toolBlock = json.content?.find((b) => b.type === 'tool_use');
-      if (!toolBlock || toolBlock.input === undefined) {
-        throw new Error(
-          `anthropic: no tool_use block in response (stop_reason=${json.stop_reason ?? 'unknown'})`,
-        );
-      }
-      return toolBlock.input;
+      return result.input;
     },
   };
 }

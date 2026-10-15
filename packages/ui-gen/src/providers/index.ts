@@ -62,6 +62,18 @@ export type { OpenRouterAdapterOptions } from './openrouter.js';
 export { createBedrockAdapter } from './bedrock.js';
 export type { BedrockAdapterOptions } from './bedrock.js';
 
+export {
+  ALWAYS_THINKING_HEADROOM_TOKENS,
+  AnthropicStructuredCallError,
+  anthropicToolCall,
+} from './anthropic-tool-call.js';
+export type {
+  AnthropicStructuredCallFailureKind,
+  AnthropicTool,
+  AnthropicToolCallRequest,
+  AnthropicToolCallResult,
+} from './anthropic-tool-call.js';
+
 import type { LlmProvider } from '@ggui-ai/mcp-server-core';
 import type { ProviderAdapter } from '../provider-adapter.js';
 import { createAnthropicAdapter } from './anthropic.js';
