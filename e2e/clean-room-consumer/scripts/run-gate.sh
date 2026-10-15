@@ -6,7 +6,8 @@
 #   [2] publish all 38 @ggui-ai/* packages to Verdaccio (leaf-first)
 #   [3] install them into a clean-room consumer — npm, fresh dir,
 #       registry pinned to Verdaccio, ZERO workspace linkage
-#   [4] run packaging smokes against the installed artifacts
+#   [4] run packaging smokes against the installed artifacts: the
+#       published shape of every package, then imports and the CLI
 #
 # Any failing step aborts (set -e) → non-zero exit → the gate blocks.
 set -euo pipefail
@@ -53,6 +54,12 @@ echo "  installed $(node -pe 'Object.keys(require("./package.json").dependencies
 
 echo
 echo "[4/5] Running packaging + CLI smokes"
+# The shape smoke parses shipped JS with acorn. It is installed into its
+# own prefix, never the consumer, so the consumer's dependency tree stays
+# exactly what the packages declare.
+npm install --prefix /tmp/shape-tools --registry "$REGISTRY" \
+  --no-audit --no-fund --loglevel=error acorn@8.18.0 acorn-walk@8.3.5
+SHAPE_TOOLS=/tmp/shape-tools node smoke/shape-smoke.mjs
 node smoke/import-smoke.mjs
 node smoke/cli-smoke.mjs
 

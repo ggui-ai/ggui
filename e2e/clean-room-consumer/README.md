@@ -114,16 +114,17 @@ Five stages, orchestrated by `scripts/run-gate.sh`:
    consumer `package.json` listing every package, then `npm install`
    (registry pinned to Verdaccio). `npm`, not `pnpm` — pnpm has
    workspace-rescue paths that would hide publish-shape breakage.
-4. **Packaging + CLI smokes** — `import-smoke` + `cli-smoke`.
+4. **Packaging + CLI smokes** — `shape-smoke` + `import-smoke` + `cli-smoke`.
 5. **Serve smoke** — boot the `ggui` binary as a real server.
 
 ### What the smokes assert
 
-| Smoke              | Hard gate                                                                                                                                                                                            | Advisory                                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `import-smoke.mjs` | every package installed; each package with a `.` entry loads via ESM `import()`                                                                                                                      | bin/app/asset packages (no `.` entry) are install-checked only; DOM/RN packages may throw in plain Node → warning |
-| `cli-smoke.mjs`    | every `ggui` subcommand — `--version`, `--help`, `gadget create`, `blueprint create`, `login`, `whoami`, `keys list` (cloud + `--keys-file`), `logout` — exits 0; `dev` loads without a module crash | —                                                                                                                 |
-| `serve-smoke.mjs`  | `ggui serve --mcp-only` binds its port, logs a listening banner, and shuts down cleanly on SIGTERM                                                                                                   | HTTP probes of `/health` + `/mcp` (routes vary by mode)                                                           |
+| Smoke              | Hard gate                                                                                                                                                                                                                                                                                                                                               | Advisory                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `shape-smoke.mjs`  | for every package: `main`, `module` and every non-`types` export target is shipped JavaScript, never TypeScript source; every `types` target is a declaration file; every relative import, re-export, `import()` and `require()` in shipped JS resolves to a shipped file as written (files are parsed, so comments and template literals do not count) | —                                                                                                              |
+| `import-smoke.mjs` | every package installed; each package with a `.` entry loads via ESM `import()`; a React Native host helper's `.` entry resolves to a shipped file (plain Node cannot run React Native, so it is not loaded)                                                                                                                                            | bin/app/asset packages (no `.` entry) are install-checked only; DOM packages may throw in plain Node → warning |
+| `cli-smoke.mjs`    | every `ggui` subcommand — `--version`, `--help`, `gadget create`, `blueprint create`, `login`, `whoami`, `keys list` (cloud + `--keys-file`), `logout` — exits 0; `dev` loads without a module crash                                                                                                                                                    | —                                                                                                              |
+| `serve-smoke.mjs`  | `ggui serve --mcp-only` binds its port, logs a listening banner, and shuts down cleanly on SIGTERM                                                                                                                                                                                                                                                      | HTTP probes of `/health` + `/mcp` (routes vary by mode)                                                        |
 
 The auth commands run against an in-process **mock auth server**
 (`mock-auth-server.mjs`) with an isolated `HOME`, so `login` / `whoami`
@@ -152,6 +153,7 @@ e2e/clean-room-consumer/
 └── consumer/             — clean-room consumer template
     ├── npmrc             — registry pin (copied to .npmrc at runtime)
     └── smoke/
+        ├── shape-smoke.mjs        — published shape: entry targets + relative specifiers
         ├── import-smoke.mjs       — install + ESM-import every package
         ├── cli-smoke.mjs          — every `ggui` subcommand
         ├── mock-auth-server.mjs   — hermetic fake of api.ggui.ai auth
