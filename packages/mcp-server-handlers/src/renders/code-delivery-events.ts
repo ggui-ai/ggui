@@ -32,7 +32,8 @@
  */
 export type CodeDeliveryEvent =
   | 'render_code_write_failed'
-  | 'render_code_b64_over_cap';
+  | 'render_code_b64_over_cap'
+  | 'render_slice_enrichment_failed';
 
 /**
  * The event names as values, so every emitter — in this package or a
@@ -52,6 +53,15 @@ export const CODE_DELIVERY_EVENTS = {
    * cannot paint — the omission must be visible, not silent.
    */
   renderCodeB64OverCap: 'render_code_b64_over_cap',
+  /**
+   * Enriching a committed render's `ai.ggui/render` slice failed: the
+   * read-back of the session, the private-bundle presign, the inline
+   * projection, or the app-record read behind the public env and
+   * display mode. The render still succeeds with a minimal slice, so a
+   * host that needs the inline channel, the public env or the gadget
+   * catalog cannot mount it — the omission must be visible, not silent.
+   */
+  renderSliceEnrichmentFailed: 'render_slice_enrichment_failed',
 } as const satisfies Record<string, CodeDeliveryEvent>;
 
 /**
@@ -121,6 +131,36 @@ export function reportRenderCodeB64OverCap(over: {
       sessionId: over.sessionId,
       appId: over.appId,
       sourceBytes: over.sourceBytes,
+    }),
+  );
+}
+
+/**
+ * Emit {@link CODE_DELIVERY_EVENTS.renderSliceEnrichmentFailed}.
+ *
+ * Never throws — same posture as the emitters above: the render is
+ * committed, and its telemetry must not fail it.
+ */
+export function reportRenderSliceEnrichmentFailed(failure: {
+  /** Render whose slice was emitted minimal. */
+  readonly sessionId: string;
+  /** Owning app, so the event joins the rest of a deployment's logs. */
+  readonly appId: string;
+  /** Whatever the enrichment threw. Unshaped by construction. */
+  readonly cause: unknown;
+}): void {
+  // eslint-disable-next-line no-console -- structured single-line event for log-pipeline pickup
+  console.warn(
+    JSON.stringify({
+      msg: CODE_DELIVERY_EVENTS.renderSliceEnrichmentFailed,
+      sessionId: failure.sessionId,
+      appId: failure.appId,
+      error:
+        failure.cause instanceof Error
+          ? failure.cause.message
+          : String(failure.cause),
+      errorName:
+        failure.cause instanceof Error ? failure.cause.name : undefined,
     }),
   );
 }

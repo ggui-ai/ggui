@@ -2994,6 +2994,35 @@ describe('createGguiRenderHandler — code-delivery channel', () => {
     }
   });
 
+  it('a failed slice enrichment cannot fail the render, and render_slice_enrichment_failed names it (ggui#1892)', async () => {
+    const warn = spyOnWarn();
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({});
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      // The render is committed; the read-back that enriches its slice fails.
+      vi.spyOn(harness.renderStore, 'get').mockRejectedValueOnce(new Error('session store offline'));
+      const meta = await harness.handler.resultMeta?.(out, {}, CTX);
+      expect(meta).toBeDefined();
+
+      const events = warn.mock.calls
+        .map(([first]) => (typeof first === 'string' ? first : ''))
+        .filter((line) => line.includes(CODE_DELIVERY_EVENTS.renderSliceEnrichmentFailed))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(events).toEqual([
+        {
+          msg: 'render_slice_enrichment_failed',
+          sessionId: out.sessionId,
+          appId: APP_ID,
+          error: 'session store offline',
+          errorName: 'Error',
+        },
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('a rejecting store cannot fail the render — no codeUrl, and render_code_write_failed names it', async () => {
     const warn = spyOnWarn();
     try {

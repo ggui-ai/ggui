@@ -43,6 +43,9 @@ describe('CODE_DELIVERY_EVENTS — the registry', () => {
     expect(CODE_DELIVERY_EVENTS.renderCodeWriteFailed).toBe(
       'render_code_write_failed',
     );
+    expect(CODE_DELIVERY_EVENTS.renderSliceEnrichmentFailed).toBe(
+      'render_slice_enrichment_failed',
+    );
   });
 
   it('maps every key to a distinct value — one key per emitted name', () => {
@@ -57,6 +60,7 @@ describe('CODE_DELIVERY_EVENTS — the registry', () => {
     expect(Object.values(CODE_DELIVERY_EVENTS).sort()).toEqual([
       'render_code_b64_over_cap',
       'render_code_write_failed',
+      'render_slice_enrichment_failed',
     ]);
   });
 });

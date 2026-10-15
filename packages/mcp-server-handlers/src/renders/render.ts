@@ -123,6 +123,7 @@ import {
 } from './render-telemetry.js';
 import {
   reportRenderCodeB64OverCap,
+  reportRenderSliceEnrichmentFailed,
   reportRenderCodeWriteFailed,
 } from './code-delivery-events.js';
 import { writeRenderIdentity } from './render-identity.js';
@@ -3205,8 +3206,15 @@ export function createGguiRenderHandler(
             renderThemeId = top.themeId;
           }
         }
-      } catch {
-        // Silent — bootstrap stays minimal if the lookup fails.
+      } catch (err) {
+        // The render is committed, so a failed enrichment emits a
+        // minimal slice rather than failing it — but the loss is named
+        // (inline channel, public env, gadget catalog), never silent.
+        reportRenderSliceEnrichmentFailed({
+          sessionId: output.sessionId,
+          appId: ctx.appId,
+          cause: err,
+        });
       }
       // Shared `ai.ggui/render` envelope base — runtimeUrl resolution,
       // minted-trio `token`→`wsToken` remap, and the layered theme
