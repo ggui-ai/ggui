@@ -62,11 +62,15 @@ export type {
 // reuses this one Anthropic structured-call implementation — and can bound
 // it with an abort signal — instead of carrying a copy.
 // The named error is the shared structured call's
-// (`@ggui-ai/ui-gen/providers`), re-exported so an `instanceof` check
-// against this package keeps matching.
+// (`@ggui-ai/ui-gen/providers`), re-exported with its guard. Match on
+// `isAnthropicStructuredCallError`, which holds even when a second copy
+// of `@ggui-ai/ui-gen` is installed; `instanceof` does not.
 export { buildLlmCaller } from './llm-backed-negotiator.js';
 export type { BuildLlmCallerOptions } from './llm-backed-negotiator.js';
-export { AnthropicStructuredCallError } from '@ggui-ai/ui-gen/providers';
+export {
+  AnthropicStructuredCallError,
+  isAnthropicStructuredCallError,
+} from '@ggui-ai/ui-gen/providers';
 export type { AnthropicStructuredCallFailureKind } from '@ggui-ai/ui-gen/providers';
 // Control plane (`/control`) — the composition that projects every
 // `protocol`- and `ops`-tagged handler onto one anonymous-capable

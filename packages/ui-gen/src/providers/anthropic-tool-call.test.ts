@@ -9,6 +9,7 @@ import {
   ALWAYS_THINKING_HEADROOM_TOKENS,
   AnthropicStructuredCallError,
   anthropicToolCall,
+  isAnthropicStructuredCallError,
 } from './anthropic-tool-call.js';
 
 const TOOL = {
@@ -152,3 +153,32 @@ describe('anthropicToolCall — every way without the tool input is a NAMED fail
     ).rejects.toMatchObject({ kind: 'http', status: 400 });
   });
 });
+
+describe('isAnthropicStructuredCallError — matches by shape, not by class identity', () => {
+  it('matches an instance', () => {
+    expect(isAnthropicStructuredCallError(new AnthropicStructuredCallError('http', 'x', { status: 500 }))).toBe(true);
+  });
+
+  it('matches an error from a SECOND copy of the class (two installed copies of this package)', () => {
+    class SecondCopy extends Error {
+      readonly kind = 'max_tokens';
+      readonly status = undefined;
+      readonly stopReason = 'max_tokens';
+      constructor() {
+        super('anthropic structured call [max_tokens]: x');
+        this.name = 'AnthropicStructuredCallError';
+      }
+    }
+    const err: unknown = new SecondCopy();
+    expect(err instanceof AnthropicStructuredCallError).toBe(false);
+    expect(isAnthropicStructuredCallError(err)).toBe(true);
+  });
+
+  it('rejects a plain Error, a TypeError, a non-error and an unknown kind', () => {
+    const unknownKind = Object.assign(new Error('x'), { name: 'AnthropicStructuredCallError', kind: 'timeout' });
+    for (const value of [new Error('x'), new TypeError('fetch failed'), { name: 'AnthropicStructuredCallError', kind: 'http' }, null, unknownKind]) {
+      expect(isAnthropicStructuredCallError(value)).toBe(false);
+    }
+  });
+});
+

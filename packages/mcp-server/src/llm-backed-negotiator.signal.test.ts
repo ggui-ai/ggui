@@ -90,4 +90,12 @@ describe("the package exports the caller (ggui#1235 Cut 1b)", () => {
     expect(serverIndex.buildLlmCaller).toBe(buildLlmCaller);
     expect(typeof serverIndex.AnthropicStructuredCallError).toBe("function");
   });
+
+  it("the guard is on the index and matches the error the caller throws (ggui#1271)", async () => {
+    expect(typeof serverIndex.isAnthropicStructuredCallError).toBe("function");
+    const llm = buildLlmCaller(SELECTION, KEY, { signal: AbortSignal.abort() });
+    const aborted: unknown = await llm.callStructured?.("sys", "user", TOOL, 512).catch((e: unknown) => e);
+    expect(serverIndex.isAnthropicStructuredCallError(aborted)).toBe(false);
+    expect(serverIndex.isAnthropicStructuredCallError(new serverIndex.AnthropicStructuredCallError("http", "x"))).toBe(true);
+  });
 });

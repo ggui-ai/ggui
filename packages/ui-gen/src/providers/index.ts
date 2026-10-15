@@ -63,9 +63,10 @@ export { createBedrockAdapter } from './bedrock.js';
 export type { BedrockAdapterOptions } from './bedrock.js';
 
 export {
-  ALWAYS_THINKING_HEADROOM_TOKENS,
+  ANTHROPIC_STRUCTURED_CALL_FAILURE_KINDS,
   AnthropicStructuredCallError,
   anthropicToolCall,
+  isAnthropicStructuredCallError,
 } from './anthropic-tool-call.js';
 export type {
   AnthropicStructuredCallFailureKind,

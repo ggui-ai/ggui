@@ -9,7 +9,12 @@
  * judge the live match probes drive in `@ggui-ai/mcp-server-handlers`,
  * and the negotiator's dev benches.
  *
- * It is a standalone function rather than a {@link ProviderAdapter}
+ * It lives here because every production caller already depends on
+ * `@ggui-ai/ui-gen`. The day a production caller lives in a package that
+ * does not (`@ggui-ai/negotiator`, `@ggui-ai/protocol`), the home becomes
+ * `@ggui-ai/mcp-server-core`, which every one of them reaches.
+ *
+ * It is a standalone function rather than a `ProviderAdapter`
  * method on purpose. Adapters return a result union and never throw;
  * every structured caller here wants the throw, because its consumers
  * (the rerank judge, the synthesizer) already collapse a throw to
@@ -52,7 +57,12 @@ const DEFAULT_ANSWER_BUDGET = 1024;
  */
 export const ALWAYS_THINKING_HEADROOM_TOKENS = 16_000;
 
-/** The one tool the call asks for, in the Messages API's tool shape. */
+/**
+ * The one tool the call asks for: the Messages API's own wire shape for a
+ * tool (`name`, `description`, `input_schema`), sent as-is under a raw
+ * `fetch`. It is not an SDK type and does not stand in for one; this
+ * package takes no Anthropic SDK dependency.
+ */
 export interface AnthropicTool {
   readonly name: string;
   readonly description: string;
@@ -88,18 +98,27 @@ export interface AnthropicToolCallResult {
   readonly usage?: { readonly input: number; readonly output: number };
 }
 
-/** How a structured call ended without the tool input it asked for. */
+/**
+ * How a structured call ended without the tool input it asked for:
+ *
+ *   - `max_tokens`: the budget ran out (`stop_reason: max_tokens`) before
+ *     the tool call.
+ *   - `no_tool_call`: the model finished without calling the tool
+ *     (possible under `auto`).
+ *   - `refusal`: the model declined (`stop_reason: refusal`).
+ *   - `http`: the API answered non-2xx.
+ *   - `malformed`: the body was JSON but not a Messages response.
+ */
+export const ANTHROPIC_STRUCTURED_CALL_FAILURE_KINDS = [
+  'max_tokens',
+  'no_tool_call',
+  'refusal',
+  'http',
+  'malformed',
+] as const;
+
 export type AnthropicStructuredCallFailureKind =
-  /** The budget ran out (`stop_reason: max_tokens`) before the tool call. */
-  | 'max_tokens'
-  /** The model finished without calling the tool (possible under `auto`). */
-  | 'no_tool_call'
-  /** The model declined (`stop_reason: refusal`). */
-  | 'refusal'
-  /** The API answered non-2xx. */
-  | 'http'
-  /** The body was JSON but not a Messages response. */
-  | 'malformed';
+  (typeof ANTHROPIC_STRUCTURED_CALL_FAILURE_KINDS)[number];
 
 /**
  * A structured call that returned no tool input, NAMED by why. The kind
@@ -122,6 +141,27 @@ export class AnthropicStructuredCallError extends Error {
     this.status = extra.status;
     this.stopReason = extra.stopReason;
   }
+}
+
+/**
+ * Whether `err` is an {@link AnthropicStructuredCallError}, by its shape:
+ * an `Error` named `AnthropicStructuredCallError` whose `kind` is one of
+ * {@link ANTHROPIC_STRUCTURED_CALL_FAILURE_KINDS}.
+ *
+ * Prefer this to `instanceof`. An `instanceof` check holds only while one
+ * copy of this package is installed: a consumer that resolves a second
+ * copy (its own `@ggui-ai/ui-gen` at a different version from the one
+ * `@ggui-ai/mcp-server` depends on) gets errors from a class it did not
+ * import, and every one of them fails the check.
+ */
+export function isAnthropicStructuredCallError(
+  err: unknown,
+): err is AnthropicStructuredCallError {
+  if (!(err instanceof Error) || err.name !== 'AnthropicStructuredCallError') {
+    return false;
+  }
+  const kind: unknown = Reflect.get(err, 'kind');
+  return ANTHROPIC_STRUCTURED_CALL_FAILURE_KINDS.some((known) => known === kind);
 }
 
 /**
