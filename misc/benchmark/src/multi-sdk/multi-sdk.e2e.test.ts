@@ -193,7 +193,8 @@ describe.skipIf(!hasAnyKey)('Full benchmark suite', { timeout: TIMEOUT * 10 }, (
       const googleConfig = { apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY };
       variants.push(
         { id: 'google-raw-flash-sp', sdkName: 'google', tier: 'fast', modelId: 'gemini/gemini-3-flash-preview', mode: 'raw' },
-        { id: 'google-raw-flash-lite-sp', sdkName: 'google', tier: 'fast', modelId: 'gemini/gemini-3.1-flash-lite-preview', mode: 'raw' },
+        // ggui#1291: the preview id is "(Shut down)" on ai.google.dev (2026-10-15) and no longer routable; the stable id is the row.
+        { id: 'google-raw-flash-lite-sp', sdkName: 'google', tier: 'fast', modelId: 'gemini/gemini-3.1-flash-lite', mode: 'raw' },
       );
       runner.registerAdapter(new GoogleRawAdapter(googleConfig), googleConfig);
     }

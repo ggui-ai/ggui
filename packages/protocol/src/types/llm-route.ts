@@ -27,7 +27,7 @@
  */
 
 // ============================================================================
-// MODELS registry — single source of truth
+// MODELS allowlist — what a route may NAME; pinned to the registry (ggui#1291)
 // ============================================================================
 
 /**
@@ -35,6 +35,16 @@
  * EXACTLY what the provider's API expects on the wire — no
  * transformation, no prefix-strip, no map. Register a new model by
  * adding its wire-canonical string to the matching provider's array.
+ *
+ * This list is NOT a second source of truth about models (ggui#1291): for
+ * the direct providers (`anthropic`, `openai`, `google`) every entry here is
+ * either a `MODEL_REGISTRY` row's wire id (llm.ts) or a spelling declared in
+ * `MODEL_WIRE_ALIASES` (an alias or dated snapshot of a row), and every row's
+ * wire id is admitted here — `model-allowlist-pin.test.ts` holds both
+ * directions with nothing left over. The registry says what a model IS; this
+ * list says what a route may NAME. The marketplaces (`bedrock`, `openrouter`)
+ * are outside the pin: their ids are other vendors' models under the
+ * marketplace's spelling, curated by their own smoke.
  *
  * Provider naming uses the COMPANY name for consistency across all
  * providers (`anthropic`, `openai`, `google`) — matches LiteLLM's
@@ -71,7 +81,7 @@ export const MODELS = {
     'claude-opus-5',
     'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
-    'claude-opus-4-8',
+    'claude-opus-4-8', // row since ggui#1291 (2026-10-15): platform.claude.com model page — Active (legacy), retire ≥ 2027-05-28
     'claude-sonnet-4-6',
     'claude-opus-4-7',
     'claude-opus-4-6',
@@ -122,10 +132,14 @@ export const MODELS = {
     'gemini-3.6-flash',
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
-    'gemini-flash-latest',
+    // Dropped ggui#1291 (2026-10-15), ai.google.dev/gemini-api/docs/models:
+    // `gemini-flash-latest` is a "-latest" alias that "will get hot-swapped
+    // with every new release" with no stated target (no row can stand for
+    // it; ggui#672 bans it on the status probe for the same reason), and
+    // `gemini-3.1-flash-lite-preview` sits under "Previous models" marked
+    // "(Shut down)".
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
-    'gemini-3.1-flash-lite-preview',
     'gemini-3-flash-preview',
   ],
   bedrock: [

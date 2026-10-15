@@ -334,6 +334,27 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 200000,
     supportsTools: true,
   },
+  // ggui#1291 (2026-10-15): allowlisted since 2026-08-13 with no row. Quoted
+  // from platform.claude.com/docs/en/models/opus-4-8: "Active (legacy)",
+  // "Released May 28, 2026", "Not sooner than May 28, 2027", $5 / $25,
+  // 5m cache write $6.25, cache read $0.50, "Context window 1M tokens".
+  "anthropic/claude-opus-4-8": {
+    id: "anthropic/claude-opus-4-8",
+    provider: "anthropic",
+    displayName: "Claude Opus 4.8",
+    tier: "premium",
+    state: "legacy",
+    lineup: false,
+    retireNotBefore: "2027-05-28",
+    costs: {
+      inputPer1M: 5.0,
+      outputPer1M: 25.0,
+      cacheWritePer1M: 6.25,
+      cacheReadPer1M: 0.5,
+    },
+    maxTokens: 1000000,
+    supportsTools: true,
+  },
   "anthropic/claude-opus-4-7": {
     id: "anthropic/claude-opus-4-7",
     provider: "anthropic",
@@ -625,6 +646,38 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 200000,
     supportsTools: true,
   },
+  // ggui#1291 (2026-10-15): the gpt-5.5 family was allowlisted with no row.
+  // Quoted from developers.openai.com/api/docs/models/gpt-5.5: "$5" input,
+  // "$0.5" cached input, "$30" output, "1,050,000 context window", function
+  // calling supported on Chat Completions and Responses; its one snapshot
+  // (`gpt-5.5-2026-04-23`) is declared in MODEL_WIRE_ALIASES below.
+  "openai/gpt-5.5": {
+    id: "openai/gpt-5.5",
+    provider: "openai",
+    displayName: "GPT-5.5",
+    tier: "premium",
+    state: "active",
+    lineup: false,
+    costs: { inputPer1M: 5.0, outputPer1M: 30.0, cacheReadPer1M: 0.5 },
+    maxTokens: 1050000,
+    supportsTools: true,
+  },
+  // …/models/gpt-5.5-pro: "$30" input, "$180" output, "GPT-5.5 Pro does not
+  // offer a cached input discount", "1,050,000 context window", function
+  // calling supported, Chat Completions "Not supported" (Responses only —
+  // the adapter's concern, as with gpt-6.1-sol). Snapshot
+  // `gpt-5.5-pro-2026-04-23` is declared in MODEL_WIRE_ALIASES below.
+  "openai/gpt-5.5-pro": {
+    id: "openai/gpt-5.5-pro",
+    provider: "openai",
+    displayName: "GPT-5.5 Pro",
+    tier: "premium",
+    state: "active",
+    lineup: false,
+    costs: { inputPer1M: 30.0, outputPer1M: 180.0 },
+    maxTokens: 1050000,
+    supportsTools: true,
+  },
   "openai/gpt-5.4": {
     id: "openai/gpt-5.4",
     provider: "openai",
@@ -763,4 +816,49 @@ export const ZERO_CONFIG_ROUTE_BY_PROVIDER: Readonly<
   google: { provider: "google", model: "gemini-3.5-flash-lite" },
   // Listed on ggui#1743 after its ggui#1267 smoke (3/3, `tool_choice: required`).
   openrouter: { provider: "openrouter", model: "anthropic/claude-haiku-5.5" },
+};
+
+/**
+ * Why a wire spelling the allowlist admits is not a row's own wire id
+ * (ggui#1291): a vendor ALIAS that routes to a registered model, or a dated
+ * SNAPSHOT of one.
+ */
+export type ModelWireAliasKind = "alias" | "snapshot";
+
+/** The registered model a declared wire spelling stands for. */
+export interface ModelWireAlias {
+  readonly of: ModelId;
+  readonly kind: ModelWireAliasKind;
+}
+
+/**
+ * The allowlist (`MODELS`, llm-route.ts) and this registry are ONE list,
+ * pinned both ways (ggui#1291): every direct-provider allowlist entry is a
+ * row's wire id or an entry HERE, and every row's wire id is admitted. This
+ * map is the declaration of the second kind — a typed record, not a comment
+ * beside the string — so a new allowlist spelling that is neither fails the
+ * pin test rather than routing to a model with no row (no display name, no
+ * tier, no price, no picker entry: `claude-opus-4-8` did exactly that from
+ * 2026-08-13 until this pin). The marketplaces (`bedrock`, `openrouter`) are
+ * outside the pin: their ids are other vendors' models under the
+ * marketplace's spelling, curated by their own smoke.
+ *
+ * Receipts (developers.openai.com/api/docs/models/<id>, fetched 2026-10-15):
+ * "The `gpt-5.6` alias routes requests to GPT-5.6 Sol"; the gpt-5.5,
+ * gpt-5.5-pro, gpt-5.4, gpt-5.4-mini and gpt-5.4-nano pages each list ONE
+ * snapshot, the dated id, as "Default snapshot". Anthropic needs no entry:
+ * its 4.6+ ids are dateless pinned snapshots, and Haiku 4.5's dated wire id
+ * is what `anthropic/claude-haiku-4-5` already resolves to (LITELLM_TO_WIRE).
+ */
+export const MODEL_WIRE_ALIASES: Readonly<
+  Partial<Record<LlmProvider, Readonly<Record<string, ModelWireAlias>>>>
+> = {
+  openai: {
+    "gpt-5.6": { of: "openai/gpt-5.6-sol", kind: "alias" },
+    "gpt-5.5-2026-04-23": { of: "openai/gpt-5.5", kind: "snapshot" },
+    "gpt-5.5-pro-2026-04-23": { of: "openai/gpt-5.5-pro", kind: "snapshot" },
+    "gpt-5.4-2026-03-05": { of: "openai/gpt-5.4", kind: "snapshot" },
+    "gpt-5.4-mini-2026-03-17": { of: "openai/gpt-5.4-mini", kind: "snapshot" },
+    "gpt-5.4-nano-2026-03-17": { of: "openai/gpt-5.4-nano", kind: "snapshot" },
+  },
 };
