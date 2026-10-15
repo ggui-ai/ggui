@@ -106,7 +106,7 @@ const inputSchema = {
   payload: z
     .record(z.string(), z.unknown())
     .describe(
-      'Per-kind payload. Shape narrowed by `kind`. See `SubmitActionEnvelope` in `@ggui-ai/protocol/integrations/mcp-apps` for the canonical per-kind shapes.',
+      'Per-kind payload. Shape narrowed by `kind`. See `SubmitActionEnvelope` in `@ggui-ai/protocol/integrations/mcp-apps` for the canonical per-kind shapes. A top-level member literally named `__proto__` is not a payload member: the server’s parse drops it before the view proof is verified, so a call that signed one reads args_mismatch (ggui#1626). Nested members pass as signed.',
     ),
   sessionId: z
     .string()

@@ -235,6 +235,37 @@ describe('the view-proof measuring gate over a real SDK client (ggui#1415)', () 
     });
   });
 
+  it('a TOP-LEVEL __proto__ member of payload is not a payload member: the server’s parse drops it before the verifier, so a view that signed one reads args_mismatch, never valid (the contract, ggui#1626)', async () => {
+    // The settle-first finding of ggui#1415 (c.5880281180): `payload` is a
+    // string-keyed record on the tool's input schema, and zod's record parse
+    // drops an own key literally named `__proto__` at that level. The gate
+    // verifies the PARSED arguments, so the bound bytes no longer match what
+    // the view signed. SPEC §"Verification (server)" states it: a view MUST
+    // NOT sign a top-level `__proto__` (the first-party runtime builds
+    // `payload` from fixed keys and cannot). The nested case above is the
+    // control: inside `actionData` the member passes as signed.
+    const signed: JsonObject = JSON.parse(
+      '{"kind":"dispatch","payload":{"__proto__":{"x":1},"intent":"confirm","actionData":{"n":1},"uiContext":{}},"sessionId":"' +
+        sessionId +
+        '","appId":"app-1","actionId":"c5f2d3e4","firedAt":"2026-09-29T00:00:00.000Z"}',
+    );
+    // Control: the wire really carries the member the view is signing over.
+    expect(JSON.stringify(signed)).toContain('"payload":{"__proto__":{"x":1}');
+    await withServer(async (client, lines) => {
+      const result = await client.callTool({
+        name: 'ggui_runtime_submit_action',
+        arguments: signed,
+        _meta: { [MCP_APP_AI_GGUI_VIEW_META_KEY]: signDispatch(signed) },
+      });
+      // Measured, not refused, at this release (SPEC "By release").
+      expect(result.isError).not.toBe(true);
+      expect(invoked(lines, 'ggui_runtime_submit_action')).toMatchObject({
+        viewProof: 'invalid',
+        viewProofReason: 'args_mismatch',
+      });
+    });
+  });
+
   it('the handler runs with the gated context: the verdict reaches it, and a required call reads its row once', async () => {
     const seen: Array<string | undefined> = [];
     const echo: SharedHandler<ZodRawShape, ZodRawShape> = {
