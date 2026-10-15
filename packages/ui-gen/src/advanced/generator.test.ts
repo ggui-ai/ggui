@@ -201,7 +201,7 @@ describe('createAdvancedUiGenerator — identity', () => {
     expect(gen.tier).toBe(ADVANCED_GENERATOR_TIER);
     expect(gen.tier).toBe('advanced');
     expect(gen.model).toBe(ADVANCED_GENERATOR_MODEL);
-    expect(gen.model).toBe('anthropic/claude-opus-4-7');
+    expect(gen.model).toBe('anthropic/claude-opus-5-5');
   });
 });
 

@@ -64,7 +64,7 @@ import {
 /** Generator identity — slug, tier, and model. */
 export const ADVANCED_GENERATOR_SLUG = 'ui-gen-advanced' as const;
 export const ADVANCED_GENERATOR_TIER: GeneratorTier = 'advanced';
-export const ADVANCED_GENERATOR_MODEL: ModelRef = 'anthropic/claude-opus-4-7';
+export const ADVANCED_GENERATOR_MODEL: ModelRef = 'anthropic/claude-opus-5-5';
 
 /**
  * Re-exported under a friendlier name for callers wiring deploys.
@@ -134,8 +134,9 @@ export interface CreateAdvancedUiGeneratorOptions
 
   /**
    * Inner generator. Defaults to a fresh `createUiGenerator({tier:
-   * 'advanced', model: 'opus-4-7'})` so the BYOK route resolves to an
-   * Opus model on Anthropic. Tests can inject a stub.
+   * 'advanced', model: ADVANCED_GENERATOR_MODEL})`. That model is the
+   * generator's declared identity only: each request runs on the model
+   * its own `input.llm` route names. Tests can inject a stub.
    *
    * The inner generator's identity (slug/tier/model) is irrelevant —
    * this advanced wrapper exposes its own fixed identity.
