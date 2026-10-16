@@ -13,7 +13,7 @@ import { AgentWorkspace } from './workspace';
 import { getSoftWarnings } from './self-check';
 import { runTier0Checks } from '../check/index.js';
 import { runGatedAxisChecks, traceAxisChecksSkipped } from '../evaluation/axis-checks/dispatch.js';
-import type { AxisCheck, AxisCheckInput } from '../evaluation/types-public.js';
+import type { AxisCheck, AxisCheckInput, EvalIssue } from '../evaluation/types-public.js';
 import type { Classification } from '../classifier/axes.js';
 import type { CanvasClass } from '../design-mode.js';
 import { PRIMITIVES_DOCUMENTATION } from '../validation/index.js';
@@ -23,6 +23,21 @@ import type {
   CommitMetadata,
 } from './types';
 import { DEFAULT_DESIGN_MODE, type DesignMode } from '../design-mode.js';
+
+/**
+ * ggui#1876 — the auto-commit line's axis field: the F/W counts, then the check ids behind them, so a
+ * WARN the model saw at a turn is attributable in the log (the `[WARN]` text otherwise appears only at
+ * the final evaluation). `0F/1W[W:universal.tint_category_in_words]`; nothing appended at `0F/0W`.
+ * The `<n>F/<n>W` prefix is unchanged, so anything that reads the counts reads them as before. An
+ * issue with no `subcategory` (the axis checks always set one, as their id) is named by its category.
+ */
+export function axisCountsWithIds(issues: readonly EvalIssue[]): string {
+  const idOf = (i: EvalIssue): string => i.subcategory ?? i.category;
+  const warns = issues.filter((i) => i.result === 'warn').map(idOf);
+  const fails = issues.filter((i) => i.result !== 'warn').map(idOf);
+  const groups = [...(fails.length > 0 ? [`F:${fails.join(',')}`] : []), ...(warns.length > 0 ? [`W:${warns.join(',')}`] : [])];
+  return `${fails.length}F/${warns.length}W${groups.length > 0 ? `[${groups.join(' ')}]` : ''}`;
+}
 
 /**
  * Extract documentation for a single component from the full primitives docs.
@@ -197,7 +212,7 @@ async function autoCommit(
 
   const status = buildSuccess && selfCheckPassed ? 'PASS' : 'FAIL';
   console.log(
-    `[coding-agent] auto-commit: ${status} | build=${buildMs}ms self-check=${selfCheckMs}ms git=${gitMs}ms total=${Date.now() - commitStart}ms | violations=${violations.length} | axis=${axisRun === undefined ? 'off' : `${axisIssues.length - axisWarnings.length}F/${axisWarnings.length}W`}`,
+    `[coding-agent] auto-commit: ${status} | build=${buildMs}ms self-check=${selfCheckMs}ms git=${gitMs}ms total=${Date.now() - commitStart}ms | violations=${violations.length} | axis=${axisRun === undefined ? 'off' : axisCountsWithIds(axisIssues)}`,
   );
   if (violations.length > 0) {
     for (const v of violations) {
