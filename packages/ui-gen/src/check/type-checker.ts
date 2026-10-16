@@ -59,6 +59,7 @@ import ts from 'typescript';
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
+import { TINT_STEPS } from '@ggui-ai/design';
 import { describeAllowedImports } from '../validation/allowed-imports.js';
 
 // ---------------------------------------------------------------------------
@@ -126,6 +127,19 @@ function generateFix(code: number, message?: string, sourceLine?: string): strin
   // Detect "Cannot find name" for destructured props
   if (code === 2304 && message && !message.includes('module') && !message.includes('import')) {
     return `This name is not defined in scope. Either you destructured props (use \`props.fieldName\` directly instead) OR you removed a helper declaration in this patch but kept a JSX/expression reference to it. Read your full patch and either restore the declaration or remove the reference.${sourceHint}`;
+  }
+
+  // ggui#1846 — a categorical tint passed to `surface`. `surface` takes a layout slot; a data
+  // category takes `tint`. TypeScript names the slot union but never the prop, and the line it
+  // reports is the attribute's own (`surface={tint}`), so the key is that line plus a
+  // string-literal target type. A wrong prop on the same line reports the props object instead
+  // (`Type '{ … }' is not assignable to …`) and keeps the generic text. With both colour props on
+  // one line, the target tells them apart: the `tint` prop's union is the tint steps, the surface
+  // union never contains one. Only the TARGET is read, because the rejected value may itself be a
+  // tint (`Type '"tint-3"' is not assignable to type '"default" | …'`).
+  const target = message === undefined ? undefined : /is not assignable to type '(.*)/.exec(message)?.[1];
+  if ((code === 2322 || code === 2820) && target !== undefined && target.startsWith('"') && sourceLine && /(?<![\w-])surface=/.test(sourceLine) && !TINT_STEPS.some((s) => target.includes(`"${s}"`))) {
+    return `\`surface\` takes a layout slot only, one of the values the message lists. To colour by a data category (series, lanes, kinds, element groups), set \`tint\` instead, on the same Box or Card: ${TINT_STEPS.map((s) => `tint="${s}"`).join(', ')}. When the value comes from a map or a helper, type it as the tint union (${TINT_STEPS.map((s) => `'${s}'`).join(' | ')}), not \`string\`. Never cast it.${sourceHint}`;
   }
 
   // Detect "unknown is not assignable to ReactNode"
