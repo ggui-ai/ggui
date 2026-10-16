@@ -179,6 +179,12 @@ interface VfsEntry {
 
 let vfsCache: Map<string, VfsEntry> | null = null;
 
+/**
+ * Where `csstype`'s declarations sit in the sandbox (ggui#1871). `@types/react`'s
+ * `import … from "csstype"` resolves here through the generic bare-specifier lookup.
+ */
+const CSSTYPE_VFS_PATH = 'node_modules/csstype/index.d.ts';
+
 function parseAndStore(
   vfs: Map<string, VfsEntry>,
   virtualPath: string,
@@ -225,8 +231,8 @@ function findReactTypesDir(): string | null {
   // `@types/react/index.d.ts` included. That made this function return null
   // and the sandbox ran WITHOUT React's types (ggui#1849). Plain components
   // kept their own props through the global JSX shim, but every prop typed
-  // through React (`ref`, `style`, handlers) degraded to `any` (`style` stays
-  // `any` until `csstype` loads too — ggui#1871), and so did every
+  // through React (`ref`, `style`, handlers) degraded to `any` (`style` needs
+  // `csstype` as well — {@link findCsstypeDir}, ggui#1871), and so did every
   // prop of the trait-composed primitives (Box, Card, Grid, Row, Stack): their
   // `WithTrait` union has an arm built from React's types, and a union with an
   // `any` arm is `any`. Walk Node's own
@@ -235,6 +241,23 @@ function findReactTypesDir(): string | null {
   const lookup = createRequire(import.meta.url).resolve.paths('@types/react') ?? [];
   for (const dir of lookup) {
     const candidate = path.join(dir, '@types', 'react');
+    if (fs.existsSync(path.join(candidate, 'index.d.ts'))) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Resolve `csstype`'s root directory (ggui#1871). `@types/react/index.d.ts`
+ * opens with `import * as CSS from "csstype"`; without it `CSS` is unresolved,
+ * `CSSProperties` has no members and every `style={{…}}` goes unchecked.
+ * `csstype` is `@types/react`'s own dependency, so it is looked up from that
+ * package's real directory — the same place Node would find it for React's
+ * types, nested or hoisted.
+ */
+function findCsstypeDir(reactDir: string): string | null {
+  const lookup = createRequire(path.join(fs.realpathSync(reactDir), 'index.d.ts')).resolve.paths('csstype') ?? [];
+  for (const dir of lookup) {
+    const candidate = path.join(dir, 'csstype');
     if (fs.existsSync(path.join(candidate, 'index.d.ts'))) return candidate;
   }
   return null;
@@ -288,6 +311,10 @@ async function loadVfs(): Promise<Map<string, VfsEntry>> {
     for (const file of reactDts) {
       const content = fs.readFileSync(path.join(reactDir, file), 'utf-8');
       parseAndStore(vfs, `node_modules/@types/react/${file}`, content);
+    }
+    const csstypeDir = findCsstypeDir(reactDir);
+    if (csstypeDir) {
+      parseAndStore(vfs, CSSTYPE_VFS_PATH, fs.readFileSync(path.join(csstypeDir, 'index.d.ts'), 'utf-8'));
     }
   }
 
