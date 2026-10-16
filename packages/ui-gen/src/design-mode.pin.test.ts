@@ -241,10 +241,15 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // `tint` beside `surface` as the theme-tracking fills, and a "Categorical tint" paragraph carries its rules
 // (data categories only; the category also in words; ink-only text, one short line; a category keeps its tint;
 // group to eight). The boilerplate is byte-stable.
+// Re-recorded 2026-10-16 for ggui#1896 (a context slot seeded from a prop): the contextSpec section teaches
+// the seed as `useLayoutEffect(() => setName(props.name ?? ''), [props.name])`, and the boilerplate's React
+// import lists `useLayoutEffect`. All four digests move: constrained prompt 32cedfa6… → a2656392…, constrained
+// boilerplate 1a1346a2… → ba33a31f…, free prompt d212b4b2… → 64589393…, free boilerplate 6b267409… → 6423e307….
+// Receipt: the parent commit's tree passes the previous constants.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "32cedfa65cecd24f0cd3ca756df61f4a0e692125ee78fc9f7d9bb220c377911b";
+  "a265639273b3e752032c4d37c1bc6cfce8bdf13e54f68cb72779bc8082389422";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  '1a1346a2f1886b72a066cec3b299115fdaffff6a2935c61a5f91d708b7a42e60';
+  'ba33a31f42fdcd814e33b3f91620776d0f69b649daceea177243cf207935d8b9';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
 // item's own identity — the field that names it when there is no id, never the map index; the prompt now
 // says what the self-check refuses). A HARD section shared by both arms, so BOTH prompt digests move
@@ -305,12 +310,13 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-10-13 for ggui#1847 — see the constrained note (the `tint` prop).
 // Re-recorded 2026-10-13 for ggui#1846: the colour rule's role list names `tint-1` … `tint-8` as the categorical
 // fills, with the same rules as the constrained prompt in token terms (text on a tint is `onContainer`).
+// Re-recorded 2026-10-16 for ggui#1896 — see the constrained note (the slot seed); both free digests move.
 export const FREE_PROMPT_SHA256 =
-  "d212b4b2093c6ee18d0b0232a59bd5be96d1c420f2fc684a074f2fc90b15346d";
+  "6458939316eb4ca7f71695d2334cea1f3c0559b6f440896c493c67350e1277cc";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
-  '6b2674094b26b6fc7737a55f82118d3d5169efd54552e4e3759b603e3311b912';
+  '6423e3078104d8951c7940fd2fabbe35c99cbbb31c4b5893bb4c6a1402746e26';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [

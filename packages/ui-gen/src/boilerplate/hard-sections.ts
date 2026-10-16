@@ -183,6 +183,8 @@ Every value change is mirrored to the host LLM's context automatically (debounce
 
 **When to use the auto-generated state.** Any slot the contract declared. If \`contextSpec.draftText\` exists, bind \`<Input value={draftText} onChange={e => setDraftText(e.target.value)}>\` so the agent sees the typing live. If \`contextSpec.currentStep\` exists, render the step indicator from \`currentStep\` and bump it via \`setCurrentStep\` in your "next" callback.
 
+**Seeding a slot from a prop.** A slot starts at the contract's default, never at a prop. When a slot must start from a prop (a form pre-filled from \`props\`), seed it with \`useLayoutEffect(() => setName(props.name ?? ''), [props.name])\` — \`useLayoutEffect\`, not \`useEffect\`: \`useEffect\` lets the first frame paint the empty default before the prop arrives. The dependency array re-seeds the slot when the agent repaints with new props.
+
 **When NOT to use it.** Local UI state the contract did NOT declare — \`isDropdownOpen\`, hover flags, animation phase, ephemeral toggles. For those, use a plain \`useState\` directly. The runtime ignores undeclared state.
 
 **\`contextSpec\` direction is one-way: client → agent.** The agent uses \`propsSpec\` (via \`ggui_amend\` for in-place repaints of this mount, or \`ggui_update\` when it mints a new history card) and \`streamSpec\` (via the live channel) to push state TO the client. Don't try to write to the agent via \`contextSpec\` — there is no return path.

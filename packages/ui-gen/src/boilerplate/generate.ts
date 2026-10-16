@@ -544,8 +544,10 @@ export function generateBoilerplate(
   const gadgetImport =
     gadgetImportLine.length > 0 ? `${gadgetImportLine}\n` : "";
 
-  // ── React import — only include hooks that are actually needed ──
-  const reactHooks = ["useState", "useCallback", "useMemo", "useEffect", "useRef"];
+  // ── React import — the hooks generated code may use, always listed (the line is DO NOT EDIT) ──
+  // `useLayoutEffect` (ggui#1896): the prompt seeds a context slot from a prop with it, so the
+  // first frame never paints the slot's contract default.
+  const reactHooks = ["useState", "useCallback", "useMemo", "useEffect", "useLayoutEffect", "useRef"];
   const reactImport = `import React, { ${reactHooks.join(", ")} } from 'react';`;
 
   // ── Hook body ──────────────────────────────────────────

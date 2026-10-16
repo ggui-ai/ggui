@@ -116,6 +116,14 @@ describe("state.payload.initial_values_seeded on context slots (ggui#1869)", () 
     ).toEqual([]);
   });
 
+  it("passes a layout effect seeding the slot from the prop, the form the prompt teaches (ggui#1896)", () => {
+    expect(
+      run(`${SLOTS}
+        useLayoutEffect(() => setName(props.initialProfile?.name ?? ''), [props.initialProfile?.name]);
+      `),
+    ).toEqual([]);
+  });
+
   it("passes a slot value that falls back to the prop, with no effect", () => {
     expect(run(`${SLOTS} const shown = email ?? props.initialProfile?.email;`)).toEqual([]);
   });
