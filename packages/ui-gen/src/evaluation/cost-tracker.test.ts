@@ -21,8 +21,9 @@ describe('CostTracker prices the prompt cache (ggui#1524)', () => {
 
   it('no stated cache rates: a read at the input rate (over, the safe side), a write at input × the bound — never under', () => {
     const t = new CostTracker(null);
-    // gemini-3.5-flash: in 1.5. read 100k·1.5 = 0.15; write 100k·1.5·1.25 = 0.1875
-    expect(t.record('gemini-3.5-flash', 0, 0, { read: 100_000, write: 100_000 })).toBeCloseTo(0.3375, 12);
+    // gemini-3.1-flash-lite: in 0.25, no cache rates stated (gemini-3.5-flash carried none until ggui#1889 priced it
+    // as gemini-3.6-flash, which states a read rate). read 100k·0.25 = 0.025; write 100k·0.25·1.25 = 0.03125
+    expect(t.record('gemini-3.1-flash-lite', 0, 0, { read: 100_000, write: 100_000 })).toBeCloseTo(0.05625, 12);
   });
 
   it('a stated read rate with no write rate: the read at its rate, the write at input × the bound (gemini-3.7-flash: in 0.75, read 0.075)', () => {

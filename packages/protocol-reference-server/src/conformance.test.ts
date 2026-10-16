@@ -264,6 +264,13 @@ const EXPECTED_SKIPPED = [
   'domain-error/get-session-unknown-session',
   'domain-error/render-unknown-handshake',
   'domain-error/update-unknown-session',
+  // The `output-schema` catalog (ggui#1333) grades a `tools/list` VIEW,
+  // which this run does not pass to the runner (`toolsList`), so the
+  // runner reports the row as skipped and names the input it wanted.
+  // The reference server advertises no `outputSchema` on any tool, so
+  // the row would pass by its `accept-no-output-schema` case the day
+  // this test feeds the runner the server's own `tools/list`.
+  'output-schema/advertised-output-objects-open',
   'props-update-roundtrip',
   'transport-refusal/refuse-deprovisioned-endpoint',
   'transport-refusal/refuse-render-only-code',

@@ -407,14 +407,15 @@ describe('resolveCostModelId', () => {
       resolveCostModelId({ coding: 'gemini-3.5-flash' }, 'gemini/gemini-3.1-flash-lite'),
       tokens,
     );
-    // flash: 0.1M × $1.5 + 0.2M × $9.0 = $1.95
+    // flash, priced as gemini-3.6-flash, which answers it (ggui#1889): 0.1M × $0.75 + 0.2M × $3.75 = $0.825
     expect(overridden).toBeCloseTo(
       calculateCost('gemini/gemini-3.5-flash', tokens),
       10,
     );
-    // The base (flash-lite) rate would be $0.325 — the Exp 45 bug shape.
+    // The base (flash-lite) rate would be $0.325 — the Exp 45 bug shape. The override's rate is well clear of it
+    // (more than double) at every rate either row has carried.
     expect(overridden).toBeGreaterThan(
-      calculateCost('gemini/gemini-3.1-flash-lite', tokens) * 5,
+      calculateCost('gemini/gemini-3.1-flash-lite', tokens) * 2,
     );
   });
 });
