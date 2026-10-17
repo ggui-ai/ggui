@@ -63,7 +63,7 @@ function pendingProvider(
   deps: ReturnType<typeof makeDeps>,
   walk: Promise<void>,
 ): InstalledBlueprintsProvider & { ensureCached: ReturnType<typeof vi.fn> } {
-  return { ensureCached: vi.fn(() => walk), invalidate: vi.fn(), deps };
+  return { ensureCached: vi.fn(() => walk), invalidate: vi.fn(), drain: vi.fn(async () => undefined), deps };
 }
 
 /** True when `p` has settled by the time the macrotask queue drains once. */
@@ -177,6 +177,7 @@ describe('exact-key before the walk settles (ggui#1370)', () => {
         events.push('ensured');
       },
       invalidate: (scope) => inner.invalidate(scope),
+      drain: () => inner.drain(),
       deps,
     };
     vi.spyOn(deps.vectorStore, 'query').mockImplementation(async (...args) => {
@@ -348,6 +349,7 @@ describe('exact-key before the walk settles (ggui#1370)', () => {
     const provider: InstalledBlueprintsProvider = {
       ensureCached: () => Promise.reject(new Error('walk failed')),
       invalidate: () => undefined,
+      drain: async () => undefined,
       deps,
     };
     const result = await matchBlueprint(
@@ -367,6 +369,7 @@ describe('exact-key before the walk settles (ggui#1370)', () => {
         throw new Error('sync throw');
       },
       invalidate: () => undefined,
+      drain: async () => undefined,
       deps,
     };
     const result = await matchBlueprint(

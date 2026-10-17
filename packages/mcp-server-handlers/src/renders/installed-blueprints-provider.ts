@@ -275,6 +275,15 @@ export interface InstalledBlueprintsProvider {
    */
   invalidate(scope: string): void;
   /**
+   * Resolve once no ensure-walk is in flight on this provider. A walk can outlive the request that started it (the
+   * matcher does not await it on an exact-key hit), so a host's graceful shutdown should await `drain()` before it
+   * exits: a walk cut between a blueprint's vector write and its index write leaves an `installed: true` vector with
+   * no index row. Waits for every walk pending when it is called AND for any walk started while it waits, including a
+   * walk whose scope was invalidated meanwhile. It never rejects: a walk that fails (even before its own bookkeeping)
+   * counts as settled. It has no timeout of its own: the caller bounds it.
+   */
+  drain(): Promise<void>;
+  /**
    * Reference-equality handle on the provider's
    * `BlueprintRegistryDeps`. Exposed so consumers like
    * `createGguiServer` can verify the provider is wired to the SAME
@@ -341,6 +350,10 @@ export function createInstalledBlueprintsProvider(
     readonly discoveryPoisoned?: boolean;
   }
   const ensured = new Map<string, ScopeState>();
+  // Every ensure-walk still running, independent of `ensured`: an entry there can be deleted by `invalidate()` or
+  // left holding a rejected promise by a walk that threw before its last write, and neither may hide a walk from
+  // `drain()` (or spin it). A walk joins when it starts and leaves when it settles, whichever way.
+  const inFlight = new Set<Promise<void>>();
 
   // Bindings THIS provider instance registered, per scope:
   // contractKey → the exact index key + row id it bound. The walk's
@@ -653,6 +666,12 @@ export function createInstalledBlueprintsProvider(
         ensured.set(scope, { signature, state: true });
       })();
 
+      inFlight.add(work);
+      const leave = (): void => {
+        inFlight.delete(work);
+      };
+      work.then(leave, leave);
+
       // Register the in-flight promise under whatever signature we
       // currently know (the prior one if any, else a placeholder).
       // Concurrent callers see `state !== true` and latch on. The
@@ -665,6 +684,11 @@ export function createInstalledBlueprintsProvider(
     },
     invalidate(scope) {
       ensured.delete(scope);
+    },
+    async drain() {
+      while (inFlight.size > 0) {
+        await Promise.allSettled([...inFlight]);
+      }
     },
     deps: options.deps,
   };

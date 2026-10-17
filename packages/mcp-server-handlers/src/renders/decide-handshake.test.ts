@@ -856,6 +856,7 @@ describe('decideHandshake — find-similar across pools', () => {
     const bridge: InstalledBlueprintsProvider = {
       ensureCached: vi.fn(async () => {}),
       invalidate: vi.fn(),
+      drain: vi.fn(async () => undefined),
       deps: {
         embedding: new MockEmbeddingProvider(),
         vectorStore: new InMemoryVectorStore(),

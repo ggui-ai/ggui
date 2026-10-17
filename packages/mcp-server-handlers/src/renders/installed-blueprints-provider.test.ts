@@ -537,6 +537,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
         throw new Error('provider went off the rails');
       }),
       invalidate: vi.fn(),
+      drain: vi.fn(async () => undefined),
       deps,
     };
 
@@ -555,6 +556,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     const provider = {
       ensureCached: vi.fn(async () => undefined),
       invalidate: vi.fn(),
+      drain: vi.fn(async () => undefined),
       deps,
     };
 
@@ -574,6 +576,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     const provider = {
       ensureCached: vi.fn(async () => undefined),
       invalidate: vi.fn(),
+      drain: vi.fn(async () => undefined),
       deps,
     };
 
