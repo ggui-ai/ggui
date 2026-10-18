@@ -18,6 +18,8 @@
 //     blueprint-reuse shape, and brand-bearing color via the closed
 //     `--ggui-color-*` token manifest (no literals, no fallbacks).
 
+import type { CanvasClass } from "@ggui-ai/design/rendering";
+
 export const DESIGN_MODES = ["constrained", "free"] as const;
 
 export type DesignMode = (typeof DESIGN_MODES)[number];
@@ -38,15 +40,8 @@ export const DEFAULT_DESIGN_MODE: DesignMode = "constrained";
 // breakpoints. `canvasForViewportWidth` is monotonic in width per
 // display mode (pinned by `design-mode.test.ts`).
 
-export const CANVAS_CLASSES = [
-  "xs-chat-card",
-  "mobile-fullscreen-small",
-  "md",
-  "lg",
-  "xl",
-] as const;
-
-export type CanvasClass = (typeof CANVAS_CLASSES)[number];
+// The vocabulary itself lives in `@ggui-ai/design/rendering`, where the runtime reads it too.
+export { CANVAS_CLASSES, type CanvasClass } from "@ggui-ai/design/rendering";
 
 export interface CanvasViewport {
   readonly width: number;

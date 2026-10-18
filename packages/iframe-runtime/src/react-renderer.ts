@@ -50,6 +50,9 @@ import {
   stripMarkers,
   rewriteImports,
   composeThemeCss,
+  resolveMountFit,
+  GGUI_MOUNT_CANVAS_EXPORT,
+  type HostDisplayMode,
 } from '@ggui-ai/design/rendering';
 import {
   hoistImports,
@@ -439,8 +442,8 @@ export interface ReactRootMountOptions {
    */
   readonly hostPalette?: Readonly<Record<string, string>>;
   readonly cssOverrides?: string;
-  /** `fill` — the root is the whole canvas: no silhouette, fills the page (ggui#1041; from the host's `displayMode`). */
-  readonly fit?: 'fill';
+  /** The host-announced display mode; with the bundle's canvas export it decides the mount fit (`resolveMountFit`). */
+  readonly displayMode?: HostDisplayMode;
   readonly onError?: (error: Error) => void;
   /**
    * The error boundary's give-up (ggui#1679): fires once per terminal catch,
@@ -556,6 +559,10 @@ export async function mountReactRoot(
     reportHeldBlank(where, 'rendered-nothing');
   };
 
+  // The evaluated bundle's canvas export, set by `evaluate`; absent until a bundle has loaded and
+  // on a bundle compiled before the export existed — both compose as before (`resolveMountFit`).
+  let mountCanvas: unknown;
+
   async function evaluate(code: string): Promise<ComponentType<Record<string, unknown>>> {
     // 0. If code is a URL (S3 presigned), fetch the bytes first.
     //    Matches RCR's first-step URL-fetch guard verbatim.
@@ -578,6 +585,8 @@ export async function mountReactRoot(
     const hoisted = hoistImports(cleaned);
 
     const pick = (mod: Record<string, unknown>): ComponentType<Record<string, unknown>> => {
+      // The canvas the bundle was composed for (read untrusted; `resolveMountFit` narrows it).
+      mountCanvas = mod[GGUI_MOUNT_CANVAS_EXPORT];
       const Comp = (mod.default ??
         Object.values(mod).find(
           (v): v is ComponentType => typeof v === 'function',
@@ -686,7 +695,7 @@ export async function mountReactRoot(
       ...(opts.hostPalette !== undefined ? { hostPalette: opts.hostPalette } : {}),
       ...(opts.appTheme !== undefined ? { appTheme: opts.appTheme } : {}),
       ...(opts.cssOverrides !== undefined ? { cssOverrides: opts.cssOverrides } : {}),
-      ...(opts.fit !== undefined ? { fit: opts.fit } : {}),
+      fit: resolveMountFit({ canvas: mountCanvas, displayMode: opts.displayMode }),
     });
 
     // Also inject theme CSS at `:root` on `document.head`. The scoped

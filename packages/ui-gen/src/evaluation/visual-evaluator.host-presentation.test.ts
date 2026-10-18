@@ -111,10 +111,10 @@ describe('ggui#1492 — the inline card inside the host\'s own frame', () => {
   });
 
   it('the frame line names the host instead of the stand-in', () => {
-    const line = criteriaFrameLine({ canvas: 'xs-chat-card', width: 400, height: 640, hostLabel: WIDGET.label });
+    const line = criteriaFrameLine({ canvas: 'xs-chat-card', width: 400, height: 640, fit: 'card', hostLabel: WIDGET.label });
     expect(line).toContain("inside the host's own frame (a chat widget, inline, reference theme)");
     expect(line).not.toContain('stand-in');
-    expect(criteriaFrameLine({ canvas: 'md', width: 816, height: 736, hostLabel: 'a canvas pane, reference theme' })).toContain('816×736, a fixed full-screen box the card fills (a canvas pane, reference theme)');
+    expect(criteriaFrameLine({ canvas: 'md', width: 816, height: 736, fit: 'fill', hostLabel: 'a canvas pane, reference theme' })).toContain('816×736, a fixed full-screen box the card fills (a canvas pane, reference theme)');
   });
 });
 

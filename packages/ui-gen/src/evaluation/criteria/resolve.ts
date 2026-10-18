@@ -8,6 +8,7 @@
  * id; a tie or an unanswered id reads `n/a` (the CTO's A2) — a `must` at `n/a` is never a pass when
  * a gate later reads the set.
  */
+import type { MountFit } from '@ggui-ai/design/rendering';
 import type { CriteriaAnswer } from '../types.js';
 import type { CriteriaAnswerCounts, CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
 import type { VisionFinishReason } from '../../harness/llm-router.js';
@@ -153,6 +154,8 @@ export interface CriteriaJudgeFrame {
   readonly height: number;
   /** ggui#1492 — the host whose presentation framed this canvas (e.g. "a chat widget, inline, reference theme"); absent ⇒ the judge's own stand-in. */
   readonly hostLabel?: string;
+  /** How the card was composed on this frame (`resolveMountFit`, the one rule the runtime serves by); the sentence follows it. */
+  readonly fit: MountFit;
 }
 
 /** What the block carries besides the selected rows: the frame's box, and the props the card was rendered with. */
@@ -178,7 +181,10 @@ export const CRITERIA_PROPS_MAX_CHARS = 2000;
  */
 export function criteriaFrameLine(frame: CriteriaJudgeFrame): string {
   const box = `${frame.width}×${frame.height}`;
-  if (frame.canvas === 'xs-chat-card') {
+  if (frame.fit === 'framed-card') {
+    return `This frame is ${box}${frame.hostLabel !== undefined ? ` (${frame.hostLabel})` : ''} with the card at its natural height at the top, inside the card's own frame — its surface, a thin ring of its ink and rounded corners — on the host's ground: the card is sized to its content, so judge composition and space within the card's own extent, and read the ground round it as the host's, not the card's.`;
+  }
+  if (frame.fit === 'card') {
     const framedBy =
       frame.hostLabel !== undefined
         ? `inside the host's own frame (${frame.hostLabel}), on the host's ground`

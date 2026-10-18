@@ -101,7 +101,7 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
     mount!.unmount();
   });
 
-  it("fit: 'fill' ends the cascade with the fill rule after the frameless rule (ggui#1041: the host's canvas is the chrome); absent fit leaves the card its silhouette", async () => {
+  it("a fullscreen display mode (no canvas export: fill) ends the cascade with the fill rule after the frameless rule (ggui#1041: the host's canvas is the chrome); absent fit leaves the card its silhouette", async () => {
     const container = makeContainer();
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
@@ -109,7 +109,7 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
         render: { id: 'x', componentCode: '' },
         themeMode: 'light',
         appTheme: { ...THEME, frameless: true },
-        fit: 'fill',
+        displayMode: 'fullscreen',
       });
     });
     const { scopeClass, css } = scopedStyleOf(container);

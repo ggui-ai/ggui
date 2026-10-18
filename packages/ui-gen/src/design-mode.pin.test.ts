@@ -246,10 +246,14 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // import lists `useLayoutEffect`. All four digests move: constrained prompt 32cedfa6… → a2656392…, constrained
 // boilerplate 1a1346a2… → ba33a31f…, free prompt d212b4b2… → 64589393…, free boilerplate 6b267409… → 6423e307….
 // Receipt: the parent commit's tree passes the previous constants.
+// Re-recorded 2026-10-18 for ggui#1924 (a chat-width card keeps its natural height under a fullscreen host): the
+// boilerplate emits `export const gguiMountCanvas = "<canvas>";` under a DO NOT EDIT line, the canvas the runtime
+// reads at mount. Prompt text is unchanged; both boilerplate digests move: constrained ba33a31f… → 41af21c4…,
+// free 6423e307… → 9ef65a25….
 export const CONSTRAINED_PROMPT_SHA256 =
   "a265639273b3e752032c4d37c1bc6cfce8bdf13e54f68cb72779bc8082389422";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
-  'ba33a31f42fdcd814e33b3f91620776d0f69b649daceea177243cf207935d8b9';
+  '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
 // item's own identity — the field that names it when there is no id, never the map index; the prompt now
 // says what the self-check refuses). A HARD section shared by both arms, so BOTH prompt digests move
@@ -315,8 +319,9 @@ export const FREE_PROMPT_SHA256 =
   "6458939316eb4ca7f71695d2334cea1f3c0559b6f440896c493c67350e1277cc";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
+// Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.
 export const FREE_BOILERPLATE_SHA256 =
-  '6423e3078104d8951c7940fd2fabbe35c99cbbb31c4b5893bb4c6a1402746e26';
+  '9ef65a2561d2f9e968218b9a311a47497aadb6782e882c441048d337c0c68e46';
 
 /** `## ` / `### ` headings, in order, of the free prompt (fixture A). */
 export const FREE_PROMPT_SECTIONS: readonly string[] = [

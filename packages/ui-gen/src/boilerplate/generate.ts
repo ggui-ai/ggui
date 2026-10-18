@@ -36,7 +36,8 @@ import type {
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { renderBoilerplate } from "./render.js";
 import { jsonSchemaTypeToTs } from "./json-schema-ts.js";
-import { DEFAULT_DESIGN_MODE, type DesignMode } from "../design-mode.js";
+import { GGUI_MOUNT_CANVAS_EXPORT } from "@ggui-ai/design/rendering";
+import { DEFAULT_DESIGN_MODE, canvasForRendering, type DesignMode } from "../design-mode.js";
 
 /** Shell layout modes supported by the boilerplate templates. */
 export type ShellType = "chat" | "fullscreen" | "spatial";
@@ -605,11 +606,21 @@ export function generateBoilerplate(
   // hooks own their typed return shape internally; the contract surface
   // is pure declaration.
 
+  // The canvas this card is composed for, as a named export the runtime reads at mount
+  // (`resolveMountFit`): a chat-width card on a fullscreen surface keeps its natural height in its
+  // own frame instead of filling the surface. The compile step writes it; the model never does.
+  // It follows the shell × screen descriptors, which is what makes a chat shell `xs-chat-card`.
+  // An explicit canvas (the free prompt's) is not consulted: it can disagree with the shell, and the
+  // constrained boilerplate stays byte-identical whatever canvas is passed (INVARIANT 1).
+  const mountCanvas =
+    `\n\n// DO NOT EDIT — the canvas this card is composed for; the runtime reads it at mount.\n` +
+    `export const ${GGUI_MOUNT_CANVAS_EXPORT} = "${canvasForRendering(shellType, screen)}";`;
+
   return renderBoilerplate(shellType ?? "fullscreen", screen ?? "universal", {
     REACT_IMPORT: reactImport,
     ALL_DESIGN,
     WIRE_IMPORT: wireImport + gadgetImport,
-    PROPS_INTERFACE: propsInterface,
+    PROPS_INTERFACE: propsInterface + mountCanvas,
     ACTION_TYPES: actionTypesBlock,
     STREAM_TYPES: streamTypesBlock,
     CONTEXT_HOOKS: contextHooks,

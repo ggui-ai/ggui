@@ -5344,10 +5344,14 @@ async function bootProduction(opts: {
             const themeMode = resolveMountThemeMode(meta);
             return themeMode !== undefined ? { themeMode } : {};
           })(),
-          // The host's canvas is the chrome (ggui#1041): a `fullscreen` display mode
-          // composes the tree with `fit: 'fill'`; the hostcontextchanged re-injection
-          // below picks up a flip exactly as it does the theme mode.
-          ...(hostAnnouncedDisplayMode() === 'fullscreen' ? { fit: 'fill' as const } : {}),
+          // The host's display mode (ggui#1041): with the bundle's canvas export it
+          // decides the mount fit in the renderer (`resolveMountFit`); the
+          // hostcontextchanged re-injection below picks up a flip exactly as it does
+          // the theme mode.
+          ...(() => {
+            const displayMode = hostAnnouncedDisplayMode();
+            return displayMode !== undefined ? { displayMode } : {};
+          })(),
           // Per-app theme (ggui#987 v2). Threaded straight from the
           // bootstrap's `_meta["ai.ggui/render"].theme` (typed `AppTheme`,
           // already injection-validated by the wire parser) onto the mount

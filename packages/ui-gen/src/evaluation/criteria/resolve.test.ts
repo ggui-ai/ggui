@@ -71,8 +71,8 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     expect(buildCriteriaJudgeBlock(bank, { criteriaSetId: 'x', selection: [] })).toBe('');
     // the inline chat card is host-sized: the block says to judge inside the card's extent on that canvas only
     // every canvas names its box and how the card occupies it (the evidence audit on #1438: phone rows guessed a tablet box)
-    const xs = { canvas: 'xs-chat-card' as const, width: 400, height: 640 };
-    const phone = { canvas: 'mobile-fullscreen-small' as const, width: 390, height: 844 };
+    const xs = { canvas: 'xs-chat-card' as const, width: 400, height: 640, fit: 'card' as const };
+    const phone = { canvas: 'mobile-fullscreen-small' as const, width: 390, height: 844, fit: 'fill' as const };
     // ggui#1475 — the capture IS the card at its natural height (the box is its ceiling), so the line names no void under it.
     expect(criteriaFrameLine(xs)).toContain("an inline chat card captured at its natural height (at most 400×640, the host's ceiling)");
     expect(criteriaFrameLine(xs)).toContain("a generic stand-in for the host's frame");
@@ -80,7 +80,7 @@ describe('resolveCriteriaBlock (ggui#1436)', () => {
     expect(criteriaFrameLine(phone)).toContain('390×844, a fixed full-screen box the card fills');
     expect(buildCriteriaJudgeBlock(bank, selected, { frame: xs })).toContain(criteriaFrameLine(xs));
     expect(buildCriteriaJudgeBlock(bank, selected, { frame: phone })).toContain(criteriaFrameLine(phone));
-    expect(buildCriteriaJudgeBlock(bank, selected, { frame: { canvas: 'md', width: 384, height: 516 } })).toContain('This frame is 384×516, a fixed');
+    expect(buildCriteriaJudgeBlock(bank, selected, { frame: { canvas: 'md', width: 384, height: 516, fit: 'fill' } })).toContain('This frame is 384×516, a fixed');
     expect(block).not.toContain('This frame is');
     // the rendered props are the one declared non-frame input, bounded and labelled
     const withProps = buildCriteriaJudgeBlock(bank, selected, { propsJson: '{"title":"Harbor"}' });

@@ -21,7 +21,7 @@ import type { CriteriaContextInput } from './criteria/context.js';
 import { selectCriteria } from './criteria/select.js';
 import { buildCriteriaJudgeBlock, resolveCriteriaBlock } from './criteria/resolve.js';
 import { build } from 'esbuild';
-import { EXPANDED_FRAME, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens } from '@ggui-ai/design/rendering';
+import { EXPANDED_FRAME, FRAMED_CARD_GROUND, GGUI_MOUNT_CANVAS_EXPORT, cardFitRule, expandedFramePanelDecls, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens, inlineCardRadius, resolveMountFit, type MountFit } from '@ggui-ai/design/rendering';
 import { readInkExtent, type InkExtent } from './ink-extent.js';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
@@ -686,8 +686,11 @@ function buildRenderHTML(
   fit?: 'fill',
   chrome?: CanvasChrome,
   presentation?: CanvasHostPresentation,
+  /** Set for a `framed-card` mount: the card frame's radius ({@link inlineCardRadius}); `null` keeps the theme's `lg` token. */
+  framedCardRadiusPx?: number | null,
 ): string {
-  if (chrome === 'panel' && fit !== 'fill') throw new Error("the judge's panel frames a fill canvas only (ggui#1083 cut 3)");
+  const framedCard = framedCardRadiusPx !== undefined;
+  if (chrome === 'panel' && fit !== 'fill' && !framedCard) throw new Error("the judge's panel frames a fill canvas only (ggui#1083 cut 3)");
   if (chrome === 'ground' && fit === 'fill') throw new Error("the host ground frames an inline card only — a fill canvas has no natural height (ggui#1475)");
   // Default to the design tokens production's no-theme branch injects
   // (getCssTokens → default theme, light) — ggui#613: under the s4
@@ -715,11 +718,12 @@ function buildRenderHTML(
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
     ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
+    ${framedCard ? `.${JUDGE_PANEL_CLASS} { ${expandedFramePanelDecls()} background: ${FRAMED_CARD_GROUND}; display: flow-root; } body > .${JUDGE_PANEL_CLASS} { margin: ${EXPANDED_FRAME.insetPx}px; height: calc(100vh - ${2 * EXPANDED_FRAME.insetPx}px); }` + cardFitRule(JUDGE_SCOPE_CLASS, framedCardRadiusPx) : ''}
     ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { ${inlineFrameDecls(presentation?.frame)} }` : ''}
   </style>
 </head>
 <body>
-  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : chrome === 'ground' ? `<div class="${JUDGE_GROUND_CLASS}"><div class="${JUDGE_INLINE_FRAME_CLASS}">` : ''}<div id="root"${fit === 'fill' ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' ? '</div>' : chrome === 'ground' ? '</div></div>' : ''}
+  ${chrome === 'panel' ? `<div class="${JUDGE_PANEL_CLASS}">` : chrome === 'ground' ? `<div class="${JUDGE_GROUND_CLASS}"><div class="${JUDGE_INLINE_FRAME_CLASS}">` : ''}<div id="root"${fit === 'fill' || framedCard ? ` class="${JUDGE_SCOPE_CLASS}"` : ''}></div>${chrome === 'panel' ? '</div>' : chrome === 'ground' ? '</div></div>' : ''}
   <script type="importmap">
   {
     "imports": {
@@ -1137,9 +1141,29 @@ export interface VisualEvalDetailed {
  * ({@link runVisualFit}) frame through this ONE function, so a fit verdict
  * reached without the judge is taken on the frame the judge would have seen.
  */
+/**
+ * The canvas a compiled bundle declares in its {@link GGUI_MOUNT_CANVAS_EXPORT} export, read from the code as the runtime
+ * reads it from the module: the binding exported under that name (`export{r as gguiMountCanvas}` minified, or the plain
+ * `const gguiMountCanvas`) and its string literal. Untrusted: `resolveMountFit` narrows it, and anything unread is `undefined`.
+ */
+export function mountCanvasOf(compiledCode: string): string | undefined {
+  const name = GGUI_MOUNT_CANVAS_EXPORT;
+  const binding = new RegExp(`([A-Za-z_$][\\w$]*)\\s+as\\s+${name}\\b`).exec(compiledCode)?.[1] ?? name;
+  return new RegExp(`(?:^|[^\\w$.])${binding.replace(/\$/g, '\\$')}\\s*=\\s*"([^"\\\\]*)"`).exec(compiledCode)?.[1];
+}
+/** The `--ggui-*` custom properties a composed token block declares (the last declaration of a name wins, as in CSS). */
+function themeVarsOf(css: string): Readonly<Record<string, string>> {
+  const vars: Record<string, string> = {};
+  for (const [, name, value] of css.matchAll(/(--ggui-[\w-]+)\s*:\s*([^;}]+)/g)) {
+    if (name !== undefined && value !== undefined) vars[name] = value.trim();
+  }
+  return vars;
+}
 interface CanvasFrame {
   readonly viewport: CanvasViewport;
   readonly policy: CanvasFitPolicy;
+  /** How the runtime would compose this card on this canvas (`resolveMountFit`) — the capture and the frame statement follow it. */
+  readonly mountFit: MountFit;
   readonly fit: 'fill' | undefined;
   /** The host stand-in drawn round the scope (ggui#1083 cut 3) — the window is padded by its gap; `viewport` stays the card's box. */
   readonly chrome: CanvasChrome;
@@ -1183,13 +1207,16 @@ async function frameCanvas(
   const declaredBox = canvasViewports?.[canvas];
   const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
   const policy = canvasFitPolicy(canvas);
-  const fit = canvasFit(canvas);
+  // The ONE fit rule the runtime serves by: the bundle's canvas export + the display mode this canvas stands for.
+  const mountFit = resolveMountFit({ canvas: mountCanvasOf(context.compiledCode), displayMode: displayModeForCanvas(canvas) });
+  const fit = mountFit === 'framed-card' ? undefined : canvasFit(canvas);
   const chrome = canvasChrome(canvas);
   const outcome = resolvePresentation(canvas, hostPresentations?.[canvas]);
   const presentation = outcome?.status === 'applied' ? outcome.applied : undefined;
   const geometry = inlineGeometry(presentation?.frame);
+  const framedCardRadiusPx = mountFit === 'framed-card' ? inlineCardRadius(themeVarsOf(context.cssTokens ?? getCssTokens())).radiusPx : undefined;
   const canvasHtml =
-    fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation) : html;
+    fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation, framedCardRadiusPx) : html;
   const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, policy.capture, {
     padPx: geometry.padPx,
     ...(geometry.floorPx !== undefined ? { floorPx: geometry.floorPx } : {}),
@@ -1197,7 +1224,7 @@ async function frameCanvas(
   // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
   const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };
   return {
-    viewport, policy, fit, chrome, declared: declaredBox !== undefined, attempt,
+    viewport, policy, mountFit, fit, chrome, declared: declaredBox !== undefined, attempt,
     ink: readInk(captured.png, chrome, canvas, geometry.inkInsetPx),
     ...(outcome !== undefined ? { presentation: outcome } : {}),
   };
@@ -1490,7 +1517,7 @@ export async function runVisualEvaluationDetailed(
       const criteriaBlock =
         context.criteria !== undefined && criteriaSelected !== undefined
           ? buildCriteriaJudgeBlock(context.criteria.bank, criteriaSelected, {
-              frame: { canvas, width: viewport.width, height: viewport.height, ...(frame.presentation?.status === 'applied' ? { hostLabel: frame.presentation.applied.label } : {}) },
+              frame: { canvas, width: viewport.width, height: viewport.height, fit: frame.mountFit, ...(frame.presentation?.status === 'applied' ? { hostLabel: frame.presentation.applied.label } : {}) },
               ...(config.sampleProps !== undefined ? { propsJson: JSON.stringify(config.sampleProps) } : {}),
             })
           : '';
@@ -1736,6 +1763,8 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
 
 /** One stored capture to judge: the frame the judge saw at capture time, plus what the capture measured. */
 export interface StoredCaptureInput {
+  /** How the stored capture was composed. Absent ⇒ the canvas's composition before mount fits existed (`fill` on a fullscreen canvas, else `card`). */
+  readonly mountFit?: MountFit;
   readonly canvas: CanvasClass;
   /** The capture as saved (`canvas-<class>.png`). */
   readonly png: Buffer;
@@ -1800,7 +1829,7 @@ export async function judgeStoredCapture(
   const criteriaBlock =
     input.criteria !== undefined && criteriaSelected !== undefined
       ? buildCriteriaJudgeBlock(input.criteria.bank, criteriaSelected, {
-          frame: { canvas, width: viewport.width, height: viewport.height },
+          frame: { canvas, width: viewport.width, height: viewport.height, fit: input.mountFit ?? (canvasFit(canvas) === 'fill' ? 'fill' : 'card') },
           ...(input.sampleProps !== undefined ? { propsJson: JSON.stringify(input.sampleProps) } : {}),
         })
       : '';

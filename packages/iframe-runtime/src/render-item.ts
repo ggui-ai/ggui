@@ -37,6 +37,7 @@
  *   takes over — matches DynamicComponent's componentCode-present
  *   gate.
  */
+import type { HostDisplayMode } from '@ggui-ai/design/rendering';
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import type { AppTheme, GguiSession } from '@ggui-ai/protocol/wire';
@@ -107,11 +108,12 @@ export interface RenderItemOptions {
    */
   readonly themeMode?: 'light' | 'dark';
   /**
-   * The mounted root fills its surface without a silhouette of its own (ggui#1041):
-   * set when the host's context says `displayMode: 'fullscreen'` — a canvas panel
-   * is the chrome. Absent for inline mounts.
+   * The display mode the host announced for this view (`hostContext.displayMode`). The renderer
+   * reads it with the bundle's canvas export through `resolveMountFit`: under `fullscreen` a
+   * canvas fills its surface (the host's panel is the chrome) and a chat-width card keeps its
+   * natural height in its own frame. Absent for inline mounts.
    */
-  readonly fit?: 'fill';
+  readonly displayMode?: HostDisplayMode;
   /**
    * The per-app theme (protocol's `AppTheme`, ggui#987 v2) forwarded
    * verbatim to {@link ReactRootMountOptions.appTheme}: the renderer
@@ -329,10 +331,10 @@ export async function mountRender(
       ...(currentOpts.cssOverrides !== undefined
         ? { cssOverrides: currentOpts.cssOverrides }
         : {}),
-      // The host's canvas is the chrome (ggui#1041): `fit` MUST cross this
-      // boundary like every other compose option — ggui#1073 shipped
-      // without it, and every served hello composed as an inline card.
-      ...(currentOpts.fit !== undefined ? { fit: currentOpts.fit } : {}),
+      // The host's display mode MUST cross this boundary like every other compose
+      // option — ggui#1073 shipped without it, and every served hello composed as an
+      // inline card. The renderer turns it into the mount fit.
+      ...(currentOpts.displayMode !== undefined ? { displayMode: currentOpts.displayMode } : {}),
       ...(currentOpts.onError !== undefined ? { onError: currentOpts.onError } : {}),
       ...(currentOpts.onRenderFailure !== undefined ? { onRenderFailure: currentOpts.onRenderFailure } : {}),
       renderWrapper: wrapInScopedProvider,
@@ -416,7 +418,7 @@ export async function mountRender(
           ...(next.appTheme !== undefined ? { appTheme: next.appTheme } : {}),
           ...(next.hostPalette !== undefined ? { hostPalette: next.hostPalette } : {}),
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
-          ...(next.fit !== undefined ? { fit: next.fit } : {}),
+          ...(next.displayMode !== undefined ? { displayMode: next.displayMode } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
           ...(next.onRenderFailure !== undefined ? { onRenderFailure: next.onRenderFailure } : {}),
           renderWrapper: wrapInScopedProvider,

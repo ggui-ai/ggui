@@ -40,11 +40,11 @@ function scopedCss(container: HTMLElement): { scopeClass: string; css: string } 
 const base = () => ({ render: makeComponentRender(), scopedWireConfig: null, streamBus: new StreamBus(), sessionId: 'render_fit_1', themeMode: 'light' as const });
 
 describe('mountRender — fit reaches the tree compose (ggui#1073)', () => {
-  it("mount: fit: 'fill' composes the fill rule; absent fit does not", async () => {
+  it("mount: a fullscreen display mode composes the fill rule (a bundle with no canvas export); absent does not", async () => {
     const filled = makeContainer();
     let handle!: Awaited<ReturnType<typeof mountRender>>;
     await flush(async () => {
-      handle = await mountRender(filled, { ...base(), fit: 'fill' });
+      handle = await mountRender(filled, { ...base(), displayMode: 'fullscreen' });
     });
     const f = scopedCss(filled);
     expect(f.css).toContain(fillFitRule(f.scopeClass));
@@ -59,7 +59,7 @@ describe('mountRender — fit reaches the tree compose (ggui#1073)', () => {
     handle.unmount();
   });
 
-  it('update: a later fit: "fill" (the host flipped to fullscreen) recomposes with the fill rule', async () => {
+  it('update: a later fullscreen display mode (the host flipped) recomposes with the fill rule', async () => {
     const container = makeContainer();
     let handle!: Awaited<ReturnType<typeof mountRender>>;
     await flush(async () => {
@@ -67,7 +67,7 @@ describe('mountRender — fit reaches the tree compose (ggui#1073)', () => {
     });
     expect(scopedCss(container).css).not.toContain('min-height: 100%');
     await flush(async () => {
-      await handle.update({ ...base(), fit: 'fill' });
+      await handle.update({ ...base(), displayMode: 'fullscreen' });
     });
     const after = scopedCss(container);
     expect(after.css).toContain(fillFitRule(after.scopeClass));

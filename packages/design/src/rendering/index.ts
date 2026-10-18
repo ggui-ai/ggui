@@ -26,8 +26,22 @@ export {
   expandedFramePanelRule,
   composeThemeCss,
   toCssDecls,
+  CANVAS_CLASSES,
+  isCanvasClass,
+  GGUI_MOUNT_CANVAS_EXPORT,
+  resolveMountFit,
+  RADIUS_BUCKETS,
+  RADIUS_LADDERS,
+  INLINE_CARD_RADIUS_PX,
+  INLINE_CARD_RING,
+  INLINE_CARD_FRAME_VARS,
+  recoverRadiusBucket,
+  pxValue,
+  inlineCardRadius,
+  cardFitRule,
+  FRAMED_CARD_GROUND,
 } from './css-tokens';
-export type { ComposeThemeCssOptions, ThemeOverlayLayers } from './css-tokens';
+export type { ComposeThemeCssOptions, ThemeOverlayLayers, CanvasClass, HostDisplayMode, MountFit, RadiusBucket } from './css-tokens';
 export {
   rewriteImports,
   buildStaticShimModules,

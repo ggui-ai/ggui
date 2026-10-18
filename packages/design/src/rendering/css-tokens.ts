@@ -394,7 +394,9 @@ export function expandedFrameScrim(over: string): string {
  *    scroll container would swallow the overflow a judge measures on the document.
  *
  * Rule 0 holds: ggui's runtime NEVER composes this (the fill rule strips the card's own silhouette;
- * a second chrome is the frame-in-frame fault). It exists for the surfaces that STAND IN for a host —
+ * a second chrome is the frame-in-frame fault). Its one keyed exception is a chat-width card on a
+ * fullscreen surface ({@link resolveMountFit} → `framed-card`): no host frame exists round that card,
+ * so the runtime composes the card's own frame ({@link cardFitRule}) — one frame, not two. It exists for the surfaces that STAND IN for a host —
  * the judge's page and the served-preview harness — so the frame the founder approves carries the
  * hairline, radius and elevation the visitor sees.
  */
@@ -641,13 +643,14 @@ export interface ComposeThemeCssOptions {
   /** Verbatim CSS the caller appends between the variable layers and the trailing rules (`tree` only). */
   readonly cssOverrides?: string;
   /**
-   * How the mounted root sits on its surface (`tree` only). `fill` — the host
-   * shows this page as the whole of a canvas (an MCP Apps `displayMode` of
-   * `fullscreen`): the root loses its own silhouette (border, radius, shadow)
-   * and fills the page, because the host's panel is the chrome (ggui#1041).
-   * Absent — the root keeps its card silhouette, as an inline mount needs.
+   * How the mounted root sits on its surface (`tree` only); the value comes from
+   * {@link resolveMountFit}. `fill` — the host shows this page as the whole of a canvas
+   * (an MCP Apps `displayMode` of `fullscreen`): the root loses its own silhouette (border,
+   * radius, shadow) and fills the page, because the host's panel is the chrome. `framed-card` —
+   * a chat-width card on a fullscreen surface keeps its natural height inside the card frame
+   * composed here. `card` — the inline mount, nothing composed. Absent ≡ `card`.
    */
-  readonly fit?: 'fill';
+  readonly fit?: MountFit;
 }
 
 /** `{ '--ggui-a': '1', '--ggui-b': '2' }` → `--ggui-a: 1;--ggui-b: 2;` */
@@ -690,6 +693,7 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
       css += `${opts.appTheme.keyframes?.[m] ?? ''}${opts.appTheme.frameless === true ? framelessSuppressionRule(scope) : ''}`;
     }
     if (opts.fit === 'fill') css += fillFitRule(scope);
+    if (opts.fit === 'framed-card') css += cardFitRule(scope, inlineCardRadius({ ...(overlay ?? {}), ...(opts.appTheme?.cssVariables ?? {}) }).radiusPx);
     return css;
   }
   let css = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);
@@ -714,3 +718,154 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
   return css;
 }
 
+
+// ─── Mount fit: how a mounted card sits on its host surface ─────────────────
+
+/**
+ * The rendering canvases a card is generated for and judged at. A class is derived from the host's
+ * display mode plus width, never from width alone: an inline chat-width card is `xs-chat-card`
+ * whatever the window measures; a fullscreen surface follows its width through the breakpoints.
+ * Defined once here so the runtime, the generator and the evaluator read one vocabulary.
+ */
+export const CANVAS_CLASSES = ['xs-chat-card', 'mobile-fullscreen-small', 'md', 'lg', 'xl'] as const;
+export type CanvasClass = (typeof CANVAS_CLASSES)[number];
+
+/** Whether an untrusted value (a compiled bundle's export) is a canvas class. */
+export function isCanvasClass(value: unknown): value is CanvasClass {
+  return CANVAS_CLASSES.some((c) => c === value);
+}
+
+/**
+ * The display mode a host announces for a view (MCP Apps `hostContext.displayMode`, the values of
+ * `ui/request-display-mode`).
+ */
+export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
+
+/**
+ * How the mounted root sits on its surface:
+ * - `card` — the inline mount: the root keeps its natural height and the host draws the card's
+ *   frame round it, so nothing is composed here.
+ * - `framed-card` — a chat-width card on a fullscreen surface: the root keeps its natural height
+ *   and the runtime composes the card's frame round it ({@link cardFitRule}).
+ * - `fill` — the host shows the page as the whole of a canvas: the root drops its own silhouette
+ *   and fills the page, because the host's panel is the chrome ({@link fillFitRule}).
+ */
+export type MountFit = 'card' | 'framed-card' | 'fill';
+
+/**
+ * The named export a compiled card bundle carries its canvas class in. The generator emits it
+ * (`export const gguiMountCanvas = '<class>'`) and the runtime reads it beside the default export.
+ */
+export const GGUI_MOUNT_CANVAS_EXPORT = 'gguiMountCanvas' as const;
+
+/**
+ * The ONE fit rule, read by the runtime's composition, the evaluator's capture and the evaluator's
+ * frame statement, so none can disagree with the others.
+ *
+ * - Not fullscreen → `card` (the inline mount; the host draws the frame).
+ * - Fullscreen + a chat-width card (`xs-chat-card`) → `framed-card`: the card stays the size of its
+ *   content, at the top of the surface, in its own frame. This is the one keyed exception to the
+ *   rule that the runtime never composes a card's chrome ({@link EXPANDED_FRAME_CHROME}): on that
+ *   surface no host frame exists round the card, so there is one frame, not two.
+ * - Fullscreen + any other canvas, OR an unknown or absent canvas → `fill`. This fails closed: a
+ *   bundle compiled before it carried {@link GGUI_MOUNT_CANVAS_EXPORT}, or carrying a value that is
+ *   not a {@link CanvasClass}, is composed exactly as before.
+ *
+ * Two absents, kept apart: an absent `canvas` (no export in the bundle) means `fill` under
+ * fullscreen; an absent `displayMode` (the host announced none) means the inline mount.
+ */
+export function resolveMountFit(input: { readonly canvas: unknown; readonly displayMode: HostDisplayMode | undefined }): MountFit {
+  if (input.displayMode !== 'fullscreen') return 'card';
+  return isCanvasClass(input.canvas) && input.canvas === 'xs-chat-card' ? 'framed-card' : 'fill';
+}
+
+/** A radius bucket: the shape family an app theme's radius ladder belongs to. */
+export const RADIUS_BUCKETS = ['none', 'soft', 'round'] as const;
+export type RadiusBucket = (typeof RADIUS_BUCKETS)[number];
+
+/**
+ * The radius ladders (sm / md / lg / xl, in px) a host forwards into an app theme, one per bucket.
+ * Distinct, so a ladder names its bucket. Their `xl` stops are the expanded frame's outer radius.
+ */
+export const RADIUS_LADDERS: Readonly<Record<RadiusBucket, readonly [number, number, number, number]>> = {
+  none: [0, 0, 0, 0],
+  soft: [4, 8, 12, 16],
+  round: [8, 12, 18, 24],
+};
+
+/**
+ * The inline card frame by bucket: its corner radius (a table, not a ladder stop — soft's 10 px is
+ * on no ladder) and its ring, a hairline of the card's ink.
+ */
+export const INLINE_CARD_RADIUS_PX: Readonly<Record<RadiusBucket, number>> = { none: 0, soft: 10, round: 18 };
+export const INLINE_CARD_RING = { widthPx: 1, alpha: 0.08 } as const;
+
+/** The token names the inline card frame reads from an app theme. */
+export const INLINE_CARD_FRAME_VARS = {
+  ground: '--ggui-color-ground',
+  surface: '--ggui-color-container',
+  ink: '--ggui-color-onContainer',
+  radius: ['--ggui-shape-radius-sm', '--ggui-shape-radius-md', '--ggui-shape-radius-lg', '--ggui-shape-radius-xl'],
+} as const;
+
+/** The bucket whose ladder equals the theme's sm / md / lg / xl radii exactly; `null` for any other ladder (never the nearest). */
+export function recoverRadiusBucket(ladderPx: readonly (number | null)[]): RadiusBucket | null {
+  for (const bucket of RADIUS_BUCKETS) {
+    if (RADIUS_LADDERS[bucket].every((stop, i) => ladderPx[i] === stop)) return bucket;
+  }
+  return null;
+}
+
+/** `'12px'` → 12; anything else (a var, a `rem`, absent) → null. */
+export function pxValue(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const m = /^(\d+(?:\.\d+)?)px$/.exec(value.trim());
+  return m === null ? null : Number(m[1]);
+}
+
+/**
+ * The inline card's frame radius for an app theme's variables: the bucket's inline radius when the
+ * theme's ladder is one of {@link RADIUS_LADDERS}; otherwise the theme's own `lg` radius, the stop
+ * the design system's card wears (`source: 'theme-lg'`). Absent or unreadable both → `null`
+ * radius px, and the frame keeps the `lg` token as a CSS value.
+ */
+export function inlineCardRadius(vars: Readonly<Record<string, string>>): {
+  readonly bucket: RadiusBucket | null;
+  readonly radiusPx: number | null;
+  readonly source: 'bucket' | 'theme-lg';
+} {
+  const bucket = recoverRadiusBucket(INLINE_CARD_FRAME_VARS.radius.map((name) => pxValue(vars[name])));
+  if (bucket !== null) return { bucket, radiusPx: INLINE_CARD_RADIUS_PX[bucket], source: 'bucket' };
+  return { bucket: null, radiusPx: pxValue(vars['--ggui-shape-radius-lg']), source: 'theme-lg' };
+}
+
+/**
+ * The ground under a framed card: the host's sunken pane ground, painted round the card so its edge
+ * reads against the room it sits in. The runtime paints it as the document's backdrop (through the
+ * render shell's `--ggui-shell-background` override point); a judge's page paints the same token
+ * under the card. One constant, so the two cannot drift.
+ */
+export const FRAMED_CARD_GROUND = 'var(--ggui-color-sunken)';
+
+/**
+ * The `fit: 'framed-card'` rule: the root keeps its natural height at the top of
+ * the page, inset by the frame's gap, and wears the inline card's frame — the theme's container
+ * surface, a 1 px ring of its ink, the bucket's corner radius, its content clipped to that radius,
+ * no shadow. `radiusPx` comes from {@link inlineCardRadius}; `null` falls back to the theme's `lg`
+ * radius token. The page round it is the host's ground.
+ */
+export function cardFitRule(scopeClass: string, radiusPx: number | null): string {
+  const s = scopeClass;
+  const v = INLINE_CARD_FRAME_VARS;
+  const radius = radiusPx === null ? 'var(--ggui-shape-radius-lg)' : `${radiusPx}px`;
+  const ringPct = Math.round(INLINE_CARD_RING.alpha * 100);
+  return [
+    '',
+    `html:has(.${s}), html:has(.${s}) body { margin: 0; }`,
+    // The document's backdrop is the room's ground. The render shell stamps its backdrop inline as a
+    // `var(--ggui-shell-background, …)`, so setting the property repaints it in place.
+    `html:has(.${s}) { --ggui-shell-background: ${FRAMED_CARD_GROUND}; }`,
+    `:has(> .${s}) { margin: 0; padding: 0; list-style: none; }`,
+    `.${s} { margin: ${EXPANDED_FRAME.insetPx}px; background: var(${v.surface}); border: ${INLINE_CARD_RING.widthPx}px solid color-mix(in srgb, var(${v.ink}) ${ringPct}%, transparent); border-radius: ${radius}; overflow: clip; box-shadow: none; }`,
+  ].join('\n');
+}
