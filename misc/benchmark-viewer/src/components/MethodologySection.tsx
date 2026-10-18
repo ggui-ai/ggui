@@ -65,6 +65,20 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-18',
+    text:
+      'Run note, to be replaced by a fuller entry with our checks of this run (internal issue ' +
+      '#1869): the 18 October run is the first on the image described in the first 16 October ' +
+      'entry, so the arms named there start their new series here. It is not a comparison with ' +
+      '16 October. Benchmark runs were paused from 16 October, so there is no 17 October run, ' +
+      'and this one was started by hand. It ran on a rebuild of that image, not the build we ' +
+      'named before the run: the source is the same, and the one difference is a patch update to ' +
+      'the Chromium browser, from 155.0.8059.39 to 155.0.8059.79. Chromium renders each ' +
+      'generated interface for the behaviour check and the visual judge, so the update is a ' +
+      'small term in those scores as well as in run times and cost. We expect it to be near ' +
+      'zero, but we have not measured it.',
+  },
+  {
     date: '2026-10-16',
     text:
       'Arm change (internal issue #1743): from the first run on a runner image built with this ' +
