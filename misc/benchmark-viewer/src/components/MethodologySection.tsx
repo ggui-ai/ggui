@@ -67,16 +67,22 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-18',
     text:
-      'Run note, to be replaced by a fuller entry with our checks of this run (internal issue ' +
-      '#1869): the 18 October run is the first on the image described in the first 16 October ' +
-      'entry, so the arms named there start their new series here. It is not a comparison with ' +
-      '16 October. Benchmark runs were paused from 16 October, so there is no 17 October run, ' +
-      'and this one was started by hand. It ran on a rebuild of that image, not the build we ' +
-      'named before the run: the source is the same, and the one difference is a patch update to ' +
-      'the Chromium browser, from 155.0.8059.39 to 155.0.8059.79. Chromium renders each ' +
-      'generated interface for the behaviour check and the visual judge, so the update is a ' +
-      'small term in those scores as well as in run times and cost. We expect it to be near ' +
-      'zero, but we have not measured it.',
+      'Run note (internal issues #1743 and #1869): the 18 October run is the first on the image ' +
+      'described in the first 16 October entry, so the arms named there start their new series ' +
+      'here. It is not a comparison with 16 October. Benchmark runs were paused from 16 October, ' +
+      'so there is no 17 October run, and this one was started by hand. It ran on a rebuild of ' +
+      'that image, not the build we named before the run: the source is the same, and the one ' +
+      'difference is a patch update to the Chromium browser, from 155.0.8059.39 to ' +
+      '155.0.8059.79. In this run Chromium executes the contract-behaviour check and a runtime ' +
+      'check inside the generation loop, so the update is a small term, which we have not ' +
+      'measured, in those results, in turn counts, and in run times and cost. The judges score ' +
+      'the code, not screenshots. Against the seven runs before it, mean turns and the number of ' +
+      'runs needing six or more turns are within their range. Pass rate, score and polish are ' +
+      'above it, and that includes the six arms whose models did not change. On those arms the ' +
+      'step comes from two of the three judges, and this run cannot tell its possible causes ' +
+      'apart: the generator change in the same image, the Chromium update, or a change on the ' +
+      'judges\' side. We do not read it as an improvement. On the six unchanged arms, the ' +
+      'self-check fix described on 16 October fired no more often than on the two runs before it.',
   },
   {
     date: '2026-10-16',
