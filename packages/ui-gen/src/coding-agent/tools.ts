@@ -11,6 +11,7 @@
 import * as esbuild from 'esbuild';
 import { AgentWorkspace } from './workspace';
 import { getSoftWarnings } from './self-check';
+import { restoreReactImport } from '../boilerplate/react-hooks.js';
 import { runTier0Checks } from '../check/index.js';
 import { runGatedAxisChecks, traceAxisChecksSkipped } from '../evaluation/axis-checks/dispatch.js';
 import type { AxisCheck, AxisCheckInput, EvalIssue } from '../evaluation/types-public.js';
@@ -121,7 +122,14 @@ async function autoCommit(
   // No post-compile formatting — the generated TSX is built as-is.
   // (Prettier auto-format was removed; it added a dependency + repair
   // churn without a quality gain.)
-  const formatted = raw;
+  // ggui#1932: the boilerplate's DO NOT EDIT React import is code's to keep — restored here, before
+  // the build and tier-0, so a dropped hook never becomes a refusal the model spends a turn on.
+  const restore = restoreReactImport(raw);
+  if (restore.added.length > 0) {
+    workspace.write(restore.source);
+    console.log(`[coding-agent] react-import restored: ${restore.added.map((h) => `+${h}`).join(',')}`);
+  }
+  const formatted = restore.source;
 
   // Build with esbuild — keep all imports (react, @ggui-ai/design)
   // esbuild.transform() passes them through as-is, the runtime resolves them
