@@ -52,7 +52,7 @@
   },
   "peerDependencies": {
     "better-sqlite3": "^11.0.0",
-    "vitest": "^3.0.0 || ^4.0.0"
+    "vitest": "^3.0.0"
   },
   "peerDependenciesMeta": {
     "better-sqlite3": {
