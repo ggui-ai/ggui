@@ -35,6 +35,7 @@ import type {
 } from "@ggui-ai/protocol";
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { renderBoilerplate } from "./render.js";
+import { BOILERPLATE_REACT_IMPORT } from "./react-hooks.js";
 import { jsonSchemaTypeToTs } from "./json-schema-ts.js";
 import { GGUI_MOUNT_CANVAS_EXPORT } from "@ggui-ai/design/rendering";
 import { DEFAULT_DESIGN_MODE, canvasForRendering, type DesignMode } from "../design-mode.js";
@@ -548,8 +549,7 @@ export function generateBoilerplate(
   // ── React import — the hooks generated code may use, always listed (the line is DO NOT EDIT) ──
   // `useLayoutEffect` (ggui#1896): the prompt seeds a context slot from a prop with it, so the
   // first frame never paints the slot's contract default.
-  const reactHooks = ["useState", "useCallback", "useMemo", "useEffect", "useLayoutEffect", "useRef"];
-  const reactImport = `import React, { ${reactHooks.join(", ")} } from 'react';`;
+  const reactImport = BOILERPLATE_REACT_IMPORT;
 
   // ── Hook body ──────────────────────────────────────────
   // Wire hooks are placed inside render(), before the return statement.

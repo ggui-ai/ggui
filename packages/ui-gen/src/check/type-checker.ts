@@ -61,6 +61,7 @@ import path from 'path';
 import { createRequire } from 'module';
 import { TINT_STEPS } from '@ggui-ai/design';
 import { describeAllowedImports } from '../validation/allowed-imports.js';
+import { BOILERPLATE_REACT_HOOKS, BOILERPLATE_REACT_IMPORT } from '../boilerplate/react-hooks.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,6 +123,14 @@ function generateFix(code: number, message?: string, sourceLine?: string): strin
   // the destructure to `_X`, breaking prop access. Steer back.
   if (code === 2339 && message && /Property '_[a-zA-Z]/.test(message)) {
     return `You renamed a prop with a leading underscore to silence \`no-unused-vars\`, but the prop on \`Props\` doesn't have that prefix. Restore the original name; better, don't destructure props you won't render — access them via \`props.fieldName\` only when needed.${sourceHint}`;
+  }
+
+  // A React hook the boilerplate always imports is missing: the DO NOT EDIT React import line was
+  // dropped or rewritten. The generic text below (props / a removed helper) points the model away
+  // from the one line that fixes it, and it loops (google-fast × chat-interface reached 30 turns).
+  const missing = code === 2304 && message !== undefined ? /Cannot find name '([^']+)'/.exec(message)?.[1] : undefined;
+  if (missing !== undefined && BOILERPLATE_REACT_HOOKS.some((h) => h === missing)) {
+    return `\`${missing}\` is a React hook, and the boilerplate's React import lists it: \`${BOILERPLATE_REACT_IMPORT}\` is a DO NOT EDIT line. This patch dropped or rewrote it. Restore that line exactly as the boilerplate wrote it, at the top of the file; do not import the hook a second way.${sourceHint}`;
   }
 
   // Detect "Cannot find name" for destructured props
