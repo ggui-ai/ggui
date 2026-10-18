@@ -1359,6 +1359,52 @@ export const PERSONALIZATION_COMMITS: BenchmarkCommit[] = [
  */
 export const EXPERIMENT_COMMITS: BenchmarkCommit[] = [
   {
+    id: 'profile-slots',
+    name: 'Profile Editor (context slots seeded from props)',
+    description: 'A form whose draft fields are context slots that must start from props (ggui#1896: a slot seeded from a prop)',
+    complexity: 'medium',
+    expectedMinScore: 60,
+    shellType: 'chat',
+    screen: 'desktop',
+    prompt: `Build an edit-profile card.
+
+  Three fields: display name, email, and a short bio. They are pre-filled from props.initialProfile, because the visitor
+  is editing a profile that already exists. The agent watches the draft while the visitor types, so each field's value
+  lives in the contract's context slot of the same name (name, email, bio).
+
+  One primary action, "Save profile", that calls the save action with the three values. A secondary "Reset" restores
+  the values from props.
+
+  Requirements:
+  - The fields show the profile from props on first render, never empty boxes
+  - Email is validated as an email before Save is enabled
+  - Use the design system's primitives and tokens for all styling
+  - Keep the card compact: it renders in the chat panel`,
+    contract: {
+      propsSpec: {
+        properties: {
+          initialProfile: {
+            schema: { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string' }, bio: { type: 'string' } } },
+            required: true,
+            description: 'The existing profile being edited',
+            example: { name: 'Ada Lovelace', email: 'ada@example.com', bio: 'Writes the first programs.' },
+          },
+        },
+      },
+      contextSpec: {
+        name: { schema: { type: 'string' }, description: 'The display name as currently typed' },
+        email: { schema: { type: 'string' }, description: 'The email as currently typed' },
+        bio: { schema: { type: 'string' }, description: 'The bio as currently typed' },
+      },
+      actionSpec: {
+        save: { label: 'Save profile', description: 'Saves the edited profile', example: { name: 'Ada Lovelace', email: 'ada@example.com', bio: 'Writes the first programs.' } },
+      },
+    },
+    props: {
+      initialProfile: { name: 'Ada Lovelace', email: 'ada@example.com', bio: 'Writes the first programs.' },
+    },
+  },
+  {
     id: 'booking-confirm',
     name: 'Table Booking Confirmation',
     description: 'A reservation summary with one once-only Confirm; the confirm is declared oneShot on the contract',
