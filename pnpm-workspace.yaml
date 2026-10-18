@@ -90,8 +90,8 @@ overrides:
   "picomatch@<2.3.2": ^2.3.2
   "picomatch@>=4.0.0 <4.0.4": ^4.0.4
   "postcss@<8.5.23": ^8.5.23
-  "brace-expansion@>=1 <2": ^1.1.18
-  "brace-expansion@>=2 <3": ^2.1.4
+  "brace-expansion@>=1 <2": ^1.1.21
+  "brace-expansion@>=2 <3": ^2.1.7
   "@tootallnate/once@<3.0.1": ^3.0.1
   "tar@<7.5.21": ^7.5.21
   # sigstore trio + body-parser/form-data floors (2026-08-04 wave 2):
@@ -124,14 +124,14 @@ overrides:
   # overlapping hoisted trees, and tsc only unifies duplicate packages
   # at identical name+version. A version split here makes the cloud pod
   # see two nominal McpServer classes (install-order dependent!).
-  "@modelcontextprotocol/sdk": 1.30.0
+  "@modelcontextprotocol/sdk": 1.31.0
   # Same invariant (2.x only — @google/adk's 1.52.0 chain stays put).
   "@google/genai@>=2": 2.15.0
   # Same invariant — 13.16-vs-13.17 split broke RN <WebView> JSX in CI.
   react-native-webview: 13.16.1
   # Same invariant, NATIVE flavor — dual sharp = libvips soname collision
   # under hoisting; 0.35.x also satisfies GHSA-f88m-g3jw-g9cj.
-  sharp: 0.35.4
+  sharp: 0.35.5
   # Same invariant — single version repo-wide. 25.6.0 also clears the
   # extract-zip symlink-traversal Dependabot alert (no patched
   # extract-zip exists; @puppeteer/browsers 3.x dropped the dependency
@@ -139,9 +139,9 @@ overrides:
   # 24.42.0 pin is re-verified against 25.x by ui-gen's typecheck.
   puppeteer-core: 25.6.0
   "@smithy/types": ^4.14.0
-  "brace-expansion@>=5": ^5.0.9
+  "brace-expansion@>=5": ^5.0.12
   # fast-uri floor raised 3.1.4 → 3.1.6 (2026-09-03: GHSA-5jgf-p345-68v8 / f65p-4m7j-42xc / fph4-wmhf-6fwf / jqff-g426-hqxp, HIGH, published 2026-09-02; ajv@8 resolver, in the pod + backend prod closures). Same-major.
-  "fast-uri@<3.1.6": ^3.1.6
+  "fast-uri@<3.1.8": ^3.1.8
   # GHSA-w27v-7q3p-w38r + GHSA-4vpr-x523-8j87 (svgo removeScripts bypasses; transitive via astro, build-time) — whole-major floor
   "svgo@4": ^4.1.0
   # immutable <3.8.4 (GHSA-xvcm-6775-5m9r, HIGH; surfaced by the 2026-09-03
@@ -164,9 +164,18 @@ overrides:
   # for the same transitive graph. Same-major targets only; cross-major
   # advisories stay out of both.
   hono: ^4.13.5 # 2026-09-09: GHSA-g6gw-c38x-mqfc / GHSA-crvj-82cr-hjcx / GHSA-gqvv-2mrq-wpjv (fixed 4.13.5)
-  handlebars: ^4.7.9
-  shell-quote: ^1.9.0
-  dompurify: ^3.4.6
+  handlebars: ^4.7.10
+  shell-quote: ^1.11.0
+  dompurify: ^3.4.16
+  # 2026-10-18 advisory batch (#1927): same-line floors, every one a patch
+  # or a >=1.x minor of the version already resolved.
+  "proxy-addr@2": ^2.0.8
+  "source-map-js@1": ^1.2.2
+  "@grpc/grpc-js@>=1.14 <1.14.5": ^1.14.5
+  "engine.io@6": ^6.6.10
+  "@fastify/busboy@3": ^3.2.2
+  "@modelcontextprotocol/client@2": ^2.2.0
+  "smol-toml@1": ^1.9.0
   # nodemailer override removed 2026-08-04 (lockstep with root): sole
   # consumer is mcp-server's direct dep, bumped to ^9.0.1 — no patched
   # 8.x exists for GHSA-p6gq-j5cr-w38f.
@@ -179,7 +188,7 @@ overrides:
   # link-local misclassified -> SSRF / trust-boundary bypass; fixed 10.5.1). Whole-major selector: the
   # declarers are carets (express-rate-limit ^10.2.0, socks ^10.1.1) — the previous `<10.3.1` line was
   # never a superset of them and reached nothing.
-  "ip-address@10": ^10.5.1
+  "ip-address@10": ^10.7.1
   "@mikro-orm/knex@<6.6.14": ^6.6.14
   # qs floor raised 6.15.2 → 6.16.0 (2026-09-03: GHSA-4mjr-xmp4-gh2g / x5fp-wj9c-mxmx, MEDIUM, published 2026-09-02; express 5 / body-parser, in the pod + backend prod closures). Same-major.
   "qs@>=6.11.1 <6.16.0": ^6.16.0
@@ -346,20 +355,21 @@ overrides:
   "@esbuild/win32-x64@0.27.x": 0.27.7
   "@esbuild/win32-x64@0.28.x": 0.28.2
   "@google-cloud/storage": 7.21.0
+  "@grpc/grpc-js": 1.14.6
   "@guuey/mcp-apps-host@0.30.x": 0.30.0
   "@guuey/threads": 0.30.0
   "@hono/node-server": 2.1.0
   "@huggingface/jinja": 0.5.9
-  "@img/sharp-freebsd-wasm32": 0.35.4
-  "@img/sharp-libvips-linux-ppc64": 1.3.3
-  "@img/sharp-libvips-linux-riscv64": 1.3.3
-  "@img/sharp-libvips-linux-s390x": 1.3.3
-  "@img/sharp-linux-ppc64": 0.35.4
-  "@img/sharp-linux-riscv64": 0.35.4
-  "@img/sharp-linux-s390x": 0.35.4
-  "@img/sharp-wasm32": 0.35.4
-  "@img/sharp-webcontainers-wasm32": 0.35.4
-  "@img/sharp-win32-ia32": 0.35.4
+  "@img/sharp-freebsd-wasm32": 0.35.5
+  "@img/sharp-libvips-linux-ppc64": 1.3.4
+  "@img/sharp-libvips-linux-riscv64": 1.3.4
+  "@img/sharp-libvips-linux-s390x": 1.3.4
+  "@img/sharp-linux-ppc64": 0.35.5
+  "@img/sharp-linux-riscv64": 0.35.5
+  "@img/sharp-linux-s390x": 0.35.5
+  "@img/sharp-wasm32": 0.35.5
+  "@img/sharp-webcontainers-wasm32": 0.35.5
+  "@img/sharp-win32-ia32": 0.35.5
   "@joshwooding/vite-plugin-react-docgen-typescript": 0.7.0
   "@jsonjoy.com/fs-core": 4.66.1
   "@jsonjoy.com/fs-fsa": 4.66.1
@@ -376,7 +386,10 @@ overrides:
   "@mikro-orm/postgresql": 6.6.9
   "@mikro-orm/reflection": 6.6.16
   "@mikro-orm/sqlite": 6.6.9
+  "@modelcontextprotocol/client": 2.3.1
+  "@modelcontextprotocol/core": 2.3.1
   "@modelcontextprotocol/ext-apps": 1.7.5
+  "@modelcontextprotocol/sdk@^1": 1.31.0
   "@napi-rs/wasm-runtime": 1.2.3
   "@nodable/entities": 3.0.0
   "@npmcli/agent": 4.0.2
@@ -469,6 +482,9 @@ overrides:
   bare-stream: 2.13.3
   bare-url: 2.4.7
   better-sqlite3: 12.11.1
+  "brace-expansion@^1": 1.1.21
+  "brace-expansion@^2": 2.1.7
+  "brace-expansion@^5": 5.0.12
   caniuse-lite: 1.0.30001806
   chardet: 2.2.0
   chromium-bidi: 17.0.2
@@ -485,7 +501,7 @@ overrides:
   eventsource-parser: 3.1.0
   expect-type: 1.4.0
   express-rate-limit: 8.6.1
-  fast-uri: 3.1.7
+  fast-uri: 3.1.8
   fast-xml-builder: 1.3.0
   fast-xml-parser: 5.10.1
   "fflate@0.4.x": 0.4.9
@@ -495,7 +511,7 @@ overrides:
   function.prototype.name: 1.2.0
   happy-dom: 20.11.1
   "hono@^4": 4.13.7
-  ip-address: 10.7.0
+  ip-address: 10.7.4
   isomorphic-git: 1.40.0
   "jose@^5": 5.10.0
   "jose@^6": 6.2.8
@@ -536,6 +552,7 @@ overrides:
   "prettier@^1": 1.19.1
   "prettier@^2": 2.3.2
   "prettier@^3": 3.9.6
+  proxy-addr: 2.0.8
   "puppeteer-core@^25": 25.6.0
   qs: 6.16.0
   react-docgen: 8.0.3
@@ -543,8 +560,10 @@ overrides:
   resend: 6.18.1
   rolldown: 1.2.6
   rollup: 4.62.4
-  "sharp@0.35.x": 0.35.4
+  "sharp@0.35.x": 0.35.5
+  "shell-quote@^1": 1.12.0
   side-channel: 1.1.1
+  source-map-js: 1.2.2
   storybook: 10.5.10
   streamx: 2.28.0
   string.prototype.trim: 1.2.11

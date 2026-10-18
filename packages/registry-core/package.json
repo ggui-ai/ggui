@@ -66,11 +66,6 @@
     "oxc-parser": "^0.131.0",
     "zod": "^4.3.6"
   },
-  "peerDependenciesMeta": {
-    "vitest": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",
     "@sigstore/mock": "~0.12.1",
