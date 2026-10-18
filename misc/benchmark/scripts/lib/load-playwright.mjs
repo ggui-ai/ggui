@@ -1,7 +1,9 @@
 /**
- * PlaywrightModule adapter (#973): `chromium.launch` with the image's binary
- * (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) and no Chromium sandbox (containers
- * without user namespaces). Fails loudly when playwright-core or the binary
+ * PlaywrightModule adapter (#973): `chromium.launch` with no Chromium sandbox
+ * (containers without user namespaces). The runner image installs the headless
+ * shell playwright-core's own version names, under PLAYWRIGHT_BROWSERS_PATH, so
+ * no executablePath is needed there (#1853); PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+ * when set, still overrides it for a local run. Fails loudly when playwright-core or the binary
  * is missing — a silent fallback would turn every contractBehavior into
  * SKIP without anyone noticing. Shared by bench.mjs and eval-cell.mjs.
  */

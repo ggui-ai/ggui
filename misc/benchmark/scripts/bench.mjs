@@ -392,8 +392,8 @@ const run = async () => {
     process.exit(1);
   }
 
-  // Chromium for the runner: playwright-core with the image's binary
-  // (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; the package never downloads one).
+  // Chromium for the runner: playwright-core with the headless shell its own
+  // version names, installed in the image at bake (#1853; never at run time).
   // The adapter keeps the PlaywrightModule shape the runner + ui-visual-tester
   // expect while pinning the executable and the container-safe sandbox flag.
   const playwright = playwrightEnabled ? await loadPlaywright() : undefined;
