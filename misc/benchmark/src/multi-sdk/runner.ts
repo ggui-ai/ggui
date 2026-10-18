@@ -19,6 +19,7 @@ import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters
 import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
 import { appGenerationProfileSchema, type AppGenerationProfile } from "@ggui-ai/protocol";
 import { runWithVariantTag } from "./variant-log-tag.js";
+import { warmupRuntimeRenderWorker, type RuntimeRenderWorkerWarmup } from "@ggui-ai/ui-gen/harness/check/runtime-render";
 import type { AdapterResult } from "@ggui-ai/ui-gen/adapters/types";
 import type { ModelRoles } from "@ggui-ai/ui-gen/harness/result-types";
 import { DEFAULT_QUALITY_CONFIG } from "@ggui-ai/ui-gen/evaluation";
@@ -724,6 +725,39 @@ export class BenchmarkRunner {
  * misconfigured fixture doesn't silently bypass the default
  * generator.
  */
+/** The line a run logs when its render worker warmed; the image receipt a night's log is grepped for. */
+export const RENDER_WORKER_WARM_OK = "[benchmark] render worker warm: ok";
+
+/**
+ * Stop a run before any cell when the render worker cannot run a check (ggui#1934).
+ *
+ * Every render check pre-loads each design specifier the renderer serves, so a runner image missing one
+ * crashes every check's worker; per cell that is an `unverified` warn, which scores as a passing probe.
+ * One warm-up spawn on a trivial component (no model call) catches it at start: the run logs
+ * {@link RENDER_WORKER_WARM_OK} and proceeds unchanged, or logs the failure and throws.
+ *
+ * An `incomplete` warm-up (it ran out of its bound, e.g. a cold first spawn) says nothing about whether a
+ * check can pass, so it logs a WARN line that never contains the ok receipt and the run proceeds; that
+ * night carries no image receipt. `blocking` (a worker that cannot render, the missing-specifier case)
+ * and `spawn` stop the run.
+ */
+export async function gateRenderWorker(
+  warm: () => Promise<RuntimeRenderWorkerWarmup> = () => warmupRuntimeRenderWorker(),
+  log: (line: string) => void = (line) => console.log(line),
+): Promise<void> {
+  const result = await warm();
+  if (result.ok) {
+    log(`${RENDER_WORKER_WARM_OK} in ${result.ms}ms`);
+    return;
+  }
+  if (result.kind === "incomplete") {
+    log(`[benchmark] render worker warm: INCOMPLETE in ${result.ms}ms — ${result.reason}; proceeding`);
+    return;
+  }
+  log(`[benchmark] render worker warm: FAILED (${result.kind}) in ${result.ms}ms — ${result.reason}`);
+  throw new Error(`render worker warm-up failed (${result.kind}); the run stopped before any cell: ${result.reason}`);
+}
+
 export function resolveGeneratorSlug(variant: BenchmarkVariant): string {
   if (typeof variant.generator !== 'string') return DEFAULT_GENERATOR_SLUG;
   const trimmed = variant.generator.trim();

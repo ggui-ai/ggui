@@ -324,7 +324,7 @@ for (const root of ENV_ROOTS) {
 
 const run = async () => {
   // Dynamic imports of TypeScript modules (via tsx loader)
-  const { BenchmarkRunner } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/runner.ts'));
+  const { BenchmarkRunner, gateRenderWorker } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/runner.ts'));
   // ggui#1282: tag each variant's console lines (paired cells run concurrently in one process).
   const { installVariantConsoleTag } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variant-log-tag.ts'));
   installVariantConsoleTag();
@@ -455,6 +455,9 @@ const run = async () => {
     };
     runner.registerAdapter(new GoogleRawAdapter(cfg), cfg);
   }
+
+  // ggui#1934: the render worker must run a check before any cell is spent; a broken image stops here.
+  await gateRenderWorker();
 
   // Run benchmark
   const report = await runner.run({ variants, commits: selectedCommits });
