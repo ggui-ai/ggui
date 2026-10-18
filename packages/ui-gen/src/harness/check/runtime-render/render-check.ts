@@ -21,6 +21,20 @@ import type { DataContract, JsonObject, PropsSpec } from "@ggui-ai/protocol";
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { createProbe, createProbeWireConfig, type ActionFiredEvent, type Probe } from "./probe.js";
 import { loadComponent } from "./load-component.js";
+import { ASSET_SHIM_FOR_SPECIFIER } from "@ggui-ai/design/rendering";
+
+/**
+ * ggui#1934 — the design specifiers production's import rewrite serves, each paired with the module
+ * that backs it here. `templates` is backed by the barrel: the renderer's templates shim serves every
+ * layer (compositions, then primitives and components). `app-components` is the operator's own registry, never a design-package module, so it is not
+ * pre-resolved; a card importing it fails with the sandbox's "not available" reason.
+ */
+export function sandboxDesignModules(): ReadonlyArray<readonly [specifier: string, moduleId: string]> {
+  return Object.keys(ASSET_SHIM_FOR_SPECIFIER)
+    .filter((id) => id === "@ggui-ai/design" || id.startsWith("@ggui-ai/design/"))
+    .filter((id) => id !== "@ggui-ai/design/app-components")
+    .map((id) => [id, id === "@ggui-ai/design/templates" ? "@ggui-ai/design" : id] as const);
+}
 import { findWiring, type WiringDetection } from "./find-wiring.js";
 import { installProductionActShim } from "./production-act-shim.js";
 // All happy-dom / RTL / user-event narrowing flows through the typed
@@ -290,27 +304,12 @@ export async function runRenderCheckInProcess(
       "@ggui-ai/wire": Wire,
     };
 
-    // Pre-load the @ggui-ai/design specifiers the boilerplate may import.
-    // Post-D1, generated code imports the single bare `@ggui-ai/design`
-    // barrel — that MUST be pre-resolved here: the package is ESM-only
-    // with no `require` export condition, so `loadComponent`'s
-    // `createRequire` fallback cannot load it (it would crash:fail the
-    // render check). The subpaths stay for any legacy/first-party code.
-    // Per-specifier failures are swallowed — the sandbox throws its own
-    // clear error if the component actually needs a missing one.
-    const designSpecifiers = [
-      "@ggui-ai/design",
-      "@ggui-ai/design/primitives",
-      "@ggui-ai/design/components",
-      "@ggui-ai/design/compositions",
-      "@ggui-ai/design/interact",
-    ];
-    for (const id of designSpecifiers) {
-      try {
-        moduleResolutions[id] = await import(id);
-      } catch {
-        /* skip — sandbox will report a clear error if the component imports it */
-      }
+    // Pre-load every @ggui-ai/design specifier production serves (ggui#1934). The package is ESM-only
+    // with no `require` export condition, so `loadComponent`'s `createRequire` fallback can load none
+    // of them: a specifier missing here fails the probe while the served card renders. The list is
+    // the renderer's own map, so a subpath production starts serving is served here too.
+    for (const [id, moduleId] of sandboxDesignModules()) {
+      moduleResolutions[id] = await import(moduleId);
     }
 
     // Pre-load `@ggui-ai/gadgets` for components that declare
