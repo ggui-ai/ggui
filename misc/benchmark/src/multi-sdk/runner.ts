@@ -198,7 +198,7 @@ export class BenchmarkRunner {
     const results = await runWithConcurrency(
       runnableTasks.map((task) => async () => {
         // ggui#1282: every console line this cell writes carries its variant's tag.
-        const result = await runWithVariantTag(task.variant.id, () => this.runSingle(task.variant, task.commit));
+        const result = await runWithVariantTag(task.variant.id, () => this.runSingle(task.variant, task.commit), task.commit.id);
         completedCount++;
         this.config.onProgress?.({ completed: completedCount, total });
         return result;

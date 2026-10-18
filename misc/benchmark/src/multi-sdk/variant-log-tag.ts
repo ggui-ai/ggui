@@ -16,21 +16,36 @@ import { format } from 'node:util';
  * logging is not changed.
  */
 
-const variantStore = new AsyncLocalStorage<string>();
+/** The cell a line belongs to: its arm, and the prompt (commit) when the caller names one. */
+interface CellTag {
+  readonly variantId: string;
+  readonly commitId: string | undefined;
+}
 
-/** Run `fn` so every console line written inside it (and in what it awaits) carries this variant's tag. */
-export function runWithVariantTag<T>(variantId: string, fn: () => Promise<T>): Promise<T> {
-  return variantStore.run(variantId, fn);
+const variantStore = new AsyncLocalStorage<CellTag>();
+
+/**
+ * Run `fn` so every console line written inside it (and in what it awaits) carries this variant's
+ * tag, and the cell's prompt after it when `commitId` is given. An arm runs its prompts concurrently,
+ * so the arm alone cannot attribute a line to a cell.
+ */
+export function runWithVariantTag<T>(variantId: string, fn: () => Promise<T>, commitId?: string): Promise<T> {
+  return variantStore.run({ variantId, commitId }, fn);
 }
 
 /** The variant whose cell is running in the current async context, if any. */
 export function currentVariantTag(): string | undefined {
-  return variantStore.getStore();
+  return variantStore.getStore()?.variantId;
 }
 
 /** The tag a line carries — exported so log readers match the exact form. */
 export function variantTagPrefix(variantId: string): string {
   return `[v:${variantId}] `;
+}
+
+/** The cell tag that follows the variant tag when a cell named its prompt: `[c:<commitId>] `. */
+export function cellTagPrefix(commitId: string): string {
+  return `[c:${commitId}] `;
 }
 
 const TAGGED_METHODS = ['log', 'info', 'warn', 'error'] as const;
@@ -52,12 +67,12 @@ export function installVariantConsoleTag(target: Console = console): () => void 
   const originals = TAGGED_METHODS.map((m) => [m, target[m]] as const);
   for (const [m, original] of originals) {
     target[m] = (...args: Parameters<Console['log']>): void => {
-      const id = variantStore.getStore();
-      if (id === undefined) {
+      const tag = variantStore.getStore();
+      if (tag === undefined) {
         original.apply(target, args);
         return;
       }
-      const prefix = variantTagPrefix(id);
+      const prefix = variantTagPrefix(tag.variantId) + (tag.commitId !== undefined ? cellTagPrefix(tag.commitId) : '');
       original.call(
         target,
         format(...args)
