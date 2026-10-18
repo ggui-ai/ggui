@@ -250,8 +250,13 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // boilerplate emits `export const gguiMountCanvas = "<canvas>";` under a DO NOT EDIT line, the canvas the runtime
 // reads at mount. Prompt text is unchanged; both boilerplate digests move: constrained ba33a31f… → 41af21c4…,
 // free 6423e307… → 9ef65a25….
+// Re-recorded 2026-10-18 for ggui#1933 (part 1, the prompt leg): the contextSpec section's two `Input`
+// bindings taught `onChange={(e) => setDraftText(e.target.value)}`, the form tier-0 refuses (a design control's
+// `onChange` hands over the value, `Input.tsx`'s own docblock); both now read `onChange={setDraftText}`. A HARD
+// section both arms carry: constrained prompt a2656392… → 5756b359…, free prompt 64589393… → 043121fe….
+// Boilerplates are byte-stable.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "a265639273b3e752032c4d37c1bc6cfce8bdf13e54f68cb72779bc8082389422";
+  "5756b359a43f5135e2e221634747a33e676047f8a652e002b054a631d29de2c1";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -315,8 +320,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-10-13 for ggui#1846: the colour rule's role list names `tint-1` … `tint-8` as the categorical
 // fills, with the same rules as the constrained prompt in token terms (text on a tint is `onContainer`).
 // Re-recorded 2026-10-16 for ggui#1896 — see the constrained note (the slot seed); both free digests move.
+// Re-recorded 2026-10-18 for ggui#1933 — see the constrained note (the `Input` onChange binding).
 export const FREE_PROMPT_SHA256 =
-  "6458939316eb4ca7f71695d2334cea1f3c0559b6f440896c493c67350e1277cc";
+  "043121fe8a2b7a1bd3667ff4d8ef4f3d1debd0e460e494250240b9be301869af";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 // Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.

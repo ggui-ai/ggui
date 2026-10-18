@@ -168,7 +168,7 @@ export default function Component(props: Props) {
   return (
     <Container>
       <Text>Step {currentStep}</Text>
-      <Input value={draftText} onChange={(e) => setDraftText(e.target.value)} />
+      <Input value={draftText} onChange={setDraftText} />
       <Button onClick={() => setCurrentStep((s) => s + 1)}>Next</Button>
     </Container>
   );
@@ -181,7 +181,7 @@ For every declared slot you have **\`slotName\` + \`setSlotName\`** in scope:
 
 Every value change is mirrored to the host LLM's context automatically (debounced, default 300ms — adjustable per-slot via \`entry.debounceMs\` in the contract). The agent sees the user's interaction state — drafts, current step, hover, selection — without you calling any API.
 
-**When to use the auto-generated state.** Any slot the contract declared. If \`contextSpec.draftText\` exists, bind \`<Input value={draftText} onChange={e => setDraftText(e.target.value)}>\` so the agent sees the typing live. If \`contextSpec.currentStep\` exists, render the step indicator from \`currentStep\` and bump it via \`setCurrentStep\` in your "next" callback.
+**When to use the auto-generated state.** Any slot the contract declared. If \`contextSpec.draftText\` exists, bind \`<Input value={draftText} onChange={setDraftText}>\` so the agent sees the typing live (a design control's \`onChange\` hands you the value, never an event). If \`contextSpec.currentStep\` exists, render the step indicator from \`currentStep\` and bump it via \`setCurrentStep\` in your "next" callback.
 
 **Seeding a slot from a prop.** A slot starts at the contract's default, never at a prop. When a slot must start from a prop (a form pre-filled from \`props\`), seed it with \`useLayoutEffect(() => setName(props.name ?? ''), [props.name])\` — \`useLayoutEffect\`, not \`useEffect\`: \`useEffect\` lets the first frame paint the empty default before the prop arrives. The dependency array re-seeds the slot when the agent repaints with new props.
 
