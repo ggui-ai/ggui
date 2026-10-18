@@ -67,6 +67,25 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-18',
     text:
+      'Runner change (internal issue #1853): from the first run on a runner image built with ' +
+      'this change, the browsers come from the lockfile, and the fonts are fixed files ' +
+      'checked by their content. Until now the runner installed the operating system\'s ' +
+      'Chromium, which was not pinned: it moved from 154 to 155 between two runner images ' +
+      'with no change on our side. Now the contract check, which clicks through each ' +
+      'generated interface, runs the headless Chromium build its own browser library names, ' +
+      '151.0.7922.34. That is an older build than before, by choice: it is the one the library ' +
+      'is released and tested against. The screenshot judge, which does not score the nightly ' +
+      'results on this page, runs the headless Chrome build its library names, 151.0.7922.77, ' +
+      'derived the same way as the hosted service\'s own renderer. The Liberation fonts move from the ' +
+      'operating system\'s package to the 2.1.5 release, and DejaVu is named as the fallback face. ' +
+      'The contract check reads behaviour, not pixels, so we expect little movement in the ' +
+      'contract pass rate. What it does not fix are the libraries the browsers load from the operating system, which are ' +
+      'recorded, not pinned. No prompt, arm, judge or scoring rule changes, and history is ' +
+      'not rewritten.',
+  },
+  {
+    date: '2026-10-18',
+    text:
       'Run note (internal issues #1743 and #1869): the 18 October run is the first on the image ' +
       'described in the first 16 October entry, so the arms named there start their new series ' +
       'here. It is not a comparison with 16 October. Benchmark runs were paused from 16 October, ' +
