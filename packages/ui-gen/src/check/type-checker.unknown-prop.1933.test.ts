@@ -49,6 +49,27 @@ describe('an unknown prop on a design primitive names the props it takes (ggui#1
     expect(await fixes(card('<Stack gap="md"><Text tone="muted">x</Text></Stack>'))).toEqual([]);
   });
 
+  it('a native-extending control lists its own props and names the native set, not every HTML attribute', async () => {
+    const src = `import React from 'react';
+import { Input } from '@ggui-ai/design';
+
+export default function Component() {
+  return <Input spacing="md" />;
+}
+`;
+    const f = await fixes(src);
+    const hit = f.find((e) => e.fix.includes('takes no `spacing` prop'));
+    expect(hit, JSON.stringify(f)).toBeDefined();
+    expect(hit?.fix).toContain('plus the native HTML attributes');
+    expect(hit?.fix).not.toContain('`accessKey`');
+    expect(hit?.fix.length).toBeLessThan(800);
+  });
+
+  it('a primitive with no native set says nothing about one', async () => {
+    const f = await fixes(card('<Stack spacing="md"><Text>x</Text></Stack>'));
+    expect(f.find((e) => e.fix.includes('takes no `spacing` prop'))?.fix).not.toContain('native');
+  });
+
   it('fail-closed: the alias is named only when the target is in the accepted list', () => {
     expect(unknownPropFix('Box', 'spacing', ['padding', 'style'], '')).not.toContain('in other kits');
     expect(unknownPropFix('Stack', 'spacing', ['gap'], '')).toContain('`<Stack>` takes `gap`');

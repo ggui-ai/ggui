@@ -114,14 +114,18 @@ const PROP_INTENT_ALIASES: Readonly<Record<string, string>> = { spacing: 'gap', 
  * what the component accepts, so the generic text sent the model guessing (a fast arm looped on `<Stack spacing>`).
  * `accepted` is the component's own props, read from its props type.
  */
-export function unknownPropFix(component: string, prop: string, accepted: readonly string[], sourceHint: string): string {
+export function unknownPropFix(component: string, prop: string, accepted: readonly string[], sourceHint: string, native = false): string {
   const meant = PROP_INTENT_ALIASES[prop];
   const named = meant !== undefined && accepted.includes(meant) ? ` For what \`${prop}\` does in other kits, \`<${component}>\` takes \`${meant}\`.` : '';
-  return `\`<${component}>\` takes no \`${prop}\` prop.${named} Its props: ${accepted.map((a) => `\`${a}\``).join(', ')}. Use one of these or drop the prop.${sourceHint}`;
+  return `\`<${component}>\` takes no \`${prop}\` prop.${named} Its props: ${accepted.map((a) => `\`${a}\``).join(', ')}${native ? ', plus the native HTML attributes' : ''}. Use one of these or drop the prop.${sourceHint}`;
 }
 
-/** The JSX element a diagnostic sits in, and the prop names its component's props type declares; `undefined` when unreadable. */
-function acceptedPropsAt(program: ts.Program, file: ts.SourceFile, pos: number): { component: string; accepted: string[] } | undefined {
+/**
+ * The JSX element a diagnostic sits in, and the prop names its component declares; `undefined` when unreadable.
+ * Props inherited from React's own attribute types (a control extending `InputHTMLAttributes`) are not listed one
+ * by one, so a native-extending control's list stays its own props; `native` says the native set is also accepted.
+ */
+function acceptedPropsAt(program: ts.Program, file: ts.SourceFile, pos: number): { component: string; accepted: string[]; native: boolean } | undefined {
   const find = (node: ts.Node): ts.Node | undefined =>
     pos >= node.getStart(file) && pos < node.getEnd() ? (ts.forEachChild(node, find) ?? node) : undefined;
   let node = find(file);
@@ -133,12 +137,14 @@ function acceptedPropsAt(program: ts.Program, file: ts.SourceFile, pos: number):
   const param = signature?.getParameters()[0];
   if (param === undefined) return undefined;
   const propsType = checker.getTypeOfSymbolAtLocation(param, node);
-  const accepted = checker
+  const listed = checker
     .getPropertiesOfType(propsType)
-    .map((p) => p.getName())
-    .filter((n) => n !== 'children' && n !== 'key' && n !== 'ref' && !n.startsWith('aria-') && !n.startsWith('data-'))
-    .sort();
-  return accepted.length > 0 ? { component: node.tagName.getText(file), accepted } : undefined;
+    .filter((p) => !['children', 'key', 'ref'].includes(p.getName()) && !p.getName().startsWith('aria-') && !p.getName().startsWith('data-'));
+  const fromReact = (p: ts.Symbol): boolean =>
+    (p.getDeclarations() ?? []).every((d) => /[\\/]@types[\\/]react[\\/]/.test(d.getSourceFile().fileName));
+  const own = listed.filter((p) => !fromReact(p));
+  const accepted = own.map((p) => p.getName()).sort();
+  return accepted.length > 0 ? { component: node.tagName.getText(file), accepted, native: own.length < listed.length } : undefined;
 }
 
 function generateFix(code: number, message?: string, sourceLine?: string): string {
@@ -774,7 +780,7 @@ export async function typecheck(
       code: code_,
       line,
       message,
-      fix: unknownProp !== undefined && props !== undefined ? unknownPropFix(props.component, unknownProp, props.accepted, hint) : generateFix(code_, message, sourceLine),
+      fix: unknownProp !== undefined && props !== undefined ? unknownPropFix(props.component, unknownProp, props.accepted, hint, props.native) : generateFix(code_, message, sourceLine),
     };
 
     if (BLOCKING_CODES.has(code_)) {
