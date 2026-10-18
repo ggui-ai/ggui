@@ -103,6 +103,44 @@ const BLOCKING_CODES = new Set([
 // Fix suggestions per error code
 // ---------------------------------------------------------------------------
 
+/**
+ * ggui#1933 — props a model reaches for from other kits, mapped to the design primitive's own name for the
+ * same thing. Applied only when the component's props type (read from the checker) actually has the target.
+ */
+const PROP_INTENT_ALIASES: Readonly<Record<string, string>> = { spacing: 'gap', space: 'gap', gutter: 'gap', color: 'tone' };
+
+/**
+ * ggui#1933 — fix text for a prop the component does not take: TypeScript says the prop does not exist, never
+ * what the component accepts, so the generic text sent the model guessing (a fast arm looped on `<Stack spacing>`).
+ * `accepted` is the component's own props, read from its props type.
+ */
+export function unknownPropFix(component: string, prop: string, accepted: readonly string[], sourceHint: string): string {
+  const meant = PROP_INTENT_ALIASES[prop];
+  const named = meant !== undefined && accepted.includes(meant) ? ` For what \`${prop}\` does in other kits, \`<${component}>\` takes \`${meant}\`.` : '';
+  return `\`<${component}>\` takes no \`${prop}\` prop.${named} Its props: ${accepted.map((a) => `\`${a}\``).join(', ')}. Use one of these or drop the prop.${sourceHint}`;
+}
+
+/** The JSX element a diagnostic sits in, and the prop names its component's props type declares; `undefined` when unreadable. */
+function acceptedPropsAt(program: ts.Program, file: ts.SourceFile, pos: number): { component: string; accepted: string[] } | undefined {
+  const find = (node: ts.Node): ts.Node | undefined =>
+    pos >= node.getStart(file) && pos < node.getEnd() ? (ts.forEachChild(node, find) ?? node) : undefined;
+  let node = find(file);
+  while (node !== undefined && !ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) node = node.parent;
+  if (node === undefined) return undefined;
+  const checker = program.getTypeChecker();
+  const tagType = checker.getTypeAtLocation(node.tagName);
+  const signature = [...tagType.getCallSignatures(), ...tagType.getConstructSignatures()][0];
+  const param = signature?.getParameters()[0];
+  if (param === undefined) return undefined;
+  const propsType = checker.getTypeOfSymbolAtLocation(param, node);
+  const accepted = checker
+    .getPropertiesOfType(propsType)
+    .map((p) => p.getName())
+    .filter((n) => n !== 'children' && n !== 'key' && n !== 'ref' && !n.startsWith('aria-') && !n.startsWith('data-'))
+    .sort();
+  return accepted.length > 0 ? { component: node.tagName.getText(file), accepted } : undefined;
+}
+
 function generateFix(code: number, message?: string, sourceLine?: string): string {
   // Source-line hint: when the failing line is short and self-contained,
   // appending it gives the LLM a precise target. Skip for very long lines
@@ -728,11 +766,15 @@ export async function typecheck(
         ? sourceLines[rawLine - 1]?.trim() ?? ''
         : '';
 
+    // ggui#1933 — a prop the component does not take: name the props it does take, from its own props type.
+    const unknownProp = code_ === 2322 ? /Property '([^']+)' does not exist on type '[^']*Props[^']*'/.exec(message)?.[1] : undefined;
+    const props = unknownProp !== undefined ? acceptedPropsAt(program, diag.file, diag.start ?? 0) : undefined;
+    const hint = sourceLine.length > 0 && sourceLine.length <= 140 ? ` Offending line: \`${sourceLine}\`` : '';
     const entry: TypeCheckDiagnostic = {
       code: code_,
       line,
       message,
-      fix: generateFix(code_, message, sourceLine),
+      fix: unknownProp !== undefined && props !== undefined ? unknownPropFix(props.component, unknownProp, props.accepted, hint) : generateFix(code_, message, sourceLine),
     };
 
     if (BLOCKING_CODES.has(code_)) {

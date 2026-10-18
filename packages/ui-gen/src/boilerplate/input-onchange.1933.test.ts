@@ -20,4 +20,17 @@ describe('the prompt binds a design control by its value (ggui#1933)', () => {
   ] as const)('no %s / %s prompt teaches e.target', (designMode, shellType) => {
     expect(buildSystemPrompt({ userRequest: 'x', shellType, designMode })).not.toContain('e.target');
   });
+
+  // The general form: a value-typed handler (`onChange`, `onValueChange`) is never taught as an event arrow,
+  // and no handler reads an event target. Event handlers (`onClick={() => …}`) stay legal.
+  it.each([
+    ['constrained', 'chat'],
+    ['constrained', 'fullscreen'],
+    ['free', 'chat'],
+    ['free', 'fullscreen'],
+  ] as const)('no %s / %s prompt binds a value handler as an event arrow', (designMode, shellType) => {
+    const p = buildSystemPrompt({ userRequest: 'x', shellType, designMode });
+    expect(p.match(/on(?:Value)?Change=\{\(?\s*(?:e|ev|evt|event)\s*\)?\s*=>/g) ?? []).toEqual([]);
+    expect(p.match(/\.(?:target|currentTarget)\b/g) ?? []).toEqual([]);
+  });
 });
