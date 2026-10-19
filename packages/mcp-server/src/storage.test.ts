@@ -362,3 +362,29 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     closeIfPossible(round2.vectors);
   });
 });
+
+describe('resolveStorageFromConfig — the blueprint index beside the vectors (ggui#1907)', () => {
+  it('a sqlite vectors surface also yields a blueprint index on the same file, and a binding survives a restart', async () => {
+    const vectorsPath = join(tmpRoot, 'index-1907', 'ggui-vectors.sqlite');
+    const first = await resolveStorageFromConfig({ vectors: { driver: 'sqlite', path: vectorsPath } });
+    expect(first.index).toBeDefined();
+    await first.index?.putId('app-a', 'exact-key', 'bp_one');
+    closeIfPossible(first.index);
+    closeIfPossible(first.vectors);
+
+    const second = await resolveStorageFromConfig({ vectors: { driver: 'sqlite', path: vectorsPath } });
+    expect(await second.index?.getId('app-a', 'exact-key')).toBe('bp_one');
+    closeIfPossible(second.index);
+    closeIfPossible(second.vectors);
+  });
+
+  it('no sqlite vectors surface, no index: the server keeps its in-memory default', async () => {
+    expect((await resolveStorageFromConfig({ vectors: { driver: 'memory' } })).index).toBeUndefined();
+    const rendersOnly = await resolveStorageFromConfig({
+      renders: { driver: 'sqlite', path: join(tmpRoot, 'index-1907-renders', 'ggui-sessions.sqlite') },
+    });
+    expect(rendersOnly.index).toBeUndefined();
+    closeIfPossible(rendersOnly.renderStore);
+    closeIfPossible(rendersOnly.streamBuffer);
+  });
+});

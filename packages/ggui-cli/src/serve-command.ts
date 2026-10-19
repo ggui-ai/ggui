@@ -1209,7 +1209,7 @@ Persistent storage (default-on; opt-out via --ephemeral):
       ├── ws-token-secret.hex       (HMAC, 0600)
       ├── short-codes.sqlite        (signed render-URL resolution)
       ├── sessions.sqlite            (GguiSessionStore — renders + event history)
-      ├── vectors.sqlite            (RAG corpus)
+      ├── vectors.sqlite            (blueprint cache — vectors + their identity index)
       └── keys.json                 (paired bearers)
 
   Override the dir with \`GGUI_PERSISTENT_DIR\`. Pass \`--ephemeral\` to

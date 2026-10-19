@@ -41,9 +41,9 @@
  * who want storage from config write:
  *
  * ```ts
- * const { renderStore, vectors, streamBuffer } =
+ * const { renderStore, vectors, index, streamBuffer } =
  *   await resolveStorageFromConfig(manifest.storage, { baseDir: projectRoot });
- * const server = createGguiServer({ renderStore, vectors, streamBuffer });
+ * const server = createGguiServer({ renderStore, vectors, index, streamBuffer });
  * ```
  *
  * Explicit instances passed to `createGguiServer` still win — this
@@ -52,6 +52,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type {
+  BlueprintIndex,
   GguiSessionStore,
   GguiSessionStreamBuffer,
   ThreadStore,
@@ -89,6 +90,16 @@ export interface ResolvedStorageStores {
   /** Concrete VectorStore, iff the config declared one. Undefined =
    * caller falls back to createGguiServer's in-memory default. */
   readonly vectors?: VectorStore;
+  /**
+   * The blueprint identity index, present iff `vectors` declares sqlite: a
+   * `SqliteBlueprintIndex` on the same database file, so the index persists
+   * exactly when the vectors do. Pass it to `createGguiServer({ index })`
+   * beside `vectors`. An in-memory index over persistent vectors starts
+   * empty after every restart, and each restart then registers the same
+   * blueprints again as new rows (ggui#1907). Absent otherwise, and
+   * `createGguiServer` keeps its in-memory index.
+   */
+  readonly index?: BlueprintIndex;
   /** Concrete ThreadStore, iff the config declared one. Undefined
    * ONLY when `storage.threads` is absent from the manifest — in
    * that case the caller skips the `threads:` opt-in on
@@ -175,6 +186,7 @@ export async function resolveStorageFromConfig(
   const result: {
     renderStore?: GguiSessionStore;
     vectors?: VectorStore;
+    index?: BlueprintIndex;
     threadStore?: ThreadStore;
     threadDurability?: 'durable' | 'ephemeral';
     streamBuffer?: GguiSessionStreamBuffer;
@@ -193,7 +205,7 @@ export async function resolveStorageFromConfig(
   // Single dynamic import serves every sqlite adapter — better-sqlite3's
   // N-API binding loads once even if the import lands twice; the
   // subpath barrel is cached by Node's module loader.
-  const { SqliteGguiSessionStore, SqliteGguiSessionStreamBuffer, SqliteVectorStore, SqliteThreadStore } =
+  const { SqliteBlueprintIndex, SqliteGguiSessionStore, SqliteGguiSessionStreamBuffer, SqliteVectorStore, SqliteThreadStore } =
     await import('@ggui-ai/mcp-server-core/sqlite');
 
   if (config.renders && config.renders.driver === 'sqlite') {
@@ -206,6 +218,7 @@ export async function resolveStorageFromConfig(
     const filename = resolveStoragePath(config.vectors.path, opts.baseDir);
     ensureParentDir(filename);
     result.vectors = new SqliteVectorStore({ filename });
+    result.index = new SqliteBlueprintIndex({ filename });
   }
   if (config.threads && config.threads.driver === 'sqlite') {
     const filename = resolveStoragePath(config.threads.path, opts.baseDir);

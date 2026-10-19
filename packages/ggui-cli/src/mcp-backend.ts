@@ -49,6 +49,7 @@ import {
   InMemoryShortCodeIndex,
   selectEmailSenderFromEnv,
   type BlueprintProvider,
+  DEFAULT_CLOSE_GRACE_MS,
   type DiscoveredPrimitiveCatalog,
   type EmailSender,
   type GadgetDescriptor,
@@ -77,6 +78,7 @@ import {
   type CreateInstalledBlueprintsProviderOptions,
   type InstalledBlueprintCacheIssue,
   type InstalledBlueprintCompileResult,
+  type InstalledBlueprintsProvider,
   type InstalledBlueprintEntry,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import { createDeterministicPreviewEmitter } from "@ggui-ai/preview-a2ui/emitters";
@@ -468,6 +470,26 @@ export interface BuildMcpServerBackendOptions {
 }
 
 /**
+ * Await the install walks still in flight on `provider`, for at most
+ * `withinMs`. Resolves either way and never rejects (`drain()` never does);
+ * the timer is unref'd, so it never holds the process open on its own. No
+ * provider (no installed blueprints) resolves at once.
+ */
+export async function drainWithin(
+  provider: Pick<InstalledBlueprintsProvider, "drain"> | undefined,
+  withinMs: number,
+): Promise<void> {
+  if (provider === undefined) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const elapsed = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, withinMs);
+    timer.unref();
+  });
+  await Promise.race([provider.drain(), elapsed]);
+  clearTimeout(timer);
+}
+
+/**
  * Pick a free localhost TCP port by letting the OS assign one on a
  * throwaway listener. Close the listener immediately and return the
  * chosen number. Exported so the CLI (`cli.ts::runServeCommand`) and
@@ -730,14 +752,14 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // `createGguiServer` so server + provider share state.
   const vectorStore = storage.vectors ?? new InMemoryVectorStore();
 
-  // Blueprint identity index — minted here so the install bridge's
-  // provider deps and the server share ONE instance (the server's
-  // ref-equality guard enforces this, same as `vectorStore`). The index
-  // is rebuildable from vector-store metadata and self-heals at the read
-  // site, so an in-memory index is safe even alongside a persistent
-  // `storage.vectors`; a persistent index can be threaded later via the
-  // same seam.
-  const blueprintIndex = new InMemoryBlueprintIndex();
+  // Blueprint identity index, ONE instance for the install bridge's
+  // provider deps and the server (the server's ref-equality guard
+  // enforces this, same as `vectorStore`). It persists exactly when the
+  // vectors do: storage that persists vectors hands its index beside them
+  // (`storage.index`). An in-memory index over persistent vectors comes
+  // back empty after every restart, and the install walk then registers
+  // each installed blueprint again as a new row (ggui#1907).
+  const blueprintIndex = storage.index ?? new InMemoryBlueprintIndex();
 
   // Construct the marketplace-install bridge BEFORE `createGguiServer`
   // so we can fold it into `opts.generation.installedBlueprints` below.
@@ -1093,7 +1115,16 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       }
       return addr.port;
     },
-    close: () => server.close(),
+    close: async () => {
+      await server.close();
+      // A walk can outlive the request that started it, and a persistent
+      // index means one cut between a blueprint's vector write and its
+      // index write leaves a vector with no binding. Wait for the walks
+      // once no request can start a new one (the server is closed), for
+      // at most the server's own close grace: past it, the cut is what a
+      // stop without a drain would have done (ggui#1907).
+      await drainWithin(installedBlueprintsProvider, DEFAULT_CLOSE_GRACE_MS);
+    },
     toolCount: server.toolCount,
     serverName: "ggui-mcp-server",
     serverVersion: opts.cliVersion,

@@ -9,9 +9,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { StreamSpec } from '@ggui-ai/protocol';
-import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { InMemoryGguiSessionStore, MockEmbeddingProvider } from '@ggui-ai/mcp-server-core/in-memory';
+import { isEnumerableVectorStore } from '@ggui-ai/mcp-server-core';
 import { SqliteGguiSessionStreamBuffer } from '@ggui-ai/mcp-server-core/sqlite';
-import { layerPersistentSessionStores } from './persistent-stores.js';
+import { createInstalledBlueprintsProvider } from '@ggui-ai/mcp-server-handlers/renders';
+import type { DataContract } from '@ggui-ai/protocol';
+import { createPersistentVectorStores, layerPersistentSessionStores } from './persistent-stores.js';
 
 const root = mkdtempSync(join(tmpdir(), 'ggui-persistent-stores-'));
 afterAll(() => {
@@ -64,5 +67,36 @@ describe('layerPersistentSessionStores (ggui#1534)', () => {
     const layered = await layerPersistentSessionStores(declared, join(root, 'declared'));
     expect(layered).toBe(declared);
     expect(layered.streamBuffer).toBeUndefined();
+  });
+});
+
+const COUNTER: DataContract = {
+  contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
+  actionSpec: { increment: { label: 'Increment' } },
+};
+
+describe('createPersistentVectorStores (ggui#1907)', () => {
+  it('the vectors and their blueprint index persist together: a restart re-walks the installed blueprints without adding rows', async () => {
+    const dir = join(root, 'vectors-restart');
+    // One `ggui serve` lifetime: open the persistent pair, run the install walk the
+    // backend runs on the first match, close.
+    const boot = async (): Promise<number> => {
+      const { vectors, index } = await createPersistentVectorStores(dir);
+      const provider = createInstalledBlueprintsProvider({
+        installedBlueprints: () => [{ id: 'vendor:counter', manifestPath: '/fake/ggui.ui.json', contract: COUNTER, intent: 'counter' }],
+        compile: async () => ({ kind: 'ok' as const, code: 'export default () => null;' }),
+        deps: { embedding: new MockEmbeddingProvider(), vectorStore: vectors, index },
+      });
+      await provider.ensureCached('app');
+      if (!isEnumerableVectorStore(vectors)) throw new Error('the persistent vector store lists its rows');
+      const rows = (await vectors.listByScope('app')).length;
+      closeIfPossible(index);
+      closeIfPossible(vectors);
+      return rows;
+    };
+    expect(await boot()).toBe(1);
+    // Before ggui#1907 the index was in memory beside persistent vectors: it came back empty,
+    // the walk missed it, and each restart registered the blueprint again as a new row.
+    expect(await boot()).toBe(1);
   });
 });

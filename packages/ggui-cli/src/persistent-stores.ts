@@ -17,6 +17,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
+  BlueprintIndex,
   GguiSessionStore,
   GguiSessionStreamBuffer,
   VectorStore,
@@ -74,16 +75,26 @@ export async function layerPersistentSessionStores(
   return { ...storage, renderStore, streamBuffer };
 }
 
-export async function createPersistentVectorStore(
+/**
+ * `ggui serve`'s persistent layer for blueprints: the vector store and its
+ * blueprint identity index, in one `vectors.sqlite`, both or neither. An
+ * in-memory index beside persistent vectors comes back empty after every
+ * restart, and the install walk then registers each installed blueprint
+ * again as a new row (ggui#1907). Throws when SQLite is unavailable; the
+ * caller falls back to the in-memory defaults.
+ */
+export async function createPersistentVectorStores(
   persistentDir: string,
-): Promise<VectorStore> {
+): Promise<{ readonly vectors: VectorStore; readonly index: BlueprintIndex }> {
   mkdirSync(persistentDir, { recursive: true });
-  const { SqliteVectorStore } = await import(
+  const { SqliteBlueprintIndex, SqliteVectorStore } = await import(
     '@ggui-ai/mcp-server-core/sqlite'
   );
-  return new SqliteVectorStore({
-    filename: join(persistentDir, 'vectors.sqlite'),
-  });
+  const filename = join(persistentDir, 'vectors.sqlite');
+  return {
+    vectors: new SqliteVectorStore({ filename }),
+    index: new SqliteBlueprintIndex({ filename }),
+  };
 }
 
 /**

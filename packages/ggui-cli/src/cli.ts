@@ -76,7 +76,7 @@ import { createThemeWriter } from './theme-writer.js';
 import { createThemeFileUploader } from './theme-file-uploader.js';
 import { getPersistentDir } from './paths.js';
 import {
-  createPersistentVectorStore,
+  createPersistentVectorStores,
   layerPersistentSessionStores,
 } from './persistent-stores.js';
 import {
@@ -395,8 +395,8 @@ async function runServeCommand(args: string[]): Promise<number> {
       }
       if (!manifestDeclaresVectors && storage.vectors === undefined) {
         try {
-          const vectors = await createPersistentVectorStore(persistentDir);
-          storage = { ...storage, vectors };
+          const { vectors, index } = await createPersistentVectorStores(persistentDir);
+          storage = { ...storage, vectors, index };
         } catch (err) {
           process.stderr.write(
             `ggui serve: persistent vector store unavailable — using in-memory `
