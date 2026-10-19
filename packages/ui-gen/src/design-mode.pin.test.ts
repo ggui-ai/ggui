@@ -255,8 +255,11 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // `onChange` hands over the value, `Input.tsx`'s own docblock); both now read `onChange={setDraftText}`. A HARD
 // section both arms carry: constrained prompt a2656392… → 5756b359…, free prompt 64589393… → 043121fe….
 // Boilerplates are byte-stable.
+// Re-recorded 2026-10-19 for ggui#1765 (the prompt leg): one bullet after the spacing scale says `padding` sets a
+// surface's vertical rhythm and the card owns the horizontal inset (one content edge per card), matching design's
+// new `--ggui-card-inset`: constrained prompt 5756b359… → b8369701…. The free prompt and both boilerplates are unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "5756b359a43f5135e2e221634747a33e676047f8a652e002b054a631d29de2c1";
+  "b8369701359bd5c54255b071463bf8232680580281eb277638cc32b2e803795b";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
