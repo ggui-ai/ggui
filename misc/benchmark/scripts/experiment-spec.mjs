@@ -94,3 +94,24 @@ export function decideNextRep({ capUsd, spentUsd, lastRepUsd }) {
   const projectedUsd = (spentUsd + lastRepUsd) * JUDGING_MARGIN;
   return { stop: projectedUsd > capUsd, projectedUsd };
 }
+
+/** A container image digest as ECS reports it. */
+export const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+/**
+ * The image this task is running, from the ECS task metadata endpoint (v4) container document (ggui#1789): `Image`
+ * is the reference the task definition names (a mutable tag), `ImageID` the digest that reference resolved to when
+ * the task started. A document whose `ImageID` is not a digest is refused, so a receipt never records a guess.
+ * @param {unknown} doc
+ * @returns {{ ref: string | null, digest: string }}
+ */
+export function imageFromContainerMetadata(doc) {
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new Error('container metadata: not a JSON object');
+  }
+  const { Image, ImageID } = /** @type {{ Image?: unknown, ImageID?: unknown }} */ (doc);
+  if (typeof ImageID !== 'string' || !IMAGE_DIGEST.test(ImageID)) {
+    throw new Error(`container metadata: ImageID is not a sha256 digest (${JSON.stringify(ImageID)})`);
+  }
+  return { ref: typeof Image === 'string' ? Image : null, digest: ImageID };
+}

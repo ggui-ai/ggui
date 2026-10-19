@@ -11,7 +11,8 @@
  *      upload the report and the sources under `experiments/<id>/`; before the next repetition, stop if another one
  *      would pass the cap (`decideNextRep`).
  *   4. Write `experiments/<id>/receipt.json`: the spec, the image (`GIT_SHA`, `BENCH_SOURCE_HASH` from the
- *      container env), each repetition's report key, cell count and generation cost, and the stop reason if any.
+ *      container env, and the digest the task is running, read from its own ECS metadata), each repetition's report
+ *      key, cell count and generation cost, and the stop reason if any.
  *
  * Nothing here writes the public dashboard's prefix. Exits non-zero on any failure, after writing the receipt with
  * the failure recorded.
@@ -22,7 +23,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { decideNextRep, parseExperimentSpec } from './experiment-spec.mjs';
+import { decideNextRep, imageFromContainerMetadata, parseExperimentSpec } from './experiment-spec.mjs';
 import { resolveRunVariants } from '../src/multi-sdk/variants.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -92,17 +93,32 @@ function newestReport(dir, notBefore) {
   return reports[0].full;
 }
 
+/**
+ * The image this task is running (ggui#1789): ECS injects `ECS_CONTAINER_METADATA_URI_V4` into every task container,
+ * and its document carries the digest the task's image reference resolved to. Off ECS (a local run) there is no
+ * endpoint, and the receipt says so instead of naming an image.
+ * @returns {Promise<{ ref: string | null, digest: string | null, digestSource: string }>}
+ */
+async function runningImage() {
+  const uri = process.env.ECS_CONTAINER_METADATA_URI_V4;
+  if (!uri) return { ref: null, digest: null, digestSource: 'none: not running on ECS (no ECS_CONTAINER_METADATA_URI_V4)' };
+  const res = await fetch(uri);
+  if (!res.ok) throw new Error(`ECS container metadata: HTTP ${res.status} from ${uri}`);
+  return { ...imageFromContainerMetadata(await res.json()), digestSource: 'ECS task metadata v4' };
+}
+
 async function main() {
   const spec = parseExperimentSpec(await readSpec());
   resolveRunVariants(spec.variants); // throws on an unregistered arm, before any spend
   const prefix = `experiments/${spec.id}/`;
   const receiptKey = `${prefix}receipt.json`;
   if (await exists(receiptKey)) throw new Error(`experiment ${spec.id} already has a receipt (${receiptKey}); ids are used once`);
+  const image = await runningImage(); // before any spend: an experiment that cannot name its image does not run
 
   const receipt = {
     id: spec.id,
     spec,
-    image: { gitSha: process.env.GIT_SHA ?? null, benchSourceHash: process.env.BENCH_SOURCE_HASH ?? null },
+    image: { gitSha: process.env.GIT_SHA ?? null, benchSourceHash: process.env.BENCH_SOURCE_HASH ?? null, ...image },
     startedAt: new Date().toISOString(),
     finishedAt: null,
     runs: [],

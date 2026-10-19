@@ -5,6 +5,7 @@ import {
   MAX_REPS,
   NIGHTLY_COMMITS,
   decideNextRep,
+  imageFromContainerMetadata,
   parseExperimentSpec,
 } from './experiment-spec.mjs';
 
@@ -52,5 +53,30 @@ describe('decideNextRep', () => {
     // spent 8 + next 8 = 16, × margin = 20 → exactly at a 20 cap runs; above it stops
     expect(decideNextRep({ capUsd: 20, spentUsd: 8, lastRepUsd: 8 })).toEqual({ stop: false, projectedUsd: 16 * JUDGING_MARGIN });
     expect(decideNextRep({ capUsd: 19.99, spentUsd: 8, lastRepUsd: 8 }).stop).toBe(true);
+  });
+});
+
+describe('imageFromContainerMetadata (#1789)', () => {
+  const digest = `sha256:${'0123456789abcdef'.repeat(4)}`;
+
+  it('names the digest the task is running and the reference it came from', () => {
+    const doc = { Image: '437064342055.dkr.ecr.us-east-1.amazonaws.com/ggui-benchmark-runner:latest', ImageID: digest };
+    expect(imageFromContainerMetadata(doc)).toEqual({ ref: doc.Image, digest });
+  });
+
+  it('keeps the digest when the reference is missing', () => {
+    expect(imageFromContainerMetadata({ ImageID: digest })).toEqual({ ref: null, digest });
+  });
+
+  it('refuses a document whose ImageID is not a sha256 digest, so a receipt never records a guess', () => {
+    expect(() => imageFromContainerMetadata({ Image: 'x:latest' })).toThrow(/ImageID is not a sha256 digest/);
+    expect(() => imageFromContainerMetadata({ ImageID: 'sha256:abc' })).toThrow(/ImageID is not a sha256 digest/);
+    expect(() => imageFromContainerMetadata({ ImageID: 'latest' })).toThrow(/ImageID is not a sha256 digest/);
+  });
+
+  it('refuses a document that is not an object', () => {
+    expect(() => imageFromContainerMetadata(null)).toThrow(/not a JSON object/);
+    expect(() => imageFromContainerMetadata([])).toThrow(/not a JSON object/);
+    expect(() => imageFromContainerMetadata('sha256:x')).toThrow(/not a JSON object/);
   });
 });
