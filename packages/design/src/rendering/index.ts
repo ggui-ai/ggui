@@ -39,6 +39,7 @@ export {
   pxValue,
   inlineCardRadius,
   cardFitRule,
+  cardInsetRule,
   FRAMED_CARD_GROUND,
 } from './css-tokens';
 export type { ComposeThemeCssOptions, ThemeOverlayLayers, CanvasClass, HostDisplayMode, MountFit, RadiusBucket } from './css-tokens';
