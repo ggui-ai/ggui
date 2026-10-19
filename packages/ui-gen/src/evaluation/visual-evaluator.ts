@@ -27,7 +27,7 @@ import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'node:module';
-import { existsSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'os';
 import { createVisionAgent, type AgentConfig, type VisionFinishReason } from '../harness/llm-router';
@@ -501,8 +501,24 @@ export interface VisualEvalContext {
  * same place the harness's own imports come from.
  */
 export function resolveUiGenPackageDir(): string {
-  const selfDir = dirname(fileURLToPath(import.meta.url));
-  return resolve(selfDir, '..', '..');
+  // ggui#1769: found by walking up to this package's own manifest, never by counting directories. The code moves
+  // with the bundle's layout: under `src/evaluation/` and the old per-entry `dist/evaluation/` the package root
+  // was two levels up, but a shared chunk sits at `dist/` itself, one level up.
+  return findPackageRootAbove(dirname(fileURLToPath(import.meta.url)), '@ggui-ai/ui-gen');
+}
+
+/** The nearest directory at or above `start` whose `package.json` is named `name`; throws when there is none. */
+export function findPackageRootAbove(start: string, name: string): string {
+  for (let dir = start; ; dir = dirname(dir)) {
+    const manifest = resolve(dir, 'package.json');
+    if (existsSync(manifest) && readPackageName(manifest) === name) return dir;
+    if (dirname(dir) === dir) throw new Error(`${name}: no package.json named ${name} at or above ${start}`);
+  }
+}
+
+function readPackageName(manifest: string): string | undefined {
+  const parsed: unknown = JSON.parse(readFileSync(manifest, 'utf8'));
+  return typeof parsed === 'object' && parsed !== null && 'name' in parsed && typeof parsed.name === 'string' ? parsed.name : undefined;
 }
 
 /**

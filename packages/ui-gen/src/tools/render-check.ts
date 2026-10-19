@@ -78,12 +78,12 @@ const RENDER_NODE_HEAP_MB = 256;
  * that means a broken build, not a missing test fixture.
  */
 function resolveWorkerSpawn(): { command: string; args: string[] } {
-  // Sibling-first, then `../tools/`. When this function is inlined
-  // into `dist/adapters/index.js`, sibling resolves to a nonexistent
-  // `dist/adapters/render-check-worker.js`; the `../tools/` candidate
-  // then lands on the real `dist/tools/render-check-worker.js`.
+  // Sibling-first, then from a dist-root module, then `../tools/`. A dist entry under `dist/<dir>/` reaches the
+  // real `dist/tools/render-check-worker.js` through `../tools/`; a shared chunk at the dist root (ggui#1769: the
+  // bundle splits shared modules, and this function lands in one) reaches it through `./tools/`.
   const jsCandidates = [
     new URL('./render-check-worker.js', import.meta.url),
+    new URL('./tools/render-check-worker.js', import.meta.url),
     new URL('../tools/render-check-worker.js', import.meta.url),
   ];
   const tsCandidates = [

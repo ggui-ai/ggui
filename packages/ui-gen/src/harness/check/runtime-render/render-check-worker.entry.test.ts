@@ -1,21 +1,39 @@
 // ggui#1380 C2b — the dist-only fact about the worker, pinned as CONFIG,
-// not as a build: tsup keeps `splitting: false` and lists BOTH render-check
-// workers as explicit entries, which is what makes `import.meta.url` name the
-// worker file in dist so the entry guard fires there. The runtime half of
+// not as a build: BOTH render-check workers are explicit tsup entries and NO
+// other module imports either one, which is what keeps each worker's body —
+// its entry guard included — in its own dist file, so `import.meta.url` names
+// the worker file and the guard fires there. (ggui#1769 turned tsup's
+// `splitting` on: a module moves into a shared chunk only when two or more
+// entries import it, which a worker imported by nothing never is. Built-dist
+// receipt on that commit: the guard in both worker files, and
+// warmupRuntimeRenderWorker ok from plain Node on the split dist.) The runtime half of
 // the guard is pinned by render-check-host.kill-path.integration.test.ts
 // with a real spawn of the source worker; an end-to-end receipt on a real
 // build (warmupRuntimeRenderWorker ok from plain Node) is the reviewer's,
 // cited in the commit — a per-PR tsup build for one case is not worth its
 // standing cost.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const tsupConfig = readFileSync(fileURLToPath(new URL('../../../../tsup.config.ts', import.meta.url)), 'utf8');
 
 describe('the render-check workers ship as their own dist entries (ggui#1380 C2b)', () => {
-  it('tsup does not split chunks — a worker file is one file, so import.meta.url names it', () => {
-    expect(tsupConfig).toMatch(/splitting:\s*false/);
+  it('no module imports a worker, so splitting can never move its body (and guard) into a shared chunk', () => {
+    const srcRoot = fileURLToPath(new URL('../../../', import.meta.url));
+    const importers: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (p.endsWith('.ts') && !/\.test\.ts$/.test(p) && !p.endsWith('render-check-worker.ts')) {
+          if (/from\s+['"][^'"]*render-check-worker(\.js)?['"]|import\(\s*['"][^'"]*render-check-worker(\.js)?['"]\s*\)/.test(readFileSync(p, 'utf8'))) importers.push(p);
+        }
+      }
+    };
+    walk(srcRoot);
+    expect(importers).toEqual([]);
   });
 
   it('both workers are explicit tsup entries', () => {
