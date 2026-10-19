@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   test: {
+    setupFiles: ['../../test-support/no-ambient-aws.mjs'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     // React-rendering specs run in jsdom; the node specs that
     // collocate next to them (router/server contract tests) tolerate

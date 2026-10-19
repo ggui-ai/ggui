@@ -16,6 +16,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    setupFiles: ['../../test-support/no-ambient-aws.mjs'],
     // Several suites do real esbuild compiles + ui-gen generation-harness
     // stubs (compile_component, multi-generator dispatch) that cross
     // vitest's 5000ms default under cold-cache 2-core CI concurrency.

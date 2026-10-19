@@ -13,7 +13,7 @@ export default defineConfig({
     // use `act(...)` to flush initial render + effects. React 19
     // requires `globalThis.IS_REACT_ACT_ENVIRONMENT = true` to recognize
     // the test environment; vitest's `setupFiles` installs it once.
-    setupFiles: ['./src/__tests__/setup.ts'],
+    setupFiles: ['../../test-support/no-ambient-aws.mjs', './src/__tests__/setup.ts'],
     env: {
       // Suppress the module-load-time autostart in `runtime.ts` so
       // tests can import the module (to exercise `bootSequence()`

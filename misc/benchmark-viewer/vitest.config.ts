@@ -6,6 +6,7 @@ import { defineConfig } from 'vitest/config';
 // once from its stale compiled copy.
 export default defineConfig({
   test: {
+    setupFiles: ['../../test-support/no-ambient-aws.mjs'],
     include: ['src/**/*.test.ts'],
   },
 });

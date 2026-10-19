@@ -15,6 +15,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    setupFiles: ['../../test-support/no-ambient-aws.mjs'],
     // Matches both the per-fixture Lane-3 contract tests AND the
     // top-level release-readiness checks (e.g. the transitive-package
     // drift check at `tests/tarball-transitive-packages.test.ts`).

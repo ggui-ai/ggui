@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    setupFiles: ['./src/test-setup.ts'],
+    setupFiles: ['../../test-support/no-ambient-aws.mjs', './src/test-setup.ts'],
   },
 });

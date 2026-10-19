@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    setupFiles: ['../../test-support/no-ambient-aws.mjs'],
     // ui-gen unit tests do real work — esbuild compiles, tsc self-checks,
     // and jsdom render-checks — each ~0.7–2s in isolation. On a cold-cache
     // 2-core CI runner under full-suite (~49-file) concurrency the heaviest
