@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
-import { copyFileSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { testTmpDir } from '../test-tmp-dir.js';
+import { copyFileSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   readCellInputs,
@@ -29,7 +29,7 @@ import type { PanelEvalResult } from '../multi-sdk/post-eval.js';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
 
 function cellDir(opts: { evalJson?: boolean; commit?: string | null } = {}): string {
-  const dir = mkdtempSync(join(tmpdir(), 'exp008-cell-'));
+  const dir = testTmpDir('exp008-cell-');
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(){ return <div/> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: {}, contractKey: 'k1', commitRef: opts.commit === undefined ? 'weather-card' : opts.commit }));
@@ -524,14 +524,14 @@ describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejec
     prompt: string; sampleProps?: Record<string, never>; profile: { direction: string };
   };
   it("parses the newer writer's real hello judge-input (profile.direction) as a bootstrap input", () => {
-    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    const dir = testTmpDir('exp008-judge-input-');
     writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify(fixture));
     const j = readJudgeInput(dir);
     expect(j.prompt).toBe(fixture.prompt);
     expect(j.profile?.direction).toBe(fixture.profile.direction);
   });
   it('drops a profile member this reader cannot know yet instead of failing the cell', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    const dir = testTmpDir('exp008-judge-input-');
     writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify({ ...fixture, profile: { ...fixture.profile, aMemberFromTheNextRelease: 'ignored by this reader' } }));
     const j = readJudgeInput(dir);
     expect(j.profile).toEqual(fixture.profile);
@@ -541,12 +541,12 @@ describe('readJudgeInput under the N-1 rule (#1014): an older reader never rejec
     expect(profileMembersStrippedNote(j.profileStripped ?? [])).toContain('aMemberFromTheNextRelease');
   });
   it('names nothing when the writer sent nothing this reader does not know', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    const dir = testTmpDir('exp008-judge-input-');
     writeFileSync(join(dir, JUDGE_INPUT_FILE), JSON.stringify(fixture));
     expect(readJudgeInput(dir).profileStripped).toBeUndefined();
   });
   it('reads the theme overlay through the same door and names its stripped members', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'exp008-judge-input-'));
+    const dir = testTmpDir('exp008-judge-input-');
     writeFileSync(
       join(dir, JUDGE_INPUT_FILE),
       JSON.stringify({

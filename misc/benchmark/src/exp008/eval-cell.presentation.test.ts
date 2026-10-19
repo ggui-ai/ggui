@@ -3,10 +3,10 @@
 // `presentation` (which the binder digests) is what the JUDGE DREW — built from its per-canvas outcome, never
 // from this reader's prediction. Absent ⇒ today: no key, nothing handed to the judge.
 
-import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { testTmpDir } from '../test-tmp-dir.js';
 import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
 import type { PanelEvalResult } from '../multi-sdk/post-eval.js';
@@ -24,7 +24,7 @@ const INLINE = { canvas: 'xs-chat-card', label: 'host, inline card', frame: FRAM
 const PANE = { canvas: 'md', label: 'host, pane, reference viewport', box: { width: 816, height: 736 }, ground: '#eeece4' };
 
 function bootstrapCell(judgeInput: JsonObject): string {
-  const dir = mkdtempSync(join(tmpdir(), 'exp008-presentation-'));
+  const dir = testTmpDir('exp008-presentation-');
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: CONTRACT, contractKey: 'k1', commitRef: null }));

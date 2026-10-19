@@ -18,7 +18,7 @@
  * A props-LESS contract judged empty is judged CORRECTLY and must never read as
  * not-judgeable; a cell that carried its own sampleProps never carries exampleFields.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -27,15 +27,27 @@ import { readCellInputs, examplesFrom, contractRendersProps, type BootstrapJudge
 
 const MINT = { cellId: 'c1', runId: 'r1', arm: 'B', model: 'openai/gpt-6-astra', codeHash: 'abc', latencyMs: 1234, generationTimeMs: 1200, turnsUsed: 2, passesUsed: 1, tokens: { input: 1000, output: 500 }, designMode: 'free', canvas: 'xs-chat-card', requested: { designMode: 'free', canvas: 'xs-chat-card' } };
 
-/** A BOOTSTRAP cell (commitRef null) — prompt and optional sampleProps come from judge-input.json, exactly as the mint exports them. */
-function bootstrapCell(contract: DataContract, judgeInput: BootstrapJudgeInput): string {
+/**
+ * The inputs read from a BOOTSTRAP cell (commitRef null) — prompt and optional sampleProps come from
+ * judge-input.json, exactly as the mint exports them. Two describes read theirs at collection time,
+ * outside any test, so the cell is staged, read and removed here rather than by a per-test hook.
+ */
+function bootstrapInputs(contract: DataContract, judgeInput: BootstrapJudgeInput): ReturnType<typeof readCellInputs> {
   const dir = mkdtempSync(join(tmpdir(), 'exp008-judgeable-'));
+  try {
+    stageCell(dir, contract, judgeInput);
+    return readCellInputs(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function stageCell(dir: string, contract: DataContract, judgeInput: BootstrapJudgeInput): void {
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract, contractKey: 'k1', commitRef: null }));
   writeFileSync(join(dir, 'mint.json'), JSON.stringify(MINT));
   writeFileSync(join(dir, 'judge-input.json'), JSON.stringify(judgeInput));
-  return dir;
 }
 
 /** The rep-fleet welcome shape WITH examples — the contract the ruling's part 1 reaches. */
@@ -83,7 +95,7 @@ describe('examplesFrom / contractRendersProps (the two derivations the writer re
 });
 
 describe('readCellInputs — part 1: no sampleProps, examples present ⇒ judged on the examples', () => {
-  const inputs = readCellInputs(bootstrapCell(WITH_EXAMPLES, { prompt: 'a welcome card' }));
+  const inputs = bootstrapInputs(WITH_EXAMPLES, { prompt: 'a welcome card' });
   it("propsSource STAYS 'empty' (no reader's enum changes) and the presence of exampleFields is the fact", () => {
     expect(inputs.propsSource).toBe('empty');
     expect(inputs.exampleFields).toEqual(['heading', 'message', 'quickReplies']);
@@ -100,7 +112,7 @@ describe('readCellInputs — part 1: no sampleProps, examples present ⇒ judged
 });
 
 describe('readCellInputs — part 2: no sampleProps, no examples, a props-bearing contract ⇒ NOT judgeable', () => {
-  const inputs = readCellInputs(bootstrapCell(WITHOUT_EXAMPLES, { prompt: 'a welcome card' }));
+  const inputs = bootstrapInputs(WITHOUT_EXAMPLES, { prompt: 'a welcome card' });
   it('judgeable is false, nothing is rendered, and no exampleFields are claimed', () => {
     expect(inputs.judgeable).toBe(false);
     expect(inputs.propsSource).toBe('empty');
@@ -111,13 +123,13 @@ describe('readCellInputs — part 2: no sampleProps, no examples, a props-bearin
 
 describe('readCellInputs — the two cases that must NOT read as not-judgeable', () => {
   it('a props-LESS contract judged empty is judged correctly', () => {
-    const inputs = readCellInputs(bootstrapCell(NO_PROPS, { prompt: 'a save button' }));
+    const inputs = bootstrapInputs(NO_PROPS, { prompt: 'a save button' });
     expect(inputs.propsSource).toBe('empty');
     expect(inputs.judgeable).toBe(true);
     expect(inputs.exampleFields).toBeUndefined();
   });
   it("a cell that carried its own sampleProps is 'cell' and never carries exampleFields, even when the contract has examples too", () => {
-    const inputs = readCellInputs(bootstrapCell(WITH_EXAMPLES, { prompt: 'a welcome card', sampleProps: { heading: 'Hi', message: 'Live copy', quickReplies: [] } }));
+    const inputs = bootstrapInputs(WITH_EXAMPLES, { prompt: 'a welcome card', sampleProps: { heading: 'Hi', message: 'Live copy', quickReplies: [] } });
     expect(inputs.propsSource).toBe('cell');
     expect(inputs.sampleProps).toEqual({ heading: 'Hi', message: 'Live copy', quickReplies: [] });
     expect(inputs.exampleFields).toBeUndefined();

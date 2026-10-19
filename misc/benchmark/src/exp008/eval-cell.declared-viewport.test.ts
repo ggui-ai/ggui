@@ -4,10 +4,10 @@
 // captures that canvas at that box. An older mint wrote none ⇒ no key (N−1).
 // RED before the read-door + threading, GREEN after.
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { testTmpDir } from '../test-tmp-dir.js';
 import type { DataContract, JsonObject } from '@ggui-ai/protocol';
 import type { PlaywrightModule } from '@ggui-ai/ui-visual-tester';
 import type { PanelEvalResult } from '../multi-sdk/post-eval.js';
@@ -21,7 +21,7 @@ const DECLARED = { canvas: 'xs-chat-card', width: 384, height: 516 } as const;
 
 /** `judgeInput` is what the file holds — JSON — so a malformed box can be written on purpose. */
 function bootstrapCell(judgeInput: JsonObject): string {
-  const dir = mkdtempSync(join(tmpdir(), 'exp008-declared-viewport-'));
+  const dir = testTmpDir('exp008-declared-viewport-');
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: CONTRACT, contractKey: 'k1', commitRef: null }));

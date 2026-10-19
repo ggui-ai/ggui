@@ -3,10 +3,10 @@
 // exactly as the mint's in-loop round does: the overlay ON that ladder. An older mint wrote no
 // `themeId` ⇒ no key, and a theme-only cell stays byte-identical to today's composition (N−1).
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { testTmpDir } from '../test-tmp-dir.js';
 import type { AppTheme, DataContract, JsonObject } from '@ggui-ai/protocol';
 import { getDefaultThemeId, getThemeIds } from '@ggui-ai/design/themes';
 import { cssTokensForAppTheme } from '@ggui-ai/ui-gen/evaluation';
@@ -26,7 +26,7 @@ const THEME: AppTheme = {
 const PRESET = getThemeIds().find((id) => id !== getDefaultThemeId());
 
 function bootstrapCell(judgeInput: JsonObject): string {
-  const dir = mkdtempSync(join(tmpdir(), 'exp008-theme-id-'));
+  const dir = testTmpDir('exp008-theme-id-');
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: CONTRACT, contractKey: 'k1', commitRef: null }));

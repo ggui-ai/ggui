@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { testTmpDir } from '../test-tmp-dir.js';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { CANVAS_CLASSES, CANVAS_VIEWPORTS, persistCanvasScreenshots, visualCanvasesFromTierEvaluation } from './canvas';
@@ -19,7 +19,7 @@ describe('canvas vocabulary (#973 §4 F5 — ONE vocabulary: ui-gen\'s, re-expor
 
 describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in the report, never the image', () => {
   it('writes canvas-<class>.png per canvas and returns artefact refs with a relative path, sha256 and bytes', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
+    const dir = testTmpDir('bench-canvas-');
     const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
     const out = persistCanvasScreenshots(dir, [
       { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 81, passed: true, screenshotPng: png, contentHeight: 1000, overflow: false, inkRatio: null, judge: { k: 1, rule: 'median' as const, samples: [81], sigma: 0, notes: ['ok'] } },
@@ -34,12 +34,12 @@ describe('persistCanvasScreenshots — PNG beside source.tsx, hash + bytes in th
   });
 
   it('returns [] and writes nothing for an empty list', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
+    const dir = testTmpDir('bench-canvas-');
     expect(persistCanvasScreenshots(dir, [])).toEqual([]);
   });
 
   it('forwards the fill instrument (#1120) and the criteria block (#1436) verbatim — a hand-listed projection dropped both', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bench-canvas-'));
+    const dir = testTmpDir('bench-canvas-');
     const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
     const judge = { k: 1, rule: 'median' as const, samples: [80], sigma: 0, notes: ['ok'] };
     const criteria = {

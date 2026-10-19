@@ -6,10 +6,10 @@
 // read is dropped WITH its reason on the row, and the cell is still judged.
 
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { testTmpDir } from '../test-tmp-dir.js';
 import type { AppTheme, DataContract, JsonObject } from '@ggui-ai/protocol';
 import { getDefaultThemeId, getThemeIds } from '@ggui-ai/design/themes';
 import { classifyAxes } from '@ggui-ai/ui-gen/classifier';
@@ -46,7 +46,7 @@ const THEME_JSON: JsonObject = {
 const PRESET = getThemeIds().find((id) => id !== getDefaultThemeId());
 
 function bootstrapCell(judgeInput: JsonObject, mint: JsonObject = MINT): string {
-  const dir = mkdtempSync(join(tmpdir(), 'exp008-criteria-'));
+  const dir = testTmpDir('exp008-criteria-');
   writeFileSync(join(dir, 'compiled.js'), 'export default function C(){return null}');
   writeFileSync(join(dir, 'source.tsx'), 'export default function C(props){ return <div>{props.heading}</div> }');
   writeFileSync(join(dir, 'contract.json'), JSON.stringify({ contract: CONTRACT, contractKey: 'k1', commitRef: null }));

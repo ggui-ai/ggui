@@ -15,7 +15,7 @@
  * contractBehavior; judge keys ANTHROPIC_API_KEY / OPENAI_API_KEY /
  * GEMINI_API_KEY as container secrets.
  */
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -107,7 +107,17 @@ async function syncUp(s3, bucket, prefix, dir) {
 
 async function main() {
   const s3 = locator.kind === 's3' ? new S3Client({}) : null;
-  const dir = locator.kind === 'dir' ? locator.dir : mkdtempSync(join(tmpdir(), 'exp008-cell-'));
+  if (locator.kind === 'dir') return evalCell(s3, locator.dir);
+  // An S3 cell is staged in a temp dir this process owns, so it removes it whatever the outcome.
+  const dir = mkdtempSync(join(tmpdir(), 'exp008-cell-'));
+  try {
+    return await evalCell(s3, dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function evalCell(s3, dir) {
   if (locator.kind === 's3') await syncDown(s3, locator.bucket, locator.prefix, dir);
 
   const inputs = readCellInputs(dir);
