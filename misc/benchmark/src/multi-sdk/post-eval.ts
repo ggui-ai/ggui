@@ -350,6 +350,13 @@ export const JUDGE_PANELS = {
     { provider: 'openai', model: 'gpt-5.4-mini' },
     { provider: 'google', model: 'gemini-3.6-flash' },
   ],
+  // Not a generator under test, as the 2026-10-10 methodology entry intends for this seat;
+  // the two above are the claude-fast and claude-balanced arms.
+  'cand-anthropic-opus-5': [
+    { provider: 'anthropic', model: 'claude-opus-5' },
+    { provider: 'openai', model: 'gpt-5.4-mini' },
+    { provider: 'google', model: 'gemini-3.6-flash' },
+  ],
 } as const satisfies Record<string, ReadonlyArray<{ provider: AgentConfig['provider']; model: string }>>;
 
 export type JudgePanelId = keyof typeof JUDGE_PANELS;

@@ -14,6 +14,7 @@ import {
 } from './post-eval.js';
 import { MODEL_REGISTRY } from '@ggui-ai/protocol';
 import { resolveJudgeCostModelId } from './runner.js';
+import { getDefaultVariants } from './variants.js';
 
 describe('buildJudgeDisclosure (effective sampling, #713)', () => {
   it('records the sampling the router reports it applied', () => {
@@ -306,6 +307,12 @@ describe('JUDGE_PANELS (#1798): the default panel is unchanged, a candidate diff
     for (const panel of Object.values(JUDGE_PANELS)) {
       for (const j of panel) expect(MODEL_REGISTRY, j.model).toHaveProperty([resolveJudgeCostModelId(j.model)]);
     }
+  });
+
+  it('the opus-5 candidate seat is not a generator under test (the 2026-10-10 entry\'s stated intent)', () => {
+    const arms = new Set(getDefaultVariants().map((v) => v.modelId));
+    expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-opus-5'][0].model))).toBe(false);
+    expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-haiku-5-5'][0].model))).toBe(true);
   });
 
   it('parses a known id and is loud on an unknown one', () => {
