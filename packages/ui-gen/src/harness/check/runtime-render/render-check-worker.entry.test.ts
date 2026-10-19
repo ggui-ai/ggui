@@ -28,7 +28,8 @@ describe('the render-check workers ship as their own dist entries (ggui#1380 C2b
         const p = join(dir, name);
         if (statSync(p).isDirectory()) walk(p);
         else if (p.endsWith('.ts') && !/\.test\.ts$/.test(p) && !p.endsWith('render-check-worker.ts')) {
-          if (/from\s+['"][^'"]*render-check-worker(\.js)?['"]|import\(\s*['"][^'"]*render-check-worker(\.js)?['"]\s*\)/.test(readFileSync(p, 'utf8'))) importers.push(p);
+          // `from` (named, default, namespace and re-exports), dynamic `import()`, and a bare side-effect import.
+          if (/from\s+['"][^'"]*render-check-worker(\.js)?['"]|import\(\s*['"][^'"]*render-check-worker(\.js)?['"]\s*\)|import\s+['"][^'"]*render-check-worker(\.js)?['"]/.test(readFileSync(p, 'utf8'))) importers.push(p);
         }
       }
     };
