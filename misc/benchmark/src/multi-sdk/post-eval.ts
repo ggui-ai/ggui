@@ -190,7 +190,7 @@ const WEIGHTS = { layout: 0.2, designTokens: 0.2, hierarchy: 0.2, polish: 0.2, d
  * block lets the judge see the same shape the generator saw — stops "missing
  * X" hallucinations against UNAMPUTATED source.
  */
-function buildJudgeUserMessage(sourceCode: string, prompt: string, contract?: unknown): string {
+export function buildJudgeUserMessage(sourceCode: string, prompt: string, contract?: unknown): string {
   const contractBlock = contract
     ? `\n\nData contract:\n\`\`\`json\n${JSON.stringify(contract, null, 2).slice(0, 3000)}\n\`\`\``
     : '';
@@ -324,15 +324,47 @@ export interface PanelEvalResult {
 }
 
 /**
- * The judge panel. One model per provider, scored at temperature 0 so a
- * re-run is reproducible. Changing this set or the prompt invalidates score
- * comparability across runs; bump {@link AESTHETIC_PROMPT_VERSION_PANEL}.
+ * The judge panels, by name. One model per provider, scored at temperature 0
+ * so a re-run is reproducible. `v4-panel` is the one every run uses
+ * ({@link DEFAULT_JUDGE_PANEL}); changing it or the prompt invalidates score
+ * comparability across runs, so bump {@link AESTHETIC_PROMPT_VERSION_PANEL}.
+ *
+ * The other entries are CANDIDATES (#1798): the same panel with one seat
+ * changed, so a calibration can score the same sources with both and measure
+ * the shift before any switch. Naming one here changes no run; only a caller
+ * that passes its id uses it.
  */
-const PANEL = [
-  { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
-  { provider: 'openai', model: 'gpt-5.4-mini' },
-  { provider: 'google', model: 'gemini-3.6-flash' },
-] as const;
+export const JUDGE_PANELS = {
+  'v4-panel': [
+    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+    { provider: 'openai', model: 'gpt-5.4-mini' },
+    { provider: 'google', model: 'gemini-3.6-flash' },
+  ],
+  'cand-anthropic-haiku-5-5': [
+    { provider: 'anthropic', model: 'claude-haiku-5-5' },
+    { provider: 'openai', model: 'gpt-5.4-mini' },
+    { provider: 'google', model: 'gemini-3.6-flash' },
+  ],
+  'cand-anthropic-sonnet-5-5': [
+    { provider: 'anthropic', model: 'claude-sonnet-5-5' },
+    { provider: 'openai', model: 'gpt-5.4-mini' },
+    { provider: 'google', model: 'gemini-3.6-flash' },
+  ],
+} as const satisfies Record<string, ReadonlyArray<{ provider: AgentConfig['provider']; model: string }>>;
+
+export type JudgePanelId = keyof typeof JUDGE_PANELS;
+
+export const DEFAULT_JUDGE_PANEL: JudgePanelId = 'v4-panel';
+
+function isJudgePanelId(id: string): id is JudgePanelId {
+  return Object.hasOwn(JUDGE_PANELS, id);
+}
+
+/** A panel id from untyped input (a CLI flag); loud on anything not in {@link JUDGE_PANELS}. */
+export function parseJudgePanelId(id: string): JudgePanelId {
+  if (isJudgePanelId(id)) return id;
+  throw new Error(`unknown judge panel '${id}' (known: ${Object.keys(JUDGE_PANELS).join(', ')})`);
+}
 
 /**
  * Judge-call resilience knobs (#565 item 1). The first real run (2026-08-19)
@@ -443,16 +475,17 @@ export async function evaluateAestheticsPanel(
   sourceCode: string,
   prompt: string,
   contract?: unknown,
-  opts?: { panelPrompt?: PanelPrompt },
+  opts?: { panelPrompt?: PanelPrompt; panelId?: JudgePanelId },
 ): Promise<PanelEvalResult | null> {
   const startTime = Date.now();
   const panel = selectPanelPrompt(opts?.panelPrompt);
+  const judges = JUDGE_PANELS[opts?.panelId ?? DEFAULT_JUDGE_PANEL];
 
   // Each judge: globally concurrency-capped per ATTEMPT, retried with
   // backoff on null/throw. The backoff sleep happens OUTSIDE the limiter
   // slot so a rate-limited judge doesn't block other judges while waiting.
   const settled = await Promise.all(
-    PANEL.map((p) =>
+    judges.map((p) =>
       retryWithBackoff(
         () => judgeLimit(() => runSingleJudge(p.provider, p.model, sourceCode, prompt, panel, contract)),
         JUDGE_RETRY,

@@ -6,9 +6,14 @@ import {
   buildJudgeDisclosure,
   AESTHETIC_PROMPT_VERSION_PANEL,
   selectPanelPrompt,
+  JUDGE_PANELS,
+  DEFAULT_JUDGE_PANEL,
+  parseJudgePanelId,
   type SingleJudgeResult,
   type AestheticScores,
 } from './post-eval.js';
+import { MODEL_REGISTRY } from '@ggui-ai/protocol';
+import { resolveJudgeCostModelId } from './runner.js';
 
 describe('buildJudgeDisclosure (effective sampling, #713)', () => {
   it('records the sampling the router reports it applied', () => {
@@ -273,5 +278,39 @@ describe('default panel prompt v4 (#1350 — the design-system rubric is the pub
     for (const role of ['container/onContainer', 'sunken/onSunken', 'outline', 'link', 'primary-*']) expect(prompt).toContain(role);
     expect(prompt).toMatch(/typed variants first/);
     for (const k of ['layout', 'designTokens', 'hierarchy', 'polish', 'dataPresentation']) expect(prompt).toContain(`"${k}"`);
+  });
+});
+
+describe('JUDGE_PANELS (#1798): the default panel is unchanged, a candidate differs in one seat', () => {
+  it('runs use v4-panel, with exactly the three judges every run has used since 10-16', () => {
+    expect(DEFAULT_JUDGE_PANEL).toBe('v4-panel');
+    expect(JUDGE_PANELS['v4-panel']).toEqual([
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+      { provider: 'openai', model: 'gpt-5.4-mini' },
+      { provider: 'google', model: 'gemini-3.6-flash' },
+    ]);
+  });
+
+  it('each candidate keeps the OpenAI and Google seats and changes only the Anthropic one', () => {
+    const base = JUDGE_PANELS['v4-panel'];
+    for (const [id, panel] of Object.entries(JUDGE_PANELS)) {
+      if (id === 'v4-panel') continue;
+      expect(panel.map((j) => j.provider), id).toEqual(base.map((j) => j.provider));
+      const changed = panel.filter((j, i) => j.model !== base[i]!.model);
+      expect(changed, id).toHaveLength(1);
+      expect(changed[0]!.provider, id).toBe('anthropic');
+    }
+  });
+
+  it('every judge in every panel is priced, so a calibration never reports a silent $0', () => {
+    for (const panel of Object.values(JUDGE_PANELS)) {
+      for (const j of panel) expect(MODEL_REGISTRY, j.model).toHaveProperty([resolveJudgeCostModelId(j.model)]);
+    }
+  });
+
+  it('parses a known id and is loud on an unknown one', () => {
+    expect(parseJudgePanelId('cand-anthropic-haiku-5-5')).toBe('cand-anthropic-haiku-5-5');
+    expect(() => parseJudgePanelId('v5-panel')).toThrow(/unknown judge panel 'v5-panel'/);
+    expect(() => parseJudgePanelId('constructor')).toThrow(/unknown judge panel/);
   });
 });
