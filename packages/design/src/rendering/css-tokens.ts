@@ -498,6 +498,17 @@ export function fillFitRule(scopeClass: string): string {
   ].join('\n');
 }
 
+/**
+ * The fit's CSS for a scoped mount — the ONE selection (ggui#1765): the runtime's `composeThemeCss` and the visual
+ * judge's page both call it, so neither can pick a different set of rules for a fit. `fill` takes the fill rule;
+ * every other fit takes the card's one content edge, and `framed-card` also its frame (`radiusPx`, `null` = the
+ * theme's `lg` radius).
+ */
+export function mountFitCss(scopeClass: string, fit: MountFit | undefined, radiusPx: number | null): string {
+  if (fit === 'fill') return fillFitRule(scopeClass);
+  return cardInsetRule(scopeClass) + (fit === 'framed-card' ? cardFitRule(scopeClass, radiusPx) : '');
+}
+
 /** The card's content inset (ggui#1765): the `lg` step by default, per app through the spacing scale. */
 const CARD_INSET = 'var(--ggui-card-inset, var(--ggui-spacing-lg))';
 
@@ -721,9 +732,7 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
     if (opts.appTheme) {
       css += `${opts.appTheme.keyframes?.[m] ?? ''}${opts.appTheme.frameless === true ? framelessSuppressionRule(scope) : ''}`;
     }
-    if (opts.fit === 'fill') css += fillFitRule(scope);
-    else css += cardInsetRule(scope);
-    if (opts.fit === 'framed-card') css += cardFitRule(scope, inlineCardRadius({ ...(overlay ?? {}), ...(opts.appTheme?.cssVariables ?? {}) }).radiusPx);
+    css += mountFitCss(scope, opts.fit, opts.fit === 'framed-card' ? inlineCardRadius({ ...(overlay ?? {}), ...(opts.appTheme?.cssVariables ?? {}) }).radiusPx : null);
     return css;
   }
   let css = opts.themeId ? getThemeCss(opts.themeId, m) : getCssTokens(m);

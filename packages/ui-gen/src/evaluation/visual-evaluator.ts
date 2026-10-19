@@ -21,7 +21,7 @@ import type { CriteriaContextInput } from './criteria/context.js';
 import { selectCriteria } from './criteria/select.js';
 import { buildCriteriaJudgeBlock, resolveCriteriaBlock } from './criteria/resolve.js';
 import { build } from 'esbuild';
-import { EXPANDED_FRAME, FRAMED_CARD_GROUND, GGUI_MOUNT_CANVAS_EXPORT, cardFitRule, cardInsetRule, expandedFramePanelDecls, expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, getCssTokens, inlineCardRadius, resolveMountFit, type MountFit } from '@ggui-ai/design/rendering';
+import { EXPANDED_FRAME, FRAMED_CARD_GROUND, GGUI_MOUNT_CANVAS_EXPORT, mountFitCss, expandedFramePanelDecls, expandedFramePanelRule, expandedFrameScrimDecls, getCssTokens, inlineCardRadius, resolveMountFit, type MountFit } from '@ggui-ai/design/rendering';
 import { readInkExtent, type InkExtent } from './ink-extent.js';
 import { judgeDesignIdentity, type JudgeDesignIdentity } from './design-identity.js';
 import { resolve, dirname } from 'path';
@@ -740,10 +740,10 @@ function buildRenderHTML(
       color: var(--ggui-color-neutral-900, #111827);
     }
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
-    ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
-    ${framedCard ? `.${JUDGE_PANEL_CLASS} { ${expandedFramePanelDecls()} background: ${FRAMED_CARD_GROUND}; display: flow-root; } body > .${JUDGE_PANEL_CLASS} { margin: ${EXPANDED_FRAME.insetPx}px; height: calc(100vh - ${2 * EXPANDED_FRAME.insetPx}px); }` + cardFitRule(JUDGE_SCOPE_CLASS, framedCardRadiusPx) : ''}
+    ${/* ggui#1765 — the fit's rules come from the ONE selection the runtime's composeThemeCss uses. */ mountFitCss(JUDGE_SCOPE_CLASS, fit === 'fill' ? 'fill' : framedCard ? 'framed-card' : 'card', framedCardRadiusPx ?? null)}
+    ${fit === 'fill' && chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : ''}
+    ${framedCard ? `.${JUDGE_PANEL_CLASS} { ${expandedFramePanelDecls()} background: ${FRAMED_CARD_GROUND}; display: flow-root; } body > .${JUDGE_PANEL_CLASS} { margin: ${EXPANDED_FRAME.insetPx}px; height: calc(100vh - ${2 * EXPANDED_FRAME.insetPx}px); }` : ''}
     ${framedCard && chrome !== 'panel' ? `body { background: ${FRAMED_CARD_GROUND}; }` : ''}
-    ${fit === 'fill' ? '' : cardInsetRule(JUDGE_SCOPE_CLASS) /* ggui#1765 — the runtime's composeThemeCss appends it for every non-fill fit */}
     ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { ${inlineFrameDecls(presentation?.frame)} }` : ''}
   </style>
 </head>
