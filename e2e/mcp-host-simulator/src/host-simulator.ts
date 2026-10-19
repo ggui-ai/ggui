@@ -475,8 +475,10 @@ export class HostSimulator {
   /**
    * ggui#1822 — one `resources/read` of a `ui://` shell, timed and gated.
    *
-   * Two budgets: the first body byte must arrive within the first-byte gate
-   * (the server's own latency), and the whole read within the body budget
+   * Two budgets: the first body byte must arrive within the first-byte gate,
+   * counted from when the request is written onto its connection (the
+   * server's own latency; opening the connection is the path's, under the HTTP
+   * client's connect timeout), and the whole read within the body budget
    * from `GGUI_E2E_BODY_TIMEOUT_MS` (default 60 s), which is the only budget
    * a slow path gets slack on. The measurements are reported on every
    * outcome. Each read also logs one line on stderr when it is sent, naming
@@ -529,6 +531,32 @@ export class HostSimulator {
         { cause: err },
       );
     }
+  }
+
+  /**
+   * ggui#1822 — {@link callTool}, plus `accepted`: resolves `true` once the
+   * server's response headers for THIS call arrived, `false` if the call ended
+   * without them. It never rejects. A tool answers as a stream, and a streamed
+   * answer's headers go out as the server's handler starts, so `accepted` is
+   * the moment the server has the call, measured rather than guessed. A spec
+   * that must know a call is in flight on the server before it acts (a
+   * long-poll parked before a submit) waits on it, instead of on a fixed sleep
+   * that a slow connection open outlasts.
+   */
+  callToolTracked(
+    name: string,
+    args: Record<string, unknown>,
+    options?: { readonly timeoutMs?: number },
+  ): { readonly result: Promise<CallToolResult>; readonly accepted: Promise<boolean> } {
+    const watch = this.meter.watchNext("tools/call", name);
+    const result = this.callTool(name, args, options);
+    const settled = result.then(
+      () => true,
+      () => false,
+    );
+    void settled.then(() => watch.cancel());
+    const accepted = Promise.race([watch.probe.then((p) => p.headersArrived()), settled]);
+    return { result, accepted };
   }
 
   /**

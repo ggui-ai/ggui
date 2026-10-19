@@ -48,7 +48,7 @@ describe('RequestMeter: an open request is described by the phase it reached (gg
 
     const [line, ...rest] = meter.describeInFlight();
     expect(rest).toEqual([]);
-    expect(line).toMatch(/^tools\/list sent \d+ ms ago: headers \+\d+ ms \(text\/event-stream\), no body byte, still open$/);
+    expect(line).toMatch(/^tools\/list sent \d+ ms ago: written \+\d+ ms \(new connection, connected \+\d+ ms\), headers \+\d+ ms \(text\/event-stream\), no body byte, still open$/);
     await reader.cancel();
     await reading;
   });
@@ -77,7 +77,7 @@ describe('RequestMeter: an open request is described by the phase it reached (gg
     const pending = meter.fetch(url, { method: 'POST', body: TOOLS_LIST });
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(meter.describeInFlight()).toEqual([expect.stringMatching(/^tools\/list sent \d+ ms ago: headers none, no body byte, still open$/)]);
+    expect(meter.describeInFlight()).toEqual([expect.stringMatching(/^tools\/list sent \d+ ms ago: written \+\d+ ms \(new connection, connected \+\d+ ms\), headers none, no body byte, still open$/)]);
     server.closeAllConnections();
     await expect(pending).rejects.toThrow();
     expect(meter.describeInFlight()).toEqual([]);
