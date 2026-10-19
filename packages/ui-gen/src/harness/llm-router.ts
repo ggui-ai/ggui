@@ -2435,3 +2435,39 @@ export async function callLLMWithTools(
   return result;
 }
 
+
+/** What {@link preloadProviderSdks} loaded, and what it could not, by specifier. */
+export interface ProviderSdkPreload {
+  readonly ms: number;
+  readonly loaded: readonly string[];
+  readonly missing: ReadonlyArray<{ readonly specifier: string; readonly reason: string }>;
+}
+
+/**
+ * ggui#1769 — load the provider SDKs this router imports lazily, once, before a long-lived host takes traffic.
+ *
+ * Each agent imports its SDK on first use. Cold, `@anthropic-ai/claude-agent-sdk` alone compiles for ~0.9 s
+ * synchronously, so a host's first generation stalls the event loop for that long mid-request. A host awaits
+ * this at boot instead; afterwards every `import()` below resolves from the module cache.
+ *
+ * Never rejects: an SDK that is not installed (an optional provider a deployment does not use) is reported in
+ * `missing` with its reason, and its agent fails on first use exactly as it would without the preload.
+ */
+export async function preloadProviderSdks(): Promise<ProviderSdkPreload> {
+  const start = Date.now();
+  const attempts: ReadonlyArray<readonly [string, () => Promise<object>]> = [
+    ['@anthropic-ai/claude-agent-sdk', () => import('@anthropic-ai/claude-agent-sdk')],
+    ['openai', () => import('openai')],
+    ['@google/genai', () => import('@google/genai')],
+    ['@anthropic-ai/bedrock-sdk', () => import('@anthropic-ai/bedrock-sdk')],
+  ];
+  const settled = await Promise.allSettled(attempts.map(([, load]) => load()));
+  const loaded: string[] = [];
+  const missing: { specifier: string; reason: string }[] = [];
+  settled.forEach((r, i) => {
+    const specifier = attempts[i]?.[0] ?? '';
+    if (r.status === 'fulfilled') loaded.push(specifier);
+    else missing.push({ specifier, reason: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+  });
+  return { ms: Date.now() - start, loaded, missing };
+}

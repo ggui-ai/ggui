@@ -95,7 +95,10 @@ export default defineConfig({
   minify: false,
   clean: true,
   treeshake: true,
-  splitting: false,
+  // ggui#1769: ON, so every entry shares ONE instance of each module. Off, every entry inlined its own copy of
+  // the type checker and its lazy ~7 MB `.d.ts` VFS: a host that warmed one entry (`./check`) left the copy its
+  // generation path runs (the root entry) cold, and the first request paid the parse on the event loop.
+  splitting: true,
   target: 'node22',
   // The runtime-render probe was crashing with `Dynamic require of
   // "events" is not supported` and `Window2 is not a constructor`.
