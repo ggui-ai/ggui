@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
-import { fillFitRule, framelessSuppressionRule } from '@ggui-ai/design/rendering';
+import { fillFitRule, framelessSuppressionRule, mountFitCss } from '@ggui-ai/design/rendering';
 import { mountReactRoot } from '../react-renderer.js';
 
 function makeContainer(): HTMLElement {
@@ -128,7 +128,7 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
     expect(scopedStyleOf(plain).css).not.toContain('border-radius: 0 !important');
   });
 
-  it('one cascade: compiled < hostPalette < overlays[mode] < cssVariables < cssOverrides < keyframes[mode] < frameless rule', async () => {
+  it('one cascade: compiled < hostPalette < overlays[mode] < cssVariables < cssOverrides < keyframes[mode] < frameless rule < the fit', async () => {
     const container = makeContainer();
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
@@ -153,10 +153,14 @@ describe('mountReactRoot — per-app theme v2 (ggui#987 §3.3)', () => {
     const overrides = at('.override{color:red}');
     const keyframes = at('@keyframes ggui-t-light');
     const frameless = at(framelessSuppressionRule(scopeClass));
-    expect([compiled, host, overlay, vars, overrides, keyframes, frameless]).toEqual(
-      [compiled, host, overlay, vars, overrides, keyframes, frameless].slice().sort((a, b) => a - b),
+    // ggui#1765 — the fit's CSS (here the inline card's one content edge) closes the scoped block: it sets the card's
+    // inset, which no theme layer above states, so it never contends with them.
+    const fit = mountFitCss(scopeClass, 'card', null);
+    const fitAt = at(fit);
+    expect([compiled, host, overlay, vars, overrides, keyframes, frameless, fitAt]).toEqual(
+      [compiled, host, overlay, vars, overrides, keyframes, frameless, fitAt].slice().sort((a, b) => a - b),
     );
-    expect(css.endsWith(framelessSuppressionRule(scopeClass))).toBe(true);
+    expect(css.endsWith(fit)).toBe(true);
     expect(css).not.toContain('@keyframes ggui-t-dark');
     mount!.unmount();
   });

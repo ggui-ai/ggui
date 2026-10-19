@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule } from '@ggui-ai/design/rendering';
+import { expandedFramePanelRule, expandedFrameScrimDecls, fillFitRule, mountFitCss } from '@ggui-ai/design/rendering';
 import { CANVAS_CLASSES, displayModeForCanvas } from '../design-mode.js';
 import {
   JUDGE_PANEL_CLASS,
@@ -71,8 +71,11 @@ describe('fit@judge == fit@runtime (ggui#1100)', () => {
     expect(filled).toContain(`<div id="root" class="${JUDGE_SCOPE_CLASS}">`);
     expect(filled).toContain(fillFitRule(JUDGE_SCOPE_CLASS));
     const inline = buildRenderHTML(COMPONENT);
-    expect(inline).toContain('<div id="root"></div>');
-    expect(inline).not.toContain(JUDGE_SCOPE_CLASS);
+    // ggui#1765 — the inline page scopes its root and carries the card's one content edge, as the runtime composes it
+    // for a non-fill fit, and none of the fill rule.
+    expect(inline).toContain(`<div id="root" class="${JUDGE_SCOPE_CLASS}">`);
+    expect(inline).toContain(mountFitCss(JUDGE_SCOPE_CLASS, 'card', null));
+    expect(inline).not.toContain(fillFitRule(JUDGE_SCOPE_CLASS));
     expect(inline).not.toContain('min-height: 100vh');
   });
 
@@ -86,7 +89,8 @@ describe('fit@judge == fit@runtime (ggui#1100)', () => {
     expect(result).not.toBeNull();
     expect(d.pages).toHaveLength(2);
     const [xsPage, mdPage] = d.pages;
-    expect(xsPage).not.toContain(JUDGE_SCOPE_CLASS);
+    expect(xsPage).not.toContain(fillFitRule(JUDGE_SCOPE_CLASS));
+    expect(xsPage).toContain(mountFitCss(JUDGE_SCOPE_CLASS, 'card', null));
     expect(mdPage).toContain(`class="${JUDGE_SCOPE_CLASS}"`);
     expect(mdPage).toContain(fillFitRule(JUDGE_SCOPE_CLASS));
     const [xs, md] = result!.canvases!;
