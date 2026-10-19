@@ -799,6 +799,9 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   };
   for (const [key, value] of Object.entries(spacingLadder)) V[`--ggui-spacing-${key}`] = onRhythm(String(value)) ?? stated(sp, key) ?? String(value);
   for (const [key, value] of Object.entries(NAMED_SPACING)) V[`--ggui-spacing-${key}`] = onRhythm(value) ?? stated(sp, key) ?? value;
+  // ggui#1765 — the card's content inset, one name for the step a card's content sits in from its edge (the `lg`
+  // step, as `Card`'s default padding always was). An alias, never a copy: an app that restates `lg` moves the inset.
+  V['--ggui-card-inset'] = 'var(--ggui-spacing-lg)';
   const rad = doc.shape?.radius as Tokens;
   for (const [key, value] of Object.entries(radiusLadder)) V[`--ggui-shape-radius-${key}`] = stated(rad, key) ?? String(value);
   // Radius by ROLE (ggui#1093, the harvest half): a host's cards and its controls do not share a

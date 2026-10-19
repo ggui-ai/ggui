@@ -482,17 +482,46 @@ export function fillFitRule(scopeClass: string): string {
     // strips; `background-origin: border-box` positions it over the whole element, which is exactly
     // the box it painted before the border existed. The block axis is left as it was: no edge is
     // shared there.
-    ...fillSurfaces(s).map((f) => `${f} { padding: ${inset} !important; }`),
+    // ggui#1765 — the fill surface's CONTENT sits the card's inset in from its edge (40 from the pane at the default
+    // `lg` step: the host's 16 px panel gap, then the card's 24); the block axis keeps the frame's 16.
+    ...fillSurfaces(s).map((f) => `${f} { padding: ${inset} ${CARD_INSET} !important; }`),
     ...fillSurfaces(s).map(
       (f) =>
         `${f} > [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     ),
     ...fillSurfaces(s).map(
       (f) =>
-        `${f} > :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -${inset} !important; margin-right: -${inset} !important; border-left: ${inset} solid transparent !important; border-right: ${inset} solid transparent !important; background-origin: border-box !important; border-radius: 0 !important; }`,
+        `${f} > :is(${EXPANDED_FRAME_BLEEDS}) { ${bleedInline()} border-radius: 0 !important; }`,
     ),
     ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -${inset} !important; }`),
     ...fillSurfaces(s).map((f) => `${f} > :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -${inset} !important; }`),
+  ].join('\n');
+}
+
+/** The card's content inset (ggui#1765): the `lg` step by default, per app through the spacing scale. */
+const CARD_INSET = 'var(--ggui-card-inset, var(--ggui-spacing-lg))';
+
+/**
+ * A bleeding element's inline declarations (ggui#1556, ggui#1765): it takes the card's inset back so its GROUND meets
+ * the card's edge, hands the same width to its content as a transparent border its ground paints under, and drops its
+ * own inline padding — so its content lands on the body's edge, measured from the card's edge, never inset twice.
+ */
+function bleedInline(): string {
+  return `margin-left: calc(-1 * ${CARD_INSET}) !important; margin-right: calc(-1 * ${CARD_INSET}) !important; border-left: ${CARD_INSET} solid transparent !important; border-right: ${CARD_INSET} solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important;`;
+}
+
+/**
+ * The card's one content edge in the inline and framed fits (ggui#1765): the root insets its content by the card's
+ * inset, whatever padding the generated root set, so every block's content shares one left edge (a surface's own
+ * content steps in by exactly one inset); an opening hero band or a `bleed` element keeps its ground edge to edge.
+ * The host draws the frame OUTSIDE the iframe; this is the card's inside, which ggui's runtime paints for every host.
+ */
+export function cardInsetRule(scopeClass: string): string {
+  const s = scopeClass;
+  return [
+    '',
+    `.${s} > :where(:not(style)) { padding-left: ${CARD_INSET} !important; padding-right: ${CARD_INSET} !important; }`,
+    `.${s} > :where(:not(style)) > :is(${EXPANDED_FRAME_BLEEDS}) { ${bleedInline()} }`,
   ].join('\n');
 }
 
@@ -693,6 +722,7 @@ export function composeThemeCss(opts: ComposeThemeCssOptions): string {
       css += `${opts.appTheme.keyframes?.[m] ?? ''}${opts.appTheme.frameless === true ? framelessSuppressionRule(scope) : ''}`;
     }
     if (opts.fit === 'fill') css += fillFitRule(scope);
+    else css += cardInsetRule(scope);
     if (opts.fit === 'framed-card') css += cardFitRule(scope, inlineCardRadius({ ...(overlay ?? {}), ...(opts.appTheme?.cssVariables ?? {}) }).radiusPx);
     return css;
   }
@@ -744,9 +774,12 @@ export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
 /**
  * How the mounted root sits on its surface:
  * - `card` — the inline mount: the root keeps its natural height and the host draws the card's
- *   frame round it, so nothing is composed here.
+ *   frame round it, outside the iframe. Inside it, the runtime composes only the card's one content
+ *   edge ({@link cardInsetRule}, ggui#1765): the root's content sits `--ggui-card-inset` in from the
+ *   card's edge, for every host, and an opening hero band keeps its ground edge to edge.
  * - `framed-card` — a chat-width card on a fullscreen surface: the root keeps its natural height
- *   and the runtime composes the card's frame round it ({@link cardFitRule}).
+ *   and the runtime composes the card's frame round it ({@link cardFitRule}) and the same content
+ *   edge inside it ({@link cardInsetRule}).
  * - `fill` — the host shows the page as the whole of a canvas: the root drops its own silhouette
  *   and fills the page, because the host's panel is the chrome ({@link fillFitRule}).
  */

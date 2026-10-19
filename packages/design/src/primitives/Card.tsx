@@ -54,7 +54,11 @@ export function Card(props: WithTrait<CardProps>) {
     ...(bleed === true ? { bleed: true } : {}),
   };
 
-  const resolvedPadding = resolveSpacing(padding);
+  // ggui#1765 — `padding` sets the card's VERTICAL rhythm; its inline inset is the card's own,
+  // `--ggui-card-inset` (the `lg` step), for every Card that draws a boundary (its hairline or a fill).
+  const visible = border || (surface !== undefined && surface !== 'transparent') || tint !== undefined;
+  const resolvedPadding =
+    padding === 'none' ? resolveSpacing(padding) : `${resolveSpacing(padding)} ${visible ? 'var(--ggui-card-inset, var(--ggui-spacing-lg))' : '0'}`;
 
   // `surface` (typed slot) lets the LLM pick the variant family —
   // 'inverted' for testimonial-style dark cards on a light theme,

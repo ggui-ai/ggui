@@ -73,9 +73,10 @@ describe('the expanded frame — one definition (ggui#1083 cut 2)', () => {
 describe("the fill rule carries the frame's rhythm — and only the fill rule", () => {
   const rule = fillFitRule('s1');
 
-  it('both fill surfaces (a many-child root, or the one child a wrapper hands the fill to) keep the 16 px inset', () => {
-    expect(rule).toContain('.s1 > :where(:not(style)):not(:has(> :only-child)) { padding: 16px !important; }');
-    expect(rule).toContain('.s1 > :where(:not(style)) > :where(:only-child) { padding: 16px !important; }');
+  // ggui#1765 — the block axis keeps the frame's 16 px; the inline axis is the card's own inset (the `lg` step).
+  it('both fill surfaces (a many-child root, or the one child a wrapper hands the fill to) keep 16 px on the block axis and the card inset on the inline axis', () => {
+    expect(rule).toContain('.s1 > :where(:not(style)):not(:has(> :only-child)) { padding: 16px var(--ggui-card-inset, var(--ggui-spacing-lg)) !important; }');
+    expect(rule).toContain('.s1 > :where(:not(style)) > :where(:only-child) { padding: 16px var(--ggui-card-inset, var(--ggui-spacing-lg)) !important; }');
   });
 
   it('a first-level surface takes the concentric radius; a bleeding element takes the inset back and squares off', () => {
@@ -84,7 +85,7 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
       `> [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     );
     expect(rule).toContain(
-      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: -16px !important; margin-right: -16px !important; border-left: 16px solid transparent !important; border-right: 16px solid transparent !important; background-origin: border-box !important; border-radius: 0 !important; }`,
+      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; margin-right: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; border-left: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; border-right: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important; border-radius: 0 !important; }`,
     );
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -16px !important; }`);
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -16px !important; }`);
@@ -98,11 +99,12 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
     expect(line).toBeDefined();
     const decl = (prop: string): string | undefined =>
       new RegExp(`(?:^|[{;]\\s*)${prop}: ([^;!]+) !important`).exec(line ?? '')?.[1]?.trim();
+    // ggui#1765 — the inline inset is the card's own (`--ggui-card-inset`), and the band's own inline padding is
+    // dropped, so its content lands on the body's edge measured from the card's edge, never inset twice.
     for (const side of ['left', 'right'] as const) {
-      const margin = decl(`margin-${side}`);
-      const border = decl(`border-${side}`);
-      expect(margin).toBe(`-${EXPANDED_FRAME.insetPx}px`);
-      expect(border).toBe(`${EXPANDED_FRAME.insetPx}px solid transparent`);
+      expect(decl(`margin-${side}`)).toBe('calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg)))');
+      expect(decl(`border-${side}`)).toBe('var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent');
+      expect(decl(`padding-${side}`)).toBe('0');
     }
     // The block axis is unchanged: no edge is shared there, and a served band keeps its rhythm.
     expect(line).not.toMatch(/border-(top|bottom):/);
@@ -116,10 +118,16 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
     expect(line).toContain('background-origin: border-box !important');
   });
 
-  it('an inline (non-fill) composition carries none of it', () => {
-    const inline = composeThemeCss({ layer: 'tree', scopeClass: 's1' });
-    expect(inline).not.toContain('data-ggui-bleed');
-    expect(inline).not.toContain('data-ggui-surface');
+  // ggui#1765 — an inline (non-fill) composition carries the card's one content edge (the root's inset and the
+  // bleed hand-off) and none of the fill's rhythm (no concentric radius, no viewport height).
+  it("an inline (non-fill) composition carries the card's content edge and none of the fill's rhythm", () => {
+    for (const fit of [undefined, 'framed-card'] as const) {
+      const inline = composeThemeCss({ layer: 'tree', scopeClass: 's1', ...(fit ? { fit } : {}) });
+      expect(inline).toContain('.s1 > :where(:not(style)) { padding-left: var(--ggui-card-inset, var(--ggui-spacing-lg)) !important; padding-right: var(--ggui-card-inset, var(--ggui-spacing-lg)) !important; }');
+      expect(inline).toContain(`.s1 > :where(:not(style)) > :is(${EXPANDED_FRAME_BLEEDS}) {`);
+      expect(inline).not.toContain(EXPANDED_FRAME_INNER_RADIUS);
+      expect(inline).not.toContain('min-height: 100vh');
+    }
     expect(composeThemeCss({ layer: 'tree', scopeClass: 's1', fit: 'fill' })).toContain('data-ggui-bleed');
   });
 });

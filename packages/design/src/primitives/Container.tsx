@@ -19,7 +19,7 @@ const maxWidthMap: Record<string, string> = {
 export function Container({
   children,
   maxWidth = 'lg',
-  center = true,
+  center = false,
   padding,
   style,
   className,

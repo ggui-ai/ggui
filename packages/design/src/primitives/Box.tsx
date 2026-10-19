@@ -40,16 +40,15 @@ export function Box(props: WithTrait<BoxProps>) {
       ? undefined
       : { ...(markedSurface !== undefined ? { surface: markedSurface } : {}), ...(bleed === true ? { bleed: true } : {}) };
 
-  // Compute padding with paddingX/paddingY overrides. Each spacing
-  // prop resolves a SpacingScale name to its `--ggui-spacing-*` token.
-  let computedPadding: string | undefined;
-  if (paddingX !== undefined || paddingY !== undefined) {
-    const px = resolveSpacing(paddingX) || '0';
-    const py = resolveSpacing(paddingY) || '0';
-    computedPadding = `${py} ${px}`;
-  } else {
-    computedPadding = resolveSpacing(padding);
-  }
+  // ggui#1765 — one horizontal inset per card. `padding` / `paddingY` set this box's VERTICAL rhythm; the inline
+  // axis is the card's: a visible surface (a fill or a tint) insets its content by `--ggui-card-inset`, and an
+  // unboxed Box adds no inline inset at all (its content keeps the edge of the content around it). `paddingX` no
+  // longer moves the inline axis. A Box with no padding at all stays flush, as before.
+  const blockPadding = resolveSpacing(paddingY ?? padding);
+  const padded = [padding, paddingX, paddingY].some((p) => p !== undefined && p !== 'none');
+  const computedPadding: string | undefined = padded
+    ? `${blockPadding || '0'} ${markedSurface !== undefined ? 'var(--ggui-card-inset, var(--ggui-spacing-lg))' : '0'}`
+    : resolveSpacing(padding);
 
   // `surface` (typed slot) is the theme-tracking path; `assetColor`
   // (paired with a non-empty `assetSemantic`) is the typed escape for
