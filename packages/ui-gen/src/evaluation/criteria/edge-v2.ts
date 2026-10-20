@@ -183,16 +183,26 @@ export function judgeEdgesV2(
   };
   // A placeholder leads its row when a block of its container follows it on its line; otherwise it is not a block (v1).
   const leadsARow = (p: EdgeBlockV2): boolean => measured.some((b) => b !== p && containerOf(b) === containerOf(p) && follower(b) && b.left >= p.right - 1 && vOverlap(b, p));
-  // Rule 4: a media block centred in its container is a media column's image, and may centre.
-  const centredMedia = (m: EdgeBlockV2): boolean => {
-    const box = contentBoxOf(containerOf(m));
-    return box !== undefined && same((m.left + m.right) / 2, (box.left + box.right) / 2);
+  // Rule 4 (re-registered): media is a painted image, or a painted box with no control inside, that is the only block
+  // on its line in its container; it may centre in its column, and its own content may centre inside it.
+  const holdsControl = (s: EdgeBlockV2): boolean => {
+    const inside = (b: EdgeBlockV2): boolean => { for (let w = b.within; w !== undefined; w = byId.get(w)?.within) if (w === s.id) return true; return false; };
+    return measured.some((b) => b.kind === 'controls' && inside(b));
   };
+  const aloneOnItsLine = (m: EdgeBlockV2): boolean =>
+    !measured.some((b) => b !== m && containerOf(b) === containerOf(m) && b.role !== 'placeholder' && vOverlap(b, m));
+  // Centred, and narrower than its column: a box that starts on its container's content edge is full width, not centred.
+  const centredInContainer = (m: EdgeBlockV2): boolean => {
+    const box = contentBoxOf(containerOf(m));
+    return box !== undefined && same((m.left + m.right) / 2, (box.left + box.right) / 2) && !same(m.left, box.left);
+  };
+  const isMedia = (b: EdgeBlockV2): boolean => (b.kind === 'media' || (b.kind === 'surface' && b.role !== 'table' && !holdsControl(b))) && aloneOnItsLine(b) && centredInContainer(b);
   const blocks = measured.filter((b) => {
     if (b.role === 'placeholder') return leadsARow(b);
-    if (b.kind === 'media') return !centredMedia(b);
+    if (b.kind === 'media' && centredInContainer(b)) return false;
     return true;
   });
+  const exemptMedia = new Set(blocks.filter(isMedia).map((b) => b.id));
   // Rule 2, trailing: a block alone on its line that ends on its container's right content edge is right-anchored.
   const rightAnchored = (b: EdgeBlockV2): boolean => {
     const box = contentBoxOf(containerOf(b));
@@ -204,7 +214,7 @@ export function judgeEdgesV2(
   for (const container of containers) {
     const inContainer = blocks.filter((b) => containerOf(b) === container);
     // The container's own column: its blocks that lead (or are not in) a row, less right-anchored trailing items.
-    const direct = inContainer.filter((b) => !follower(b) && !rightAnchored(b));
+    const direct = inContainer.filter((b) => !follower(b) && !rightAnchored(b) && !exemptMedia.has(b.id));
     for (const col of columns(direct)) offsets.push(...checkColumn(container, col, blocks));
     // Each row item after a leader is its own column group, measured among its own blocks.
     const items = new Map<string, EdgeBlockV2[]>();

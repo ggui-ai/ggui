@@ -65,11 +65,14 @@ export const EDGE_BLOCKS_V2_EXPRESSION = String.raw`(() => {
     const s = css(el);
     if (/^inline/.test(s.display) || s.display === 'contents') return false;
     if (isTable(el)) return true;
-    return sides(s) >= 3 || (!clear(s.backgroundColor) && s.backgroundColor !== groundOf(el)) || (s.boxShadow && s.boxShadow !== 'none');
+    // v2 (the design lead, #1765): what paints owns its edge — any border side (a single rule counts), a fill, a shadow.
+    return sides(s) >= 1 || (!clear(s.backgroundColor) && s.backgroundColor !== groundOf(el)) || (s.boxShadow && s.boxShadow !== 'none');
   };
   const path = (el) => {
     const parts = [];
-    for (let e = el; e && e !== root && parts.length < 4; e = e.parentElement) {
+    // v2: the whole path from the root, so nested boxes with the same tail and text never share an id (v1 kept four
+    // steps, and three nested surfaces of one card read as one container).
+    for (let e = el; e && e !== root; e = e.parentElement) {
       const i = e.parentElement ? Array.prototype.indexOf.call(e.parentElement.children, e) + 1 : 1;
       parts.unshift(e.tagName.toLowerCase() + ':' + i);
     }
@@ -189,14 +192,18 @@ export const EDGE_BLOCKS_V2_EXPRESSION = String.raw`(() => {
     const tw = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT); const ns = []; for (let n = tw.nextNode(); n; n = tw.nextNode()) ns.push(n);
     const cg = firstGlyph(ns);
     if (!bounded(firstEl) && cg) edge = cg.left;
-    // A native field has no text node to read: its content starts inside its border and padding.
+    // v2: a control's edge is its first painted content — its first character or a painted icon inside its box,
+    // whichever is leftmost; an icon drawn over a native field counts. A field with neither reads its padding edge.
     const fs = css(firstEl);
     const fieldEdge = firstEl.matches('input,select,textarea') ? firstR.left + parseFloat(fs.borderLeftWidth) + parseFloat(fs.paddingLeft) : null;
+    const iconLefts = all.filter((k) => k.matches('svg,img,i,[aria-hidden="true"]') && !(k.parentElement && k.parentElement.closest('svg')) && painted(k)).map((k) => k.getBoundingClientRect()).filter((r) => r.left >= firstR.left - 1 && r.right <= firstR.right + 1 && r.top >= firstR.top - 1 && r.bottom <= firstR.bottom + 1).map((r) => r.left);
+    const iconLeft = iconLefts.length ? Math.min.apply(null, iconLefts) : null;
     controls += 1;
     const ps = css(p);
     const centred = ps.justifyContent === 'center' || (ps.textAlign === 'center' && !/flex|grid/.test(ps.display));
     const block = { id: idOf(p) + ' [controls]', kind: 'controls', edge: px(edge), left: px(Math.min.apply(null, rs.map((r) => r.left))), right: px(Math.max.apply(null, rs.map((r) => r.right))), top: Math.round(topRow), bottom: Math.round(Math.max.apply(null, rs.map((r) => r.bottom))) };
-    if (cg) block.textEdge = px(cg.left);
+    const firstPaint = [cg ? cg.left : null, iconLeft].filter((v) => v !== null);
+    if (firstPaint.length) block.textEdge = px(Math.min.apply(null, firstPaint));
     else if (fieldEdge !== null) block.textEdge = px(fieldEdge);
     if (centred) block.role = 'centred';
     owners.push(firstEl); lines.push({ top: firstR.top, bottom: firstR.bottom }); rects.push(rs); rawLeft.push(Math.min.apply(null, rs.map((r) => r.left))); words.push('');
