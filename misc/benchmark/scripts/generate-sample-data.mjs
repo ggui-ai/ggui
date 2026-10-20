@@ -44,7 +44,7 @@ const OUT = resolve(process.cwd(), outDir);
 const { generateReport, toDisplayReport } = await import(
   resolve(BENCH_ROOT, 'src/multi-sdk/reporter.ts')
 );
-const { AESTHETIC_PROMPT_VERSION_PANEL } = await import(
+const { AESTHETIC_PROMPT_VERSION_PANEL, DEFAULT_JUDGE_PANEL, JUDGE_PANELS } = await import(
   resolve(BENCH_ROOT, 'src/multi-sdk/post-eval.ts')
 );
 const { getDefaultVariants } = await import(
@@ -58,15 +58,11 @@ const { getDefaultVariants } = await import(
 // tiers, and model ids the nightly actually runs.
 const VARIANTS = getDefaultVariants();
 
-// The judge panel surfaced on every synthetic cell — one model per
-// provider, mirroring the real `PANEL` in post-eval.ts. The panel
-// aggregator (and the viewer) reads `judges[]`, derives `spread`, and
-// renders the per-judge breakdown, so the demo must carry all three.
-const PANEL_MODELS = [
-  'claude-haiku-4-5-20251001',
-  'gpt-5.4-mini',
-  'gemini-3.5-flash',
-];
+// The judge panel surfaced on every synthetic cell: the default panel runs use,
+// read from post-eval.ts so the demo never drifts from it. The panel aggregator
+// (and the viewer) reads `judges[]`, derives `spread`, and renders the per-judge
+// breakdown, so the demo must carry all three.
+const PANEL_MODELS = JUDGE_PANELS[DEFAULT_JUDGE_PANEL].map((j) => j.model);
 
 const COMMITS = [
   { id: 'weather-card', name: 'Weather Card', complexity: 'simple' },
