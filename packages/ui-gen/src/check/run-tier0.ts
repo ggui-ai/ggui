@@ -600,18 +600,22 @@ function kitControlTags(source: string): { name: string; attrs: string; line: nu
   return out;
 }
 
-/** A border key (not a radius) in the tag's inline style, or in a same-file object its `style={name}` points at. */
-function inlineBorderKey(attrs: string, source: string): string | null {
-  const BORDER = /\b(border(?:Top|Right|Bottom|Left)?(?:Color|Width|Style)?)\s*:/;
+/** A border key, never a radius (ggui#1697). */
+const CONTROL_BORDER_KEY = /\b(border(?:Top|Right|Bottom|Left)?(?:Color|Width|Style)?)\s*:/;
+/** An ink or fill key (ggui#1966): a kit control's variant carries its ink and its fill, token or not. */
+const CONTROL_COLOR_KEY = /\b(color|background|backgroundColor)\s*:/;
+
+/** A matching key in the tag's inline style, or in a same-file object its `style={name}` points at. */
+function inlineStyleKey(attrs: string, source: string, key: RegExp): string | null {
   const style = attrs.match(/\bstyle=\{\{([\s\S]*)\}\}/);
   if (style !== null) {
-    const hit = (style[1] ?? '').match(BORDER);
+    const hit = (style[1] ?? '').match(key);
     if (hit !== null) return hit[1] ?? null;
   }
   const named = attrs.match(/\bstyle=\{\s*([A-Za-z_$][\w$]*)\s*\}/);
   if (named === null) return null;
   const decl = source.match(new RegExp(`\\b(?:const|let)\\s+${named[1]}\\b[^=]*=\\s*\\{([^{}]*)\\}`));
-  const hit = decl !== null ? (decl[1] ?? '').match(BORDER) : null;
+  const hit = decl !== null ? (decl[1] ?? '').match(key) : null;
   return hit !== null ? hit[1] ?? null : null;
 }
 
@@ -1241,12 +1245,27 @@ export async function runTier0Checks(
   // this check enforces what the model was told. The description starts with the check's id so the
   // generator's logged violation lines (`✗ …`) count its fires per generation, in-turn repairs included.
   for (const tag of enforceDesignVocabulary ? kitControlTags(sourceCode) : []) {
-    const key = inlineBorderKey(tag.attrs, sourceCode);
+    const key = inlineStyleKey(tag.attrs, sourceCode, CONTROL_BORDER_KEY);
     if (key === null) continue;
     issues.push({
       tier: 0, result: 'fail', category: 'tokens', subcategory: 'control-inline-border', severity: 'critical',
       description: `control-inline-border: <${tag.name}> sets an inline \`${key}\` — a kit control draws its own boundary, and an inline border paints over it`,
       fix: `Remove the border from <${tag.name}>'s style (keep borderRadius if you need it). An outline chip is <Button variant="outline"> exactly as it comes; a control-like edge on your own element uses var(--ggui-color-controlOutline).`,
+      line: tag.line,
+    });
+  }
+
+  // ── A kit control's ink and fill are the kit's (ggui#1966) ──
+  // The variant carries a control's ink and fill, derived to read on its surface in every theme; an inline
+  // `color` or `background` paints over it, a token as much as a literal (`var(--ggui-color-onContainer)` on an
+  // outline Button is still a restyle). The prompt's rule 5 says the same.
+  for (const tag of enforceDesignVocabulary ? kitControlTags(sourceCode) : []) {
+    const key = inlineStyleKey(tag.attrs, sourceCode, CONTROL_COLOR_KEY);
+    if (key === null) continue;
+    issues.push({
+      tier: 0, result: 'fail', category: 'tokens', subcategory: 'control-inline-color', severity: 'critical',
+      description: `control-inline-color: <${tag.name}> sets an inline \`${key}\` — a kit control's variant carries its ink and fill, and an inline one paints over it`,
+      fix: `Remove \`${key}\` from <${tag.name}>'s style and pick the variant that carries the look (e.g. <Button variant="primary"> for the main action, variant="outline" for a chip). Colour your own element, not the kit's control.`,
       line: tag.line,
     });
   }

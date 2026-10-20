@@ -265,8 +265,11 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // Re-recorded 2026-10-20 for ggui#1765 — the reference names no token for the card inset ("the `lg` spacing step"):
 // a token the prompt names must be on the consumed manifest, and generated code never sets the card's inset, so the
 // name is not taught. Three lines of the reference change: constrained c697f8cb… → 87aec111…, free 0b5e5e93… → e40a1470….
+// Re-recorded 2026-10-20 for ggui#1966: rule 5 extends from a kit control's border to its ink and fill — never an
+// inline `color`, `background` or `backgroundColor` on a kit control, token or literal; the variant carries the look.
+// constrained prompt 87aec111… → dfabd5b5…. The free prompt and both boilerplates are unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "87aec1114c5483f23cf0edb94a78372d83225aaf495dfc016925355667e52b5c";
+  "dfabd5b578e8abdab6c892567ab1d0bfb8b4ff4b640e195e7a148fa943f8281c";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
