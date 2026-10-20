@@ -99,7 +99,7 @@ export interface CardProps extends BaseProps {
   children?: ReactNode;
   /**
    * The card's VERTICAL rhythm (top + bottom), ggui#1765. Its inline inset is the card's own,
-   * `--ggui-card-inset` (the `lg` step), on every Card that draws a boundary (a hairline or a fill); a
+   * the `lg` spacing step, on every Card that draws a boundary (a hairline or a fill); a
    * borderless transparent Card adds no inline inset. `none` removes both. Prefer a spacing-scale name
    * (`'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'`) — each resolves to
    * the matching `--ggui-spacing-*` token. A number is treated as
@@ -354,7 +354,7 @@ export interface SkeletonProps extends BaseProps {
  * spacing, colored sections, or wrapping arbitrary content.
  *
  * One content edge per card (ggui#1765): `padding` / `paddingY` set the vertical rhythm, and the inline axis is
- * the card's — a visible surface insets its content by `--ggui-card-inset`, an unboxed Box adds none.
+ * the card's — a visible surface insets its content by the card's inset (the `lg` step), an unboxed Box adds none.
  *
  * CSS variables used: none (all values are passed through directly).
  *
@@ -379,7 +379,7 @@ export interface BoxProps extends BaseProps {
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number | string;
   /**
    * Sets NO inset (ggui#1765): the inline axis is the card's. A visible surface (a `surface` or a `tint`) insets its
-   * content by the card's inset (`--ggui-card-inset`), and an unboxed Box adds no inline inset at all, so every
+   * content by the card's inset (the `lg` spacing step), and an unboxed Box adds no inline inset at all, so every
    * block of a card shares one content edge. Its value is ignored; any value other than `none` only marks the box
    * as padded, as `padding` does. Use `padding` / `paddingY` for the vertical rhythm. The prop stays so code written
    * before the change still compiles.

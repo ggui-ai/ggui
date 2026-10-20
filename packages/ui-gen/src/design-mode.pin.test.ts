@@ -262,8 +262,11 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // one-content-edge contract — Box `padding`/`paddingY` set the vertical rhythm, `paddingX` sets no inset, Card's inline
 // inset is its own, Container is start-aligned by default, and the Box example drops `paddingX` — so the prompt no
 // longer contradicts the primitives: constrained prompt b8369701… → c697f8cb…, free prompt 043121fe… → 0b5e5e93….
+// Re-recorded 2026-10-20 for ggui#1765 — the reference names no token for the card inset ("the `lg` spacing step"):
+// a token the prompt names must be on the consumed manifest, and generated code never sets the card's inset, so the
+// name is not taught. Three lines of the reference change: constrained c697f8cb… → 87aec111…, free 0b5e5e93… → e40a1470….
 export const CONSTRAINED_PROMPT_SHA256 =
-  "c697f8cbf246ff493600af3eb92432bfcaa6cc65f8b54466e76793e6fbb180d0";
+  "87aec1114c5483f23cf0edb94a78372d83225aaf495dfc016925355667e52b5c";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -329,8 +332,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-10-16 for ggui#1896 — see the constrained note (the slot seed); both free digests move.
 // Re-recorded 2026-10-18 for ggui#1933 — see the constrained note (the `Input` onChange binding).
 // Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (the component reference).
+// Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (no token named for the card inset).
 export const FREE_PROMPT_SHA256 =
-  "0b5e5e93ed61aa287151869fefa35c86bb00e682041cf7de5dac93c649d08ee4";
+  "e40a14702e126bfda587e3a8b8fa701878eda3ac46100cac55dad99673968e86";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 // Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.
