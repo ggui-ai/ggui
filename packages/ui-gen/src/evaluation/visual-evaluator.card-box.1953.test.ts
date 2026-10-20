@@ -92,4 +92,15 @@ describe("a framed card's ceiling is its pane less the frame's gap (ggui#1953, t
     const under = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a hello' }, { canvases: ['md'] }, deps({ x: 32, y: 32, width: 784, height: ceiling - 20 }, 2000));
     if (under.status === 'measured') expect(under.issues).toEqual([]);
   });
+
+  // The ceiling is the room for the card's BORDER box (the frame's 1 px ring included): a root that fills its room
+  // exactly measures the ceiling and is not over it (the technical reviewer's ask). #1918's ADV declares 704 px of its
+  // own content inside that ring, so its box is 706 and it overflows by 2 px — a real over, not this case.
+  it('a card that fills its room exactly (border box = the ceiling) raises nothing', async () => {
+    const pane = CANVAS_VIEWPORTS.md;
+    const ceiling = pane.height - 2 * 16;
+    const exact = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a full card' }, { canvases: ['md'] }, deps({ x: 32, y: 32, width: 784, height: ceiling }, 2000));
+    expect(exact.status).toBe('measured');
+    if (exact.status === 'measured') expect(exact.issues).toEqual([]);
+  });
 });
