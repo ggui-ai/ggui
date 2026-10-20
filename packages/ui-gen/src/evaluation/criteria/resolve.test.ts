@@ -1,6 +1,7 @@
 // ggui#1436 — from K answers and the capture's measurements to one block: K-majority per judge row, a tie or an
 // unanswered id reads n/a (the CTO's A2), instruments answer from measurements only when live, otherwise n/a with the
 // reason from `status`; humans read n/a; every verdict carries severity, method and status.
+import { EDGE_INSTRUMENT_IDS } from './edge-instruments.js';
 import { describe, expect, it } from 'vitest';
 import type { CriteriaContext } from '../types-public.js';
 import { parseCriteriaBank } from './bank.js';
@@ -117,8 +118,19 @@ describe('an instrument beside a judge row (ggui#1663)', () => {
     expect(v).toMatchObject({ verdict: 'pass', evidence: 'looks aligned', instrument: { verdict: 'fail', evidence: fail.evidence } });
   });
   it('no page to read (a stored frame) and a failed probe are both n/a, and say which', () => {
-    expect(read(undefined).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read' });
-    expect(read(null).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'edge probe failed on this capture' });
+    expect(read(undefined).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read', id: EDGE_INSTRUMENT_IDS.v1 });
+    expect(read(null).verdicts.find((x) => x.id === 'space.edge')?.instrument).toEqual({ verdict: 'n/a', evidence: 'edge probe failed on this capture', id: EDGE_INSTRUMENT_IDS.v1 });
+  });
+  // #1765 — v2 reads beside v1 on the same row, report-only, each naming its own probe; v2 unmeasured reads n/a too.
+  it('v2 sits beside v1 on the same row, with its own verdict and its own id, and changes no verdict', () => {
+    const v = read(fail).verdicts.find((x) => x.id === 'space.edge')!;
+    expect(v.verdict).toBe('pass');
+    expect(v.instrument?.id).toBe(EDGE_INSTRUMENT_IDS.v1);
+    expect(v.instrumentV2).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read', id: EDGE_INSTRUMENT_IDS.v2 });
+    expect(EDGE_INSTRUMENT_IDS.v1).not.toBe(EDGE_INSTRUMENT_IDS.v2);
+  });
+  it('rows without an instrument beside them carry no v2 field either', () => {
+    expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrumentV2');
   });
   it('rows without an instrument beside them carry no field', () => {
     expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrument');

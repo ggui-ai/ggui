@@ -8,6 +8,7 @@
  * id; a tie or an unanswered id reads `n/a` (the CTO's A2) — a `must` at `n/a` is never a pass when
  * a gate later reads the set.
  */
+import { EDGE_INSTRUMENT_IDS } from './edge-instruments.js';
 import type { MountFit } from '@ggui-ai/design/rendering';
 import type { CriteriaAnswer } from '../types.js';
 import type { CriteriaAnswerCounts, CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
@@ -51,14 +52,20 @@ export interface CriteriaMeasurements {
    * `null` when the probe ran and failed.
    */
   readonly edge?: EdgeVerdict | null;
+  /** #1765 — the v2 edge rule on the same capture, read beside v1: absent / `null` as for `edge`. */
+  readonly edgeV2?: EdgeVerdict | null;
   /** ggui#1711 — the capture includes a state after an action ran. Absent = no (every capture today). */
   readonly postActionCapture?: boolean;
 }
 
 function besideRead(kind: 'edge', m: CriteriaMeasurements): Read {
-  if (m.edge === undefined) return { verdict: 'n/a', evidence: 'not measured: this capture had no page to read' };
-  if (m.edge === null) return { verdict: 'n/a', evidence: 'edge probe failed on this capture' };
-  return { verdict: m.edge.verdict, evidence: m.edge.evidence };
+  return edgeRead(m.edge);
+}
+
+function edgeRead(e: EdgeVerdict | null | undefined): Read {
+  if (e === undefined) return { verdict: 'n/a', evidence: 'not measured: this capture had no page to read' };
+  if (e === null) return { verdict: 'n/a', evidence: 'edge probe failed on this capture' };
+  return { verdict: e.verdict, evidence: e.evidence };
 }
 
 type Read = { verdict: CriteriaVerdict; evidence: string };
@@ -123,7 +130,13 @@ export function resolveCriteriaBlock(args: {
       source: s.source,
       verdict: read.verdict,
       evidence: read.evidence,
-      ...(beside !== undefined && row.evaluation === 'judge' ? { instrument: besideRead(beside, args.measurements) } : {}),
+      ...(beside !== undefined && row.evaluation === 'judge'
+        ? {
+            instrument: { ...besideRead(beside, args.measurements), id: EDGE_INSTRUMENT_IDS.v1 },
+            // #1765 — v2 beside v1 on the same capture, report-only, until its own fresh sealed draw.
+            instrumentV2: { ...edgeRead(args.measurements.edgeV2), id: EDGE_INSTRUMENT_IDS.v2 },
+          }
+        : {}),
     });
   }
   return {

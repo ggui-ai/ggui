@@ -477,7 +477,12 @@ export interface CriterionVerdict {
    * ggui#1663 — a measured reading beside a judge row, REPORT-ONLY: the row's `verdict` stays the judge's, so this
    * changes no verdict, score or bar. Present only on rows an instrument answers beside the judge (`space.edge`).
    */
-  instrument?: { verdict: CriteriaVerdict; evidence: string };
+  instrument?: { verdict: CriteriaVerdict; evidence: string; id?: string };
+  /**
+   * #1765 — the rewritten edge rule (`space.edge.v2`), a SEPARATE instrument read beside v1 on the same capture,
+   * REPORT-ONLY like `instrument`; `id` names the probe that produced it. Present only beside `space.edge`.
+   */
+  instrumentV2?: { verdict: CriteriaVerdict; evidence: string; id: string };
 }
 /** ggui#1687 — the criteria call as it came back: its answer's counts, ids it answered outside the bank, its stop. */
 export interface CriteriaCallRecord {
