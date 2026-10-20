@@ -176,7 +176,12 @@ export interface CanvasVisualResult {
 }
 
 /** How a canvas is captured for the judge and what an overflow means there (ggui#1027). */
-export type CaptureMode = 'viewport' | 'full-page' | 'natural';
+/**
+ * How a canvas is captured. `card-box` (ggui#1953): a framed card (a chat-width card on a fullscreen surface,
+ * ggui#1924) is captured as the inline card is — its OWN box at its natural extent, plus the frame ground's margin on
+ * every side, ring and corners visible — never the pane round it, whose empty ground is the host's, not the card's.
+ */
+export type CaptureMode = 'viewport' | 'full-page' | 'natural' | 'card-box';
 export interface CanvasFitPolicy {
   /**
    * `viewport` = the whole box; `full-page` = the whole scrolled document; `natural` (ggui#1475) = the
@@ -922,6 +927,33 @@ export function naturalClip(window: { width: number; height: number }, cardHeigh
   return { x: 0, y: 0, width: window.width, height: Math.max(1, Math.min(Math.ceil(cardHeightPx), box)) + 2 * m };
 }
 
+/** The expression a card-box capture reads: the mount's own border box, in page CSS px (ggui#1953). */
+export const CARD_BOX_EXPRESSION = `(() => { const r = document.querySelector('.${JUDGE_SCOPE_CLASS}'); if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; })()`;
+
+async function measureCardBox(page: ScreenshotPage): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  try {
+    const v: unknown = await page.evaluate(CARD_BOX_EXPRESSION);
+    if (typeof v !== 'object' || v === null) return null;
+    const n = (k: string): number | null => { const x = Reflect.get(v, k); return typeof x === 'number' && Number.isFinite(x) ? x : null; };
+    const [x, y, width, height] = [n('x'), n('y'), n('width'), n('height')];
+    return x === null || y === null || width === null || height === null || width <= 0 || height <= 0 ? null : { x, y, width, height };
+  } catch (e) {
+    console.warn(`[visual-eval] card box unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+/**
+ * The card-box capture's region (ggui#1953): the card's own box with the frame ground's margin on every side, clamped
+ * to the window. The card is never cropped above its own bottom edge while the window can hold it.
+ */
+export function cardBoxClip(window: { width: number; height: number }, box: { x: number; y: number; width: number; height: number }): ScreenshotClip {
+  const m = JUDGE_GROUND_MARGIN_PX;
+  const x = Math.max(0, Math.floor(box.x - m));
+  const y = Math.max(0, Math.floor(box.y - m));
+  return { x, y, width: Math.min(window.width - x, Math.ceil(box.width + 2 * m)), height: Math.max(1, Math.min(window.height - y, Math.ceil(box.height + 2 * m))) };
+}
+
 /** Measure the rendered document's height (or the card's, for a natural capture); a failed measurement is reported, never a failed capture. */
 async function measureContentHeight(page: ScreenshotPage, expression: string = CONTENT_HEIGHT_EXPRESSION): Promise<number | null> {
   try {
@@ -992,6 +1024,17 @@ export async function captureScreenshotDetailed(
         const edge = await measureEdges(page);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
         return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX, edge };
+      }
+      if (capture === 'card-box') {
+        // ggui#1953 — the card's own box (the mount, which wears the card frame), so a root that stretches itself still
+        // shows its void, and the host's empty ground below a short card is never in the frame.
+        const box = await measureCardBox(page);
+        if (box !== null) {
+          const clip = cardBoxClip(viewport, box);
+          const edge = await measureEdges(page);
+          const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
+          return { png: Buffer.from(screenshot), contentHeight: Math.round(box.height), edge };
+        }
       }
       const contentHeight = await measureContentHeight(page);
       const edge = await measureEdges(page);
@@ -1233,15 +1276,20 @@ async function frameCanvas(
   const framedCardRadiusPx = mountFit === 'framed-card' ? inlineCardRadius(themeVarsOf(context.cssTokens ?? getCssTokens())).radiusPx : undefined;
   const canvasHtml =
     fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation, framedCardRadiusPx) : html;
-  const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, policy.capture, {
+  // ggui#1953 — a framed card is captured as a card, on its own box, at every canvas it is framed on.
+  const capture: CaptureMode = mountFit === 'framed-card' ? 'card-box' : policy.capture;
+  const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, capture, {
     padPx: geometry.padPx,
     ...(geometry.floorPx !== undefined ? { floorPx: geometry.floorPx } : {}),
   });
   // ggui#1083 cut 3 — on a panelled page the document is the panel plus its gap; every verdict reads the CARD's height.
-  const attempt: ScreenshotAttempt = { ...captured, contentHeight: cardHeight(captured.contentHeight, chrome) };
+  // A card-box capture already measured the card itself; only the full-page document carries the panel's gap.
+  const attempt: ScreenshotAttempt = { ...captured, contentHeight: capture === 'card-box' ? captured.contentHeight : cardHeight(captured.contentHeight, chrome) };
+  // A card-box frame has the inline card's geometry (margin, ring, corner), so its ink is read past the same inset.
+  const cardBoxInk = JUDGE_GROUND_MARGIN_PX + JUDGE_INLINE_FRAME_BORDER_PX + (framedCardRadiusPx ?? JUDGE_INLINE_FRAME_RADIUS_PX);
   return {
     viewport, policy, mountFit, fit, chrome, declared: declaredBox !== undefined, attempt,
-    ink: readInk(captured.png, chrome, canvas, geometry.inkInsetPx),
+    ink: capture === 'card-box' ? readInk(captured.png, 'ground', canvas, cardBoxInk) : readInk(captured.png, chrome, canvas, geometry.inkInsetPx),
     ...(outcome !== undefined ? { presentation: outcome } : {}),
   };
 }
