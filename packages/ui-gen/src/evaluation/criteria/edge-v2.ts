@@ -196,30 +196,43 @@ export function judgeEdgesV2(
     const box = contentBoxOf(containerOf(m));
     return box !== undefined && same((m.left + m.right) / 2, (box.left + box.right) / 2) && !same(m.left, box.left);
   };
-  const isMedia = (b: EdgeBlockV2): boolean => (b.kind === 'media' || (b.kind === 'surface' && b.role !== 'table' && !holdsControl(b))) && aloneOnItsLine(b) && centredInContainer(b);
+  const mediaKind = (b: EdgeBlockV2): boolean => b.kind === 'media' || (b.kind === 'surface' && b.role !== 'table' && !holdsControl(b));
   const blocks = measured.filter((b) => {
     if (b.role === 'placeholder') return leadsARow(b);
     if (b.kind === 'media' && centredInContainer(b)) return false;
     return true;
   });
-  const exemptMedia = new Set(blocks.filter(isMedia).map((b) => b.id));
+
+  // A surface that bleeds to the card's own edge (x0, full width): its outer edge is the card's, not a content edge,
+  // so it is compared by its content edge alone (the design lead, c.6263664713: the root's content edge against every
+  // bleeding surface's content).
+  const bleeds = (b: EdgeBlockV2): boolean => b.kind === 'surface' && containerOf(b) === CARD && b.left <= EDGE_TOLERANCE_PX && b.right >= opts.cardContent.right - EDGE_TOLERANCE_PX;
+  const judged = blocks.map((b) => (bleeds(b) && b.contentLeft !== undefined ? { ...b, edge: b.contentLeft } : b));
   // Rule 2, trailing: a block alone on its line that ends on its container's right content edge is right-anchored.
+  // A trailing item trails: it starts in the right half of its container's content box, and is never a bleed.
   const rightAnchored = (b: EdgeBlockV2): boolean => {
     const box = contentBoxOf(containerOf(b));
     const ends = (r: number | undefined): boolean => r !== undefined && same(b.right, r);
-    return (ends(box?.right) || ends(b.parentRight)) && (box === undefined || !same(b.edge, box.left));
+    return (ends(box?.right) || ends(b.parentRight)) && box !== undefined && b.left >= (box.left + box.right) / 2 && !bleeds(b);
   };
   const offsets: EdgeOffset[] = [];
-  const containers = [CARD, ...blocks.filter((b) => b.kind === 'surface' && b.role !== 'table').map((b) => b.id)];
+  const containers = [CARD, ...judged.filter((b) => b.kind === 'surface' && b.role !== 'table').map((b) => b.id)];
   for (const container of containers) {
-    const inContainer = blocks.filter((b) => containerOf(b) === container);
+    const inContainer = judged.filter((b) => containerOf(b) === container);
     // The container's own column: its blocks that lead (or are not in) a row, less right-anchored trailing items.
-    const direct = inContainer.filter((b) => !follower(b) && !rightAnchored(b) && !exemptMedia.has(b.id));
-    for (const col of columns(direct)) offsets.push(...checkColumn(container, col, blocks));
+    const direct = inContainer.filter((b) => !follower(b) && !rightAnchored(b));
+    for (const col of columns(direct)) {
+      // Rule 4: media alone in its column, centred in its container, may centre (the design lead, c.6282971546). A
+      // lone block of any kind passes its own column; this only exempts the media from its NEIGHBOURS' column, which
+      // is how a centred cover beside or above edge-aligned text reaches a column at all.
+      const only = col.length === 1 ? col[0]! : undefined;
+      if (only !== undefined && mediaKind(only) && aloneOnItsLine(only) && centredInContainer(only)) continue;
+      offsets.push(...checkColumn(container, col, judged));
+    }
     // Each row item after a leader is its own column group, measured among its own blocks.
     const items = new Map<string, EdgeBlockV2[]>();
     for (const b of inContainer.filter(follower)) items.set(b.item ?? b.id, [...(items.get(b.item ?? b.id) ?? []), b]);
-    for (const [item, group] of items) for (const col of columns(group)) offsets.push(...checkColumn(`${container} › ${item}`, col, blocks));
+    for (const [item, group] of items) for (const col of columns(group)) offsets.push(...checkColumn(`${container} › ${item}`, col, judged));
   }
   if (offsets.length === 0) return { verdict: 'pass', offsets, evidence: 'every column shares its content edge, every row item after its leader shares its own, within 2 px' };
   const worst = offsets.reduce((a, b) => (b.offPx > a.offPx ? b : a));
