@@ -3,7 +3,8 @@
 // pane's empty host ground below a short hello against the card (md notes named the empty field 6/6).
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
-import { CARD_BOX_EXPRESSION, JUDGE_GROUND_MARGIN_PX, cardBoxClip, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
+import { CANVAS_VIEWPORTS } from '../design-mode.js';
+import { CARD_BOX_EXPRESSION, JUDGE_GROUND_MARGIN_PX, cardBoxClip, fitCeiling, runVisualFit, type ScreenshotBrowser, type VisualEvalDeps } from './visual-evaluator.js';
 
 const FRAMED = 'export default function C(){ return null; } export const gguiMountCanvas = "xs-chat-card";';
 const UNFRAMED = 'export default function C(){ return null; }';
@@ -66,12 +67,29 @@ describe('a framed card is captured on its own box, at md (ggui#1953)', () => {
     const d = deps({ x: 0, y: 0, width: 0, height: 0 }, 768);
     const outcome = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a hello' }, { canvases: ['md'] }, d);
     expect(d.captures).toHaveLength(0);
-    expect(JSON.stringify(outcome)).toContain("the card's own box could not be measured");
+    expect(JSON.stringify(outcome)).toContain("card's own box (.ggui-judge-scope) could not be measured");
   });
 
   it('control: an unframed card at md keeps the full-page capture', async () => {
     const d = deps({ x: 0, y: 0, width: 816, height: 400 }, 736);
     await runVisualFit({ compiledCode: UNFRAMED, originalPrompt: 'a page' }, { canvases: ['md'] }, d);
     expect(d.captures[0]!.clip).toBeUndefined();
+  });
+});
+
+describe("a framed card's ceiling is its pane less the frame's gap (ggui#1953, the CDO's c.6280166571)", () => {
+  it('704 in a 736 pane; an unframed canvas keeps its own box', () => {
+    expect(fitCeiling({ viewport: { width: 816, height: 736 }, mountFit: 'framed-card' }).height).toBe(736 - 2 * 16);
+    expect(fitCeiling({ viewport: { width: 816, height: 736 }, mountFit: 'fill' }).height).toBe(736);
+  });
+
+  it('a framed card over its ceiling fails the canvas, as the inline card does; one under it raises nothing', async () => {
+    const pane = CANVAS_VIEWPORTS.md;
+    const ceiling = pane.height - 2 * 16;
+    const over = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a tall hello' }, { canvases: ['md'] }, deps({ x: 32, y: 32, width: 784, height: ceiling + 20 }, 2000));
+    expect(over.status).toBe('measured');
+    if (over.status === 'measured') expect(over.issues.map((i) => [i.subcategory, i.severity])).toEqual([['canvas-overflow', 'critical']]);
+    const under = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a hello' }, { canvases: ['md'] }, deps({ x: 32, y: 32, width: 784, height: ceiling - 20 }, 2000));
+    if (under.status === 'measured') expect(under.issues).toEqual([]);
   });
 });

@@ -1031,7 +1031,7 @@ export async function captureScreenshotDetailed(
         const box = await measureCardBox(page);
         // Fail closed, named: a card-box capture that cannot find the card's own box never falls back to the pane, which
         // is the frame this capture exists to stop judging (and would read as the old defect, silently).
-        if (box === null) return { png: null, reason: "card-box capture: the card's own box could not be measured", contentHeight: null };
+        if (box === null) return { png: null, reason: `card-box capture: the card's own box (.${JUDGE_SCOPE_CLASS}) could not be measured`, contentHeight: null };
         const clip = cardBoxClip(viewport, box);
         const edge = await measureEdges(page);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
@@ -1266,9 +1266,11 @@ async function frameCanvas(
 ): Promise<CanvasFrame> {
   const declaredBox = canvasViewports?.[canvas];
   const viewport = declaredBox !== undefined ? integerBox(declaredBox) : CANVAS_VIEWPORTS[canvas];
-  const policy = canvasFitPolicy(canvas);
   // The ONE fit rule the runtime serves by: the bundle's canvas export + the display mode this canvas stands for.
   const mountFit = resolveMountFit({ canvas: mountCanvasOf(context.compiledCode), displayMode: displayModeForCanvas(canvas) });
+  // ggui#1953 — the fit decides the overflow posture: a framed card is a card, seen whole in its room, so a card that
+  // cannot fit its pane fails the canvas as the inline card does (#1475), never scrolls as a page.
+  const policy: CanvasFitPolicy = mountFit === 'framed-card' ? { capture: 'card-box', overflow: 'fail' } : canvasFitPolicy(canvas);
   const fit = mountFit === 'framed-card' ? undefined : canvasFit(canvas);
   const chrome = canvasChrome(canvas);
   const outcome = resolvePresentation(canvas, hostPresentations?.[canvas]);
@@ -1278,7 +1280,7 @@ async function frameCanvas(
   const canvasHtml =
     fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation, framedCardRadiusPx) : html;
   // ggui#1953 — a framed card is captured as a card, on its own box, at every canvas it is framed on.
-  const capture: CaptureMode = mountFit === 'framed-card' ? 'card-box' : policy.capture;
+  const capture: CaptureMode = policy.capture;
   const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, capture, {
     padPx: geometry.padPx,
     ...(geometry.floorPx !== undefined ? { floorPx: geometry.floorPx } : {}),
@@ -1296,14 +1298,25 @@ async function frameCanvas(
 }
 
 /**
+ * The box a frame's card must fit (ggui#1953): the canvas box, except for a framed card, which sits in its pane with
+ * the frame's gap above and below — so its ceiling is the pane less that gap on both sides (704 in a 736 pane).
+ */
+export function fitCeiling(frame: Pick<CanvasFrame, 'viewport' | 'mountFit'>): { width: number; height: number } {
+  return frame.mountFit === 'framed-card'
+    ? { width: frame.viewport.width, height: frame.viewport.height - 2 * EXPANDED_FRAME.insetPx }
+    : frame.viewport;
+}
+
+/**
  * The deterministic fit verdict on one frame (ggui#1027): the issue the
  * canvas's policy gives an overflow, or `null` when the content fits, could
  * not be measured, or the canvas scrolls by design.
  */
 function fitVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue | null {
   const contentHeight = frame.attempt.contentHeight;
-  if (contentHeight === null || contentHeight <= frame.viewport.height || frame.policy.overflow === 'none') return null;
-  return canvasOverflowIssue(canvas, frame.viewport, contentHeight, frame.policy.overflow);
+  const ceiling = fitCeiling(frame);
+  if (contentHeight === null || contentHeight <= ceiling.height || frame.policy.overflow === 'none') return null;
+  return canvasOverflowIssue(canvas, ceiling, contentHeight, frame.policy.overflow);
 }
 
 /**
