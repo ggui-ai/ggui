@@ -740,6 +740,7 @@ function buildRenderHTML(
     .error { color: #dc2626; padding: 16px; font-family: monospace; white-space: pre-wrap; }
     ${fit === 'fill' ? fillFitRule(JUDGE_SCOPE_CLASS) + (chrome === 'panel' ? expandedFramePanelRule(JUDGE_PANEL_CLASS, JUDGE_SCOPE_CLASS) : '') : ''}
     ${framedCard ? `.${JUDGE_PANEL_CLASS} { ${expandedFramePanelDecls()} background: ${FRAMED_CARD_GROUND}; display: flow-root; } body > .${JUDGE_PANEL_CLASS} { margin: ${EXPANDED_FRAME.insetPx}px; height: calc(100vh - ${2 * EXPANDED_FRAME.insetPx}px); }` + cardFitRule(JUDGE_SCOPE_CLASS, framedCardRadiusPx) : ''}
+    ${framedCard && chrome !== 'panel' ? `body { background: ${FRAMED_CARD_GROUND}; }` : ''}
     ${chrome === 'ground' ? `.${JUDGE_GROUND_CLASS} { padding: ${JUDGE_GROUND_MARGIN_PX}px; } .${JUDGE_INLINE_FRAME_CLASS} { ${inlineFrameDecls(presentation?.frame)} }` : ''}
   </style>
 </head>
@@ -1258,7 +1259,6 @@ function blankVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue | nu
 async function frameCanvas(
   bundledCode: string,
   context: VisualEvalContext,
-  html: string,
   canvas: CanvasClass,
   canvasViewports: VisualEvalConfig['canvasViewports'],
   deps: ScreenshotDeps,
@@ -1277,8 +1277,9 @@ async function frameCanvas(
   const presentation = outcome?.status === 'applied' ? outcome.applied : undefined;
   const geometry = inlineGeometry(presentation?.frame);
   const framedCardRadiusPx = mountFit === 'framed-card' ? inlineCardRadius(themeVarsOf(context.cssTokens ?? getCssTokens())).radiusPx : undefined;
-  const canvasHtml =
-    fit !== undefined || chrome !== undefined ? buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation, framedCardRadiusPx) : html;
+  // Every canvas's page is composed by the one builder, from this canvas's fit, chrome and frame: a framed card on a
+  // canvas with no chrome (the phone, ggui#1953) is still composed as the runtime serves it, never the plain page.
+  const canvasHtml = buildRenderHTML(bundledCode, context.cssTokens, fit, chrome, presentation, framedCardRadiusPx);
   // ggui#1953 — a framed card is captured as a card, on its own box, at every canvas it is framed on.
   const capture: CaptureMode = policy.capture;
   const captured = await captureScreenshotDetailed(canvasHtml, judgeWindow(viewport, chrome, geometry.padPx), deps, capture, {
@@ -1576,7 +1577,7 @@ export async function runVisualEvaluationDetailed(
     const perCanvas: CanvasVisualResult[] = [];
     const perCanvasResults: EvaluationResult[] = [];
     for (const canvas of config.canvases) {
-      const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps, config.hostPresentations);
+      const frame = await frameCanvas(bundledCode, context, canvas, config.canvasViewports, deps, config.hostPresentations);
       const { viewport, policy, fit, attempt } = frame;
       const screenshot = attempt.png;
       if (!screenshot) {
@@ -2258,11 +2259,10 @@ export async function runVisualFit(
   } catch (e) {
     return { status: 'unavailable', reason: `bundle failed: ${e instanceof Error ? e.message : String(e)}` };
   }
-  const html = buildRenderHTML(bundledCode, context.cssTokens);
   const issues: EvalIssue[] = [];
   const readings: CanvasFitReading[] = [];
   for (const canvas of config.canvases) {
-    const frame = await frameCanvas(bundledCode, context, html, canvas, config.canvasViewports, deps, config.hostPresentations);
+    const frame = await frameCanvas(bundledCode, context, canvas, config.canvasViewports, deps, config.hostPresentations);
     if (!frame.attempt.png) {
       return { status: 'unavailable', reason: `${frame.attempt.reason ?? 'no browser available'} at canvas ${canvas}` };
     }
