@@ -315,6 +315,11 @@ describe('JUDGE_PANELS (#1798): the default panel is unchanged, a candidate diff
     expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-haiku-5-5'][0].model))).toBe(true);
   });
 
+  it('the opus-5-5 candidate seat IS a generator under test (the claude-premium arm), so its calibration measures its own-arm tilt', () => {
+    const premium = getDefaultVariants().find((v) => v.id === 'claude-premium');
+    expect(premium?.modelId).toBe(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-opus-5-5'][0].model));
+  });
+
   it('parses a known id and is loud on an unknown one', () => {
     expect(parseJudgePanelId('cand-anthropic-haiku-5-5')).toBe('cand-anthropic-haiku-5-5');
     expect(() => parseJudgePanelId('v5-panel')).toThrow(/unknown judge panel 'v5-panel'/);

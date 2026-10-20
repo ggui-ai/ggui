@@ -357,6 +357,13 @@ export const JUDGE_PANELS = {
     { provider: 'openai', model: 'gpt-5.4-mini' },
     { provider: 'google', model: 'gemini-3.6-flash' },
   ],
+  // IS a generator under test: the claude-premium arm. Its calibration therefore also measures whether this seat
+  // scores its own arm up, on premium-tier cells (#1798 leg 2).
+  'cand-anthropic-opus-5-5': [
+    { provider: 'anthropic', model: 'claude-opus-5-5' },
+    { provider: 'openai', model: 'gpt-5.4-mini' },
+    { provider: 'google', model: 'gemini-3.6-flash' },
+  ],
 } as const satisfies Record<string, ReadonlyArray<{ provider: AgentConfig['provider']; model: string }>>;
 
 export type JudgePanelId = keyof typeof JUDGE_PANELS;
