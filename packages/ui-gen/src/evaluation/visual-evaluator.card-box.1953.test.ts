@@ -62,6 +62,13 @@ describe('a framed card is captured on its own box, at md (ggui#1953)', () => {
     expect(d.captures[0]!.clip!.height).toBeGreaterThan(704);
   });
 
+  it('fails closed, named, when the card box cannot be measured: no full-pane fallback', async () => {
+    const d = deps({ x: 0, y: 0, width: 0, height: 0 }, 768);
+    const outcome = await runVisualFit({ compiledCode: FRAMED, originalPrompt: 'a hello' }, { canvases: ['md'] }, d);
+    expect(d.captures).toHaveLength(0);
+    expect(JSON.stringify(outcome)).toContain("the card's own box could not be measured");
+  });
+
   it('control: an unframed card at md keeps the full-page capture', async () => {
     const d = deps({ x: 0, y: 0, width: 816, height: 400 }, 736);
     await runVisualFit({ compiledCode: UNFRAMED, originalPrompt: 'a page' }, { canvases: ['md'] }, d);

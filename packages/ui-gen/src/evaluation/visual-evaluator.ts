@@ -1029,12 +1029,13 @@ export async function captureScreenshotDetailed(
         // ggui#1953 — the card's own box (the mount, which wears the card frame), so a root that stretches itself still
         // shows its void, and the host's empty ground below a short card is never in the frame.
         const box = await measureCardBox(page);
-        if (box !== null) {
-          const clip = cardBoxClip(viewport, box);
-          const edge = await measureEdges(page);
-          const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
-          return { png: Buffer.from(screenshot), contentHeight: Math.round(box.height), edge };
-        }
+        // Fail closed, named: a card-box capture that cannot find the card's own box never falls back to the pane, which
+        // is the frame this capture exists to stop judging (and would read as the old defect, silently).
+        if (box === null) return { png: null, reason: "card-box capture: the card's own box could not be measured", contentHeight: null };
+        const clip = cardBoxClip(viewport, box);
+        const edge = await measureEdges(page);
+        const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
+        return { png: Buffer.from(screenshot), contentHeight: Math.round(box.height), edge };
       }
       const contentHeight = await measureContentHeight(page);
       const edge = await measureEdges(page);
