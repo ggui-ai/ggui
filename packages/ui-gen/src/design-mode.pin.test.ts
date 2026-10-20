@@ -258,8 +258,12 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // Re-recorded 2026-10-19 for ggui#1765 (the prompt leg): one bullet after the spacing scale says `padding` sets a
 // surface's vertical rhythm and the card owns the horizontal inset (one content edge per card), matching design's
 // new `--ggui-card-inset`: constrained prompt 5756b359… → b8369701…. The free prompt and both boilerplates are unchanged.
+// Re-recorded 2026-10-20 for ggui#1765 (the component reference): the generated primitives reference follows the
+// one-content-edge contract — Box `padding`/`paddingY` set the vertical rhythm, `paddingX` sets no inset, Card's inline
+// inset is its own, Container is start-aligned by default, and the Box example drops `paddingX` — so the prompt no
+// longer contradicts the primitives: constrained prompt b8369701… → c697f8cb…, free prompt 043121fe… → 0b5e5e93….
 export const CONSTRAINED_PROMPT_SHA256 =
-  "b8369701359bd5c54255b071463bf8232680580281eb277638cc32b2e803795b";
+  "c697f8cbf246ff493600af3eb92432bfcaa6cc65f8b54466e76793e6fbb180d0";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -324,8 +328,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // fills, with the same rules as the constrained prompt in token terms (text on a tint is `onContainer`).
 // Re-recorded 2026-10-16 for ggui#1896 — see the constrained note (the slot seed); both free digests move.
 // Re-recorded 2026-10-18 for ggui#1933 — see the constrained note (the `Input` onChange binding).
+// Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (the component reference).
 export const FREE_PROMPT_SHA256 =
-  "043121fe8a2b7a1bd3667ff4d8ef4f3d1debd0e460e494250240b9be301869af";
+  "0b5e5e93ed61aa287151869fefa35c86bb00e682041cf7de5dac93c649d08ee4";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 // Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.

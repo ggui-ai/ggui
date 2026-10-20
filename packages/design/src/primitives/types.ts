@@ -62,8 +62,9 @@ export interface ContainerProps extends BaseProps {
    */
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full' | string;
   /**
-   * Whether to center the container horizontally via `margin: 0 auto`.
-   * @default true
+   * Whether to center the container horizontally via `margin: 0 auto`. Off by default (ggui#1765): a centred
+   * Container narrower than its card gives its content an edge of its own, apart from the card's one content edge.
+   * @default false
    */
   center?: boolean;
   /**
@@ -97,7 +98,9 @@ export interface ContainerProps extends BaseProps {
 export interface CardProps extends BaseProps {
   children?: ReactNode;
   /**
-   * Padding applied to all sides. Prefer a spacing-scale name
+   * The card's VERTICAL rhythm (top + bottom), ggui#1765. Its inline inset is the card's own,
+   * `--ggui-card-inset` (the `lg` step), on every Card that draws a boundary (a hairline or a fill); a
+   * borderless transparent Card adds no inline inset. `none` removes both. Prefer a spacing-scale name
    * (`'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'`) — each resolves to
    * the matching `--ggui-spacing-*` token. A number is treated as
    * pixels; any other string is passed through as a raw CSS value.
@@ -350,13 +353,13 @@ export interface SkeletonProps extends BaseProps {
  * or border -- it is a blank canvas for custom styling. Use it for layout
  * spacing, colored sections, or wrapping arbitrary content.
  *
- * When both `paddingX`/`paddingY` and `padding` are provided, the axis-specific
- * props take precedence and `padding` is ignored.
+ * One content edge per card (ggui#1765): `padding` / `paddingY` set the vertical rhythm, and the inline axis is
+ * the card's — a visible surface insets its content by `--ggui-card-inset`, an unboxed Box adds none.
  *
  * CSS variables used: none (all values are passed through directly).
  *
  * @example
- * <Box paddingX="xl" paddingY="lg" surface="accent" radius="lg">
+ * <Box padding="lg" surface="accent" radius="lg">
  *   <Text size="sm" tone="emphasized">
  *     Tip: You can customize your theme in Settings.
  *   </Text>
@@ -365,27 +368,28 @@ export interface SkeletonProps extends BaseProps {
 export interface BoxProps extends BaseProps {
   children?: ReactNode;
   /**
-   * Padding applied to all four sides. Prefer a spacing-scale name
+   * This box's VERTICAL rhythm (top + bottom), ggui#1765; the inline axis is the card's (see
+   * {@link BoxProps.paddingX}). Prefer a spacing-scale name
    * (`'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'`) — each resolves to
    * the matching `--ggui-spacing-*` token. A number is treated as
    * pixels; any other string is passed through as a raw CSS value.
-   * Ignored when `paddingX` or `paddingY` is set.
+   * `paddingY` wins over it when set.
    * @default undefined (no padding)
    */
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number | string;
   /**
-   * Horizontal (left + right) padding. Accepts a spacing-scale name,
-   * a pixel number, or a raw CSS string — see {@link BoxProps.padding}.
-   * When set alongside `paddingY`, they combine into a shorthand `padding: {Y} {X}`.
-   * When set without `paddingY`, vertical padding defaults to 0.
+   * Sets NO inset (ggui#1765): the inline axis is the card's. A visible surface (a `surface` or a `tint`) insets its
+   * content by the card's inset (`--ggui-card-inset`), and an unboxed Box adds no inline inset at all, so every
+   * block of a card shares one content edge. Its value is ignored; any value other than `none` only marks the box
+   * as padded, as `padding` does. Use `padding` / `paddingY` for the vertical rhythm. The prop stays so code written
+   * before the change still compiles.
    * @default undefined
    */
   paddingX?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number | string;
   /**
-   * Vertical (top + bottom) padding. Accepts a spacing-scale name,
-   * a pixel number, or a raw CSS string — see {@link BoxProps.padding}.
-   * When set alongside `paddingX`, they combine into a shorthand `padding: {Y} {X}`.
-   * When set without `paddingX`, horizontal padding defaults to 0.
+   * Vertical (top + bottom) padding: this box's rhythm, which wins over `padding`'s. Accepts a spacing-scale name,
+   * a pixel number, or a raw CSS string — see {@link BoxProps.padding}. The inline axis is the card's (see
+   * {@link BoxProps.paddingX}).
    * @default undefined
    */
   paddingY?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number | string;
