@@ -67,6 +67,43 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-20',
     text:
+      'Generator change (internal issue #1765): from the first run on a runner image built with ' +
+      'this change, the generation prompt teaches one content edge per card (a card owns its ' +
+      'horizontal inset; padding sets vertical rhythm), and the design system\'s Card, Box and ' +
+      'Container primitives apply it. Before it landed we ran a same-session A/B against the ' +
+      'previous build: the three fast arms, the ten prompts, four runs per side in alternating ' +
+      'order, with pass bars registered before the first run. It passed every bar. Contract ' +
+      'failures 0 vs 0, probe failures 6 vs 6, median turns 2 vs 2. Generations needing six or ' +
+      'more turns were 4 vs 6, at the edge of the registered allowance (6 against a limit of 4 ' +
+      'plus 2). The panel score moved -0.40 points (95% interval -1.63 to +0.74) as registered, ' +
+      'on the first two runs per side; read over all eight runs after the fact, -0.65 (-1.63 to ' +
+      '+0.22). One prompt does get worse, and we report it: on google-fast, stock-ticker needed ' +
+      'six or more turns in all 6 runs with the change and in none of the 6 without it, pooled ' +
+      'from this A/B and the round before it. In those runs the model wrote layout and text properties the design ' +
+      'system does not have, and spent turns removing them. This measures no harm on the bars ' +
+      'above. It does not measure the inset itself: the page\'s scores read code, not ' +
+      'screenshots, so that is checked on rendered cards outside this benchmark. The version that ' +
+      'landed differs from the one measured by a three-line wording change in the prompt\'s ' +
+      'component reference: a style variable\'s name is replaced by a description of the same ' +
+      'inset. The measured runs never used that name (0 of 180 generations), so we did not re-run. ' +
+      'It lands together with the judge change below, so the first run after both cannot ' +
+      'separate their effects.',
+  },
+  {
+    date: '2026-10-20',
+    text:
+      'Cost metering (internal issue #1957): from the first run on a runner image built with ' +
+      'this change, the cost of OpenAI generations includes prompt-cache writes. OpenAI bills ' +
+      'cache writes on GPT-5.6 and later models at 1.25 times the input rate, and our metering ' +
+      'counted those tokens as plain input. The bills did not change; the published cost of ' +
+      'the OpenAI arms (all of them run GPT-5.6 or later models) rises slightly to match them. ' +
+      'Generation itself is unchanged. The first run on the new image will be published with ' +
+      'those arms\' cost both ways, so the step is visible. Read it as metering catching up, not ' +
+      'as a regression. Cost history is not rewritten.',
+  },
+  {
+    date: '2026-10-20',
+    text:
       'Judge change (internal issue #1798): from the first run on a runner image built with this ' +
       'change, the judge panel\'s Anthropic seat is Claude Opus 5.5 instead of Claude Haiku 4.5. ' +
       'The OpenAI and Google seats and the scoring prompt are unchanged; the panel is now named ' +
