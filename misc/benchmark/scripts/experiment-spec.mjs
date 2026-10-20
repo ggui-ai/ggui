@@ -27,11 +27,6 @@ export const EXPERIMENT_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 export const MAX_REPS = 10;
 /** A spec's own cap may not exceed this, whatever it says: a typo cannot authorise a large spend. */
 export const MAX_COST_CAP_USD = 100;
-/**
- * The generation cost the report records (`estimatedCostUsd`) does not include the judge panel's calls. The stop
- * rule therefore projects with this margin, so a run stops before its total (generation + judging) passes the cap.
- */
-export const JUDGING_MARGIN = 1.25;
 
 /**
  * Parse and validate an experiment spec. Returns the normalised spec, or throws with every problem named.
@@ -83,15 +78,16 @@ export function parseExperimentSpec(raw) {
 }
 
 /**
- * Before starting the next repetition: stop if the spend so far plus another repetition like the last one, with the
- * judging margin, would pass the cap. The first repetition always runs (there is nothing to project from); the cap
+ * Before starting the next repetition: stop if the spend so far plus another repetition like the last one would pass
+ * the cap. The spend is the sum of the report rows' `estimatedCostUsd`, which already includes the judge panel's
+ * calls (the runner adds them to each row), so no margin is added on top. The first repetition always runs (there is nothing to project from); the cap
  * itself is bounded by {@link MAX_COST_CAP_USD}.
  * @param {{ capUsd: number, spentUsd: number, lastRepUsd: number | null }} args
  * @returns {{ stop: boolean, projectedUsd: number }}
  */
 export function decideNextRep({ capUsd, spentUsd, lastRepUsd }) {
   if (lastRepUsd === null) return { stop: false, projectedUsd: 0 };
-  const projectedUsd = (spentUsd + lastRepUsd) * JUDGING_MARGIN;
+  const projectedUsd = spentUsd + lastRepUsd;
   return { stop: projectedUsd > capUsd, projectedUsd };
 }
 

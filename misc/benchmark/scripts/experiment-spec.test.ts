@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  JUDGING_MARGIN,
   MAX_COST_CAP_USD,
   MAX_REPS,
   NIGHTLY_COMMITS,
@@ -49,10 +48,10 @@ describe('decideNextRep', () => {
     expect(decideNextRep({ capUsd: 1, spentUsd: 0, lastRepUsd: null })).toEqual({ stop: false, projectedUsd: 0 });
   });
 
-  it('stops when another repetition like the last, with the judging margin, would pass the cap', () => {
-    // spent 8 + next 8 = 16, × margin = 20 → exactly at a 20 cap runs; above it stops
-    expect(decideNextRep({ capUsd: 20, spentUsd: 8, lastRepUsd: 8 })).toEqual({ stop: false, projectedUsd: 16 * JUDGING_MARGIN });
-    expect(decideNextRep({ capUsd: 19.99, spentUsd: 8, lastRepUsd: 8 }).stop).toBe(true);
+  it('stops when another repetition like the last would pass the cap, with no margin on top', () => {
+    // spent 8 + next 8 = 16 → exactly at a 16 cap runs; above it stops. The rows' cost already includes judging.
+    expect(decideNextRep({ capUsd: 16, spentUsd: 8, lastRepUsd: 8 })).toEqual({ stop: false, projectedUsd: 16 });
+    expect(decideNextRep({ capUsd: 15.99, spentUsd: 8, lastRepUsd: 8 }).stop).toBe(true);
   });
 });
 

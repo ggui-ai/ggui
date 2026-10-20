@@ -122,7 +122,7 @@ async function main() {
     startedAt: new Date().toISOString(),
     finishedAt: null,
     runs: [],
-    totalGenCostUsd: 0,
+    totalCostUsd: 0,
     stopped: null,
     failure: null,
   };
@@ -132,7 +132,7 @@ async function main() {
   let lastRepUsd = null;
   try {
     for (let rep = 1; rep <= spec.reps; rep++) {
-      const decision = decideNextRep({ capUsd: spec.costCapUsd, spentUsd: receipt.totalGenCostUsd, lastRepUsd });
+      const decision = decideNextRep({ capUsd: spec.costCapUsd, spentUsd: receipt.totalCostUsd, lastRepUsd });
       if (decision.stop) {
         receipt.stopped = { beforeRep: rep, reason: `projected $${decision.projectedUsd.toFixed(2)} > cap $${spec.costCapUsd}` };
         log(`COST STOP before repetition ${rep}: ${receipt.stopped.reason}`);
@@ -149,10 +149,10 @@ async function main() {
       await put(reportKey, readFileSync(reportPath), 'application/json');
       const sources = existsSync(sourcesDir) ? readdirSync(sourcesDir) : [];
       for (const f of sources) await put(`${prefix}sources/run${rep}/${f}`, readFileSync(join(sourcesDir, f)), 'text/plain');
-      receipt.runs.push({ rep, reportKey, reportId: report.meta?.reportId ?? null, cells: report.results.length, genCostUsd: Number(cost.toFixed(4)), sources: sources.length });
-      receipt.totalGenCostUsd = Number((receipt.totalGenCostUsd + cost).toFixed(4));
+      receipt.runs.push({ rep, reportKey, reportId: report.meta?.reportId ?? null, cells: report.results.length, costUsd: Number(cost.toFixed(4)), sources: sources.length });
+      receipt.totalCostUsd = Number((receipt.totalCostUsd + cost).toFixed(4));
       lastRepUsd = cost;
-      log(`repetition ${rep}: ${report.results.length} cells, $${cost.toFixed(4)} generation; total $${receipt.totalGenCostUsd}`);
+      log(`repetition ${rep}: ${report.results.length} cells, $${cost.toFixed(4)} (generation + judging); total $${receipt.totalCostUsd}`);
     }
   } catch (err) {
     receipt.failure = String(err);
