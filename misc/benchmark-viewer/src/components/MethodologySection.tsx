@@ -115,7 +115,11 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'generations crosses the pass line, from pass to fail. The new judge is stricter mainly on ' +
       'data presentation and polish, and slightly more lenient on design tokens. Scores are not ' +
       'comparable across this date; read a step at the switch as the judge, not the generators. ' +
-      'History is not rewritten. Two things to know. First, the 2026-10-10 entry said we would ' +
+      'History is not rewritten. Cost moves too: each generation\'s published cost includes the ' +
+      'judge panel\'s own calls, and the new seat costs more. Re-judging the same 150 generations, ' +
+      'the Anthropic seat cost 0.5 cents per generation before the switch and 2.8 cents after; ' +
+      'the other two seats are unchanged. So every arm\'s published cost steps up by about 2.3 ' +
+      'cents per generation at the switch. That step is judging, not generation. Two things to know. First, the 2026-10-10 entry said we would ' +
       'choose a judge that is not a generator under test. Claude Opus 5.5 is a generator under ' +
       'test (it is the claude-premium arm), so that promise is not kept here. Instead we measured ' +
       'whether it scores its own arm higher, on 30 new ' +
