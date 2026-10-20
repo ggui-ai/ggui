@@ -58,6 +58,7 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
     // OpenAI's input token count INCLUDES cached tokens; track the cached
     // subset so tokens.input reports NON-cached input (ggui#1186).
     let totalCachedInputTokens = 0;
+    let totalCacheWriteTokens = 0;
     let turnsUsed = 0;
     let allTextOutput = '';
 
@@ -80,6 +81,8 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
         totalOutputTokens += response.usage.output_tokens ?? 0;
         totalCachedInputTokens +=
           response.usage.input_tokens_details?.cached_tokens ?? 0;
+        totalCacheWriteTokens +=
+          response.usage.input_tokens_details?.cache_write_tokens ?? 0;
       }
 
       // Process output items
@@ -166,6 +169,7 @@ export class OpenAiRawAdapter extends GeneratorAdapter {
         totalInputTokens,
         totalOutputTokens,
         totalCachedInputTokens,
+        totalCacheWriteTokens,
       ),
       generationTimeMs: Date.now() - startTime,
       turnsUsed,

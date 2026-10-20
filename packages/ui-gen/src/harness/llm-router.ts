@@ -252,6 +252,8 @@ export interface LLMWithToolsResponse {
   turnsUsed: number;
   /** Prompt-cache reads summed over the loop's turns, when the provider reports them (absent = unreported, never zero). */
   cacheReadTokens?: number;
+  /** ggui#1957 — prompt-cache writes summed over the loop's turns, when the provider reports them (absent = unreported). */
+  cacheCreationTokens?: number;
 }
 
 export interface LLMToolCall {
@@ -1428,11 +1430,14 @@ export class OpenAIAgent extends LLMAgent {
     // ggui#1186 (second site): `input_tokens` INCLUDES the cached prefix on the
     // Responses API — report the NON-cached input like every other provider.
     // The text response carries no cache field, so the cached count is
-    // dropped here rather than double-counted.
+    // dropped here rather than double-counted. Cache writes (ggui#1957) stay
+    // inside `inputTokens` on this path for the same reason: with no
+    // cache-write term to carry them, subtracting them would drop them.
     const textUsage = splitOpenAiUsage(
       response.usage?.input_tokens ?? 0,
       response.usage?.output_tokens ?? 0,
       response.usage?.input_tokens_details?.cached_tokens ?? 0,
+      0,
     );
     return {
       text,
@@ -1509,6 +1514,7 @@ export class OpenAIAgent extends LLMAgent {
       response.usage?.input_tokens ?? 0,
       response.usage?.output_tokens ?? 0,
       response.usage?.input_tokens_details?.cached_tokens ?? 0,
+      response.usage?.input_tokens_details?.cache_write_tokens ?? 0,
     );
     return {
       toolCalls: functionCalls.map((fc) => ({
@@ -1519,6 +1525,7 @@ export class OpenAIAgent extends LLMAgent {
       inputTokens: toolsUsage.tokens.input,
       outputTokens: toolsUsage.tokens.output,
       cacheReadTokens: toolsUsage.cacheReadTokens,
+      cacheCreationTokens: toolsUsage.cacheCreationTokens,
     };
   }
 
@@ -1558,6 +1565,7 @@ export class OpenAIAgent extends LLMAgent {
     let totalIn = 0;
     let totalOut = 0;
     let totalCacheRead = 0;
+    let totalCacheWrite = 0;
     let allText = '';
 
     for (let turn = 0; turn < maxTurns; turn++) {
@@ -1574,10 +1582,12 @@ export class OpenAIAgent extends LLMAgent {
         response.usage?.input_tokens ?? 0,
         response.usage?.output_tokens ?? 0,
         response.usage?.input_tokens_details?.cached_tokens ?? 0,
+        response.usage?.input_tokens_details?.cache_write_tokens ?? 0,
       );
       totalIn += turnUsage.tokens.input;
       totalOut += turnUsage.tokens.output;
       totalCacheRead += turnUsage.cacheReadTokens;
+      totalCacheWrite += turnUsage.cacheCreationTokens;
 
       const functionCalls = response.output.filter(
         (o): o is ResponseFunctionToolCall => o.type === 'function_call',
@@ -1615,6 +1625,7 @@ export class OpenAIAgent extends LLMAgent {
       inputTokens: totalIn,
       outputTokens: totalOut,
       cacheReadTokens: totalCacheRead,
+      cacheCreationTokens: totalCacheWrite,
       turnsUsed: input.length,
     };
   }

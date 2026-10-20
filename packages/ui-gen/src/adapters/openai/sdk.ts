@@ -94,13 +94,18 @@ export class OpenAiSdkAdapter extends GeneratorAdapter {
       (sum, details) => sum + (details.cached_tokens ?? 0),
       0,
     );
+    // ggui#1957 — and the cache writes, the same kind of subset.
+    const cacheWriteTokens = (usage.inputTokensDetails ?? []).reduce(
+      (sum, details) => sum + (details.cache_write_tokens ?? 0),
+      0,
+    );
 
     return {
       compiledCode: capture.compiledCode,
       sourceCode: capture.sourceCode,
       stream: capture.stream,
       generatorMeta: capture.generatorMeta,
-      ...splitOpenAiUsage(inputTokens, outputTokens, cachedInputTokens),
+      ...splitOpenAiUsage(inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens),
       generationTimeMs: Date.now() - startTime,
       turnsUsed: result.rawResponses?.length ?? 0,
     };

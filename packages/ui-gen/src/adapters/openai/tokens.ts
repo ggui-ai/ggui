@@ -21,18 +21,32 @@ import type { AdapterResult } from '../types';
  * inflates `$/gen` and breaks `render_cache_metric`'s `cacheReadPct`
  * denominator). So the OpenAI adapters subtract the cached subset here.
  *
- * `total` is the full processed footprint (non-cached input + cache
- * reads + output = `inputTokensInclCached + outputTokens`), matching the
- * Claude adapter's `total` (input + cacheCreation + cacheRead + output);
- * OpenAI has no explicit cache-creation step, so there is no
- * `cacheCreationTokens` term.
+ * Cache WRITES are the same kind of subset (ggui#1957): OpenAI bills them on
+ * GPT-5.6 and later (1.25× input) and reports them as
+ * `input_tokens_details.cache_write_tokens`, "the number of input tokens
+ * that were written to the cache", inside the same input total. They are
+ * subtracted from `input` as the reads are and reported as
+ * `cacheCreationTokens`, so a consumer prices them at the cache-write rate,
+ * exactly once.
+ *
+ * `total` is the full processed footprint (non-cached input + cache reads +
+ * cache writes + output = `inputTokensInclCached + outputTokens`), matching
+ * the Claude adapter's `total` (input + cacheCreation + cacheRead + output).
  */
 export function splitOpenAiUsage(
   inputTokensInclCached: number,
   outputTokens: number,
   cachedTokens: number,
-): { tokens: AdapterResult['tokens']; cacheReadTokens: number } {
-  return splitCacheInclusiveUsage(inputTokensInclCached, outputTokens, cachedTokens);
+  cacheWriteTokens: number,
+): { tokens: AdapterResult['tokens']; cacheReadTokens: number; cacheCreationTokens: number } {
+  const split = splitCacheInclusiveUsage(inputTokensInclCached, outputTokens, cachedTokens);
+  // Never let a malformed usage report drive input negative: the writes are at most what remains after the reads.
+  const cacheCreation = Math.min(Math.max(cacheWriteTokens, 0), split.tokens.input);
+  return {
+    tokens: { input: split.tokens.input - cacheCreation, output: split.tokens.output, total: split.tokens.total },
+    cacheReadTokens: split.cacheReadTokens,
+    cacheCreationTokens: cacheCreation,
+  };
 }
 
 /**
