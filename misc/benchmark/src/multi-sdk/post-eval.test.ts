@@ -266,10 +266,11 @@ describe('arm-neutral panel prompt (#973 §5b — experiment-lane promptVersion;
   });
 });
 
-describe('default panel prompt v4 (#1350 — the design-system rubric is the public judge)', () => {
-  it('is versioned aesthetic-eval.v4-panel', () => {
-    expect(selectPanelPrompt(undefined).promptVersion).toBe('aesthetic-eval.v4-panel');
-    expect(AESTHETIC_PROMPT_VERSION_PANEL).toBe('aesthetic-eval.v4-panel');
+describe('default panel prompt (#1350 — the design-system rubric is the public judge)', () => {
+  it('is versioned by the panel that scores with it: v5-panel by default, v4-panel on the bridge panel', () => {
+    expect(selectPanelPrompt(undefined).promptVersion).toBe('aesthetic-eval.v5-panel');
+    expect(AESTHETIC_PROMPT_VERSION_PANEL).toBe(`aesthetic-eval.${DEFAULT_JUDGE_PANEL}`);
+    expect(selectPanelPrompt(undefined, 'v4-panel')).toEqual({ ...selectPanelPrompt(undefined), promptVersion: 'aesthetic-eval.v4-panel' });
   });
 
   it('no longer names the retired roles, names the current ones, and puts typed variants first', () => {
@@ -282,9 +283,17 @@ describe('default panel prompt v4 (#1350 — the design-system rubric is the pub
   });
 });
 
-describe('JUDGE_PANELS (#1798): the default panel is unchanged, a candidate differs in one seat', () => {
-  it('runs use v4-panel, with exactly the three judges every run has used since 10-16', () => {
-    expect(DEFAULT_JUDGE_PANEL).toBe('v4-panel');
+describe('JUDGE_PANELS (#1798): runs use v5-panel; v4-panel stays as the bridge; a candidate differs in one seat', () => {
+  it('runs use v5-panel: claude-opus-5-5 in the Anthropic seat, the OpenAI and Google seats unchanged', () => {
+    expect(DEFAULT_JUDGE_PANEL).toBe('v5-panel');
+    expect(JUDGE_PANELS['v5-panel']).toEqual([
+      { provider: 'anthropic', model: 'claude-opus-5-5' },
+      { provider: 'openai', model: 'gpt-5.4-mini' },
+      { provider: 'google', model: 'gemini-3.6-flash' },
+    ]);
+  });
+
+  it('keeps v4-panel, the judges every run used from 10-16 to 10-20, for bridge re-judges', () => {
     expect(JUDGE_PANELS['v4-panel']).toEqual([
       { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'openai', model: 'gpt-5.4-mini' },
@@ -315,14 +324,14 @@ describe('JUDGE_PANELS (#1798): the default panel is unchanged, a candidate diff
     expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-haiku-5-5'][0].model))).toBe(true);
   });
 
-  it('the opus-5-5 candidate seat IS a generator under test (the claude-premium arm), so its calibration measures its own-arm tilt', () => {
+  it('the v5-panel Anthropic seat IS a generator under test (the claude-premium arm), which the page discloses', () => {
     const premium = getDefaultVariants().find((v) => v.id === 'claude-premium');
-    expect(premium?.modelId).toBe(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-opus-5-5'][0].model));
+    expect(premium?.modelId).toBe(resolveJudgeCostModelId(JUDGE_PANELS['v5-panel'][0].model));
   });
 
   it('parses a known id and is loud on an unknown one', () => {
     expect(parseJudgePanelId('cand-anthropic-haiku-5-5')).toBe('cand-anthropic-haiku-5-5');
-    expect(() => parseJudgePanelId('v5-panel')).toThrow(/unknown judge panel 'v5-panel'/);
+    expect(() => parseJudgePanelId('v6-panel')).toThrow(/unknown judge panel 'v6-panel'/);
     expect(() => parseJudgePanelId('constructor')).toThrow(/unknown judge panel/);
   });
 });

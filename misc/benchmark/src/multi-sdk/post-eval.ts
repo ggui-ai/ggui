@@ -170,12 +170,18 @@ export type PanelPrompt = 'default' | 'arm-neutral';
 
 export const AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL = 'aesthetic-eval.v3-panel-arm-neutral' as const;
 
-/** Resolve which panel prompt + version a run judges with. */
-export function selectPanelPrompt(kind: PanelPrompt | undefined): { prompt: string; promptVersion: string } {
+/**
+ * Resolve which panel prompt + version a run judges with. The default prompt's version names the panel that
+ * scores with it (`aesthetic-eval.<panel id>`), so a re-judge on `v4-panel` still records v4.
+ */
+export function selectPanelPrompt(
+  kind: PanelPrompt | undefined,
+  panelId: JudgePanelId = DEFAULT_JUDGE_PANEL,
+): { prompt: string; promptVersion: string } {
   if (kind === 'arm-neutral') {
     return { prompt: AESTHETIC_EVAL_PROMPT_ARM_NEUTRAL, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL_ARM_NEUTRAL };
   }
-  return { prompt: AESTHETIC_EVAL_PROMPT, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL };
+  return { prompt: AESTHETIC_EVAL_PROMPT, promptVersion: `aesthetic-eval.${panelId}` };
 }
 
 
@@ -297,7 +303,10 @@ export function createLimiter(max: number): <T>(fn: () => Promise<T>) => Promise
 // model-echo calls on #1889), so this names the judge that has been scoring since then. No behaviour changes,
 // so the version stays v4. The scores did step at 10-10 (Gemini seat about −1, about −0.4 of the panel mean on
 // its own); the page announces that step, and a Gemini-seat call is now priced at the model that answers.
-export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v4-panel';
+// v5 (2026-10-20, #1798): the same prompt; the Anthropic seat moves claude-haiku-4-5 → claude-opus-5-5 (the
+// founder's pick after the calibration on #1798). The version names the default PANEL with its prompt, so a
+// run on another panel records that panel's own version (see selectPanelPrompt).
+export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v5-panel';
 
 /** One judge's contribution to a panel. */
 export interface SingleJudgeResult {
@@ -325,14 +334,15 @@ export interface PanelEvalResult {
 
 /**
  * The judge panels, by name. One model per provider, scored at temperature 0
- * so a re-run is reproducible. `v4-panel` is the one every run uses
+ * so a re-run is reproducible. `v5-panel` is the one every run uses
  * ({@link DEFAULT_JUDGE_PANEL}); changing it or the prompt invalidates score
- * comparability across runs, so bump {@link AESTHETIC_PROMPT_VERSION_PANEL}.
+ * comparability across runs, so add a panel and move the default (the version
+ * follows the panel id).
  *
- * The other entries are CANDIDATES (#1798): the same panel with one seat
- * changed, so a calibration can score the same sources with both and measure
- * the shift before any switch. Naming one here changes no run; only a caller
- * that passes its id uses it.
+ * `v4-panel` is the previous default (to 2026-10-20), kept so stored runs can be
+ * re-judged on it as a bridge. The `cand-*` entries are the #1798 calibration's
+ * other candidates: the same panel with one seat changed. Naming one here changes
+ * no run; only a caller that passes its id uses it.
  */
 export const JUDGE_PANELS = {
   'v4-panel': [
@@ -357,9 +367,10 @@ export const JUDGE_PANELS = {
     { provider: 'openai', model: 'gpt-5.4-mini' },
     { provider: 'google', model: 'gemini-3.6-flash' },
   ],
-  // IS a generator under test: the claude-premium arm. Its calibration therefore also measures whether this seat
-  // scores its own arm up, on premium-tier cells (#1798 leg 2).
-  'cand-anthropic-opus-5-5': [
+  // The default since 2026-10-20 (#1798). Its Anthropic seat IS a generator under test (the claude-premium arm):
+  // calibrated on #1798 (shift −1.86 against v4; own-arm tilt −2.8 to +1.9 at 95%; a +4.8-point lean toward
+  // claude-balanced), disclosed on the page.
+  'v5-panel': [
     { provider: 'anthropic', model: 'claude-opus-5-5' },
     { provider: 'openai', model: 'gpt-5.4-mini' },
     { provider: 'google', model: 'gemini-3.6-flash' },
@@ -368,7 +379,7 @@ export const JUDGE_PANELS = {
 
 export type JudgePanelId = keyof typeof JUDGE_PANELS;
 
-export const DEFAULT_JUDGE_PANEL: JudgePanelId = 'v4-panel';
+export const DEFAULT_JUDGE_PANEL: JudgePanelId = 'v5-panel';
 
 function isJudgePanelId(id: string): id is JudgePanelId {
   return Object.hasOwn(JUDGE_PANELS, id);
@@ -492,8 +503,9 @@ export async function evaluateAestheticsPanel(
   opts?: { panelPrompt?: PanelPrompt; panelId?: JudgePanelId },
 ): Promise<PanelEvalResult | null> {
   const startTime = Date.now();
-  const panel = selectPanelPrompt(opts?.panelPrompt);
-  const judges = JUDGE_PANELS[opts?.panelId ?? DEFAULT_JUDGE_PANEL];
+  const panelId = opts?.panelId ?? DEFAULT_JUDGE_PANEL;
+  const panel = selectPanelPrompt(opts?.panelPrompt, panelId);
+  const judges = JUDGE_PANELS[panelId];
 
   // Each judge: globally concurrency-capped per ATTEMPT, retried with
   // backoff on null/throw. The backoff sleep happens OUTSIDE the limiter

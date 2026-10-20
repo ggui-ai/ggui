@@ -39,7 +39,7 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
   {
     label: 'designTokens',
     definition:
-      "Do colour and spacing come from the ggui design system? The primitives' typed variants first (Button/Badge/Alert variant, Text/Heading tones); raw CSS only through var(--ggui-color-*) roles (container/onContainer, sunken/onSunken, outline, link, primary-*) and var(--ggui-spacing-*) — no hardcoded hex colors, no rgba()/hsl(), no custom gradients, no literal fallbacks, no raw pixel values for spacing. (Runs judged with aesthetic-eval.v4-panel. Earlier runs used the definition quoted in the 2026-09-25 changelog entry.)",
+      "Do colour and spacing come from the ggui design system? The primitives' typed variants first (Button/Badge/Alert variant, Text/Heading tones); raw CSS only through var(--ggui-color-*) roles (container/onContainer, sunken/onSunken, outline, link, primary-*) and var(--ggui-spacing-*) — no hardcoded hex colors, no rgba()/hsl(), no custom gradients, no literal fallbacks, no raw pixel values for spacing. (Runs judged with aesthetic-eval.v4-panel or v5-panel, which share this definition. Earlier runs used the definition quoted in the 2026-09-25 changelog entry.)",
   },
   {
     label: 'hierarchy',
@@ -64,6 +64,35 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  * announced here, dated, because run-to-run comparability is the product.
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
+  {
+    date: '2026-10-20',
+    text:
+      'Judge change (internal issue #1798): from the first run on a runner image built with this ' +
+      'change, the judge panel\'s Anthropic seat is Claude Opus 5.5 instead of Claude Haiku 4.5. ' +
+      'The OpenAI and Google seats and the scoring prompt are unchanged; the panel is now named ' +
+      'aesthetic-eval.v5-panel. The switch is bridged: on 150 stored generations from six arms, ' +
+      'the old and new panels scored the same code in the same session. The new panel scores ' +
+      'lower by 1.9 points on average (95% interval 0.9 to 2.6). Per arm: claude-balanced -0.4, ' +
+      'openai-fast -0.8, openai-balanced -1.0, claude-fast -2.1, google-balanced -2.6, ' +
+      'google-fast -3.1. Only google-fast moves by more than our same-session noise. One of the 150 ' +
+      'generations crosses the pass line, from pass to fail. The new judge is stricter mainly on ' +
+      'data presentation and polish, and slightly more lenient on design tokens. Scores are not ' +
+      'comparable across this date; read a step at the switch as the judge, not the generators. ' +
+      'History is not rewritten. Two things to know. First, the 2026-10-10 entry said we would ' +
+      'choose a judge that is not a generator under test. Claude Opus 5.5 is a generator under ' +
+      'test (it is the claude-premium arm), so that promise is not kept here. Instead we measured ' +
+      'whether it scores its own arm higher, on 30 new ' +
+      'premium-tier generations. On its own arm, it scores relative to the other two judges between ' +
+      '2.8 points lower and 1.9 points higher (95% interval). We found no preference for its own ' +
+      'arm, but this sample can only reliably detect one of about 5 points, so a smaller one is ' +
+      'not ruled out. Second, it scores claude-balanced (Claude Sonnet 5.5) 4.8 points higher than ' +
+      'the other two judges do (95% interval 2.5 to 6.7), which is about 1.6 points on that arm\'s ' +
+      'published score. Every newer Anthropic model we tried in this seat leans the same way, by ' +
+      '1.7 to 5.4 points. Read claude-balanced\'s place in the ranking with that in mind. Also, ' +
+      'a judge\'s instructions move scores more than most effects we report: one added sentence ' +
+      'moved a judge about 7 points on identical screenshots in a separate test. So any change to ' +
+      'the judges\' instructions is announced here, never folded in.',
+  },
   {
     date: '2026-10-18',
     text:
