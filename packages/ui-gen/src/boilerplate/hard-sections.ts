@@ -252,7 +252,10 @@ export const FRAME_SIZING = `## Sizing — the frame owns the height and the wid
 The host sizes the iframe; the component never sizes itself to the viewport. NEVER write \`100vh\` / \`100dvh\` / \`100svh\` (or an \`h-screen\` / \`min-h-screen\` class) as a height on any element:
 - An inline card takes its natural height. A content-sized frame is measured FROM the content, so a \`100vh\` root can never shrink and grows the frame on every re-measure.
 - Under fullscreen the frame already stretches your root to its full height. Centre inside it with flex (\`display: flex; flex-direction: column; justify-content: center\`), never with a viewport height.
-- Under fullscreen the frame also keeps a 16 px inset between your content and the panel's edge — leave it. A \`surface="hero"\` band that OPENS the card runs edge to edge on its own. Any other band that is MEANT to run edge to edge (a full-width strip of rows, a closing action bar) takes \`bleed\` (\`<Box surface="sunken" bleed>…</Box>\`); only such a band should, and \`bleed\` is ignored outside fullscreen.
+- In EVERY fit (an inline card, a framed card, fullscreen) the card keeps ONE content edge: the runtime insets your root's content from the card's edge. Leave it, and never pad it back out. Only two things run edge to edge, in every fit:
+  - a \`surface="hero"\` band that is your root's FIRST child, opening the card (\`<Box surface="hero">…</Box>\` directly inside the root, not wrapped in a \`Stack\`, not second);
+  - any other band that declares \`bleed\` (\`<Box surface="sunken" bleed>…</Box>\`). Only a band MEANT to run edge to edge takes it: a full-width strip of rows, a closing action bar.
+  A band you paint yourself (a \`Box\` with a \`background\`) is NOT an edge-to-edge band. It sits inside the inset with the card's corners showing around it, like a box floating in the card. An opening band is always the kit's \`surface="hero"\`, never your own colour.
 - To fill a parent that has a height use \`height: 100%\` or \`flex: 1\`; a viewport unit is only ever a \`max-height\` cap on a scroll region.
 
 The width works the same way, and the mistake is the mirror image: **your outermost element FILLS the frame; a width cap belongs INSIDE it, on the column that holds text.**

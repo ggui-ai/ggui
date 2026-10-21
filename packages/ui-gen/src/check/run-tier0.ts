@@ -571,6 +571,103 @@ function detectComponentNeverReturns(
  * Wraps the same logic as runSelfChecks (adapters/tools.ts) but emits EvalIssue[].
  * Also runs contract validation when contract are provided.
  */
+/**
+ * ggui#1977: an opening band that lost its edge. Since ggui#1765 the card keeps one content edge in every fit, and only
+ * two things take the inset back so their ground meets the card's edge: a `surface="hero"` band that is the root's
+ * FIRST child, and an element that declares `bleed` (design's `EXPANDED_FRAME_BLEEDS`). Two shapes miss it and render
+ * as a box floating inside the card (the #1385 hello on judge 4680f34):
+ *   - `painted-band`: the root's first child paints its own ground (an inline `background`, a non-hero `surface`, a
+ *     `tint`), carries a heading, holds no form field, and declares no `bleed`. It is a band the generator coloured
+ *     itself.
+ *   - `hero-not-first`: a `surface="hero"` band that is a direct child of the root but not its first, or the first
+ *     child of a plain wrapper that opens the root.
+ * Read from the returned JSX's root, never from a helper's. A `warn`, not a `fail`, until an A/B reads its precision
+ * (CDO on ggui#1977: one classifier, zero false hits on the served corpus).
+ */
+function detectBandEdgeLost(
+  sourceCode: string,
+): { readonly shape: 'painted-band' | 'hero-not-first'; readonly line: number } | null {
+  const sf = ts.createSourceFile('source.tsx', sourceCode, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TSX);
+  type El = ts.JsxElement | ts.JsxSelfClosingElement;
+  const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) ? unwrap(e.expression) : e);
+  const isEl = (n: ts.Node): n is El => ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n);
+  const opening = (el: El): ts.JsxOpeningElement | ts.JsxSelfClosingElement => (ts.isJsxElement(el) ? el.openingElement : el);
+  const tag = (el: El): string => opening(el).tagName.getText(sf);
+  const attr = (el: El, name: string): ts.JsxAttribute | undefined =>
+    opening(el).attributes.properties.find((a): a is ts.JsxAttribute => ts.isJsxAttribute(a) && a.name.getText(sf) === name);
+  const stringAttr = (el: El, name: string): string | undefined => {
+    const a = attr(el, name);
+    if (a?.initializer === undefined) return undefined;
+    if (ts.isStringLiteral(a.initializer)) return a.initializer.text;
+    if (ts.isJsxExpression(a.initializer) && a.initializer.expression !== undefined && ts.isStringLiteral(a.initializer.expression)) {
+      return a.initializer.expression.text;
+    }
+    return undefined;
+  };
+  const flagOn = (el: El, name: string): boolean => {
+    const a = attr(el, name);
+    if (a === undefined) return false;
+    if (a.initializer === undefined) return true;
+    return !(ts.isJsxExpression(a.initializer) && a.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword);
+  };
+  const children = (el: El): El[] => (ts.isJsxElement(el) ? el.children.filter(isEl) : []);
+  const descendants = (el: El): El[] => children(el).flatMap((c) => [c, ...descendants(c)]);
+  const lineOf = (el: El): number => sf.getLineAndCharacterOfPosition(el.getStart(sf)).line + 1;
+
+  const isHero = (el: El): boolean => stringAttr(el, 'surface') === 'hero';
+  const paints = (el: El): boolean => {
+    const surface = stringAttr(el, 'surface');
+    if (surface !== undefined && surface !== 'hero' && surface !== 'transparent') return true;
+    if (attr(el, 'tint') !== undefined) return true;
+    const style = attr(el, 'style')?.initializer;
+    if (style === undefined || !ts.isJsxExpression(style) || style.expression === undefined) return false;
+    const obj = unwrap(style.expression);
+    return (
+      ts.isObjectLiteralExpression(obj) &&
+      obj.properties.some((pr) => ts.isPropertyAssignment(pr) && /^(background|backgroundColor)$/.test(pr.name.getText(sf).replace(/['"]/g, '')))
+    );
+  };
+  const HEADING_SIZES = new Set(['xl', '2xl', '3xl', '4xl']);
+  const isHeading = (el: El): boolean =>
+    tag(el) === 'Heading' || /^h[1-3]$/.test(tag(el)) || (tag(el) === 'Text' && HEADING_SIZES.has(stringAttr(el, 'size') ?? ''));
+  const FORM_FIELDS = new Set(['Input', 'Select', 'TextArea', 'Checkbox', 'RadioGroup', 'Toggle', 'SearchField', 'input', 'select', 'textarea']);
+  const WRAPPERS = new Set(['Stack', 'Box', 'Container', 'div']);
+
+  // The default export's returned root element.
+  let component: ts.FunctionLikeDeclaration | undefined;
+  for (const st of sf.statements) {
+    if (ts.isFunctionDeclaration(st) && st.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) component = st;
+  }
+  if (component?.body === undefined) return null;
+  let root: El | undefined;
+  if (!ts.isBlock(component.body)) {
+    const e = unwrap(component.body);
+    if (isEl(e)) root = e;
+  } else {
+    for (const st of component.body.statements) {
+      if (ts.isReturnStatement(st) && st.expression !== undefined) {
+        const e = unwrap(st.expression);
+        if (isEl(e)) root = e;
+      }
+    }
+  }
+  if (root === undefined) return null;
+
+  const kids = children(root);
+  const first = kids[0];
+  if (first === undefined) return null;
+  if (!isHero(first) && !flagOn(first, 'bleed') && paints(first) && descendants(first).some(isHeading) && !descendants(first).some((d) => FORM_FIELDS.has(tag(d)))) {
+    return { shape: 'painted-band', line: lineOf(first) };
+  }
+  const laterHero = kids.slice(1).find((k) => isHero(k) && !flagOn(k, 'bleed'));
+  if (laterHero !== undefined) return { shape: 'hero-not-first', line: lineOf(laterHero) };
+  const wrapped = children(first)[0];
+  if (WRAPPERS.has(tag(first)) && !paints(first) && !isHero(first) && wrapped !== undefined && isHero(wrapped) && !flagOn(wrapped, 'bleed')) {
+    return { shape: 'hero-not-first', line: lineOf(wrapped) };
+  }
+  return null;
+}
+
 /** The kit controls whose boundary the design system draws (ggui#1697). */
 const KIT_CONTROLS = ['Button', 'Input', 'Select', 'TextArea', 'Checkbox', 'RadioGroup', 'Toggle', 'SearchField'] as const;
 
@@ -1267,6 +1364,25 @@ export async function runTier0Checks(
       description: `control-inline-color: <${tag.name}> sets an inline \`${key}\` — a kit control's variant carries its ink and fill, and an inline one paints over it`,
       fix: `Remove \`${key}\` from <${tag.name}>'s style and pick the variant that carries the look (e.g. <Button variant="primary"> for the main action, variant="outline" for a chip). Colour your own element, not the kit's control.`,
       line: tag.line,
+    });
+  }
+
+  // ── An opening band that lost its edge (ggui#1977) ──
+  // The card keeps one content edge in every fit; only a first-child `surface="hero"` band or a `bleed` element meets
+  // the card's edge. The prompt teaches both; this names the two shapes that miss it. A warn until an A/B reads it.
+  const bandEdge = enforceDesignVocabulary ? detectBandEdgeLost(sourceCode) : null;
+  if (bandEdge !== null) {
+    issues.push({
+      tier: 0, result: 'warn', category: 'layout', subcategory: `band-edge-lost:${bandEdge.shape}`, severity: 'major',
+      description:
+        bandEdge.shape === 'painted-band'
+          ? 'band-edge-lost: the band that opens the card paints its own ground, so it floats inside the card\'s inset with the card\'s corners around it'
+          : 'band-edge-lost: a surface="hero" band that is not the root\'s first child floats inside the card\'s inset',
+      fix:
+        bandEdge.shape === 'painted-band'
+          ? 'Make the opening band the kit\'s <Box surface="hero"> as the root\'s first child (it runs edge to edge in every fit), or declare `bleed` on it. Do not colour your own band.'
+          : 'Move the surface="hero" band to be the root\'s FIRST child (not wrapped in a Stack, not after other content), or declare `bleed` on it.',
+      line: bandEdge.line,
     });
   }
 

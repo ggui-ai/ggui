@@ -593,7 +593,7 @@ If your component is 100% purple text on purple backgrounds, you've lost the eye
 ### Visual rhythm — vary your card treatments
 
 A row of identical flat tiles feels monotone. Use card-treatment variation to create rhythm:
-- **Hero card**: \`<Card surface="hero" padding="xl" shadow="lg" radius="xl">\` — the theme's hero ground (brand-tinted on a light host, the ink pair on a dark one); anchors the eye
+- **Hero card**: \`<Card surface="hero" padding="xl" shadow="lg" radius="xl">\` — the theme's hero ground (brand-tinted on a light host, the ink pair on a dark one); anchors the eye. As the band that OPENS a card it is the root's first child and runs edge to edge, in every fit; inside a grid it is a tile
 - **Stat tiles**: \`<Card padding="md" shadow="sm" radius="md">\` with surface bg — secondary
 - **Inline rows / list items**: no card chrome at all, just \`<Stack gap="sm">\` with dividers — tertiary
 
