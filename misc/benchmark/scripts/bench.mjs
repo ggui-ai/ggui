@@ -43,7 +43,7 @@
  *   --threshold      Pass threshold 0-100 (default: 70)
  *   --concurrency    Max concurrent cells (default: 36). Memory-bound
  *                    environments (the 2GB Fargate runner) pass a lower cap.
- *   --no-eval        Skip ALL evaluation: zeroes in-loop eval rounds AND skips
+ *   --no-eval        Skip ALL evaluation: turns the in-loop evaluation off AND skips
  *                    the post-gen aesthetic judge (no Anthropic call, no score)
  *   --visual         Enable in-loop visual evaluation (screenshot + multimodal
  *                    LLM scoring during eval rounds). The visual judge is the
@@ -209,9 +209,10 @@ const codingModel = getArg(['--model', '-m'], preset?.model || null);
 const thinkModel = getArg(['--think'], null);
 const evalModel = getArg(['--eval'], null);
 const maxAttempts = parseInt(getArg(['--max-turns'], String(preset?.maxAttempts ?? 30)), 10);
-// --no-eval kills BOTH evaluation surfaces: the in-loop eval rounds
-// (maxEvalRounds=0) and the post-gen aesthetic judge (skipEvaluation).
-// Pre-fix it only zeroed the rounds, so the judge still ran + billed.
+// --no-eval kills BOTH evaluation surfaces: the in-loop evaluation (the
+// runner dispatches with `evaluation.enabled: false`, #1975) and the post-gen
+// aesthetic judge (skipEvaluation). Zeroing maxEvalRounds alone does not stop
+// the in-loop evaluation: its first round ran before #1975.
 const skipEvaluation = hasFlag(['--no-eval']);
 const maxEvalRounds = skipEvaluation ? 0 : parseInt(getArg(['--max-eval'], String(preset?.maxEvalRounds ?? 3)), 10);
 const timeoutMs = parseInt(getArg(['--timeout'], String(preset?.timeout ?? 300000)), 10);

@@ -97,4 +97,17 @@ describe('BenchmarkRunner → dispatchGeneration forwarding', () => {
     const params = vi.mocked(dispatchGeneration).mock.calls[0]![0];
     expect(params.visualEvaluation).toBeUndefined();
   });
+
+  // #1975 — `--no-eval` (skipEvaluation) must switch the in-loop evaluation
+  // off at dispatch. Zeroing maxEvalRounds alone left the first round running.
+  it('dispatches with in-loop evaluation off when evaluation is skipped', async () => {
+    const runner = new BenchmarkRunner({ skipEvaluation: true });
+    runner.registerAdapter(new MockAdapter({}));
+
+    await runner.run({ variants: [variant], commits: [commit] });
+
+    expect(dispatchGeneration).toHaveBeenCalledTimes(1);
+    const params = vi.mocked(dispatchGeneration).mock.calls[0]![0];
+    expect(params.evaluation?.enabled).toBe(false);
+  });
 });

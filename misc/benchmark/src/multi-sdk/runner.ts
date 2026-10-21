@@ -444,7 +444,10 @@ export class BenchmarkRunner {
             fixtureProps: commit.props as JsonObject | undefined,
             originalPrompt: commit.prompt,
             evaluation: {
-              enabled: true,
+              // #1975 — `--no-eval` turns the in-loop evaluation off here.
+              // `maxEvalRounds: 0` alone does not: the text leg runs whenever
+              // `evaluation.enabled` is true (ui-gen `inLoopEvaluation`).
+              enabled: !this.config.skipEvaluation,
               passThreshold: this.config.passThreshold,
               provider: variant.sdkName,
             },
