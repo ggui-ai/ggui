@@ -575,18 +575,19 @@ function detectComponentNeverReturns(
  * ggui#1977: an opening band that lost its edge. Since ggui#1765 the card keeps one content edge in every fit, and only
  * two things take the inset back so their ground meets the card's edge: a `surface="hero"` band that is the root's
  * FIRST child, and an element that declares `bleed` (design's `EXPANDED_FRAME_BLEEDS`). Two shapes miss it and render
- * as a box floating inside the card (the #1385 hello on judge 4680f34):
+ * as a box floating inside the card (the #1385 hello on judge 4680f34). This names the one with a clean read:
  *   - `painted-band`: the root's first child paints its own ground (an inline `background`, a non-hero `surface`, a
  *     `tint`), carries a heading, holds no form field, and declares no `bleed`. It is a band the generator coloured
  *     itself.
- *   - `hero-not-first`: a `surface="hero"` band that is a direct child of the root but not its first, or the first
- *     child of a plain wrapper that opens the root.
- * Read from the returned JSX's root, never from a helper's. A `warn`, not a `fail`, until an A/B reads its precision
- * (CDO on ggui#1977: one classifier, zero false hits on the served corpus).
+ * The other shape, a `surface="hero"` band that is not the root's first child, is NOT checked: on #1977's A/B every
+ * such hit (8 of 8) was a hero TILE, a hero card with its own radius and shadow inside a wrapper, which the prompt
+ * teaches and which is not a band. A warn can reach an eval-fix turn's feedback, so a false one is a wrong nudge. It
+ * returns only with a bound the served-corpus count supports (CDO's zero-false-hits bar).
+ * Read from the returned JSX's root, never from a helper's. A `warn`, not a `fail`.
  */
 function detectBandEdgeLost(
   sourceCode: string,
-): { readonly shape: 'painted-band' | 'hero-not-first'; readonly line: number } | null {
+): { readonly shape: 'painted-band'; readonly line: number } | null {
   const sf = ts.createSourceFile('source.tsx', sourceCode, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TSX);
   type El = ts.JsxElement | ts.JsxSelfClosingElement;
   const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) ? unwrap(e.expression) : e);
@@ -631,7 +632,6 @@ function detectBandEdgeLost(
   const isHeading = (el: El): boolean =>
     tag(el) === 'Heading' || /^h[1-3]$/.test(tag(el)) || (tag(el) === 'Text' && HEADING_SIZES.has(stringAttr(el, 'size') ?? ''));
   const FORM_FIELDS = new Set(['Input', 'Select', 'TextArea', 'Checkbox', 'RadioGroup', 'Toggle', 'SearchField', 'input', 'select', 'textarea']);
-  const WRAPPERS = new Set(['Stack', 'Box', 'Container', 'div']);
 
   // The default export's returned root element.
   let component: ts.FunctionLikeDeclaration | undefined;
@@ -658,12 +658,6 @@ function detectBandEdgeLost(
   if (first === undefined) return null;
   if (!isHero(first) && !flagOn(first, 'bleed') && paints(first) && descendants(first).some(isHeading) && !descendants(first).some((d) => FORM_FIELDS.has(tag(d)))) {
     return { shape: 'painted-band', line: lineOf(first) };
-  }
-  const laterHero = kids.slice(1).find((k) => isHero(k) && !flagOn(k, 'bleed'));
-  if (laterHero !== undefined) return { shape: 'hero-not-first', line: lineOf(laterHero) };
-  const wrapped = children(first)[0];
-  if (WRAPPERS.has(tag(first)) && !paints(first) && !isHero(first) && wrapped !== undefined && isHero(wrapped) && !flagOn(wrapped, 'bleed')) {
-    return { shape: 'hero-not-first', line: lineOf(wrapped) };
   }
   return null;
 }
@@ -1369,19 +1363,13 @@ export async function runTier0Checks(
 
   // ── An opening band that lost its edge (ggui#1977) ──
   // The card keeps one content edge in every fit; only a first-child `surface="hero"` band or a `bleed` element meets
-  // the card's edge. The prompt teaches both; this names the two shapes that miss it. A warn until an A/B reads it.
+  // the card's edge. The prompt teaches both; this names the painted opening band that misses it. A warn.
   const bandEdge = enforceDesignVocabulary ? detectBandEdgeLost(sourceCode) : null;
   if (bandEdge !== null) {
     issues.push({
       tier: 0, result: 'warn', category: 'layout', subcategory: `band-edge-lost:${bandEdge.shape}`, severity: 'major',
-      description:
-        bandEdge.shape === 'painted-band'
-          ? 'band-edge-lost: the band that opens the card paints its own ground, so it floats inside the card\'s inset with the card\'s corners around it'
-          : 'band-edge-lost: a surface="hero" band that is not the root\'s first child floats inside the card\'s inset',
-      fix:
-        bandEdge.shape === 'painted-band'
-          ? 'Make the opening band the kit\'s <Box surface="hero"> as the root\'s first child (it runs edge to edge in every fit), or declare `bleed` on it. Do not colour your own band.'
-          : 'Move the surface="hero" band to be the root\'s FIRST child (not wrapped in a Stack, not after other content), or declare `bleed` on it.',
+      description: 'band-edge-lost: the band that opens the card paints its own ground, so it floats inside the card\'s inset with the card\'s corners around it',
+      fix: 'Make the opening band the kit\'s <Box surface="hero"> as the root\'s first child (it runs edge to edge in every fit), or declare `bleed` on it. Do not colour your own band.',
       line: bandEdge.line,
     });
   }

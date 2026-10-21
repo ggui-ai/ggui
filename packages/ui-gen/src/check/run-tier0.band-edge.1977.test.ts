@@ -1,6 +1,6 @@
 // ggui#1977: an opening band that lost its edge. Only a first-child `surface="hero"` band or a `bleed` element meets the
-// card's edge in every fit (design's EXPANDED_FRAME_BLEEDS). The two shapes that miss it warn; the shapes that keep it,
-// and the legitimate look-alikes (a sunken panel opening a form, a hero tile in a grid), pass.
+// card's edge in every fit (design's EXPANDED_FRAME_BLEEDS). The painted opening band warns; the shapes that keep the
+// edge, and the look-alikes (a sunken panel opening a form, a hero tile in a grid or a wrapper), pass.
 import { describe, expect, it } from 'vitest';
 import { runTier0Checks } from './run-tier0.js';
 
@@ -22,11 +22,10 @@ describe('band-edge-lost (ggui#1977)', () => {
     expect(await band(wrap(`<Box><Box surface="accent">${HEADING}</Box><Text>Body</Text></Box>`))).toHaveLength(1);
     expect(await band(wrap(`<Box><Box tint="primary-100">${HEADING}</Box><Text>Body</Text></Box>`))).toHaveLength(1);
   });
-  it('warns on a hero band that is not the root\'s first child, second or wrapped in a Stack', async () => {
-    expect((await band(wrap(`<Box><Text>Intro</Text><Box surface="hero">${HEADING}</Box></Box>`)))[0]?.subcategory).toBe('band-edge-lost:hero-not-first');
-    expect((await band(wrap(`<Box><Stack gap="md"><Box surface="hero">${HEADING}</Box><Text>Body</Text></Stack></Box>`)))[0]?.subcategory).toBe(
-      'band-edge-lost:hero-not-first',
-    );
+  it('does NOT warn on a hero that is not the root\'s first child: on #1977\'s A/B every such hit was a hero tile, not a band', async () => {
+    // The A/B's shape, verbatim in kind: a hero card with its own radius and shadow inside a wrapper.
+    expect(await band(wrap(`<Box><Stack gap="md"><Card surface="hero" padding="xl" shadow="lg" radius="xl">${HEADING}</Card><Text>Body</Text></Stack></Box>`))).toHaveLength(0);
+    expect(await band(wrap(`<Box><Text>Intro</Text><Box surface="hero">${HEADING}</Box></Box>`))).toHaveLength(0);
   });
   it('passes the shapes that keep the edge: a first-child hero band, and a painted band that declares bleed', async () => {
     expect(await band(wrap(`<Box><Box surface="hero" padding="lg">${HEADING}</Box><Text>Body</Text></Box>`))).toHaveLength(0);
