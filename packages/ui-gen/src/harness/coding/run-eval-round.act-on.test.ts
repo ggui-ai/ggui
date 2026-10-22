@@ -221,3 +221,45 @@ describe("visualEvaluation.actOn — the visual leg’s majors may start a round
     }
   });
 });
+
+describe("a feedback round logs each tier-0 finding and whether it took a feedback slot (ggui#1981)", () => {
+  let logSpy: MockInstance<typeof console.log>;
+  const tier0Lines = (): string[] =>
+    logSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes(": tier0 "));
+  const t0 = (subcategory: string): EvalIssue => ({
+    tier: 0,
+    result: "warn",
+    category: "layout",
+    subcategory,
+    description: `${subcategory} finding`,
+    fix: "Fix it.",
+  });
+  beforeEach(() => {
+    mockRunCheck.mockReset();
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it("names every tier-0 warn on the round; the ones past the slot cap read delivered=false", async () => {
+    mockRunCheck.mockResolvedValue({ issues: [t0("band-edge-lost:hero-card-first"), t0("a"), t0("b"), t0("c")] });
+    const { ctx, input } = await buildCtx({ visualIssues: [], qualityMode: "auto-improve" });
+    const round = await runEvalRound(ctx, input);
+    expect(round.control).toBe("feedback");
+    expect(tier0Lines()).toEqual([
+      "[simple] eval round 1: tier0 warn band-edge-lost:hero-card-first delivered=true",
+      "[simple] eval round 1: tier0 warn a delivered=true",
+      "[simple] eval round 1: tier0 warn b delivered=true",
+      "[simple] eval round 1: tier0 warn c delivered=false",
+    ]);
+  });
+
+  it("logs nothing for a round with no tier-0 finding", async () => {
+    mockRunCheck.mockResolvedValue({ issues: [] });
+    const { ctx, input } = await buildCtx({ visualIssues: [], textIssues: [textVisualWarn], qualityMode: "auto-improve" });
+    const round = await runEvalRound(ctx, input);
+    expect(round.control).toBe("feedback");
+    expect(tier0Lines()).toEqual([]);
+  });
+});

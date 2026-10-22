@@ -1462,6 +1462,15 @@ export async function runEvalRound(
     console.log(
       `[simple] eval round ${evalRoundsUsed}: ${allActionable.length} issues (${blocking.length} fail, ${warns.length} warn) → feeding back to coding loop`,
     );
+    // ggui#1981 — one line per deterministic (tier-0) finding on a feedback round, and whether it took one of the
+    // MAX_FEEDBACK_ISSUES slots, so a bench read can count a warn that displaced a repair instead of inferring it.
+    for (const issue of evalResult.issues) {
+      if (issue.tier !== 0 || (issue.result !== "fail" && issue.result !== "warn")) continue;
+      console.log(
+        `[simple] eval round ${evalRoundsUsed}: tier0 ${issue.result} ${issue.subcategory ?? issue.category} ` +
+          `delivered=${allActionable.includes(issue)}`,
+      );
+    }
     // ggui#1542 — WHY this round continued, for a caller that set `actOn`: the manipulation check of an experiment on
     // the setting reads this line. `visual majors acted` counts the judge's majors only (fit's are never acted on).
     if (visualEvaluation?.actOn !== undefined) {
