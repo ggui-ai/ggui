@@ -116,6 +116,12 @@ overrides:
   # a ^6-range lands ≥6.4.3 (verified in both lockfiles at retirement).
   # If a transitive context ever entrenches <6.4.3 again, prefer
   # peerDependencyRules or an exact-version selector over a range floor.
+  # GHSA-587h-7wmj-h5pm (vite 8.2.0–8.2.3, launch-editor; #1994): astro
+  # 7.3's own `vite: ^8.0.13` dependency entrenched 8.2.0, which no
+  # in-range update reaches. Parent-scoped, so it rewrites ONLY astro's
+  # spec and never vitest's peer (the retired-floor lesson above); the
+  # bounded selector goes dormant once astro's range starts at 8.2.4.
+  "astro>vite@<8.2.4": ^8.3.5
   # esbuild: no workspace-wide pin (#758) — mirrors the root yaml; the two
   # prior floors (<0.25.0 → ^0.25.0; >=0.27.3 <0.28.1 → ^0.28.1) were dormant
   # (one 0.25.12 arm existed) and are retired.
@@ -399,20 +405,21 @@ overrides:
   "@playwright/test": 1.62.1
   "@protobufjs/utf8": 1.1.2
   "@puppeteer/browsers": 3.2.0
-  "@rolldown/binding-android-arm64": 1.2.6
-  "@rolldown/binding-darwin-arm64": 1.2.6
-  "@rolldown/binding-darwin-x64": 1.2.6
-  "@rolldown/binding-freebsd-x64": 1.2.6
-  "@rolldown/binding-linux-arm-gnueabihf": 1.2.6
-  "@rolldown/binding-linux-arm64-gnu": 1.2.6
-  "@rolldown/binding-linux-arm64-musl": 1.2.6
-  "@rolldown/binding-linux-ppc64-gnu": 1.2.6
-  "@rolldown/binding-linux-s390x-gnu": 1.2.6
-  "@rolldown/binding-linux-x64-gnu": 1.2.6
-  "@rolldown/binding-linux-x64-musl": 1.2.6
-  "@rolldown/binding-openharmony-arm64": 1.2.6
-  "@rolldown/binding-win32-arm64-msvc": 1.2.6
-  "@rolldown/binding-win32-x64-msvc": 1.2.6
+  "@rolldown/binding-android-arm-eabi": 1.2.15
+  "@rolldown/binding-android-arm64": 1.2.15
+  "@rolldown/binding-darwin-arm64": 1.2.15
+  "@rolldown/binding-darwin-x64": 1.2.15
+  "@rolldown/binding-freebsd-x64": 1.2.15
+  "@rolldown/binding-linux-arm-gnueabihf": 1.2.15
+  "@rolldown/binding-linux-arm64-gnu": 1.2.15
+  "@rolldown/binding-linux-arm64-musl": 1.2.15
+  "@rolldown/binding-linux-ppc64-gnu": 1.2.15
+  "@rolldown/binding-linux-s390x-gnu": 1.2.15
+  "@rolldown/binding-linux-x64-gnu": 1.2.15
+  "@rolldown/binding-linux-x64-musl": 1.2.15
+  "@rolldown/binding-openharmony-arm64": 1.2.15
+  "@rolldown/binding-win32-arm64-msvc": 1.2.15
+  "@rolldown/binding-win32-x64-msvc": 1.2.15
   "@rolldown/pluginutils": 1.0.1
   "@rollup/pluginutils": 5.4.0
   "@rollup/rollup-android-arm-eabi": 4.62.4
@@ -557,7 +564,7 @@ overrides:
   react-docgen: 8.0.3
   recast: 0.23.19
   resend: 6.18.1
-  rolldown: 1.2.6
+  rolldown: 1.2.15
   rollup: 4.62.4
   "sharp@0.35.x": 0.35.5
   "shell-quote@^1": 1.12.0

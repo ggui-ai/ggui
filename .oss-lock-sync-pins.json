@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T13:40:07.439Z",
+  "generatedAt": "2026-10-22T20:07:14.073Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -119,6 +119,7 @@
     "@playwright/test",
     "@protobufjs/utf8",
     "@puppeteer/browsers",
+    "@rolldown/binding-android-arm-eabi",
     "@rolldown/binding-android-arm64",
     "@rolldown/binding-darwin-arm64",
     "@rolldown/binding-darwin-x64",
@@ -466,6 +467,7 @@
     "@playwright/test",
     "@protobufjs/utf8",
     "@puppeteer/browsers",
+    "@rolldown/binding-android-arm-eabi",
     "@rolldown/binding-android-arm64",
     "@rolldown/binding-darwin-arm64",
     "@rolldown/binding-darwin-x64",
