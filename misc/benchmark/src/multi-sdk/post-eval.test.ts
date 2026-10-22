@@ -318,12 +318,6 @@ describe('JUDGE_PANELS (#1798): runs use v5-panel; v4-panel stays as the bridge;
     }
   });
 
-  it('the opus-5 candidate seat is not a generator under test (the 2026-10-10 entry\'s stated intent)', () => {
-    const arms = new Set(getDefaultVariants().map((v) => v.modelId));
-    expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-opus-5'][0].model))).toBe(false);
-    expect(arms.has(resolveJudgeCostModelId(JUDGE_PANELS['cand-anthropic-haiku-5-5'][0].model))).toBe(true);
-  });
-
   it('the v5-panel Anthropic seat IS a generator under test (the claude-premium arm), which the page discloses', () => {
     const premium = getDefaultVariants().find((v) => v.id === 'claude-premium');
     expect(premium?.modelId).toBe(resolveJudgeCostModelId(JUDGE_PANELS['v5-panel'][0].model));

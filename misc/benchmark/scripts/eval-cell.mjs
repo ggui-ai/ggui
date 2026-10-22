@@ -51,6 +51,10 @@ const { resolve: resolvePath } = await import('node:path');
 const judgeK = parseJudgeKEnv({ JUDGE_K: process.env.JUDGE_K, JUDGE_K_CANVASES: process.env.JUDGE_K_CANVASES }, KNOWN_CANVASES);
 const JUDGE_CONFIG = {
   provider: 'claude',
+  // Deliberate bridge (ggui#1803): this visual judge stays on Claude Sonnet 5 while the model
+  // lineup moves to 5.5. Every bar read through it (the visual-eval experiments' pass bars, their
+  // recorded spreads, their stored judgements) was calibrated on this model, so moving it is a
+  // recalibration of those bars, decided with them, not a lineup swap.
   model: 'claude-sonnet-5',
   passThreshold: 60,
   judgeK: judgeK.k,

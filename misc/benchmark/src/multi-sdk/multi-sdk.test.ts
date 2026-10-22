@@ -20,7 +20,7 @@ import {
 import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost, resolveCostModelId } from './runner';
-import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants, getCandidateVariants, resolveRunVariants } from './variants';
+import { getDefaultVariants, getSpeedVariants, getCandidateVariants, resolveRunVariants } from './variants';
 import type { BenchmarkRunResult, PanelEvalResult, AestheticScores } from './types';
 import { AESTHETIC_PROMPT_VERSION_PANEL } from './post-eval';
 
@@ -553,15 +553,6 @@ describe('Benchmark Variants', () => {
       expect(['fast', 'balanced']).toContain(v.tier);
     }
   });
-
-  it('hybrid variants have draft and review models', () => {
-    const variants = getHybridVariants();
-    for (const v of variants) {
-      expect(v.hybrid).toBeDefined();
-      expect(v.hybrid!.draftModel).toBeTruthy();
-      expect(v.hybrid!.reviewModel).toBeTruthy();
-    }
-  });
 });
 
 // =============================================================================
@@ -782,37 +773,6 @@ describe('Adapter Registry', () => {
     expect(claudeRaw?.available).toBe(true);
   });
 });
-
-// =============================================================================
-// Raw vs SDK Variants
-// =============================================================================
-
-describe('Raw vs SDK Variants', () => {
-  it('generates 8 variants (4 providers x 2 modes)', () => {
-    const variants = getRawVsSdkVariants();
-    expect(variants).toHaveLength(8);
-
-    const ids = variants.map((v) => v.id);
-    expect(ids).toContain('claude-raw-balanced');
-    expect(ids).toContain('claude-sdk-balanced');
-    expect(ids).toContain('openai-raw-balanced');
-    expect(ids).toContain('openai-sdk-balanced');
-    expect(ids).toContain('google-raw-balanced');
-    expect(ids).toContain('google-sdk-balanced');
-    expect(ids).toContain('openrouter-raw-balanced');
-    expect(ids).toContain('openrouter-sdk-balanced');
-  });
-
-  it('each variant has the correct mode set', () => {
-    const variants = getRawVsSdkVariants();
-    for (const v of variants) {
-      expect(v.mode).toBeDefined();
-      expect(['raw', 'sdk']).toContain(v.mode);
-    }
-  });
-});
-
-
 
 describe('public arm openai-frontier (#973, founder ruling 2026-09-09: "Add astra as a public 11th benchmark arm")', () => {
   it('is in the default matrix as openai/gpt-6-astra with the premium tier label, mirroring claude-frontier', () => {

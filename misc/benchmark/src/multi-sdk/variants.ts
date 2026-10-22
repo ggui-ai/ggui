@@ -2,7 +2,6 @@
 
 import type { BenchmarkVariant } from './types';
 import { ADVANCED_GENERATOR_SLUG, DEFAULT_GENERATOR_SLUG } from './types';
-import type { AdapterMode, ProviderName } from '@ggui-ai/ui-gen/adapters/types';
 
 /**
  * Default benchmark variants: 9 combinations (3 SDKs x 3 tiers).
@@ -174,71 +173,6 @@ export function getSpeedVariants(): BenchmarkVariant[] {
       modelId: 'anthropic/claude-haiku-5-5',
     },
   ];
-}
-
-/**
- * Hybrid variants that use fast model for draft + premium for review.
- */
-export function getHybridVariants(): BenchmarkVariant[] {
-  return [
-    {
-      id: 'claude-hybrid-haiku-sonnet',
-      sdkName: 'claude',
-      tier: 'balanced',
-      hybrid: {
-        draftModel: 'anthropic/claude-haiku-5-5',
-        reviewModel: 'anthropic/claude-sonnet-5', // 2026-08-19: 4-6 → 5
-      },
-    },
-    {
-      id: 'openai-hybrid-codex-codex',
-      sdkName: 'openai',
-      tier: 'balanced',
-      hybrid: {
-        draftModel: 'openai/gpt-5.3-codex',
-        reviewModel: 'openai/gpt-5.3-codex',
-      },
-    },
-    {
-      id: 'google-hybrid-flash-pro',
-      sdkName: 'google',
-      tier: 'balanced',
-      hybrid: {
-        draftModel: 'gemini/gemini-3.5-flash', // 2026-08-19: 3-preview gone
-        reviewModel: 'gemini/gemini-3.1-pro-preview',
-      },
-    },
-  ];
-}
-
-/**
- * Raw vs SDK comparison variants.
- * Tests each provider with both raw API and agent SDK modes using the balanced tier.
- */
-export function getRawVsSdkVariants(): BenchmarkVariant[] {
-  const modes: AdapterMode[] = ['raw', 'sdk'];
-  const providers: Array<{
-    sdkName: ProviderName;
-    modelId: string;
-  }> = [
-    // 2026-08-19: claude legs moved sonnet-4-6 → sonnet-5 (current balanced).
-    // gpt-5.3-codex stays — still OpenAI's latest codex model (no 5.4/5.6
-    // codex exists as of 2026-08-19).
-    { sdkName: 'claude', modelId: 'anthropic/claude-sonnet-5' },
-    { sdkName: 'openai', modelId: 'openai/gpt-5.3-codex' },
-    { sdkName: 'google', modelId: 'gemini/gemini-3.1-pro-preview' },
-    { sdkName: 'openrouter', modelId: 'openrouter/anthropic/claude-sonnet-5' },
-  ];
-
-  return providers.flatMap(({ sdkName, modelId }) =>
-    modes.map((mode) => ({
-      id: `${sdkName}-${mode}-balanced`,
-      sdkName,
-      tier: 'balanced' as const,
-      modelId,
-      mode,
-    }))
-  );
 }
 
 /**
