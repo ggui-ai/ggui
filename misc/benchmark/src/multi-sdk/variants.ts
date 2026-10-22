@@ -1,7 +1,6 @@
 // oss/misc/benchmark/src/multi-sdk/variants.ts
 
 import type { BenchmarkVariant } from './types';
-import { ADVANCED_GENERATOR_SLUG, DEFAULT_GENERATOR_SLUG } from './types';
 
 /**
  * Default benchmark variants: 9 combinations (3 SDKs x 3 tiers).
@@ -171,42 +170,6 @@ export function getSpeedVariants(): BenchmarkVariant[] {
       sdkName: 'claude',
       tier: 'fast',
       modelId: 'anthropic/claude-haiku-5-5',
-    },
-  ];
-}
-
-/**
- * Multi-generator comparison variants. Pairs the two shipped
- * generator slugs on identical commits so a reader can see
- * `default-haiku vs advanced-opus` side-by-side on the same fixture.
- *
- *   - `gen-default-haiku` → {@link DEFAULT_GENERATOR_SLUG} (`ui-gen-default`)
- *     on the Claude `fast` tier (haiku). The default seed; no extra deps.
- *   - `gen-advanced-opus` → {@link ADVANCED_GENERATOR_SLUG} (`ui-gen-advanced`)
- *     on the Claude `balanced` tier (sonnet-default; the advanced loop
- *     re-uses the wrapped generator's identity for prompt routing).
- *     Requires Playwright in the bench env — the runner emits a clear
- *     log line + an error result when Playwright is missing.
- *
- * Use this with the `BENCHMARK_COMMITS` corpus (or a 1-2 commit
- * subset for fast iteration) to drive the comparison matrix in the
- * report. See `BenchmarkReport.byGenerator` for the report shape.
- */
-export function getGeneratorVariants(): BenchmarkVariant[] {
-  return [
-    {
-      id: 'gen-default-haiku',
-      sdkName: 'claude',
-      tier: 'fast',
-      modelId: 'anthropic/claude-haiku-5-5',
-      generator: DEFAULT_GENERATOR_SLUG,
-    },
-    {
-      id: 'gen-advanced-opus',
-      sdkName: 'claude',
-      tier: 'balanced',
-      modelId: 'anthropic/claude-sonnet-4-6',
-      generator: ADVANCED_GENERATOR_SLUG,
     },
   ];
 }

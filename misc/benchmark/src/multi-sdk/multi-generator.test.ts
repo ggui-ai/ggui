@@ -2,7 +2,6 @@
  * Multi-generator dimension tests (MVB-8).
  *
  * Narrow scope:
- *   1. `getGeneratorVariants` — returns the locked 2-variant preset.
  *   2. `resolveGeneratorSlug` — variant routing through the default
  *      + explicit slug paths.
  *   3. `BenchmarkRunner.runSingle` — generator dispatch for unknown
@@ -35,7 +34,6 @@ import {
   formatVarianceBlock,
   resolveGeneratorSlug,
 } from './runner';
-import { getGeneratorVariants } from './variants';
 import {
   PERSONALIZATION_COMMITS,
   BENCHMARK_COMMITS,
@@ -98,35 +96,6 @@ function mkEval(score: number): PanelEvalResult {
     evalTimeMs: 1000,
   };
 }
-
-// =============================================================================
-// 1. Variant presets
-// =============================================================================
-
-describe('getGeneratorVariants', () => {
-  it('returns exactly two variants comparing default vs advanced generators', () => {
-    const variants = getGeneratorVariants();
-    expect(variants).toHaveLength(2);
-    const ids = variants.map((v) => v.id);
-    expect(ids).toContain('gen-default-haiku');
-    expect(ids).toContain('gen-advanced-opus');
-  });
-
-  it('uses the locked generator slugs', () => {
-    const variants = getGeneratorVariants();
-    const slugs = variants.map((v) => v.generator);
-    expect(slugs).toContain(DEFAULT_GENERATOR_SLUG);
-    expect(slugs).toContain(ADVANCED_GENERATOR_SLUG);
-  });
-
-  it('default-haiku variant targets the fast Claude tier', () => {
-    const variant = getGeneratorVariants().find(
-      (v) => v.generator === DEFAULT_GENERATOR_SLUG,
-    );
-    expect(variant?.sdkName).toBe('claude');
-    expect(variant?.tier).toBe('fast');
-  });
-});
 
 // =============================================================================
 // 2. resolveGeneratorSlug
@@ -426,11 +395,17 @@ describe('PERSONALIZATION_COMMITS', () => {
 // 7. Integration — 2 commits × 2 generators = 4 cells
 // =============================================================================
 
+// A two-generator pair: the runner's generator routing, driven with the two shipped slugs.
+const GENERATOR_PAIR: BenchmarkVariant[] = [
+  { id: 'gen-default', sdkName: 'claude', tier: 'fast', modelId: 'anthropic/claude-haiku-5-5', generator: DEFAULT_GENERATOR_SLUG },
+  { id: 'gen-advanced', sdkName: 'claude', tier: 'balanced', modelId: 'anthropic/claude-sonnet-5-5', generator: ADVANCED_GENERATOR_SLUG },
+];
+
 describe('Multi-generator integration', () => {
   it('runs 2 generators × 2 commits = 4 cells; all produce results', async () => {
     const runner = new BenchmarkRunner();
     runner.registerAdapter(new MockAdapter({}));
-    const variants = getGeneratorVariants();
+    const variants = GENERATOR_PAIR;
     const commits = PERSONALIZATION_COMMITS;
     const report = await runner.run({ variants, commits });
 
@@ -453,7 +428,7 @@ describe('Multi-generator integration', () => {
   it('report.byGenerator has cells under both generator slugs after a multi-generator run', async () => {
     const runner = new BenchmarkRunner();
     runner.registerAdapter(new MockAdapter({}));
-    const variants = getGeneratorVariants();
+    const variants = GENERATOR_PAIR;
     const commits = PERSONALIZATION_COMMITS;
     const report = await runner.run({ variants, commits });
 
