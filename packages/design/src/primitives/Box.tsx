@@ -38,7 +38,7 @@ export function Box(props: WithTrait<BoxProps>) {
   const frame =
     markedSurface === undefined && bleed !== true
       ? undefined
-      : { ...(markedSurface !== undefined ? { surface: markedSurface } : {}), ...(bleed === true ? { bleed: true } : {}) };
+      : { ...(markedSurface !== undefined ? { surface: markedSurface } : {}), ...(bleed === true ? { bleed: true } : {}), box: true };
 
   // ggui#1765 — one horizontal inset per card. `padding` / `paddingY` set this box's VERTICAL rhythm; the inline
   // axis is the card's: a visible surface (a fill or a tint) insets its content by `--ggui-card-inset`, and an

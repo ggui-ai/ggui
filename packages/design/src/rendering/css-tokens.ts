@@ -354,8 +354,17 @@ export const EXPANDED_FRAME_INNER_RADIUS = `max(0px, calc(var(${EXPANDED_FRAME.o
  * that declares `bleed`, and a `surface="hero"` band that is the fill surface's FIRST child.
  * The second is inferred from position, not declared by the card, so a card served before
  * `bleed` existed keeps its opening hero band edge to edge.
+ *
+ * ggui#1981 — the band, the tile and the body. A first-child hero Box (`data-ggui-box`) is the opening band and keeps
+ * the inference (923 served cards rely on it, the #1981 corpus count). A hero Card (`data-ggui-card`) that is the
+ * root's ONLY child is the card's body, the whole card, and keeps it too. A hero Card first AMONG siblings is a tile
+ * (its own radius, shadow and border) and does not bleed; that case reads 0 served cards on dev, staging and prod,
+ * so this changes no served render. A Card that declares `bleed` still bleeds. The marks are positive on purpose:
+ * `:not([data-ggui-card])` selects the same Boxes but nests a negation inside the rules' own
+ * `:not(EXPANDED_FRAME_BLEEDS)`, which jsdom's selector engine cannot parse.
  */
-export const EXPANDED_FRAME_BLEEDS = '[data-ggui-bleed], [data-ggui-surface="hero"]:first-child';
+export const EXPANDED_FRAME_BLEEDS =
+  '[data-ggui-bleed], [data-ggui-box][data-ggui-surface="hero"]:first-child, [data-ggui-card][data-ggui-surface="hero"]:only-child';
 
 /**
  * The scrim a host stand-in paints under the expanded frame (ggui#1083 cut 1 → cut 3): the theme's

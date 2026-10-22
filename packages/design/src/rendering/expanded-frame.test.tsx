@@ -80,7 +80,9 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
   });
 
   it('a first-level surface takes the concentric radius; a bleeding element takes the inset back and squares off', () => {
-    expect(EXPANDED_FRAME_BLEEDS).toBe('[data-ggui-bleed], [data-ggui-surface="hero"]:first-child');
+    expect(EXPANDED_FRAME_BLEEDS).toBe(
+      '[data-ggui-bleed], [data-ggui-box][data-ggui-surface="hero"]:first-child, [data-ggui-card][data-ggui-surface="hero"]:only-child',
+    );
     expect(rule).toContain(
       `> [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     );
@@ -155,7 +157,7 @@ describe("what bleeds, on a card's real markup (the founder's pick (B))", () => 
     expect(kids.map(bleeds)).toEqual([true, false, false]);
   });
 
-  it('an opening Card on the hero surface bleeds too: the rule reads the surface, not the primitive', () => {
+  it('ggui#1981: a hero Card first AMONG siblings does NOT bleed: it is a tile, never the band the inference heals', () => {
     const kids = children(
       renderToStaticMarkup(
         <Box surface="default">
@@ -164,7 +166,38 @@ describe("what bleeds, on a card's real markup (the founder's pick (B))", () => 
         </Box>,
       ),
     );
-    expect(kids.map(bleeds)).toEqual([true, false]);
+    expect(kids.map(bleeds)).toEqual([false, false]);
+  });
+
+  it("ggui#1981: a hero Card that is the root's ONLY child is the card's body and keeps its bleed", () => {
+    const sole = (surface: 'hero' | 'elevated') =>
+      children(
+        renderToStaticMarkup(
+          <Box surface="default">
+            <Card surface={surface}>the whole card</Card>
+          </Box>,
+        ),
+      ).map(bleeds);
+    expect(sole('hero')).toEqual([true]);
+    // Any other surface on a sole-child Card keeps the inset.
+    expect(sole('elevated')).toEqual([false]);
+  });
+
+  it('ggui#1981: a Card among siblings bleeds only when it declares bleed; a Card carries data-ggui-card, a surface Box data-ggui-box', () => {
+    const kids = children(
+      renderToStaticMarkup(
+        <Box surface="default">
+          <Card surface="hero" bleed>
+            declared band
+          </Card>
+          <Card>tile</Card>
+          <Box surface="hero">later hero box</Box>
+        </Box>,
+      ),
+    );
+    expect(kids.map(bleeds)).toEqual([true, false, false]);
+    expect(kids.map((k) => k.hasAttribute('data-ggui-card'))).toEqual([true, true, false]);
+    expect(kids.map((k) => k.hasAttribute('data-ggui-box'))).toEqual([false, false, true]);
   });
 
   it('an opening band on any other surface keeps the inset unless it declares bleed', () => {

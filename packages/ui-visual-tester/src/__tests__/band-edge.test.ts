@@ -15,7 +15,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright-core';
-import { Box, Text } from '@ggui-ai/design/primitives';
+import { Box, Card, Text } from '@ggui-ai/design/primitives';
 import { composeThemeCss } from '@ggui-ai/design/rendering';
 
 const SCOPE = 'ggui-rcr-1';
@@ -48,6 +48,12 @@ const SHAPES = {
   heroSecond: card(body, h(Box, { surface: 'hero', padding: 'lg' }, heading)),
   /** Any other band that declares `bleed`, anywhere in the root. */
   bleedSecond: card(body, h(Box, { surface: 'sunken', padding: 'lg', bleed: true }, heading)),
+  /** ggui#1981 — a hero Card opening the card: a tile, never the band the inference heals. */
+  heroCardFirst: card(h(Card, { surface: 'hero', padding: 'lg' }, heading), body),
+  /** ggui#1981 — the same Card declaring `bleed`: it bleeds, because it said so. */
+  heroCardFirstBleed: card(h(Card, { surface: 'hero', padding: 'lg', bleed: true }, heading), body),
+  /** ggui#1981 — a hero Card that is the root's ONLY child: the card's body, the whole card. */
+  heroCardOnly: card(h(Card, { surface: 'hero', padding: 'lg' }, heading)),
 } as const;
 
 interface Edges {
@@ -109,6 +115,24 @@ describe('an opening band meets the card edge only as the kit band, first, or wi
     const { root, band } = await measure(page(SHAPES.painted, fit), vp);
     expect(band.left - root.left).toBeGreaterThan(0);
     expect(root.right - band.right).toBe(band.left - root.left);
+  });
+
+  it.each(CASES)('%s fit at %s: ggui#1981, a hero CARD first among siblings is a tile and keeps the inset on both sides', async (fit, _c, vp) => {
+    const { root, band } = await measure(page(SHAPES.heroCardFirst, fit), vp);
+    expect(band.left - root.left).toBeGreaterThan(0);
+    expect(root.right - band.right).toBe(band.left - root.left);
+  });
+
+  it.each(CASES)('%s fit at %s: ggui#1981, a first-child hero Card that declares bleed runs edge to edge', async (fit, _c, vp) => {
+    const { root, band } = await measure(page(SHAPES.heroCardFirstBleed, fit), vp);
+    expect(band.left - root.left).toBe(0);
+    expect(root.right - band.right).toBe(0);
+  });
+
+  it.each(CASES)("%s fit at %s: ggui#1981, a hero Card that is the root's only child is the card's body and runs edge to edge", async (fit, _c, vp) => {
+    const { root, band } = await measure(page(SHAPES.heroCardOnly, fit), vp);
+    expect(band.left - root.left).toBe(0);
+    expect(root.right - band.right).toBe(0);
   });
 
   it.each(CASES)('%s fit at %s: a surface="hero" band that is NOT the first child floats inside the inset too', async (fit, _c, vp) => {

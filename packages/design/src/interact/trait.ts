@@ -115,17 +115,27 @@ export type WithTrait<Own> =
 export interface FrameMarks {
   readonly surface?: string;
   readonly bleed?: boolean;
+  /**
+   * ggui#1981 — which primitive set the marks. A Box surface is the opening band the hero-first-child inference heals;
+   * a Card is a tile by construction, never the band. Both are positive marks so the bleed selector needs no negation.
+   */
+  readonly box?: boolean;
+  readonly card?: boolean;
 }
 
 /** `{ surface: 'hero', bleed: true }` → `data-ggui-surface="hero" data-ggui-bleed=""`. */
 function frameAttributes(frame: FrameMarks | undefined): {
   readonly 'data-ggui-surface'?: string;
   readonly 'data-ggui-bleed'?: '';
+  readonly 'data-ggui-box'?: '';
+  readonly 'data-ggui-card'?: '';
 } {
   if (frame === undefined) return {};
   return {
     ...(frame.surface !== undefined ? { 'data-ggui-surface': frame.surface } : {}),
     ...(frame.bleed === true ? { 'data-ggui-bleed': '' as const } : {}),
+    ...(frame.box === true ? { 'data-ggui-box': '' as const } : {}),
+    ...(frame.card === true ? { 'data-ggui-card': '' as const } : {}),
   };
 }
 

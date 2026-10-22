@@ -159,9 +159,8 @@ export interface CardProps extends BaseProps {
    * Span the expanded frame's inset edge to edge (ggui#1083). In a host's
    * fullscreen canvas the frame gives the root a 16 px content inset; a
    * `bleed` element (a full-width row the design means to touch the panel's
-   * edges) takes that inset back and meets the panel edge. A `surface="hero"`
-   * band that opens the card already does, without it. Ignored everywhere
-   * else, so it is safe on any card.
+   * edges) takes that inset back and meets the panel edge. Ignored
+   * everywhere else, so it is safe on any card.
    * @default false
    */
   bleed?: boolean;

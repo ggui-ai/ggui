@@ -49,9 +49,12 @@ export function Card(props: WithTrait<CardProps>) {
   } = props;
   // ggui#1083 — a painted Card is a surface; the fill rule reads the marks.
   // A tinted Card (ggui#1847) is a painted surface, marked with its step.
+  // ggui#1981 — a Card marks itself a Card: it is a tile, so the hero-first-child inference never bleeds it
+  // (it still bleeds when it declares `bleed`).
   const frame = {
     ...(tint !== undefined ? { surface: tint } : surface !== 'transparent' ? { surface: surface ?? 'default' } : {}),
     ...(bleed === true ? { bleed: true } : {}),
+    card: true,
   };
 
   // ggui#1765 — `padding` sets the card's VERTICAL rhythm; its inline inset is the card's own,
