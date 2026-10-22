@@ -65,6 +65,37 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-22',
+    text:
+      'Generator change (internal issue #1981): from the first run on a runner image built with ' +
+      'this change, the generation prompt stops describing a hero Card as the band that opens a ' +
+      'card and runs edge to edge. One sentence is deleted from the constrained prompt and one ' +
+      'from the component reference both prompts share; nothing is added. The runtime now bleeds ' +
+      'an opening hero Box, a hero Card that is a card\'s only child, or anything marked `bleed`, ' +
+      'to the card\'s edges; a hero Card among siblings stays inside the inset as a tile. The ' +
+      'deleted sentences taught the one shape the runtime does not bleed. The in-loop checker\'s ' +
+      'warning for a band that loses its edge also changes which shapes it names; in the A/B ' +
+      'below it appeared on none of the 63 feedback rounds (29 of them in the changed arm), so it ' +
+      'displaced no repair and added no turn. Before it landed we ran a same-session A/B against ' +
+      'the same build without the change: the three fast arms, the ten prompts, alternating ' +
+      'order, with bars registered before the first run. An earlier version of the change failed ' +
+      'its registered bar (generations needing six or more turns, 1 vs 3 against a limit of 2) ' +
+      'and did not land. For this version we changed how turns are judged, and we say so here: ' +
+      'instead of counting generations at six or more turns, which a no-change run fails about ' +
+      'one time in five, we compare the average number of turns per generation, paired by arm and ' +
+      'prompt, and keep the count as a guard. A no-change run fails that comparison about one ' +
+      'time in sixteen and needs a second round about one time in seven. The first round could ' +
+      'not resolve; as registered, a second round was run and read together with it. Turns ' +
+      'changed by -0.12 per generation (95% interval -0.85 to +0.57): no detectable rise at the ' +
+      'registered precision of 0.75 turns per generation. Contract failures, probe failures and ' +
+      'median turns passed in both rounds; the panel score moved +0.93 and +0.63, both within ' +
+      'noise (each 95% interval includes zero). One prompt sits at the guard\'s limit: on ' +
+      'google-fast, product-page needed six or more turns in two runs with the change (20 and 8 ' +
+      'turns) and at most four without. This measures cost, not the benefit: whether the band ' +
+      'meets the card\'s edges is checked on rendered cards outside this benchmark. The landed ' +
+      'commits equal the measured ones; only the surrounding context of a changelog line differs.',
+  },
+  {
     date: '2026-10-20',
     text:
       'Generator change (internal issue #1765): from the first run on a runner image built with ' +
