@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T08:58:26.351Z",
+  "generatedAt": "2026-10-22T13:40:07.439Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -169,7 +169,6 @@
     "@storybook/addon-docs",
     "@storybook/addon-links",
     "@storybook/builder-vite",
-    "@storybook/csf-plugin",
     "@storybook/icons",
     "@storybook/react",
     "@storybook/react-dom-shim",
@@ -517,7 +516,6 @@
     "@storybook/addon-docs",
     "@storybook/addon-links",
     "@storybook/builder-vite",
-    "@storybook/csf-plugin",
     "@storybook/icons",
     "@storybook/react",
     "@storybook/react-dom-shim",
