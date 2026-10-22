@@ -218,15 +218,17 @@ const MODEL_ROWS = defineModelRegistry({
   // Claude Opus 5.5 and Claude Sonnet 5.5 are priced at 0.05x the base input
   // price"; model-deprecations "claude-sonnet-5-5 | Active | N/A | Not sooner
   // than September 28, 2027"; models/sonnet-5-5/overview: released 2026-09-28,
-  // 1M context, dateless id. Not in the lineup: support ships so the default
-  // switch can be measured, the switch itself is a separate decision.
+  // 1M context, dateless id. On the lineup since ggui#1803 (founder ruling
+  // 2026-10-22, "swap in 5.5"): Claude Sonnet 5 goes legacy and leaves it — the
+  // ggui#1266 replace shape; it stays routable. The open-source default
+  // (Haiku 5.5) does not move.
   "anthropic/claude-sonnet-5-5": {
     id: "anthropic/claude-sonnet-5-5",
     provider: "anthropic",
     displayName: "Claude Sonnet 5.5",
     tier: "balanced",
     state: "active",
-    lineup: false,
+    lineup: true,
     retireNotBefore: "2027-09-28",
     costs: {
       inputPer1M: 2.0,
@@ -243,13 +245,15 @@ const MODEL_ROWS = defineModelRegistry({
   // the PERMANENT standard price — Anthropic's pricing docs state the
   // scheduled 2026-09-01 increase to $3/$15 will not occur (verified
   // platform.claude.com/docs/en/about-claude/pricing, 2026-08-19).
+  // Legacy since ggui#1803 (2026-10-22): Claude Sonnet 5.5 replaces it on the
+  // lineup; it stays routable, behind a picker's "see all models" door.
   "anthropic/claude-sonnet-5": {
     id: "anthropic/claude-sonnet-5",
     provider: "anthropic",
     displayName: "Claude Sonnet 5",
     tier: "balanced",
-    state: "active",
-    lineup: true,
+    state: "legacy",
+    lineup: false,
     retireNotBefore: "2027-06-30",
     costs: {
       inputPer1M: 2.0,

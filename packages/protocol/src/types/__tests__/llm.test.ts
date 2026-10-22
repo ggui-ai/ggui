@@ -63,7 +63,7 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
 });
 
 describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
-  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Gemini 3.5 Flash, Gemini 3.7 Flash — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)"; ggui#1889: the two rerouted Gemini ids)', () => {
+  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Sonnet 5, Gemini 3.5 Flash, Gemini 3.7 Flash — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1803: Sonnet 5.5 replaces Sonnet 5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)"; ggui#1889: the two rerouted Gemini ids)', () => {
     const legacy = ids().filter((id) => MODEL_REGISTRY[id].state === 'legacy');
     expect(legacy).toEqual([
       'anthropic/claude-fable-5',
@@ -73,6 +73,7 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
       'anthropic/claude-opus-4-8',
       'anthropic/claude-opus-5',
       'anthropic/claude-sonnet-4-6',
+      'anthropic/claude-sonnet-5',
       'gemini/gemini-3.5-flash',
       'gemini/gemini-3.7-flash',
     ]);
@@ -81,13 +82,13 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
     }
   });
 
-  it('the lineup is exactly Fable 5.1 · Haiku 5.5 · Opus 5.5 · Sonnet 5 · GPT-6 Luna, every member active, derived once (ggui#1266: the first OpenAI row on the front page; ggui#1743: Haiku 5.5 replaces Haiku 4.5)', () => {
+  it('the lineup is exactly Fable 5.1 · Haiku 5.5 · Opus 5.5 · Sonnet 5.5 · GPT-6 Luna, every member active, derived once (ggui#1266: the first OpenAI row on the front page; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1803: Sonnet 5.5 replaces Sonnet 5)', () => {
     const lineup = ids().filter((id) => MODEL_REGISTRY[id].lineup);
     expect(lineup).toEqual([
       'anthropic/claude-fable-5-1',
       'anthropic/claude-haiku-5-5',
       'anthropic/claude-opus-5-5',
-      'anthropic/claude-sonnet-5',
+      'anthropic/claude-sonnet-5-5',
       'openai/gpt-6-luna',
     ]);
     expect([...MODEL_LINEUP].sort()).toEqual(lineup);
@@ -100,6 +101,11 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
     // ggui#1743 — Haiku 4.5 the same way: legacy, routable, off the front page.
     expect(isLineupModel('anthropic/claude-haiku-4-5')).toBe(false);
     expect(MODEL_REGISTRY['anthropic/claude-haiku-4-5'].state).toBe('legacy');
+    // ggui#1803 — Sonnet 5 the same way: legacy, routable, off the front page; Sonnet 5.5 takes its slot.
+    expect(isLineupModel('anthropic/claude-sonnet-5')).toBe(false);
+    expect(MODEL_REGISTRY['anthropic/claude-sonnet-5'].state).toBe('legacy');
+    expect(isValidLlmRoute('anthropic', 'claude-sonnet-5')).toBe(true);
+    expect(isLineupModel('anthropic/claude-sonnet-5-5')).toBe(true);
     expect(isLineupModel('openai/gpt-5.4')).toBe(false);
   });
 
@@ -341,14 +347,14 @@ describe('MODEL_REGISTRY — the latest-generation rows (ggui#1743)', () => {
     });
   });
 
-  it('carries anthropic/claude-sonnet-5-5 exactly as quoted: 2 / 10, write 2.5, read 0.1 (0.05×), floor 2027-09-28, not lineup', () => {
+  it('carries anthropic/claude-sonnet-5-5 exactly as quoted: 2 / 10, write 2.5, read 0.1 (0.05×), floor 2027-09-28, on the lineup since ggui#1803', () => {
     expect(MODEL_REGISTRY['anthropic/claude-sonnet-5-5']).toEqual({
       id: 'anthropic/claude-sonnet-5-5',
       provider: 'anthropic',
       displayName: 'Claude Sonnet 5.5',
       tier: 'balanced',
       state: 'active',
-      lineup: false,
+      lineup: true,
       retireNotBefore: '2027-09-28',
       costs: { inputPer1M: 2.0, outputPer1M: 10.0, cacheWritePer1M: 2.5, cacheReadPer1M: 0.1 },
       maxTokens: 1000000,
@@ -397,7 +403,8 @@ describe('MODEL_REGISTRY — the latest-generation rows (ggui#1743)', () => {
       const ref = modelRefOfRoute(route);
       expect(ref).toBe(expectedRef);
       if (!isModelId(ref)) throw new Error(`${ref} is not a registry ModelId`);
-      expect(isLineupModel(ref)).toBe(ref === 'anthropic/claude-haiku-5-5');
+      // ggui#1743 put Haiku 5.5 on the lineup; ggui#1803 added Sonnet 5.5. The other two stay off it.
+      expect(isLineupModel(ref)).toBe(ref === 'anthropic/claude-haiku-5-5' || ref === 'anthropic/claude-sonnet-5-5');
     }
   });
 
@@ -408,16 +415,18 @@ describe('MODEL_REGISTRY — the latest-generation rows (ggui#1743)', () => {
    * one-sided 95 % lower bound of +0.88 against a −2.5 bar; ≥ 6-turn share 2/30
    * vs 2/30; contract-behaviour failures 2 vs 2; ≈ 0.18× the cost per
    * generation; the one loop it exposed fixed as #1790 and re-measured at
-   * 1/1/1 turns). Only the default and its lineup slot move: Sonnet 5.5,
-   * GPT-6.1 Sol and Gemini 3.8 Flash stay off the front page, unmeasured.
+   * 1/1/1 turns). Only the default and its lineup slot moved then: GPT-6.1
+   * Sol and Gemini 3.8 Flash stay off the front page, unmeasured; Sonnet 5.5
+   * joined it under ggui#1803 (founder ruling 2026-10-22, the ggui#1266
+   * replace shape: Sonnet 5 legacy, still routable).
    */
-  it('the measured switch: DEFAULT_MODEL is Haiku 5.5 on the lineup, Haiku 4.5 is legacy and off it, the other three new rows stay off it', () => {
+  it('the measured switch: DEFAULT_MODEL is Haiku 5.5 on the lineup, Haiku 4.5 is legacy and off it, GPT-6.1 Sol and Gemini 3.8 Flash stay off it, Sonnet 5.5 is on it since ggui#1803', () => {
     expect(DEFAULT_MODEL).toBe('anthropic/claude-haiku-5-5');
     expect(MODEL_LINEUP).toContain('anthropic/claude-haiku-5-5');
     expect(MODEL_LINEUP).not.toContain('anthropic/claude-haiku-4-5');
     expect(MODEL_REGISTRY['anthropic/claude-haiku-4-5'].state).toBe('legacy');
     expect(isValidLlmRoute('anthropic', 'claude-haiku-4-5-20251001')).toBe(true); // legacy, still routable
-    expect(MODEL_LINEUP).not.toContain('anthropic/claude-sonnet-5-5');
+    expect(MODEL_LINEUP).toContain('anthropic/claude-sonnet-5-5'); // ggui#1803
     expect(MODEL_LINEUP).not.toContain('openai/gpt-6.1-sol');
     expect(MODEL_LINEUP).not.toContain('gemini/gemini-3.8-flash');
   });
