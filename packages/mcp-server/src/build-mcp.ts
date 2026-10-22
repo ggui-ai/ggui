@@ -580,6 +580,25 @@ function claimedSessionField(
   };
 }
 
+/**
+ * Largest combined number of array elements and object members one
+ * `tools/call` may carry in its `arguments` (ggui#1993). The MCP SDK
+ * counts them before any schema runs and before the handler is reached;
+ * a call over the ceiling takes the invalid-input door it already has —
+ * `isError: true` with one text block naming the tool and the ceiling —
+ * and the handler never sees it. A call at or under it is unaffected.
+ *
+ * The number: the largest legitimate tool input in this repository's
+ * corpora is about a thousand elements (a benchmark render of a
+ * 41-element contract with 945 elements of props; conformance-kit cases
+ * stay under 120; a theme document is ~325), so ten thousand is an order
+ * of magnitude of headroom over anything the surface is asked to carry
+ * today. Strings do not count toward it, however long. It bounds the
+ * work a request can ask of schema validation; the request body limit
+ * bounds everything else, and lives with the transport.
+ */
+export const MAX_TOOL_INPUT_ELEMENTS = 10_000;
+
 export function buildMcpServer(
   info: ServerInfo,
   handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
@@ -590,13 +609,18 @@ export function buildMcpServer(
   // `instructions` is a ServerOptions field (the SECOND argument): the
   // SDK sends it in the `initialize` result. In the first argument (the
   // Implementation) it was dropped, and no host ever received it (ggui#1579).
+  // The element ceiling rides the same options object: every server this
+  // function builds carries it, on every mount (ggui#1993).
   const server = new McpServer(
     {
       name: info.name,
       version: info.version,
       ...(info.description ? { description: info.description } : {}),
     },
-    opts.instructions ? { instructions: opts.instructions } : undefined,
+    {
+      maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
+      ...(opts.instructions ? { instructions: opts.instructions } : {}),
+    },
   );
 
   // Content-addressed shell URI (stale-shell bust) — when MCP Apps

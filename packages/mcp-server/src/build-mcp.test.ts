@@ -34,7 +34,7 @@ import {
   type HandlerFailure,
   type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
-import { buildMcpServer } from './build-mcp.js';
+import { buildMcpServer, MAX_TOOL_INPUT_ELEMENTS } from './build-mcp.js';
 import type { Logger } from './logger.js';
 
 const silentLogger = {
@@ -1242,5 +1242,101 @@ describe('buildMcpServer — amend, update and render log their session (#1474)'
     expect(invoked[0]?.fields).toMatchObject({ tool: 'ggui_render', outcome: 'error' });
     expect(invoked[0]?.fields).not.toHaveProperty('sessionId');
     expect(invoked[0]?.fields).not.toHaveProperty('claimedSessionId');
+  });
+});
+
+/**
+ * `buildMcpServer` bounds how many array elements and object members one
+ * `tools/call` may carry (ggui#1993). The SDK counts them before any
+ * schema work or handler runs; a call over the ceiling takes the
+ * invalid-input door it already has — `isError: true` + one text block
+ * naming the tool and the ceiling — and the handler never sees it.
+ * Pinned here: the refusal shape, the control at exactly the ceiling (the
+ * handler runs), and the number itself, so a change to it is deliberate.
+ */
+describe('buildMcpServer — tool input element ceiling (ggui#1993)', () => {
+  const info = { name: 'test', version: '0.0.1' };
+
+  /**
+   * Mirrors the open shape of the protocol's blueprint validator: a string
+   * plus an unknown-shaped fixture. Counts how often it is reached.
+   */
+  function openInputHandler(ran: { count: number }): SharedHandler<ZodRawShape, ZodRawShape> {
+    return {
+      name: 'open_input',
+      description: 'accepts an open input and counts its calls',
+      inputSchema: { source: z.string(), fixtureProps: z.unknown().optional() },
+      outputSchema: { ok: z.boolean() },
+      async handler() {
+        ran.count += 1;
+        return { ok: true };
+      },
+    };
+  }
+
+  /**
+   * `source` and `fixtureProps` are two members of `arguments`; the
+   * array's items supply the rest, so the payload counts exactly `total`.
+   */
+  function argumentsWithElements(total: number): { source: string; fixtureProps: number[] } {
+    return { source: 'x', fixtureProps: new Array<number>(total - 2).fill(0) };
+  }
+
+  async function boot(ran: { count: number }): Promise<{ client: Client; close: () => Promise<void> }> {
+    const server = buildMcpServer(info, [openInputHandler(ran)], () => baseCtx, silentLogger);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'ceiling-test', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return {
+      client,
+      close: async () => {
+        await client.close();
+        await server.close();
+      },
+    };
+  }
+
+  it('pins the ceiling at ten thousand elements', () => {
+    expect(MAX_TOOL_INPUT_ELEMENTS).toBe(10_000);
+  });
+
+  it('refuses a call one element over the ceiling before the handler runs: isError + the ceiling named', async () => {
+    const ran = { count: 0 };
+    const { client, close } = await boot(ran);
+    try {
+      const result = await client.callTool({
+        name: 'open_input',
+        arguments: argumentsWithElements(MAX_TOOL_INPUT_ELEMENTS + 1),
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        {
+          type: 'text',
+          text: expect.stringContaining(
+            `Invalid arguments for tool open_input: arguments contain more than the maximum of ${MAX_TOOL_INPUT_ELEMENTS} elements`,
+          ),
+        },
+      ]);
+      expect(result.structuredContent).toBeUndefined();
+      expect(result._meta).toBeUndefined();
+      expect(ran.count).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+
+  it('a call at exactly the ceiling reaches the handler (control)', async () => {
+    const ran = { count: 0 };
+    const { client, close } = await boot(ran);
+    try {
+      const result = await client.callTool({
+        name: 'open_input',
+        arguments: argumentsWithElements(MAX_TOOL_INPUT_ELEMENTS),
+      });
+      expect(result.isError).toBeFalsy();
+      expect(ran.count).toBe(1);
+    } finally {
+      await close();
+    }
   });
 });
