@@ -17,7 +17,7 @@
  *                       (Authorization, Content-Type, Accept, Mcp-*), stops
  *                       startup with the variable named.
  *   MODEL               Override the default Claude model (default
- *                       `claude-sonnet-4-6` — see agent.ts)
+ *                       `claude-sonnet-5-5` — see agent.ts)
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely (use the SDK's
  *                       built-in default).

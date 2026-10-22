@@ -118,7 +118,7 @@ function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
 }
 
 export interface ClaudeAgentSdkAdapterOptions {
-  /** Default `claude-sonnet-4-6`. */
+  /** Default `claude-sonnet-5-5`. */
   readonly model?: string;
   /** Default `process.env.ANTHROPIC_API_KEY`. */
   readonly apiKey?: string;
@@ -162,7 +162,7 @@ export function createClaudeAgentSdkAdapter(
       'createClaudeAgentSdkAdapter: ANTHROPIC_API_KEY required (env var or apiKey option).',
     );
   }
-  const model = opts.model ?? 'claude-sonnet-4-6';
+  const model = opts.model ?? 'claude-sonnet-5-5';
   const maxTurns = opts.maxTurns ?? 50;
   const allowedToolsByServer = opts.allowedToolsByServer;
 
