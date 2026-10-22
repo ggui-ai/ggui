@@ -572,22 +572,30 @@ function detectComponentNeverReturns(
  * Also runs contract validation when contract are provided.
  */
 /**
- * ggui#1977: an opening band that lost its edge. Since ggui#1765 the card keeps one content edge in every fit, and only
- * two things take the inset back so their ground meets the card's edge: a `surface="hero"` band that is the root's
- * FIRST child, and an element that declares `bleed` (design's `EXPANDED_FRAME_BLEEDS`). Two shapes miss it and render
- * as a box floating inside the card (the #1385 hello on judge 4680f34). This names the one with a clean read:
- *   - `painted-band`: the root's first child paints its own ground (an inline `background`, a non-hero `surface`, a
- *     `tint`), carries a heading, holds no form field, and declares no `bleed`. It is a band the generator coloured
- *     itself.
- * The other shape, a `surface="hero"` band that is not the root's first child, is NOT checked: on #1977's A/B every
- * such hit (8 of 8) was a hero TILE, a hero card with its own radius and shadow inside a wrapper, which the prompt
- * teaches and which is not a band. A warn can reach an eval-fix turn's feedback, so a false one is a wrong nudge. It
- * returns only with a bound the served-corpus count supports (CDO's zero-false-hits bar).
- * Read from the returned JSX's root, never from a helper's. A `warn`, not a `fail`.
+ * ggui#1977 / #1981: an opening band that lost its edge. The card keeps one content edge in every fit; only a hero
+ * Box that is the root's FIRST child, a hero Card that is its ONLY child (the runtime's legacy inference) or a root
+ * child that declares `bleed` meets the card's edge (design's `EXPANDED_FRAME_BLEEDS`). The shapes that miss it (the
+ * #1981 corpus analyzer's version of `hero-not-first` read 14 of 14 true on dev + staging, by the CDO; the cases
+ * added since, and `hero-card-first`, are pinned by unit tests and were not counted on the corpus, which is compiled
+ * JS this source reader does not parse):
+ *   - `hero-not-first`: a band (a `surface="hero"` Box with no edge of its own: no `radius` but `none`, no style
+ *     radius, shadow or border; a Card is a tile, never a band) that is a root child but not the first and does not
+ *     declare `bleed`, OR the first child of a plain wrapper (a Stack, Box, Container or div that paints no ground
+ *     and is not a horizontal Stack) that opens the root, `bleed` or not: the runtime honours `bleed` on root
+ *     children only. It renders inside the inset, a box floating in the card.
+ *   - `hero-card-first` (#1981 c.6314477145): a `surface="hero"` Card without `bleed` that is the root's first child
+ *     AMONG siblings. A Card there is a tile and keeps the inset; if it is meant as the opening band, the band is a
+ *     Box. Never a sole child: a Card that is the root's only child is the card's body and keeps its bleed.
+ * A root that already opens on a band is left alone (a second band is not this shape). Conditional children are read
+ * where they render: `a && <El/>`, `a || <El/>` and every ternary branch. When the band renders conditionally, or
+ * every slot before it does, the warning says so. The component is `export default function`, or
+ * `export default C` naming a function or an arrow in the file. Read from the source, never from a helper's JSX.
+ * A `warn`, not a `fail`.
+ * Retired (#1981, the CDO's read): `painted-band`, 7 of 8 served hits were contained Cards (tiles), not bands.
  */
 function detectBandEdgeLost(
   sourceCode: string,
-): { readonly shape: 'painted-band'; readonly line: number } | null {
+): { readonly shape: 'hero-not-first' | 'hero-card-first'; readonly line: number; readonly conditional: boolean } | null {
   const sf = ts.createSourceFile('source.tsx', sourceCode, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TSX);
   type El = ts.JsxElement | ts.JsxSelfClosingElement;
   const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) ? unwrap(e.expression) : e);
@@ -611,32 +619,80 @@ function detectBandEdgeLost(
     if (a.initializer === undefined) return true;
     return !(ts.isJsxExpression(a.initializer) && a.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword);
   };
-  const children = (el: El): El[] => (ts.isJsxElement(el) ? el.children.filter(isEl) : []);
-  const descendants = (el: El): El[] => children(el).flatMap((c) => [c, ...descendants(c)]);
+  type Slot = { readonly alts: El[]; readonly conditional: boolean };
+  /**
+   * The elements a JSX child can render: itself, or every element branch of `a && <El/>`, `a || <El/>` and
+   * `a ? <El/> : <Other/>` (nested ternaries included).
+   */
+  const branches = (x: ts.Expression): El[] => {
+    const e = unwrap(x);
+    if (isEl(e)) return [e];
+    const guard = ts.isBinaryExpression(e) && (e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken || e.operatorToken.kind === ts.SyntaxKind.BarBarToken);
+    if (guard) return branches(e.right);
+    if (ts.isConditionalExpression(e)) return [...branches(e.whenTrue), ...branches(e.whenFalse)];
+    return [];
+  };
+  /** One rendered slot per JSX child; an expression child is conditional and lists the elements it may render. */
+  const slots = (el: El): Slot[] => {
+    if (!ts.isJsxElement(el)) return [];
+    const out: Slot[] = [];
+    for (const n of el.children) {
+      if (isEl(n)) out.push({ alts: [n], conditional: false });
+      else if (ts.isJsxExpression(n) && n.expression !== undefined) {
+        const alts = branches(n.expression);
+        if (alts.length > 0) out.push({ alts, conditional: true });
+      }
+    }
+    return out;
+  };
   const lineOf = (el: El): number => sf.getLineAndCharacterOfPosition(el.getStart(sf)).line + 1;
 
-  const isHero = (el: El): boolean => stringAttr(el, 'surface') === 'hero';
+  const styleKeys = (el: El): string[] => {
+    const style = attr(el, 'style')?.initializer;
+    if (style === undefined || !ts.isJsxExpression(style) || style.expression === undefined) return [];
+    const obj = unwrap(style.expression);
+    if (!ts.isObjectLiteralExpression(obj)) return [];
+    return obj.properties.filter(ts.isPropertyAssignment).map((pr) => pr.name.getText(sf).replace(/['"]/g, ''));
+  };
   const paints = (el: El): boolean => {
     const surface = stringAttr(el, 'surface');
-    if (surface !== undefined && surface !== 'hero' && surface !== 'transparent') return true;
+    if (surface !== undefined && surface !== 'transparent') return true;
     if (attr(el, 'tint') !== undefined) return true;
-    const style = attr(el, 'style')?.initializer;
-    if (style === undefined || !ts.isJsxExpression(style) || style.expression === undefined) return false;
-    const obj = unwrap(style.expression);
-    return (
-      ts.isObjectLiteralExpression(obj) &&
-      obj.properties.some((pr) => ts.isPropertyAssignment(pr) && /^(background|backgroundColor)$/.test(pr.name.getText(sf).replace(/['"]/g, '')))
-    );
+    return styleKeys(el).some((k) => k === 'background' || k === 'backgroundColor');
   };
-  const HEADING_SIZES = new Set(['xl', '2xl', '3xl', '4xl']);
-  const isHeading = (el: El): boolean =>
-    tag(el) === 'Heading' || /^h[1-3]$/.test(tag(el)) || (tag(el) === 'Text' && HEADING_SIZES.has(stringAttr(el, 'size') ?? ''));
-  const FORM_FIELDS = new Set(['Input', 'Select', 'TextArea', 'Checkbox', 'RadioGroup', 'Toggle', 'SearchField', 'input', 'select', 'textarea']);
+  /** A Box with an edge of its own is a tile: a `radius` other than `none`, or a style radius, shadow or border. */
+  const hasOwnEdge = (el: El): boolean => {
+    if (attr(el, 'radius') !== undefined && stringAttr(el, 'radius') !== 'none') return true;
+    return styleKeys(el).some((k) => k === 'borderRadius' || k === 'boxShadow' || /^border(Top|Bottom|Left|Right)?(Width|Style|Color)?$/.test(k));
+  };
+  /** A hero Box with no edge of its own: a band. A Card is a tile, never a band. */
+  const isHeroBand = (el: El): boolean => tag(el) === 'Box' && stringAttr(el, 'surface') === 'hero' && !hasOwnEdge(el);
+  const isHeroCard = (el: El): boolean => tag(el) === 'Card' && stringAttr(el, 'surface') === 'hero' && !flagOn(el, 'bleed');
+  /** A wrapper that only stacks its children: it paints nothing and does not lay them out side by side. */
+  const isPlainWrapper = (el: El): boolean =>
+    ['Stack', 'Box', 'Container', 'div'].includes(tag(el)) && !paints(el) && !(tag(el) === 'Stack' && stringAttr(el, 'direction') === 'horizontal');
 
-  // The default export's returned root element.
-  let component: ts.FunctionLikeDeclaration | undefined;
+  // The default export's component: `export default function`, or `export default C` naming a function or a
+  // `const C = (…) => …` in this file, or an inline arrow / function expression.
+  type Fn = ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression;
+  const byName = new Map<string, Fn>();
+  let component: Fn | undefined;
   for (const st of sf.statements) {
-    if (ts.isFunctionDeclaration(st) && st.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) component = st;
+    if (ts.isFunctionDeclaration(st)) {
+      if (st.name !== undefined) byName.set(st.name.text, st);
+      if (st.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) component = st;
+    } else if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) {
+        const init = d.initializer === undefined ? undefined : unwrap(d.initializer);
+        if (ts.isIdentifier(d.name) && init !== undefined && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) byName.set(d.name.text, init);
+      }
+    }
+  }
+  for (const st of sf.statements) {
+    if (component !== undefined || !ts.isExportAssignment(st) || st.isExportEquals === true) continue;
+    const e = unwrap(st.expression);
+    if (ts.isIdentifier(e)) component = byName.get(e.text);
+    else if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) component = e;
   }
   if (component?.body === undefined) return null;
   let root: El | undefined;
@@ -653,11 +709,29 @@ function detectBandEdgeLost(
   }
   if (root === undefined) return null;
 
-  const kids = children(root);
+  const kids = slots(root);
   const first = kids[0];
   if (first === undefined) return null;
-  if (!isHero(first) && !flagOn(first, 'bleed') && paints(first) && descendants(first).some(isHeading) && !descendants(first).some((d) => FORM_FIELDS.has(tag(d)))) {
-    return { shape: 'painted-band', line: lineOf(first) };
+  // A root that already opens on a band (always rendered) has its band; a second one is not this shape.
+  if (!first.conditional && first.alts.some(isHeroBand)) return null;
+  // A hero Card first AMONG siblings is a tile: it keeps the inset. Never a sole child (that Card is the card's body).
+  const heroCard = kids.length > 1 ? first.alts.find(isHeroCard) : undefined;
+  if (heroCard !== undefined) return { shape: 'hero-card-first', line: lineOf(heroCard), conditional: first.conditional };
+  // A band that is a later root child: the root's inset holds it unless it declares `bleed` (honoured on a root
+  // child). Conditional when it, or every slot before it, renders conditionally.
+  for (let i = 1; i < kids.length; i++) {
+    const k = kids[i]!;
+    const band = k.alts.find((a) => isHeroBand(a) && !flagOn(a, 'bleed'));
+    if (band !== undefined) {
+      return { shape: 'hero-not-first', line: lineOf(band), conditional: k.conditional || kids.slice(0, i).every((s) => s.conditional) };
+    }
+  }
+  // A band first inside a plain wrapper that opens the root: `bleed` is not honoured that deep, so it warns either way.
+  const opener = first.alts.find(isPlainWrapper);
+  const inner = opener === undefined ? undefined : slots(opener)[0];
+  const wrapped = inner?.alts.find(isHeroBand);
+  if (wrapped !== undefined && inner !== undefined) {
+    return { shape: 'hero-not-first', line: lineOf(wrapped), conditional: first.conditional || inner.conditional };
   }
   return null;
 }
@@ -1361,15 +1435,22 @@ export async function runTier0Checks(
     });
   }
 
-  // ── An opening band that lost its edge (ggui#1977) ──
-  // The card keeps one content edge in every fit; only a first-child `surface="hero"` band or a `bleed` element meets
-  // the card's edge. The prompt teaches both; this names the painted opening band that misses it. A warn.
+  // ── An opening band that lost its edge (ggui#1977 / #1981) ──
+  // Only a first-child hero Box, a sole-child hero Card or a root-child `bleed` element meets the card's edge. The
+  // prompt (FRAME_SIZING) teaches the band as a hero Box, the root's first child; this names a hero band placed
+  // anywhere else, and a hero Card opening the root among siblings. A warn.
   const bandEdge = enforceDesignVocabulary ? detectBandEdgeLost(sourceCode) : null;
   if (bandEdge !== null) {
     issues.push({
       tier: 0, result: 'warn', category: 'layout', subcategory: `band-edge-lost:${bandEdge.shape}`, severity: 'major',
-      description: 'band-edge-lost: the band that opens the card paints its own ground, so it floats inside the card\'s inset with the card\'s corners around it',
-      fix: 'Make the opening band the kit\'s <Box surface="hero"> as the root\'s first child (it runs edge to edge in every fit), or declare `bleed` on it. Do not colour your own band.',
+      description:
+        bandEdge.shape === 'hero-card-first'
+          ? `band-edge-lost: a surface="hero" Card opens the card among other children; a Card is a tile and keeps the card's inset (read from the source${bandEdge.conditional ? '; it renders conditionally' : ''})`
+          : `band-edge-lost: a surface="hero" band that is not the root's first child floats inside the card's inset (read from the source${bandEdge.conditional ? '; it, or everything before it, renders conditionally, and it was read where it renders' : ''})`,
+      fix:
+        bandEdge.shape === 'hero-card-first'
+          ? 'If this is the opening band, make it <Box surface="hero" bleed> (a Box, no radius, shadow or border of its own). A hero tile belongs among other tiles, in a grid or a row, not opening the card.'
+          : 'Make the opening band the root\'s FIRST child as <Box surface="hero" bleed> (not wrapped in a Stack, not after other content). A band is a Box with no radius, shadow or border of its own; a hero Card is a tile and stays where it is. Put a conditional notice after the band, not before it.',
       line: bandEdge.line,
     });
   }

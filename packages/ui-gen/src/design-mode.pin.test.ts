@@ -269,7 +269,7 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // inline `color`, `background` or `backgroundColor` on a kit control, token or literal; the variant carries the look.
 // constrained prompt 87aec111… → dfabd5b5…. The free prompt and both boilerplates are unchanged.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "e97c798e8b49bff71dcfec6963a4ec4e2319583eba40de11b698a60198e1ce12";
+  "713ada53dc83df8dccbbfab8781b1cf50129cc300fbff3e096b60ef1403a1f4c";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -337,7 +337,7 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (the component reference).
 // Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (no token named for the card inset).
 export const FREE_PROMPT_SHA256 =
-  "68e9fc371a67261063ad2b675a072ea03b14accd1cec2faf220a52e00c2d2074";
+  "f29ca97da14702906a22935d6d530398fe79c1f880b683d3c959e380f63c9405";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 // Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.
