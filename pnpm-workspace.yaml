@@ -487,7 +487,8 @@ overrides:
   bare-path: 3.1.1
   bare-stream: 2.13.3
   bare-url: 2.4.7
-  better-sqlite3: 12.11.1
+  "better-sqlite3@^12": 12.11.1
+  "better-sqlite3@^13": 13.0.3
   "brace-expansion@^1": 1.1.21
   "brace-expansion@^2": 2.1.7
   "brace-expansion@^5": 5.0.12
@@ -623,6 +624,14 @@ confirmModulesPurge: false
 allowBuilds:
   "@google/genai": false # ships prebuilt dist; its `prepare` script file is not in the published tarball (lockstep with root)
   better-sqlite3: true # native SQLite bindings
+  # false (#2014): 13.x is N-API and ships its binaries in the tarball
+  # (prebuilds/<platform>.node, loaded by lib/binding.js), with no install
+  # script and `"gypfile": false`. pnpm 11.2.2 still runs an implicit
+  # `node-gyp rebuild` on it, and the node-gyp hoisted here (8.4.1) cannot
+  # run on Python 3.12+ (no distutils), so the install fails. pnpm accepts
+  # only an exact version here: move it with every 13.x bump. 12.x keeps
+  # its prebuild-install script through the bare-name entry above.
+  "better-sqlite3@13.0.3": false # (lockstep with root)
   esbuild: true # native bundler binary
   onnxruntime-node: true # native ML runtime bindings
   protobufjs: true # codegen post-install
