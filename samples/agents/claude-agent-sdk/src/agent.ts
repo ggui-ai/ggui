@@ -271,6 +271,15 @@ async function* runOnce(args: {
       prompt: input.prompt,
       options: {
         model,
+        // Thinking is asked off through the SDK's typed option. The Claude
+        // Code this SDK version bundles picks the thinking SHAPE from a
+        // model list that ends at the 4.6 generation; for any later model it
+        // sends the legacy `thinking.type: enabled` + budget, which the 5.x
+        // API refuses (400 "use thinking.type.adaptive"). `disabled` is the
+        // one setting that version honours for every model. Lifting it is
+        // ggui#2008: a 0.3.x SDK, whose CLI knows 5.x but ships as a native
+        // binary with no `cli.js` — `resolveClaudeCliPath` goes with it.
+        thinking: { type: 'disabled' },
         mcpServers: sdkMcpServers,
         allowedTools,
         ...sessionOptions,
