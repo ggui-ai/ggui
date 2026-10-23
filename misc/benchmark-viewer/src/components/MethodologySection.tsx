@@ -67,6 +67,32 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-23',
     text:
+      'Contract re-check result (internal issues #1765 and #1981), the measurement the correction ' +
+      'below promised: we re-ran the contract check on the generations both A/Bs stored, with the ' +
+      'same check the nightly uses, on each stored source compiled again, and it ran on all 15 ' +
+      'action-prompt cells of every run. #1765 was decided by a replication with four runs per ' +
+      'side, registered with its outcomes set before it ran: 2 contract failures with the change ' +
+      'and 2 without, within the registered allowance. It was run because the round before it, on ' +
+      'the same builds, failed a different bar (turns); that round also reads 3 with the change ' +
+      'and 1 without here, outside the contract allowance. The original first round reads 2 and ' +
+      '2, and all of #1765\'s rounds together read 7 with the change and 5 without, at the edge ' +
+      'of the allowance. #1981\'s deciding A/B, its two rounds read together, reads 2 with the ' +
+      'change and 3 without, within the allowance; the earlier version of that change, which did ' +
+      'not land, reads 0 with the change and 1 without. Across every run here, the failures are 9 ' +
+      'in each arm, on the same two cells: a kanban board\'s task update and a chat\'s message ' +
+      'send that had no effect when clicked, plus one chat control that could not be reached. ' +
+      'These are prompts and kinds of failure the nightly also records. So the withdrawn ' +
+      'sentences\' counts were wrong, and their conclusion is replaced by a narrower one: both ' +
+      'A/Bs pass the registered contract bar, with 2 vs 2 and 2 vs 3 failures rather than 0 vs 0. ' +
+      'In simulation, a bar of this size catches a tripling of the failure rate about four times ' +
+      'in five and a doubling a little better than half the time, so passing it shows no large ' +
+      'rise in contract failures, not that the change is harmless. The check ran on the stored ' +
+      'generations after the fact, with its harness fixed before any result was read and checked ' +
+      'against a card known to pass and the same card with its action disabled, which it failed.',
+  },
+  {
+    date: '2026-10-23',
+    text:
       'Correction (internal issues #1765 and #1981): two entries below report a contract-check ' +
       'result that was not measured. The 2026-10-20 entry (#1765) says "Contract failures 0 vs ' +
       '0", and the 2026-10-22 entry (#1981) says contract failures "passed in both rounds". Two ' +
