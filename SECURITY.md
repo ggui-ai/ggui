@@ -4,13 +4,13 @@
 
 ggui is pre-1.0. Every `@ggui-ai/*` package is published together as one wave with one version, and security fixes ship in the **next wave of the current line** — there are no back-ported patch releases for earlier waves during 0.x.
 
-| Line                | Security fixes        | Notes                                                                                                                                                    |
-| ------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0.18.x` (current)  | ✅ next wave          | Install with `npm install @ggui-ai/cli@latest`.                                                                                                          |
-| `0.17.x` (previous) | ❌ upgrade to current | Still speaks the wire the current line accepts (N−1 compatibility), so upgrading is a version bump, not a migration.                                     |
-| `0.16.x` and older  | ❌ upgrade to current | Older lines keep working against the hosted service only inside the dated windows in `docs/protocol/SERVICE-COMPAT-POLICY.md` §4; they receive no fixes. |
+| Line                   | Security fixes        | Notes                                                                                                                |
+| ---------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Current `0.MINOR`      | ✅ next wave          | The line `npm view @ggui-ai/cli version` reports. Install it with `npm install @ggui-ai/cli@latest`.                 |
+| The previous `0.MINOR` | ❌ upgrade to current | Still speaks the wire the current line accepts (N−1 compatibility), so upgrading is a version bump, not a migration. |
+| Older lines            | ❌ upgrade to current | They receive no fixes.                                                                                               |
 
-The wire schema is a draft (`draft-2026-09-10`); a fix that has to change the wire follows `docs/protocol/VERSION-POLICY.md` like any other change. Once `1.0.0` ships this table gains a support window for older majors.
+The wire schema is still a draft: its version is `PROTOCOL_VERSION` in `@ggui-ai/protocol`. A fix that has to change the wire follows the [version policy](https://docs.ggui.ai/protocol/version-policy/) like any other change. Once `1.0.0` ships, this table gains a support window for older majors.
 
 ## Reporting a Vulnerability
 
@@ -22,7 +22,7 @@ Please include:
 
 - A description of the vulnerability and its potential impact
 - Steps to reproduce, or a minimal proof of concept
-- The affected package and version (e.g. `@ggui-ai/mcp-server@0.18.0`)
+- The affected package and version (`npm ls @ggui-ai/mcp-server` prints it, for example)
 - Any suggested mitigation
 
 ## Response Timeline
