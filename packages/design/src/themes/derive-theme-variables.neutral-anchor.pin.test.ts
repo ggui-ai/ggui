@@ -83,8 +83,11 @@ describe('ggui#1495 — a near-neutral anchor takes the host\'s temperature', ()
     // Re-recorded 2026-10-13 for ggui#1848 (unstated state container pairs sit on the container's side): nine
     // entries, marked, move, and in each only `{success,warning,info}Container` and their `on…Container` inks
     // moved (neon-noir light: the three inks only, which read 1.7:1 before). Every other key is byte-identical.
+    // Re-recorded 2026-10-23 for ggui#1998 (the built-in ggui theme authors its light hero pair, the brand's dark pair):
+    // ONE entry, marked, moves, and in it only `heroGround`, `onHeroGround`, `heroLink` and `heroOutline` moved
+    // (#ebe9e1 / #292929 / #1f1f1f / #7e7d7a → #292929 / #f4f3ed / #d9d9d9 / #7a7a77). Every other key is byte-identical.
     const BEFORE: Readonly<Record<string, string>> = {
-      'ggui/light': '61d4bf60aa9b21ad',
+      'ggui/light': '94878f6fed63d3d3' /* ggui#1998 */,
       'ggui/dark': '22562b54e1e6e3f5' /* ggui#1848 */,
       'indigo/light': 'd1dec01a72b2cecb',
       'indigo/dark': 'a91fab621fdc7529' /* ggui#1848 */,

@@ -143,6 +143,14 @@ export interface DtcgTheme {
     tertiaryContainer?: DtcgToken;
     /** Text / icon color rendered ON a tertiaryContainer surface. */
     onTertiaryContainer?: DtcgToken;
+    /**
+     * ggui#1998 — the hero band's ground (`surface="hero"`), when the theme authors it. Only a PAIR is kept: with
+     * {@link onHeroGround} it replaces the derived ground; alone it is ignored and the pair is derived (light host:
+     * the primary container pair; dark host: the ink pair).
+     */
+    heroGround?: DtcgToken;
+    /** ggui#1998 — the text / icon color ON an authored {@link heroGround}; kept only with it. */
+    onHeroGround?: DtcgToken;
   };
 
   font: {

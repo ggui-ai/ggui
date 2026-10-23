@@ -229,6 +229,10 @@ const gguiLight: DtcgTheme = {
     onPrimary: { $value: '#f4f3ed', $type: 'color' }, // paper
     primaryContainer: { $value: '#ebe9e1', $type: 'color' }, // paper-2
     onPrimaryContainer: { $value: '#292929', $type: 'color' }, // ink
+    // ggui#1998 — the hero band on a light host is the brand's dark pair: ink ground, paper heading (the CDO's
+    // pick, c.6357369453). Authored as a pair, so the derivation keeps it; a dark host keeps the derived ink pair.
+    heroGround: { $value: '#292929', $type: 'color' }, // ink
+    onHeroGround: { $value: '#f4f3ed', $type: 'color' }, // paper
     // Error role pair — onError is paper for high contrast on signal-red.
     onError: { $value: '#f4f3ed', $type: 'color' },
     errorContainer: { $value: '#fbe7e3', $type: 'color' }, // error-50

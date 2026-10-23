@@ -16,10 +16,13 @@
  *
  *   - `elevated` is never authored: light = `container`; dark =
  *     `container` mixed 8% toward `onContainer`; `onElevated` = `onContainer`.
- *   - `heroGround` / `onHeroGround` are never authored (ggui#1031 L2): on a
- *     light host the primary container pair (a brand-tinted ground the page
- *     keeps its paper around); on a dark host the ink pair (`onContainer` /
- *     `container`) — the hello's ground follows the host's darkness by
+ *   - `heroGround` / `onHeroGround` are derived unless the theme authors the
+ *     pair (ggui#1031 L2, ggui#1998): a theme that states BOTH keeps them, as
+ *     the built-in `ggui` theme does on a light host (its ink band); a theme
+ *     that states neither, or only one, gets the derived pair — on a light
+ *     host the primary container pair (a brand-tinted ground the page keeps
+ *     its paper around); on a dark host the ink pair (`onContainer` /
+ *     `container`), so the hello's ground follows the host's darkness by
  *     construction, and `inverted` stays what it says.
  *   - the neutral ramp interpolates `ground → onGround` at fixed stops;
  *     `outline` / `outlineVariant` are its 300 / 200 stops.
@@ -692,10 +695,15 @@ export function deriveThemeVariables(doc: DtcgTheme, mode: ThemeMode, options: D
   // else the container's ink. `primary-600` alone read 2.55:1 on the brand
   // theme's light container and every anchor with it.
   V['--ggui-color-link'] = single('link') ?? readableAccent(V, container, onContainer);
-  // The hero ground pair (ggui#1031 L2) — derived, never authored: light host →
-  // the primary container pair; dark host → the ink pair (as `inverted`).
-  V['--ggui-color-heroGround'] = mode === 'light' ? V['--ggui-color-primaryContainer']! : onContainer;
-  V['--ggui-color-onHeroGround'] = mode === 'light' ? V['--ggui-color-onPrimaryContainer']! : container;
+  // The hero ground pair (ggui#1031 L2, ggui#1998) — derived unless the theme authors the PAIR: a theme that
+  // states both keeps them; one that states neither or only one gets the derived pair, so a ground and its ink
+  // always come from one source. Derived: light host → the primary container pair; dark host → the ink pair
+  // (as `inverted`). `heroLink` / `heroOutline` below are walked against whichever pair this is.
+  const authoredHero = single('heroGround');
+  const authoredOnHero = single('onHeroGround');
+  const heroAuthored = authoredHero !== undefined && authoredOnHero !== undefined;
+  V['--ggui-color-heroGround'] = heroAuthored ? authoredHero : mode === 'light' ? V['--ggui-color-primaryContainer']! : onContainer;
+  V['--ggui-color-onHeroGround'] = heroAuthored ? authoredOnHero : mode === 'light' ? V['--ggui-color-onPrimaryContainer']! : container;
   // Accent text on a swapped ground (ggui#1043): `link` is walked against the
   // container; a hero card and an inverted card paint other grounds, so each
   // carries an accent walked against ITS ground — the scopes remap `link` to it.

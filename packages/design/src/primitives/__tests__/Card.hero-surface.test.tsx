@@ -41,14 +41,35 @@ describe('surface="hero" (ggui#1031 L2)', () => {
     }
     expect(renderToStaticMarkup(<Card surface="inverted">x</Card>)).toContain(`<style>${INVERTED_SCOPE_CSS}</style>`);
   });
+  it('ggui#1998 — the built-in ggui theme on a light host: the brand\'s dark pair (ink ground, paper heading); dark keeps the derived ink pair', () => {
+    const light = deriveThemeVariables(getRawTheme('ggui', 'light')!, 'light');
+    expect([light['--ggui-color-heroGround'], light['--ggui-color-onHeroGround'], light['--ggui-color-heroLink'], light['--ggui-color-heroOutline']]).toEqual(['#292929', '#f4f3ed', '#d9d9d9', '#7a7a77']);
+    const dark = deriveThemeVariables(getRawTheme('ggui', 'dark')!, 'dark');
+    expect(dark['--ggui-color-heroGround']).toBe(dark['--ggui-color-onContainer']);
+  });
+
+  it('ggui#1998 — only a PAIR is kept: a theme that authors heroGround alone gets the derived pair', () => {
+    const raw = getRawTheme('indigo', 'light')!;
+    const half = { ...raw, color: { ...raw.color, heroGround: { $value: '#000000', $type: 'color' as const } } };
+    const v = deriveThemeVariables(half, 'light');
+    expect(v['--ggui-color-heroGround']).toBe(v['--ggui-color-primaryContainer']);
+  });
+
   for (const id of getThemeIds()) {
     for (const mode of ['light', 'dark'] as const) {
-      it(`${id} ${mode}: the derived hero pair reads at ≥ 4.5:1 and follows the host's darkness`, () => {
-        const v = deriveThemeVariables(getRawTheme(id, mode)!, mode);
+      it(`${id} ${mode}: the hero pair reads at ≥ 4.5:1 — the theme's own authored pair, else derived from the host's darkness`, () => {
+        const raw = getRawTheme(id, mode)!;
+        const v = deriveThemeVariables(raw, mode);
         const bg = v['--ggui-color-heroGround']!;
         const ink = v['--ggui-color-onHeroGround']!;
         expect(contrastRatio(ink, bg)).toBeGreaterThanOrEqual(4.5);
-        if (mode === 'light') expect(bg).toBe(v['--ggui-color-primaryContainer']);
+        // ggui#1998 — a theme that authors BOTH keeps them; otherwise the derivation decides.
+        const authored = raw.color.heroGround?.$value;
+        const authoredInk = raw.color.onHeroGround?.$value;
+        if (authored !== undefined && authoredInk !== undefined) {
+          expect(bg).toBe(authored);
+          expect(ink).toBe(authoredInk);
+        } else if (mode === 'light') expect(bg).toBe(v['--ggui-color-primaryContainer']);
         else expect(bg).toBe(v['--ggui-color-onContainer']);
       });
     }
