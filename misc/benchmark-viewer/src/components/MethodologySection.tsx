@@ -80,7 +80,8 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'contract check on the generations both A/Bs stored, and will add the result here, dated. ' +
       'The nightly runs behind this page\'s tables run the check in every run (55 of 55 ' +
       'action-prompt cells on each published night from 2026-10-13 to 2026-10-18) and are not ' +
-      'affected.',
+      'affected; no nightly has run since 2026-10-18, so none has yet measured the changes those ' +
+      'two entries describe, and the re-run above will be the first measurement.',
   },
   {
     date: '2026-10-22',
