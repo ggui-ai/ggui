@@ -65,6 +65,24 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-23',
+    text:
+      'Correction (internal issues #1765 and #1981): two entries below report a contract-check ' +
+      'result that was not measured. The 2026-10-20 entry (#1765) says "Contract failures 0 vs ' +
+      '0", and the 2026-10-22 entry (#1981) says contract failures "passed in both rounds". Two ' +
+      'faults combined. The A/Bs ran on a local runner that did not enable the browser the ' +
+      'contract check needs, so on the five prompts whose contracts declare an action the check ' +
+      'was skipped in every run. And our reading counted a skipped check as a failure on both ' +
+      'sides, so it compared skips with skips and reported a pass, and its coverage line counted ' +
+      'results present, not checks run. Those two sentences say nothing about contract behaviour; ' +
+      'read them as withdrawn. The other results in both entries (turns, probe failures, median ' +
+      'turns and the panel score) do not depend on that check and stand. We are re-running the ' +
+      'contract check on the generations both A/Bs stored, and will add the result here, dated. ' +
+      'The nightly runs behind this page\'s tables run the check in every run (55 of 55 ' +
+      'action-prompt cells on each published night from 2026-10-13 to 2026-10-18) and are not ' +
+      'affected.',
+  },
+  {
     date: '2026-10-22',
     text:
       'Generator change (internal issue #1981): from the first run on a runner image built with ' +
