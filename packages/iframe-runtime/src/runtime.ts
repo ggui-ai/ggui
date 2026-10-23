@@ -2250,7 +2250,7 @@ type PreBootToolResult =
   | { readonly kind: 'meta'; readonly boot: BootMeta }
   | { readonly kind: 'locator'; readonly locator: string };
 
-function awaitToolResultMeta(
+export function awaitToolResultMeta(
   timeoutMs: number,
 ): Promise<PreBootToolResult | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
@@ -2264,6 +2264,12 @@ function awaitToolResultMeta(
       resolve(value);
     };
     const onMessage = (ev: MessageEvent) => {
+      // MUST act only on the embedding window (ggui#2015). Any frame on
+      // the page can reach this one and post into it, and before the
+      // handshake nothing else binds a tool-result to the host; a
+      // stranger's message is dropped without reply and without
+      // touching the bound, exactly as the App's transport drops it.
+      if (ev.source !== window.parent) return;
       const m = ev.data as
         | { jsonrpc?: string; method?: string; params?: unknown }
         | null

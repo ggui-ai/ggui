@@ -383,7 +383,10 @@ function readMetaFromCallToolResult(params){
   return meta;
 }
 window.addEventListener('message',function(ev){
-  var m=ev&&ev.data;
+  // Only the embedding window speaks for the host: a reply or a
+  // tool-result from any other frame is dropped, unanswered.
+  if(!ev||ev.source!==window.parent)return;
+  var m=ev.data;
   if(!m||m.jsonrpc!=='2.0')return;
   if(m.id!=null&&pending[m.id]){
     var p=pending[m.id];delete pending[m.id];
@@ -618,7 +621,9 @@ const GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY = `
 (function(){'use strict';
 var buf=window.__GGUI_PENDING_TOOL_RESULTS__=window.__GGUI_PENDING_TOOL_RESULTS__||[];
 window.addEventListener('message',function(ev){
-  var m=ev&&ev.data;
+  // Only the embedding window's tool-results are buffered.
+  if(!ev||ev.source!==window.parent)return;
+  var m=ev.data;
   if(!m||m.jsonrpc!=='2.0'||m.method!=='ui/notifications/tool-result')return;
   buf.push(m.params);
   if(buf.length>8)buf.splice(0,buf.length-8);

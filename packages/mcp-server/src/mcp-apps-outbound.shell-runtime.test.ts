@@ -15,7 +15,7 @@ import vm from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCP_APP_BOOTSTRAP_FAILED_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { runtimeBundlePlainTwin } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { GGUI_RENDER_SHELL_HTML } from './mcp-apps-outbound.js';
+import { GGUI_RENDER_SHELL_HTML, buildInlineRenderShellHtml } from './mcp-apps-outbound.js';
 import { RUNTIME_BUNDLE_PLAIN_NAME } from './runtime-bundle-hash.js';
 
 interface Posted {
@@ -55,7 +55,7 @@ function bootShell() {
   // file's first run). Refuse to run on it.
   expect(MCP_APP_BOOTSTRAP_FAILED_TYPE, 'the failure message type is defined').toBe('ggui:bootstrap-failed');
   const posted: Posted[] = [];
-  const listeners: Array<(ev: { data: object }) => void> = [];
+  const listeners: Array<(ev: { data: object; source: unknown }) => void> = [];
   const root = fakeElement();
   const appended: FakeElement[] = [];
   const doc = {
@@ -66,10 +66,12 @@ function bootShell() {
   };
   const win = {
     parent: { postMessage: (msg: Posted) => posted.push(msg) },
-    addEventListener: (type: string, fn: (ev: { data: object }) => void) => {
+    addEventListener: (type: string, fn: (ev: { data: object; source: unknown }) => void) => {
       if (type === 'message') listeners.push(fn);
     },
   };
+  // Another frame on the same page: it can post into this one, and it is not the parent.
+  const stranger = { postMessage: (): void => {} };
   const context = vm.createContext({
     window: win,
     document: doc,
@@ -83,10 +85,35 @@ function bootShell() {
     console,
   });
   vm.runInContext(shellScript(), context);
-  const deliver = (data: object): void => listeners.forEach((fn) => fn({ data }));
+  const deliver = (data: object, source: unknown = win.parent): void => listeners.forEach((fn) => fn({ data, source }));
   const rpc = (method: string): Posted | undefined => posted.find((p) => p.method === method && p.id !== undefined);
   const failures = (): Posted[] => posted.filter((p) => p.type === MCP_APP_BOOTSTRAP_FAILED_TYPE);
-  return { posted, root, appended, deliver, rpc, failures };
+  return { posted, root, appended, deliver, rpc, failures, stranger };
+}
+
+/**
+ * The inline-runtime shell's buffer script, executed the same way: the first
+ * plain `<script>` of the served document (the runtime's own tag is `type="module"`).
+ */
+function bootInlineBuffer() {
+  const m = buildInlineRenderShellHtml('').match(/<script>([\s\S]*?)<\/script>/);
+  if (m === null || m[1] === undefined) throw new Error('the inline shell has no buffer <script>');
+  const posted: Posted[] = [];
+  const listeners: Array<(ev: { data: object; source: unknown }) => void> = [];
+  const win: {
+    parent: { postMessage: (msg: Posted) => number };
+    addEventListener: (type: string, fn: (ev: { data: object; source: unknown }) => void) => void;
+    __GGUI_PENDING_TOOL_RESULTS__?: unknown[];
+  } = {
+    parent: { postMessage: (msg: Posted) => posted.push(msg) },
+    addEventListener: (type, fn) => {
+      if (type === 'message') listeners.push(fn);
+    },
+  };
+  const stranger = { postMessage: (): void => {} };
+  vm.runInContext(m[1], vm.createContext({ window: win }));
+  const deliver = (data: object, source: unknown = win.parent): void => listeners.forEach((fn) => fn({ data, source }));
+  return { win, posted, deliver, stranger };
 }
 
 /** Answer the shell's `ui/initialize` so it moves on to waiting for the tool result. */
@@ -253,3 +280,77 @@ describe("the thin shell's in-frame twin is the protocol's (ggui#1501)", () => {
   });
 });
 
+const RUNTIME_URL = 'https://example.test/rt.js';
+const SLICE_RESULT = { jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { _meta: { 'ai.ggui/render': { runtimeUrl: RUNTIME_URL } } } };
+/** The per-render resource document the door returns: the envelope on one line, as `gguiShellHtml` writes it. */
+const RESOURCE_DOC = { contents: [{ text: `<script>globalThis.__GGUI_META__ = ${JSON.stringify({ 'ai.ggui/render': { runtimeUrl: RUNTIME_URL } })};</script>` }] };
+
+describe('the thin shell acts on messages from its embedding window only (ggui#2015)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Ordered on purpose: the stranger's message FIRST, then the same bytes
+  // from the parent, in one shell. Two separate cases would also pass for
+  // a listener that consumed itself on the stranger's message — the one
+  // field failure this check must not introduce.
+  it('a tool-result from another frame mounts nothing; the same bytes from the parent, after it, mount the runtime', async () => {
+    const shell = bootShell();
+    await completeInit(shell);
+    shell.deliver(SLICE_RESULT, shell.stranger);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(shell.appended, 'no runtime script for a stranger\'s envelope').toEqual([]);
+    shell.deliver(SLICE_RESULT);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(shell.appended.map((el) => el.src), 'the listener is still there for the parent').toEqual([RUNTIME_URL]);
+  });
+
+  it('a stranger\'s tool-result does not disarm the bound: with no parent message the wait still fails at 30 s', async () => {
+    const shell = bootShell();
+    await completeInit(shell);
+    shell.deliver(SLICE_RESULT, shell.stranger);
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(shell.failures().map((f) => f.reason)).toEqual(['MISSING_META_GGUI_BOOTSTRAP']);
+  });
+
+  it('a reply to a pending request from another frame is not the host\'s answer: the parent\'s later reply to the same id completes ui/initialize', async () => {
+    const shell = bootShell();
+    const id = shell.rpc('ui/initialize')?.id;
+    shell.deliver({ jsonrpc: '2.0', id, result: {} }, shell.stranger);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(shell.rpc('ui/notifications/initialized'), 'the stranger did not complete the handshake').toBeUndefined();
+    shell.deliver({ jsonrpc: '2.0', id, result: {} });
+    await vi.advanceTimersByTimeAsync(1_001);
+    expect(shell.failures(), 'the parent\'s reply to the same id completed it before the 3 s bound').toEqual([]);
+  });
+
+  it('a door answer from another frame is ignored; the parent\'s answer to the same id mounts', async () => {
+    const shell = bootShell();
+    await completeInit(shell);
+    shell.deliver({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { structuredContent: { resourceUri: LOCATOR } } });
+    await vi.advanceTimersByTimeAsync(0);
+    const id = shell.rpc('resources/read')?.id;
+    expect(id).toBeDefined();
+    shell.deliver({ jsonrpc: '2.0', id, result: RESOURCE_DOC }, shell.stranger);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(shell.appended, 'a stranger cannot answer the door').toEqual([]);
+    shell.deliver({ jsonrpc: '2.0', id, result: RESOURCE_DOC });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(shell.appended.map((el) => el.src)).toEqual([RUNTIME_URL]);
+  });
+});
+
+describe('the inline shell buffers tool-results from its embedding window only (ggui#2015)', () => {
+  it('a stranger\'s or sourceless tool-result is not buffered; the parent\'s is', () => {
+    const shell = bootInlineBuffer();
+    expect(shell.posted.map((p) => p.method), 'the preflight ran, so the script executed').toEqual(['ui/initialize', 'ui/notifications/initialized']);
+    shell.deliver(SLICE_RESULT, shell.stranger);
+    shell.deliver(SLICE_RESULT, null);
+    expect(shell.win.__GGUI_PENDING_TOOL_RESULTS__).toEqual([]);
+    shell.deliver(SLICE_RESULT);
+    expect(shell.win.__GGUI_PENDING_TOOL_RESULTS__).toEqual([SLICE_RESULT.params]);
+  });
+});
