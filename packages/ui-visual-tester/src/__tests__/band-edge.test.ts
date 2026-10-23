@@ -15,7 +15,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright-core';
-import { Box, Card, Text } from '@ggui-ai/design/primitives';
+import { Box, Card, Stack, Text } from '@ggui-ai/design/primitives';
 import { composeThemeCss } from '@ggui-ai/design/rendering';
 
 const SCOPE = 'ggui-rcr-1';
@@ -54,6 +54,10 @@ const SHAPES = {
   heroCardFirstBleed: card(h(Card, { surface: 'hero', padding: 'lg', bleed: true }, heading), body),
   /** ggui#1981 — a hero Card that is the root's ONLY child: the card's body, the whole card. */
   heroCardOnly: card(h(Card, { surface: 'hero', padding: 'lg' }, heading)),
+  /** ggui#1986 — the same sole child setting its own width, as three served dev modules do: the bleed owns the inline axis. */
+  heroCardOnlyFullWidth: card(h(Card, { surface: 'hero', padding: 'lg', style: { width: '100%' } }, heading)),
+  /** ggui#1986 — the bled element's width is the bleed's even when the root centres its children (`align-items: center`). */
+  heroFirstInCenteredStack: renderToStaticMarkup(h(Stack, { align: 'center' }, h(Box, { surface: 'hero', padding: 'lg' }, heading), body)),
 } as const;
 
 interface Edges {
@@ -131,6 +135,20 @@ describe('an opening band meets the card edge only as the kit band, first, or wi
 
   it.each(CASES)("%s fit at %s: ggui#1981, a hero Card that is the root's only child is the card's body and runs edge to edge", async (fit, _c, vp) => {
     const { root, band } = await measure(page(SHAPES.heroCardOnly, fit), vp);
+    expect(band.left - root.left).toBe(0);
+    expect(root.right - band.right).toBe(0);
+  });
+
+  it.each(CASES)("%s fit at %s: ggui#1986, a sole-child hero Card with its own width: 100% bleeds as the plain sole child does", async (fit, _c, vp) => {
+    const plain = await measure(page(SHAPES.heroCardOnly, fit), vp);
+    const { root, band } = await measure(page(SHAPES.heroCardOnlyFullWidth, fit), vp);
+    expect(band.left - root.left).toBe(0);
+    expect(root.right - band.right).toBe(0);
+    expect(band).toEqual(plain.band);
+  });
+
+  it.each(CASES)('%s fit at %s: ggui#1986, an opening hero band still runs edge to edge in a root that centres its children', async (fit, _c, vp) => {
+    const { root, band } = await measure(page(SHAPES.heroFirstInCenteredStack, fit), vp);
     expect(band.left - root.left).toBe(0);
     expect(root.right - band.right).toBe(0);
   });

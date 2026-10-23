@@ -87,7 +87,7 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
       `> [data-ggui-surface]:not(${EXPANDED_FRAME_BLEEDS}) { border-radius: ${EXPANDED_FRAME_INNER_RADIUS} !important; }`,
     );
     expect(rule).toContain(
-      `> :is(${EXPANDED_FRAME_BLEEDS}) { margin-left: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; margin-right: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; border-left: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; border-right: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important; border-radius: 0 !important; }`,
+      `> :is(${EXPANDED_FRAME_BLEEDS}) { width: auto !important; align-self: stretch !important; margin-left: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; margin-right: calc(-1 * var(--ggui-card-inset, var(--ggui-spacing-lg))) !important; border-left: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; border-right: var(--ggui-card-inset, var(--ggui-spacing-lg)) solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important; border-radius: 0 !important; }`,
     );
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):first-child { margin-top: -16px !important; }`);
     expect(rule).toContain(`> :is(${EXPANDED_FRAME_BLEEDS}):last-child { margin-bottom: -16px !important; }`);
@@ -110,6 +110,17 @@ describe("the fill rule carries the frame's rhythm — and only the fill rule", 
     }
     // The block axis is unchanged: no edge is shared there, and a served band keeps its rhythm.
     expect(line).not.toMatch(/border-(top|bottom):/);
+  });
+
+  // ggui#1986 — a sole-child hero Card that set `width: 100%` itself was pulled left by the bleed but held at the
+  // content box's width, a strip of root ground down its right side. The bleed owns the inline axis: its width is
+  // `auto` whatever the element sets inline, and it stretches across a root that centres its children.
+  it('the bleed owns the inline axis: width auto and align-self stretch, both beating an inline style', () => {
+    const line = rule.split('\n').find((l) => l.includes(`> :is(${EXPANDED_FRAME_BLEEDS}) {`));
+    const decl = (prop: string): string | undefined =>
+      new RegExp(`(?:^|[{;]\\s*)${prop}: ([^;!]+) !important`).exec(line ?? '')?.[1]?.trim();
+    expect(decl('width')).toBe('auto');
+    expect(decl('align-self')).toBe('stretch');
   });
 
   // A band's ground is often a gradient, set inline (`style={{ background: 'linear-gradient(…)' }}`): the

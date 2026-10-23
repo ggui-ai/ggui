@@ -525,9 +525,13 @@ const CARD_INSET = 'var(--ggui-card-inset, var(--ggui-spacing-lg))';
  * A bleeding element's inline declarations (ggui#1556, ggui#1765): it takes the card's inset back so its GROUND meets
  * the card's edge, hands the same width to its content as a transparent border its ground paints under, and drops its
  * own inline padding — so its content lands on the body's edge, measured from the card's edge, never inset twice.
+ * The bleed owns the inline axis (ggui#1986): `width: auto` overrides a width the element sets itself, because a
+ * `width: 100%` resolves against the content box and holds the ground one inset short of the card's far edge; and
+ * `align-self: stretch` keeps that auto width the card's in a root that centres its children, where a flex item
+ * would otherwise shrink to its content.
  */
 function bleedInline(): string {
-  return `margin-left: calc(-1 * ${CARD_INSET}) !important; margin-right: calc(-1 * ${CARD_INSET}) !important; border-left: ${CARD_INSET} solid transparent !important; border-right: ${CARD_INSET} solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important;`;
+  return `width: auto !important; align-self: stretch !important; margin-left: calc(-1 * ${CARD_INSET}) !important; margin-right: calc(-1 * ${CARD_INSET}) !important; border-left: ${CARD_INSET} solid transparent !important; border-right: ${CARD_INSET} solid transparent !important; padding-left: 0 !important; padding-right: 0 !important; background-origin: border-box !important;`;
 }
 
 /**
