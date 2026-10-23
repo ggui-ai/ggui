@@ -12,18 +12,8 @@
  * `@ggui-ai/protocol/integrations/mcp-apps`. The library handles
  * every `_meta.ui.*` / `_meta.ai.ggui/*` slice.
  */
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  query,
-  type SDKMessage,
-  type SpawnOptions,
-  type SpawnedProcess,
-} from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 import {
   listModelVisibleTools,
@@ -32,90 +22,6 @@ import {
   type NormalizedMessage,
   type McpCallToolResult,
 } from '@ggui-ai/agent-server';
-
-/**
- * Locate the Claude Agent SDK's bundled `cli.js`. The SDK ships a
- * portable `#!/usr/bin/env node` `cli.js` AND optional platform-
- * native binaries (`@anthropic-ai/claude-agent-sdk-<plat>`); its
- * default lookup prefers the native binary and hard-errors when the
- * matching optional package didn't install. Pinning
- * `pathToClaudeCodeExecutable` at the bundled `cli.js` runs the
- * agent loop on plain Node everywhere.
- */
-function resolveClaudeCliPath(): string {
-  const tried: string[] = [];
-  const startDir = dirname(fileURLToPath(import.meta.url));
-  let dir = startDir;
-  for (let depth = 0; depth < 20; depth++) {
-    const candidates = [
-      tryResolveSdkDir(dir),
-      join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
-    ];
-    for (const sdkDir of candidates) {
-      if (!sdkDir) continue;
-      const cli = join(sdkDir, 'cli.js');
-      if (!tried.includes(cli)) tried.push(cli);
-      if (existsSync(cli)) return cli;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  throw new Error(
-    `Could not locate @anthropic-ai/claude-agent-sdk/cli.js. ` +
-      `Checked ${tried.length} candidate path(s):\n  ${tried.join('\n  ')}`,
-  );
-}
-
-function tryResolveSdkDir(fromDir: string): string | null {
-  try {
-    const req = createRequire(join(fromDir, 'noop.js'));
-    return dirname(req.resolve('@anthropic-ai/claude-agent-sdk'));
-  } catch {
-    return null;
-  }
-}
-
-const CLAUDE_CLI_PATH = resolveClaudeCliPath();
-
-function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
-  if (!existsSync(CLAUDE_CLI_PATH)) {
-    throw new Error(
-      `spawnClaudeCli: cli.js missing at spawn time — was present at module ` +
-        `load but is gone now: ${CLAUDE_CLI_PATH}`,
-    );
-  }
-  const child = spawn(process.execPath, [CLAUDE_CLI_PATH, ...opts.args], {
-    cwd: opts.cwd,
-    env: opts.env,
-    signal: opts.signal,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-  child.stderr?.on('data', (chunk: Buffer) => {
-    process.stderr.write(`[agent-cli] ${chunk.toString()}`);
-  });
-  const { stdin, stdout } = child;
-  if (!stdin || !stdout) {
-    throw new Error(
-      'spawnClaudeCli: child stdin/stdout missing despite pipe stdio',
-    );
-  }
-  return {
-    stdin,
-    stdout,
-    get killed() {
-      return child.killed;
-    },
-    get exitCode() {
-      return child.exitCode;
-    },
-    kill: child.kill.bind(child),
-    on: child.on.bind(child),
-    once: child.once.bind(child),
-    off: child.off.bind(child),
-  };
-}
 
 export interface ClaudeAgentSdkAdapterOptions {
   /** Default `claude-sonnet-5-5`. */
@@ -271,15 +177,6 @@ async function* runOnce(args: {
       prompt: input.prompt,
       options: {
         model,
-        // Thinking is asked off through the SDK's typed option. The Claude
-        // Code this SDK version bundles picks the thinking SHAPE from a
-        // model list that ends at the 4.6 generation; for any later model it
-        // sends the legacy `thinking.type: enabled` + budget, which the 5.x
-        // API refuses (400 "use thinking.type.adaptive"). `disabled` is the
-        // one setting that version honours for every model. Lifting it is
-        // ggui#2008: a 0.3.x SDK, whose CLI knows 5.x but ships as a native
-        // binary with no `cli.js` — `resolveClaudeCliPath` goes with it.
-        thinking: { type: 'disabled' },
         mcpServers: sdkMcpServers,
         allowedTools,
         ...sessionOptions,
@@ -288,8 +185,7 @@ async function* runOnce(args: {
         strictMcpConfig: true,
         maxTurns,
         env: { ANTHROPIC_API_KEY: apiKey },
-        pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-        spawnClaudeCodeProcess: spawnClaudeCli,
+        stderr: (data) => process.stderr.write(`[agent-cli] ${data}`),
         ...(systemPrompt ? { systemPrompt } : {}),
         abortController: sdkAbort,
       },
