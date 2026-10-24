@@ -182,6 +182,10 @@ overrides:
   "@fastify/busboy@3": ^3.2.2
   "@modelcontextprotocol/client@2": ^2.2.0
   "smol-toml@1": ^1.9.0
+  # GHSA-27r3-jxmh-p828 (#2019): same-line floors; both fit express's
+  # own ranges (5.x `^2.2.1`, 4.x `~1.20.5`), and body-parser is never a peer.
+  "body-parser@2": ^2.4.0
+  "body-parser@1": ^1.20.9
   # nodemailer override removed 2026-08-04 (lockstep with root): sole
   # consumer is mcp-server's direct dep, bumped to ^9.0.1 — no patched
   # 8.x exists for GHSA-p6gq-j5cr-w38f.
@@ -561,7 +565,7 @@ overrides:
   "prettier@^3": 3.9.6
   proxy-addr: 2.0.8
   "puppeteer-core@^25": 25.6.0
-  qs: 6.16.0
+  qs: 6.16.1
   react-docgen: 8.0.3
   recast: 0.23.19
   resend: 6.18.1
