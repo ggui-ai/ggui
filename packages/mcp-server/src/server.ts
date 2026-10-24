@@ -4991,11 +4991,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // setHeader later, which replaces this layer's value.
   app.use(createBrowserCorsMiddleware({ policy: originHostPolicy }));
 
-  app.use(express.json({ limit: bodyLimit }));
+  // Bodies are read as sent: neither parser decodes a `Content-Encoding`
+  // (a compressed body answers 415). MCP clients post plain JSON, so
+  // nothing known is refused, and no request body reaches a decoder.
+  app.use(express.json({ limit: bodyLimit, inflate: false }));
   // Form-urlencoded body parser for /oauth/token (RFC 6749 §4.1.3
   // requires application/x-www-form-urlencoded). JSON bodies still
   // work via the JSON parser above — handlers tolerate both.
-  app.use(express.urlencoded({ extended: false, limit: "64kb" }));
+  app.use(express.urlencoded({ extended: false, limit: "64kb", inflate: false }));
 
   // End-user browser-session cookie bridge. When a request
   // arrives with `ggui_user_session` cookie but no `Authorization`
