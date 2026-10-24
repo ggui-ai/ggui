@@ -23,6 +23,14 @@ export type { CreateUiGeneratorOptions } from './create-ui-generator.js';
 export type { RuntimeRenderProbeConfig } from './harness/check/runtime-render/adapter.js';
 export type { ProviderRetryInfo } from './harness/llm-router.js';
 export { preloadProviderSdks, type ProviderSdkPreload } from './harness/llm-router.js';
+// ggui#1951: the Agent SDK is an optional peer. Only what names none of
+// its types is exported here, so this entry type-checks without it.
+export {
+  CLAUDE_AGENT_SDK_SPECIFIER,
+  CLAUDE_AGENT_SDK_VERSION,
+  ClaudeAgentSdkMissingError,
+  ensureClaudeAgentSdk,
+} from './harness/claude-agent-sdk-loader.js';
 export type { GenerationResult, SameExchangeBreak, SameFailureBreak } from './harness/result-types.js';
 // The build identity a stamp outside this package can name: the same
 // digests `createUiGenerator` puts on every result's `metadata.build`, for

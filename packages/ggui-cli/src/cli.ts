@@ -96,6 +96,7 @@ import { runCreateCommand } from './create-app-command.js';
 import { runPushCommand } from './push-command.js';
 import { runDeployCommand } from './deploy-command.js';
 import { runProviderKeyCommand } from './provider-key-command.js';
+import { localCliLoginSdkWarning } from './local-cli-login-sdk.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -743,6 +744,10 @@ async function runServeCommand(args: string[]): Promise<number> {
     process.stderr.write(
       `ggui serve: --local-cli-login covers anthropic routes only; this server generates on ${generationBinding.provider}, so the flag has no effect.\n`,
     );
+  } else if (parsed.localCliLogin) {
+    // ggui#1951: the login route runs on an optional peer; say so at boot.
+    const sdkWarning = await localCliLoginSdkWarning();
+    if (sdkWarning !== undefined) process.stderr.write(sdkWarning);
   }
 
   // Build seed pools from --seed-pool flags BEFORE composing the backend

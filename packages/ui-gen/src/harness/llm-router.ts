@@ -36,6 +36,7 @@ import { createAnthropicClient } from '../adapters/claude/client.js';
 import { getBedrockModelId } from '../adapters/provider-router.js';
 import { toolArgsToJsonObject } from '../adapters/tool-bridge.js';
 import { splitCacheInclusiveUsage, splitOpenAiUsage } from '../adapters/openai/tokens.js';
+import { loadClaudeAgentSdk } from './claude-agent-sdk-loader.js';
 import {
   emitLlmTraceEvent,
   newLlmTraceId,
@@ -1171,7 +1172,7 @@ export class ClaudeCodeLoginAgent extends LLMAgent implements VisionAgent {
   }
 
   protected async createClient(): Promise<LoginSdk> {
-    const { query, tool, createSdkMcpServer } = await import('@anthropic-ai/claude-agent-sdk');
+    const { query, tool, createSdkMcpServer } = await loadClaudeAgentSdk();
     return { query, tool, createSdkMcpServer };
   }
 

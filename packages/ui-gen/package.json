@@ -190,6 +190,7 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
@@ -201,6 +202,9 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    },
     "@google/adk": {
       "optional": true
     },
@@ -222,7 +226,6 @@
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.33.3",
-    "@anthropic-ai/claude-agent-sdk": "0.3.229",
     "@anthropic-ai/sdk": "^0.123.0",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/gadgets": "workspace:*",
@@ -248,6 +251,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",

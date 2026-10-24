@@ -13,6 +13,7 @@
 import type { ToolDefinition } from '../types';
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { JsonObject } from '@ggui-ai/protocol';
+import { loadClaudeAgentSdk } from '../../harness/claude-agent-sdk-loader';
 
 /** Name used for the in-process MCP server. */
 export const MCP_SERVER_NAME = 'ggui';
@@ -30,7 +31,7 @@ export async function createToolMcpServer(
   server: McpSdkServerConfigWithInstance;
   allowedToolNames: string[];
 }> {
-  const { tool, createSdkMcpServer } = await import('@anthropic-ai/claude-agent-sdk');
+  const { tool, createSdkMcpServer } = await loadClaudeAgentSdk();
 
   const mcpTools = tools.map((def) => {
     // Extract Zod shape from the input schema

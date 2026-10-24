@@ -11,8 +11,8 @@
 //   - `./types.js` — the post-eval result shape (`DimensionScores`,
 //     `EvaluationResult`, `EvaluationIssue`, `QualityMetadata`,
 //     `EvaluationConfig`, `EvaluationContext`).
-// Plus the runtime cluster (`runEvaluationLoop`, `runEvaluation`,
-// `runAxisChecks`, evaluator MCP server, prompts, message parsing).
+// Plus the runtime cluster (`runEvaluation`, `runAxisChecks`, score
+// arithmetic, prompts, message parsing).
 
 // Vocabulary the harness legs depend on (was: flat `packages/ui-gen/src/evaluation.ts`).
 export type {
@@ -55,10 +55,8 @@ export {
 } from './types-public.js';
 
 // Cloud-ported runtime cluster.
-export { runEvaluationLoop } from './loop.js';
-export type { EvaluationLoopOptions, EvaluationLoopResult } from './loop.js';
 export { runEvaluation } from './evaluator.js';
-export { createEvaluationToolsServer, computeEvaluationScore } from './mcp-server.js';
+export { computeEvaluationScore } from './mcp-server.js';
 export type { EvaluateScoreInput } from './mcp-server.js';
 export { getEvaluatorSystemPrompt, buildFixPrompt } from './prompts.js';
 export {

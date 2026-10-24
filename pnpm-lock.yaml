@@ -1734,9 +1734,6 @@ importers:
       '@anthropic-ai/bedrock-sdk':
         specifier: 0.33.3
         version: 0.33.3(zod@4.4.3)
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: 0.3.229
-        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.32.1(zod@4.4.3))(zod@4.4.3)
       '@anthropic-ai/sdk':
         specifier: ^0.123.0
         version: 0.123.0(zod@4.4.3)
@@ -1807,6 +1804,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: 0.3.229
+        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.32.1(zod@4.4.3))(zod@4.4.3)
       '@ggui-ai/mcp-server-core':
         specifier: workspace:*
         version: link:../mcp-server-core

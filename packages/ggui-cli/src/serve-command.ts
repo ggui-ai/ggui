@@ -1138,7 +1138,9 @@ Options:
                          Claude plan's terms and usage limits apply, and
                          generation is about 2x slower (2.2x at the median)
                          than with an API key. For your own use: refused with
-                         --multi-user and --public-demo.
+                         --multi-user and --public-demo. Needs
+                         @anthropic-ai/claude-agent-sdk installed beside
+                         ggui (not installed with it); boot says how.
   --public-base-url <u>  Override the public base URL used to compose
                          iframe-runtime + shortCode URLs. Set this to a
                          tunnel URL (https://<random>.trycloudflare.com)

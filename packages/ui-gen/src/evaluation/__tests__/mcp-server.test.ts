@@ -1,23 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createEvaluationToolsServer, computeEvaluationScore } from '../mcp-server';
+import { computeEvaluationScore } from '../mcp-server';
 import type { EvaluateScoreInput } from '../mcp-server';
 import type { EvaluationResult } from '../types';
-
-describe('createEvaluationToolsServer', () => {
-  it('creates a server object with expected shape', () => {
-    const server = createEvaluationToolsServer();
-    expect(server).toBeDefined();
-    // SDK MCP servers have type: 'sdk' and a name
-    const serverAny = server as Record<string, unknown>;
-    expect(serverAny.type).toBe('sdk');
-    expect(serverAny.name).toBe('eval-tools');
-  });
-
-  it('creates a server with custom threshold', () => {
-    const server = createEvaluationToolsServer(80);
-    expect(server).toBeDefined();
-  });
-});
 
 describe('computeEvaluationScore', () => {
   /** Convenience: build input with defaults */

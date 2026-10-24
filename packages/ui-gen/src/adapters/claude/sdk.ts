@@ -15,6 +15,7 @@ import { createArtifacts, processMessage } from './message-parser';
 import { createToolMcpServer } from './tool-bridge';
 import { claudeCodeLoginQueryOptions, loginChildEnv } from './claude-code-login';
 import { sdkToolPins } from './sdk-tool-pins';
+import { loadClaudeAgentSdk } from '../../harness/claude-agent-sdk-loader';
 
 export class ClaudeSdkAdapter extends GeneratorAdapter {
   readonly provider: ProviderName = 'claude';
@@ -38,8 +39,9 @@ export class ClaudeSdkAdapter extends GeneratorAdapter {
     const startTime = Date.now();
     const cfg = this.sdkConfig;
 
-    // Dynamic import to avoid loading claude-agent-sdk in non-Claude contexts
-    const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    // The SDK is an optional peer (ggui#1951): loaded on first use, and a
+    // missing one fails with the install line.
+    const { query } = await loadClaudeAgentSdk();
 
     // Build environment from config or process.env
     // ggui#1185/#1278 — on the login path the binary sees an allowlisted

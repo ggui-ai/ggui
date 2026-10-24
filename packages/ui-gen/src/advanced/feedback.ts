@@ -7,8 +7,7 @@
  * (`validateContractBehavior`) returns structured
  * {@link BehaviorFailure}s. This module converts both into
  * prompt-augmenting text fragments the regen call appends to the
- * user prompt — same shape the existing `runEvaluationLoop` uses
- * for LLM-eval complaints.
+ * user prompt.
  *
  * Format mirrors the diagnostic format the runtime-render adapter
  * already produces (see `harness/check/runtime-render/adapter.ts`),
