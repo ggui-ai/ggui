@@ -120,6 +120,42 @@ describe('RequestMeter: the write, the connection and how the transfer ended (gg
     expect(timing[0]).toContain(' outcome=cancelled status=202 ');
   });
 
+  it("the caller's own abort mid-body is cancelled, not failed; the line keeps how far the body got", async () => {
+    // The MCP SDK's close() aborts every open POST. A spec that ends right
+    // after its last answer closes that call's stream before the server's end
+    // arrives: every green P0 run printed four `outcome=failed` lines for it.
+    const lines = captureStderr();
+    server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: {"jsonrpc":"2.0","id":1,"result":{}}\n\n');
+    });
+    const url = await listen(server);
+    const caller = new AbortController();
+    const res = await new RequestMeter().fetch(url, { method: 'POST', body: body('tools/call', { name: 'x' }), signal: caller.signal });
+    const reader = res.body!.getReader();
+    await reader.read();
+    caller.abort();
+    await expect(reader.read()).rejects.toThrow();
+    const timing = lines.filter((l) => l.includes('request timing method=tools/call '));
+    expect(timing).toHaveLength(1);
+    expect(timing[0]).toContain(' outcome=cancelled status=200 ');
+    expect(timing[0]).toMatch(/ bytes=[1-9]\d* /);
+  });
+
+  it('a body the server breaks off is still failed', async () => {
+    const lines = captureStderr();
+    server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: partial\n\n', () => setTimeout(() => res.socket?.destroy(), 20));
+    });
+    const url = await listen(server);
+    const res = await new RequestMeter().fetch(url, { method: 'POST', body: body('tools/call', { name: 'x' }) });
+    await expect(res.text()).rejects.toThrow();
+    const timing = lines.filter((l) => l.includes('request timing method=tools/call '));
+    expect(timing).toHaveLength(1);
+    expect(timing[0]).toContain(' outcome=failed status=200 ');
+  });
+
   it("watchNext hands over the matching call's probe, and headersArrived says when the server has it", async () => {
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));

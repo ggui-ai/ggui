@@ -65,8 +65,11 @@ export function readBodyTimeoutMs(env: NodeJS.ProcessEnv = process.env): number 
 /**
  * How a request's transfer ended: `ok` when the body ended, `failed` when it
  * broke off or the request never got headers, `cancelled` when the reader
- * stopped reading after the headers (the MCP SDK does, for a `202` to a
- * notification, whose body it never reads).
+ * stopped reading after the headers: the MCP SDK does for a `202` to a
+ * notification, whose body it never reads, and its close() aborts any body
+ * still open, often a stream whose answer has already arrived. A body the
+ * caller's own signal ended is `cancelled`; the line's bytes and phase times
+ * still say how far it got.
  */
 export type RequestOutcome = "ok" | "failed" | "cancelled";
 
@@ -414,7 +417,9 @@ export class RequestMeter {
         try {
           chunk = await reader.read();
         } catch (err) {
-          done(err);
+          // The caller's own signal ended the body (the MCP SDK's close()
+          // aborts every open POST): the reader stopped, the wire did not fail.
+          done(err, init.signal?.aborted === true);
           controller.error(err);
           return;
         }
