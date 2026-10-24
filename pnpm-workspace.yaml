@@ -146,8 +146,10 @@ overrides:
   puppeteer-core: 25.6.0
   "@smithy/types": ^4.14.0
   "brace-expansion@>=5": ^5.0.12
-  # fast-uri floor raised 3.1.4 → 3.1.6 (2026-09-03: GHSA-5jgf-p345-68v8 / f65p-4m7j-42xc / fph4-wmhf-6fwf / jqff-g426-hqxp, HIGH, published 2026-09-02; ajv@8 resolver, in the pod + backend prod closures). Same-major.
-  "fast-uri@<3.1.8": ^3.1.8
+  # fast-uri floor (ajv@8's URI resolver, in the pod + backend prod closures): raised 3.1.4 → 3.1.6 (2026-09-03, GHSA-5jgf/f65p/fph4/jqff), → 3.1.8 (#1927), → 3.1.9 (2026-10-25, #2022: GHSA-w74x/wjr9/xhq7/333x). Same-major.
+  "fast-uri@<3.1.9": ^3.1.9
+  # nodemailer floor (#2022: GHSA-85x2/8c8m/m943), same-line.
+  "nodemailer@<10.1.4": ^10.1.4
   # GHSA-w27v-7q3p-w38r + GHSA-4vpr-x523-8j87 (svgo removeScripts bypasses; transitive via astro, build-time) — whole-major floor
   "svgo@4": ^4.1.0
   # immutable <3.8.4 (GHSA-xvcm-6775-5m9r, HIGH; surfaced by the 2026-09-03
@@ -189,7 +191,7 @@ overrides:
   # nodemailer override removed 2026-08-04 (lockstep with root): sole
   # consumer is mcp-server's direct dep, bumped to ^9.0.1 — no patched
   # 8.x exists for GHSA-p6gq-j5cr-w38f.
-  undici: ^7.29.1
+  undici: ^7.30.1
   "fast-xml-parser@>=4 <5": ^4.5.5
   "fast-xml-parser@>=5": ^5.8.0
   "js-yaml@>=3 <4": ^3.15.2
@@ -512,7 +514,7 @@ overrides:
   eventsource-parser: 3.1.0
   expect-type: 1.4.0
   express-rate-limit: 8.6.1
-  fast-uri: 3.1.8
+  fast-uri: 3.1.9
   fast-xml-builder: 1.3.0
   fast-xml-parser: 5.10.1
   "fflate@0.4.x": 0.4.9
@@ -550,7 +552,7 @@ overrides:
   node-abi: 3.94.0
   node-exports-info: 1.6.2
   node-releases: 2.0.52
-  nodemailer: 10.0.13
+  nodemailer: 10.2.1
   nwsapi: 2.2.24
   ob1: 0.83.8
   own-keys: 1.0.2
