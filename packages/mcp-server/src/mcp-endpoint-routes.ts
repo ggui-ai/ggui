@@ -47,7 +47,7 @@ import type { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { ZodRawShape } from "zod";
 import { resolveIdentity, UnauthenticatedError } from "./auth.js";
-import { buildMcpServer, type BuildMcpServerOptions, type ServerInfo } from "./build-mcp.js";
+import { buildMcpServer, observeToolCallRefusals, type BuildMcpServerOptions, type ServerInfo } from "./build-mcp.js";
 import {
   CONTROL_PATH,
   DATA_PLANE_AUDIENCES,
@@ -554,7 +554,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       });
 
       try {
-        await mcp.connect(transport);
+        // ggui#1995 — the server connects through the refusal observer, so a
+        // `tools/call` the SDK refuses before any handler (element ceiling,
+        // input schema, unknown tool) still logs its `tool_invoked` line.
+        await mcp.connect(observeToolCallRefusals(transport, mcp, reqLogger, () => als.getStore() ?? ctx));
         await als.run(ctx, () => transport.handleRequest(req, res, req.body));
       } catch (err) {
         reqLogger.error("mcp_handle_failed", { error: String(err) });

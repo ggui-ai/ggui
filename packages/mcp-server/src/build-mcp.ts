@@ -10,6 +10,15 @@
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Transport, TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
+import {
+  isJSONRPCErrorResponse,
+  isJSONRPCRequest,
+  isJSONRPCResponse,
+  type JSONRPCMessage,
+  type MessageExtraInfo,
+  type RequestId,
+} from '@modelcontextprotocol/sdk/types.js';
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpUiToolMeta } from '@modelcontextprotocol/ext-apps';
 import { isRecord } from '@ggui-ai/protocol';
@@ -416,6 +425,12 @@ function validateOutputPayload(
  * The thrown path is untouched (`outcome: 'error'` + `errorClass`),
  * which is what makes "a gate that throws instead of returning a
  * refusal is a conformance failure" observable in ops.
+ *
+ * `outcome: 'refused'` has a second door since ggui#1995: a `tools/call`
+ * the SDK refused before any handler ran (element ceiling, input schema,
+ * unknown tool) logs the same outcome from {@link observeToolCallRefusals},
+ * carrying a `reason` instead of a registry `code`. One outcome, two
+ * fields: `code` names a handler's refusal, `reason` an SDK-level one.
  */
 function classifyFailurePayload(
   payload: unknown,
@@ -622,6 +637,14 @@ export function buildMcpServer(
       ...(opts.instructions ? { instructions: opts.instructions } : {}),
     },
   );
+  // ggui#1995 — what `observeToolCallRefusals` pairs a `tools/call` answer
+  // against: the request ids whose registered callback ran, and the names
+  // this server registered (an unknown name is refused by the SDK too).
+  const accounting: ToolCallAccounting = {
+    invoked: new Set<RequestId>(),
+    tools: new Set(handlers.map((h) => h.name)),
+  };
+  TOOL_CALL_ACCOUNTING.set(server, accounting);
 
   // Content-addressed shell URI (stale-shell bust) — when MCP Apps
   // outbound wiring registers the shell, declarations advertising the
@@ -683,8 +706,11 @@ export function buildMcpServer(
     }
     const cb = async (
       input: Record<string, unknown>,
-      extra: { _meta?: unknown; signal?: AbortSignal },
+      extra: { _meta?: unknown; signal?: AbortSignal; requestId?: RequestId },
     ) => {
+      // ggui#1995 — the callback ran for this request: whatever answer
+      // leaves for this id is the handler's, not an SDK-level refusal.
+      if (extra?.requestId !== undefined) accounting.invoked.add(extra.requestId);
       // Thread per-request `_meta` AND the cancellation `signal` onto the
       // canonical context. The MCP SDK already parses `params._meta` for
       // us and exposes it on `RequestHandlerExtra._meta`; handlers that
@@ -933,4 +959,157 @@ function errorClassName(err: unknown): string {
     return err.constructor.name || 'Error';
   }
   return 'Unknown';
+}
+
+/** ggui#1995 — per-server pairing state for {@link observeToolCallRefusals}. */
+interface ToolCallAccounting {
+  /** Request ids of `tools/call`s whose registered callback ran. */
+  readonly invoked: Set<RequestId>;
+  /** Tool names this server registered. */
+  readonly tools: ReadonlySet<string>;
+}
+const TOOL_CALL_ACCOUNTING = new WeakMap<McpServer, ToolCallAccounting>();
+
+/**
+ * Why an SDK-level `tools/call` refusal was refused, as far as the server
+ * can tell without the SDK exposing it (ggui#1995):
+ *
+ *   - `elements_over_ceiling` — the SDK's element-count door
+ *     (`maxToolInputElements`, {@link MAX_TOOL_INPUT_ELEMENTS}). Classified
+ *     by the SDK's own sentence, which `build-mcp.test.ts` pins as the
+ *     refusal text — an SDK wording change reds that pin before it could
+ *     silently reclassify every over-ceiling refusal here.
+ *   - `unknown_tool` — a name this server never registered.
+ *   - `input_rejected` — every other `isError` answer the handler never saw:
+ *     the SDK's input-schema validation, a disabled tool.
+ *   - `rpc_error` — answered as a JSON-RPC `error` member rather than a
+ *     tool result (in SDK 1.32.1 only `UrlElicitationRequired` leaves this
+ *     way).
+ */
+export type ToolCallRefusalReason = 'elements_over_ceiling' | 'unknown_tool' | 'input_rejected' | 'rpc_error';
+
+const CEILING_SENTENCE = 'arguments contain more than the maximum of';
+
+/**
+ * ggui#1995 — every answered `tools/call` produces exactly one `tool_invoked`
+ * line. The SDK refuses an over-ceiling or schema-failing call inside its
+ * own handler, before the callback {@link buildMcpServer} registers, so the
+ * refusal is observable on the wire (`isError`) yet, without this, invisible
+ * in ops logs. There is no pre-dispatch seam in the SDK (`registerTool`
+ * takes zod only; the element counter is module-private), so the rule is
+ * structural and read at the transport: **a `tools/call` answered — by
+ * `result.isError` or by a JSON-RPC `error` — whose request id the callback
+ * never saw is an SDK-level refusal**, logged as `tool_invoked` with
+ * `outcome: 'refused'` and a {@link ToolCallRefusalReason}. The same event
+ * name as every other call, so an operator's per-tool counts include the
+ * refusals; the fields are the tool name, the request id and the app —
+ * never the arguments or the SDK's message (a schema message can carry
+ * received values).
+ *
+ * A decorator, not a patch: it implements `Transport` around the real one
+ * and is what `McpServer.connect` receives, so nothing on the SDK's object
+ * is replaced and the order of `connect` does not matter. A `tools/call`
+ * whose transport closes before an answer is a non-event here — the
+ * obligation is on answered calls.
+ *
+ * Parties: this server ↔ its operator's log consumer. Failure mode: a
+ * refusal with no line. Observable violation: `build-mcp.test.ts`
+ * (ggui#1995) and the route test over HTTP.
+ */
+export function observeToolCallRefusals(
+  inner: Transport,
+  server: McpServer,
+  logger: Logger,
+  getContext: () => HandlerContext,
+): Transport {
+  const accounting = TOOL_CALL_ACCOUNTING.get(server);
+  if (!accounting) {
+    throw new Error('observeToolCallRefusals: the server was not built by buildMcpServer');
+  }
+  return new ToolCallRefusalObserver(inner, accounting, logger, getContext);
+}
+
+class ToolCallRefusalObserver implements Transport {
+  /** `tools/call` requests seen inbound and not yet answered: id → tool name. */
+  private readonly pending = new Map<RequestId, string>();
+  onclose?: () => void;
+  onerror?: (error: Error) => void;
+  onmessage?: <T extends JSONRPCMessage>(message: T, extra?: MessageExtraInfo) => void;
+
+  constructor(
+    private readonly inner: Transport,
+    private readonly accounting: ToolCallAccounting,
+    private readonly logger: Logger,
+    private readonly getContext: () => HandlerContext,
+  ) {
+    inner.onmessage = (message, extra) => {
+      if (isJSONRPCRequest(message) && message.method === 'tools/call') {
+        const name = message.params?.['name'];
+        this.pending.set(message.id, typeof name === 'string' ? name : '');
+      }
+      this.onmessage?.(message, extra);
+    };
+    inner.onclose = () => {
+      this.pending.clear();
+      this.onclose?.();
+    };
+    inner.onerror = (error) => this.onerror?.(error);
+  }
+
+  get sessionId(): string | undefined {
+    return this.inner.sessionId;
+  }
+
+  setProtocolVersion(version: string): void {
+    this.inner.setProtocolVersion?.(version);
+  }
+
+  start(): Promise<void> {
+    return this.inner.start();
+  }
+
+  close(): Promise<void> {
+    return this.inner.close();
+  }
+
+  send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> {
+    this.observe(message);
+    return this.inner.send(message, options);
+  }
+
+  private observe(message: JSONRPCMessage): void {
+    let id: RequestId;
+    let reason: ToolCallRefusalReason | undefined;
+    if (isJSONRPCResponse(message)) {
+      id = message.id;
+      const result = message.result;
+      if (result['isError'] !== true) {
+        this.pending.delete(id);
+        return;
+      }
+      reason = 'input_rejected';
+      const content = result['content'];
+      const first = Array.isArray(content) ? content[0] : undefined;
+      const text = isRecord(first) && typeof first['text'] === 'string' ? first['text'] : '';
+      if (text.includes(CEILING_SENTENCE)) reason = 'elements_over_ceiling';
+    } else if (isJSONRPCErrorResponse(message)) {
+      // An error response may carry no id (a parse error); nothing to pair.
+      if (message.id === undefined) return;
+      id = message.id;
+      reason = 'rpc_error';
+    } else {
+      return;
+    }
+    const tool = this.pending.get(id);
+    this.pending.delete(id);
+    if (tool === undefined || this.accounting.invoked.has(id)) return;
+    if (reason !== 'rpc_error' && !this.accounting.tools.has(tool)) reason = 'unknown_tool';
+    this.logger.warn('tool_invoked', {
+      tool,
+      appId: this.getContext().appId,
+      outcome: 'refused',
+      reason,
+      requestId: String(id),
+    });
+  }
 }

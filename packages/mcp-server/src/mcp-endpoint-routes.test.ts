@@ -26,6 +26,7 @@ import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import type { AuthAdapter, AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import type { Logger } from './logger.js';
+import { MAX_TOOL_INPUT_ELEMENTS } from './build-mcp.js';
 import { createGguiServer, type GguiServer } from './server.js';
 
 interface BootedFixture {
@@ -538,6 +539,45 @@ describe('mcp-endpoint-routes — the universal route refuses a per-app-only cre
     expect(health.status).toBe(200);
     const oddHealth = await fetch(`${fx.url}/ggui/HEALTH`);
     expect(oddHealth.status).toBe(404);
+  });
+
+  it('an SDK-level refusal on the HTTP route logs one tool_invoked with outcome refused — the ops line the wire refusal never had (ggui#1995)', async () => {
+    const cap = capturingLogger();
+    // An isolated service mount rides the same route code as the data plane; its one tool takes the over-ceiling call.
+    const svcTool: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'svc_echo',
+      description: 'echo',
+      inputSchema: { q: z.string(), padding: z.unknown().optional() },
+      outputSchema: { q: z.string() },
+      handler: async (input: Record<string, unknown>) => ({ q: String(input.q) }),
+    };
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      logger: cap.logger,
+      mcpServices: [{ name: 'svc', path: '/svc', handlers: [svcTool] }],
+    });
+    const res = await fetch(`${fx.url}/svc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${AGENT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'over-1',
+        method: 'tools/call',
+        params: { name: 'svc_echo', arguments: { q: 'x', padding: new Array<number>(MAX_TOOL_INPUT_ELEMENTS).fill(0) } },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('"isError":true');
+    const lines = cap.warns.filter((w) => w.event === 'tool_invoked');
+    expect(lines.map((w) => [w.fields?.['tool'], w.fields?.['outcome'], w.fields?.['reason'], w.fields?.['requestId']])).toEqual([
+      ['svc_echo', 'refused', 'elements_over_ceiling', 'over-1'],
+    ]);
+    expect(JSON.stringify(lines)).not.toContain('padding');
   });
 
   it('listing a source without a per-app authorize callback refuses to construct the server', () => {

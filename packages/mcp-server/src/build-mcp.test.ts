@@ -34,7 +34,7 @@ import {
   type HandlerFailure,
   type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
-import { buildMcpServer, MAX_TOOL_INPUT_ELEMENTS } from './build-mcp.js';
+import { buildMcpServer, MAX_TOOL_INPUT_ELEMENTS, observeToolCallRefusals } from './build-mcp.js';
 import type { Logger } from './logger.js';
 
 const silentLogger = {
@@ -1254,6 +1254,114 @@ describe('buildMcpServer — amend, update and render log their session (#1474)'
  * Pinned here: the refusal shape, the control at exactly the ceiling (the
  * handler runs), and the number itself, so a change to it is deliberate.
  */
+describe('buildMcpServer — an SDK-level tools/call refusal still produces one tool_invoked line (ggui#1995)', () => {
+  // The SDK refuses an over-ceiling or schema-failing `tools/call` inside its own handler, before the callback
+  // ggui installs — observable on the wire (isError) but, until this, invisible in ops logs. The rule: a `tools/call`
+  // answered — by `result.isError` or by a JSON-RPC `error` — whose request id the callback never saw is an SDK-level
+  // refusal, and it logs `tool_invoked` with `outcome: 'refused'` and a reason. Never the arguments.
+  const info = { name: 'test', version: '0.0.1' };
+  interface Call {
+    readonly level: 'info' | 'warn' | 'error';
+    readonly event: string;
+    readonly fields: Record<string, unknown>;
+  }
+  function logging(calls: Call[]): Logger {
+    const logger: Logger = {
+      info: (event, fields) => calls.push({ level: 'info', event, fields: fields ?? {} }),
+      warn: (event, fields) => calls.push({ level: 'warn', event, fields: fields ?? {} }),
+      error: (event, fields) => calls.push({ level: 'error', event, fields: fields ?? {} }),
+      debug: () => undefined,
+      child: () => logger,
+    };
+    return logger;
+  }
+  const echo: SharedHandler<ZodRawShape, ZodRawShape> = {
+    name: 'echo',
+    description: 'echoes q',
+    inputSchema: { q: z.string(), fixtureProps: z.unknown().optional() },
+    outputSchema: { q: z.string() },
+    async handler(input) {
+      return { q: String(input.q) };
+    },
+  };
+  async function boot(calls: Call[]): Promise<{ client: Client; close: () => Promise<void> }> {
+    const logger = logging(calls);
+    const server = buildMcpServer(info, [echo], () => baseCtx, logger);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'refusal-line-test', version: '0' });
+    await Promise.all([
+      server.connect(observeToolCallRefusals(serverTransport, server, logger, () => baseCtx)),
+      client.connect(clientTransport),
+    ]);
+    return {
+      client,
+      close: async () => {
+        await client.close();
+        await server.close();
+      },
+    };
+  }
+  const invoked = (calls: Call[]) => calls.filter((c) => c.event === 'tool_invoked');
+
+  it('control: a served call logs exactly one tool_invoked, outcome success, and no refused line', async () => {
+    const calls: Call[] = [];
+    const { client, close } = await boot(calls);
+    try {
+      const result = await client.callTool({ name: 'echo', arguments: { q: 'hi' } });
+      expect(result.isError).not.toBe(true);
+      expect(invoked(calls).map((c) => c.fields['outcome'])).toEqual(['success']);
+    } finally {
+      await close();
+    }
+  });
+
+  it('a call over the element ceiling logs one tool_invoked with outcome refused, reason elements_over_ceiling — tool and request id, never the arguments', async () => {
+    const calls: Call[] = [];
+    const { client, close } = await boot(calls);
+    try {
+      const result = await client.callTool({
+        name: 'echo',
+        arguments: { q: 'x', fixtureProps: new Array<number>(MAX_TOOL_INPUT_ELEMENTS).fill(0) },
+      });
+      expect(result.isError).toBe(true);
+      const lines = invoked(calls);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]?.level).toBe('warn');
+      expect(lines[0]?.fields).toMatchObject({ tool: 'echo', outcome: 'refused', reason: 'elements_over_ceiling' });
+      expect(lines[0]?.fields).toHaveProperty('requestId');
+      expect(JSON.stringify(lines[0]?.fields)).not.toContain('fixtureProps');
+    } finally {
+      await close();
+    }
+  });
+
+  it('a schema-failing call logs one refused line with reason input_rejected', async () => {
+    const calls: Call[] = [];
+    const { client, close } = await boot(calls);
+    try {
+      const result = await client.callTool({ name: 'echo', arguments: { q: 42 } });
+      expect(result.isError).toBe(true);
+      expect(invoked(calls).map((c) => [c.fields['outcome'], c.fields['reason']])).toEqual([['refused', 'input_rejected']]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('a call to a tool this server never registered logs one refused line with reason unknown_tool', async () => {
+    const calls: Call[] = [];
+    const { client, close } = await boot(calls);
+    try {
+      const result = await client.callTool({ name: 'nope', arguments: {} });
+      expect(result.isError).toBe(true);
+      expect(invoked(calls).map((c) => [c.fields['tool'], c.fields['outcome'], c.fields['reason']])).toEqual([
+        ['nope', 'refused', 'unknown_tool'],
+      ]);
+    } finally {
+      await close();
+    }
+  });
+});
+
 describe('buildMcpServer — tool input element ceiling (ggui#1993)', () => {
   const info = { name: 'test', version: '0.0.1' };
 
@@ -1300,7 +1408,7 @@ describe('buildMcpServer — tool input element ceiling (ggui#1993)', () => {
     expect(MAX_TOOL_INPUT_ELEMENTS).toBe(10_000);
   });
 
-  it('refuses a call one element over the ceiling before the handler runs: isError + the ceiling named', async () => {
+  it('refuses a call one element over the ceiling before the handler runs: isError + the ceiling named — the sentence #1995 classifies `elements_over_ceiling` by', async () => {
     const ran = { count: 0 };
     const { client, close } = await boot(ran);
     try {
