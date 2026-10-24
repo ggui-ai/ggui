@@ -97,7 +97,22 @@ function requiredOnlyLoop(schema: Json): readonly Edge[] | null {
   return null;
 }
 
+/** Every path at which a schema spells a union as a `type` ARRAY (`type: ['string', 'null']`) instead of `anyOf`. */
+function typeArrays(schema: Json, at = ''): readonly string[] {
+  if (Array.isArray(schema)) return schema.flatMap((n, i) => typeArrays(n, `${at}/${i}`));
+  if (!isObject(schema)) return [];
+  const here = Array.isArray(schema['type']) ? [`${at}/type`] : [];
+  return [...here, ...Object.entries(schema).flatMap(([k, v]) => (k === 'type' ? [] : typeArrays(v, `${at}/${k}`)))];
+}
+
 describe('the rule itself, on hand-made schemas (ggui#1637)', () => {
+  it('finds a union spelled as a `type` array at any depth, and nothing in the anyOf spelling (ggui#2021)', () => {
+    const compacted: Json = { type: 'object', properties: { note: { type: ['string', 'null'] } }, definitions: { j: { anyOf: [{ type: ['string', 'number'] }] } } };
+    expect(typeArrays(compacted)).toEqual(['/properties/note/type', '/definitions/j/anyOf/0/type']);
+    const expanded: Json = { type: 'object', properties: { note: { anyOf: [{ type: 'string' }, { type: 'null' }] } } };
+    expect(typeArrays(expanded)).toEqual([]);
+  });
+
   it('flags a definition that reaches itself through an object arm, the served shape Google refused', () => {
     const refused: Json = {
       type: 'object',
@@ -124,7 +139,7 @@ describe('the rule itself, on hand-made schemas (ggui#1637)', () => {
 describe('every served input schema is inside the model-API subset (ggui#1637)', () => {
   let server: GguiServer;
   let client: Client;
-  let tools: ReadonlyArray<{ readonly name: string; readonly inputSchema: Json }> = [];
+  let tools: ReadonlyArray<{ readonly name: string; readonly inputSchema: Json; readonly outputSchema: Json }> = [];
 
   beforeAll(async () => {
     // The full data-plane surface a real agent's `tools/list` sees: the render family needs `mcpApps`, emit needs
@@ -145,7 +160,11 @@ describe('every served input schema is inside the model-API subset (ggui#1637)',
       }),
     );
     const listed = await client.listTools();
-    tools = listed.tools.map((t) => ({ name: t.name, inputSchema: JSON.parse(JSON.stringify(t.inputSchema)) as Json }));
+    tools = listed.tools.map((t) => ({
+      name: t.name,
+      inputSchema: JSON.parse(JSON.stringify(t.inputSchema)) as Json,
+      outputSchema: JSON.parse(JSON.stringify(t.outputSchema ?? null)) as Json,
+    }));
   });
 
   afterAll(async () => {
@@ -163,6 +182,18 @@ describe('every served input schema is inside the model-API subset (ggui#1637)',
       const loop = requiredOnlyLoop(t.inputSchema);
       return loop ? [`${t.name}: ${loop.map((e) => e.at).join(' -> ')}`] : [];
     });
+    expect(offenders).toEqual([]);
+  });
+
+  it('no served schema spells a union as a `type` array — the SDK projects every registered zod shape itself, and zod ≥ 4.5 compacts a union of bare types (ggui#2021)', () => {
+    // The protocol wrapper re-expands its own output; the SDK's `tools/list` projection has no such hook, so the served
+    // list stays in the `anyOf` spelling only while no registered shape carries a bare-type union or a `.nullable()`
+    // scalar. Measured on the zod 4.4.3 → 4.6.7 move: the served list was identical on both planes. This pins that a
+    // handler cannot change the served spelling by accident; the row that adds the first such shape decides it.
+    const offenders = tools.flatMap((t) => [
+      ...typeArrays(t.inputSchema).map((at) => `${t.name} inputSchema${at}`),
+      ...typeArrays(t.outputSchema).map((at) => `${t.name} outputSchema${at}`),
+    ]);
     expect(offenders).toEqual([]);
   });
 });

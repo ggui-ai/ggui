@@ -30,6 +30,23 @@
  *      The subset algorithm treats an empty schema as a wildcard
  *      (matches `isSchemaSubset(..., {type: 'string'})` as
  *      compatible), which mirrors JSON Schema semantics.
+ *   5. Re-expand a `type` ARRAY into `anyOf` of single-type branches.
+ *      zod ≥ 4.5 compacts a union whose branches are bare type
+ *      assertions — `z.union([z.string(), z.number()])`, and every
+ *      `.nullable()` scalar — from `anyOf: [{type: 'string'},
+ *      {type: 'number'}]` into `type: ['string', 'number']`. The two
+ *      spellings are equivalent in every JSON Schema draft, but the
+ *      `anyOf` form is the one this wrapper has always returned, the
+ *      one the subset algorithm reads (a `type` array is not a type
+ *      it knows), and the one the model-API function-declaration
+ *      subsets take (Gemini's `parameters` is an OpenAPI 3.0 object
+ *      whose `type` is a single string). The re-expansion restores
+ *      the pre-4.5 output exactly for a one-level union; a union of
+ *      unions, which zod now folds flat, comes back as one flat
+ *      `anyOf` rather than the nested one older zod emitted —
+ *      equivalent, and not a shape any caller pins. A branch that
+ *      carries a constraint, `const`, `$ref` or metadata is never
+ *      compacted by zod in the first place and so passes through.
  *
  * **Intended call sites.**
  *
@@ -73,10 +90,11 @@ export function zodToJsonSchema(input: ZodType | ZodRawShape): JsonSchema {
 
 /**
  * Strip zod / draft-2020-12 quirks the subset algorithm doesn't
- * consume, recursively. Does NOT strip unsupported constructs
- * (oneOf/anyOf/enum/const/$ref/allOf) — those surface as explicit
- * `unsupported` violations from the subset algorithm, which is what
- * we want.
+ * consume, recursively, and re-expand zod's compacted `type` arrays
+ * into `anyOf` (normalization 5 above). Does NOT strip unsupported
+ * constructs (oneOf/anyOf/enum/const/$ref/allOf) — those surface as
+ * explicit `unsupported` violations from the subset algorithm, which
+ * is what we want.
  */
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
@@ -102,6 +120,13 @@ function normalize(value: unknown): unknown {
     }
     if (key === 'items') {
       out[key] = normalize(v);
+      continue;
+    }
+    if (key === 'type' && Array.isArray(v)) {
+      // Normalization 5: zod's `compactTypeUnion` only ever emits a
+      // `type` array for a union of bare types, so each member maps
+      // back to the single-type branch it came from.
+      out['anyOf'] = v.map((member) => ({ type: member }));
       continue;
     }
     out[key] = normalize(v);

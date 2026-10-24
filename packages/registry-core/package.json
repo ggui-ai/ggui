@@ -64,7 +64,7 @@
     "@ggui-ai/protocol": "workspace:*",
     "esbuild": "0.28.2",
     "oxc-parser": "^0.131.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",

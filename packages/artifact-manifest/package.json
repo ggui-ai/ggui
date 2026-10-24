@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@ggui-ai/protocol": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",

@@ -148,6 +148,26 @@ describe('zodToJsonSchema — unions / enums / literals', () => {
       anyOf: [{ type: 'string' }, { type: 'null' }],
     });
   });
+
+  it('a nullable property inside an object is anyOf at depth, not a `type` array', () => {
+    const result = zodToJsonSchema(z.object({ note: z.string().nullable() }));
+    expect(result).toEqual({
+      type: 'object',
+      properties: { note: { anyOf: [{ type: 'string' }, { type: 'null' }] } },
+      required: ['note'],
+      additionalProperties: false,
+    });
+  });
+
+  it('a union whose branches carry constraints keeps every constraint on its own branch', () => {
+    const result = zodToJsonSchema(z.union([z.string().min(1), z.number().int()]));
+    expect(result).toEqual({
+      anyOf: [
+        { type: 'string', minLength: 1 },
+        { type: 'integer', minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER },
+      ],
+    });
+  });
 });
 
 describe('zodToJsonSchema — raw shape input', () => {

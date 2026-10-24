@@ -71,7 +71,7 @@
     "@ggui-ai/ui-gen": "workspace:*",
     "@ggui-ai/ui-registry": "workspace:*",
     "canonicalize": "^2.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@ggui-ai/embedding-local": "workspace:*",
