@@ -301,6 +301,7 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
           // place (fingerprint + cooldown + forceEscape +
           // scopedEscapeUsedCount).
           dupeBreak: session.dupeBreak,
+          ...(params.onCodingTurnPrompt !== undefined ? { onPrompt: params.onCodingTurnPrompt } : {}),
         },
         {
           turnsUsed: telemetry.turnsUsed,

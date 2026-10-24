@@ -189,6 +189,8 @@ export interface CodingTurnContext {
    * `breakDuplicatePatch` policy flag gates whether this turn reads it.
    */
   readonly dupeBreak?: import("./dupe-break.js").DupeBreakState;
+  /** Told the system prompt and user message this turn hands the coding agent, just before the call. */
+  readonly onPrompt?: (sent: import("../runtime.js").CodingTurnPrompt) => void;
 }
 
 /**
@@ -544,6 +546,7 @@ ${closingInstruction}`;
     planFirstTurn,
     codeFormat,
   );
+  ctx.onPrompt?.({ turn: turnsUsed, systemPrompt, userPrompt });
   const llmStart = Date.now();
   const response = await codingAgent.callTools(
     codingModel,

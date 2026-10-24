@@ -66,6 +66,18 @@ export interface AgentSpec {
   onRetry?: AgentConfig["onRetry"];
 }
 
+/**
+ * One coding turn's prompt, exactly as handed to the coding agent's tool call: the system prompt (after every
+ * policy swap, e.g. the condensed component reference) and the turn's user message. Lets a caller audit the
+ * prompt a generation actually sent rather than the templates it was built from.
+ */
+export interface CodingTurnPrompt {
+  /** 1-indexed coding turn. */
+  readonly turn: number;
+  readonly systemPrompt: string;
+  readonly userPrompt: string;
+}
+
 export interface SingleComponentParams {
   userPrompt: string;
   contract?: DataContract;
@@ -119,6 +131,11 @@ export interface SingleComponentParams {
     actOn?: "critical" | "major";
   };
   onProgress?: (event: unknown) => void;
+  /**
+   * Observer of what each coding turn sends the model — see {@link CodingTurnPrompt}. Read-only: the generation is
+   * byte-identical with or without it. Absent = nothing reported.
+   */
+  onCodingTurnPrompt?: (sent: CodingTurnPrompt) => void;
   onInitialResult?: (result: {
     componentCode: string;
     sourceCode?: string;

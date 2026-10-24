@@ -28,6 +28,9 @@ import { resolveHarnessPolicy } from "../harness/policy.js";
 // prompts carry pitfalls + design-system docs + primitives + wire
 // content.
 import { buildSystemPrompt as buildSystemPromptWithFunnel } from "../harness/runtime.js";
+import type { CodingTurnPrompt } from "../harness/runtime.js";
+
+export type { CodingTurnPrompt };
 // Axis-check registry filter. The `createHarness` constructor accepts a
 // pre-filtered axisChecks list; this callsite runs the `matches()`
 // predicate against the full registry and passes the filtered result.
@@ -137,6 +140,11 @@ export interface GenerationDispatchParams {
    * Production callers can omit this; benchmark runners should pass commit.props.
    */
   fixtureProps?: JsonObject;
+  /**
+   * Observer of the exact prompt each coding turn sends — the system prompt after the component-reference swap
+   * below, and the turn's user message (see `CodingTurnPrompt`). Read-only; nothing sent changes. Absent = no report.
+   */
+  onCodingTurnPrompt?: (sent: CodingTurnPrompt) => void;
   /**
    * Whether to wire the runtime-render check (`runtimeRender` when given,
    * else `DEFAULT_RUNTIME_RENDER_CHECK`) into the harness's check leg.
@@ -332,6 +340,7 @@ export async function dispatchGeneration(
     visualEvaluation: params.visualEvaluation,
     qualityConfig: params.qualityConfig,
     fixtureProps: params.fixtureProps,
+    ...(params.onCodingTurnPrompt !== undefined ? { onCodingTurnPrompt: params.onCodingTurnPrompt } : {}),
   };
 
   // ── Classify + build harness.

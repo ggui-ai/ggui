@@ -16,7 +16,7 @@ import {
 } from "@ggui-ai/protocol";
 import type { AnyAdapterConfig } from "@ggui-ai/ui-gen/adapters/base";
 import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters";
-import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
+import { dispatchGeneration, type CodingTurnPrompt } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
 import { appGenerationProfileSchema, type AppGenerationProfile } from "@ggui-ai/protocol";
 import { runWithVariantTag } from "./variant-log-tag.js";
 import { warmupRuntimeRenderWorker, type RuntimeRenderWorkerWarmup } from "@ggui-ai/ui-gen/harness/check/runtime-render";
@@ -429,6 +429,13 @@ export class BenchmarkRunner {
         ) +
         contextBlock +
         varianceBlock;
+      // Opt-in sent-prompt capture (#2010): with GGUI_BENCH_SOURCES_DIR set, the first coding turn's system prompt
+      // and user message, exactly as handed to the model, are kept and written beside the cell's source below, so a
+      // bar that quotes "the text a card receives" diffs against what was sent, not against the authored templates.
+      // Unset (the default, and every CI run): no observer is passed and nothing is kept.
+      const sourcesDir = process.env.GGUI_BENCH_SOURCES_DIR;
+      const captureSent = sourcesDir !== undefined && sourcesDir !== '';
+      let firstTurnSent: CodingTurnPrompt | undefined;
       const generation: GenerationResult | AdapterResult =
         await withTimeout(
           dispatchGeneration({
@@ -488,6 +495,13 @@ export class BenchmarkRunner {
             ...(commit.appGadgets !== undefined
               ? { appGadgets: commit.appGadgets }
               : {}),
+            ...(captureSent
+              ? {
+                  onCodingTurnPrompt: (sent: CodingTurnPrompt) => {
+                    if (sent.turn === 1) firstTurnSent = sent;
+                  },
+                }
+              : {}),
             // Thread the per-package `.d.ts` for the registered
             // gadgets so the coding agent's typecheck resolves a
             // generated `import { LeafletMap } from '<package>'`
@@ -529,10 +543,14 @@ export class BenchmarkRunner {
       // commit and time, so a bar that greps or mounts the source reads the
       // exact text the cell scored. Unset (the default, and every CI run), this
       // block is skipped and no file is written.
-      const sourcesDir = process.env.GGUI_BENCH_SOURCES_DIR;
-      if (sourcesDir !== undefined && sourcesDir !== '' && generation.sourceCode) {
+      if (captureSent) {
+        const stem = join(sourcesDir, `${variant.id}-${commit.id}-${Date.now()}`);
         mkdirSync(sourcesDir, { recursive: true });
-        writeFileSync(join(sourcesDir, `${variant.id}-${commit.id}-${Date.now()}.tsx`), generation.sourceCode, 'utf8');
+        if (generation.sourceCode) writeFileSync(`${stem}.tsx`, generation.sourceCode, 'utf8');
+        if (firstTurnSent !== undefined) {
+          writeFileSync(`${stem}.system.txt`, firstTurnSent.systemPrompt, 'utf8');
+          writeFileSync(`${stem}.user.txt`, firstTurnSent.userPrompt, 'utf8');
+        }
       }
 
       // Post-generation analysis (lightweight, no AWS needed)
