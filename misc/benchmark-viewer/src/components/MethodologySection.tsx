@@ -65,6 +65,21 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-24',
+    text:
+      'Correction (internal issue #1981): the 2026-10-22 entry below says the change deletes one ' +
+      'sentence from the constrained prompt and one from the component reference both prompts ' +
+      'share. Only the first reaches the model. The prompt sends the component reference in a ' +
+      'condensed form that keeps the first sentence of each property\'s description (up to 80 ' +
+      'characters), and the deleted reference sentence was not a first sentence: the reference ' +
+      'the model reads is byte for byte the same with and without the change, in every run of the ' +
+      'A/B. The whole treatment the model received was one sentence of the constrained prompt, ' +
+      '123 bytes. The A/B ran the constrained prompt, as the nightly does, and measured exactly ' +
+      'that sentence, so its result stands as a result about those 123 bytes. The free prompt ' +
+      'changed only through the reference, so nothing it sends changed and nothing about it was ' +
+      'tested. The runtime change the entry describes is unaffected.',
+  },
+  {
     date: '2026-10-23',
     text:
       'Contract re-check result (internal issues #1765 and #1981), the measurement the correction ' +
