@@ -580,6 +580,32 @@ describe('mcp-endpoint-routes — the universal route refuses a per-app-only cre
     expect(JSON.stringify(lines)).not.toContain('padding');
   });
 
+  it('createGguiServer refuses a ceiling below 1 or NaN at construction, not at the first call (ggui#1996)', () => {
+    for (const bad of [0, -1, Number.NaN]) {
+      expect(() => createGguiServer({ logger: silentLogger, maxToolInputElements: bad })).toThrow(/maxToolInputElements/);
+    }
+  });
+
+  it('a server built with maxToolInputElements: 3 refuses a 4-element call on its mount, naming 3 (ggui#1996)', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth(), maxToolInputElements: 3 });
+    const res = await fetch(`${fx.url}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${AGENT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'ceiling-3',
+        method: 'tools/call',
+        params: { name: 'ggui_search_blueprints', arguments: { a: 1, b: 2, c: 3, d: 4 } },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('more than the maximum of 3 elements');
+  });
+
   it('listing a source without a per-app authorize callback refuses to construct the server', () => {
     expect(() =>
       createGguiServer({

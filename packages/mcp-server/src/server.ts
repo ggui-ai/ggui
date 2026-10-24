@@ -3481,6 +3481,19 @@ export interface CreateGguiServerOptions {
   readonly withholdResultMeta?: boolean;
 
   /**
+   * The tool-input element ceiling every mount this server builds applies
+   * (ggui#1993): how many array elements and object members one
+   * `tools/call`'s `arguments` may carry before the SDK refuses the call
+   * ahead of any handler. Default `MAX_TOOL_INPUT_ELEMENTS` (10,000);
+   * `Infinity` is "no limit" (the request body limit is then the only
+   * bound). A value below 1 or NaN is refused here, at composition — a
+   * configuration error at boot, never at the first call (ggui#1996). A
+   * deployment whose tools legitimately carry larger inputs (a data-dense
+   * dashboard in `props`) raises it instead of forking the factory.
+   */
+  readonly maxToolInputElements?: number;
+
+  /**
    * Dep seam for the operator-class `ggui_ops_*` apps handlers. Like
    * every ops domain it is optional — `buildOpsBundleHandlers`
    * registers the apps tools only when this seam is bound. A deployment
@@ -5222,8 +5235,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Per-boot `buildMcpServer` options — every input below is fixed at
   // composition time, so the bundle is assembled once and the MCP
   // endpoint family spreads a fresh copy per request.
+  // ggui#1996 — the SDK refuses a bad ceiling at `new McpServer`, which this
+  // factory runs per request; refuse it here instead, at composition.
+  if (
+    opts.maxToolInputElements !== undefined &&
+    opts.maxToolInputElements !== Infinity &&
+    (Number.isNaN(opts.maxToolInputElements) || opts.maxToolInputElements < 1)
+  ) {
+    throw new Error(
+      `createGguiServer: maxToolInputElements must be a number of at least 1, or Infinity, got ${String(opts.maxToolInputElements)}`,
+    );
+  }
   const buildMcpOptions: BuildMcpServerOptions = {
     mcpAppsOutbound: mcpAppsEnabled,
+    ...(opts.maxToolInputElements !== undefined ? { maxToolInputElements: opts.maxToolInputElements } : {}),
     ...(viewProofGate !== undefined ? { viewProofGate } : {}),
     // Caller-provided `shellHtml` overrides the default (and the
     // inline-runtime shell); `installMcpAppsOutbound` falls back to

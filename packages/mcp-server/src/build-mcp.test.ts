@@ -1254,6 +1254,66 @@ describe('buildMcpServer — amend, update and render log their session (#1474)'
  * Pinned here: the refusal shape, the control at exactly the ceiling (the
  * handler runs), and the number itself, so a change to it is deliberate.
  */
+describe('buildMcpServer — the element ceiling is an option, defaulting to the constant (ggui#1996)', () => {
+  // #1993 hard-coded MAX_TOOL_INPUT_ELEMENTS for every server the published factory builds; a self-hoster whose
+  // tools legitimately carry larger inputs had no knob but a fork. The option applies the operator's ceiling, else
+  // the default; `Infinity` is the SDK's "no limit".
+  const info = { name: 'test', version: '0.0.1' };
+  const open: SharedHandler<ZodRawShape, ZodRawShape> = {
+    name: 'open_input',
+    description: 'accepts an open input',
+    inputSchema: { source: z.string(), fixtureProps: z.unknown().optional() },
+    outputSchema: { ok: z.boolean() },
+    async handler() {
+      return { ok: true };
+    },
+  };
+  function withElements(total: number): { source: string; fixtureProps: number[] } {
+    return { source: 'x', fixtureProps: new Array<number>(total - 2).fill(0) };
+  }
+  async function boot(opts: Parameters<typeof buildMcpServer>[4]): Promise<{ client: Client; close: () => Promise<void> }> {
+    const server = buildMcpServer(info, [open], () => baseCtx, silentLogger, opts);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'ceiling-option-test', version: '0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return { client, close: async () => { await client.close(); await server.close(); } };
+  }
+
+  it('an option of N refuses N+1 elements, naming N, and admits exactly N', async () => {
+    const { client, close } = await boot({ maxToolInputElements: 5 });
+    try {
+      const refused = await client.callTool({ name: 'open_input', arguments: withElements(6) });
+      expect(refused.isError).toBe(true);
+      expect(JSON.stringify(refused.content)).toContain('more than the maximum of 5 elements');
+      const admitted = await client.callTool({ name: 'open_input', arguments: withElements(5) });
+      expect(admitted.isError).not.toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it('omission applies the constant — the refusal names MAX_TOOL_INPUT_ELEMENTS', async () => {
+    const { client, close } = await boot({});
+    try {
+      const refused = await client.callTool({ name: 'open_input', arguments: withElements(MAX_TOOL_INPUT_ELEMENTS + 1) });
+      expect(refused.isError).toBe(true);
+      expect(JSON.stringify(refused.content)).toContain(`more than the maximum of ${MAX_TOOL_INPUT_ELEMENTS} elements`);
+    } finally {
+      await close();
+    }
+  });
+
+  it("Infinity is the SDK's no-limit: a payload past the constant is admitted", async () => {
+    const { client, close } = await boot({ maxToolInputElements: Infinity });
+    try {
+      const admitted = await client.callTool({ name: 'open_input', arguments: withElements(MAX_TOOL_INPUT_ELEMENTS + 1) });
+      expect(admitted.isError).not.toBe(true);
+    } finally {
+      await close();
+    }
+  });
+});
+
 describe('buildMcpServer — an SDK-level tools/call refusal still produces one tool_invoked line (ggui#1995)', () => {
   // The SDK refuses an over-ceiling or schema-failing `tools/call` inside its own handler, before the callback
   // ggui installs — observable on the wire (isError) but, until this, invisible in ops logs. The rule: a `tools/call`

@@ -180,6 +180,17 @@ export interface ServerInfo {
 
 export interface BuildMcpServerOptions {
   /**
+   * How many array elements and object members one `tools/call`'s
+   * `arguments` may carry before the SDK refuses the call ahead of any
+   * handler (ggui#1993). Default {@link MAX_TOOL_INPUT_ELEMENTS}; `Infinity`
+   * is the SDK's "no limit", leaving the request body limit as the only
+   * bound. A value below 1 or NaN is refused by the SDK at construction
+   * (`RangeError`); `createGguiServer` refuses it earlier, at composition,
+   * so a misconfigured deployment fails at boot and not at its first call
+   * (ggui#1996).
+   */
+  readonly maxToolInputElements?: number;
+  /**
    * The view-origin proof's measuring gate (ggui#1415), built once per
    * server with the secret its ws envelopes are signed with. For a tool
    * that declares a view proof, the gate verifies the call's proof before
@@ -633,7 +644,7 @@ export function buildMcpServer(
       ...(info.description ? { description: info.description } : {}),
     },
     {
-      maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
+      maxToolInputElements: opts.maxToolInputElements ?? MAX_TOOL_INPUT_ELEMENTS,
       ...(opts.instructions ? { instructions: opts.instructions } : {}),
     },
   );
