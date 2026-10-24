@@ -181,6 +181,14 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
     // Failure-path classification handlers — delegate to the matching
     // caller callback. Kept inline for parity with the web host's
     // listener switch.
+    // ggui#2018 — one nonce per mounted host, minted here and stamped into
+    // the shim the main frame runs; `handleMessage` dispatches only
+    // envelopes that carry it. The card's origin is the trust boundary: a
+    // same-origin child the card creates reaches the shim's override and is
+    // stamped (it is the card); a cross-origin child cannot reach the shim
+    // and its only route is the raw native handler, which this drops.
+    const bridgeNonce = useMemo(() => mintBridgeNonce(), []);
+
     const handleMessage = useCallback(
       async (event: WebViewMessageEvent): Promise<void> => {
         const raw = event.nativeEvent.data;
@@ -200,6 +208,9 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
         // here; raw payloads outside the envelope (legacy / non-bridge
         // messages) are dropped.
         if (envelope[NATIVE_BRIDGE_ENVELOPE_KEY] !== true) return;
+        // ggui#2018 — not stamped by the shim this host injected: a frame
+        // speaking to the native handler directly. Dropped, nothing owed.
+        if (envelope.nonce !== bridgeNonce) return;
         const payload = envelope.payload;
 
         const tag = classifyRendererEnvelope(payload);
@@ -271,7 +282,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
         }
       },
-      [deliverToWebView, onError, onObserve, onLifecycle, onSizeChanged],
+      [bridgeNonce, deliverToWebView, onError, onObserve, onLifecycle, onSizeChanged],
     );
 
     // Mount-source null → caller gave an unmountable resource. Emit
@@ -309,7 +320,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       };
     }, []);
 
-    const injectedScript = useMemo(() => buildInjectedBridgeScript(), []);
+    const injectedScript = useMemo(() => buildInjectedBridgeScript({ nonce: bridgeNonce }), [bridgeNonce]);
     const dims = resolveContainerDimensions(containerDimensions);
 
     // Native WebView permission gating — media playback requires user
@@ -383,3 +394,23 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
     );
   },
 );
+
+/**
+ * A per-mount nonce for the bridge envelope (ggui#2018). `crypto.getRandomValues`
+ * when the runtime has it (Hermes ships it; a polyfill supplies it elsewhere),
+ * else `crypto.randomUUID`, else two `Math.random` base-36 segments. The receiver
+ * drops silently, so a stranger has no oracle; the nested frame cannot observe
+ * the host realm's generator; and the shim keeps the value in its closure.
+ */
+function mintBridgeNonce(): string {
+  const g = globalThis as {
+    crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array; randomUUID?: () => string };
+  };
+  if (g.crypto?.getRandomValues) {
+    const bytes = g.crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID().replace(/-/g, '');
+  const seg = (): string => Math.random().toString(36).slice(2, 12).padEnd(10, '0');
+  return seg() + seg();
+}

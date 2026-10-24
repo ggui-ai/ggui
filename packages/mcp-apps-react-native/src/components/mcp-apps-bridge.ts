@@ -249,11 +249,29 @@ export async function handleHostBridgeRequest(
 //
 // Wire format — wrap the original payload so the RN side can
 // distinguish MCP Apps traffic from other message events the embedded
-// page might legitimately generate.
+// page might legitimately generate, and stamp it with the nonce the host
+// minted for this WebView (ggui#2018, see `BridgeShimOptions.nonce`).
 export const NATIVE_BRIDGE_ENVELOPE_KEY = '__ggui_mcp_apps';
 
+export interface BridgeShimOptions {
+  /**
+   * The per-WebView nonce the host minted for this mount. The shim stamps
+   * it on every envelope it forwards and the host's `onMessage` receiver
+   * dispatches only envelopes that carry it. The native message handler
+   * the shim fronts is reachable from every frame in the WebView
+   * (`window.webkit.messageHandlers…` on iOS, the JavaScript interface on
+   * Android), while this script runs in the main frame only — so the nonce
+   * is what makes "sent through the shim the host installed" checkable.
+   * It lives in the shim's closure, never on `window`. A host composing
+   * its own receiver around `buildInjectedBridgeScript` mints one the same
+   * way and checks it in its own `onMessage`.
+   */
+  readonly nonce: string;
+}
+
 /** Script injected BEFORE the page's own scripts run. */
-export function buildInjectedBridgeScript(): string {
+export function buildInjectedBridgeScript(options: BridgeShimOptions): string {
+  const nonceLiteral = JSON.stringify(options.nonce);
   // The `true;` trailer is required by react-native-webview on iOS for
   // injected strings; without it iOS's JS runtime returns an `undefined`
   // result that confuses the loader.
@@ -268,6 +286,7 @@ export function buildInjectedBridgeScript(): string {
         if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             ${JSON.stringify(NATIVE_BRIDGE_ENVELOPE_KEY)}: true,
+            nonce: ${nonceLiteral},
             payload: msg,
           }));
         }

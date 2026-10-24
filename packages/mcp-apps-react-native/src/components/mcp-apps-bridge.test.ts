@@ -98,9 +98,34 @@ function makeWebKitWindow(): {
 }
 
 describe('injected bridge + delivery script — executable transport contract', () => {
+  it('page → host: the forwarded envelope carries the nonce the host minted for this WebView (ggui#2018)', () => {
+    const { win, run } = makeWebKitWindow();
+    run(buildInjectedBridgeScript({ nonce: 'n-abc123' }));
+    win.postMessage({ jsonrpc: '2.0', method: 'ping' });
+    const raw = win.ReactNativeWebView.postMessage.mock.calls[0]?.[0] as string;
+    expect(JSON.parse(raw)).toEqual({
+      [NATIVE_BRIDGE_ENVELOPE_KEY]: true,
+      nonce: 'n-abc123',
+      payload: { jsonrpc: '2.0', method: 'ping' },
+    });
+  });
+
+  it('the nonce lives only in the shim closure — no own property of window holds it after the script runs (ggui#2018)', () => {
+    const { win, run } = makeWebKitWindow();
+    run(buildInjectedBridgeScript({ nonce: 'n-secret-xyz' }));
+    const leaked = Object.getOwnPropertyNames(win).filter((k) => {
+      try {
+        return JSON.stringify((win as unknown as Record<string, unknown>)[k]).includes('n-secret-xyz');
+      } catch {
+        return false;
+      }
+    });
+    expect(leaked).toEqual([]);
+  });
+
   it('page → host: window.postMessage forwards an enveloped payload to the RN bridge', () => {
     const { win, run } = makeWebKitWindow();
-    run(buildInjectedBridgeScript());
+    run(buildInjectedBridgeScript({ nonce: 'n-test' }));
     win.postMessage({ jsonrpc: '2.0', id: 1, method: 'ui/initialize' });
     expect(win.ReactNativeWebView.postMessage).toHaveBeenCalledTimes(1);
     const raw = win.ReactNativeWebView.postMessage.mock.calls[0]?.[0] as string;
@@ -111,13 +136,13 @@ describe('injected bridge + delivery script — executable transport contract', 
 
   it('window.parent identity is STABLE across accesses (transport equality checks)', () => {
     const { win, run } = makeWebKitWindow();
-    run(buildInjectedBridgeScript());
+    run(buildInjectedBridgeScript({ nonce: 'n-test' }));
     expect(win.parent).toBe(win.parent);
   });
 
   it('host → page: delivery reaches a page message listener under WebKit source rules', () => {
     const { win, run } = makeWebKitWindow();
-    run(buildInjectedBridgeScript());
+    run(buildInjectedBridgeScript({ nonce: 'n-test' }));
     // The shell / runtime registers its listener AFTER the
     // document-start bridge, exactly like the real load order.
     const received: unknown[] = [];
@@ -132,7 +157,7 @@ describe('injected bridge + delivery script — executable transport contract', 
 
   it('host → page: a window.onmessage handler also receives the delivery', () => {
     const { win, run } = makeWebKitWindow();
-    run(buildInjectedBridgeScript());
+    run(buildInjectedBridgeScript({ nonce: 'n-test' }));
     const received: unknown[] = [];
     win.onmessage = (ev) => received.push(ev);
     run(buildDeliveryScript({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: {} }));
@@ -141,7 +166,7 @@ describe('injected bridge + delivery script — executable transport contract', 
 
   it('host → page: listeners removed via removeEventListener stop receiving', () => {
     const { win, run } = makeWebKitWindow();
-    run(buildInjectedBridgeScript());
+    run(buildInjectedBridgeScript({ nonce: 'n-test' }));
     const received: unknown[] = [];
     const listener: MessageListener = (ev) => received.push(ev);
     win.addEventListener('message', listener);

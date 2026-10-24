@@ -560,9 +560,24 @@ describe('<McpAppIframe> — WebView mount', () => {
  * `onMessage` callback receives a `WebViewMessageEvent` with
  * `nativeEvent.data` set to the JSON-encoded envelope.
  */
+/**
+ * The nonce the host minted for this WebView, read off the injected script the
+ * way only the main frame's shim can (ggui#2018). A test that wants to speak as
+ * a stranger passes its own `nonce` (or `null` for none) to `simulateFromWebView`.
+ */
+function nonceInjectedInto(tree: ReactTestRenderer): string {
+  const webView = findWebView(tree);
+  if (!webView) throw new Error('WebView not yet mounted');
+  const script = webView.props.injectedJavaScriptBeforeContentLoaded as string;
+  const m = /nonce: ("[^"]+")/.exec(script);
+  if (!m?.[1]) throw new Error('injected bridge script carries no nonce');
+  return JSON.parse(m[1]) as string;
+}
+
 async function simulateFromWebView(
   tree: ReactTestRenderer,
   payload: unknown,
+  nonce: string | null = nonceInjectedInto(tree),
 ): Promise<void> {
   const webView = findWebView(tree);
   if (!webView) throw new Error('WebView not yet mounted');
@@ -572,6 +587,7 @@ async function simulateFromWebView(
   if (!onMessage) throw new Error('WebView has no onMessage handler');
   const envelope = {
     __ggui_mcp_apps: true,
+    ...(nonce !== null ? { nonce } : {}),
     payload,
   };
   await act(async () => {
@@ -581,6 +597,33 @@ async function simulateFromWebView(
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   });
 }
+
+describe('<McpAppIframe> — the receiver takes envelopes only from the shim it injected (ggui#2018)', () => {
+  it('dispatches an envelope stamped with this WebView\'s nonce, and drops the same payload with none or another', async () => {
+    const onLifecycle = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<McpAppIframe resource={makeResource()} onLifecycle={onLifecycle} />);
+    });
+    const lifecycle = { type: 'ggui:lifecycle', event: { state: 'mounting' } };
+    await simulateFromWebView(tree, lifecycle, null);
+    await simulateFromWebView(tree, lifecycle, 'not-the-nonce');
+    expect(onLifecycle).not.toHaveBeenCalled();
+    await simulateFromWebView(tree, lifecycle);
+    expect(onLifecycle).toHaveBeenCalledTimes(1);
+  });
+
+  it('mints a different nonce per mounted host', () => {
+    let a!: ReactTestRenderer;
+    let b!: ReactTestRenderer;
+    act(() => {
+      a = create(<McpAppIframe resource={makeResource()} />);
+      b = create(<McpAppIframe resource={makeResource()} />);
+    });
+    expect(nonceInjectedInto(a)).not.toBe(nonceInjectedInto(b));
+    expect(nonceInjectedInto(a).length).toBeGreaterThanOrEqual(16);
+  });
+});
 
 describe('<McpAppIframe> — lifecycle envelope integration', () => {
   it('ggui:lifecycle → mirrors state via accessibilityValue AND fires onLifecycle', async () => {

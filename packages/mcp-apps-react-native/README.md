@@ -55,6 +55,31 @@ The package also exports a React Native theme system (`ThemeProvider`,
 | `@ggui-ai/mcp-apps-react-native`              | Components, hooks, theme |
 | `@ggui-ai/mcp-apps-react-native/chat-helpers` | Message-grouping helpers |
 
+## Trust boundary — who may speak to the host
+
+The host (`<McpAppIframe>`) accepts bridge traffic only from the shim it
+injected into the WebView's main frame. Every envelope the shim forwards is
+stamped with a nonce the host minted for that mount; `onMessage` dispatches an
+envelope only when the nonce matches, and drops everything else silently. The
+nonce lives in the shim's closure, never on `window`, and the shim runs in the
+main frame only.
+
+The boundary is the card's **origin**, which gives two doors with one check
+each:
+
+- A **same-origin child** the card's own code creates (`srcdoc`, `about:blank`)
+  calls `parent.postMessage` and reaches the shim's override, which stamps the
+  envelope — by design, that child is the card.
+- A **cross-origin child** cannot reach the shim: its `parent.postMessage` is
+  the browser's native method, so it lands as a DOM `MessageEvent` whose
+  `source` is the child, which the view-side listeners drop; anything that
+  reaches the host by another route arrives without the nonce and is dropped.
+
+A host composing its own receiver around `buildInjectedBridgeScript` mints a
+nonce the same way (`{ nonce }` is required) and checks it in its own
+`onMessage`. The served card is not a party: card code still calls plain
+`postMessage`, so a card from any server version is unaffected.
+
 ## License
 
 Apache-2.0
