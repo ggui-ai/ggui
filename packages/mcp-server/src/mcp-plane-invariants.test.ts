@@ -148,7 +148,7 @@ describe("Origin/Host validation is WIRED (mount order, not just the pure functi
     }
   });
 
-  it("403s a disallowed Origin on POST /MCP — Express routes case-insensitively, so the uppercase path must not bypass the check", async () => {
+  it("403s a disallowed Origin on POST /MCP — the Origin check is app-level middleware ahead of the router, so an odd-cased path (a 404 since ggui#1997) is refused for its Origin first", async () => {
     const { port, close } = await bootServer();
     try {
       const res = await rawRequest({

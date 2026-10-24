@@ -18,7 +18,7 @@
  * the MCP SDK `StreamableHTTPClientTransport` (for the accepted path).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z, type ZodRawShape } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
@@ -498,10 +498,46 @@ describe('mcp-endpoint-routes — the universal route refuses a per-app-only cre
   it('the refusal log names the REGISTERED mount as `route` (bounded) and keeps the caller\'s spelling as `path`', async () => {
     const cap = capturingLogger();
     fx = await boot({ auth: federatedAndAgentAuth(), perAppRouting: perAppOnly, logger: cap.logger });
-    const { status } = await initializeAt(fx.url, '/MCP/', FEDERATED_TOKEN);
+    // `/mcp/` — a spelling that is not the registered mount but still routes to it (strict routing is off; case is
+    // not folded since ggui#1997, so an odd-cased spelling would be a 404 before this log line).
+    const { status } = await initializeAt(fx.url, '/mcp/', FEDERATED_TOKEN);
     expect(status).toBe(403);
     const hit = cap.warns.find((w) => w.event === 'per_app_only_source_refused');
-    expect(hit?.fields).toEqual({ route: '/mcp', path: '/MCP/', source: 'oidc', appId: 'a' });
+    expect(hit?.fields).toEqual({ route: '/mcp', path: '/mcp/', source: 'oidc', appId: 'a' });
+  });
+
+  it('serves a mount at exactly its declared path: an odd-cased spelling is a 404 on every mount the factory exposes (ggui#1997)', async () => {
+    // Express folds case by default, so `POST /CONTROL` reached the `/control` handler while a per-path edge policy
+    // (ingress-nginx's case-sensitive `Prefix` location, e.g. the 256k body cap of ggui#1993) never saw it. With case-
+    // sensitive routing the app's table is the one source of truth for what a path means: declared spelling served,
+    // any other casing refused by the router before any handler runs.
+    const svcTool: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'svc_echo',
+      description: 'echo',
+      inputSchema: { q: z.string() },
+      outputSchema: { q: z.string() },
+      handler: async (input: Record<string, unknown>) => ({ q: String(input.q) }),
+    };
+    fx = await boot({
+      auth: federatedAndAgentAuth(),
+      mcpServices: [{ name: 'svc', path: '/svc', handlers: [svcTool] }],
+    });
+    const pairs: ReadonlyArray<readonly [declared: string, odd: string]> = [
+      ['/control', '/CONTROL'],
+      ['/control', '/Control'],
+      ['/mcp', '/MCP'],
+      ['/svc', '/SVC'],
+    ];
+    for (const [declared, odd] of pairs) {
+      const served = await initializeAt(fx.url, declared, AGENT_TOKEN);
+      expect(served.status, declared).not.toBe(404);
+      const refused = await initializeAt(fx.url, odd, AGENT_TOKEN);
+      expect(refused.status, odd).toBe(404);
+    }
+    const health = await fetch(`${fx.url}/ggui/health`);
+    expect(health.status).toBe(200);
+    const oddHealth = await fetch(`${fx.url}/ggui/HEALTH`);
+    expect(oddHealth.status).toBe(404);
   });
 
   it('listing a source without a per-app authorize callback refuses to construct the server', () => {

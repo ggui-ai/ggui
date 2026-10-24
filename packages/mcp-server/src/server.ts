@@ -4942,6 +4942,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const als = new AsyncLocalStorage<HandlerContext>();
 
   const app = express();
+  // ggui#1997 — a mount is served at exactly its declared path. Express folds
+  // case by default, so `POST /CONTROL` reached the `/control` handler while
+  // a per-path edge policy (ingress-nginx's case-sensitive `Prefix` location,
+  // such as the control plane's 256k body cap) never saw it. The router reads
+  // this setting when it is first created, so it is set before any route or
+  // middleware is registered. An odd-cased path is a 404 from the router,
+  // before any handler runs; no first-party client sends one (the published
+  // connect URLs are lower-case literals).
+  app.set("case sensitive routing", true);
   // Per-request context (ALS-backed) — captures forwarded host/proto
   // when the TCP peer is loopback, so deps that build absolute URLs
   // (render/update resultMeta.runtimeUrl) can adapt to the tunnel host.
