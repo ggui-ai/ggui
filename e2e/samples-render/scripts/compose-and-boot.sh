@@ -223,18 +223,21 @@ if [ -n "${GGUI_STORAGE_SQLITE:-}" ]; then
     const { readFileSync, writeFileSync } = require("node:fs");
     const pkgPath = process.argv[1];
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    pkg.dependencies = { ...(pkg.dependencies ?? {}), "better-sqlite3": "^12.9.0" };
+    pkg.dependencies = { ...(pkg.dependencies ?? {}), "better-sqlite3": "^13.0.3" };
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   ' "$GGUI_DIR/package.json"
-  # pnpm 11 will NOT run better-sqlite3's prebuild-install/node-gyp postinstall
-  # (so the native .node binding never lands → `ggui serve` crashes loading the
-  # sqlite vectors driver) unless the dep is in the workspace `allowBuilds`
-  # allowlist. `strictDepBuilds:false` only downgrades the error to a warning;
-  # it does NOT approve the build. Mirror the monorepo root's allowlist form.
-  # Idempotent: only append if not already present.
+  # better-sqlite3 13 ships its binaries in the tarball and has nothing to
+  # build, but pnpm 11 still counts it as a build dependency: unlisted, every
+  # install warns "Ignored build scripts"; allowed, it runs an implicit
+  # `node-gyp rebuild`. An explicit `false` installs the shipped binary as
+  # is, without the warning.
+  # (11.x and 12.x are not used: built from source on Node 24.19+ they abort
+  # the process when a statement is collected, nodejs/node#65446.) Mirror the
+  # monorepo root's allowlist form. Idempotent: only append if not already
+  # present.
   WS_YAML="$APP_DIR/pnpm-workspace.yaml"
-  if ! grep -q "better-sqlite3: true" "$WS_YAML" 2>/dev/null; then
-    printf '\nallowBuilds:\n  better-sqlite3: true\n' >> "$WS_YAML"
+  if ! grep -q "better-sqlite3: false" "$WS_YAML" 2>/dev/null; then
+    printf '\nallowBuilds:\n  better-sqlite3: false\n' >> "$WS_YAML"
   fi
 fi
 

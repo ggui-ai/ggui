@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T17:08:18.433Z",
+  "generatedAt": "2026-10-24T20:28:38.986Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -549,8 +549,7 @@
     "bare-path",
     "bare-stream",
     "bare-url",
-    "better-sqlite3@^12",
-    "better-sqlite3@^13",
+    "better-sqlite3",
     "brace-expansion@^1",
     "brace-expansion@^2",
     "brace-expansion@^5",

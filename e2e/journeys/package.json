@@ -27,7 +27,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/ws": "^8.5.0",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^13.0.3",
     "dotenv": "^16.4.0",
     "vitest": "^4.1.11",
     "ws": "^8.20.1",
