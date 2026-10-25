@@ -424,6 +424,30 @@ import type { FetchShape, LayoutShape, RenderShape, RiskTier, StateShape, WriteS
 
 export type CriteriaSeverity = "must" | "should";
 export type CriteriaVerdict = "pass" | "fail" | "n/a";
+/**
+ * Why a verdict is `n/a` because nothing EVALUATED it — as distinct from an evaluation that found the criterion
+ * cannot be read off this frame (the judge's own `n/a`, which carries no reason). ggui#1440.
+ * - `status-not-live`: the method's `status` is not live.
+ * - `not-wired`: an instrument row marked live with no instrument bound to it.
+ * - `no-page`: the instrument reads the rendered page and this capture had none (a stored frame).
+ * - `probe-failed`: the instrument's page read failed on this capture.
+ * - `not-flat`: the instrument refuses a number because a colour cannot be composited from flat colours
+ *   (an image or gradient, an opacity, a blend mode, an overlap).
+ * - `unresolved-token`: a theme token the instrument compares against did not resolve to a colour.
+ * - `readers-column`: a human row: the reader's column, not the judge's.
+ * - `no-post-action-capture`: a judge row that needs a state after an action, on a capture without one.
+ * - `unanswered`: a judge row the judge did not answer.
+ */
+export type CriteriaNotEvaluatedReason =
+  | "status-not-live"
+  | "not-wired"
+  | "no-page"
+  | "probe-failed"
+  | "not-flat"
+  | "unresolved-token"
+  | "readers-column"
+  | "no-post-action-capture"
+  | "unanswered";
 /** The method that produces a verdict: an instrument's measurement, the vision judge off the frame, or a person's eye. */
 export type CriteriaMethod = "instrument" | "judge" | "human";
 /** The method's readiness, as the bank's author wrote it — the only source of an `n/a` that is not the judge's own. */
@@ -473,6 +497,11 @@ export interface CriterionVerdict {
   source: CriteriaSource;
   verdict: CriteriaVerdict;
   evidence: string;
+  /**
+   * ggui#1440 — present only when `verdict` is `n/a` because nothing evaluated the criterion, with why. Absent on every
+   * evaluated verdict, the judge's own `n/a` included; `evidence` stays the prose.
+   */
+  notEvaluated?: { reason: CriteriaNotEvaluatedReason };
   /**
    * ggui#1663 — a measured reading beside a judge row, REPORT-ONLY: the row's `verdict` stays the judge's, so this
    * changes no verdict, score or bar. Present only on rows an instrument answers beside the judge (`space.edge`).

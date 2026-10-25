@@ -165,3 +165,54 @@ describe('a row that needs a post-action capture (ggui#1711)', () => {
     expect(block.verdicts.find((v) => v.id === 'state.feedback')).toMatchObject({ verdict: 'pass', evidence: 'the button shows Sending…' });
   });
 });
+
+// ggui#1440 — every n/a the resolver writes for a row nothing evaluated says WHY, as a closed reason; an evaluated row
+// (the judge's own n/a included) carries none. The finish rows read their probe: absent on a stored frame, null when it failed.
+describe('not evaluated, with a reason (ggui#1440)', () => {
+  const rb = parseCriteriaBank({
+    version: 'v2',
+    criteria: [
+      { id: 'read.contrast', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'AA', evidence: 'the runs' },
+      { id: 'host.casing', scope: {}, severity: 'must', evaluation: 'instrument', status: 'planned', text: 'casing', evidence: 'the prose' },
+      { id: 'host.theme', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'theme', evidence: 'the tokens' },
+      { id: 'comp.void', scope: {}, severity: 'should', evaluation: 'human', status: 'manual', text: 'placed void', evidence: 'the region' },
+      { id: 'task.copy', scope: {}, severity: 'must', evaluation: 'judge', status: 'planned', text: 'copy', evidence: 'the greeting' },
+      { id: 'space.shape', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'radii', evidence: 'the pills' },
+      { id: 'state.feedback', scope: {}, severity: 'should', evaluation: 'judge', status: 'planned', text: 'a result', evidence: 'the post-action state' },
+    ],
+  });
+  const sel = selectCriteria(rb, ctx);
+  const probe = {
+    version: 'finish-probe-v1' as const,
+    card: { width: 384, height: 516 },
+    hero: null,
+    heroGround: null,
+    texts: [{ tag: 'p', sample: 'Hi', color: [41, 41, 41, 1] as const, backgrounds: [[255, 255, 255, 1] as const], composite: true, fontSize: 16, fontWeight: 400, heading: false, control: false, lines: 1 }],
+    paints: [],
+  };
+  const read = (finish: typeof probe | null | undefined) =>
+    Object.fromEntries(
+      resolveCriteriaBlock({ bank: rb, context: ctx, selected: sel, answers: [[{ id: 'space.shape', verdict: 'n/a', evidence: 'cannot see' }]], measurements: finish === undefined ? m : { ...m, finish } }).verdicts.map((v) => [v.id, v]),
+    );
+
+  it('each kind of not-evaluated names its reason', () => {
+    const by = read(probe);
+    expect(by['host.casing']?.notEvaluated).toEqual({ reason: 'status-not-live' });
+    expect(by['host.theme']?.notEvaluated).toEqual({ reason: 'not-wired' });
+    expect(by['comp.void']?.notEvaluated).toEqual({ reason: 'readers-column' });
+    expect(by['task.copy']?.notEvaluated).toEqual({ reason: 'unanswered' });
+    expect(by['state.feedback']?.notEvaluated).toEqual({ reason: 'no-post-action-capture' });
+  });
+  it("an evaluated row carries no reason — the judge's own n/a included", () => {
+    const by = read(probe);
+    expect(by['read.contrast']).toMatchObject({ verdict: 'pass', method: 'instrument', status: 'live' });
+    expect(by['read.contrast']).not.toHaveProperty('notEvaluated');
+    expect(by['space.shape']).toMatchObject({ verdict: 'n/a', evidence: 'cannot see' });
+    expect(by['space.shape']).not.toHaveProperty('notEvaluated');
+  });
+  it('a finish row on a stored frame (no page) and on a failed probe says which', () => {
+    expect(read(undefined)['read.contrast']).toMatchObject({ verdict: 'n/a', notEvaluated: { reason: 'no-page' } });
+    expect(read(null)['read.contrast']).toMatchObject({ verdict: 'n/a', evidence: 'finish probe failed on this capture', notEvaluated: { reason: 'probe-failed' } });
+  });
+});
+

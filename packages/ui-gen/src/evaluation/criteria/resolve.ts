@@ -11,17 +11,24 @@
 import { EDGE_INSTRUMENT_IDS } from './edge-instruments.js';
 import type { MountFit } from '@ggui-ai/design/rendering';
 import type { CriteriaAnswer } from '../types.js';
-import type { CriteriaAnswerCounts, CriteriaBlock, CriteriaContext, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
+import type { CriteriaAnswerCounts, CriteriaBlock, CriteriaContext, CriteriaNotEvaluatedReason, CriteriaVerdict, CriterionVerdict } from '../types-public.js';
 import type { VisionFinishReason } from '../../harness/llm-router.js';
 import { bankRows, type BankRow, type CriteriaBank } from './bank.js';
 import { CRITERIA_SELECTOR_VERSION, type CriteriaSelectionResult } from './select.js';
 import type { EdgeVerdict } from './edge.js';
+import { FINISH_READS } from './finish.js';
+import type { FinishProbe } from './finish-probe.js';
 
 /** The instruments the capture runs today, by the bank ids they answer (v1 binding; a bank field may replace it). */
-export const INSTRUMENT_BY_ID: Readonly<Record<string, 'fit' | 'fill'>> = {
+export const INSTRUMENT_BY_ID: Readonly<Record<string, 'fit' | 'fill' | 'finish'>> = {
   'comp.fit': 'fit',
   'floor.fit': 'fit',
   'finish.canvas.inhabited': 'fill',
+  // ggui#1440 — the finish probe's four readings (`finish.ts`), report-only like every instrument row.
+  'read.contrast': 'finish',
+  'hello.field': 'finish',
+  'hello.one-colour': 'finish',
+  'hello.gesture': 'finish',
 };
 
 /**
@@ -56,6 +63,11 @@ export interface CriteriaMeasurements {
   readonly edgeV2?: EdgeVerdict | null;
   /** ggui#1711 — the capture includes a state after an action ran. Absent = no (every capture today). */
   readonly postActionCapture?: boolean;
+  /**
+   * ggui#1440 — the finish probe on the capture's DOM: absent when this capture had no page to read (a stored frame),
+   * `null` when the probe ran and failed.
+   */
+  readonly finish?: FinishProbe | null;
 }
 
 function besideRead(kind: 'edge', m: CriteriaMeasurements): Read {
@@ -68,11 +80,12 @@ function edgeRead(e: EdgeVerdict | null | undefined): Read {
   return { verdict: e.verdict, evidence: e.evidence };
 }
 
-type Read = { verdict: CriteriaVerdict; evidence: string };
+type Read = { verdict: CriteriaVerdict; evidence: string; notEvaluated?: { reason: CriteriaNotEvaluatedReason } };
+const notEvaluated = (reason: CriteriaNotEvaluatedReason, evidence: string): Read => ({ verdict: 'n/a', evidence, notEvaluated: { reason } });
 
 function majority(id: string, answers: readonly CriteriaAnswer[][], unansweredReason: string | undefined): Read {
   const votes = answers.flatMap((a) => a.filter((x) => x.id === id));
-  if (votes.length === 0) return { verdict: 'n/a', evidence: unansweredReason ?? 'not answered' };
+  if (votes.length === 0) return notEvaluated('unanswered', unansweredReason ?? 'not answered');
   const counts = new Map<CriteriaVerdict, number>();
   for (const v of votes) counts.set(v.verdict, (counts.get(v.verdict) ?? 0) + 1);
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -82,7 +95,18 @@ function majority(id: string, answers: readonly CriteriaAnswer[][], unansweredRe
   return { verdict: top[0], evidence };
 }
 
-function instrumentRead(kind: 'fit' | 'fill', m: CriteriaMeasurements): Read {
+/** Whether `id` names one of the finish probe's readings — an own key of {@link FINISH_READS}, never an inherited one. */
+function isFinishReadId(id: string): id is keyof typeof FINISH_READS {
+  return Object.hasOwn(FINISH_READS, id);
+}
+
+function instrumentRead(kind: 'fit' | 'fill' | 'finish', id: string, m: CriteriaMeasurements): Read {
+  if (kind === 'finish') {
+    if (m.finish === undefined) return notEvaluated('no-page', 'not measured: this capture had no page to read');
+    if (m.finish === null) return notEvaluated('probe-failed', 'finish probe failed on this capture');
+    if (!isFinishReadId(id)) return notEvaluated('not-wired', 'instrument not wired (no finish reading for this id)');
+    return FINISH_READS[id](m.finish);
+  }
   if (kind === 'fit') {
     if (m.contentHeight === null) return { verdict: 'n/a', evidence: 'content height unmeasurable' };
     return { verdict: m.overflow ? 'fail' : 'pass', evidence: `content ${m.contentHeight}px against a ${m.viewportHeight}px box` };
@@ -93,12 +117,12 @@ function instrumentRead(kind: 'fit' | 'fill', m: CriteriaMeasurements): Read {
 }
 
 function readRow(row: BankRow, answers: readonly CriteriaAnswer[][], m: CriteriaMeasurements, unansweredReason: string | undefined): Read {
-  if (row.evaluation === 'judge' && REQUIRES_POST_ACTION_CAPTURE.has(row.id) && m.postActionCapture !== true) return { verdict: 'n/a', evidence: NO_POST_ACTION };
+  if (row.evaluation === 'judge' && REQUIRES_POST_ACTION_CAPTURE.has(row.id) && m.postActionCapture !== true) return notEvaluated('no-post-action-capture', NO_POST_ACTION);
   if (row.evaluation === 'judge') return majority(row.id, answers, unansweredReason);
-  if (row.evaluation === 'human') return { verdict: 'n/a', evidence: `reader's column (status ${row.status})` };
-  if (row.status !== 'live') return { verdict: 'n/a', evidence: `not implemented (status ${row.status})` };
+  if (row.evaluation === 'human') return notEvaluated('readers-column', `reader's column (status ${row.status})`);
+  if (row.status !== 'live') return notEvaluated('status-not-live', `not implemented (status ${row.status})`);
   const kind = INSTRUMENT_BY_ID[row.id];
-  return kind === undefined ? { verdict: 'n/a', evidence: 'instrument not wired (status live, no binding)' } : instrumentRead(kind, m);
+  return kind === undefined ? notEvaluated('not-wired', 'instrument not wired (status live, no binding)') : instrumentRead(kind, row.id, m);
 }
 
 export function resolveCriteriaBlock(args: {
@@ -130,6 +154,7 @@ export function resolveCriteriaBlock(args: {
       source: s.source,
       verdict: read.verdict,
       evidence: read.evidence,
+      ...(read.notEvaluated !== undefined ? { notEvaluated: read.notEvaluated } : {}),
       ...(beside !== undefined && row.evaluation === 'judge'
         ? {
             instrument: { ...besideRead(beside, args.measurements), id: EDGE_INSTRUMENT_IDS.v1 },

@@ -47,6 +47,7 @@ import { judgeEdges, type EdgeVerdict } from './criteria/edge.js';
 import { EDGE_BLOCKS_EXPRESSION, parseEdgeProbe } from './criteria/edge-probe.js';
 import { EDGE_BLOCKS_V2_EXPRESSION, parseEdgeProbeV2 } from './criteria/edge-probe-v2.js';
 import { judgeEdgesV2 } from './criteria/edge-v2.js';
+import { FINISH_PROBE_EXPRESSION, parseFinishProbe, type FinishProbe } from './criteria/finish-probe.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -887,6 +888,8 @@ export interface ScreenshotAttempt {
   readonly edge?: EdgeVerdict | null;
   /** #1765 — the v2 edge rule on the same DOM, read beside `edge` (report-only); `null` when its probe failed. */
   readonly edgeV2?: EdgeVerdict | null;
+  /** ggui#1440 — the finish probe on the same DOM (report-only); `null` when it failed. Absent on a failed capture. */
+  readonly finish?: FinishProbe | null;
 }
 
 /** The expression the fit measurement evaluates in the page — the taller of the two scroll heights. */
@@ -975,8 +978,24 @@ async function measureContentHeight(page: ScreenshotPage, expression: string = C
  * ggui#1663 — read the edge rule off the page the screenshot is about to take. The probe only reads layout (it never
  * writes to the DOM), so the frame is unchanged; a failed read is reported and returns `null`, never a failed capture.
  */
-async function measureEdges(page: ScreenshotPage): Promise<{ edge: EdgeVerdict | null; edgeV2: EdgeVerdict | null }> {
-  return { edge: await measureEdgesV1(page), edgeV2: await measureEdgesV2(page) };
+async function measureEdges(page: ScreenshotPage): Promise<{ edge: EdgeVerdict | null; edgeV2: EdgeVerdict | null; finish: FinishProbe | null }> {
+  return { edge: await measureEdgesV1(page), edgeV2: await measureEdgesV2(page), finish: await measureFinish(page) };
+}
+
+/**
+ * ggui#1440 — the finish probe on the same page, read just before the screenshot like the edge probes: it only reads
+ * computed styles and boxes, so the frame is unchanged; a failed read is reported and returns `null`, never a failed
+ * capture.
+ */
+async function measureFinish(page: ScreenshotPage): Promise<FinishProbe | null> {
+  try {
+    const probe = parseFinishProbe(await page.evaluate(FINISH_PROBE_EXPRESSION));
+    if (probe === null) console.warn('[visual-eval] finish probe unavailable: the page returned no readable probe');
+    return probe;
+  } catch (e) {
+    console.warn(`[visual-eval] finish probe unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 }
 
 /** #1765 — the v2 rule on the same page, beside v1; a failed read is reported and returns `null`, never a failed capture. */
@@ -1671,7 +1690,7 @@ export async function runVisualEvaluationDetailed(
               context: criteriaContext,
               selected: criteriaSelected,
               answers: criteriaReads(criteriaAnswer),
-              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null, edgeV2: attempt.edgeV2 ?? null },
+              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null, edgeV2: attempt.edgeV2 ?? null, finish: attempt.finish ?? null },
               ...criteriaUnansweredReason(criteriaAnswer),
               ...criteriaCallOf(criteriaAnswer),
             })

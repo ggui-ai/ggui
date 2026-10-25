@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { parseCriteriaBank } from './criteria/bank.js';
 import type { CriteriaContextInput } from './criteria/context.js';
+import { FINISH_PROBE_EXPRESSION, FINISH_PROBE_VERSION } from './criteria/finish-probe.js';
 import { CARD_OVERFLOW_X_EXPRESSION,
   VISUAL_EVAL_PROMPT,
   runVisualEval,
@@ -47,7 +48,7 @@ type JudgeArgs = { prompt: string; original: string; profileBlock: string; crite
  * A fake browser + a judge that records what it was asked. A scoring call (no criteria block) answers from
  * `scoring` in call order; the criteria call answers `criteriaText`.
  */
-function deps(scoring: string[], criteriaText?: string): VisualEvalDeps & { asked: JudgeArgs[] } {
+function deps(scoring: string[], criteriaText?: string, finish?: unknown): VisualEvalDeps & { asked: JudgeArgs[] } {
   const asked: JudgeArgs[] = [];
   let scored = 0;
   const launch = async (_o: LaunchOptions): Promise<ScreenshotBrowser> => ({
@@ -56,7 +57,8 @@ function deps(scoring: string[], criteriaText?: string): VisualEvalDeps & { aske
       waitForNetworkIdle: async () => {},
       waitForSelector: async () => null,
       // ggui#1475 — the inline card's horizontal overflow is its own measurement: this card fits its width.
-      evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : 500),
+      // ggui#1440 — the finish probe answers what the test hands it (absent: a non-probe value, so the probe reads failed).
+      evaluate: async (expression: string) => (expression === CARD_OVERFLOW_X_EXPRESSION ? 0 : expression === FINISH_PROBE_EXPRESSION && finish !== undefined ? finish : 500),
       screenshot: async () => new Uint8Array([1, 2, 3]),
     }),
     close: async () => {},
@@ -213,5 +215,67 @@ describe('the judge emits a typed criteria block per canvas (ggui#1436)', () => 
     expect(c.criteria!.selection).toEqual([]);
     expect(c.criteria!.verdicts).toEqual([]);
     expect(summarizeVisualResult(out.result!)!.criteria).toEqual({ mustFailed: [], shouldFailed: [], mustNa: [] });
+  });
+});
+
+// ggui#1440 — the finish instruments answer four must rows at capture, REPORT-ONLY: a card the instruments fail scores and
+// passes exactly as the same card they pass, and the fails appear only in the block and its roll-up.
+describe('the finish instruments are report-only (ggui#1440)', () => {
+  const finishBank = parseCriteriaBank({
+    version: 'v2',
+    applies: { kind: ['*'], canvases: ['xs-chat-card'] },
+    criteria: [
+      { id: 'read.contrast', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'AA', evidence: 'the runs' },
+      { id: 'hello.field', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'the band', evidence: 'the ground' },
+      { id: 'hello.one-colour', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'one colour', evidence: 'the paints' },
+      { id: 'hello.gesture', scope: {}, severity: 'must', evaluation: 'instrument', status: 'live', text: 'one event', evidence: 'the type' },
+    ],
+  });
+  const ink = [41, 41, 41, 1];
+  const run = (patch: object) => ({ tag: 'p', sample: 'Welcome', color: ink, backgrounds: [[255, 255, 255, 1]], composite: true, fontSize: 16, fontWeight: 400, heading: false, control: false, lines: 1, ...patch });
+  const card = (patch: object) => ({
+    version: FINISH_PROBE_VERSION,
+    card: { width: 384, height: 516 },
+    hero: { width: 384, height: 120, background: ink, flat: true, firstChild: true },
+    heroGround: ink,
+    texts: [run({ tag: 'h3', sample: 'Hello', heading: true, fontSize: 24, color: [244, 243, 237, 1], backgrounds: [ink] }), run({})],
+    paints: [{ kind: 'fill', color: ink, area: 46080, inHero: true, control: false, behind: [] }],
+    ...patch,
+  });
+  const passing = card({});
+  // Every row fails: grey body text (contrast), an orange band that is not the ink hero ground (field), a populous
+  // blue fill outside that band (one-colour), and the heading at body size (gesture).
+  const orange = [228, 84, 23, 1];
+  const failing = card({
+    hero: { width: 384, height: 120, background: orange, flat: true, firstChild: true },
+    texts: [run({ tag: 'h3', sample: 'Hello', heading: true, fontSize: 16 }), run({ color: [200, 200, 200, 1] })],
+    paints: [{ kind: 'fill', color: orange, area: 46080, inHero: true, control: false, behind: [] }, { kind: 'fill', color: [23, 84, 228, 1], area: 8000, inHero: false, control: false, behind: [] }],
+  });
+  const evaluate = (finish: unknown) =>
+    runVisualEvaluationDetailed({ compiledCode: COMPONENT, originalPrompt: 'a card', criteria: { bank: finishBank, context } }, config, deps([answer(80)], answer(80, []), finish));
+
+  it('the instruments decide their rows from the probe: all four pass one card and fail the other', async () => {
+    const ok = await evaluate(passing);
+    const bad = await evaluate(failing);
+    const verdicts = (o: typeof ok) => Object.fromEntries(o.result!.canvases![0]!.criteria!.verdicts.map((v) => [v.id, v.verdict]));
+    expect(verdicts(ok)).toEqual({ 'read.contrast': 'pass', 'hello.field': 'pass', 'hello.one-colour': 'pass', 'hello.gesture': 'pass' });
+    expect(verdicts(bad)).toEqual({ 'read.contrast': 'fail', 'hello.field': 'fail', 'hello.one-colour': 'fail', 'hello.gesture': 'fail' });
+  });
+
+  it('REPORT-ONLY: four must fails move no score and no pass — per canvas and overall — and appear only in the roll-up', async () => {
+    const ok = await evaluate(passing);
+    const bad = await evaluate(failing);
+    const scored = (o: typeof ok) => ({ score: o.result!.canvases![0]!.score, passed: o.result!.canvases![0]!.passed, finalScore: o.result!.finalScore, overall: o.result!.passed, issues: o.result!.issues });
+    expect(scored(bad)).toEqual(scored(ok));
+    expect(scored(ok)).toMatchObject({ score: 80, passed: true, overall: true });
+    expect(summarizeVisualResult(ok.result!)!.criteria!.mustFailed).toEqual([]);
+    expect(summarizeVisualResult(bad.result!)!.criteria!.mustFailed).toEqual(expect.arrayContaining(['read.contrast', 'hello.field', 'hello.one-colour', 'hello.gesture']));
+  });
+
+  it('a failed probe reads each row not evaluated with its reason, and still moves nothing', async () => {
+    const out = await evaluate(undefined);
+    const v = out.result!.canvases![0]!.criteria!.verdicts;
+    expect(v.map((x) => x.notEvaluated?.reason)).toEqual(['probe-failed', 'probe-failed', 'probe-failed', 'probe-failed']);
+    expect(out.result!.canvases![0]!).toMatchObject({ score: 80, passed: true });
   });
 });
