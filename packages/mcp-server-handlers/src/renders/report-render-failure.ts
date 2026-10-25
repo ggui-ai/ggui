@@ -34,7 +34,7 @@ import {
   type GguiReportRenderFailureInput,
   type GguiReportRenderFailureOutput,
 } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logOwnershipUnverified } from './cross-app-refused.js';
 

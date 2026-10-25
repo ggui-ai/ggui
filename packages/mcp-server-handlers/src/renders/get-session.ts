@@ -26,7 +26,7 @@
  * the row travels (#817 part C).
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import { getSessionInputShape, gguiGetSessionOutputSchema } from '@ggui-ai/protocol';
 import type {
   GguiSessionStore,

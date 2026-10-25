@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 
 import { blueprintSourceSchema, llmBlueprintSourceSchema } from './blueprint';
 import { blueprintMetaSchema } from './handshake-suggestion';

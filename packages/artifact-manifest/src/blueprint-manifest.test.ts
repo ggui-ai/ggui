@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   GGUI_BLUEPRINT_JSON_FILENAME,
   blueprintManifestSchema,

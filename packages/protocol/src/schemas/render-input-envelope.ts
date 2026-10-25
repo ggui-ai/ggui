@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { parseAnyLlmRoute } from '../types/llm-route';
 import { renderInputShape } from './mcp';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import * as zm from 'zod/mini';
 import type { JsonValue } from '../types/data-contract';
 import { jsonValueSchema } from './data-contract';

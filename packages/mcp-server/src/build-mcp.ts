@@ -22,7 +22,8 @@ import {
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpUiToolMeta } from '@modelcontextprotocol/ext-apps';
 import { isRecord } from '@ggui-ai/protocol';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import {
   isHandlerFailure,
   type HandlerContext,

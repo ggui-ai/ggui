@@ -24,7 +24,7 @@
  * one place. Handler package wraps these into `SharedHandler`
  * factories.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { GENERATOR_ID_PATTERN } from '../types/blueprint-source';
 import {
   dataContractSchema,

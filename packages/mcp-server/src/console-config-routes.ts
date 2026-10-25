@@ -25,7 +25,7 @@ import { GguiJsonV1 } from "@ggui-ai/project-config";
 import { findGguiJson, safeLoadGguiJson } from "@ggui-ai/project-config/node";
 import type { Express } from "express";
 import { readFileSync } from "node:fs";
-import { z } from "zod";
+import * as z from "zod";
 import { applyDevtoolSecurityHeaders } from "./console-headers.js";
 import type { Logger } from "./logger.js";
 

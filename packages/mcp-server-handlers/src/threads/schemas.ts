@@ -11,7 +11,8 @@
  * {@link InvalidThreadRequestError} uniformly, so transports see one
  * error class for every shape-level rejection.
  */
-import { z, type ZodType } from 'zod';
+import * as z from 'zod';
+import type { ZodType } from 'zod';
 import {
   isThreadStateAction,
   THREAD_STATE_ACTIONS,

@@ -24,7 +24,7 @@ import {
   strictGadgetDescriptorSchema,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** Canonical filename — duplicated from `@ggui-ai/project-config` so
  * this helper stays free of that dependency. The constant lives in one

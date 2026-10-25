@@ -13,7 +13,7 @@
  *     own the target app; missing/foreign apps answer the uniform
  *     `app_not_found`.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {

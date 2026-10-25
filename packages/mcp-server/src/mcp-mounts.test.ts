@@ -7,7 +7,7 @@
  * test added alongside this seam.
  */
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import type { SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import {
   composeHandlersWithMounts,

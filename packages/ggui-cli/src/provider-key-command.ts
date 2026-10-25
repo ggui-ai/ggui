@@ -11,7 +11,7 @@
 /* eslint-disable no-console */
 import process from 'node:process';
 import { parseAnyLlmRoute, type LlmProvider } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import { setAppProviderKey } from './api-client.js';
 import { findGguiJson, readGguiJson } from './internal/ggui-json.js';
 

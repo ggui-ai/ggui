@@ -4,7 +4,7 @@
 // Zod → JSON Schema for tool declarations, and validated narrowing of
 // decoded tool-call arguments to `JsonObject`.
 
-import { z } from 'zod';
+import * as z from 'zod';
 import type { JsonObject, JsonValue } from '@ggui-ai/protocol';
 
 /**

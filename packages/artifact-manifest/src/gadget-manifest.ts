@@ -52,7 +52,7 @@
  * `ggui.gadget.json` should fail loud, not silently get ignored at
  * publish time.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   BUNDLE_HOST_RE,
   gadgetRequiresSchema,

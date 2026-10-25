@@ -29,7 +29,7 @@
  * after the change.
  */
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryGguiSessionStore,

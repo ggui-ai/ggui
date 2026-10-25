@@ -9,7 +9,7 @@
  * Its own module (ggui#819) so the browser entry (`@ggui-ai/protocol/wire`)
  * reaches it without the tool schemas that used to share its file.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const viewportSchema = z.object({
   width: z.number(),

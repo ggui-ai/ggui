@@ -13,7 +13,7 @@
  * appId is empty — that means an unauthenticated caller slipped past
  * auth, which would be a real bug worth surfacing.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { providerKeySummarySchema, type ProviderKeyStore } from './types.js';
 

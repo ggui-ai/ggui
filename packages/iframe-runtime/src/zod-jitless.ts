@@ -14,6 +14,6 @@
  * schema. The frame never wants zod codegen anyway; jitless validation
  * speed is a non-factor at frame scale.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 z.config({ jitless: true });

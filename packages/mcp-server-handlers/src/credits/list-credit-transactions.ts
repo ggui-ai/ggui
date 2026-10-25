@@ -15,7 +15,7 @@
  * single-app fold) — see that module's docstring for why reading
  * `ctx.appId` alone loses every multi-app caller.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler } from '../types.js';
 
 /**

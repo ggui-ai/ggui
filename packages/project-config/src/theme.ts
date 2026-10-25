@@ -41,7 +41,7 @@
  * and host-neutral; root and per-group objects are strict — unknown
  * keys fail parse, the same discipline as `ggui.json`.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { fontFaceDeclarationSchema } from '@ggui-ai/protocol';
 import { lightTheme } from '@ggui-ai/design/themes';
 import type { DtcgTheme, DtcgToken } from '@ggui-ai/design/themes';

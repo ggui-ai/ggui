@@ -16,7 +16,7 @@
  *     list" model. We don't enforce reference integrity at parse time;
  *     that's a renderer concern.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** Shared base: every component carries a stable string id. */
 const ComponentBase = z.object({

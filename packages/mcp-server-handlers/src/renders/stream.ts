@@ -16,7 +16,7 @@
  * addressable scope.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import { emitInputShape, gguiEmitOutputSchema } from '@ggui-ai/protocol';
 import type {
   ComponentGguiSession,

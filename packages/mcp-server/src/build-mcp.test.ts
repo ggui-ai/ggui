@@ -13,7 +13,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { renderOutputSchema, type ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {

@@ -9,7 +9,7 @@
  * answer (ggui#1358). `ContractViolation` extends `JsonObject`, so the
  * mirror is loose: a validator MAY carry further JSON members.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type { ContractViolation } from '../validation/contract-validator';
 
 export const contractViolationSchema: z.ZodType<ContractViolation> = z

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { isDomainError } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import type { JsonSchema } from '@ggui-ai/protocol';
 import {
   checkRenderSchemaCompat,

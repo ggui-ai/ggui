@@ -40,7 +40,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   MCP_ENDPOINT_REFUSAL_CODES,
   PRE_GENERATION_REFUSAL_CODES,

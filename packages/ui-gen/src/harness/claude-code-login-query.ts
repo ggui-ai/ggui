@@ -39,7 +39,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources";
 import { isRecord, type JsonObject, type JsonValue } from "@ggui-ai/protocol";
-import { z } from "zod";
+import * as z from "zod";
 import type { LLMToolDef } from "../llm.js";
 import {
   claudeCodeLoginQueryOptions,

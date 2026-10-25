@@ -24,7 +24,7 @@
  *     its handler imports {@link renderInputShape}.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   blueprintDraftSchema,
   handshakeSuggestionSchema,

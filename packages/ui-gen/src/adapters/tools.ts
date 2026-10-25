@@ -5,7 +5,7 @@
 // but without Claude Agent SDK dependencies, making them portable across
 // OpenAI, Google, and Anthropic SDKs.
 
-import { z } from 'zod';
+import * as z from 'zod';
 import * as esbuild from 'esbuild';
 import { PRIMITIVES_DOCUMENTATION } from '../validation/index.js';
 import {

@@ -4,7 +4,7 @@
  * `../types/blueprint.ts` is the declared source of truth; the schema
  * here is `z.ZodType<Blueprint>` so any drift fails compile.
  */
-import { z } from "zod";
+import * as z from "zod";
 import type {
   AppBlueprintSearchConfig,
   Blueprint,

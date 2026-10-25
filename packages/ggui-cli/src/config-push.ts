@@ -17,7 +17,7 @@ import {
   type AppTheme,
 } from '@ggui-ai/protocol';
 import { loadTheme, parseGguiJson } from '@ggui-ai/project-config/node';
-import { z } from 'zod';
+import * as z from 'zod';
 import { patchAppConfig } from './api-client.js';
 import {
   findGguiJson,

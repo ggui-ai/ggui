@@ -10,7 +10,7 @@
  * Pure over two seams. A production deployment binds its own
  * implementations of both; tests bind in-memory fakes.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { AppNotFoundError } from './types.js';

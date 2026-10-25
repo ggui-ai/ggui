@@ -21,7 +21,8 @@
  *   - drain_ack + activeConsumerRegistry + slow-consume telemetry
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z, ZodError } from 'zod';
+import * as z from 'zod';
+import { ZodError } from 'zod';
 import type { ComponentGguiSession, ConsumeEventEntry, JsonValue } from '@ggui-ai/protocol';
 import { gguiConsumeOutputSchema } from '@ggui-ai/protocol';
 import {

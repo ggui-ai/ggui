@@ -6,7 +6,7 @@
 // future SDK bump fails compilation here, not in production.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import type { Interactions } from '@google/genai';
 import { GoogleRawAdapter } from './raw';
 import type { ToolDefinition } from '../types';

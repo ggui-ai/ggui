@@ -40,7 +40,7 @@
  * objects are also strict for v1; additive fields are a coordinated
  * schema change, not a drive-by.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   appPublicEnvSchema,
   parseAnyLlmRoute,

@@ -58,7 +58,7 @@
  * Root + nested objects are strict — unknown keys fail parse. Same
  * loud-feedback posture as the gadget manifest.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   type BlueprintVariance,
   type DataContract,

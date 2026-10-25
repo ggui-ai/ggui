@@ -33,7 +33,7 @@
  * its session gets nothing. The advertised output schema is pinned byte for
  * byte in `@ggui-ai/mcp-server` (ggui#1510).
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';

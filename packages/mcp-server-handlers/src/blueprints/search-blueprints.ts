@@ -50,7 +50,7 @@
  * config loading. A composing host may wrap this with its own
  * logging when assembling the server.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type {
   BlueprintEntry,
   BlueprintProvider,

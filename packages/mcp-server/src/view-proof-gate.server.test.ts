@@ -7,7 +7,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import type { SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import type { Logger } from './logger.js';

@@ -6,7 +6,7 @@
  * per-tool deltas are parameterized on `tool`, everything else is
  * byte-identical behavior.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   ContractViolationError,
   buildEnforcedPropsSchema,

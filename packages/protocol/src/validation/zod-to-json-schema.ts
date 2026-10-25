@@ -60,7 +60,8 @@
  *
  * @see ./schema-subset.ts
  */
-import { z, type ZodRawShape, type ZodType } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape, ZodType } from 'zod';
 import type { JsonSchema } from '../types/data-contract.js';
 import { isRecord } from './is-record.js';
 

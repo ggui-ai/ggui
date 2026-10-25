@@ -41,7 +41,7 @@
  *       record) is the ONLY lever that forces one.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryBlueprintStore,

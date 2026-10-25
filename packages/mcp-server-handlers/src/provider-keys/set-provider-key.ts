@@ -18,7 +18,7 @@
  * encrypts + persists. The result NEVER carries plaintext (curated
  * `ProviderKeySummary` shape).
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from '../ops-apps/identity.js';
 import type {

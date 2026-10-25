@@ -8,7 +8,7 @@
  * MCP tool surface MUST agree with the provider enum on the stored
  * `GguiUserProviderKey` record.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** The provider enum — ONE source; the wire schema, the type and the guard all derive from it. */
 export const providerNameSchema = z.enum(['anthropic', 'openai', 'google', 'openrouter']);

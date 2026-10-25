@@ -51,7 +51,7 @@
  * `{sessionId, stackItemId, ...}` to `{sessionId, ...}` — every render
  * IS the addressable scope.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   CONTEXT_SLOT_VALUE_MAX_BYTES,
   CONTEXT_SNAPSHOT_MAX_BYTES,

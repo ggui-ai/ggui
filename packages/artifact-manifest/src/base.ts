@@ -8,7 +8,7 @@
  * No discriminator field lives here — `kind` is intentionally per-variant
  * so zod's `z.discriminatedUnion("kind", […])` can narrow on the literal.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * Artifact scope — an npm-style organizational namespace. MUST start

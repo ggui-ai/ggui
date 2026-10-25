@@ -30,7 +30,7 @@
  * Pure over the {@link AppsSource} + {@link UserDefaultAppSource}
  * seams.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import { DefaultAppDeleteBlockedError } from './types.js';

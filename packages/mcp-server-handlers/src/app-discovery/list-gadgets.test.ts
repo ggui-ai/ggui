@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import { STDLIB_GADGETS, type GadgetDescriptor } from '@ggui-ai/protocol';
 const STDLIB_PKG = STDLIB_GADGETS[0].package;
 import { InMemoryAppMetadataStore } from '@ggui-ai/mcp-server-core/in-memory';

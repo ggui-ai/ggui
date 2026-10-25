@@ -51,7 +51,7 @@
  * just to accept the contract and pass it to the generator.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 
 import { PUBLIC_ENV_APP_KEY_RE } from './public-env-key';
 import { KNOWN_PERMISSION_NAMES } from '../validation/hygiene-rules';

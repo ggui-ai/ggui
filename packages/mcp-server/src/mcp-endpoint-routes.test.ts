@@ -18,7 +18,8 @@
  * the MCP SDK `StreamableHTTPClientTransport` (for the accepted path).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';

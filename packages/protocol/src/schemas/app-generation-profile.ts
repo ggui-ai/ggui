@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * The generator PROFILE slot on an app's `generation` section (ggui#991;

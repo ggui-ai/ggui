@@ -19,7 +19,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { InMemoryKeyValueStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   DATA_CONTRACT_MINIMAL_EXAMPLE,
   DATA_CONTRACT_SHAPE_RULE,

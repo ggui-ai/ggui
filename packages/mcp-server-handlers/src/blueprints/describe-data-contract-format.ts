@@ -7,7 +7,7 @@
  * Pinning the format server-side guards against contract drift between
  * what Claude composes and what `ggui_protocol_validate_blueprint` expects.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { RETIRED_CONTRACT_FIELDS } from '@ggui-ai/protocol';
 import { defineHandler, type ShapeOutput } from '../types.js';
 

@@ -5,7 +5,7 @@
  * the listing over it and never relabel it as a render charge.
  */
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   KNOWN_CREDIT_TRANSACTION_KINDS,
   createListCreditTransactionsHandler,

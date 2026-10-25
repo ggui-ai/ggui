@@ -22,7 +22,7 @@
  * union keys on presence of the payload key rather than on a
  * dedicated discriminator string.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { ComponentSchema } from './components';
 
 /** A2UI protocol version our V1 subset targets. */

@@ -34,7 +34,7 @@
  * compiled artifact and drives conflict detection on publish. It is
  * NOT the identity.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type { DataContract } from '@ggui-ai/protocol';
 
 /**

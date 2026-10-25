@@ -45,7 +45,7 @@
  * previous "always throw" shape was the worst of both worlds — tool
  * surface advertised, zero functionality — and is retired here.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type { UiRegistry } from '@ggui-ai/ui-registry';
 import { renderBlueprintInputShape } from '@ggui-ai/protocol';
 import { defineHandler, type ShapeOutput } from '../types.js';

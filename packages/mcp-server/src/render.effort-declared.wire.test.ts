@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { z } from 'zod';
+import * as z from 'zod';
 import { APP_GENERATION_PROFILE_EFFORTS } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';

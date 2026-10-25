@@ -32,7 +32,7 @@
  * pins the deps shape (a logger and nothing else) so a store
  * dependency cannot arrive silently: it fails typecheck naming the row.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   runtimeTelemetryInputShape,
   type GguiRuntimeTelemetryOutput,

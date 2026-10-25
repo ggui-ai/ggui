@@ -55,7 +55,7 @@ import {
 } from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash, randomUUID } from "node:crypto";
-import { z } from "zod";
+import * as z from "zod";
 import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import { admitGeneratorBuild, type BlueprintRegistryDeps } from "../renders/index.js";

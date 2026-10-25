@@ -38,7 +38,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DomainError } from '@ggui-ai/protocol';
 import type { GeneratorId } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {

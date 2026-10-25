@@ -33,7 +33,7 @@
  * `['ops']` — served on `/control`. NOT visible to agents on `/mcp`.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   opsDeleteBlueprintInputSchema,
   type OpsDeleteBlueprintInput,

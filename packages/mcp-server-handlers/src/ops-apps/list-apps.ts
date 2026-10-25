@@ -10,7 +10,7 @@
  * by construction — `AppsSource.list` only returns rows whose
  * `ownerSub` matches.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import type { AppsSource } from './types.js';

@@ -24,7 +24,7 @@
  * apply a chosen theme.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext, type ShapeOutput } from '../types.js';
 import { AppAccessDeniedError } from './errors.js';

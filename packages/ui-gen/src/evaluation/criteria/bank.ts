@@ -10,7 +10,7 @@
  * never mid-run. Fields the loader does not read (`examples`, `fields`, `groups`, `seed`) are page
  * matter and are dropped here; an additive field tomorrow does not break today's loader.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** `family.property[.facet]` — `read.contrast`, `hello.field`. */
 const CRITERION_ID = /^[a-z][a-z0-9-]*(?:\.[a-zA-Z][a-zA-Z0-9-]*)+$/;

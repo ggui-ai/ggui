@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * The rendering-context vocabulary — how and where a generated component

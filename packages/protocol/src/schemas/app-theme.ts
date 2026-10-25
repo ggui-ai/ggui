@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * Platform CSS-variable namespace — only `--ggui-*` custom properties.

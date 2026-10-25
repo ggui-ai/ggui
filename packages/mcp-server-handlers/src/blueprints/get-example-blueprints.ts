@@ -23,7 +23,7 @@
  * call `ggui_protocol_get_blueprint_boilerplate` instead — that's the
  * generative path; this is the curated reference path.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type ShapeOutput } from '../types.js';
 
 const inputSchema = {

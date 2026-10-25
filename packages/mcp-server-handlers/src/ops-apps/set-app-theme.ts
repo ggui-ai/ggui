@@ -43,7 +43,7 @@ import {
   type AppThemeRefusalBody,
   appThemeWouldDropRefusalText,
 } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   defineHandler,
   handlerFailure,

@@ -15,7 +15,7 @@
  *   2. Behavioral — a probe set of valid/invalid names fed through
  *      both the standalone regex and the live protocol schemas.
  */
-import { z } from "zod";
+import * as z from "zod";
 import { searchBlueprintsInputShape } from "@ggui-ai/protocol";
 import { describe, expect, it } from "vitest";
 import { MCP_TOOL_BINDING_NAME_RE } from "./mcp-tool-bindings.js";

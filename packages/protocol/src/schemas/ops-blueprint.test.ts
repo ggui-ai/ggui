@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   OPS_GENERATE_BLUEPRINT_INTENT_MAX_CHARS,
   opsGenerateBlueprintInputSchema,

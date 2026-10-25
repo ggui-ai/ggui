@@ -11,7 +11,7 @@
  *
  * Pure over the {@link AppsSource} seam.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
 import type { AppRecord, AppsSource } from './types.js';

@@ -9,7 +9,7 @@
  * key to the model directly and leave process.env alone.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 
 const ctor = vi.hoisted(() => ({ gemini: [] as unknown[], agent: [] as unknown[] }));
 

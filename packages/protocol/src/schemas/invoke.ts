@@ -12,7 +12,7 @@
  * and types for authoring.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import { interfaceContextSchema } from './interface-context';
 
 // ── Content blocks ────────────────────────────────────────────────────

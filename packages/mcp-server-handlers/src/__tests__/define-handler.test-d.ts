@@ -17,7 +17,7 @@
 // relationship holds the wrong way (precedent: protocol's
 // contract-inference.test-d.ts).
 import { expectTypeOf } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   defineHandler,
   type EnvelopeFor,

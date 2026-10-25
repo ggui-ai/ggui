@@ -20,7 +20,7 @@
  * `streamSpec[*].source.tool`). Gadgets never derive (they carry no
  * contract).
  */
-import { z } from "zod";
+import * as z from "zod";
 import type { BlueprintManifest } from "./blueprint-manifest.js";
 import type { GadgetManifest } from "./gadget-manifest.js";
 

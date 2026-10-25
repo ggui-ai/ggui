@@ -15,7 +15,7 @@
  * and the import-allowlist (`@ggui-ai/design/primitives`,
  * `/components`, `/compositions`).
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { PRIMITIVES_DOCUMENTATION_TS } from '@ggui-ai/ui-gen/tools/get-primitives-ts';
 import { defineHandler } from '../types.js';
 

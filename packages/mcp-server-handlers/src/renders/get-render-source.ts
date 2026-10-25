@@ -26,7 +26,7 @@
  *     scoping models differ completely.
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import { dataContractSchema, getRenderSourceInputShape } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';

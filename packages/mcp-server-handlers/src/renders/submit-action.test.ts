@@ -17,7 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   ACTIVE_CONSUMER_EXIT_RETENTION_MS,
   InMemoryActiveConsumerRegistry,

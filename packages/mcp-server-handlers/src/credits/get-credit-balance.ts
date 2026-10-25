@@ -22,7 +22,7 @@
  * credit account (e.g. agent-builder identities) get the zero-row
  * fallback.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler } from '../types.js';
 
 /**

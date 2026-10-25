@@ -15,7 +15,8 @@ import { InMemoryBlueprintStore } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiOpsRegisterBlueprintHandler } from '@ggui-ai/mcp-server-handlers/ops-blueprint';
 import type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
 import { describe, expect, it } from 'vitest';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { buildMcpServer } from './build-mcp.js';
 
 const silentLogger = {

@@ -15,7 +15,7 @@
  * know which tier stopped, then iterate. Cost on a passing blueprint
  * with a contract: ~100-300ms cold, ~50ms warm.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { blueprintValidationResultSchema } from '@ggui-ai/protocol';
 import { validateBlueprint } from '@ggui-ai/ui-gen/blueprint-validator';
 import { defineHandler, type ShapeOutput } from '../types.js';

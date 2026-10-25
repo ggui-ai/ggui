@@ -32,7 +32,8 @@ import {
   type SharedHandler,
 } from '@ggui-ai/mcp-server';
 import type { UiManifest } from '@ggui-ai/project-config';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { InMemoryGguiSessionStreamBuffer } from '@ggui-ai/mcp-server-core/in-memory';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
 import type { ServeBackend } from './serve-command.js';

@@ -20,7 +20,7 @@
  * about a specific kind can use the narrower parsers without dipping
  * into the union.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { gadgetManifestSchema, type GadgetManifest } from './gadget-manifest.js';
 import {
   blueprintManifestSchema,

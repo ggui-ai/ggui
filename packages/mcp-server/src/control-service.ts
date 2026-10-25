@@ -48,7 +48,8 @@ import {
   type SharedHandler,
   type SharedHandlerOutputBound,
 } from "@ggui-ai/mcp-server-handlers";
-import { z, type ZodRawShape, type ZodTypeAny } from "zod";
+import * as z from "zod";
+import type { ZodRawShape, ZodTypeAny } from "zod";
 import type { McpService } from "./mcp-mounts.js";
 
 type AnyHandler = SharedHandler<ZodRawShape, ZodRawShape>;

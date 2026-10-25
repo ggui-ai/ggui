@@ -26,7 +26,7 @@
  * drops the per-summary stack count (every render IS one item).
  */
 
-import { z } from 'zod';
+import * as z from 'zod';
 import { gguiListSessionsOutputSchema } from '@ggui-ai/protocol';
 import type { GguiSessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {

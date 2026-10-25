@@ -42,7 +42,8 @@ import {
   type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
 import { describe, expect, it } from 'vitest';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { buildMcpServer } from './build-mcp.js';
 
 /** The JSON Schema document the SDK's validator takes — the same type the client validates results with. */

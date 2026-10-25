@@ -41,7 +41,7 @@
  *   3. Root and per-primitive objects are strict — unknown keys fail
  *      parse. Same discipline as `ggui.json` + `ggui.ui.json`.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * Primitive component name — must be a valid JavaScript identifier.

@@ -17,7 +17,7 @@
  * the next sub-slice) and BEFORE `ggui_protocol_validate_blueprint`. The contract
  * is the load-bearing input: a richer contract → a more complete scaffold.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   generateBoilerplate,
   type ScreenSize,

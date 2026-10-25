@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenRouterRawAdapter } from './raw';
 import type { ToolDefinition } from '../types';
-import { z } from 'zod';
+import * as z from 'zod';
 
 // Mock the client module
 const mockChatCompletion = vi.fn();

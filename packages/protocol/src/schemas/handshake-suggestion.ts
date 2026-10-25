@@ -7,7 +7,7 @@
  * are the declared source of truth; the schemas here are typed
  * `z.ZodType<T>` so any drift fails compile.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { GENERATOR_ID_PATTERN } from '../types/blueprint-source';
 import type {
   BlueprintDraft,

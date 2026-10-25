@@ -86,7 +86,7 @@ import {
   strictGadgetDescriptorSchema,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
-import { z } from 'zod';
+import * as z from 'zod';
 import { READ_ERROR_CODES, type ArtifactKind, type ReadErrorBody } from '@ggui-ai/registry-core';
 import {
   FIND_MAX_DEPTH,

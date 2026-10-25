@@ -23,7 +23,8 @@
 
 import type { SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import type { Express } from "express";
-import { z, type ZodRawShape } from "zod";
+import * as z from "zod";
+import type { ZodRawShape } from "zod";
 import { applyDevtoolSecurityHeaders } from "./console-headers.js";
 import type { Logger } from "./logger.js";
 

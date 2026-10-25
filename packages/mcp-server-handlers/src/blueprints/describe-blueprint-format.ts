@@ -7,7 +7,7 @@
  * example. Pinning the format server-side guards against Claude
  * composing from stale training-data assumptions about the shape.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { defineHandler } from '../types.js';
 
 const inputSchema = {};

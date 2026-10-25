@@ -80,7 +80,7 @@
  * its cursor), and `limit` above {@link RUNTIME_PULL_MAX_LIMIT} is
  * CLAMPED, not rejected.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import {
   RUNTIME_PULL_MAX_LIMIT,
   RUNTIME_PULL_MAX_WAIT_SECONDS,

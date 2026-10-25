@@ -11,7 +11,8 @@ import { createHmac } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it, vi } from 'vitest';
-import { z, type ZodRawShape } from 'zod';
+import * as z from 'zod';
+import type { ZodRawShape } from 'zod';
 import { mintViewRoot } from '@ggui-ai/mcp-server-core';
 import {
   InMemoryGguiSessionStore,
