@@ -24,7 +24,9 @@
  * <file.json>` on the CLI) and every tool that advertises an `outputSchema`
  * becomes one row, failing with the path of every closed object. A tool
  * that advertises no `outputSchema` has no object to be closed and
- * contributes no row.
+ * contributes no row here; when NO tool advertises one, the runner reports
+ * the single row `output-schema/none-advertised-vacuous` as a pass
+ * (ggui#1897), so a scorecard never shows the catalog as absent.
  *
  * ## Polyglot, decoupled
  *

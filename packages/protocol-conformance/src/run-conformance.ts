@@ -166,7 +166,9 @@ export interface RunConformanceConfig {
    * The deployment's served `tools/list` document, for the `output-schema`
    * catalog (SPEC §7.9 "Advertised output objects", ggui#1333): every tool
    * that advertises an `outputSchema` is one row, failing with the path of
-   * every closed object. Omitted ⇒ the catalog is SKIPPED, named.
+   * every closed object; a document in which no tool advertises one passes
+   * as the single row `output-schema/none-advertised-vacuous` (ggui#1897).
+   * Omitted ⇒ the catalog is SKIPPED, named.
    */
   readonly toolsList?: AdvertisedToolsListView;
   /**
@@ -465,7 +467,10 @@ async function runPureFunctionCatalogs(
   // ── output-schema (ggui#1333) ──
   // Graded on the served `tools/list` document the adopter supplies; every
   // tool advertising an `outputSchema` is one row. Absent input ⇒ one named
-  // SKIP row, so the catalog is never silently not run.
+  // SKIP row; a supplied document in which no tool advertises one ⇒ one
+  // named PASS row under its own id (ggui#1897: the obligation was checked
+  // against every tool and holds for all zero of them — an observation, not
+  // an absence). Either way the catalog is never silently not run.
   const toolsList = config.toolsList;
   if (toolsList === undefined) {
     skip(
@@ -474,6 +479,9 @@ async function runPureFunctionCatalogs(
     );
   } else {
     const outputSchemas = runOutputSchemaConformance(toolsList);
+    if (outputSchemas.passed.length === 0 && outputSchemas.failed.length === 0) {
+      pass('output-schema/none-advertised-vacuous');
+    }
     for (const name of outputSchemas.passed) pass(`output-schema/${name}`);
     for (const violation of outputSchemas.failed) {
       fail({

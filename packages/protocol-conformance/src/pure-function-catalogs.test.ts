@@ -83,6 +83,12 @@ const THEME_ROWS = [...THEME_MODE_CASES, ...APP_THEME_CASES, ...OVERLAY_HASH_CAS
 const N1_ROWS = N1_COMPAT_CASES.map((c) => `n1-compat/${c.name}`);
 /** The one row the output-schema catalog contributes when no `toolsList` is supplied (ggui#1333): a named SKIP. */
 const OUTPUT_SCHEMA_SKIP_ROW = 'output-schema/advertised-output-objects-open';
+/**
+ * The one row it contributes when the supplied document advertises no `outputSchema`
+ * (ggui#1897): a PASS under its own id, so the catalog is never absent from a scorecard
+ * and a pass-set diff shows that nothing was inspected.
+ */
+const OUTPUT_SCHEMA_VACUOUS_ROW = 'output-schema/none-advertised-vacuous';
 
 /** A conformant tools/call driver, built from the catalog's own cases. */
 function catalogToolCallDriver(scenario: ToolCallScenario): RawToolCallResult | null {
@@ -246,6 +252,31 @@ describe('runConformance — output-schema catalog fold (ggui#1333)', () => {
     expect(result.failed.map((f) => f.name)).toEqual(['output-schema/closed_tool']);
     expect(result.failed[0]?.received).toEqual(['$.properties.nested']);
     expect(result.failed[0]?.message).toContain('$.properties.nested');
+  });
+
+  it('reports the catalog row as PASSED when the supplied document advertises no outputSchema — the obligation holds vacuously and the scorecard says so, never a missing row (ggui#1897)', async () => {
+    const result = await run({
+      only: [OUTPUT_SCHEMA_SKIP_ROW, OUTPUT_SCHEMA_VACUOUS_ROW],
+      toolsList: { tools: [{ name: 'text_only_tool' }] },
+    });
+    expect(result.skipped).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.passed).toEqual([OUTPUT_SCHEMA_VACUOUS_ROW]);
+  });
+
+  it('adds no vacuous row when any tool advertises an outputSchema — the per-tool rows are the grade', async () => {
+    const result = await run({
+      only: [OUTPUT_SCHEMA_SKIP_ROW, OUTPUT_SCHEMA_VACUOUS_ROW, 'output-schema/open_tool'],
+      toolsList: {
+        tools: [
+          { name: 'open_tool', outputSchema: { type: 'object', additionalProperties: {}, properties: {} } },
+          { name: 'text_only_tool' },
+        ],
+      },
+    });
+    expect(result.skipped).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.passed).toEqual(['output-schema/open_tool']);
   });
 });
 
