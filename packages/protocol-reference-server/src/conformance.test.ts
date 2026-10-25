@@ -8,16 +8,16 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 45 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
+ *   - 49 rows PASS (see {@link EXPECTED_PASSING}) — 9 WebSocket
  *     fixtures, the 4 `registry-completeness` catalog rows, which
  *     grade the closed refusal-code registry this server embeds from
  *     `@ggui-ai/protocol` (ggui#786), the 6 `refusal-envelope`
  *     rows, graded through the protocol's own `projectRenderRefusal`
  *     (ggui#803 leg 9) — no tool plane needed for a pure projection —
- *     the 13 `theme-binding` rows (ggui#987) and the 13 `n1-compat` rows
- *     (7 backward + 6 forward; ggui#1014 §3.6, ggui#1093, ggui#1280, ggui#1415): pure-function
+ *     the 13 `theme-binding` rows (ggui#987) and the 17 `n1-compat` rows
+ *     (9 backward + 8 forward; ggui#1014 §3.6, ggui#1093, ggui#1280, ggui#1291, ggui#1415): pure-function
  *     catalogs a vendor-neutral server passes by construction.
- *   - 11 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
+ *   - 12 rows SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`), the matcher's
  *     `unmatchable-on-ws` for Path-B claims (`props-update`), the
@@ -170,6 +170,8 @@ const EXPECTED_PASSING = [
   'n1-compat/forward-view-proof-later-version',
   'n1-compat/forward-view-proof-root-later-claim',
   // Sorted order: 'release-13…' sorts before 'release-2…'.
+  'n1-compat/release-0-28-ops-list-blueprints-gemini-3.1-flash-lite-preview',
+  'n1-compat/release-0-28-ops-list-blueprints-gemini-flash-latest',
   'n1-compat/release-13-render-result',
   'n1-compat/release-14-ops-list-blueprints',
   'n1-compat/release-2-app-theme-v2',

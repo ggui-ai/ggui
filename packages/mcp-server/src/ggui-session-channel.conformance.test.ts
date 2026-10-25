@@ -193,6 +193,8 @@ const EXPECTED_PASSING = [
   'n1-compat/release-2-ops-generate-blueprint',
   'n1-compat/release-2-render-meta',
   'n1-compat/release-9-1-handshake-suggestion',
+  'n1-compat/release-0-28-ops-list-blueprints-gemini-3.1-flash-lite-preview',
+  'n1-compat/release-0-28-ops-list-blueprints-gemini-flash-latest',
   'n1-compat/release-13-render-result',
   'n1-compat/release-14-ops-list-blueprints',
   // theme-binding — the kit's theme catalog folded into runConformance()
