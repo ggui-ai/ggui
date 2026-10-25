@@ -26,6 +26,7 @@ import { execSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { extAppsZodShimPlugin } from '../scripts/ext-apps-zod-shim.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(__dirname);
@@ -68,6 +69,23 @@ try {
   // surfaces a useful identifier — just not the commit-precise one.
 }
 const buildId = `${pkgJson.version}+${gitSha}`;
+
+// ggui#2032: `@modelcontextprotocol/ext-apps` imports zod through its aliased
+// `z` export (twice, statically) and once through `await import("zod/v4")`.
+// esbuild cannot shake members off a re-exported namespace object, and a
+// dynamic import materialises the whole module, so either form keeps all of
+// zod — its 64 locale tables included, 265 KB raw — in this bundle, after our
+// own packages switched to the shakable `import * as z`. The plugin redirects
+// ext-apps' `zod/v4` imports to a virtual module that re-exports every name of
+// the REAL zod through named imports and builds `z` as an object literal of
+// them (no `locales`). The names come from the installed zod, enumerated here,
+// so a zod upgrade needs no edit; the plugin checks at build end that ext-apps
+// still imports `zod/v4`, and only by member access — and fails the build with
+// the reason otherwise (oss/packages/scripts/ext-apps-zod-shim.mjs). The
+// bundle-size gate then reads the result: exactly one locale table (`en`,
+// zod's own default) and one `zod/v4/core` entry in the metafile.
+const zodNames = Object.keys(await import('zod/v4'));
+const coreNames = Object.keys(await import('zod/v4/core'));
 
 const result = await build({
   entryPoints: [entry],
@@ -113,6 +131,7 @@ const result = await build({
     '.tsx': 'tsx',
   },
   jsx: 'automatic',
+  plugins: [extAppsZodShimPlugin({ resolveDir: pkgRoot, zodNames, coreNames })],
 });
 
 if (result.errors.length > 0) {

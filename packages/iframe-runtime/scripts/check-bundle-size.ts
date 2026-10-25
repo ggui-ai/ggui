@@ -177,6 +177,43 @@ function findDuplicatePackages(
   return findings.sort((a, b) => b.wastedBytes - a.wastedBytes);
 }
 
+/** `node_modules/zod/v4/locales/<table>.js` — one of zod's locale tables (not the index). */
+const ZOD_LOCALE_TABLE = /node_modules\/zod\/v4\/locales\/(?!index\.js$)([^/]+)\.js$/;
+const ZOD_CORE_ENTRY = /node_modules\/zod\/v4\/core\/index\.js$/;
+
+/**
+ * The zod locale tables the bundle carries (bytes in output above zero), by
+ * table name, sorted. zod's own default is `en` (its entry runs
+ * `config(en())`), so a correctly shaken bundle reads exactly `['en']`.
+ * Anything more means some import reached the tables: the aliased `z`
+ * export (`import { z } from 'zod'`, a namespace object esbuild cannot
+ * shake), a dynamic `import('zod/v4')`, or a direct read of `z.core` /
+ * `z.locales` (ggui#2032). Pure over the metafile's input map, for the
+ * self-test.
+ */
+function bundledZodLocaleTables(
+  inputs: Readonly<Record<string, { readonly bytesInOutput: number }>>,
+): string[] {
+  const tables: string[] = [];
+  for (const [inputPath, { bytesInOutput }] of Object.entries(inputs)) {
+    const m = ZOD_LOCALE_TABLE.exec(inputPath);
+    if (m?.[1] !== undefined && bytesInOutput > 0) tables.push(m[1]);
+  }
+  return tables.sort();
+}
+
+/**
+ * The `zod/v4/core` entry paths in the bundle. Exactly one is the receipt
+ * that the ext-apps zod shim re-exports from the same zod instance the rest
+ * of the bundle uses (ggui#2032): a second entry would mean the shim, or a
+ * nested copy, brought its own core.
+ */
+function zodCoreEntryPaths(
+  inputs: Readonly<Record<string, { readonly bytesInOutput: number }>>,
+): string[] {
+  return Object.keys(inputs).filter((p) => ZOD_CORE_ENTRY.test(p)).sort();
+}
+
 interface BudgetFile {
   /**
    * Maximum allowed RAW size of `dist/iframe-runtime.js` in bytes —
@@ -294,13 +331,33 @@ function selfTest(): number {
     `expected one finding for "@modelcontextprotocol/sdk", got ${JSON.stringify(scoped.map((d) => d.name))}`,
   );
 
+  // ggui#2032: the locale-table read names every table the bundle carries,
+  // ignores the index and zero-byte entries, and is exactly `['en']` on a
+  // shaken bundle; the core-entry read counts entries, not bytes.
+  const shaken = {
+    'node_modules/zod/v4/locales/en.js': { bytesInOutput: 2725 },
+    'node_modules/zod/v4/locales/index.js': { bytesInOutput: 0 },
+    'node_modules/zod/v4/locales/de.js': { bytesInOutput: 0 },
+    'node_modules/zod/v4/core/index.js': { bytesInOutput: 690 },
+    'node_modules/zod/v4/classic/schemas.js': { bytesInOutput: 40000 },
+  };
+  check('shaken bundle reads exactly the default locale', JSON.stringify(bundledZodLocaleTables(shaken)) === '["en"]', `got ${JSON.stringify(bundledZodLocaleTables(shaken))}`);
+  check('one zod core entry on the shaken bundle', zodCoreEntryPaths(shaken).length === 1, `got ${zodCoreEntryPaths(shaken).length}`);
+  const leaking = {
+    ...shaken,
+    'node_modules/zod/v4/locales/de.js': { bytesInOutput: 4000 },
+    'node_modules/zod/v4/locales/fr-CA.js': { bytesInOutput: 3500 },
+    'node_modules/@modelcontextprotocol/ext-apps/node_modules/zod/v4/core/index.js': { bytesInOutput: 690 },
+  };
+  check('a leak names every extra table, sorted', JSON.stringify(bundledZodLocaleTables(leaking)) === '["de","en","fr-CA"]', `got ${JSON.stringify(bundledZodLocaleTables(leaking))}`);
+  check('a second core entry is counted', zodCoreEntryPaths(leaking).length === 2, `got ${zodCoreEntryPaths(leaking).length}`);
   if (failures.length > 0) {
     console.error('[check-bundle-size] SELF-TEST FAILED');
     for (const f of failures) console.error(`  ✗ ${f}`);
     return 1;
   }
   console.log(
-    '[check-bundle-size] self-test PASS — duplicate detector fires on the #376 shape, stays quiet on a clean bundle, and keeps scoped names intact.',
+    '[check-bundle-size] self-test PASS — duplicate detector fires on the #376 shape, stays quiet on a clean bundle, keeps scoped names intact; the zod locale read names exactly the default table on a shaken bundle and every extra one on a leak.',
   );
   return 0;
 }
@@ -387,6 +444,27 @@ if (duplicates.length > 0) {
 console.log(
   `  no duplicate packages — every bundled dependency resolves from exactly one install location`,
 );
+
+// ggui#2032: zod's locale tables. Runs before the size check for the same
+// reason the duplicate check does — a table leak is a cause, the overrun its
+// symptom.
+const localeTables = bundledZodLocaleTables(bundleOutput.inputs);
+const coreEntries = zodCoreEntryPaths(bundleOutput.inputs);
+if (localeTables.length !== 1 || localeTables[0] !== 'en' || coreEntries.length !== 1) {
+  console.error(
+    `[check-bundle-size] FAIL — the bundle carries ${localeTables.length} zod locale table(s) [${localeTables.join(', ')}] and ${coreEntries.length} zod/v4/core entr${coreEntries.length === 1 ? 'y' : 'ies'}; ` +
+      `expected exactly the default table (en) and one core entry.\n` +
+      `  Every table past \`en\` means some import reached zod's locale namespace: the aliased \`z\` export ` +
+      `(\`import { z } from 'zod'\` — a re-exported namespace object esbuild cannot shake; write \`import * as z\`), ` +
+      `a dynamic \`import('zod/v4')\`, or a read of \`z.core\` / \`z.locales\`. In our own packages the source gate ` +
+      `oss/packages/scripts/zod-import-form.test.mjs names the file; in a dependency, the esbuild.config.mjs shim for ` +
+      `@modelcontextprotocol/ext-apps is the adaptation (oss/packages/scripts/ext-apps-zod-shim.mjs). ` +
+      `A second core entry means a zod instance other than the bundle's own was brought in.` +
+      (coreEntries.length > 1 ? `\n  core entries:\n    ${coreEntries.join('\n    ')}` : ''),
+  );
+  process.exit(1);
+}
+console.log(`  zod locale tables: ${localeTables.join(', ')} (the default only) · one zod/v4/core entry`);
 
 if (raw.byteLength > budget.rawBytesMax) {
   console.error(
