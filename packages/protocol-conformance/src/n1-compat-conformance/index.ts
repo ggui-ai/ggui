@@ -32,6 +32,8 @@ import release2OpsGenerateBlueprint from './cases/release-2-ops-generate-bluepri
 import release91HandshakeSuggestion from './cases/release-9-1-handshake-suggestion.json' with { type: 'json' };
 import release13RenderResult from './cases/release-13-render-result.json' with { type: 'json' };
 import release14OpsListBlueprints from './cases/release-14-ops-list-blueprints.json' with { type: 'json' };
+import release028OpsListBlueprintsGeminiFlashLatest from './cases/release-0-28-ops-list-blueprints-gemini-flash-latest.json' with { type: 'json' };
+import release028OpsListBlueprintsGemini31FlashLitePreview from './cases/release-0-28-ops-list-blueprints-gemini-3.1-flash-lite-preview.json' with { type: 'json' };
 import forwardAppThemeUnknownMember from './cases/forward-app-theme-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUnknownMember from './cases/forward-app-theme-carry-unknown-member.json' with { type: 'json' };
 import forwardAppThemeCarryUninterpretable from './cases/forward-app-theme-carry-uninterpretable.json' with { type: 'json' };
@@ -132,6 +134,8 @@ export const N1_COMPAT_CASES: readonly N1CompatCase[] = [
   release91HandshakeSuggestion,
   release13RenderResult,
   release14OpsListBlueprints,
+  release028OpsListBlueprintsGeminiFlashLatest,
+  release028OpsListBlueprintsGemini31FlashLitePreview,
   forwardAppThemeUnknownMember,
   forwardAppThemeCarryUnknownMember,
   forwardAppThemeCarryUninterpretable,

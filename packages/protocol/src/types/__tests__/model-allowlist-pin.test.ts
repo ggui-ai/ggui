@@ -51,6 +51,7 @@
  *     of; ggui#672's 2026-09-01 ruling already bans "-latest" aliases on the
  *     status probe for the same reason).
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   MODEL_REGISTRY,
@@ -60,6 +61,8 @@ import {
 } from '../llm.js';
 import {
   MODELS,
+  isKnownModel,
+  isModelRef,
   isValidLlmRoute,
   parseAnyLlmRoute,
   type LlmProvider,
@@ -184,9 +187,22 @@ describe('the dispositions the pin forced (ggui#1291, receipts fetched 2026-10-1
     });
   });
 
-  it('the two Google ids with no row and no fixed target are no longer admitted; the stable sibling still is (control)', () => {
-    expect(isValidLlmRoute('google', 'gemini-3.1-flash-lite-preview')).toBe(false);
-    expect(isValidLlmRoute('google', 'gemini-flash-latest')).toBe(false);
+  it('the two Google ids with no row and no fixed target are out of the allowlist, and the wire still admits them through 0.29 (ggui#1291, VERSION-POLICY §3.6); the stable sibling is a row (control)', () => {
+    for (const id of ['gemini-3.1-flash-lite-preview', 'gemini-flash-latest'] as const) {
+      expect(MODELS.google).not.toContain(id);
+      expect(isKnownModel('google', id)).toBe(false);
+      expect(isValidLlmRoute('google', id)).toBe(true);
+      expect(isModelRef(`gemini/${id}`)).toBe(true);
+    }
+    expect(isKnownModel('google', 'gemini-3.1-flash-lite')).toBe(true);
     expect(isValidLlmRoute('google', 'gemini-3.1-flash-lite')).toBe(true);
+  });
+
+  it('the ggui#1291 tolerance expires with 0.29: at 0.30 the two ids leave the wire (VERSION-POLICY §3.6, one release after the allowlist drop)', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string };
+    const [major, minor] = pkg.version.split('.').map(Number);
+    const beforeThirty = major === 0 && minor <= 29;
+    expect(isValidLlmRoute('google', 'gemini-flash-latest')).toBe(beforeThirty);
+    expect(isValidLlmRoute('google', 'gemini-3.1-flash-lite-preview')).toBe(beforeThirty);
   });
 });

@@ -17,6 +17,8 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
       'release-9-1-handshake-suggestion',
       'release-13-render-result',
       'release-14-ops-list-blueprints',
+      'release-0-28-ops-list-blueprints-gemini-flash-latest',
+      'release-0-28-ops-list-blueprints-gemini-3.1-flash-lite-preview',
       'forward-app-theme-unknown-member',
       'forward-app-theme-carry-unknown-member',
       'forward-app-theme-carry-uninterpretable',
@@ -52,9 +54,9 @@ describe('n1-compat conformance (ggui#1014 §3.6)', () => {
 
   it('is on the package surface — root barrel and its own exports subpath', () => {
     expect(typeof root.runN1CompatConformance).toBe('function');
-    expect(root.N1_COMPAT_CASES.length).toBe(15);
+    expect(root.N1_COMPAT_CASES.length).toBe(17);
     expect(root.N1_COMPAT_DIRECTIONS).toEqual(['backward', 'forward']);
-    expect(runN1CompatConformance().map((r) => r.direction)).toEqual(['backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward']);
+    expect(runN1CompatConformance().map((r) => r.direction)).toEqual(['backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'backward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward', 'forward']);
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
       exports: Record<string, { types?: string; import?: string; default?: string }>;
     };

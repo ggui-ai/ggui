@@ -6,6 +6,42 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `MODELS` and `MODEL_REGISTRY` are one list, pinned (2026-10-15,
+ * ggui#1291), and the two ids the pin removed stay on the wire through
+ * 0.29 (2026-10-25, VERSION-POLICY §3.6). The allowlist (what a route may
+ * NAME) and the registry (what a model IS) now relate in both directions
+ * for the direct providers: every allowlist id is a row's wire id or a
+ * declared alias of one, and every row is routable. The pin forced two
+ * dispositions on `MODELS.google`: `gemini-flash-latest` (a `-latest`
+ * alias with no stated target) and `gemini-3.1-flash-lite-preview` (shut
+ * down at the vendor) left the allowlist and `KnownModelOf<'google'>` —
+ * the whole difference between 0.28.0's `MODELS` and today's (set diff
+ * per provider, `a734373b5` → now: google 10 → 8, every other provider
+ * identical). Removing an id a 0.28 producer may have written is a wire
+ * change between rolled surfaces, so `isValidLlmRoute` keeps admitting
+ * both from `WIRE_TOLERATED_MODELS_THROUGH_0_29`: a 0.28 server's stored
+ * blueprint rows and `ggui_ops_*` blueprint outputs, a portable blueprint
+ * and an operator config naming either still parse, routed as sent with
+ * no row and no rate, as before. `MODELS`, `KnownModelOf` and
+ * `isKnownModel` do not carry them. Pinned by the allowlist test and two
+ * kit `ops-list-blueprints` backward cases tagged 0.28.0. Exit: deleted
+ * in 0.30 once 0.29 is fully rolled on every channel AND a stored-row
+ * census reads 0 for both ids on every environment — a stored row does
+ * not roll, so the release clock alone cannot retire it. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
+ * A registry row says what ANSWERS it (2026-10-15, ggui#1889, additive —
+ * MINOR, same draft stamp): `answeredBy` on a `MODEL_REGISTRY` row, typed
+ * to the registry's own ids, names the row the provider answers that id
+ * with. Two rows carry it — `gemini/gemini-3.5-flash` → 3.6-flash and
+ * `gemini/gemini-3.7-flash` → 3.8-flash (Google's 2026-10-08 notes:
+ * requests to the old id are routed to its successor; confirmed by live
+ * calls) — and both move to `state: "legacy"`, off the lineup, priced as
+ * their answering row. Both rows STAY: `ModelId` does not narrow, a
+ * persisted id keeps its row and its picker entry, and both still parse
+ * as routes (N−1). `answeringModelOf(id)` is the one door a cost reader
+ * resolves through. No wire change. No `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `MODELS.bedrock`'s bare ids and their endpoint (2026-10-11, ggui#1801;
  * comments + a test, no code): the list's docblock now states the
  * contract its two id families carry — a region-less `anthropic.*` id is

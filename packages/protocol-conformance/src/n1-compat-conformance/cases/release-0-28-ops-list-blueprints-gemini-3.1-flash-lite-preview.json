@@ -1,0 +1,41 @@
+{
+  "name": "release-0-28-ops-list-blueprints-gemini-3.1-flash-lite-preview",
+  "description": "A ggui_ops_list_blueprints result as @ggui-ai/* 0.28.0 (a734373b5) would emit it for a generation-minted row whose run route is `gemini/gemini-3.1-flash-lite-preview`: SYNTHESISED, not captured — `release-14-ops-list-blueprints.json` (the tag-14 capture) with exactly two edits, `source.model` set to that id and `blueprintId` renamed to say so; the id is one 0.28.0's `MODELS.google` admitted and which left the allowlist in 0.29 (ggui#1291; at the vendor it is a preview the vendor lists under Previous models as shut down). Between tag 14 and 0.28.0 the row schema gained one optional member this row does not carry (`clonedFrom`), nothing else. Today's opsListBlueprintsOutputSchema MUST accept the result and the parsed row MUST carry `source.model` as sent: a 0.29 reader refusing it would drop the stored row at its store's read door and refuse a 0.28 server's `ggui_ops_*` blueprint outputs naming `model` (VERSION-POLICY §3.6). The tolerance expires in 0.30, one release after the drop; this case leaves with it.",
+  "release": {
+    "label": "@ggui-ai/* 0.28.0",
+    "sha": "a734373b5"
+  },
+  "wire": "ops-list-blueprints",
+  "payload": {
+    "blueprints": [
+      {
+        "blueprintId": "bp_1291-gemini-3.1-flash-lite-preview",
+        "contractHash": "a8b8be414e9e53f7",
+        "appId": "IMud3W0m",
+        "codeS3Url": "s3://blueprint-code/code/be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9.js",
+        "codeHash": "be997120c9425551b4db6c041c32d632255ba166e5d3746fe3c4cbbbf3a2edd9",
+        "source": {
+          "kind": "llm",
+          "generator": "ui-gen-default",
+          "model": "gemini/gemini-3.1-flash-lite-preview"
+        },
+        "variance": {},
+        "createdAt": "2026-09-27T16:40:27.386Z",
+        "createdBy": "agent",
+        "contract": {
+          "propsSpec": {
+            "properties": {
+              "harbour": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expect": "accepted"
+}

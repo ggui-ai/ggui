@@ -137,7 +137,8 @@ export const MODELS = {
     // with every new release" with no stated target (no row can stand for
     // it; ggui#672 bans it on the status probe for the same reason), and
     // `gemini-3.1-flash-lite-preview` sits under "Previous models" marked
-    // "(Shut down)".
+    // "(Shut down)". Both stay admitted on the WIRE through 0.29 — see
+    // `WIRE_TOLERATED_MODELS_THROUGH_0_29` (VERSION-POLICY §3.6).
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
     'gemini-3-flash-preview',
@@ -477,7 +478,8 @@ export function isValidBedrockModel(s: string): boolean {
  *   - `bedrock` — accepts any string passing {@link isValidBedrockModel}
  *
  * Every other provider requires the model to be in
- * `MODELS[provider]`.
+ * `MODELS[provider]` — or, through 0.29, in
+ * {@link WIRE_TOLERATED_MODELS_THROUGH_0_29}.
  */
 export function isValidLlmRoute(provider: string, model: string): boolean {
   if (!isLlmProvider(provider)) return false;
@@ -487,7 +489,47 @@ export function isValidLlmRoute(provider: string, model: string): boolean {
   if (provider === 'bedrock') {
     return isKnownModel('bedrock', model) || isValidBedrockModel(model);
   }
-  return isKnownModel(provider, model);
+  return isKnownModel(provider, model) || isWireToleratedModel(provider, model);
+}
+
+/**
+ * Ids a route may still NAME on the wire although they left `MODELS`
+ * (ggui#1291, VERSION-POLICY §3.6). Dropping an id from the allowlist is
+ * a wire change between independently rolled surfaces: a 0.28 server
+ * minted blueprint rows and emitted `ggui_ops_*` blueprint outputs whose
+ * `source.model` names one of these, and a portable blueprint or an
+ * operator config may name one; a 0.29 reader that refused them would
+ * drop the stored row at its store's read door, or refuse the output
+ * naming `model`. So through every 0.29.x {@link isValidLlmRoute} admits
+ * them exactly as 0.28 did — the route goes to the provider as sent, with
+ * no registry row and no rate row, as before — and nothing else carries
+ * them: `MODELS`, `KnownModelOf` and {@link isKnownModel} do not. The two
+ * ids are the WHOLE difference between 0.28.0's `MODELS` and today's
+ * (per-provider set diff `a734373b5` → now: google 10 → 8, these two
+ * removed; anthropic, openai, bedrock, openrouter identical), so this is
+ * the complete §3.6 set, not a sample. Pinned by
+ * `types/__tests__/model-allowlist-pin.test.ts` and by the conformance
+ * kit's two `ops-list-blueprints` backward cases tagged 0.28.0
+ * (`a734373b5`).
+ *
+ * Clock: delete this table, {@link isWireToleratedModel} and the two kit
+ * cases in 0.30, once 0.29 is fully rolled on every channel AND a
+ * stored-row census reads 0 rows naming either id on every environment —
+ * a stored blueprint row does not roll with a release, so the release
+ * clock alone cannot retire it (ggui#1291 carries the census). The pin
+ * test reads this package's version and turns red at 0.30 until they are
+ * gone, or the clock is consciously extended and re-pinned.
+ */
+const WIRE_TOLERATED_MODELS_THROUGH_0_29: Partial<Record<LlmProvider, readonly string[]>> = {
+  // ai.google.dev/gemini-api/docs/models (2026-10-15): a `-latest` alias
+  // with no stated target, and a "(Shut down)" preview — see the
+  // `MODELS.google` note.
+  google: ['gemini-flash-latest', 'gemini-3.1-flash-lite-preview'],
+};
+
+/** Whether `model` is admitted on the wire for `provider` by the ggui#1291 tolerance alone. */
+function isWireToleratedModel(provider: LlmProvider, model: string): boolean {
+  return WIRE_TOLERATED_MODELS_THROUGH_0_29[provider]?.includes(model) ?? false;
 }
 
 // ============================================================================
