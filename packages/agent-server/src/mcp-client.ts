@@ -325,7 +325,7 @@ const MCP_PROTOCOL_VERSION = '2025-06-18';
  *  CI instead of advertising a stale client identity. */
 const CLIENT_INFO = {
   name: '@ggui-ai/agent-server',
-  version: '0.28.0',
+  version: '0.29.0',
 } as const;
 
 /** Exported for the package.json parity test only. */

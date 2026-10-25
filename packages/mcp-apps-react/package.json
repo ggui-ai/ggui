@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/mcp-apps-react",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "React host helper for MCP Apps — components and hooks for embedding agent-generated UIs in web apps.",
   "keywords": [
     "ggui",
