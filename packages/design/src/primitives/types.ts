@@ -228,6 +228,12 @@ export interface StackProps extends BaseProps {
    * @default false
    */
   wrap?: boolean;
+  /**
+   * Wrapping rows only: at most this many rows, whole children only, the rest hidden.
+   * A group of quick-reply chips is `<Row wrap maxRows={3}>`.
+   * @revealedBy choice=offered-items
+   */
+  maxRows?: number;
 }
 
 /**

@@ -1,7 +1,11 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { StackProps } from './types';
 import { renderWithTrait, type WithTrait } from '../interact/trait';
 import { resolveSpacing } from './spacing-scale';
+import { applyRowCap } from './row-cap';
+
+/** A layout effect in the browser, a plain effect where there is no layout (server render): no SSR warning. */
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 const justifyMap: Record<string, string> = {
   start: 'flex-start',
@@ -36,6 +40,7 @@ export function Stack(props: WithTrait<StackProps>) {
     align = 'stretch',
     justify = 'start',
     wrap = false,
+    maxRows,
     style,
     className,
     as: Trait,
@@ -43,6 +48,35 @@ export function Stack(props: WithTrait<StackProps>) {
   } = props;
 
   const resolvedGap = resolveSpacing(gap);
+
+  // ggui#2010 — the row cap: measure the group's own rows after every render and on every width change, and hide
+  // the children from the first whose rows would end past `maxRows` (the end rule). Only a wrapping horizontal group is capped.
+  const groupRef = useRef<HTMLDivElement>(null);
+  const capped = maxRows !== undefined && wrap && direction === 'horizontal';
+  useIsomorphicLayoutEffect(() => {
+    const group = groupRef.current;
+    if (!capped || group === null || maxRows === undefined) return;
+    applyRowCap(group, maxRows);
+    if (typeof ResizeObserver === 'undefined') return;
+    let width = group.getBoundingClientRect().width;
+    let frame = 0;
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width;
+      if (next === undefined || next === width) return;
+      width = next;
+      // Re-packing changes the group's height inside the observer's own callback, which the browser reports as an
+      // undelivered-notifications loop. The re-pack stays synchronous (no frame shows a half-packed group); only
+      // the observation pauses, and resumes on the next frame, where the unchanged width returns early.
+      observer.unobserve(group);
+      applyRowCap(group, maxRows);
+      frame = requestAnimationFrame(() => observer.observe(group));
+    });
+    observer.observe(group);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  });
 
   const composedStyle: CSSProperties = {
     display: 'flex',
@@ -57,7 +91,7 @@ export function Stack(props: WithTrait<StackProps>) {
   return renderWithTrait(
     Trait,
     traitProps,
-    { className, style: composedStyle },
+    { className, style: composedStyle, ...(capped ? { ref: groupRef } : {}) },
     children,
   );
 }

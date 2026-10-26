@@ -30,6 +30,7 @@ import {
   type CSSProperties,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { Clickable } from './Clickable';
 import { Hoverable } from './Hoverable';
@@ -142,14 +143,20 @@ function frameAttributes(frame: FrameMarks | undefined): {
 export function renderWithTrait(
   trait: TraitComponent | undefined,
   traitProps: TraitProps<TraitComponent>,
-  root: { readonly className?: string; readonly style: CSSProperties; readonly frame?: FrameMarks },
+  root: {
+    readonly className?: string;
+    readonly style: CSSProperties;
+    readonly frame?: FrameMarks;
+    /** The plain root's element, for a primitive that measures its own children (ggui#2010). Traits do not take it. */
+    readonly ref?: Ref<HTMLDivElement>;
+  },
   children: ReactNode,
 ): ReactElement {
   const marks = frameAttributes(root.frame);
   if (trait === undefined) {
     return createElement(
       'div',
-      { className: root.className, style: root.style, ...marks },
+      { className: root.className, style: root.style, ...marks, ...(root.ref !== undefined ? { ref: root.ref } : {}) },
       children,
     );
   }
