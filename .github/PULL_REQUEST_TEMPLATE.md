@@ -22,7 +22,7 @@ For trivial changes (docs typo, formatting), a one-line summary is fine.
 - [ ] `@ggui-ai/protocol`
 - [ ] `@ggui-ai/cli`
 - [ ] `@ggui-ai/mcp-server` / `mcp-server-core` / `mcp-server-handlers`
-- [ ] `@ggui-ai/react` / `react-native`
+- [ ] `@ggui-ai/mcp-apps-react` / `mcp-apps-react-native`
 - [ ] `@ggui-ai/ui-gen`
 - [ ] `@ggui-ai/registry-core` / `registry-server`
 - [ ] Other: \_\_\_

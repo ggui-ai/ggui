@@ -9,9 +9,8 @@ body:
       options:
         - "@ggui-ai/protocol"
         - "@ggui-ai/mcp-server"
-        - "@ggui-ai/server"
-        - "@ggui-ai/react"
-        - "@ggui-ai/react-native"
+        - "@ggui-ai/mcp-apps-react"
+        - "@ggui-ai/mcp-apps-react-native"
         - "@ggui-ai/cli"
         - "@ggui-ai/wire"
         - New package

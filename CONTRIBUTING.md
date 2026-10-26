@@ -48,15 +48,18 @@ This creates a file describing your change. Commit it with your PR.
 
 Each subdirectory is a workspace package. The consumer-facing surface:
 
-| Package             | Published name          | Description                        |
-| ------------------- | ----------------------- | ---------------------------------- |
-| `protocol`          | `@ggui-ai/protocol`     | Wire protocol types                |
-| `ggui-cli`          | `@ggui-ai/cli`          | The `ggui` binary                  |
-| `mcp-server`        | `@ggui-ai/mcp-server`   | Reference OSS server               |
-| `ggui-react`        | `@ggui-ai/react`        | React embedding components         |
-| `ggui-react-native` | `@ggui-ai/react-native` | React Native embedding components  |
-| `gadgets`           | `@ggui-ai/gadgets`      | Author wrappers for 3rd-party libs |
-| `ui-gen`            | `@ggui-ai/ui-gen`       | UI-generation harness              |
+| Package                 | Published name                   | Description                                          |
+| ----------------------- | -------------------------------- | ---------------------------------------------------- |
+| `protocol`              | `@ggui-ai/protocol`              | Wire protocol types                                  |
+| `ggui-cli`              | `@ggui-ai/cli`                   | The `ggui` binary                                    |
+| `mcp-server`            | `@ggui-ai/mcp-server`            | Reference OSS server                                 |
+| `mcp-apps-react`        | `@ggui-ai/mcp-apps-react`        | MCP Apps host helper for React web apps              |
+| `mcp-apps-react-native` | `@ggui-ai/mcp-apps-react-native` | MCP Apps host helper for React Native apps           |
+| `gadgets`               | `@ggui-ai/gadgets`               | Browser-capability hooks for generated UI components |
+| `ui-gen`                | `@ggui-ai/ui-gen`                | UI-generation harness                                |
+
+The two `mcp-apps-*` packages are MCP Apps host helpers, not SDKs. An agent-generated UI runs in its own sandboxed
+iframe (a WebView on React Native), not in your app's tree; the helpers give your app the host side of that contract.
 
 The remaining directories are supporting runtime, registry, and tooling
 packages. See each subdirectory's `package.json` for the full picture.
