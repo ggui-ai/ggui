@@ -12,6 +12,7 @@
 // poor visual hierarchy, missing whitespace.
 
 import { buildStylingProfileJudgeBlock } from '../boilerplate/styling-profile.js';
+import { TRUNCATED_CONTROLS_EXPRESSION } from '@ggui-ai/ui-visual-tester/truncated-controls';
 import type { GenerationProfileInput } from '../boilerplate/styling-profile.js';
 import type { CriteriaAnswer } from './types.js';
 import type { CriteriaBlock, CriteriaContext, CriteriaRollup } from './types-public.js';
@@ -479,6 +480,11 @@ export interface VisualEvalContext {
   profile?: GenerationProfileInput;
   /** ggui#1436 — a criteria bank and the card's context; the judge selects per canvas and answers report-only. */
   criteria?: { readonly bank: CriteriaBank; readonly context: CriteriaContextInput };
+  /**
+   * ggui#2010 — true when this generation's prompt taught the offered-items choice fragment, so the no-truncate fix
+   * may name its chip example ({@link NO_TRUNCATE_CHIP_EXAMPLE}). Absent = not taught: the fix names no example.
+   */
+  offeredChoiceTaught?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -881,6 +887,8 @@ export interface ScreenshotAttempt {
   readonly contentHeight: number | null;
   /** ggui#1475 — a natural capture's horizontal overflow: how many px the card's content runs past its width; absent on every other capture. */
   readonly overflowX?: number | null;
+  /** ggui#2010 — the labels of shown controls a visitor cannot read whole (`TRUNCATED_CONTROLS_EXPRESSION`, `@ggui-ai/ui-visual-tester/truncated-controls`); `null` when unmeasurable, absent on a failed capture. */
+  readonly truncatedControls?: readonly string[] | null;
   /**
    * ggui#1663 — the edge rule on this capture's DOM, read just before the screenshot (report-only); `null` when the
    * probe failed. Absent on a failed capture.
@@ -924,6 +932,7 @@ export const OVERFLOW_X_ROUNDING_PX = 1;
 export const CARD_OVERFLOW_X_EXPRESSION =
   "(() => { const r = document.getElementById('root'); return r ? Math.max(0, Math.ceil(r.scrollWidth - r.clientWidth)) : null; })()";
 
+
 /**
  * The natural capture's region: the card on the host ground, the ground margin on every side, the
  * card's height capped at the box (content past it is the overflow the fit verdict reads). At least
@@ -964,6 +973,17 @@ export function cardBoxClip(window: { width: number; height: number }, box: { x:
 }
 
 /** Measure the rendered document's height (or the card's, for a natural capture); a failed measurement is reported, never a failed capture. */
+/** ggui#2010 — read the truncated controls off the page the screenshot is about to take; a failed read is `null`, never a failed capture. */
+async function measureTruncatedControls(page: ScreenshotPage): Promise<readonly string[] | null> {
+  try {
+    const labels = await page.evaluate(TRUNCATED_CONTROLS_EXPRESSION);
+    return Array.isArray(labels) && labels.every((l): l is string => typeof l === 'string') ? labels : null;
+  } catch (e) {
+    console.warn(`[visual-eval] truncated controls unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 async function measureContentHeight(page: ScreenshotPage, expression: string = CONTENT_HEIGHT_EXPRESSION): Promise<number | null> {
   try {
     const h = await page.evaluate(expression);
@@ -1065,9 +1085,10 @@ export async function captureScreenshotDetailed(
         }
         const framed = cardHeightPx === null ? viewport.height - 2 * natural.padPx : floorPx !== undefined ? Math.max(cardHeightPx, floorPx) : cardHeightPx;
         const clip = naturalClip(viewport, framed, natural.padPx);
+        const truncatedControls = await measureTruncatedControls(page);
         const edges = await measureEdges(page);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
-        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX, ...edges };
+        return { png: Buffer.from(screenshot), contentHeight: cardHeightPx, overflowX, truncatedControls, ...edges };
       }
       if (capture === 'card-box') {
         // ggui#1953 — the card's own box (the mount, which wears the card frame), so a root that stretches itself still
@@ -1077,14 +1098,16 @@ export async function captureScreenshotDetailed(
         // is the frame this capture exists to stop judging (and would read as the old defect, silently).
         if (box === null) return { png: null, reason: `card-box capture: the card's own box (.${JUDGE_SCOPE_CLASS}) could not be measured`, contentHeight: null };
         const clip = cardBoxClip(viewport, box);
+        const truncatedControls = await measureTruncatedControls(page);
         const edges = await measureEdges(page);
         const screenshot = await page.screenshot({ type: 'png', fullPage: false, clip });
-        return { png: Buffer.from(screenshot), contentHeight: Math.round(box.height), ...edges };
+        return { png: Buffer.from(screenshot), contentHeight: Math.round(box.height), truncatedControls, ...edges };
       }
       const contentHeight = await measureContentHeight(page);
+      const truncatedControls = await measureTruncatedControls(page);
       const edges = await measureEdges(page);
       const screenshot = await page.screenshot({ type: 'png', fullPage: capture === 'full-page' });
-      return { png: Buffer.from(screenshot), contentHeight, ...edges };
+      return { png: Buffer.from(screenshot), contentHeight, truncatedControls, ...edges };
     } finally {
       await browser.close();
     }
@@ -1375,6 +1398,42 @@ function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue 
   if (px === undefined || px === null || px <= OVERFLOW_X_ROUNDING_PX || frame.policy.overflow === 'none') return null;
   return canvasOverflowXIssue(canvas, frame.viewport, px, frame.policy.overflow);
 }
+
+/**
+ * ggui#2010 — the deterministic no-truncate verdict: a shown control a visitor cannot read whole fails the canvas,
+ * critical on every canvas (a quick-reply chip's label is the bound suggestion verbatim; a cut label breaks the bind
+ * and is the cropped-chip failure of guuey#1487). Report-free when the read was unavailable.
+ */
+export function truncatedControlsVerdict(
+  canvas: CanvasClass,
+  frame: { readonly attempt: Pick<ScreenshotAttempt, 'truncatedControls'> },
+  taught: Pick<VisualEvalContext, 'offeredChoiceTaught'> = {},
+): VisualIssue | null {
+  const labels = frame.attempt.truncatedControls;
+  if (labels === undefined || labels === null || labels.length === 0) return null;
+  return {
+    dimension: 'control-truncated',
+    origin: 'instrument',
+    severity: 'critical',
+    description:
+      `${labels.length} control label(s) on the ${canvas} canvas cannot be read whole (cut by an ellipsis, by the ` +
+      `control's own overflow, or by an ancestor that clips it): ${labels.map((l) => JSON.stringify(l)).join(', ')}.`,
+    fix: taught.offeredChoiceTaught === true ? `${NO_TRUNCATE_FIX} ${NO_TRUNCATE_CHIP_EXAMPLE}` : NO_TRUNCATE_FIX,
+  };
+}
+
+/** ggui#2010 — the no-truncate fix (CDO's text): the rule, then the CSS mechanics that break it. */
+const NO_TRUNCATE_FIX =
+  "A control's label must show whole: never clip or ellipsize its text. Let the control grow, or wrap its text " +
+  'inside it; if a container cannot hold every control, drop whole controls rather than cut one. ' +
+  'No text-overflow: ellipsis, no white-space: nowrap with overflow hidden, no fixed width or height on the ' +
+  'control. A chip that is wider than its row wraps inside itself (max-width: 100%; white-space: normal).';
+
+/**
+ * ggui#2010 — the chip example the offered-items choice fragment teaches, verbatim (pinned against the generated
+ * fragment text). The no-truncate fix appends it only where that fragment reached the prompt.
+ */
+export const NO_TRUNCATE_CHIP_EXAMPLE = 'A group of quick-reply chips is `<Row wrap maxRows={3}>`.';
 
 /** One judge call parsed, retried ONCE on a malformed answer (#1017); the FIRST reason is kept verbatim. */
 type JudgedAnswer =
@@ -1674,6 +1733,12 @@ export async function runVisualEvaluationDetailed(
       if (overflowXIssue !== null) {
         result.issues.push(overflowXIssue);
         if (policy.overflow === 'fail') result.passed = false;
+      }
+      // ggui#2010 — the no-truncate pin: deterministic, critical on every canvas.
+      const truncatedIssue = truncatedControlsVerdict(canvas, frame, context);
+      if (truncatedIssue !== null) {
+        result.issues.push(truncatedIssue);
+        result.passed = false;
       }
       // The blank verdict (ggui#1120): deterministic, critical on every canvas — a render that painted nothing fails.
       const blankIssue = blankVerdict(canvas, frame);
@@ -2315,6 +2380,8 @@ export async function runVisualFit(
     if (verdict !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, verdict)));
     const overflowXIssue = overflowXVerdict(canvas, frame);
     if (overflowXIssue !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, overflowXIssue)));
+    const truncated = truncatedControlsVerdict(canvas, frame, context);
+    if (truncated !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, truncated)));
     const blank = blankVerdict(canvas, frame);
     if (blank !== null) issues.push(toEvalIssue(canvasScopedIssue(canvas, blank)));
     const inkRatio = frame.ink?.ratio ?? null;

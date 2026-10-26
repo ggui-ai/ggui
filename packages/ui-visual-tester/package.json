@@ -40,6 +40,11 @@
       "types": "./dist/prime-inputs.d.ts",
       "import": "./dist/prime-inputs.js",
       "default": "./dist/prime-inputs.js"
+    },
+    "./truncated-controls": {
+      "types": "./dist/truncated-controls.d.ts",
+      "import": "./dist/truncated-controls.js",
+      "default": "./dist/truncated-controls.js"
     }
   },
   "scripts": {

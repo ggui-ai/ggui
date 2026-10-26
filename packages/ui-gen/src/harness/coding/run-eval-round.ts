@@ -45,6 +45,7 @@ import {
   type RenderCheckKind,
 } from "../check/runtime-render/index.js";
 import type { Harness, RuntimeRenderOutcome } from "../types-public.js";
+import { offeredChoiceTaught } from "../../fragments/index.js";
 import type { AgentSpec, SingleComponentParams } from "../runtime.js";
 import type {
   CanvasFitReading,
@@ -837,6 +838,8 @@ export async function runEvalRound(
       compiledCode,
       originalPrompt: userPrompt,
       profile: harness.profile,
+      // ggui#2010 — the no-truncate fix names the chip example only where this prompt taught it.
+      ...(offeredChoiceTaught(harness.how.fragments) ? { offeredChoiceTaught: true } : {}),
       // The caller's theme, when named — the round paints what the app paints.
       ...(visualEvaluation?.cssTokens !== undefined ? { cssTokens: visualEvaluation.cssTokens } : {}),
       // ggui#1436 — the criteria bank and the card's context; the judge selects per canvas, report-only.

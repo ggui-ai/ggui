@@ -8,6 +8,7 @@
  * pages are measured, never judged. A failed measurement never breaks
  * the round. Browser + judge are injected.
  */
+import { TRUNCATED_CONTROLS_EXPRESSION } from '@ggui-ai/ui-visual-tester/truncated-controls';
 import { describe, expect, it } from 'vitest';
 import type { LaunchOptions } from 'puppeteer-core';
 import { EXPANDED_FRAME } from '@ggui-ai/design/rendering';
@@ -138,7 +139,8 @@ describe('ggui#1475 — the inline card is captured as a size-honouring host sho
       deps,
     );
     // ggui#1663 — the edge probe reads the page last, just before the screenshot.
-    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION]);
+    // ggui#2010 — the no-truncate read sits just before it.
+    expect(deps.expressions).toEqual([CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, TRUNCATED_CONTROLS_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION]);
     expect(result!.issues.some((i) => i.dimension === 'canvas-overflow-x')).toBe(false);
     expect(deps.captures).toEqual([{ width: 400 + 2 * M, fullPage: false, clip: { x: 0, y: 0, width: 400 + 2 * M, height: 280 + 2 * M } }]);
     expect(deps.pages[0]).toContain(`class="${JUDGE_GROUND_CLASS}"`);
@@ -233,9 +235,9 @@ describe('the fit measurement in the per-canvas round (ggui#1027)', () => {
     expect(result).not.toBeNull();
     // The inline card is measured from its mount (ggui#1475); every other canvas from the document, as before.
     expect(deps.expressions).toEqual([
-      CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
-      CONTENT_HEIGHT_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
-      CONTENT_HEIGHT_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
+      CARD_HEIGHT_EXPRESSION, CARD_OVERFLOW_X_EXPRESSION, TRUNCATED_CONTROLS_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
+      CONTENT_HEIGHT_EXPRESSION, TRUNCATED_CONTROLS_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
+      CONTENT_HEIGHT_EXPRESSION, TRUNCATED_CONTROLS_EXPRESSION, EDGE_BLOCKS_EXPRESSION, EDGE_BLOCKS_V2_EXPRESSION, FINISH_PROBE_EXPRESSION,
     ]);
     expect(deps.captures).toEqual([
       // xs on the host ground, clipped to the card and capped at its box (ggui#1475).
