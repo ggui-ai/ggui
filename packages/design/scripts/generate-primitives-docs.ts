@@ -129,6 +129,8 @@ function parseInterfaces(filePath: string): InterfaceInfo[] {
 
       // Skip style and className (from BaseProps)
       if (propName === 'style' || propName === 'className') continue;
+      // A `@revealedBy` prop is taught only by its prompt fragment (ggui#2010; generate-primitives-docs-ts.ts).
+      if (getJSDocTag(member, 'revealedBy') !== undefined) continue;
 
       const propType = typeNodeToString(member.type, sourceFile);
       const propDescription = getJSDocDescription(member);

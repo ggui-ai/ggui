@@ -15,6 +15,7 @@ export const kanbanBoard = retrofit("kanban-board", {
       fetch: "none",
       layout: "single",
       tooling: "none",
+      choice: "none",
     },
     riskTier: "high",
     provenance: {
@@ -28,6 +29,7 @@ export const kanbanBoard = retrofit("kanban-board", {
       fetch: "contract",
       layout: "default",
       tooling: "default",
+      choice: "contract",
     },
   },
   evalGoals: [

@@ -208,6 +208,7 @@ Requirements:
       fetch: "drill-down",
       layout: "overlay",
     tooling: "wired",
+    choice: "none",
     },
     // High: render=spatial AND realtime !== 'none' auto-promotes.
     riskTier: "high",
@@ -220,6 +221,7 @@ Requirements:
       fetch: "contract",
       layout: "prompt",
     tooling: "contract",
+    choice: "contract",
     },
   },
 

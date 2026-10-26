@@ -6,8 +6,8 @@ import type { AxisCheckInput } from '../types.js';
 import type { Classification } from '../../../classifier/axes.js';
 
 const classification: Classification = {
-  vector: { render: 'grid', state: 'none', writes: 'none', writeTrigger: 'click', realtime: 'none', fetch: 'none', layout: 'single', tooling: 'none' },
-  provenance: { render: 'default', state: 'default', writes: 'default', writeTrigger: 'default', realtime: 'default', fetch: 'default', layout: 'default', tooling: 'default' },
+  vector: { render: 'grid', state: 'none', writes: 'none', writeTrigger: 'click', realtime: 'none', fetch: 'none', layout: 'single', tooling: 'none', choice: 'none' },
+  provenance: { render: 'default', state: 'default', writes: 'default', writeTrigger: 'default', realtime: 'default', fetch: 'default', layout: 'default', tooling: 'default', choice: 'default' },
   riskTier: 'low',
 };
 const run = (id: string, sourceCode: string) => {

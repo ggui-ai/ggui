@@ -14,6 +14,7 @@ export const stockTicker = retrofit("stock-ticker", {
       fetch: "drill-down",
       layout: "single",
     tooling: "wired",
+    choice: "none",
     },
     riskTier: "high",
     provenance: {
@@ -26,6 +27,7 @@ export const stockTicker = retrofit("stock-ticker", {
       fetch: "contract",
       layout: "default",
     tooling: "contract",
+    choice: "default",
     },
   },
   evalGoals: [

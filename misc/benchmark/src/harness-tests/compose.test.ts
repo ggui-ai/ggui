@@ -34,9 +34,9 @@ const ALL: BenchmarkFixture[] = [
 ];
 
 describe("fragment registry coverage", () => {
-  it("registers every enum value across 8 axes", () => {
+  it("registers every enum value across 9 axes", () => {
     // Sanity: every axis is present and non-empty
-    const axes: AxisKey[] = ["render", "state", "writes", "writeTrigger", "realtime", "fetch", "layout", "tooling"];
+    const axes: AxisKey[] = ["render", "state", "writes", "writeTrigger", "realtime", "fetch", "layout", "tooling", "choice"];
     for (const axis of axes) {
       expect(Object.keys(FRAGMENT_REGISTRY[axis]).length).toBeGreaterThan(0);
     }
@@ -50,7 +50,7 @@ describe("fragment registry coverage", () => {
         blueprint: fx.blueprint,
       });
       const composed = compose(result);
-      const axes: AxisKey[] = ["render", "state", "writes", "writeTrigger", "realtime", "fetch", "layout", "tooling"];
+      const axes: AxisKey[] = ["render", "state", "writes", "writeTrigger", "realtime", "fetch", "layout", "tooling", "choice"];
       for (const axis of axes) {
         const value = result.vector[axis] as string;
         const frag = FRAGMENT_REGISTRY[axis][value];
@@ -112,10 +112,10 @@ describe("compose output — low risk vs high risk", () => {
 });
 
 describe("compose output — deterministic ordering", () => {
-  it("stable axis ordering: render → layout → state → writes → writeTrigger → realtime → fetch → tooling", () => {
+  it("stable axis ordering: render → layout → state → writes → writeTrigger → realtime → fetch → tooling → choice", () => {
     const c = classifyAxes({ contract: kanbanBoard.contract as never, prompt: kanbanBoard.prompt });
     const composed = compose(c);
     const axisSeq = composed.fragments.map((f) => f.axis);
-    expect(axisSeq).toEqual(["render", "layout", "state", "writes", "writeTrigger", "realtime", "fetch", "tooling"]);
+    expect(axisSeq).toEqual(["render", "layout", "state", "writes", "writeTrigger", "realtime", "fetch", "tooling", "choice"]);
   });
 });

@@ -125,6 +125,7 @@ Requirements:
       fetch: "none",
       layout: "single",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "medium",
     provenance: {
@@ -136,6 +137,7 @@ Requirements:
       fetch: "contract",
       layout: "default",
     tooling: "default",
+    choice: "default",
     },
   },
 

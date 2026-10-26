@@ -13,6 +13,7 @@ export const surveyForm = retrofit("survey-form", {
       fetch: "none",
       layout: "multi-step",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "medium",
     provenance: {
@@ -25,6 +26,7 @@ export const surveyForm = retrofit("survey-form", {
       // prompt describes 4-step flow decisively
       layout: "prompt",
     tooling: "default",
+    choice: "contract",
     },
   },
   evalGoals: [

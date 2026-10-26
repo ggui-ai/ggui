@@ -14,6 +14,7 @@ export const chatInterface = retrofit("chat-interface", {
       fetch: "pagination",
       layout: "single",
       tooling: "wired",
+      choice: "none",
     },
     riskTier: "high",
     provenance: {
@@ -25,6 +26,7 @@ export const chatInterface = retrofit("chat-interface", {
       fetch: "contract",
       layout: "default",
     tooling: "contract",
+    choice: "contract",
     },
   },
   evalGoals: [

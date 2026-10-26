@@ -27,6 +27,7 @@ const AXIS_ORDER: AxisKey[] = [
   "realtime",
   "fetch",
   "tooling",
+  "choice",
 ];
 
 export function compose(classification: Classification): ComposedHarness {

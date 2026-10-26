@@ -29,5 +29,6 @@ export { inferRealtime } from "./infer-realtime";
 export { inferRender } from "./infer-render";
 export { inferState } from "./infer-state";
 export { inferTooling } from "./infer-tooling";
+export { inferChoice } from "./infer-choice";
 export { inferWriteTrigger } from "./infer-trigger";
 export { inferWrites } from "./infer-writes";

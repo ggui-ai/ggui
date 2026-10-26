@@ -17,6 +17,7 @@ function classification(
       fetch: "none",
       layout: "single",
       tooling,
+      choice: "none",
     },
     provenance: {
       render: "default",
@@ -27,6 +28,7 @@ function classification(
       fetch: "default",
       layout: "default",
       tooling: "default",
+      choice: "default",
     },
     riskTier: "low",
   };

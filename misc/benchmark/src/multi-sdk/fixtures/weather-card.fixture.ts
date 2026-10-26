@@ -13,6 +13,7 @@ export const weatherCard = retrofit("weather-card", {
       fetch: "none",
       layout: "single",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "low",
     provenance: {
@@ -24,6 +25,7 @@ export const weatherCard = retrofit("weather-card", {
       fetch: "contract",
       layout: "default",
     tooling: "default",
+    choice: "default",
     },
   },
   evalGoals: [

@@ -29,6 +29,7 @@ function classification(layout: "single" | "multi-step"): Classification {
       fetch: "none",
       layout,
       tooling: "none",
+      choice: "none",
     },
     provenance: {
       render: "default",
@@ -39,6 +40,7 @@ function classification(layout: "single" | "multi-step"): Classification {
       fetch: "default",
       layout: "default",
       tooling: "default",
+      choice: "default",
     },
     riskTier: "low",
   };

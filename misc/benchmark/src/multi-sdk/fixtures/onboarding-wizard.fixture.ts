@@ -13,6 +13,7 @@ export const onboardingWizard = retrofit("onboarding-wizard", {
       fetch: "none",
       layout: "multi-step",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "medium",
     provenance: {
@@ -24,6 +25,7 @@ export const onboardingWizard = retrofit("onboarding-wizard", {
       fetch: "contract",
       layout: "prompt",
     tooling: "default",
+    choice: "contract",
     },
   },
   evalGoals: [

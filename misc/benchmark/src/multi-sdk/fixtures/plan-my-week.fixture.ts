@@ -123,6 +123,7 @@ Requirements:
       fetch: "none",
       layout: "master-detail",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "high", // writeTrigger=drag auto-promotes to high
     provenance: {
@@ -136,6 +137,7 @@ Requirements:
       fetch: "contract",
       layout: "blueprint",
     tooling: "default",
+    choice: "contract",
     },
   },
 

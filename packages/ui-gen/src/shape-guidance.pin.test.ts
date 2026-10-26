@@ -31,13 +31,16 @@ function shapeGuidance(i: number): { readonly vector: string; readonly text: str
 // Re-recorded 2026-09-12 for ggui#1046: the render=grid guidance names BOTH shapes (tile grid; board = the
 // columns map wrapped in <Grid columns={{ base: 1, md: columns.length }}> of <Stack> columns) and drops the
 // `display: grid` sentence that contradicted the prompt's NEVER rule — fixture B (render=grid) moves, fixture A stays.
+// Re-recorded 2026-10-26 for ggui#2010: the choice axis adds a `choice` key to every vector. Fixture A (todo) classifies
+// `offered-items` (its one action names one item by one field) and its guidance gains the chip fragment, so its digest moves;
+// fixture B (kanban) classifies `none`, its text is unchanged and its digest stays — the key is the only move in either vector.
 export const SHAPE_GUIDANCE_SHA256: readonly string[] = [
-  '15abd0fa3944eba787a286fb5cd39a78bef42c80559a4d234222becd5b3d3a80',
+  '6298f72b821a4274c9e86bb857a973c979c3ddcbca83492f20136baee90b9296',
   'a3ac98059b5242994b3954764d0ad9a950bd860f87a41d58f7f94f0a0dbba1d5',
 ];
 export const SHAPE_GUIDANCE_VECTOR: readonly string[] = [
-  '{"render":"list","state":"ui-affordance","writes":"commit","writeTrigger":"click","realtime":"none","fetch":"none","layout":"single","tooling":"none"}',
-  '{"render":"grid","state":"merge","writes":"none","writeTrigger":"click","realtime":"merge","fetch":"none","layout":"single","tooling":"none"}',
+  '{"render":"list","state":"ui-affordance","writes":"commit","writeTrigger":"click","realtime":"none","fetch":"none","layout":"single","tooling":"none","choice":"offered-items"}',
+  '{"render":"grid","state":"merge","writes":"none","writeTrigger":"click","realtime":"merge","fetch":"none","layout":"single","tooling":"none","choice":"none"}',
 ];
 
 describe('Shape Guidance pin — one digest per fixture', () => {

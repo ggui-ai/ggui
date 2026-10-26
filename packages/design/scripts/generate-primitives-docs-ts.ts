@@ -25,6 +25,11 @@ interface PropInfo {
   optional: boolean;
   defaultValue: string | undefined;
   description: string;
+  /**
+   * `@revealedBy <axis>=<value>` (ggui#2010): the prop is left out of the shared reference and taught only by the
+   * prompt fragment composed for that classifier axis value, from its whole docblock (see `REVEALED_PROPS`).
+   */
+  revealedBy: string | undefined;
 }
 
 interface InterfaceInfo {
@@ -117,8 +122,9 @@ function parseInterfaces(filePath: string): InterfaceInfo[] {
       const propDescription = getJSDocDescription(member);
       const defaultValue = getJSDocTag(member, 'default');
       const optional = !!member.questionToken;
+      const revealedBy = getJSDocTag(member, 'revealedBy');
 
-      props.push({ name: propName, type: propType, optional, defaultValue, description: propDescription });
+      props.push({ name: propName, type: propType, optional, defaultValue, description: propDescription, revealedBy });
     }
 
     const info = { name, componentName, description, example, props, isComponentProps };
@@ -247,6 +253,8 @@ function formatInterface(iface: InterfaceInfo): string {
   lines.push(`interface ${interfaceName} {`);
 
   for (const prop of iface.props) {
+    // A revealed prop's one home is its fragment (REVEALED_PROPS), never the shared table.
+    if (prop.revealedBy !== undefined) continue;
     const optional = prop.optional ? '?' : '';
     const type = compactType(prop.type);
     // Trailing comment: default, then short semantic note when non-redundant.
@@ -344,12 +352,51 @@ const STATIC_FOOTER = `
 // useMotion() returns { motionEnabled } — respect prefers-reduced-motion.
 `;
 
+interface RevealedPropOut {
+  axis: string;
+  value: string;
+  prop: string;
+  type: string;
+  components: string[];
+  description: string;
+}
+
+/**
+ * Every `@revealedBy <axis>=<value>` prop, once, with the components that take it (aliases included, so `Row`
+ * inherits `Stack`'s) and its WHOLE docblock text — not the condensed first sentence the table would have carried.
+ */
+function collectRevealedProps(interfaces: InterfaceInfo[]): RevealedPropOut[] {
+  const out = new Map<string, RevealedPropOut>();
+  for (const iface of interfaces) {
+    if (!iface.isComponentProps) continue;
+    for (const prop of iface.props) {
+      if (prop.revealedBy === undefined) continue;
+      const m = prop.revealedBy.trim().match(/^(\w+)=([\w-]+)$/);
+      if (!m) throw new Error(`@revealedBy on ${iface.name}.${prop.name} must read "<axis>=<value>", got "${prop.revealedBy}"`);
+      const key = `${m[1]}=${m[2]}:${prop.name}`;
+      const entry = out.get(key) ?? {
+        axis: m[1]!,
+        value: m[2]!,
+        prop: `${prop.name}${prop.optional ? '?' : ''}`,
+        type: compactType(prop.type),
+        components: [],
+        description: prop.description.replace(/\s*\n\s*/g, ' ').trim(),
+      };
+      entry.components.push(iface.componentName);
+      out.set(key, entry);
+    }
+  }
+  return [...out.values()];
+}
+
 function main() {
   const sections: string[] = [PREAMBLE, ''];
+  const revealed: RevealedPropOut[] = [];
 
   for (const { filePath, section, importPath } of sourceFiles) {
     const interfaces = parseInterfaces(filePath);
     sections.push(generateSection(section, importPath, interfaces));
+    revealed.push(...collectRevealedProps(interfaces));
   }
 
   sections.push(STATIC_FOOTER);
@@ -376,6 +423,18 @@ export const PRIMITIVES_DOCUMENTATION_TS = ${JSON.stringify(markdown)};
 `;
 
   const outputPath = path.join(uiGenRoot, 'src/tools/get-primitives-ts.ts');
+  const revealedOutput = `/**
+ * AUTO-GENERATED from @ggui-ai/design JSDoc: every prop tagged \`@revealedBy <axis>=<value>\`, with its whole
+ * docblock. Do not edit manually. Run: pnpm --filter @ggui-ai/design generate:docs-ts
+ *
+ * These props are absent from the component reference; the prompt fragment for their axis value teaches them
+ * (fragments/index.ts), so each lives in exactly one place.
+ */
+import type { RevealedProp } from "./types.js";
+
+export const REVEALED_PROPS: readonly RevealedProp[] = ${JSON.stringify(revealed, null, 2)};
+`;
+  const revealedPath = path.join(uiGenRoot, 'src/fragments/revealed-props.ts');
 
   /* eslint-disable no-console */
   if (!fs.existsSync(path.dirname(outputPath))) {
@@ -383,6 +442,8 @@ export const PRIMITIVES_DOCUMENTATION_TS = ${JSON.stringify(markdown)};
   } else {
     fs.writeFileSync(outputPath, output, 'utf-8');
     console.log(`Generated ${outputPath}`);
+    fs.writeFileSync(revealedPath, revealedOutput, 'utf-8');
+    console.log(`Generated ${revealedPath} (${revealed.length} revealed prop(s))`);
   }
   console.log(`  Bytes: ${markdown.length}`);
   console.log(`  Approx tokens: ${Math.round(markdown.length / 3.7)}`);

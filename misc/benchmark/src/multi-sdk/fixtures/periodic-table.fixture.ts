@@ -13,6 +13,7 @@ export const periodicTable = retrofit("periodic-table", {
       fetch: "none",
       layout: "single",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "low",
     provenance: {
@@ -26,6 +27,7 @@ export const periodicTable = retrofit("periodic-table", {
       fetch: "contract",
       layout: "default",
     tooling: "default",
+    choice: "default",
     },
   },
   evalGoals: [

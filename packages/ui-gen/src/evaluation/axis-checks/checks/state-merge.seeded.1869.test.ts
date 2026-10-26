@@ -28,8 +28,8 @@ const contract: DataContract = {
 };
 
 const classification: Classification = {
-  vector: { render: 'static', state: 'merge', writes: 'submit', writeTrigger: 'click', realtime: 'merge', fetch: 'none', layout: 'single', tooling: 'none' },
-  provenance: { render: 'default', state: 'default', writes: 'default', writeTrigger: 'default', realtime: 'default', fetch: 'default', layout: 'default', tooling: 'default' },
+  vector: { render: 'static', state: 'merge', writes: 'submit', writeTrigger: 'click', realtime: 'merge', fetch: 'none', layout: 'single', tooling: 'none', choice: 'none' },
+  provenance: { render: 'default', state: 'default', writes: 'default', writeTrigger: 'default', realtime: 'default', fetch: 'default', layout: 'default', tooling: 'default', choice: 'default' },
   riskTier: 'medium',
 };
 

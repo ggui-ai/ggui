@@ -25,6 +25,7 @@ function fakeClassification(overrides: Partial<Classification["vector"]> = {}): 
       fetch: "none",
       layout: "single",
       tooling: "none",
+      choice: "none",
       ...overrides,
     },
     provenance: {
@@ -36,6 +37,7 @@ function fakeClassification(overrides: Partial<Classification["vector"]> = {}): 
       fetch: "default",
       layout: "default",
       tooling: "default",
+      choice: "default",
     },
     riskTier: "low",
   };

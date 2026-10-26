@@ -17,6 +17,7 @@ import { inferRender } from "./infer-render";
 import { inferLayout } from "./infer-layout";
 import { inferWriteTrigger } from "./infer-trigger";
 import { inferTooling } from "./infer-tooling";
+import { inferChoice } from "./infer-choice";
 import { deriveRiskTier } from "./risk-tier";
 
 export interface ClassifyInput {
@@ -41,6 +42,7 @@ export function classifyAxes(input: ClassifyInput): Classification {
   const layout = inferLayout(s, prompt, blueprint);
   const writeTrigger = inferWriteTrigger(s, prompt);
   const tooling = inferTooling(s);
+  const choice = inferChoice(s);
 
   const vector: AxisVector = {
     render: render.value,
@@ -51,6 +53,7 @@ export function classifyAxes(input: ClassifyInput): Classification {
     fetch: fetch.value,
     layout: layout.value,
     tooling: tooling.value,
+    choice: choice.value,
   };
   if (realtime.streamKinds) {
     vector.streamKinds = realtime.streamKinds;
@@ -65,6 +68,7 @@ export function classifyAxes(input: ClassifyInput): Classification {
     fetch: fetch.source,
     layout: layout.source,
     tooling: tooling.source,
+    choice: choice.source,
   };
 
   const riskTier = deriveRiskTier(vector);

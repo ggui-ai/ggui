@@ -13,6 +13,7 @@ export const productPage = retrofit("product-page", {
       fetch: "none",
       layout: "single",
     tooling: "none",
+    choice: "none",
     },
     riskTier: "medium",
     provenance: {
@@ -24,6 +25,7 @@ export const productPage = retrofit("product-page", {
       fetch: "contract",
       layout: "default",
     tooling: "default",
+    choice: "contract",
     },
   },
   evalGoals: [

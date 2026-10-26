@@ -94,6 +94,16 @@ export type ToolingShape =
   | "client"  // clientCapabilities.gadgets present (browser-capability hooks the component imports)
   | "both";   // contract exposes both catalogs
 
+/**
+ * Whether the contract offers items for the visitor to CHOOSE among (ggui#2010): an array prop of object items plus
+ * an action whose payload names one item by exactly one field — any of the item's fields (`id`, `label`, `value`…),
+ * read from the action's `schema` and its `example` both. Choosing names one item by one field; composing sends
+ * content, so a payload of two or more keys (a message box's `{text, timestamp}`) is not a choice.
+ */
+export type ChoiceShape =
+  | "none"
+  | "offered-items"; // quick-reply chips, a pick-one list, a toggle by id
+
 // =============================================================================
 // AxisVector — descriptive, no policy
 // =============================================================================
@@ -109,6 +119,7 @@ export interface AxisVector {
   fetch: FetchShape;
   layout: LayoutShape;
   tooling: ToolingShape;
+  choice: ChoiceShape;
 }
 
 // =============================================================================
@@ -131,6 +142,7 @@ export interface AxisProvenance {
   fetch: AxisSource;
   layout: AxisSource;
   tooling: AxisSource;
+  choice: AxisSource;
 }
 
 // =============================================================================

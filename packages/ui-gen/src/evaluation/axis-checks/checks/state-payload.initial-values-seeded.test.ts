@@ -13,8 +13,8 @@ const check = STATE_PAYLOAD_CHECKS.find((c) => c.id === "state.payload.initial_v
 if (check === undefined) throw new Error("check not registered");
 
 const classification: Classification = {
-  vector: { render: "static", state: "none", writes: "submit", writeTrigger: "click", realtime: "none", fetch: "none", layout: "single", tooling: "none" },
-  provenance: { render: "default", state: "default", writes: "default", writeTrigger: "default", realtime: "default", fetch: "default", layout: "default", tooling: "default" },
+  vector: { render: "static", state: "none", writes: "submit", writeTrigger: "click", realtime: "none", fetch: "none", layout: "single", tooling: "none", choice: "none" },
+  provenance: { render: "default", state: "default", writes: "default", writeTrigger: "default", realtime: "default", fetch: "default", layout: "default", tooling: "default", choice: "default" },
   riskTier: "low",
 };
 

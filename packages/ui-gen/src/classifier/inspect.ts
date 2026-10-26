@@ -177,6 +177,8 @@ export interface ActionEntryInfo {
   scalarKeys: string[];
   /** All top-level keys in the example. */
   allKeys: string[];
+  /** The payload's top-level keys from the action's `schema` properties and its `example`, together (ggui#2010). */
+  payloadKeys: string[];
   /** Entity lists referenced by id-key match (taskId ↔ tasks). */
   referencedEntities: string[];
 }
@@ -345,6 +347,11 @@ export interface ContractSignals {
   topLevelScalarCount: number;
   /** Any entity list's items carry 2D grid coordinates (row+col or x+y). */
   entitiesHaveGridPositions: boolean;
+  /**
+   * Some action's payload has exactly one key, and that key is a field of an entity list's items — the action
+   * chooses one offered item (ggui#2010; see `ChoiceShape`).
+   */
+  offeredItemChoice: boolean;
 }
 
 export function inspect(contract: ClassifierInput): ContractSignals {
@@ -363,6 +370,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     multiFieldSubmit: false,
     topLevelScalarCount: 0,
     entitiesHaveGridPositions: false,
+    offeredItemChoice: false,
   };
   if (!contract) return empty;
 
@@ -408,6 +416,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     const a = action as { example?: Record<string, unknown>; nextStep?: string };
     const scalarKeys = scalarKeyCount(a?.example);
     const allKeys = allTopLevelKeys(a?.example);
+    const payloadKeys = [...new Set([...Object.keys(propertiesOf(action) ?? {}), ...allKeys])];
     const referencedEntities = referencedEntitiesForPayload(
       allKeys,
       entityLists,
@@ -419,6 +428,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
       example: a?.example,
       scalarKeys,
       allKeys,
+      payloadKeys,
       referencedEntities,
     });
   }
@@ -507,5 +517,8 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     multiFieldSubmit,
     topLevelScalarCount,
     entitiesHaveGridPositions,
+    offeredItemChoice: actions.some(
+      (a) => a.payloadKeys.length === 1 && entityLists.some((e) => e.itemKeys.includes(a.payloadKeys[0] ?? "")),
+    ),
   };
 }

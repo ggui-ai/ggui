@@ -11,8 +11,24 @@ export type CacheTier = "stable" | "axisDelta" | "volatile";
 
 export type AxisKey = keyof Pick<
   AxisVector,
-  "render" | "state" | "writes" | "writeTrigger" | "realtime" | "fetch" | "layout" | "tooling"
+  "render" | "state" | "writes" | "writeTrigger" | "realtime" | "fetch" | "layout" | "tooling" | "choice"
 >;
+
+/**
+ * A component prop the shared reference leaves out and one axis value's fragment teaches instead (ggui#2010):
+ * generated from the design source's `@revealedBy <axis>=<value>` tag (`REVEALED_PROPS`), whole docblock included.
+ */
+export interface RevealedProp {
+  readonly axis: AxisKey;
+  readonly value: string;
+  /** The prop as declared, `?` included (`maxRows?`). */
+  readonly prop: string;
+  readonly type: string;
+  /** Every component that takes it, aliases included. */
+  readonly components: readonly string[];
+  /** The prop's whole JSDoc text, joined onto one line. */
+  readonly description: string;
+}
 
 export interface HarnessFragment {
   /** Which axis this fragment belongs to. */

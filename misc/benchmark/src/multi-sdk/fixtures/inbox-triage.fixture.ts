@@ -127,6 +127,7 @@ Requirements:
       fetch: "pagination",
       layout: "modal",
     tooling: "wired",
+    choice: "none",
     },
     riskTier: "high",
     provenance: {
@@ -138,6 +139,7 @@ Requirements:
       fetch: "contract",
       layout: "blueprint",
     tooling: "contract",
+    choice: "contract",
     },
   },
 
