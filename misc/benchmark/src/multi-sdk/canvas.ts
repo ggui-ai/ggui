@@ -34,13 +34,17 @@ export interface VisualCanvasArtefact {
   readonly score: number;
   /**
    * The JUDGE's verdict for this canvas: `score >= the judge's passThreshold`
-   * AND the canvas fits per `canvasFitPolicy` (ggui#1027: an `xs-chat-card`
-   * overflow sets this false with the score untouched). It is NOT a bar of the
-   * consumer's (the bootstrap binder's 70/70 is applied downstream, on `score`
-   * and this flag together). A reader wanting "score ≥ N" recomputes from
-   * `score`; a reader wanting "why false at 83" reads `overflow`.
+   * AND no deterministic canvas verdict failed it — an overflow under a `fail`
+   * fit policy (ggui#1027: an `xs-chat-card` overflow sets this false with the
+   * score untouched), a blank capture (ggui#1120), a control label cut
+   * (ggui#2010). It is NOT a bar of the consumer's (the bootstrap binder's bar
+   * is applied downstream, on `score` and this flag together). A reader wanting
+   * "score ≥ N" recomputes from `score`; a reader wanting "why false at 83"
+   * reads `overflow` and `truncatedControls`.
    */
   readonly passed: boolean;
+  /** ggui#2010 — the control labels the no-truncate pin failed this canvas on, verbatim from the evaluator; absent when it did not fire. */
+  readonly truncatedControls?: CanvasVisualSummary['truncatedControls'];
   /** The document's scroll height at this canvas, CSS px; `null` when unmeasurable (ggui#1027 — the fit is on the receipt). */
   readonly contentHeight: number | null;
   /** `contentHeight > viewport.height`, judged per the evaluator's `canvasFitPolicy` (ggui#1027). */
@@ -76,6 +80,7 @@ export function persistCanvasScreenshots(
       contentHeight: c.contentHeight,
       overflow: c.overflow,
       judge: c.judge,
+      ...(c.truncatedControls !== undefined ? { truncatedControls: c.truncatedControls } : {}),
       ...(c.fit !== undefined ? { fit: c.fit } : {}),
       inkRatio: c.inkRatio,
       ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
@@ -106,6 +111,7 @@ export function visualCanvasesFromTierEvaluation(
     contentHeight: c.contentHeight,
     overflow: c.overflow,
     judge: c.judge,
+    ...(c.truncatedControls !== undefined ? { truncatedControls: c.truncatedControls } : {}),
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
     inkRatio: c.inkRatio,
     ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),

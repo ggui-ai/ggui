@@ -572,8 +572,14 @@ export interface CanvasVisualSummary {
   viewport: { width: number; height: number };
   /** The judge's weighted score at this canvas (0-100). */
   score: number;
-  /** `score >= passThreshold`, and on the inline card: no overflow (ggui#1027). */
+  /**
+   * `score >= passThreshold` AND no deterministic canvas verdict failed it: an overflow under a `fail` fit policy
+   * (ggui#1027 vertical, ggui#1475 horizontal), a blank capture (ggui#1120), a control label cut (ggui#2010).
+   * `overflow` and `truncatedControls` name the cause of a high score that reads `false`.
+   */
   passed: boolean;
+  /** ggui#2010 — the control labels the no-truncate pin failed this canvas on, verbatim; absent when it did not fire. */
+  truncatedControls?: readonly string[];
   /** The document's scroll height at this canvas, CSS px; `null` when unmeasurable (ggui#1027). */
   contentHeight: number | null;
   /** `contentHeight > viewport.height` — measured on every canvas, judged per `canvasFitPolicy`. */

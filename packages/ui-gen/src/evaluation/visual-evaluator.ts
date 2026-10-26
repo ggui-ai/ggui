@@ -147,8 +147,19 @@ export interface CanvasVisualResult {
   viewport: CanvasViewport;
   /** The judge's weighted score for this canvas (0-100). */
   score: number;
-  /** `score >= passThreshold`. */
+  /**
+   * `score >= passThreshold` AND no deterministic canvas verdict failed it: an overflow under a `fail` fit policy
+   * (ggui#1027 vertical, ggui#1475 horizontal), a blank capture (ggui#1120), a control label cut (ggui#2010). A
+   * high score can therefore read `passed: false`; {@link CanvasVisualResult.overflow} and
+   * {@link CanvasVisualResult.truncatedControls} name the cause.
+   */
   passed: boolean;
+  /**
+   * ggui#2010 — the control labels the no-truncate pin failed this canvas on, verbatim from the in-page read; absent
+   * when it did not fire (nothing cut, or no reading). Carried so a consumer refusing on `passed` can name what a
+   * visitor would see cut, not only that the flag is false.
+   */
+  truncatedControls?: readonly string[];
   /** The PNG the judge saw — kept for artefact persistence + the human look. */
   screenshotPng: Buffer;
   /**
@@ -1399,6 +1410,12 @@ function overflowXVerdict(canvas: CanvasClass, frame: CanvasFrame): VisualIssue 
   return canvasOverflowXIssue(canvas, frame.viewport, px, frame.policy.overflow);
 }
 
+/** ggui#2010 — the labels the no-truncate pin fails a canvas on: the read's labels when it named any, else `null` (nothing cut, or no reading). */
+export function truncatedControlLabels(frame: { readonly attempt: Pick<ScreenshotAttempt, 'truncatedControls'> }): readonly string[] | null {
+  const labels = frame.attempt.truncatedControls;
+  return labels === undefined || labels === null || labels.length === 0 ? null : labels;
+}
+
 /**
  * ggui#2010 — the deterministic no-truncate verdict: a shown control a visitor cannot read whole fails the canvas,
  * critical on every canvas (a quick-reply chip's label is the bound suggestion verbatim; a cut label breaks the bind
@@ -1409,8 +1426,8 @@ export function truncatedControlsVerdict(
   frame: { readonly attempt: Pick<ScreenshotAttempt, 'truncatedControls'> },
   taught: Pick<VisualEvalContext, 'offeredChoiceTaught'> = {},
 ): VisualIssue | null {
-  const labels = frame.attempt.truncatedControls;
-  if (labels === undefined || labels === null || labels.length === 0) return null;
+  const labels = truncatedControlLabels(frame);
+  if (labels === null) return null;
   return {
     dimension: 'control-truncated',
     origin: 'instrument',
@@ -1736,6 +1753,7 @@ export async function runVisualEvaluationDetailed(
       }
       // ggui#2010 — the no-truncate pin: deterministic, critical on every canvas.
       const truncatedIssue = truncatedControlsVerdict(canvas, frame, context);
+      const truncatedLabels = truncatedControlLabels(frame);
       if (truncatedIssue !== null) {
         result.issues.push(truncatedIssue);
         result.passed = false;
@@ -1771,6 +1789,7 @@ export async function runVisualEvaluationDetailed(
         overflow,
         inkRatio,
         judge: judgeRecord,
+        ...(truncatedLabels !== null ? { truncatedControls: truncatedLabels } : {}),
         ...(fit !== undefined ? { fit } : {}),
         ...(frame.declared ? { declared: true as const } : {}),
         ...(criteria !== undefined ? { criteria } : {}),
@@ -1909,6 +1928,7 @@ export function summarizeVisualResult(result: VisualEvaluationResult): VisualEva
     overflow: c.overflow,
     inkRatio: c.inkRatio,
     judge: c.judge,
+    ...(c.truncatedControls !== undefined ? { truncatedControls: c.truncatedControls } : {}),
     ...(c.fit !== undefined ? { fit: c.fit } : {}),
     ...(c.criteria !== undefined ? { criteria: c.criteria } : {}),
     ...(c.presentation !== undefined ? { presentation: c.presentation } : {}),

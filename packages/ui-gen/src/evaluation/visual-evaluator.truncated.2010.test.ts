@@ -7,7 +7,10 @@ import { TRUNCATED_CONTROLS_EXPRESSION } from '@ggui-ai/ui-visual-tester/truncat
 import {
   CARD_BOX_EXPRESSION,
   NO_TRUNCATE_CHIP_EXAMPLE,
+  runVisualEvaluationDetailed,
   runVisualFit,
+  summarizeVisualResult,
+  truncatedControlLabels,
   truncatedControlsVerdict,
   type ScreenshotBrowser,
   type VisualEvalDeps,
@@ -31,6 +34,18 @@ function deps(labels: unknown): VisualEvalDeps {
     close: async () => {},
   });
   return { launch, env: { PUPPETEER_EXECUTABLE_PATH: '/fake/chromium' }, settleMs: 0 };
+}
+
+/** {@link deps} plus a judge that scores every canvas 85 — above the threshold, so only a deterministic verdict can fail it. */
+function judgedDeps(labels: unknown): VisualEvalDeps {
+  return {
+    ...deps(labels),
+    judge: async () => ({
+      text: JSON.stringify({ completeness: 85, layout: 85, hierarchy: 85, aesthetics: 85, issues: [], critique: 'fine' }),
+      inputTokens: 10,
+      outputTokens: 5,
+    }),
+  };
 }
 
 describe('truncatedControlsVerdict (ggui#2010)', () => {
@@ -108,5 +123,41 @@ describe('runVisualFit carries the pin on every capture shape (ggui#2010)', () =
       const outcome = await runVisualFit({ compiledCode: UNFRAMED, originalPrompt: 'a hello' }, { canvases: ['xs-chat-card'] }, deps(labels));
       if (outcome.status === 'measured') expect(hasTruncated(outcome.issues)).toBe(false);
     }
+  });
+});
+
+describe('the judged canvas carries the cut labels (ggui#2010) — a consumer refusing on `passed` can name them', () => {
+  // Verbatim: a duplicate and a padded label stay as the instrument read them (no trim, no dedup).
+  const LABELS = ['Show recent notes', 'Show recent notes', '  Archive  '];
+  const judge = (labels: unknown) =>
+    runVisualEvaluationDetailed({ compiledCode: UNFRAMED, originalPrompt: 'a hello' }, { provider: 'claude', passThreshold: 70, canvases: ['md'] }, judgedDeps(labels));
+
+  it('a cut label: passed=false at a passing score, the labels on the canvas and on its summary, verbatim', async () => {
+    const { result } = await judge(LABELS);
+    const md = result?.canvases?.[0];
+    expect(md?.score).toBe(85);
+    expect(md?.overflow).toBe(false);
+    expect(md?.passed).toBe(false);
+    expect(md?.truncatedControls).toEqual(LABELS);
+    const summary = result === null ? undefined : summarizeVisualResult(result);
+    expect(summary?.canvases[0]?.truncatedControls).toEqual(LABELS);
+  });
+
+  it('control: nothing cut, or no reading — passed at the same score and no member (absent, never [])', async () => {
+    for (const labels of [[], null, 200]) {
+      const { result } = await judge(labels);
+      const md = result?.canvases?.[0];
+      expect(md?.passed).toBe(true);
+      expect(md).not.toHaveProperty('truncatedControls');
+      const summary = result === null ? undefined : summarizeVisualResult(result);
+      expect(summary?.canvases[0]).not.toHaveProperty('truncatedControls');
+    }
+  });
+
+  it('truncatedControlLabels is the one source the verdict and the member read', () => {
+    expect(truncatedControlLabels({ attempt: { truncatedControls: LABELS } })).toEqual(LABELS);
+    expect(truncatedControlLabels({ attempt: { truncatedControls: [] } })).toBeNull();
+    expect(truncatedControlLabels({ attempt: { truncatedControls: null } })).toBeNull();
+    expect(truncatedControlLabels({ attempt: {} })).toBeNull();
   });
 });

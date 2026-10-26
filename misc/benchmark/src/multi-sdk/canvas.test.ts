@@ -86,3 +86,33 @@ describe('#1100 — the row carries how the judge composed each canvas', () => {
     expect(rows[1] !== undefined && 'fit' in rows[1]).toBe(false);
   });
 });
+
+describe('ggui#2010 — the row carries the control labels the no-truncate pin cut, on both paths', () => {
+  const j = { k: 1, rule: 'median' as const, samples: [85], sigma: 0, notes: ['ok'] };
+  // Verbatim: a duplicate and a padded label stay as the evaluator handed them.
+  const labels = ['Show recent notes', 'Show recent notes', '  Archive  '];
+
+  it('the eval-task path (persistCanvasScreenshots): forwarded verbatim; a canvas the pin did not fail carries no key', () => {
+    const dir = testTmpDir('bench-canvas-');
+    const png = Buffer.from('89504e470d0a1a0a0000', 'hex');
+    const [cut, clean] = persistCanvasScreenshots(dir, [
+      { canvas: 'md', viewport: CANVAS_VIEWPORTS.md, score: 85, passed: false, screenshotPng: png, contentHeight: 900, overflow: false, inkRatio: null, judge: j, truncatedControls: labels },
+      { canvas: 'lg', viewport: CANVAS_VIEWPORTS.lg, score: 85, passed: true, screenshotPng: png, contentHeight: 700, overflow: false, inkRatio: null, judge: j },
+    ]);
+    expect(cut?.truncatedControls).toEqual(labels);
+    expect(clean).not.toHaveProperty('truncatedControls');
+  });
+
+  it('the harness path (visualCanvasesFromTierEvaluation): forwarded verbatim; absent stays absent', () => {
+    const te: EvalResult = {
+      issues: [], pass: [],
+      visual: { score: 85, passed: false, canvases: [
+        { canvas: 'md', viewport: { width: 768, height: 1024 }, score: 85, passed: false, contentHeight: 900, overflow: false, inkRatio: null, judge: j, truncatedControls: labels },
+        { canvas: 'lg', viewport: { width: 1024, height: 768 }, score: 85, passed: true, contentHeight: 700, overflow: false, inkRatio: null, judge: j },
+      ] },
+    };
+    const [cut, clean] = visualCanvasesFromTierEvaluation(te) ?? [];
+    expect(cut?.truncatedControls).toEqual(labels);
+    expect(clean).not.toHaveProperty('truncatedControls');
+  });
+});
