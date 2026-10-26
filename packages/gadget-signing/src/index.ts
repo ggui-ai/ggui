@@ -273,8 +273,10 @@ export async function publicKeyFromPrivate(
 /**
  * Generate a fresh 32-byte Ed25519 keypair plus its derived `publicKeyId`.
  *
- * Use only in CLI flows (`ggui gadget keygen`) — the private key MUST be
- * stored by the author locally and NEVER uploaded to the registry.
+ * Use only in CLI flows (the first private `ggui gadget publish` or
+ * `ggui blueprint publish` of a scope generates its key) — the private
+ * key MUST be stored by the author locally and NEVER uploaded to the
+ * registry.
  */
 export async function generateEd25519Keypair(): Promise<{
   publicKey: Uint8Array;

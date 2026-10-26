@@ -320,6 +320,10 @@ describe('publishArtifact', () => {
     if (result.ok) return;
     expect(result.status).toBe(403);
     expect(result.body.error).toBe('unknown_key');
+    // #2095 — the remedy names the command that exists, with the scope
+    // filled in, so the operator can paste it.
+    expect(result.body.message).toContain('`ggui keys register --scope @test`');
+    expect(result.body.message).not.toContain('keygen');
   });
 
   it('rejects with `version_exists` on re-publish', async () => {

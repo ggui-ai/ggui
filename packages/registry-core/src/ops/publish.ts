@@ -632,7 +632,7 @@ export async function publishArtifact(
       return error(
         403,
         'unknown_key',
-        `no registered AuthorKeys row for publisher \`${deps.authn.subject}\` + keyId \`${input.signature.publicKeyId}\` — run \`ggui keygen\` and register the public key before publishing`,
+        `no registered author key for publisher \`${deps.authn.subject}\` + keyId \`${input.signature.publicKeyId}\` — register the scope's public key with \`ggui keys register --scope ${manifest.scope}\`, then publish again`,
       );
     }
 
