@@ -59,7 +59,7 @@ describe('imageFromContainerMetadata (#1789)', () => {
   const digest = `sha256:${'0123456789abcdef'.repeat(4)}`;
 
   it('names the digest the task is running and the reference it came from', () => {
-    const doc = { Image: '437064342055.dkr.ecr.us-east-1.amazonaws.com/ggui-benchmark-runner:latest', ImageID: digest };
+    const doc = { Image: '123456789012.dkr.ecr.us-east-1.amazonaws.com/ggui-benchmark-runner:latest', ImageID: digest };
     expect(imageFromContainerMetadata(doc)).toEqual({ ref: doc.Image, digest });
   });
 
