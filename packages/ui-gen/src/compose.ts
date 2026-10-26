@@ -16,8 +16,11 @@ import {
   type HarnessFragment,
 } from "./fragments/index.js";
 
-// Axis processing order inside axisDelta. Puts the most behaviourally
-// consequential axes first so the LLM reads them before scanning details.
+// The section order of Shape Guidance. `compose()` pushes one fragment per axis in this order and joins their
+// prompt texts in it; `createHarness` hands that join to the system prompt as `axisDelta` (the axisDelta cache tier),
+// rendered under `## Shape Guidance` — so this is the order the model reads: the most behaviourally consequential
+// axes first, `choice` last because it names props for a group the earlier axes have already shaped. Pinned, with a
+// reason per position, by `compose.axis-order.2010.test.ts`; a reorder re-records that list.
 const AXIS_ORDER: AxisKey[] = [
   "render",
   "layout",
