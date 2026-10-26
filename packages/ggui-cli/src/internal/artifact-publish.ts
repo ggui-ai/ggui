@@ -36,8 +36,12 @@
  *   8. Print the install command operators paste into their
  *      `ggui.json` consumers.
  *
- * `--dry-run` runs steps 1-5 and prints what would be uploaded; no
- * POST happens.
+ * `--dry-run` prints what would be uploaded and changes nothing outside
+ * this machine: no POST happens, and a PUBLIC artifact is not signed at
+ * all (step 6 is skipped before any OIDC token is resolved, so no
+ * sign-in opens and no public transparency-log entry is written). A
+ * PRIVATE artifact still runs step 6 locally, generating the scope's key
+ * on first use, so the key exists for `ggui keys register`.
  *
  * **HTTP contract (locked).**
  *
@@ -252,7 +256,10 @@ Options:
 
   --dry-run          Run validation, bundling, auth, and conformance
                      preflight; skip the POST. Prints what would be
-                     uploaded.
+                     uploaded. A public ${kind} is not signed (no OIDC
+                     sign-in, no transparency-log entry); a private one
+                     is signed locally, generating the scope's key the
+                     first time.
 
   --key <path>       Path to a 32-byte Ed25519 private key. Used to sign
                      **private** ${kind}s. Default:
@@ -522,6 +529,30 @@ export async function runArtifactPublish(
   }
   stdout(`conformance: ok\n`);
 
+  // A dry run ends with nothing outside this machine changed: no POST,
+  // and for a public artifact no OIDC sign-in and no signature, because
+  // sigstore signing writes a permanent, public Rekor entry carrying the
+  // signer's identity. A private dry run still loads (or, the first
+  // time, generates) the scope's local key and signs locally: that is
+  // how an operator gets a key to `ggui keys register` before the first
+  // upload, and none of it leaves the machine.
+  const dryRunResult = (): PublishResult => {
+    stdout(`dry-run: would POST to ${registryUrl}/publish\n`);
+    stdout(`dry-run: ${`${manifest.scope}/${manifest.name}`}@${manifest.version}\n`);
+    return {
+      ok: true,
+      exitCode: 0,
+      success: {
+        artifactId: `${manifest.scope}/${manifest.name}`,
+        version: manifest.version,
+        manifestUrl: '(dry-run — no manifestUrl)',
+        installCommand: `ggui ${opts.kind} install ${`${manifest.scope}/${manifest.name}`}@${manifest.version} --registry=${registryUrl}`,
+        registryUrl,
+        dryRun: true,
+      },
+    };
+  };
+
   // ---- step 6 + 7: sign — branched on manifest.visibility ----
   //
   // `private` → Ed25519 keypair signing (existing path: load/generate
@@ -555,7 +586,13 @@ export async function runArtifactPublish(
     });
     stdout(`signature: ${signature.algorithm} · ${keyRes.publicKeyId}\n`);
   } else {
-    // public → sigstore keyless. Resolve OIDC first.
+    // public → sigstore keyless. A dry run stops before the OIDC token is
+    // even resolved (an interactive resolution opens a browser sign-in).
+    if (opts.dryRun) {
+      stdout(`dry-run: not signed — a public publish signs with sigstore (OIDC sign-in, public transparency-log entry)\n`);
+      return dryRunResult();
+    }
+    // Resolve OIDC first.
     let oidc;
     try {
       oidc = await resolveOidcToken({
@@ -590,23 +627,8 @@ export async function runArtifactPublish(
     stdout(`signature: ${signature.algorithm} ok\n`);
   }
 
-  // ---- step 8: POST (or skip for dry-run) ----
-  if (opts.dryRun) {
-    stdout(`dry-run: would POST to ${registryUrl}/publish\n`);
-    stdout(`dry-run: ${`${manifest.scope}/${manifest.name}`}@${manifest.version}\n`);
-    return {
-      ok: true,
-      exitCode: 0,
-      success: {
-        artifactId: `${manifest.scope}/${manifest.name}`,
-        version: manifest.version,
-        manifestUrl: '(dry-run — no manifestUrl)',
-        installCommand: `ggui ${opts.kind} install ${`${manifest.scope}/${manifest.name}`}@${manifest.version} --registry=${registryUrl}`,
-        registryUrl,
-        dryRun: true,
-      },
-    };
-  }
+  // ---- step 8: POST (or stop, for a private dry run) ----
+  if (opts.dryRun) return dryRunResult();
 
   const publishRes = await postPublish({
     registryUrl,

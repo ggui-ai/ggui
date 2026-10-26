@@ -36,6 +36,7 @@ import {
   type ArtifactPublishOptions,
 } from './artifact-publish.js';
 import { saveAuthSession, tryLoadAuthSession } from '../auth-store.js';
+import { hasKeypair, scopeOf } from './key-store.js';
 import {
   generateEd25519Keypair,
   signBundleEd25519,
@@ -622,6 +623,102 @@ describe('runArtifactPublish', () => {
     expect(publish).not.toHaveBeenCalled();
     expect(conformance).toHaveBeenCalledTimes(1);
     expect(io.stdout.join('')).toContain('dry-run');
+  });
+
+  // #2094 — a dry run stops before step 6. Signing a PUBLIC artifact is
+  // not a local act: sigstore opens an OIDC sign-in and writes a
+  // permanent public Rekor entry carrying the signer's identity, so a
+  // dry run that signed published exactly what the operator asked it
+  // not to. The rig gives the signer every input it needs (an OIDC token
+  // in the env, a mocked signer) and runs the SAME rig once for real as
+  // the positive control, so "not called" cannot be the rig starving it.
+  it('public --dry-run never resolves an OIDC token nor calls the signer; the same rig without --dry-run does', async () => {
+    vi.resetModules();
+    const signer = vi.fn(async (input: { bundleBytes: Uint8Array; identityToken: string }) => ({
+      algorithm: 'sigstore-cosign' as const,
+      bundleSha384: Buffer.from(input.bundleBytes).toString('base64').slice(0, 16),
+      bundle: JSON.stringify({ mock: true }),
+      signedAt: new Date().toISOString(),
+    }));
+    vi.doMock('@ggui-ai/gadget-signing', async () => ({
+      ...(await vi.importActual<typeof import('@ggui-ai/gadget-signing')>('@ggui-ai/gadget-signing')),
+      signBundleSigstore: signer,
+    }));
+    const { runArtifactPublish: runWithMock } = await import('./artifact-publish.js');
+
+    seedPublicGadgetRepo(env.repoDir);
+    seedLoginSession();
+    const created = (): ReturnType<typeof jsonResponse> =>
+      jsonResponse(201, { artifactId: '@mapbox/map-gadget', version: '0.1.0', manifestUrl: 'm', installCommand: 'i' });
+    const run = async (dryRun: boolean) => {
+      const io = captureIO();
+      const publish = vi.fn(async () => created());
+      const result = await runWithMock({
+        kind: 'gadget',
+        dryRun,
+        cwd: env.repoDir,
+        registry: 'https://r.example',
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
+        fetch: makeFetchStub({
+          '/conformance/check': vi.fn(async () => jsonResponse(200, { ok: true })),
+          '/publish': publish,
+        }),
+        now: () => 1_700_000_000,
+      });
+      return { result, publish, out: io.stdout.join('') };
+    };
+
+    const restore = withEnv({ GGUI_OIDC_TOKEN: 'env-oidc-jwt' });
+    try {
+      const dry = await run(true);
+      expect(dry.result.ok).toBe(true);
+      if (dry.result.ok) expect(dry.result.success.dryRun).toBe(true);
+      expect(signer).not.toHaveBeenCalled();
+      expect(dry.publish).not.toHaveBeenCalled();
+      expect(dry.out).not.toContain('OIDC source');
+      expect(dry.out).not.toContain('signature:');
+      expect(dry.out).toContain('dry-run: would POST');
+
+      const real = await run(false);
+      expect(real.result.ok).toBe(true);
+      expect(signer).toHaveBeenCalledTimes(1);
+      expect(real.publish).toHaveBeenCalledTimes(1);
+      expect(real.out).toContain('OIDC source=env');
+    } finally {
+      restore();
+      vi.doUnmock('@ggui-ai/gadget-signing');
+    }
+  });
+
+  // #2094, the private half: a private dry run changes nothing outside
+  // this machine either (no POST), but it DOES load or generate the
+  // scope's local key and sign locally. That is the documented way to get
+  // a key for `ggui keys register` before the first upload, and that
+  // command refuses with `no-keypair` until a publish has made one.
+  it('private --dry-run generates the scope key locally and posts nothing', async () => {
+    seedGadgetRepo(env.repoDir);
+    seedLoginSession();
+    const scope = scopeOf('@mapbox/map-gadget');
+    expect(hasKeypair(scope)).toBe(false);
+    const io = captureIO();
+    const publish = vi.fn();
+    const result = await runArtifactPublish(
+      baseOpts({
+        dryRun: true,
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
+        fetch: makeFetchStub({
+          '/conformance/check': vi.fn(async () => jsonResponse(200, { ok: true })),
+          '/publish': publish,
+        }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(publish).not.toHaveBeenCalled();
+    expect(hasKeypair(scope)).toBe(true);
+    expect(io.stdout.join('')).toContain('generated new keypair');
+    expect(io.stdout.join('')).toContain('dry-run: would POST');
   });
 
   it('first-publish generates a signing key + prints publicKeyId', async () => {
