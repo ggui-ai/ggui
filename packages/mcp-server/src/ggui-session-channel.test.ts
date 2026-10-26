@@ -71,9 +71,14 @@ import type { SubscriberSink } from './ggui-session-channel/internal-types.js';
  * is how the bridge suite proves a failed pipe append degraded loudly
  * (`render_channel_consume_append_failed`) instead of silently.
  */
-function createRecordingLogger(loggedErrors: string[], loggedWarns: string[]): Logger {
+/** One recorded `logger.info` call: the event and the fields it carried. */
+type InfoLine = readonly [event: string, fields: Record<string, unknown> | undefined];
+
+function createRecordingLogger(loggedErrors: string[], loggedWarns: string[], loggedInfos: InfoLine[]): Logger {
   const logger: Logger = {
-    info: () => undefined,
+    info: (event, fields) => {
+      loggedInfos.push([event, fields]);
+    },
     warn: (event) => {
       loggedWarns.push(event);
     },
@@ -102,7 +107,14 @@ interface Fixture {
   readonly loggedErrors: ReadonlyArray<string>;
   /** `logger.warn` event names, in call order. */
   readonly loggedWarns: ReadonlyArray<string>;
+  /** `logger.info` calls with their fields, in call order (the read gate's two lines land here; ggui#1553). */
+  readonly loggedInfos: ReadonlyArray<InfoLine>;
   readonly close: () => Promise<void>;
+}
+
+/** The read gate's two lines (ggui#1553), in order, out of everything else the channel logs at info. */
+function gateLines(fx: Fixture): InfoLine[] {
+  return fx.loggedInfos.filter(([event]) => event === 'render_resource_read' || event === 'render_read_app_trust_over_subject');
 }
 
 /**
@@ -157,10 +169,11 @@ async function bootChannel(
 
   const loggedErrors: string[] = [];
   const loggedWarns: string[] = [];
+  const loggedInfos: InfoLine[] = [];
   const channel = createGguiSessionChannelServer({
     renderStore: store,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    logger: createRecordingLogger(loggedErrors, loggedWarns),
+    logger: createRecordingLogger(loggedErrors, loggedWarns, loggedInfos),
     ...(makeExtras !== undefined ? makeExtras(sessionId) : {}),
   });
 
@@ -219,6 +232,7 @@ async function bootChannel(
     frames,
     loggedErrors,
     loggedWarns,
+    loggedInfos,
     close: async () => {
       ws.close();
       await channel.close();
@@ -1161,7 +1175,7 @@ describe('handleSubscribe — a per-app-only source is authorized on every subsc
       createGguiSessionChannelServer({
         renderStore: new InMemoryGguiSessionStore(),
         auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-        logger: createRecordingLogger([], []),
+        logger: createRecordingLogger([], [], []),
         perAppOnlySources: ['dev'],
       }),
     ).toThrow(/perAppOnlySources/);
@@ -1297,6 +1311,10 @@ describe('handleSubscribe — a bearer end-user reaches only its own sessions (g
     expect((await fx.store.get(fx.sessionId))?.userId).toBeUndefined();
     fx.ws.send(subscribeFrame(fx.sessionId));
     await fx.nextFrame('ack');
+    // ggui#1553: the gate's per-read line names this door; no subject on the row, so no admission line.
+    expect(gateLines(fx)).toEqual([
+      ['render_resource_read', { door: 'live_channel_subscribe', appId: APP_ID, source: 'oidc', appTrustOverSubject: false }],
+    ]);
   });
 
   it("subscribes a bearer that carries no end-user identity to a subject-bound session (the app's own trust) — control", async () => {
@@ -1304,6 +1322,13 @@ describe('handleSubscribe — a bearer end-user reaches only its own sessions (g
     await bindSubject(fx, 'user-b');
     fx.ws.send(subscribeFrame(fx.sessionId));
     await fx.nextFrame('ack');
+    // ggui#1553: the one case the two predicates disagree on — the gate leaves
+    // its per-read line AND the rung-4 admission line, both naming this door,
+    // the app and the bearer's source; never the session or the subject.
+    expect(gateLines(fx)).toEqual([
+      ['render_resource_read', { door: 'live_channel_subscribe', appId: APP_ID, source: 'dev', appTrustOverSubject: true }],
+      ['render_read_app_trust_over_subject', { door: 'live_channel_subscribe', appId: APP_ID, source: 'dev' }],
+    ]);
   });
 
   it("a wsToken subscribe is not held to its synthesized identity: the token's session acks whoever its subject is (ggui#446) — control", async () => {
@@ -1321,6 +1346,8 @@ describe('handleSubscribe — a bearer end-user reaches only its own sessions (g
     await bindSubject(fx, 'user-b');
     fx.ws.send(subscribeFrame(fx.sessionId, { wsToken: 'tok-valid' }));
     await fx.nextFrame('ack');
+    // ggui#1553: the token path never runs the read gate, so it leaves none of its lines — the door's denominator is NON-token subscribes.
+    expect(gateLines(fx)).toEqual([]);
     expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
   });
 });

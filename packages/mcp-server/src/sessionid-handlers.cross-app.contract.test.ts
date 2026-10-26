@@ -35,6 +35,7 @@
  * handshake record, not its input (ggui#1484).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Logger } from './logger.js';
 import {
   InMemoryAppMetadataStore,
   InMemoryGguiSessionStore,
@@ -121,8 +122,13 @@ function card(id: string, appId: string): ComponentGguiSession {
   };
 }
 
-function build(renderStore: InMemoryGguiSessionStore, pendingEventConsumer: InMemoryPendingEventConsumer) {
+function build(
+  renderStore: InMemoryGguiSessionStore,
+  pendingEventConsumer: InMemoryPendingEventConsumer,
+  logger?: Logger,
+) {
   return defaultHandlers({
+    ...(logger ? { logger } : {}),
     embedding: new MockEmbeddingProvider(),
     vectors: new InMemoryVectorStore(),
     render: { renderStore },
@@ -394,10 +400,31 @@ describe("every sessionId handler refuses another end-user's session of the same
       const handler = world.handlers.find((h) => h.name === name);
       if (!handler) throw new Error(`${name} is not registered`);
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
       const appCaller = await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), ctxOf(APP_B)));
       const appCallerLines = warn.mock.calls.map((c) => c.map(String).join(' '));
+      const appCallerInfo = info.mock.calls.map((c) => c.map(String).join(' '));
       warn.mockRestore();
+      info.mockRestore();
       expect(appCallerLines.filter((l) => l.includes('runtime_cross_subject_refused'))).toEqual([]);
+      // ggui#1553: an admitted door leaves the gate's two lines, named with
+      // the door — the per-read line (its denominator) and the rung-4
+      // admission line, exactly once each; a door that answers as-missing
+      // ran the other predicate and leaves neither. These handlers are built
+      // without a logger, so the lines are the gate's console fallback.
+      const admitLines = appCallerInfo.filter((l) => l.startsWith('[ggui] render_read_app_trust_over_subject '));
+      const readLines = appCallerInfo.filter((l) => l.startsWith('[ggui] render_resource_read '));
+      if (expected === 'admitted') {
+        expect(admitLines).toEqual([
+          `[ggui] render_read_app_trust_over_subject {"door":"${name}","appId":"${APP_B}","source":null}`,
+        ]);
+        expect(readLines).toEqual([
+          `[ggui] render_resource_read {"door":"${name}","appId":"${APP_B}","source":null,"appTrustOverSubject":true}`,
+        ]);
+      } else {
+        expect(admitLines).toEqual([]);
+        expect(readLines).toEqual([]);
+      }
       const emptyConsumer = new InMemoryPendingEventConsumer();
       emptyConsumer.markCreated(world.sessionId);
       const emptyHandler = build(new InMemoryGguiSessionStore(), emptyConsumer).find((h) => h.name === name);
@@ -521,6 +548,53 @@ describe('a render store whose read throws (ggui#1514)', () => {
         expect(failed).toContain('"threw"');
         expect(failed).not.toBe(missing);
       }
+    });
+  }
+});
+
+/**
+ * ggui#1553 — the gate's two lines reach the COMPOSITION'S logger, not the
+ * console, at every admitted door. The `NO_END_USER` loop above builds
+ * `defaultHandlers` without a logger, so its line assertions read the gate's
+ * console fallback: they prove each door reaches the gate, not which sink it
+ * reaches. This loop builds WITH a recording logger and asserts the lines
+ * arrive there and `console.info` stays silent — the property "one query
+ * counts every door" depends on, pinned per door so a composition that drops
+ * one door's `logger` spread goes red here.
+ */
+describe("every admitted door hands the gate's lines to the composition's logger, never the console (ggui#1553)", () => {
+  for (const [name, expected] of Object.entries(NO_END_USER)) {
+    if (expected !== 'admitted') continue;
+    it(`${name}: both lines on the logger with door "${name}"; console.info untouched by the gate`, async () => {
+      const spec = CLASSIFIED[name];
+      expect(spec, `${name} is classified`).toBeDefined();
+      if (!spec) return;
+      const world = await seededWorld(OWNER);
+      const infos: Array<readonly [string, Record<string, unknown> | undefined]> = [];
+      const recording: Logger = {
+        info: (event, fields) => {
+          infos.push([event, fields]);
+        },
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined,
+        child: () => recording,
+      };
+      const handler = build(world.renderStore, world.pendingEventConsumer, recording).find((h) => h.name === name);
+      if (!handler) throw new Error(`${name} is not registered`);
+      const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      await answerOf(() => handler.handler(spec.input(world.sessionId, APP_B), ctxOf(APP_B)));
+      const consoleGateLines = info.mock.calls
+        .map((c) => String(c[0]))
+        .filter((l) => l.startsWith('[ggui] render_resource_read') || l.startsWith('[ggui] render_read_app_trust_over_subject'));
+      info.mockRestore();
+      expect(consoleGateLines).toEqual([]);
+      expect(infos.filter(([event]) => event === 'render_resource_read')).toEqual([
+        ['render_resource_read', { door: name, appId: APP_B, source: null, appTrustOverSubject: true }],
+      ]);
+      expect(infos.filter(([event]) => event === 'render_read_app_trust_over_subject')).toEqual([
+        ['render_read_app_trust_over_subject', { door: name, appId: APP_B, source: null }],
+      ]);
     });
   }
 });

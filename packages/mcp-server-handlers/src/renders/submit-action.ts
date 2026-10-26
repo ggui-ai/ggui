@@ -88,7 +88,7 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logCrossSubjectRefused, logOwnershipUnverified } from './cross-app-refused.js';
-import { renderReadAllowed } from './render-read-gate.js';
+import { renderReadAllowed, type RenderReadLogSink } from './render-read-gate.js';
 import { assertActionContract } from './assert-action-contract.js';
 import { recordCommittedOneShot, type CommittedOneShotResult } from './record-committed-one-shot.js';
 
@@ -278,7 +278,7 @@ export interface GguiSubmitActionHandlerDeps {
    * than fail the dispatch. Absent → silent swallow. It also names a
    * duplicate dispatch (`submit_action_duplicate_dispatch`, ggui#1517).
    */
-  readonly logger?: {
+  readonly logger?: RenderReadLogSink & {
     readonly warn?: (msg: string, data?: Record<string, unknown>) => void;
   };
 }
@@ -601,7 +601,7 @@ export function createGguiSubmitActionHandler(
         // the rule that admitted the view to its read (ggui#1553). Refused
         // before the contract gate, the append, the ledger write and the
         // spend, with the same answer as a session with no pipe.
-        if (read.kind === 'row' && !renderReadAllowed(read.stored, ctx)) {
+        if (read.kind === 'row' && !renderReadAllowed(read.stored, ctx, 'ggui_runtime_submit_action', deps.logger)) {
           logCrossSubjectRefused('ggui_runtime_submit_action', env.sessionId, ctx.appId);
           return pipeNotFound(env.sessionId);
         }

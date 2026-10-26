@@ -182,9 +182,14 @@ export {
 } from "./refresh-ws-token.js";
 export {
   RENDER_READ_APP_TRUST_OVER_SUBJECT,
+  RENDER_RESOURCE_READ,
   renderReadAllowed,
   renderReadVerdict,
+  renderReadVerdictLogged,
   type RenderReadCaller,
+  type RenderReadDoor,
+  type RenderReadLineFields,
+  type RenderReadLogSink,
   type RenderReadRowView,
   type RenderReadRung,
   type RenderReadVerdict,

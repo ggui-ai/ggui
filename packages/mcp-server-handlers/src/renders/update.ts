@@ -90,6 +90,7 @@ import {
   mutationInputSchema,
   runPropsMutation,
 } from './props-mutation-core.js';
+import type { RenderReadLogSink } from './render-read-gate.js';
 
 /**
  * Live-subscriber props-update notifier. The mcp-server's
@@ -192,6 +193,8 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
    * contract; absent dep = noop.
    */
   readonly telemetrySink?: TelemetrySink;
+  /** Where the read gate's two lines go (ggui#1553); absent ⇒ the gate's console fallback. */
+  readonly logger?: RenderReadLogSink;
   /**
    * Optional description override. Hosted deployments may want
    * different prose than OSS. When unset, the handler uses the OSS

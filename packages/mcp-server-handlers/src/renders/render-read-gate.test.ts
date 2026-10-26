@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { renderReadAllowed, renderReadVerdict } from "./render-read-gate.js";
+import { readFileSync, readdirSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+import {
+  renderReadAllowed,
+  renderReadVerdict,
+  renderReadVerdictLogged,
+  type RenderReadDoor,
+  type RenderReadLineFields,
+} from "./render-read-gate.js";
 import type { HandlerContext } from "../types.js";
+
+/** A sink that swallows the gate's lines; the predicate tests below are about the verdict. */
+const quiet = { info: () => undefined };
+/** The predicate alone — door and sink fixed, since these tests are about the verdict. */
+const allowed = (row: { appId: string; userId?: string }, caller: HandlerContext | undefined) =>
+  renderReadAllowed(row, caller, "resources_read", quiet);
 
 const APP = "app_a";
 // #446 — the subject is `userId`, written at commit. This fixture used
@@ -18,27 +31,27 @@ function ctx(
 
 describe("renderReadAllowed", () => {
   it("denies when no request context is available (fail closed)", () => {
-    expect(renderReadAllowed(bareRow, undefined)).toBe(false);
+    expect(allowed(bareRow, undefined)).toBe(false);
   });
 
   it("denies cross-app reads for every identity kind", () => {
     expect(
-      renderReadAllowed(bareRow, ctx({ appId: "app_b", authSource: "apikey", apiKeyHash: "h" }))
+      allowed(bareRow, ctx({ appId: "app_b", authSource: "apikey", apiKeyHash: "h" }))
     ).toBe(false);
     expect(
-      renderReadAllowed(
+      allowed(
         subjectRow,
         ctx({ appId: "app_b", authSource: "oidc", userId: "guuey:g_alice" })
       )
     ).toBe(false);
-    expect(renderReadAllowed(bareRow, ctx({ appId: "app_b", authSource: "anonymous" }))).toBe(
+    expect(allowed(bareRow, ctx({ appId: "app_b", authSource: "anonymous" }))).toBe(
       false
     );
   });
 
   it("allows a federated user reading their own subject-bound row", () => {
     expect(
-      renderReadAllowed(
+      allowed(
         subjectRow,
         ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_alice" })
       )
@@ -47,19 +60,19 @@ describe("renderReadAllowed", () => {
 
   it("denies a federated user reading another subject's row (same app)", () => {
     expect(
-      renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
+      allowed(subjectRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
     ).toBe(false);
   });
 
   it("denies an oauth-login user reading another subject's row (same app)", () => {
     expect(
-      renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "oauth", userId: "guuey:g_bob" }))
+      allowed(subjectRow, ctx({ appId: APP, authSource: "oauth", userId: "guuey:g_bob" }))
     ).toBe(false);
   });
 
   it("allows an email-login user reading their own subject-bound row", () => {
     expect(
-      renderReadAllowed(
+      allowed(
         subjectRow,
         ctx({ appId: APP, authSource: "email", userId: "guuey:g_alice" })
       )
@@ -68,19 +81,19 @@ describe("renderReadAllowed", () => {
 
   it("allows an app credential of the owning app without a subject check (tenant trust)", () => {
     expect(
-      renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "apikey", apiKeyHash: "h" }))
+      allowed(subjectRow, ctx({ appId: APP, authSource: "apikey", apiKeyHash: "h" }))
     ).toBe(true);
   });
 
   it("allows a federated user on a row without endUserIdentity (same app)", () => {
     expect(
-      renderReadAllowed(bareRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_alice" }))
+      allowed(bareRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_alice" }))
     ).toBe(true);
   });
 
   it("allows single-app builder/anonymous flows (same default app)", () => {
     expect(
-      renderReadAllowed({ appId: "builder" }, ctx({ appId: "builder", authSource: "anonymous" }))
+      allowed({ appId: "builder" }, ctx({ appId: "builder", authSource: "anonymous" }))
     ).toBe(true);
   });
 
@@ -97,13 +110,13 @@ describe("renderReadAllowed", () => {
       },
     } as { appId: string; userId?: string };
     expect(
-      renderReadAllowed(legacyOnly, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
+      allowed(legacyOnly, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
     ).toBe(true);
   });
 
   it("denies a cross-user read of a subject-bound row", () => {
     expect(
-      renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
+      allowed(subjectRow, ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" }))
     ).toBe(false);
   });
 
@@ -118,11 +131,11 @@ describe("renderReadAllowed", () => {
     const sessionId = "rnd_01JD3";
     const devPathRow = { appId: APP };
     const bootstrapCtx = ctx({ appId: APP, authSource: "apikey", userId: sessionId });
-    expect(renderReadAllowed(devPathRow, bootstrapCtx)).toBe(true);
+    expect(allowed(devPathRow, bootstrapCtx)).toBe(true);
 
     // And the inverse: a row that genuinely belongs to a person is NOT
     // readable by a bootstrap credential carrying the sessionId.
-    expect(renderReadAllowed(subjectRow, bootstrapCtx)).toBe(false);
+    expect(allowed(subjectRow, bootstrapCtx)).toBe(false);
   });
 });
 
@@ -143,7 +156,95 @@ describe("renderReadVerdict — which rung decided, and the one case #1553 measu
     ] as const;
     for (const [row, caller, expected] of cases) {
       expect(renderReadVerdict(row, caller)).toEqual(expected);
-      expect(renderReadAllowed(row, caller)).toBe(expected.allowed);
+      expect(renderReadAllowed(row, caller, 'resources_read', quiet)).toBe(expected.allowed);
     }
+  });
+});
+
+describe("renderReadVerdictLogged / renderReadAllowed — one emitter behind every door (ggui#1553)", () => {
+  const appKey = ctx({ appId: APP, authSource: "apikey", apiKeyHash: "h" });
+  const alice = ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_alice" });
+  const bob = ctx({ appId: APP, authSource: "oidc", userId: "guuey:g_bob" });
+  const DOORS: readonly RenderReadDoor[] = [
+    "resources_read",
+    "refresh_ws_token",
+    "live_channel_subscribe",
+    "ggui_runtime_pull",
+    "ggui_emit",
+    "ggui_runtime_submit_action",
+    "ggui_runtime_sync_context",
+    "ggui_update",
+    "ggui_amend",
+  ];
+  function sink() {
+    const lines: Array<[string, RenderReadLineFields]> = [];
+    return { lines, info: (event: string, fields: RenderReadLineFields) => void lines.push([event, fields]) };
+  }
+
+  it("every door: the per-read line on every allow, the admit line exactly once and only on the disagreement case, nothing on a deny", () => {
+    for (const door of DOORS) {
+      const s = sink();
+      expect(renderReadAllowed(subjectRow, appKey, door, s)).toBe(true);
+      expect(s.lines).toEqual([
+        ["render_resource_read", { door, appId: APP, source: "apikey", appTrustOverSubject: true }],
+        ["render_read_app_trust_over_subject", { door, appId: APP, source: "apikey" }],
+      ]);
+      s.lines.length = 0;
+      expect(renderReadAllowed(subjectRow, alice, door, s)).toBe(true);
+      expect(s.lines).toEqual([["render_resource_read", { door, appId: APP, source: "oidc", appTrustOverSubject: false }]]);
+      s.lines.length = 0;
+      expect(renderReadAllowed(bareRow, appKey, door, s)).toBe(true);
+      expect(s.lines).toEqual([["render_resource_read", { door, appId: APP, source: "apikey", appTrustOverSubject: false }]]);
+      s.lines.length = 0;
+      expect(renderReadAllowed(subjectRow, bob, door, s)).toBe(false);
+      expect(renderReadAllowed(subjectRow, ctx({ appId: "other", authSource: "apikey", apiKeyHash: "h" }), door, s)).toBe(false);
+      expect(renderReadAllowed(subjectRow, undefined, door, s)).toBe(false);
+      expect(s.lines).toEqual([]);
+    }
+  });
+
+  it("a caller that resolved only the two gated fields (the live channel's bearer pair) reports source null", () => {
+    const s = sink();
+    expect(renderReadAllowed(subjectRow, { appId: APP }, "live_channel_subscribe", s)).toBe(true);
+    expect(s.lines).toEqual([
+      ["render_resource_read", { door: "live_channel_subscribe", appId: APP, source: null, appTrustOverSubject: true }],
+      ["render_read_app_trust_over_subject", { door: "live_channel_subscribe", appId: APP, source: null }],
+    ]);
+  });
+
+  it("without a sink, each line falls back to ONE console.info text line, emitted from the gate", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      expect(renderReadAllowed(subjectRow, appKey, "ggui_emit")).toBe(true);
+      expect(info.mock.calls.map((c) => String(c[0]))).toEqual([
+        '[ggui] render_resource_read {"door":"ggui_emit","appId":"app_a","source":"apikey","appTrustOverSubject":true}',
+        '[ggui] render_read_app_trust_over_subject {"door":"ggui_emit","appId":"app_a","source":"apikey"}',
+      ]);
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it("logging changes nothing about the verdict", () => {
+    for (const [row, caller] of [
+      [subjectRow, appKey],
+      [subjectRow, alice],
+      [subjectRow, bob],
+      [bareRow, alice],
+      [subjectRow, undefined],
+    ] as const) {
+      expect(renderReadVerdictLogged(row, caller, "ggui_update", quiet)).toEqual(renderReadVerdict(row, caller));
+    }
+  });
+
+  it("pin: no door in this package calls the unlogged predicate — a site that bypasses the emitter is a door with no denominator", () => {
+    // Scope: this package's renders directory. The two doors in @ggui-ai/mcp-server
+    // (`resources/read`, the live channel's bearer subscribe) are outside it and are
+    // pinned by their behaviour suites there, not by this read of the source.
+    const dir = new URL("./", import.meta.url);
+    const offenders = readdirSync(dir)
+      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "render-read-gate.ts")
+      .filter((f) => /\brenderReadVerdict\(/.test(readFileSync(new URL(f, dir), "utf8")));
+    expect(offenders).toEqual([]);
   });
 });

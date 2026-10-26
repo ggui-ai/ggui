@@ -1246,6 +1246,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiSyncContextHandler({
         renderStore: deps.render.renderStore,
+        ...(deps.logger ? { logger: deps.logger } : {}),
         // Same store `ggui_render` writes identity records to — a
         // snapshot sync re-commits the row, so the record's view of it
         // is refreshed off the same seam.
@@ -1266,6 +1267,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRuntimePullHandler({
         renderStore: deps.render.renderStore,
+        ...(deps.logger ? { logger: deps.logger } : {}),
       })
     );
     // `ggui_runtime_telemetry` — the iframe runtime's transport
@@ -1302,6 +1304,7 @@ export function defaultHandlers(deps: {
       handlers.push(
         createGguiRefreshWsTokenHandler({
           renderStore: deps.render.renderStore,
+          ...(deps.logger ? { logger: deps.logger } : {}),
           verify: deps.render.wsTokenVerify,
           mint: deps.render.mintBootstrap,
         })
@@ -1378,6 +1381,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiUpdateHandler({
         renderStore: deps.update.renderStore,
+        ...(deps.logger ? { logger: deps.logger } : {}),
         ...(deps.payloadTraceSink ? { payloadTraceSink: deps.payloadTraceSink } : {}),
         ...(deps.update.renderIdentityStore
           ? { renderIdentityStore: deps.update.renderIdentityStore }
@@ -1418,6 +1422,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiAmendHandler({
         renderStore: deps.update.renderStore,
+        ...(deps.logger ? { logger: deps.logger } : {}),
         ...(deps.update.renderIdentityStore
           ? { renderIdentityStore: deps.update.renderIdentityStore }
           : {}),
@@ -1546,6 +1551,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiEmitHandler({
         renderStore: deps.render.renderStore,
+        ...(deps.logger ? { logger: deps.logger } : {}),
         async sendEnvelope(envelope) {
           const channel = channelProvider?.() ?? null;
           if (!channel) {

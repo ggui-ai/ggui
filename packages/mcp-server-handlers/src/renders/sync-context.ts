@@ -70,7 +70,7 @@ import type {
 import { VIEW_ORIGIN_UNPROVEN } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { defineHandler, readSessionRow, type HandlerContext } from '../types.js';
 import { logCrossAppRefused, logCrossSubjectRefused, logOwnershipUnverified } from './cross-app-refused.js';
-import { renderReadAllowed } from './render-read-gate.js';
+import { renderReadAllowed, type RenderReadLogSink } from './render-read-gate.js';
 import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
@@ -163,6 +163,8 @@ export interface CreateGguiSyncContextHandlerDeps {
    * best-effort and can never fail the sync.
    */
   readonly renderIdentityStore?: RenderIdentityStore;
+  /** Where the read gate's two lines go (ggui#1553); absent ⇒ the gate's console fallback. */
+  readonly logger?: RenderReadLogSink;
 }
 
 /**
@@ -247,7 +249,7 @@ export function createGguiSyncContextHandler(
       // Subject gate (ggui#1483): within the app, an end-user writes context
       // only for its own sessions — the render read door's predicate
       // (ggui#1553), with the same answer as a session that does not exist.
-      if (!renderReadAllowed(stored, ctx)) {
+      if (!renderReadAllowed(stored, ctx, 'ggui_runtime_sync_context', deps.logger)) {
         logCrossSubjectRefused('ggui_runtime_sync_context', sessionId, ctx.appId);
         return sessionNotFound(sessionId);
       }

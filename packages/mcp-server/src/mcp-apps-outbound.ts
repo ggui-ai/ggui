@@ -94,7 +94,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
-import { RENDER_READ_APP_TRUST_OVER_SUBJECT, renderReadVerdict, type RenderReadRowView } from "@ggui-ai/mcp-server-handlers/renders";
+import { renderReadVerdictLogged, type RenderReadRowView } from "@ggui-ai/mcp-server-handlers/renders";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
 import { RUNTIME_BUNDLE_PLAIN_NAME } from "./runtime-bundle-hash.js";
@@ -2333,28 +2333,11 @@ export function registerGguiRenderResourceTemplate(
             requestId: "resource-read",
           }
         : callerCtx;
-    const verdict = renderReadVerdict(candidate, fallbackCtx);
-    if (verdict.allowed) {
-      // ggui#1553: one line per ALLOWED read — door, app, source, and
-      // whether rung 4 (app trust) admitted the caller over a subject-bound
-      // row — so the admission count below has the read traffic beside it.
-      // Never the session or the subject.
-      opts.logger?.info("render_resource_read", {
-        door: "resources_read",
-        appId: candidate.appId,
-        source: fallbackCtx?.authSource ?? null,
-        appTrustOverSubject: verdict.appTrustOverSubject === true,
-      });
-      // ggui#1553: rung 4 admitted an app credential to a subject-bound
-      // session. Door, app, source; never the session or the subject. Kept
-      // as its own line: it is the one an operator counts.
-      if (verdict.appTrustOverSubject) {
-        opts.logger?.info(RENDER_READ_APP_TRUST_OVER_SUBJECT, {
-          door: "resources_read",
-          appId: candidate.appId,
-          source: fallbackCtx?.authSource ?? null,
-        });
-      }
+    // ggui#1553: the gate emits the per-read line on every allowed read and
+    // the rung-4 admission line on the disagreement case — door, app,
+    // source; never the session or the subject. Every door shares that
+    // emitter, so one query counts all of them.
+    if (renderReadVerdictLogged(candidate, fallbackCtx, "resources_read", opts.logger).allowed) {
       return true;
     }
     opts.logger?.warn("render_resource_read_denied", {

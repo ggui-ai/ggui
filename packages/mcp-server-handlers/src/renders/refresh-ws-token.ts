@@ -37,7 +37,7 @@ import * as z from 'zod';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type HandlerContext } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
-import { RENDER_READ_APP_TRUST_OVER_SUBJECT, renderReadVerdict } from './render-read-gate.js';
+import { renderReadVerdictLogged, type RenderReadLogSink } from './render-read-gate.js';
 
 const inputSchema = {
   envelope: z
@@ -121,17 +121,14 @@ export interface GguiRefreshWsTokenHandlerDeps {
    * one the render result and the read door stamp with.
    */
   readonly mint?: (sessionId: string, appId: string) => { readonly token: string; readonly expiresAt: string };
+  /** Where the read gate's two lines go (ggui#1553); absent ⇒ the gate's console fallback. */
+  readonly logger?: RenderReadLogSink;
 }
 
 /** One structured line per outcome, ids only. Handlers carry no logger. */
 function logRefreshed(fields: { sessionId: string; appId: string; source: string | null; rootAgeSec: number }): void {
   // eslint-disable-next-line no-console -- operator-visible structured line; handlers carry no logger
   console.info(`[ggui] ws_token_refreshed ${JSON.stringify(fields)}`);
-}
-/** ggui#1553: rung 4 admitted an app credential to a subject-bound session. Door, app, source; never the session or subject. */
-function logAppTrustOverSubject(fields: { door: 'refresh_ws_token'; appId: string; source: string | null }): void {
-  // eslint-disable-next-line no-console -- operator-visible structured line; handlers carry no logger
-  console.info(`[ggui] ${RENDER_READ_APP_TRUST_OVER_SUBJECT} ${JSON.stringify(fields)}`);
 }
 function logRefused(fields: { reason: 'not_supported' | 'invalid' | 'not_found' | 'read_failed'; source: string | null }): void {
   // eslint-disable-next-line no-console -- operator-visible structured line; handlers carry no logger
@@ -188,12 +185,11 @@ export function createGguiRefreshWsTokenHandler(deps: GguiRefreshWsTokenHandlerD
         logRefused({ reason: 'read_failed', source });
         throw err;
       }
-      const read = stored ? renderReadVerdict(stored, ctx) : undefined;
+      const read = stored ? renderReadVerdictLogged(stored, ctx, 'refresh_ws_token', deps.logger) : undefined;
       if (!stored || stored.appId !== verdict.appId || read === undefined || !read.allowed) {
         logRefused({ reason: 'not_found', source });
         throw new GguiSessionNotFoundError(verdict.sessionId);
       }
-      if (read.appTrustOverSubject) logAppTrustOverSubject({ door: 'refresh_ws_token', appId: stored.appId, source });
       // 5. A fresh root credential for the session.
       const minted = deps.mint(stored.id, stored.appId);
       logRefreshed({

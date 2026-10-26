@@ -212,7 +212,7 @@ export async function runPropsMutation(
       // Subject gate (ggui#1483): within the app, an end-user caller acts
       // only on its own sessions — the render read door's predicate, which
       // admits a caller with no end-user identity as app trust (ggui#1553).
-      if (!renderReadAllowed(stored, ctx)) {
+      if (!renderReadAllowed(stored, ctx, tool, deps.logger)) {
         logCrossSubjectRefused(tool, sessionId, ctx.appId);
         throw new GguiSessionNotFoundError(sessionId);
       }

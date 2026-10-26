@@ -26,7 +26,7 @@ import type {
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import { defineHandler, type ShapeOutput, type HandlerContext } from '../types.js';
 import { logCrossSubjectRefused } from './cross-app-refused.js';
-import { renderReadAllowed } from './render-read-gate.js';
+import { renderReadAllowed, type RenderReadLogSink } from './render-read-gate.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import {
   handleStream,
@@ -58,6 +58,8 @@ export interface GguiEmitHandlerDeps {
    * watching a render see emissions. OSS leaves absent.
    */
   readonly observerNotifier?: StreamObserverNotifier;
+  /** Where the read gate's two lines go (ggui#1553); absent ⇒ the gate's console fallback. */
+  readonly logger?: RenderReadLogSink;
 }
 
 export interface StreamObserverNotifier {
@@ -98,7 +100,7 @@ export function createGguiEmitHandler(
       }
       // Subject gate (ggui#1483): an end-user caller emits only into its own
       // sessions — the render read door's predicate (ggui#1553).
-      if (!renderReadAllowed(stored, ctx)) {
+      if (!renderReadAllowed(stored, ctx, 'ggui_emit', deps.logger)) {
         logCrossSubjectRefused('ggui_emit', sessionId, ctx.appId);
         throw new GguiSessionNotFoundError(sessionId);
       }

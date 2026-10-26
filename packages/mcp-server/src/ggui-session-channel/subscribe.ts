@@ -641,7 +641,18 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       // caller the id exists and is not theirs (ggui#1554).
       const endUserId =
         effectiveIdentity.identity.kind === "user" ? effectiveIdentity.identity.userId : undefined;
-      if (!viaWsToken && !renderReadAllowed(stored, { appId: effectiveAppId, userId: endUserId })) {
+      // ggui#1553: the gate's per-read and rung-4 lines name this door
+      // `live_channel_subscribe`; their denominator is the NON-token
+      // subscribes — the exempt `wsToken` path above never runs the gate.
+      if (
+        !viaWsToken &&
+        !renderReadAllowed(
+          stored,
+          { appId: effectiveAppId, userId: endUserId, authSource: effectiveIdentity.source },
+          "live_channel_subscribe",
+          deps.logger
+        )
+      ) {
         deps.logger.warn("render_channel_subject_refused", {
           sessionId: payload.sessionId,
           appId: effectiveAppId,

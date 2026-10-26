@@ -262,7 +262,8 @@ describe("ggui_runtime_refresh_ws_token is an authorized re-mint (ggui#1496 part
       ...ctxOf("A"),
       authSource: "apikey",
     });
-    expect(info.mock.calls.map((c) => String(c[0]))).toEqual([
+    // The gate's own `render_resource_read` line precedes it (ggui#1553; pinned by the gate's test) — this test is about the refresh line.
+    expect(info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[ggui] ws_token_refreshed"))).toEqual([
       '[ggui] ws_token_refreshed {"sessionId":"s1","appId":"A","source":"apikey","rootAgeSec":600}',
     ]);
     await refresh({ renderStore: store, verify, mint }, envelope, ctxOf("B")).catch(
@@ -302,7 +303,7 @@ describe("ggui_runtime_refresh_ws_token is an authorized re-mint (ggui#1496 part
     vi.setSystemTime(new Date("2026-09-01T00:10:00Z"));
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     await refresh({ renderStore: store, verify, mint }, chained, ctxOf("A"));
-    expect(info.mock.calls.map((c) => String(c[0]))).toEqual([
+    expect(info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[ggui] ws_token_refreshed"))).toEqual([
       '[ggui] ws_token_refreshed {"sessionId":"s1","appId":"A","source":null,"rootAgeSec":600}',
     ]);
   });

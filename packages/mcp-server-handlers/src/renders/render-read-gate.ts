@@ -29,7 +29,50 @@ export interface RenderReadRowView {
  * subscribe (ggui#1483) has no handler context and passes the two fields
  * it resolved.
  */
-export type RenderReadCaller = Pick<HandlerContext, 'appId' | 'userId'>;
+export type RenderReadCaller = Pick<HandlerContext, 'appId' | 'userId'> & Partial<Pick<HandlerContext, 'authSource'>>;
+
+/**
+ * The doors that admit a caller to an existing session through this gate,
+ * each named as its line reports it. CLOSED on purpose: a ninth door must
+ * add its literal here, so it cannot run the predicate without a name on
+ * its lines (ggui#1553 — six doors ran it unnamed for three weeks, and the
+ * zero they produced had no denominator). `resources_read` and
+ * `refresh_ws_token` are the two literals the first measured series used
+ * and are kept byte-identical so the series continues.
+ */
+export type RenderReadDoor =
+  | 'resources_read'
+  | 'refresh_ws_token'
+  | 'live_channel_subscribe'
+  | 'ggui_runtime_pull'
+  | 'ggui_emit'
+  | 'ggui_runtime_submit_action'
+  | 'ggui_runtime_sync_context'
+  | 'ggui_update'
+  | 'ggui_amend';
+
+/**
+ * What the gate's two lines carry: the door, the app and the caller's auth
+ * source (`null` when the door resolved only the two gated fields) — never
+ * the session, never the subject. The per-read line adds whether rung 4
+ * admitted the caller over a subject-bound row.
+ */
+export type RenderReadLineFields = {
+  readonly door: RenderReadDoor;
+  readonly appId: string;
+  readonly source: string | null;
+  readonly appTrustOverSubject?: boolean;
+};
+
+/**
+ * Where the gate's lines go: any structured logger's `info(event, fields)`
+ * fits. A composition that wires none gets ONE console text line per event
+ * from this file — the fallback lives here and nowhere else, so every door
+ * emits one shape under one logger and one query counts all of them.
+ */
+export interface RenderReadLogSink {
+  readonly info?: (event: string, fields: RenderReadLineFields) => void;
+}
 
 /**
  * Per-session render-resource read gate (rehydration access control).
@@ -86,8 +129,56 @@ export type RenderReadCaller = Pick<HandlerContext, 'appId' | 'userId'>;
  * caller only that the id exists and is not theirs, as the channel's
  * app-scope refusal already does.
  */
-export function renderReadAllowed(row: RenderReadRowView, ctx: RenderReadCaller | undefined): boolean {
-  return renderReadVerdict(row, ctx).allowed;
+export function renderReadAllowed(
+  row: RenderReadRowView,
+  ctx: RenderReadCaller | undefined,
+  door: RenderReadDoor,
+  sink?: RenderReadLogSink
+): boolean {
+  return renderReadVerdictLogged(row, ctx, door, sink).allowed;
+}
+
+/**
+ * Every allowed read, whichever door: one `render_resource_read` line
+ * (door, app, source, whether app trust admitted the caller over a
+ * subject-bound row) — the denominator an operator reads the admission
+ * count against. The event name predates the gate's widening to every door
+ * and is kept so the measured series continues; the `door` field is the
+ * split.
+ */
+export const RENDER_RESOURCE_READ = 'render_resource_read' as const;
+
+/**
+ * The gate's verdict WITH its lines: the per-read line on every allow, and
+ * {@link RENDER_READ_APP_TRUST_OVER_SUBJECT} once more on exactly the
+ * disagreement case (rung 4 admitting a caller with no end-user identity to
+ * a row with one). A deny emits nothing here — each door names its own
+ * refusal. Doors call this or {@link renderReadAllowed}; the unlogged
+ * {@link renderReadVerdict} is for tests and for this function, and the
+ * gate's test pins that no door in this package calls it.
+ */
+export function renderReadVerdictLogged(
+  row: RenderReadRowView,
+  ctx: RenderReadCaller | undefined,
+  door: RenderReadDoor,
+  sink?: RenderReadLogSink
+): RenderReadVerdict {
+  const verdict = renderReadVerdict(row, ctx);
+  if (verdict.allowed) {
+    const base = { door, appId: row.appId, source: ctx?.authSource ?? null };
+    emit(sink, RENDER_RESOURCE_READ, { ...base, appTrustOverSubject: verdict.appTrustOverSubject });
+    if (verdict.appTrustOverSubject) emit(sink, RENDER_READ_APP_TRUST_OVER_SUBJECT, base);
+  }
+  return verdict;
+}
+
+function emit(sink: RenderReadLogSink | undefined, event: string, fields: RenderReadLineFields): void {
+  if (sink?.info) {
+    sink.info(event, fields);
+    return;
+  }
+  // eslint-disable-next-line no-console -- the one fallback for a composition that wires no logger; see RenderReadLogSink
+  console.info(`[ggui] ${event} ${JSON.stringify(fields)}`);
 }
 
 /** Which rung of {@link renderReadAllowed} decided a read. */
