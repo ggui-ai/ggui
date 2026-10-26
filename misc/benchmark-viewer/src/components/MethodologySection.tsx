@@ -65,6 +65,37 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-26',
+    text:
+      'Generator change (internal issue #2010): the generator\'s own visual check gains one rule, ' +
+      'that a control\'s label must show whole and never be clipped or ellipsized, plus a check that ' +
+      'flags a button whose own text is cut. No number on this page changes. The nightly runs ' +
+      'behind the tables do not run the visual round this check lives in, so they never run it. The ' +
+      'same change teaches the generator a new section only when a request offers items to choose ' +
+      'among, and adds a layout option that caps how many rows a wrapping row shows. None of the ' +
+      'ten nightly prompts gets the new section: the prompts they send are byte-identical before ' +
+      'and after the change. The one benchmark prompt whose prompt changes, a to-do list, is not in ' +
+      'the nightly set. We measured the check before it landed, at no model cost, by replaying it ' +
+      'on stored generations: four runs of the ten nightly prompts across three model tiers, made ' +
+      'on 2026-10-26 with the then-current generator, 120 cards, each rendered at five card sizes. ' +
+      '96 could be read. The other 24 are every card for the two prompts that use a gadget (a map ' +
+      'and a chart), which the replay could not render, so the check\'s behaviour on gadget cards is ' +
+      'unmeasured. It flagged 3 of the 96, all periodic tables from one model tier: 1 of the 8 ' +
+      'readable prompts. The blind reading below found a periodic table from another tier cut as ' +
+      'well. A designer reading full-card renders without knowing which were flagged judged all 3 ' +
+      'cut. This is a floor, not a rate. The same blind reading of 10 unflagged cards, drawn one ' +
+      'per prompt, found 2 with a cut control label that the check cannot see: labels that overlap ' +
+      'their neighbours without being clipped, and a step whose label is whole but sits past the ' +
+      'card\'s edge. A third had a clipped input placeholder, which the rule does not cover. The ' +
+      'draw was one card per prompt, not a random sample, so 2 of 10 is not an estimate of the miss ' +
+      'rate. How it was read. The reader saw only shuffled ids. She recognised 3 renders from an ' +
+      'earlier set; those are the 3 flagged cards, so the unflagged result does not depend on them. ' +
+      'Content below the bottom of a tall card was read as undecidable, not cut. Wrapping inside a ' +
+      'control counts as whole. The unit is the card: the check reports at most 8 labels per size, ' +
+      'so its label counts are not a rate. All renders were made on macOS. The generator renders on ' +
+      'Linux, whose fonts differ.',
+  },
+  {
     date: '2026-10-24',
     text:
       'Correction (internal issue #1981): the 2026-10-22 entry below says the change deletes one ' +
