@@ -19,6 +19,13 @@
  * Rendering rule for consumers: every string in this AST (`text`,
  * `code`) is literal content — render as text children, NEVER markup.
  *
+ * List items hold inline content only. An indented line directly under an
+ * item continues that item's inline content, joined by a `break` (the
+ * item's lines parse as one inline run, so emphasis may span them); an
+ * unindented line ends the list and starts a paragraph. A table or heading
+ * line indented under an item is block content inside the item, so it
+ * stays item text.
+ *
  * Deliberately OUT of the subset (parse as plain text): images,
  * blockquotes, strikethrough, autolinked bare URLs, nested lists, block
  * content inside list items, setext headings. ggui owns this subset's
@@ -110,9 +117,11 @@ function safeHref(raw: string): string | undefined {
 
 // ─── inline parser ────────────────────────────────────────────────────────────
 // Recursive descent with an explicit closer stack. `closers` is innermost-
-// first; a delimiter that matches ANY active closer unwinds to that frame —
-// the frames it skips over close as `closed: false` (fail-soft: `**a *b** c`
-// closes the strong; the dangling em inside it stays open-but-stable).
+// first; a delimiter run closes the innermost frame whose marker it matches
+// exactly, else spends itself outward from the outermost frame it can close,
+// and unwinds to the outermost frame it closed — the frames it skips over
+// close as `closed: false` (fail-soft: `**a *b** c` closes the strong; the
+// dangling em inside it stays open-but-stable).
 
 type Closer = "**" | "__" | "*" | "_" | "]";
 
@@ -226,12 +235,15 @@ function parseInlineFrom(src: string, start: number, closers: Closer[]): InlineR
       const single = ch as Closer;
       const prev = pos > 0 ? src[pos - 1] : undefined;
 
-      // Measure the whole delimiter run, then walk the open frames OUTERMOST-
-      // first (link brackets bound the walk — emphasis never closes across a
-      // `[`), spending the run's characters on every closeable frame: a **
-      // run seals the strong (its inner em dangles soft — `**a *b** c`), a
-      // *** run seals the em AND the strong. The closure SET rides the unwind
-      // so every level marks its own `closed` flag accurately.
+      // Measure the whole delimiter run, then choose the frames it closes
+      // (link brackets bound the search — emphasis never closes across a `[`).
+      // First the INNERMOST closeable frame whose marker IS the run: `**`
+      // seals the strong inside `*a **b** c*` and the outer em stays open for
+      // its own `*`; inside `**a *b** c` that frame is the strong, and the
+      // em it skips dangles soft. Only a run no single frame matches is spent
+      // across frames OUTERMOST-first: a *** run seals the em AND the strong.
+      // The closure SET rides the unwind so every level marks its own
+      // `closed` flag accurately.
       let runLen = 1;
       while (src[pos + runLen] === ch) runLen++;
       const nextAfterRun = src[pos + runLen];
@@ -239,14 +251,21 @@ function parseInlineFrom(src: string, start: number, closers: Closer[]): InlineR
       const bound = bracket === -1 ? closers.length - 1 : bracket - 1;
       const closedIdxs = new Set<number>();
       let budget = runLen;
-      for (let ci = bound; ci >= 0; ci--) {
+      for (let ci = 0; ci <= bound; ci++) {
+        const m = closers[ci];
+        if (m === undefined || m[0] !== ch || m.length !== runLen) continue;
+        if (!canClose(m, prev, nextAfterRun)) continue;
+        closedIdxs.add(ci);
+        budget = 0;
+        break;
+      }
+      for (let ci = bound; budget > 0 && ci >= 0; ci--) {
         const m = closers[ci];
         if (m === undefined || m[0] !== ch) continue;
         if (m.length > budget) continue;
         if (!canClose(m, prev, nextAfterRun)) continue;
         closedIdxs.add(ci);
         budget -= m.length;
-        if (budget === 0) break;
       }
       if (closedIdxs.size > 0) {
         flush();
@@ -460,7 +479,9 @@ export function parseRichText(text: string): RichTextBlock[] {
 
   // Accumulators for the (single) open block.
   let para: string[] = [];
-  let list: { ordered: boolean; start: number | undefined; items: RichTextListItem[] } | undefined;
+  // Items keep their raw lines until the list flushes: a continuation line
+  // joins its item's inline run, so `**a` / `  b**` is one strong.
+  let list: { ordered: boolean; start: number | undefined; items: string[][] } | undefined;
 
   const flushPara = (): void => {
     if (para.length > 0) {
@@ -470,7 +491,10 @@ export function parseRichText(text: string): RichTextBlock[] {
   };
   const flushList = (): void => {
     if (list !== undefined) {
-      blocks.push({ type: "list", ordered: list.ordered, start: list.start, items: list.items });
+      const items: RichTextListItem[] = list.items.map((itemLines) => ({
+        children: parseInlineFrom(itemLines.join("\n"), 0, []).children,
+      }));
+      blocks.push({ type: "list", ordered: list.ordered, start: list.start, items });
       list = undefined;
     }
   };
@@ -533,7 +557,18 @@ export function parseRichText(text: string): RichTextBlock[] {
           items: [],
         };
       }
-      list.items.push({ children: parseInlineFrom(content, 0, []).children });
+      list.items.push([content]);
+      continue;
+    }
+
+    // An INDENTED line directly under an item (or under its continuation)
+    // continues that item's inline content, joined by a `break` like a
+    // paragraph's lines. It is checked before tables, so an indented pipe
+    // row under an item stays item text. An unindented line still ends the
+    // list (below).
+    const lastItem = list?.items[list.items.length - 1];
+    if (lastItem !== undefined && (line[0] === " " || line[0] === "\t")) {
+      lastItem.push(line.replace(/^[ \t]+/, ""));
       continue;
     }
 
@@ -562,8 +597,8 @@ export function parseRichText(text: string): RichTextBlock[] {
       }
     }
 
-    // Plain prose. A non-bullet line after a list ENDS the list (predictable
-    // for chat; lazy continuation is not part of the v1 subset).
+    // Plain prose. An unindented non-bullet line after a list ENDS the list
+    // (predictable for chat; lazy continuation is not part of the v1 subset).
     flushList();
     para.push(line);
   }

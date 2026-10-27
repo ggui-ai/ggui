@@ -345,3 +345,159 @@ describe("streaming tolerance", () => {
     });
   });
 });
+
+// ─── emphasis closer choice; indented list continuation ───────────────────────
+// Ported by behaviour from @silverprotocol/richtext 1.0.0-rc.6 / 0.12.10.
+
+type List = Extract<RichTextBlock, { type: "list" }>;
+const blockTypes = (t: string): string[] => parseRichText(t).map((b) => b.type);
+const itemTexts = (src: string): string[] => (parseRichText(src)[0] as List).items.map((it) => visibleText(it.children));
+
+describe("emphasis: a delimiter run closes the innermost frame whose marker it matches exactly", () => {
+  it("an em holding a strong closes at its own `*`, not at the strong's `**` (`*a **b** c*`)", () => {
+    expect(inline("*a **b** c*")).toEqual([
+      {
+        type: "em",
+        children: [
+          { type: "text", text: "a " },
+          { type: "strong", children: [{ type: "text", text: "b" }], closed: true },
+          { type: "text", text: " c" },
+        ],
+        closed: true,
+      },
+    ]);
+  });
+
+  it("the underscore forms and a nested em of the same marker close the same way", () => {
+    expect(inline("_a __b__ c_")).toEqual([
+      {
+        type: "em",
+        children: [
+          { type: "text", text: "a " },
+          { type: "strong", children: [{ type: "text", text: "b" }], closed: true },
+          { type: "text", text: " c" },
+        ],
+        closed: true,
+      },
+    ]);
+    expect(inline("*a *b* c*")).toEqual([
+      {
+        type: "em",
+        children: [
+          { type: "text", text: "a " },
+          { type: "em", children: [{ type: "text", text: "b" }], closed: true },
+          { type: "text", text: " c" },
+        ],
+        closed: true,
+      },
+    ]);
+  });
+
+  it("a run with no exact match still spends itself across frames (`***` seals em and strong; `**a *b** c` dangles the em)", () => {
+    expect(inline("*a **b***")).toEqual([
+      {
+        type: "em",
+        children: [
+          { type: "text", text: "a " },
+          { type: "strong", children: [{ type: "text", text: "b" }], closed: true },
+        ],
+        closed: true,
+      },
+    ]);
+    const nodes = inline("**a *b** c");
+    expect(nodes[0]).toMatchObject({ type: "strong", closed: true });
+    expect((nodes[0] as Extract<RichTextInline, { type: "strong" }>).children[1]).toMatchObject({ type: "em", closed: false });
+  });
+
+  it("the exact pass honours the link bracket: emphasis never closes across a `[` (`*a [b* c](https://x.io) d*`)", () => {
+    expect(inline("*a [b* c](https://x.io) d*")).toEqual([
+      {
+        type: "em",
+        children: [
+          { type: "text", text: "a " },
+          { type: "link", children: [{ type: "text", text: "b* c" }], href: "https://x.io", rawHref: "https://x.io", closed: true },
+          { type: "text", text: " d" },
+        ],
+        closed: true,
+      },
+    ]);
+  });
+
+  it("inside a paragraph and a list item the fix holds, and no stray `*` reaches the text", () => {
+    const blocks = parseRichText("*a **b** c*\n\n- *x **y** z*");
+    expect(blocks[0]).toMatchObject({ type: "paragraph", children: [{ type: "em", closed: true }] });
+    expect((blocks[1] as List).items[0]?.children).toMatchObject([{ type: "em", closed: true }]);
+    expect(JSON.stringify(blocks)).not.toContain("*");
+  });
+});
+
+describe("lists: an indented line under an item continues that item", () => {
+  it("`- item one` / `  continued line` / `- item two` is ONE list of two items; the continuation joins with a break", () => {
+    expect(parseRichText("- item one\n  continued line\n- item two")).toEqual([
+      {
+        type: "list",
+        ordered: false,
+        start: undefined,
+        items: [
+          { children: [{ type: "text", text: "item one" }, { type: "break" }, { type: "text", text: "continued line" }] },
+          { children: [{ type: "text", text: "item two" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("ordered items, several continuation lines, and any indent (one space or more, or a tab) continue the item", () => {
+    const [list] = parseRichText("1. first\n   more\n line three\n2. second") as List[];
+    expect(list).toMatchObject({ ordered: true, start: 1 });
+    expect(list?.items.map((it) => visibleText(it.children))).toEqual(["first\nmore\nline three", "second"]);
+    expect(itemTexts("- a\n\tb")).toEqual(["a\nb"]);
+  });
+
+  it("a continuation joins the item directly above it, not the first item", () => {
+    expect(itemTexts("- a\n  a2\n- b\n  b2")).toEqual(["a\na2", "b\nb2"]);
+    expect(itemTexts("1. a\n2. b\n   b2\n3. c")).toEqual(["a", "b\nb2", "c"]);
+  });
+
+  it("an indented table or heading line under an item is block content inside the item, so it stays item text", () => {
+    const blocks = parseRichText("- a\n  | x | y |\n  |---|---|\n  | 1 | 2 |");
+    expect(blocks.map((b) => b.type)).toEqual(["list"]);
+    expect(visibleText((blocks[0] as List).items[0]?.children ?? [])).toBe("a\n| x | y |\n|---|---|\n| 1 | 2 |");
+    const heading = parseRichText("- a\n  # h");
+    expect(heading.map((b) => b.type)).toEqual(["list"]);
+    expect(visibleText((heading[0] as List).items[0]?.children ?? [])).toBe("a\n# h");
+  });
+
+  it("inline constructs span the continuation (the item's lines parse as one inline run)", () => {
+    const [list] = parseRichText("- **bold\n  still bold** done") as List[];
+    expect(list?.items[0]?.children).toEqual([
+      { type: "strong", children: [{ type: "text", text: "bold" }, { type: "break" }, { type: "text", text: "still bold" }], closed: true },
+      { type: "text", text: " done" },
+    ]);
+  });
+
+  it("an UNINDENTED line still ends the list (lazy continuation stays out of the subset), and a blank line still does", () => {
+    expect(blockTypes("- a\nb")).toEqual(["list", "paragraph"]);
+    expect(blockTypes("- a\n\n  b")).toEqual(["list", "paragraph"]);
+  });
+
+  it("an indented bullet still flattens into the list after a continued item", () => {
+    expect(itemTexts("- a\n  more\n  - b")).toEqual(["a\nmore", "b"]);
+  });
+
+  it("streams: every prefix parses, and once the continuation line has begun its text stays in the first item", () => {
+    const doc = "- item one\n  continued line\n- item two\n";
+    const begun = doc.indexOf("  continued") + 3;
+    for (let i = 0; i <= doc.length; i++) {
+      const prefix = doc.slice(0, i);
+      const blocks = parseRichText(prefix);
+      if (i < begun) continue;
+      const shown = prefix.slice(begun - 1, Math.min(prefix.length, doc.indexOf("\n- item two")));
+      expect(blocks[0]?.type).toBe("list");
+      expect(visibleText((blocks[0] as List).items[0]?.children ?? [])).toBe(`item one\n${shown}`);
+      // A half-typed next marker (`-` with no space yet) is the open trailing
+      // block, as for any list; the continuation never moves into it.
+      expect(blocks.slice(1).every((blk) => !JSON.stringify(blk).includes("continued"))).toBe(true);
+    }
+    expect(blockTypes(doc)).toEqual(["list"]);
+  });
+});
