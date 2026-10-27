@@ -60,6 +60,20 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
       expect(row.retireNotBefore, id).toBe(e.floor);
     }
   });
+
+  it('the three 4.x legacy rows carry the floors the vendor quotes (ggui#2147, model-deprecations read 2026-10-28)', () => {
+    // "claude-sonnet-4-6 | Active | N/A | Not sooner than February 17, 2027",
+    // "claude-opus-4-7 | Active | N/A | Not sooner than April 16, 2027",
+    // "claude-opus-4-6 | Active | N/A | Not sooner than February 5, 2027".
+    const floors: Record<string, string> = {
+      'anthropic/claude-sonnet-4-6': '2027-02-17',
+      'anthropic/claude-opus-4-7': '2027-04-16',
+      'anthropic/claude-opus-4-6': '2027-02-05',
+    };
+    for (const [id, floor] of Object.entries(floors)) {
+      expect(MODEL_REGISTRY[id as ModelId].retireNotBefore, id).toBe(floor);
+    }
+  });
 });
 
 describe('MODEL_REGISTRY — state + lineup are registry facts', () => {

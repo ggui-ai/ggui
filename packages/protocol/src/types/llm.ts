@@ -324,6 +324,9 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 200000,
     supportsTools: true,
   },
+  // ggui#2147 (2026-10-28): model-deprecations "claude-sonnet-4-6 | Active |
+  // N/A | Not sooner than February 17, 2027" — the vendor's floor, never a
+  // deadline (see the Haiku 4.5 row).
   "anthropic/claude-sonnet-4-6": {
     id: "anthropic/claude-sonnet-4-6",
     provider: "anthropic",
@@ -331,6 +334,7 @@ const MODEL_ROWS = defineModelRegistry({
     tier: "balanced",
     state: "legacy",
     lineup: false,
+    retireNotBefore: "2027-02-17",
     costs: {
       inputPer1M: 3.0,
       outputPer1M: 15.0,
@@ -361,6 +365,8 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
+  // ggui#2147 (2026-10-28): model-deprecations "claude-opus-4-7 | Active |
+  // N/A | Not sooner than April 16, 2027".
   "anthropic/claude-opus-4-7": {
     id: "anthropic/claude-opus-4-7",
     provider: "anthropic",
@@ -368,6 +374,7 @@ const MODEL_ROWS = defineModelRegistry({
     tier: "premium",
     state: "legacy",
     lineup: false,
+    retireNotBefore: "2027-04-16",
     costs: {
       inputPer1M: 5.0,
       outputPer1M: 25.0,
@@ -377,6 +384,8 @@ const MODEL_ROWS = defineModelRegistry({
     maxTokens: 1000000,
     supportsTools: true,
   },
+  // ggui#2147 (2026-10-28): model-deprecations "claude-opus-4-6 | Active |
+  // N/A | Not sooner than February 5, 2027".
   "anthropic/claude-opus-4-6": {
     id: "anthropic/claude-opus-4-6",
     provider: "anthropic",
@@ -384,6 +393,7 @@ const MODEL_ROWS = defineModelRegistry({
     tier: "premium",
     state: "legacy",
     lineup: false,
+    retireNotBefore: "2027-02-05",
     costs: {
       inputPer1M: 5.0,
       outputPer1M: 25.0,

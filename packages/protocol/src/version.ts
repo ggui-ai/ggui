@@ -6,6 +6,16 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Three legacy rows gain the vendor's retirement floor (2026-10-28,
+ * ggui#2147; data only): `anthropic/claude-sonnet-4-6` 2027-02-17,
+ * `anthropic/claude-opus-4-7` 2027-04-16 and `anthropic/claude-opus-4-6`
+ * 2027-02-05, quoted from the model-deprecations page ("Not sooner
+ * than …", all three listed Active there). The registry's rule is that a
+ * row carries `retireNotBefore` whenever the vendor quotes a floor; these
+ * three were the only Anthropic rows without one. A floor is "still
+ * served at least until", never a deadline. No wire change. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * `MODELS` and `MODEL_REGISTRY` are one list, pinned (2026-10-15,
  * ggui#1291), and the two ids the pin removed stay on the wire through
  * 0.29 (2026-10-25, VERSION-POLICY §3.6). The allowlist (what a route may
