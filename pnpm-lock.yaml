@@ -31,7 +31,7 @@ overrides:
   astro>vite@<8.2.4: ^8.3.5
   uuid@<14.0.0: ^14.0.0
   '@modelcontextprotocol/sdk': 1.32.2
-  '@google/genai@>=2': 2.15.0
+  '@google/genai@>=2': 2.31.0
   react-native-webview: 13.16.1
   sharp: 0.35.5
   puppeteer-core: 25.6.0
@@ -1759,8 +1759,8 @@ importers:
         specifier: workspace:*
         version: link:../wire
       '@google/genai':
-        specifier: 2.15.0
-        version: 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+        specifier: 2.31.0
+        version: 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@testing-library/dom':
         specifier: 10.4.1
         version: 10.4.1
@@ -3340,8 +3340,8 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@google/genai@2.15.0':
-    resolution: {integrity: sha512-Q41TvqwBQ9NcmWdh6qxY5qrpg+0FaVHD7febQoH007pykxzco4ohScBUP4BBBy+Q8j5D8euIBSRIBDfWuNVCKA==}
+  '@google/genai@2.31.0':
+    resolution: {integrity: sha512-u1fw0qEiuWwNcjZixJFRfQF0awQnHb/rBBQUeiYGF+nmTXQCvcgpR2UMhKU9KNdnZdYhahY5jwS6nJ2V2tGtDA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': 1.32.2
@@ -11159,7 +11159,7 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
       '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+      '@google/genai': 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/mariadb': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(pg@8.19.0)
       '@mikro-orm/mssql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
@@ -11202,7 +11202,7 @@ snapshots:
     dependencies:
       '@a2a-js/sdk': 0.3.14(@grpc/grpc-js@1.14.6)(express@5.2.1)
       '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+      '@google/genai': 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/reflection': 6.6.16(@mikro-orm/core@6.6.16)
       '@opentelemetry/api': 1.9.0
@@ -11256,7 +11256,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/genai@2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
+  '@google/genai@2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2

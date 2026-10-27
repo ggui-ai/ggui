@@ -232,7 +232,7 @@
     "@ggui-ai/sandbox": "workspace:*",
     "@ggui-ai/ui-visual-tester": "workspace:*",
     "@ggui-ai/wire": "workspace:*",
-    "@google/genai": "^2.8.0",
+    "@google/genai": "^2.31.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.6.1",

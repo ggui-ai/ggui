@@ -1633,15 +1633,6 @@ export class OpenAIAgent extends LLMAgent {
 }
 
 // =============================================================================
-/**
- * `Interactions.GenerationConfig` as the Interactions API accepts it (ggui#1579). The SDK's type (@google/genai 2.15.0)
- * omits `temperature`, but the API takes `generation_config.temperature` and forwards it to the request's own: it
- * range-checks the value (2.5 is refused with "GenerateContentRequest.generation_config.temperature: temperature must be
- * in the range [0.0, 2.0]", 0 is accepted), while a key the API does not know is refused as "Unknown parameter". The
- * field is declared here so the call is built against a type that carries it, not left to a spread of an undeclared key.
- */
-type InteractionsGenerationConfig = Interactions.GenerationConfig & { readonly temperature?: number };
-
 // GoogleAgent — uses Interactions API (server-side state, automatic caching)
 // =============================================================================
 
@@ -1733,7 +1724,9 @@ export class GoogleAgent extends LLMAgent {
   ): Promise<LLMResponse> {
     const client = await this.getClient<GoogleGenAI>();
 
-    const generationConfig: InteractionsGenerationConfig = {
+    // ggui#1579: the API range-checks `generation_config.temperature` (2.5 is refused, 0 is accepted), and the
+    // SDK's own type declares it.
+    const generationConfig: Interactions.GenerationConfig = {
       ...(maxTokens ? { max_output_tokens: maxTokens } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
     };

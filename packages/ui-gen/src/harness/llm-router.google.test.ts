@@ -92,9 +92,9 @@ describe('GoogleAgent (steps schema)', () => {
     expect(createMock.mock.calls[0][0].input).toBe('USER');
   });
 
-  // ggui#1579 — the SDK's `Interactions.GenerationConfig` type omits `temperature`, yet the API takes it (and range-checks
-  // it), so a requested temperature must reach `generation_config` and be disclosed as applied — the judge panel asks
-  // for 0 and publishes what each judge received.
+  // ggui#1579 — the API takes `generation_config.temperature` (and range-checks it), so a requested temperature must
+  // reach `generation_config` and be disclosed as applied — the judge panel asks for 0 and publishes what each judge
+  // received.
   it('callText sends a requested temperature (0 included) as generation_config.temperature and discloses it', async () => {
     createMock.mockResolvedValueOnce(
       interactionFixture({
