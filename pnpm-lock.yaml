@@ -30,7 +30,7 @@ overrides:
   mariadb@<3.4.6: ^3.4.6
   astro>vite@<8.2.4: ^8.3.5
   uuid@<14.0.0: ^14.0.0
-  '@modelcontextprotocol/sdk': 1.32.1
+  '@modelcontextprotocol/sdk': 1.32.2
   '@google/genai@>=2': 2.15.0
   react-native-webview: 13.16.1
   sharp: 0.35.5
@@ -237,7 +237,7 @@ overrides:
   '@modelcontextprotocol/client': 2.3.1
   '@modelcontextprotocol/core': 2.3.1
   '@modelcontextprotocol/ext-apps': 1.7.5
-  '@modelcontextprotocol/sdk@^1': 1.32.1
+  '@modelcontextprotocol/sdk@^1': 1.32.2
   '@napi-rs/wasm-runtime': 1.2.3
   '@nodable/entities': 3.0.0
   '@npmcli/agent': 4.0.2
@@ -469,13 +469,13 @@ importers:
         version: link:../../packages/protocol
       '@guuey/mcp-apps-host':
         specifier: 0.30.0
-        version: 0.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+        version: 0.30.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@guuey/threads':
         specifier: 0.30.0
-        version: 0.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.27.7)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)))(zod@4.6.7)
+        version: 0.30.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.27.7)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)))(zod@4.6.7)
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@silverprotocol/core':
         specifier: 0.11.0
         version: 0.11.0
@@ -516,8 +516,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui-gen
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
@@ -561,8 +561,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/protocol
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
@@ -1184,7 +1184,7 @@ importers:
         version: link:../wire
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@noble/hashes':
         specifier: ^1.6.0
         version: 1.8.0
@@ -1202,8 +1202,8 @@ importers:
         version: 4.6.7
     devDependencies:
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1267,8 +1267,8 @@ importers:
         specifier: workspace:*
         version: link:../design
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@silverprotocol/core':
         specifier: 0.11.0
         version: 0.11.0
@@ -1313,14 +1313,14 @@ importers:
         version: link:../protocol
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
     devDependencies:
       '@ggui-ai/design':
         specifier: workspace:*
         version: link:../design
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
@@ -1383,10 +1383,10 @@ importers:
         version: link:../ui-registry
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -1567,10 +1567,10 @@ importers:
     devDependencies:
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15
@@ -1760,7 +1760,7 @@ importers:
         version: link:../wire
       '@google/genai':
         specifier: 2.15.0
-        version: 2.15.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+        version: 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@testing-library/dom':
         specifier: 10.4.1
         version: 10.4.1
@@ -1812,7 +1812,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.229
-        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(zod@4.6.7)
+        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(zod@4.6.7)
       '@ggui-ai/mcp-server-core':
         specifier: workspace:*
         version: link:../mcp-server-core
@@ -1824,7 +1824,7 @@ importers:
         version: link:../protocol
       '@google/adk':
         specifier: ^2.0.0
-        version: 2.0.0(a3eecc8e175666629a213ae402b4c53e)
+        version: 2.0.0(f373b274d4e252cf36490780185d257b)
       '@openai/agents':
         specifier: ^0.17.0
         version: 0.17.0(@aws-sdk/credential-provider-node@3.972.79)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.6.7)
@@ -1938,7 +1938,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.229
-        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(zod@4.6.7)
+        version: 0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(zod@4.6.7)
       '@ggui-ai/agent-server':
         specifier: workspace:*
         version: link:../../../packages/agent-server
@@ -1972,7 +1972,7 @@ importers:
         version: 1.5.0(@grpc/grpc-js@1.14.6)(@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(pg@8.19.0))(@mikro-orm/mssql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/mysql@6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4))(@mikro-orm/sqlite@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
         specifier: ^1.37.0
-        version: 1.50.1(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+        version: 1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -2123,8 +2123,8 @@ importers:
   samples/mcp-servers/table-order:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -2148,8 +2148,8 @@ importers:
   samples/mcp-servers/todo:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
+        specifier: 1.32.2
+        version: 1.32.2(zod@4.6.7)
       zod:
         specifier: ^4.6.6
         version: 4.6.7
@@ -2236,7 +2236,7 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
-      '@modelcontextprotocol/sdk': 1.32.1
+      '@modelcontextprotocol/sdk': 1.32.2
       zod: ^4.6.6
 
   '@anthropic-ai/sdk@0.123.0':
@@ -3307,7 +3307,7 @@ packages:
       '@mikro-orm/mysql': 6.6.9
       '@mikro-orm/postgresql': 6.6.9
       '@mikro-orm/sqlite': 6.6.9
-      '@modelcontextprotocol/sdk': 1.32.1
+      '@modelcontextprotocol/sdk': 1.32.2
       express: ^4.22.1 || ^5.1.0
     peerDependenciesMeta:
       '@google-cloud/opentelemetry-cloud-monitoring-exporter':
@@ -3335,7 +3335,7 @@ packages:
     resolution: {integrity: sha512-YbkX7H9+1Pt8wOt7DDREy8XSoiL6fRDzZQRyaVBarFf8MR3zHGqVdvM4cLbDXqPhxqvegZShgfxb8kw9C7YhAQ==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1
+      '@modelcontextprotocol/sdk': 1.32.2
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -3344,7 +3344,7 @@ packages:
     resolution: {integrity: sha512-Q41TvqwBQ9NcmWdh6qxY5qrpg+0FaVHD7febQoH007pykxzco4ohScBUP4BBBy+Q8j5D8euIBSRIBDfWuNVCKA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1
+      '@modelcontextprotocol/sdk': 1.32.2
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -3860,7 +3860,7 @@ packages:
     resolution: {integrity: sha512-TjPH2S2y5UEGKhmI6+XGFuqfqOV4ppe1x6DA3txnUaEWkgtA4G5vo14jGKFZmegdkZ1H4QMLyujLvoU1BEdnAg==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1
+      '@modelcontextprotocol/sdk': 1.32.2
       react: ^19.2.8
       react-dom: ^19.2.8
       zod: ^4.6.6
@@ -3870,8 +3870,8 @@ packages:
       react-dom:
         optional: true
 
-  '@modelcontextprotocol/sdk@1.32.1':
-    resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
+  '@modelcontextprotocol/sdk@1.32.2':
+    resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -6170,10 +6170,6 @@ packages:
   content-type@1.0.5:
     resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
     engines: {node: '>= 0.6'}
-
-  content-type@2.0.0:
-    resolution: {integrity: sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ==}
-    engines: {node: '>=18'}
 
   content-type@2.1.0:
     resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
@@ -9888,10 +9884,10 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.229':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(zod@4.6.7)':
+  '@anthropic-ai/claude-agent-sdk@0.3.229(@anthropic-ai/sdk@0.123.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(zod@4.6.7)':
     dependencies:
       '@anthropic-ai/sdk': 0.123.0(zod@4.6.7)
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
       zod: 4.6.7
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.229
@@ -11037,9 +11033,9 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@ggui-ai/protocol@0.24.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ggui-ai/protocol@0.24.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       canonicalize: 2.1.0
@@ -11118,9 +11114,9 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/vertexai@1.12.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(encoding@0.1.13)':
+  '@google-cloud/vertexai@1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)':
     dependencies:
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       google-auth-library: 9.15.1(encoding@0.1.13)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -11135,8 +11131,8 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
-      '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+      '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
+      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/mariadb': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(pg@8.19.0)
       '@mikro-orm/mssql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
@@ -11144,7 +11140,7 @@ snapshots:
       '@mikro-orm/postgresql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)
       '@mikro-orm/reflection': 6.6.16(@mikro-orm/core@6.6.16)
       '@mikro-orm/sqlite': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/api-logs': 0.205.0
       '@opentelemetry/exporter-logs-otlp-http': 0.205.0(@opentelemetry/api@1.9.0)
@@ -11175,11 +11171,11 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/adk@2.0.0(a3eecc8e175666629a213ae402b4c53e)':
+  '@google/adk@2.0.0(f373b274d4e252cf36490780185d257b)':
     dependencies:
       '@a2a-js/sdk': 0.3.14(@grpc/grpc-js@1.14.6)(express@5.2.1)
-      '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))
+      '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
+      '@google/genai': 2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/reflection': 6.6.16(@mikro-orm/core@6.6.16)
       '@opentelemetry/api': 1.9.0
@@ -11210,7 +11206,7 @@ snapshots:
       '@mikro-orm/mysql': 6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
       '@mikro-orm/postgresql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)
       '@mikro-orm/sqlite': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
       express: 5.2.1
     transitivePeerDependencies:
       - '@bufbuild/protobuf'
@@ -11220,27 +11216,27 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
+  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.6.5
       ws: 8.21.2
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  '@google/genai@2.15.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))':
+  '@google/genai@2.15.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.6.5
       ws: 8.21.2
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -11258,10 +11254,10 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@guuey/mcp-apps-host@0.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)':
+  '@guuey/mcp-apps-host@0.30.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)':
     dependencies:
-      '@ggui-ai/protocol': 0.24.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+      '@ggui-ai/protocol': 0.24.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@silverprotocol/core': 0.11.0
     optionalDependencies:
       react: 19.2.8
@@ -11270,9 +11266,9 @@ snapshots:
       - react-dom
       - zod
 
-  '@guuey/threads@0.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.27.7)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)))(zod@4.6.7)':
+  '@guuey/threads@0.30.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.27.7)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)))(zod@4.6.7)':
     dependencies:
-      '@guuey/mcp-apps-host': 0.30.0(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
+      '@guuey/mcp-apps-host': 0.30.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)
       '@silverprotocol/core': 0.11.0
     optionalDependencies:
       vitest: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.27.7)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))
@@ -11869,16 +11865,16 @@ snapshots:
       zod: 4.6.7
     optional: true
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.1(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.6.7)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       zod: 4.6.7
     optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@modelcontextprotocol/sdk@1.32.1(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.32.2(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.7)
       ajv: 8.20.0
@@ -11901,7 +11897,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@modelcontextprotocol/sdk@1.32.1(zod@4.6.7)':
+  '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.7)
       ajv: 8.20.0
@@ -12003,7 +11999,7 @@ snapshots:
       debug: 4.4.3
       openai: 5.23.2(ws@8.21.2)(zod@3.25.76)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@3.25.76)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -14278,8 +14274,6 @@ snapshots:
   content-disposition@1.1.0: {}
 
   content-type@1.0.5: {}
-
-  content-type@2.0.0: {}
 
   content-type@2.1.0: {}
 
@@ -18324,7 +18318,7 @@ snapshots:
 
   type-is@2.1.0:
     dependencies:
-      content-type: 2.0.0
+      content-type: 2.1.0
       media-typer: 1.1.0
       mime-types: 3.0.2
 
