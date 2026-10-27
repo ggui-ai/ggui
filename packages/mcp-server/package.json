@@ -54,6 +54,7 @@
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",
     "@types/express": "^5.0.0",
+    "@types/express-serve-static-core": "^5.0.0",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.10",
     "typescript": "^5.0.0",
