@@ -25,7 +25,7 @@ export const CLAUDE_AGENT_SDK_SPECIFIER = '@anthropic-ai/claude-agent-sdk';
  * lines in {@link ClaudeAgentSdkMissingError} use it; a test pins it to
  * `package.json`.
  */
-export const CLAUDE_AGENT_SDK_VERSION = '0.3.229';
+export const CLAUDE_AGENT_SDK_VERSION = '0.3.311';
 
 export type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
 
