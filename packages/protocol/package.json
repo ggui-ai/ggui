@@ -121,6 +121,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.2",
+    "@modelcontextprotocol/sdk": "^1.27.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.11"
