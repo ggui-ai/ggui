@@ -88,7 +88,7 @@ interface ParsedArgs {
   readonly transportProjector?: string;
   /** Path to an ES module exporting a `tools/call` driver (SPEC §7.9 Plane 2, ggui#880). */
   readonly toolCallDriver?: string;
-  /** Path to a JSON file holding the deployment's served `tools/list` document (SPEC §7.9 "Advertised output objects", ggui#1333). */
+  /** Path to a JSON file holding the deployment's served `tools/list` document (SPEC §7.1 "Advertised output objects", ggui#1333). */
   readonly toolsList?: string;
   readonly verbose: boolean;
   readonly help: boolean;
@@ -481,7 +481,7 @@ Options:
                            object keyed by code (grades registry-completeness).
   --tools-list <file.json> The deployment's served tools/list document, as a
                            client receives it (grades output-schema: every
-                           advertised output object is open — SPEC §7.9,
+                           advertised output object is open — SPEC §7.1,
                            ggui#1333).
   --projector <module>     ES module whose \`project(refusal)\` — a named or
                            default export — returns the SPEC §7.1 tool result

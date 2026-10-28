@@ -1,6 +1,6 @@
 /**
  * Output-schema catalog — an advertised output object MUST NOT be closed
- * (SPEC §7.9 "Advertised output objects", ggui#1333).
+ * (SPEC §7.1 "Advertised output objects", ggui#1333).
  *
  * ## The obligation
  *
@@ -80,7 +80,7 @@ export interface OutputSchemaConformanceResult {
 }
 
 export const OUTPUT_SCHEMA_OPEN_DESCRIPTION =
-  'Every object under the advertised outputSchema is open — no `additionalProperties: false` at any depth — so a host caching this schema accepts a later release’s added optional member (SPEC §7.9 "Advertised output objects", ggui#1333).';
+  'Every object under the advertised outputSchema is open — no `additionalProperties: false` at any depth — so a host caching this schema accepts a later release’s added optional member (SPEC §7.1 "Advertised output objects", ggui#1333).';
 
 /**
  * Grade a served `tools/list` document: one row per tool that advertises an

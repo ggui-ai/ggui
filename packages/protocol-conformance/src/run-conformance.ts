@@ -164,7 +164,7 @@ export interface RunConformanceConfig {
   readonly refusalRegistry?: RefusalRegistryView;
   /**
    * The deployment's served `tools/list` document, for the `output-schema`
-   * catalog (SPEC §7.9 "Advertised output objects", ggui#1333): every tool
+   * catalog (SPEC §7.1 "Advertised output objects", ggui#1333): every tool
    * that advertises an `outputSchema` is one row, failing with the path of
    * every closed object; a document in which no tool advertises one passes
    * as the single row `output-schema/none-advertised-vacuous` (ggui#1897).
@@ -475,7 +475,7 @@ async function runPureFunctionCatalogs(
   if (toolsList === undefined) {
     skip(
       'output-schema/advertised-output-objects-open',
-      'no `toolsList` supplied — pass the deployment’s served tools/list document to runConformance(), or `--tools-list <file.json>` on the CLI, to grade that every advertised output object is open (SPEC §7.9, ggui#1333)',
+      'no `toolsList` supplied — pass the deployment’s served tools/list document to runConformance(), or `--tools-list <file.json>` on the CLI, to grade that every advertised output object is open (SPEC §7.1, ggui#1333)',
     );
   } else {
     const outputSchemas = runOutputSchemaConformance(toolsList);
@@ -486,7 +486,7 @@ async function runPureFunctionCatalogs(
     for (const violation of outputSchemas.failed) {
       fail({
         name: `output-schema/${violation.name}`,
-        criterion: 'advertised output objects are open (SPEC §7.9 "Advertised output objects", ggui#1333)',
+        criterion: 'advertised output objects are open (SPEC §7.1 "Advertised output objects", ggui#1333)',
         expected: violation.description,
         received: violation.violations,
         message: `${String(violation.violations.length)} closed object(s) under the advertised outputSchema: ${violation.violations.join(', ')}`,

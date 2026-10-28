@@ -1,5 +1,5 @@
 /**
- * The first-party server passes the kit's `output-schema` catalog (SPEC §7.9
+ * The first-party server passes the kit's `output-schema` catalog (SPEC §7.1
  * "Advertised output objects", ggui#1333) — Streamable HTTP end to end: a real
  * SDK client lists tools from the shipping OSS server, and the kit grades the
  * served document exactly as an adopter's CLI run would (`--tools-list`).
