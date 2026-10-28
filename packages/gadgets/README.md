@@ -1,6 +1,6 @@
 # @ggui-ai/gadgets
 
-> Browser-capability gadget hooks for ggui. Declared on a `DataContract` via `clientCapabilities.gadgets[*]`, mounted by the UI generator's component code, surfaced to agents through the protocol's gadget-discovery tool.
+> Browser-capability gadget hooks for GGUI. Declared on a `DataContract` via `clientCapabilities.gadgets[*]`, mounted by the UI generator's component code, surfaced to agents through the protocol's gadget-discovery tool.
 
 ## Why
 
