@@ -65,50 +65,48 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-28',
+    text:
+      'Wording change, no score change: twelve entries are reworded so that they describe each ' +
+      'change by what we measured or expect it to move on this page, not by how the generator works ' +
+      'inside. They are the entries dated 2026-10-26 (#2010), 2026-10-24 (#1981), 2026-10-22 ' +
+      '(#1981), 2026-10-20 (#1765), the 2026-10-18 run note, the 2026-10-16 arm change, 2026-10-14 ' +
+      '(#1846 to #1848) and its correction (#1849), 2026-10-13 (#1849), the 2026-10-12 reading ' +
+      'note, and 2026-10-12 (#1761 and #1791). Every published score, every measured effect on it, ' +
+      'every regression, and every caveat on a measurement still reported here stands. What is ' +
+      'removed is description of how the generator works, and two kinds of count with it: the ' +
+      '2026-10-26 entry\'s replay of a check the benchmark runs never exercise, whose outcome stays ' +
+      'in that entry as a caveat, and the length limit of a text the 2026-10-24 entry names. No ' +
+      'number on this page depends on them. Where a reworded entry called the benchmark runs ' +
+      'nightly, it now says benchmark runs: they are change-triggered (see 2026-08-21 and ' +
+      '2026-09-30). All other entries are unchanged.',
+  },
+  {
     date: '2026-10-26',
     text:
-      'Generator change (internal issue #2010): the generator\'s own visual check gains one rule, ' +
-      'that a control\'s label must show whole and never be clipped or ellipsized, plus a check that ' +
-      'flags a button whose own text is cut. No number on this page changes. The nightly runs ' +
-      'behind the tables do not run the visual round this check lives in, so they never run it. The ' +
-      'same change teaches the generator a new section only when a request offers items to choose ' +
-      'among, and adds a layout option that caps how many rows a wrapping row shows. None of the ' +
-      'ten nightly prompts gets the new section: the prompts they send are byte-identical before ' +
-      'and after the change. The one benchmark prompt whose prompt changes, a to-do list, is not in ' +
-      'the nightly set. We measured the check before it landed, at no model cost, by replaying it ' +
-      'on stored generations: four runs of the ten nightly prompts across three model tiers, made ' +
-      'on 2026-10-26 with the then-current generator, 120 cards, each rendered at five card sizes. ' +
-      '96 could be read. The other 24 are every card for the two prompts that use a gadget (a map ' +
-      'and a chart), which the replay could not render, so the check\'s behaviour on gadget cards is ' +
-      'unmeasured. It flagged 3 of the 96, all periodic tables from one model tier: 1 of the 8 ' +
-      'readable prompts. The blind reading below found a periodic table from another tier cut as ' +
-      'well. A designer reading full-card renders without knowing which were flagged judged all 3 ' +
-      'cut. This is a floor, not a rate. The same blind reading of 10 unflagged cards, drawn one ' +
-      'per prompt, found 2 with a cut control label that the check cannot see: labels that overlap ' +
-      'their neighbours without being clipped, and a step whose label is whole but sits past the ' +
-      'card\'s edge. A third had a clipped input placeholder, which the rule does not cover. The ' +
-      'draw was one card per prompt, not a random sample, so 2 of 10 is not an estimate of the miss ' +
-      'rate. How it was read. The reader saw only shuffled ids. She recognised 3 renders from an ' +
-      'earlier set; those are the 3 flagged cards, so the unflagged result does not depend on them. ' +
-      'Content below the bottom of a tall card was read as undecidable, not cut. Wrapping inside a ' +
-      'control counts as whole. The unit is the card: the check reports at most 8 labels per size, ' +
-      'so its label counts are not a rate. All renders were made on macOS. The generator renders on ' +
-      'Linux, whose fonts differ.',
+      'Generator change (internal issue #2010). No number on this page changes: the benchmark runs ' +
+      'behind the tables never run one part of this change, and for the ten prompts behind the ' +
+      'tables the prompts sent to the model are byte-identical before and after it. The one ' +
+      'benchmark prompt whose prompt changes, a to-do list, is not among those ten. A blind reading ' +
+      'of rendered cards from the ten prompts, made on 2026-10-26 with the generator of that day, ' +
+      'found cut control labels on some of them, periodic tables among them. The scores on this ' +
+      'page read code, not screenshots, so they do not see this. The cards read were chosen, not ' +
+      'drawn at random, so this is not a rate, and they were rendered on macOS, whose fonts differ ' +
+      'from those of the Linux the generator renders on.',
   },
   {
     date: '2026-10-24',
     text:
       'Correction (internal issue #1981): the 2026-10-22 entry below says the change deletes one ' +
-      'sentence from the constrained prompt and one from the component reference both prompts ' +
-      'share. Only the first reaches the model. The prompt sends the component reference in a ' +
-      'condensed form that keeps the first sentence of each property\'s description (up to 80 ' +
-      'characters), and the deleted reference sentence was not a first sentence: the reference ' +
-      'the model reads is byte for byte the same with and without the change, in every run of the ' +
-      'A/B. The whole treatment the model received was one sentence of the constrained prompt, ' +
-      '123 bytes. The A/B ran the constrained prompt, as the nightly does, and measured exactly ' +
-      'that sentence, so its result stands as a result about those 123 bytes. The free prompt ' +
-      'changed only through the reference, so nothing it sends changed and nothing about it was ' +
-      'tested. The runtime change the entry describes is unaffected.',
+      'sentence from the constrained prompt and one from text both prompts share. Only the first ' +
+      'reaches the model: the model receives the shared text in a shortened form, which the deleted ' +
+      'sentence was not part of, so the shared text the model reads is byte for byte the same with ' +
+      'and without the change, in every run of the A/B. The whole treatment the model received was ' +
+      'one sentence of the constrained prompt, 123 bytes. The A/B ran the constrained prompt, as ' +
+      'the benchmark does, and measured exactly that sentence, so its result stands as a result ' +
+      'about those 123 bytes. The free prompt changed only through the shared text, so nothing it ' +
+      'sends changed and nothing about it was tested. The rest of the change the entry describes is ' +
+      'unaffected.',
   },
   {
     date: '2026-10-23',
@@ -158,57 +156,48 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-22',
     text:
-      'Generator change (internal issue #1981): from the first run on a runner image built with ' +
-      'this change, the generation prompt stops describing a hero Card as the band that opens a ' +
-      'card and runs edge to edge. One sentence is deleted from the constrained prompt and one ' +
-      'from the component reference both prompts share; nothing is added. The runtime now bleeds ' +
-      'an opening hero Box, a hero Card that is a card\'s only child, or anything marked `bleed`, ' +
-      'to the card\'s edges; a hero Card among siblings stays inside the inset as a tile. The ' +
-      'deleted sentences taught the one shape the runtime does not bleed. The in-loop checker\'s ' +
-      'warning for a band that loses its edge also changes which shapes it names; in the A/B ' +
-      'below it appeared on none of the 63 feedback rounds (29 of them in the changed arm), so it ' +
-      'displaced no repair and added no turn. Before it landed we ran a same-session A/B against ' +
-      'the same build without the change: the three fast arms, the ten prompts, alternating ' +
-      'order, with bars registered before the first run. An earlier version of the change failed ' +
-      'its registered bar (generations needing six or more turns, 1 vs 3 against a limit of 2) ' +
-      'and did not land. For this version we changed how turns are judged, and we say so here: ' +
-      'instead of counting generations at six or more turns, which a no-change run fails about ' +
-      'one time in five, we compare the average number of turns per generation, paired by arm and ' +
-      'prompt, and keep the count as a guard. A no-change run fails that comparison about one ' +
-      'time in sixteen and needs a second round about one time in seven. The first round could ' +
-      'not resolve; as registered, a second round was run and read together with it. Turns ' +
-      'changed by -0.12 per generation (95% interval -0.85 to +0.57): no detectable rise at the ' +
-      'registered precision of 0.75 turns per generation. Contract failures, probe failures and ' +
-      'median turns passed in both rounds; the panel score moved +0.93 and +0.63, both within ' +
-      'noise (each 95% interval includes zero). One prompt sits at the guard\'s limit: on ' +
-      'google-fast, product-page needed six or more turns in two runs with the change (20 and 8 ' +
-      'turns) and at most four without. This measures cost, not the benefit: whether the band ' +
-      'meets the card\'s edges is checked on rendered cards outside this benchmark. The landed ' +
-      'commits equal the measured ones; only the surrounding context of a changelog line differs.',
+      'Generator change (internal issue #1981), in effect from the first run on a runner image ' +
+      'built with this change. One sentence is deleted from the constrained prompt and one from ' +
+      'text both prompts share; nothing is added. One part of the change came into play in none of ' +
+      'the 63 feedback rounds of the A/B below (29 of them with the change), so it added no turn. ' +
+      'Before it landed we ran a same-session A/B against the same build without the change: the ' +
+      'three fast arms, the ten prompts, alternating order, with bars registered before the first ' +
+      'run. An earlier version of the change failed its registered bar (generations needing six or ' +
+      'more turns, 1 vs 3 against a limit of 2) and did not land. For this version we changed how ' +
+      'turns are judged, and we say so here: instead of counting generations at six or more turns, ' +
+      'which a no-change run fails about one time in five, we compare the average number of turns ' +
+      'per generation, paired by arm and prompt, and keep the count as a guard. A no-change run ' +
+      'fails that comparison about one time in sixteen and needs a second round about one time in ' +
+      'seven. The first round could not resolve; as registered, a second round was run and read ' +
+      'together with it. Turns changed by -0.12 per generation (95% interval -0.85 to +0.57): no ' +
+      'detectable rise at the registered precision of 0.75 turns per generation. Contract failures, ' +
+      'probe failures and median turns passed in both rounds; the panel score moved +0.93 and ' +
+      '+0.63, both within noise (each 95% interval includes zero). One prompt sits at the guard\'s ' +
+      'limit: on google-fast, product-page needed six or more turns in two runs with the change (20 ' +
+      'and 8 turns) and at most four without. This measures cost, not the benefit: the benefit, ' +
+      'which affects how cards are laid out, is checked on rendered cards outside this benchmark. ' +
+      'The landed commits equal the measured ones; only the surrounding context of a changelog line ' +
+      'differs.',
   },
   {
     date: '2026-10-20',
     text:
-      'Generator change (internal issue #1765): from the first run on a runner image built with ' +
-      'this change, the generation prompt teaches one content edge per card (a card owns its ' +
-      'horizontal inset; padding sets vertical rhythm), and the design system\'s Card, Box and ' +
-      'Container primitives apply it. Before it landed we ran a same-session A/B against the ' +
-      'previous build: the three fast arms, the ten prompts, four runs per side in alternating ' +
-      'order, with pass bars registered before the first run. It passed every bar. Contract ' +
-      'failures 0 vs 0, probe failures 6 vs 6, median turns 2 vs 2. Generations needing six or ' +
-      'more turns were 4 vs 6, at the edge of the registered allowance (6 against a limit of 4 ' +
-      'plus 2). The panel score moved -0.40 points (95% interval -1.63 to +0.74) as registered, ' +
-      'on the first two runs per side; read over all eight runs after the fact, -0.65 (-1.63 to ' +
-      '+0.22). One prompt does get worse, and we report it: on google-fast, stock-ticker needed ' +
-      'six or more turns in all 6 runs with the change and in none of the 6 without it, pooled ' +
-      'from this A/B and the round before it. In those runs the model wrote layout and text properties the design ' +
-      'system does not have, and spent turns removing them. This measures no harm on the bars ' +
-      'above. It does not measure the inset itself: the page\'s scores read code, not ' +
-      'screenshots, so that is checked on rendered cards outside this benchmark. The version that ' +
-      'landed differs from the one measured by a three-line wording change in the prompt\'s ' +
-      'component reference: a style variable\'s name is replaced by a description of the same ' +
-      'inset. The measured runs never used that name (0 of 180 generations), so we did not re-run. ' +
-      'It lands together with the judge change below, so the first run after both cannot ' +
+      'Generator change (internal issue #1765), in effect from the first run on a runner image ' +
+      'built with this change. Before it landed we ran a same-session A/B against the previous ' +
+      'build: the three fast arms, the ten prompts, four runs per side in alternating order, with ' +
+      'pass bars registered before the first run. It passed every bar. Contract failures 0 vs 0, ' +
+      'probe failures 6 vs 6, median turns 2 vs 2. Generations needing six or more turns were 4 vs ' +
+      '6, at the edge of the registered allowance (6 against a limit of 4 plus 2). The panel score ' +
+      'moved -0.40 points (95% interval -1.63 to +0.74) as registered, on the first two runs per ' +
+      'side; read over all eight runs after the fact, -0.65 (-1.63 to +0.22). One prompt does get ' +
+      'worse, and we report it: on google-fast, stock-ticker needed six or more turns in all 6 runs ' +
+      'with the change and in none of the 6 without it, pooled from this A/B and the round before ' +
+      'it. This measures no harm on the bars above. It does not measure the change\'s visual result: ' +
+      'the page\'s scores read code, not screenshots, so that is checked on rendered cards outside ' +
+      'this benchmark. The version that landed differs from the one measured by a three-line ' +
+      'wording change in the generation prompt, which replaces a name with a description of the ' +
+      'same thing. The measured runs never used that name (0 of 180 generations), so we did not ' +
+      're-run. It lands together with the judge change below, so the first run after both cannot ' +
       'separate their effects.',
   },
   {
@@ -280,46 +269,43 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
     text:
       'Run note (internal issues #1743 and #1869): the 18 October run is the first on the image ' +
       'described in the first 16 October entry, so the arms named there start their new series ' +
-      'here. It is not a comparison with 16 October. Benchmark runs were paused from 16 October, ' +
-      'so there is no 17 October run, and this one was started by hand. It ran on a rebuild of ' +
-      'that image, not the build we named before the run: the source is the same, and the one ' +
-      'difference is a patch update to the Chromium browser, from 155.0.8059.39 to ' +
-      '155.0.8059.79. In this run Chromium executes the contract-behaviour check and a runtime ' +
-      'check inside the generation loop, so the update is a small term, which we have not ' +
-      'measured, in those results, in turn counts, and in run times and cost. The judges score ' +
-      'the code, not screenshots. Against the seven runs before it, mean turns and the number of ' +
-      'runs needing six or more turns are within their range. Pass rate, score and polish are ' +
-      'above it, and that includes the six arms whose models did not change. On those arms the ' +
-      'step comes from two of the three judges, and this run cannot tell its possible causes ' +
-      'apart: the generator change in the same image, the Chromium update, or a change on the ' +
-      'judges\' side. We do not read it as an improvement. On the six unchanged arms, the ' +
-      'self-check fix described on 16 October fired no more often than on the two runs before it.',
+      'here. It is not a comparison with 16 October. Benchmark runs were paused from 16 October, so ' +
+      'there is no 17 October run, and this one was started by hand. It ran on a rebuild of that ' +
+      'image, not the build we named before the run: the source is the same, and the one difference ' +
+      'is a patch update to the Chromium browser, from 155.0.8059.39 to 155.0.8059.79. In this run ' +
+      'Chromium executes the contract-behaviour check and is also used during generation, so the ' +
+      'update is a small term, which we have not measured, in those results, in turn counts, and in ' +
+      'run times and cost. The judges score the code, not screenshots. Against the seven runs ' +
+      'before it, mean turns and the number of runs needing six or more turns are within their ' +
+      'range. Pass rate, score and polish are above it, and that includes the six arms whose models ' +
+      'did not change. On those arms the step comes from two of the three judges, and this run ' +
+      'cannot tell its possible causes apart: the generator change in the same image, the Chromium ' +
+      'update, or a change on the judges\' side. We do not read it as an improvement. On the six ' +
+      'unchanged arms, the generator fix described on 16 October came into play no more often than ' +
+      'on the two runs before it.',
   },
   {
     date: '2026-10-16',
     text:
       'Arm change (internal issue #1743): from the first run on a runner image built with this ' +
-      'change, four arms move to their provider\'s latest model: claude-balanced from Claude ' +
-      'Sonnet 5 to Sonnet 5.5, claude-premium from Claude Opus 5 to Opus 5.5, openai-fast from ' +
-      'GPT-5.6 Luna to GPT-6 Luna, and openai-premium from GPT-5.6 Sol to GPT-6.1 Sol. Each ' +
-      'move crossed a same-session comparison first: 10 prompts, run twice, with the judge ' +
-      'panel unchanged. Three bars were set before the run, each a set margin: on score, on ' +
-      'the share of runs needing six or more turns, and on contract failures. Each new ' +
-      'model met all three, and none needed six or more turns, or failed its contract, more ' +
-      'often than the model it replaces. The new models scored between 0.6 points lower ' +
-      'and 1.6 points higher. A control pair of one model against itself spread about as ' +
-      'wide as the score margin, so meeting the bar at this size means "not shown worse", ' +
-      'not "shown equal". On generation cost per run, Sonnet 5.5 cost about the same, Opus 5.5 0.73 ' +
-      'times as much, GPT-6 Luna 0.61 times and GPT-6.1 Sol 0.33 times. google-balanced is ' +
-      'relabelled from Gemini 3.7 Flash to Gemini 3.8 Flash, which is the model that has ' +
-      'actually answered it since about 10 October (see the next entry); its results do not ' +
-      'change. Each of these arms starts a new series here. The six other arms keep their ' +
-      'models. The same image also carries a fix to the generator\'s self-check: a form that ' +
-      'pre-fills its fields from the data it is given now counts as pre-filled in the ways ' +
-      'it is written in practice, where it was refused in several. That can lower turns on ' +
-      'every arm, on prompts that pre-fill a form or seed a list from data. Several other ' +
-      'changes in this image only change its source hash, and nothing the benchmark runs. No ' +
-      'prompt, judge instruction or scoring rule changes, and history is not rewritten.',
+      'change, four arms move to their provider\'s latest model: claude-balanced from Claude Sonnet ' +
+      '5 to Sonnet 5.5, claude-premium from Claude Opus 5 to Opus 5.5, openai-fast from GPT-5.6 ' +
+      'Luna to GPT-6 Luna, and openai-premium from GPT-5.6 Sol to GPT-6.1 Sol. Each move crossed a ' +
+      'same-session comparison first: 10 prompts, run twice, with the judge panel unchanged. Three ' +
+      'bars were set before the run, each a set margin: on score, on the share of runs needing six ' +
+      'or more turns, and on contract failures. Each new model met all three, and none needed six ' +
+      'or more turns, or failed its contract, more often than the model it replaces. The new models ' +
+      'scored between 0.6 points lower and 1.6 points higher. A control pair of one model against ' +
+      'itself spread about as wide as the score margin, so meeting the bar at this size means "not ' +
+      'shown worse", not "shown equal". On generation cost per run, Sonnet 5.5 cost about the same, ' +
+      'Opus 5.5 0.73 times as much, GPT-6 Luna 0.61 times and GPT-6.1 Sol 0.33 times. ' +
+      'google-balanced is relabelled from Gemini 3.7 Flash to Gemini 3.8 Flash, which is the model ' +
+      'that has actually answered it since about 10 October (see the next entry); its results do ' +
+      'not change. Each of these arms starts a new series here. The six other arms keep their ' +
+      'models. The same image also carries a fix to the generator. That can lower turns on every ' +
+      'arm, on prompts that pre-fill a form or seed a list from data. Several other changes in this ' +
+      'image only change its source hash, and nothing the benchmark runs. No prompt, judge ' +
+      'instruction or scoring rule changes, and history is not rewritten.',
   },
   {
     date: '2026-10-16',
@@ -367,102 +353,73 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-10-14',
     text:
-      'Design and generator change (internal issues #1846, #1847, #1848): from the first run on ' +
-      'a runner image built with this change, three things change together. First, the design ' +
-      'system\'s box and card components gain a categorical fill: eight colours derived from ' +
-      'each theme for telling categories of data apart, such as the element groups of a ' +
-      'periodic table, and the generator is taught to use them for data categories only, with ' +
-      'every category also named in words. Second, the generator\'s self-check gains rules for ' +
-      'it: a theme colour forced through the exact-brand-colour escape now fails, a fill outside ' +
-      'the eight fails, and three softer warnings flag a fill used for state, a filled cell with ' +
-      'no label or legend, and faint text on a fill. Third, in the colour schemes where the ' +
-      'success, warning and information chips had been derived on the wrong side of the page, ' +
-      'for example light chips on a dark page, they now sit on the theme\'s own side. This can ' +
-      'move scores, turns and cost on prompts that tell categories apart, the periodic table ' +
-      'above all, and what the judges see in the affected colour schemes; the judges\' own ' +
-      'instructions are unchanged. The benchmark\'s prompts, arms, judges and scoring rules do ' +
-      'not change, and history is not rewritten.',
+      'Design and generator change (internal issues #1846, #1847, #1848), in effect from the first ' +
+      'run on a runner image built with this change. This can move scores, turns and cost on ' +
+      'prompts that tell categories apart, the periodic table above all, and what the judges see in ' +
+      'some colour schemes, where a colour defect in earlier runs is fixed; the judges\' own ' +
+      'instructions are unchanged. The benchmark\'s prompts, arms, judges and scoring rules do not ' +
+      'change, and history is not rewritten.',
   },
   {
     date: '2026-10-14',
     text:
-      'Correction to the 2026-10-13 entry on the generator\'s type check (internal issue #1849): ' +
-      'it said the check had silently stopped seeing the types of all the props passed to the ' +
-      'design system\'s components. That was too broad. Before that change the check still saw ' +
-      'the props of the simpler components, such as text, headings and badges, so a wrong value ' +
-      'there already failed. What it could not see were the props of the five layout components ' +
-      '(box, card, grid, row and stack), whose prop types are built partly from React\'s, and ' +
-      'any prop typed through React itself: inline styles, children, event handlers, element ' +
-      'references, and the attributes of raw HTML elements. Logs from a second runner on the ' +
-      'same images show it: failures on a layout component\'s props read none on each of the ' +
-      'four nights before the change and 22 on the first night after it, while failures on the ' +
-      'simpler components\' props stayed between 35 and 65 a night throughout. The earlier ' +
-      'entry\'s other statements stand: the change can raise turn counts and cost, and its ' +
+      'Correction to the 2026-10-13 entry on a generator change (internal issue #1849): that entry, ' +
+      'as first published, overstated how much the generator\'s checking had missed before the ' +
+      'change; part of what the change covers was already checked before it. Logs from a second ' +
+      'runner on the same images show it: failures in one part of the newly covered scope read none ' +
+      'on each of the four nights before the change and 22 on the first night after it, while ' +
+      'failures in the part already covered stayed between 35 and 65 a night throughout. The ' +
+      'earlier entry\'s other statements stand: the change can raise turn counts and cost, and its ' +
       'effect is read from the published runs.',
   },
   {
     date: '2026-10-13',
     text:
-      'Generator change (internal issue #1849): from the first run on a runner image built ' +
-      'with this change, the generator\'s own type check again sees the types of the props it ' +
-      'passes to the design system\'s components. It had silently stopped seeing them, so a ' +
-      'wrong prop on a component passed the check; now it fails the check and the generator ' +
-      'is asked to fix it. That can raise turn counts and cost, and lower how often a ' +
-      'generation passes its own check, on any prompt. Re-checking 173 previously generated ' +
-      'components that we kept, 9 gain such an error, and each is a real defect the old check ' +
-      'let through (a ref the component drops, a prop value it does not have, an unchecked ' +
-      'case of a union). So the move should be small, but it is read from the published runs, ' +
-      'not assumed. One night can rule out a large move, not a ' +
-      'small one: the count of generations at six or more turns already varies from 3 to 11 ' +
-      'between nights, so a shift of one or two would not show. No arm, prompt, judge or scoring rule ' +
-      'changes, and history is not rewritten.',
+      'Generator change (internal issue #1849): from the first run on a runner image built with ' +
+      'this change, the generator\'s own check again catches a class of errors it had silently ' +
+      'stopped catching. That can raise turn counts and cost, and lower how often a generation ' +
+      'passes its own check, on any prompt. Re-checking 173 previously generated components that we ' +
+      'kept, 9 gain such an error, and each is a real defect the old check let through. So the move ' +
+      'should be small, but it is read from the published runs, not assumed. One night can rule out ' +
+      'a large move, not a small one: the count of generations at six or more turns already varies ' +
+      'from 3 to 11 between nights, so a shift of one or two would not show. No arm, prompt, judge ' +
+      'or scoring rule changes, and history is not rewritten.',
   },
   {
     date: '2026-10-12',
     text:
-      'Reading note, not a method change: the first run after the early-ending change (internal ' +
-      'issue #1791, 2026-10-12) had fewer generations at six or more turns than the run before ' +
-      'it (4 against 7) and no generation marked as ended early. Those two facts are ' +
-      'consistent: the early-ending rule ended no generation that night, so the drop is not its ' +
-      'work. The cells that left the six-or-more group finished in one to three turns, too few ' +
-      'for the rule to have ended them, and over the eleven published runs before it the count of such ' +
-      'generations ranged from 3 to 11 a night, so 4 is within the usual night-to-night spread. ' +
-      'One night is not a trend; read the rule\'s effect from the runs it marks.',
+      'Reading note, not a method change: the first run after the generator change that can end a ' +
+      'generation early (internal issue #1791, 2026-10-12) had fewer generations at six or more ' +
+      'turns than the run before it (4 against 7) and no generation marked as ended early. Those ' +
+      'two facts are consistent: the change ended no generation that night, so the drop is not its ' +
+      'work. The cells that left the six-or-more group finished in one to three turns, too few for ' +
+      'the change to have ended them, and over the eleven published runs before it the count of ' +
+      'such generations ranged from 3 to 11 a night, so 4 is within the usual night-to-night ' +
+      'spread. One night is not a trend; read the change\'s effect from the runs it marks.',
   },
   {
     date: '2026-10-12',
     text:
-      'Generator change (internal issue #1761), separate from the change announced below it: ' +
-      'from the first run on a runner image built with this change, the repair advice the ' +
-      'generator reads when its self-check finds a hard-coded list of records now names the ' +
-      'contract fields that data should come from (for the kanban board, its tasks and ' +
-      'columns) and says to read an absent value as an empty list. Before, the advice pointed ' +
-      'at a field it never named. When the check fires is unchanged; only what the generator is ' +
-      'told to do about it changes. That can move turn counts, cost and scores on prompts whose ' +
-      'generations trip this check, and leaves the others as they were. It ships one nightly ' +
-      'run after the previous change, so the two can be read apart. No arm, prompt, judge or ' +
-      'scoring rule changes, and history is not rewritten.',
+      'Generator change (internal issue #1761), separate from the change announced below it, in ' +
+      'effect from the first run on a runner image built with this change. That can move turn ' +
+      'counts, cost and scores on prompts whose generations it applies to (for example, the kanban ' +
+      'board), and leaves the others as they were. It ships one benchmark run after the previous ' +
+      'change, so the two can be read apart. No arm, prompt, judge or scoring rule changes, and ' +
+      'history is not rewritten.',
   },
   {
     date: '2026-10-12',
     text:
-      'Generator change (internal issue #1791): from the first run on a runner image built ' +
-      'with this change, two things change in the generator\'s own self-check loop, and both ' +
-      'can move turn counts, cost and scores. First, the check that a form\'s state covers ' +
-      'every field its submit action sends now counts fields the contract declares as shared ' +
-      'context slots. The generator is told not to copy those slots into local state, so before ' +
-      'this change a model that followed that instruction failed the check on every turn until ' +
-      'the turn cap, while one that ignored it passed. Second, a generation now ends early ' +
-      'when the same self-check has failed five times since the last write that passed, ' +
-      'instead of running on to the turn cap. It ships what the cap would have shipped: the ' +
-      'last version that passed self-check, or failing that, the last that built. None of this ' +
-      'page\'s prompts declares context slots, so the first change should not move them; the ' +
-      'second can end any looping run sooner, so expect fewer runs at six or more turns and ' +
-      'lower cost and latency on the runs that looped. That is a cost and latency change, not ' +
-      'a quality one: a run the guard ends is still a run whose last write failed, shipping its ' +
-      'fallback, and each such run is marked in its result. Runs before this entry were measured ' +
-      'without either change. No arm, prompt, judge or scoring rule changes, and history is ' +
-      'not rewritten.',
+      'Generator change (internal issue #1791): from the first run on a runner image built with ' +
+      'this change, two generator changes apply, and both can move turn counts, cost and scores. ' +
+      'The first applies only to prompts whose contract declares context slots. None of this ' +
+      'page\'s prompts declares context slots, so the first change should not move them. The second ' +
+      'can end any looping run sooner, so expect fewer runs at six or more turns and lower cost and ' +
+      'latency on the runs that looped. That is a cost and latency change, not a quality one: a run ' +
+      'this change ends sooner is still a run whose last attempt failed; it ships an earlier ' +
+      'version of its own, the same fallback a run that reaches the turn cap ships, and each such ' +
+      'run is marked in its result. Runs before this entry were measured without either change. No ' +
+      'arm, prompt, judge or scoring rule changes, and history is not rewritten.',
   },
   {
     date: '2026-10-11',
