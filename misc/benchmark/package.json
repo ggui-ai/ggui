@@ -2,7 +2,7 @@
   "name": "@ggui-ai/benchmark",
   "version": "0.0.1",
   "private": true,
-  "description": "Benchmark suite for the ggui generation protocol \u2014 triad-iteration tooling. Monorepo-only.",
+  "description": "Benchmark suite for the GGUI generation protocol \u2014 triad-iteration tooling. Monorepo-only.",
   "license": "Apache-2.0",
   "type": "module",
   "files": [
