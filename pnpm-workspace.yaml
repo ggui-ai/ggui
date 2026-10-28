@@ -409,7 +409,7 @@ overrides:
   "@opentelemetry/context-async-hooks": 2.10.0
   "@opentelemetry/sdk-trace-node": 2.10.0
   "@opentelemetry/semantic-conventions": 1.43.0
-  "@playwright/test": 1.62.1
+  "@playwright/test": 1.64.1
   "@protobufjs/utf8": 1.1.2
   "@puppeteer/browsers": 3.2.0
   "@rolldown/binding-android-arm-eabi": 1.2.15
@@ -564,8 +564,8 @@ overrides:
   package-manager-detector: 1.8.0
   path-expression-matcher: 1.6.2
   pg: 8.19.0
-  playwright: 1.62.1
-  playwright-core: 1.62.1
+  playwright: 1.64.1
+  playwright-core: 1.64.1
   postal-mime: 2.7.5
   "prettier@^1": 1.19.1
   "prettier@^2": 2.3.2
