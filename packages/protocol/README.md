@@ -1,6 +1,6 @@
 # @ggui-ai/protocol
 
-TypeScript source of truth for the GGUI protocol — the open wire format between agents and generated user interfaces. Ships the envelope types (`ActionEnvelope`, `StreamEnvelope`), the canonical error-frame codes, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
+TypeScript source of truth for the GGUI protocol. GGUI is an open protocol for generative UI: the wire format between agents and generated user interfaces. This package ships the envelope types (`ActionEnvelope`, `StreamEnvelope`), the canonical error-frame codes, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
 
 The full normative spec lives at [docs.ggui.ai](https://docs.ggui.ai). This package is what an implementer actually imports.
 
