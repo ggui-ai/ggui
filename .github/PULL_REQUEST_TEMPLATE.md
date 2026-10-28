@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to ggui! Please fill out the sections below.
+Thanks for contributing to GGUI! Please fill out the sections below.
 For trivial changes (docs typo, formatting), a one-line summary is fine.
 -->
 

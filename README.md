@@ -12,7 +12,7 @@
   <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
-> 🚧 **Active development — pre-1.0.** All 32 `@ggui-ai/*` packages ship in lockstep minor waves — the badges below show the current one; the protocol is a draft and may still change between waves. Pin exact versions (see badges below) and watch [Releases](https://github.com/ggui-ai/ggui/releases) for each wave's notes; `v1.0` marks the protocol freeze.
+> 🚧 **Public preview — pre-1.0.** All 32 `@ggui-ai/*` packages ship in lockstep minor waves — the badges below show the current one; the protocol is a draft and may still change between waves. Pin exact versions (see badges below) and watch [Releases](https://github.com/ggui-ai/ggui/releases) for each wave's notes; `v1.0` marks the protocol freeze.
 
 ---
 
@@ -36,8 +36,10 @@ pnpm install                        # workspace deps — `guuey dev` spawns the 
                                     # todo MCP from samples/mcp-servers/todo
 export ANTHROPIC_API_KEY=sk-ant-…   # in every terminal below
 
-# terminal 1 — the ggui runtime MCP (guuey's dev router injects ggui → this port)
-npx -y @ggui-ai/cli serve --mcp-only     # http://127.0.0.1:6781/mcp
+# terminal 1 — the ggui runtime MCP (guuey's dev router injects ggui → this port).
+# --dev-allow-all admits the bearer-less local callers (the router's ggui
+# connection and the web page's relay). Local dev only.
+npx -y @ggui-ai/cli serve --mcp-only --dev-allow-all   # http://127.0.0.1:6781/mcp
 
 # terminal 2 — the agent half: guuey.json + a Claude agent worker
 cd samples/agents/with-guuey
@@ -60,7 +62,7 @@ ggui serve --browser-origin https://app.example.com
 
 (repeatable; or `GGUI_BROWSER_ORIGINS=a,b`). The allowlist drives both
 MCP-wire Origin validation and the CORS response headers, so one flag
-covers both. It is not authentication — `/mcp` still requires a bearer.
+covers both. It is not authentication: it does not change the bearer check on `/mcp`.
 Non-browser clients (Claude Desktop, agents, curl) are unaffected: they
 connect server-to-server and ignore CORS entirely.
 
@@ -97,12 +99,13 @@ Building a hosted agent instead? See [guuey.com](https://guuey.com) — the mana
 For **testing the GGUI protocol against a real chat host**. Localhost won't work from claude.ai — you need a public HTTPS URL, which [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides for free.
 
 ```bash
-# terminal 1 — boot the OSS MCP server
-npm install -g @ggui-ai/cli
-ANTHROPIC_API_KEY=sk-… ggui serve --mcp-only       # http://127.0.0.1:6781/mcp
-
-# terminal 2 — expose it to the public internet (no Cloudflare account needed)
+# terminal 1 — a public HTTPS URL for port 6781 (no Cloudflare account needed)
 cloudflared tunnel --url http://127.0.0.1:6781     # prints https://<random>.trycloudflare.com
+
+# terminal 2 — boot the OSS MCP server behind that URL
+npm install -g @ggui-ai/cli
+ANTHROPIC_API_KEY=sk-… ggui serve --mcp-only --oauth \
+  --public-base-url https://<random>.trycloudflare.com   # banner prints the pair code
 ```
 
 **Browser-based clients.** Pages served from `localhost` reach the MCP
@@ -115,23 +118,23 @@ ggui serve --browser-origin https://app.example.com
 
 (repeatable; or `GGUI_BROWSER_ORIGINS=a,b`). The allowlist drives both
 MCP-wire Origin validation and the CORS response headers, so one flag
-covers both. It is not authentication — `/mcp` still requires a bearer.
+covers both. It is not authentication: it does not change the bearer check on `/mcp`.
 Non-browser clients (Claude Desktop, agents, curl) are unaffected: they
 connect server-to-server and ignore CORS entirely.
 
-Then in **claude.ai → Settings → Connectors → Add custom connector**, paste `https://<random>.trycloudflare.com/mcp`. Ask Claude to render any UI; the server generates the component and serves it back as a rich rendered card inside the chat.
+`--oauth` lets claude.ai connect without a pre-shared bearer, and `--public-base-url` makes the server answer on the tunnel host and hand claude.ai URLs it can reach. Then in **claude.ai → Settings → Connectors → Add custom connector**, paste `https://<random>.trycloudflare.com/mcp` and leave the OAuth Client ID and Secret empty (the server uses Dynamic Client Registration). Click **Connect**: your server's consent page asks for the pair code from the `ggui serve` banner. The code works once and expires after about 10 minutes; restart `ggui serve` for a fresh one. Ask Claude to render any UI; the server generates the component and serves it back as a rich rendered card inside the chat.
 
 Install cloudflared via your package manager: `brew install cloudflared` (macOS), `apt install cloudflared` (Debian), or grab a binary from [cloudflare.com/products/tunnel](https://www.cloudflare.com/products/tunnel/).
 
 ### 4. Use the hosted GGUI cloud — `mcp.ggui.ai`
 
-For **production**, sign in at [the GGUI console](https://console.ggui.ai) → create an app → mint a connector key. Paste the bare `https://mcp.ggui.ai` endpoint into your chat host's connector settings — no self-hosting, no tunnel, no key management.
+To skip self-hosting, use the hosted service (Public preview): sign in at [the GGUI console](https://console.ggui.ai) → create an app → mint a connector key. Paste the bare `https://mcp.ggui.ai` endpoint into your chat host's connector settings — no tunnel, no server to run.
 
 ---
 
 ## The `ggui` CLI
 
-`@ggui-ai/cli` ships the `ggui` binary — the single entrypoint for every OSS workflow. Five verbs cover the full lifecycle:
+`@ggui-ai/cli` ships the `ggui` binary — the single entrypoint for every OSS workflow. Five verbs cover the core workflow:
 
 | Verb             | What it does                                                                                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -162,7 +165,7 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 - ✅ Local server, viewer, cookie-authenticated WebSocket subscribe → ack all work end-to-end.
 - ✅ `ggui_render` mints shortCodes and lands on the same-origin viewer.
 - ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` (the same harness the hosted runtime uses). When no BYOK credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.), `ggui_render` returns an `isError: true` tool result whose `structuredContent.error.code` is `NO_CREDENTIALS`; supply a key to get full generation locally.
-- 🔒 Default auth is dev-mode (any non-empty bearer → `builder`). Swap in a real `AuthAdapter` via `createGguiServer({ auth })` before exposing beyond `127.0.0.1`.
+- 🔒 `ggui serve` defaults to strict pairing: only pair-minted bearers reach `/mcp` (`--dev-allow-all` admits any bearer, or none, for local dev only). Embedding `createGguiServer()` without an `auth` option admits any bearer, or none, as `builder`; pass a real `AuthAdapter` via `createGguiServer({ auth })` before exposing it beyond `127.0.0.1`.
 
 ## How it works
 
@@ -191,7 +194,7 @@ Plus a blueprint family (`ggui_search_blueprints`, `ggui_render_blueprint`, `ggu
 
 ### Zero agent code (MCP config only)
 
-If your agent runtime supports MCP natively, skip the SDK entirely. Add `ggui serve` as an MCP server:
+If your agent runtime supports MCP natively, skip the SDK entirely. Run `ggui serve --dev-allow-all` for local development and add it as an MCP server:
 
 ```json
 {
@@ -203,6 +206,8 @@ If your agent runtime supports MCP natively, skip the SDK entirely. Add `ggui se
   }
 }
 ```
+
+`--dev-allow-all` accepts any bearer, so `dev` is a placeholder. Without the flag, `ggui serve` admits only pair-minted bearers: pair with the code on its boot banner (landing page or `POST /pair`) and put the token you receive in place of `dev`.
 
 The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `ggui_consume`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
 
@@ -264,7 +269,7 @@ Consumer-facing surface — what you `npm install`:
 | [`@ggui-ai/protocol`](./packages/protocol)                           | Wire types (events, sessions, WebSocket, MCP envelopes)             | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)                           |
 | [`@ggui-ai/gadgets`](./packages/gadgets)                             | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)             | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)                             |
 
-Plus 27 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
+Plus 26 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
 
 ## Hosted providers
 

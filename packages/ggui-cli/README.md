@@ -1,13 +1,13 @@
 # @ggui-ai/cli
 
-> Open `ggui` CLI — the local dev + serve + authoring binary for the `ggui` protocol. OSS and self-hosted workflows end-to-end. **No account required.**
+> Open `ggui` CLI — the local dev + serve + authoring binary for the GGUI protocol. OSS and self-hosted workflows end-to-end. **No account required.**
 
 [![npm version](https://img.shields.io/npm/v/@ggui-ai/cli.svg)](https://www.npmjs.com/package/@ggui-ai/cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 This package ships the `ggui` binary. It's a thin shell over `@ggui-ai/dev-stack` (shared dev engine), `@ggui-ai/mcp-server` (OSS MCP runtime), and `@ggui-ai/agent-runtime` (agent-framework adapter seam).
 
-`ggui` is the **protocol**. `Guuey` is the **hosted platform** built on top of it. The closed `guuey` binary (shipped as `@guuey/cli`) handles hosted-control-plane commands like `guuey login` / `guuey deploy`. This binary handles everything you need to run the protocol on your own machine.
+GGUI is the **protocol**; guuey is the **hosted platform** built on top of it. The closed `guuey` binary (shipped as `@guuey/cli`) handles hosted-control-plane commands like `guuey login` / `guuey deploy`. This binary handles everything you need to run the protocol on your own machine.
 
 ## Install
 

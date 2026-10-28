@@ -1,11 +1,11 @@
-# Sample ggui — `default`
+# Sample GGUI server — `default`
 
-Baseline ggui-serving operator configuration. **Zero customization.** Pure `ggui serve` defaults — every optional field on `ggui.json` left absent so the bundled defaults apply.
+Baseline operator configuration for a GGUI server. **Zero customization.** Pure `ggui serve` defaults — every optional field on `ggui.json` left absent so the bundled defaults apply.
 
 Use as:
 
 - The control variant in the end-to-end suite (every other `gguis/*` sample adds one operator-config dimension on top of this baseline).
-- The smallest possible reference for "how do I run my own ggui MCP server."
+- The smallest possible reference for "how do I run my own GGUI MCP server."
 
 ## What's in here
 

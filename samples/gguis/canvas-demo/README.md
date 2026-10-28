@@ -1,4 +1,4 @@
-# Sample ggui — `canvas-demo`
+# Sample GGUI server — `canvas-demo`
 
 `ggui serve` configured with `defaultDisplayMode: 'fullscreen'`.
 

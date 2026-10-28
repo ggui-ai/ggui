@@ -1,6 +1,6 @@
-# Sample ggui — `leaflet-demo`
+# Sample GGUI server — `leaflet-demo`
 
-A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-leaflet`) registered on `app.gadgets`. Demonstrates the end-to-end gadget path:
+A GGUI server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-leaflet`) registered on `app.gadgets`. Demonstrates the end-to-end gadget path:
 
 - `ggui.json#app.gadgets` declares the Leaflet gadget package.
 - The CLI seeds the app-metadata store with that catalog.

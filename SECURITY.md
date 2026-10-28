@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-ggui is pre-1.0. Every `@ggui-ai/*` package is published together as one wave with one version, and security fixes ship in the **next wave of the current line** — there are no back-ported patch releases for earlier waves during 0.x.
+GGUI is pre-1.0. Every `@ggui-ai/*` package is published together as one wave with one version, and security fixes ship in the **next wave of the current line** — there are no back-ported patch releases for earlier waves during 0.x.
 
 | Line                   | Security fixes        | Notes                                                                                                                |
 | ---------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |

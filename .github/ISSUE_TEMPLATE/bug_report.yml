@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in a ggui package
+description: Report a bug in a GGUI package
 labels: ["bug"]
 body:
   - type: dropdown

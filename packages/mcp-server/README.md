@@ -20,8 +20,11 @@ npx @ggui-ai/cli serve
 ```
 
 `ggui serve` boots this package with the OSS defaults — in-memory render store
-(or SQLite when `better-sqlite3` is installed), no-auth dev posture, and every UI
-declared in `ggui.json` surfaced through the blueprint tools.
+(or SQLite when `better-sqlite3` is installed), strict pairing auth, and every UI
+declared in `ggui.json` surfaced through the blueprint tools. Under strict pairing
+only pair-minted bearers reach `/mcp`: pair with the code on the boot banner
+(landing page or `POST /pair`), or pass `--dev-allow-all` to admit any bearer, or
+none, during local development.
 
 ## Embed it directly
 
@@ -37,11 +40,20 @@ auth adapter, storage backends, blueprint provider, rate limiter, and more. Ever
 seam is an interface from `@ggui-ai/mcp-server-core`, so production deployments bind
 their own implementations without forking this package.
 
+Without an `auth` option, `createGguiServer()` admits any bearer, or a request with
+no `Authorization` header, as the single `builder` identity. That is a
+local-development default: pass your own `AuthAdapter` before you expose the server
+beyond `127.0.0.1`. (`ggui serve` passes a strict `InMemoryAuthAdapter` with pairing
+on.)
+
 ## Scope
 
 This package deliberately does **not** embed cloud-specific wiring (AWS, DynamoDB,
-Redis), and it does not implement authoring, pairing, or UI generation — those are
-separate packages and protocol flows.
+Redis). Tool logic, the session reference stores and the pairing service, and UI
+generation live in separate packages. This package binds them to HTTP, and itself
+implements the opt-in OAuth 2.1 authorization server (Dynamic Client Registration,
+PKCE, consent), OAuth and email login, the pairing routes, and a few HTTP-side
+stores (a filesystem code store, in-memory OAuth storage).
 
 ## TypeScript build
 

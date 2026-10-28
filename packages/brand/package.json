@@ -2,7 +2,7 @@
   "name": "@ggui-ai/brand",
   "version": "0.0.0",
   "private": true,
-  "description": "The ggui brand kit: the wordmark geometry, the brand tokens, the vendored faces, and one renderer for the estate's social cards.",
+  "description": "The GGUI brand kit: the wordmark geometry, the brand tokens, the vendored faces, and one renderer for the estate's social cards.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",

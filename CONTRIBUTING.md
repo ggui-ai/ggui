@@ -1,4 +1,4 @@
-# Contributing to ggui
+# Contributing to GGUI
 
 Thanks for your interest in contributing!
 

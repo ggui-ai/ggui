@@ -39,7 +39,7 @@ export function AgentCard({ toolResult }) {
 ```
 
 The component works for any MCP Apps-conformant UI, not only GGUI
-renders — it has zero ggui-specific coupling.
+renders — it has zero GGUI-specific coupling.
 
 To build a chat experience around those cards, drive the Streamable
 Invoke Protocol with `useInvoke` and group the resulting turns with the

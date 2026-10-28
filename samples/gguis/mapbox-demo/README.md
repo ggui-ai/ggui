@@ -1,6 +1,6 @@
-# Sample ggui — `mapbox-demo`
+# Sample GGUI server — `mapbox-demo`
 
-A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-mapbox`) AND an operator-stamped public env value. End-to-end demonstration of the public env channel:
+A GGUI server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-mapbox`) AND an operator-stamped public env value. End-to-end demonstration of the public env channel:
 
 - `ggui.json#app.gadgets` declares the Mapbox wrapper, including `requires: ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]`.
 - `ggui.json#app.publicEnv` carries the operator's value for that key.
