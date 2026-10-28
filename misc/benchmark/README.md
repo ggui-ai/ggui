@@ -1,6 +1,6 @@
 # @ggui-ai/benchmark
 
-Open-source benchmark suite for the [ggui generation protocol](https://github.com/ggui-ai/ggui).
+Open-source benchmark suite for the [GGUI generation protocol](https://github.com/ggui-ai/ggui).
 
 Multi-provider × multi-model quality, cost, and latency evals against the
 `@ggui-ai/ui-gen` surface — plus A2UI frame timings, SLO floors,
