@@ -1,7 +1,7 @@
 # @ggui-ai/mcp-apps-react
 
-MCP Apps host helper for React, from [GGUI](https://ggui.ai) — the interface layer between AI
-agents and humans. Agents describe UIs in natural language over MCP;
+MCP Apps host helper for React, from [GGUI](https://ggui.ai). GGUI is an open protocol for
+generative UI: agents describe UIs in natural language over MCP, and
 GGUI generates ephemeral interfaces. This package lets you embed those
 interfaces in a React web app.
 

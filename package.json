@@ -2,7 +2,7 @@
   "name": "@ggui-ai/ggui",
   "version": "0.0.1",
   "private": true,
-  "description": "ggui — The universal interface layer between AI agents and humans",
+  "description": "GGUI is an open protocol for generative UI.",
   "license": "Apache-2.0",
   "scripts": {
     "build": "pnpm -r build",

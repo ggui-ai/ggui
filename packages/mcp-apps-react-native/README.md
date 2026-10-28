@@ -1,8 +1,8 @@
 # @ggui-ai/mcp-apps-react-native
 
-MCP Apps host helper for React Native, from [GGUI](https://ggui.ai) — the interface layer
-between AI agents and humans. Agents describe UIs in natural language
-over MCP; GGUI generates ephemeral interfaces. This package lets you
+MCP Apps host helper for React Native, from [GGUI](https://ggui.ai). GGUI is an open
+protocol for generative UI: agents describe UIs in natural language
+over MCP, and GGUI generates ephemeral interfaces. This package lets you
 embed those interfaces in a React Native or Expo app.
 
 ## Install

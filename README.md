@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>GGUI</strong> is the universal MCP-UI protocol — a runtime-negotiated data contract between AI agents and human users.</p>
+<p align="center"><strong>GGUI</strong> is an open protocol for generative UI — a runtime-negotiated data contract between AI agents and human users.</p>
 
 <p align="center">
   <a href="https://docs.ggui.ai">Docs</a> ·
