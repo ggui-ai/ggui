@@ -75,11 +75,11 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'note, and 2026-10-12 (#1761 and #1791). Every published score, every measured effect on it, ' +
       'every regression, and every caveat on a measurement still reported here stands. What is ' +
       'removed is description of how the generator works, and two kinds of count with it: the ' +
-      '2026-10-26 entry\'s replay of a check the benchmark runs never exercise, whose outcome stays ' +
-      'in that entry as a caveat, and the length limit of a text the 2026-10-24 entry names. No ' +
-      'number on this page depends on them. Where a reworded entry called the benchmark runs ' +
-      'nightly, it now says benchmark runs: they are change-triggered (see 2026-08-21 and ' +
-      '2026-09-30). All other entries are unchanged.',
+      '2026-10-26 entry\'s replay of a check the benchmark runs never exercise and of the blind ' +
+      'reading built on it, whose outcome stays in that entry as a caveat, and a character count in ' +
+      'the 2026-10-24 entry. No number on this page depends on them. Where a reworded entry called ' +
+      'the benchmark runs nightly, it now says benchmark runs: they are change-triggered (see ' +
+      '2026-08-21 and 2026-09-30). All other entries are unchanged.',
   },
   {
     date: '2026-10-26',
@@ -89,24 +89,26 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'tables the prompts sent to the model are byte-identical before and after it. The one ' +
       'benchmark prompt whose prompt changes, a to-do list, is not among those ten. A blind reading ' +
       'of rendered cards from the ten prompts, made on 2026-10-26 with the generator of that day, ' +
-      'found cut control labels on some of them, periodic tables among them. The scores on this ' +
-      'page read code, not screenshots, so they do not see this. The cards read were chosen, not ' +
-      'drawn at random, so this is not a rate, and they were rendered on macOS, whose fonts differ ' +
-      'from those of the Linux the generator renders on.',
+      'found cut control labels on some of them, periodic tables among them. The reader saw the ' +
+      'cards under shuffled ids; she recognised 3 of them from an earlier set, and found cut labels ' +
+      'on cards outside those 3 as well. Content below the bottom of a tall card was read as ' +
+      'undecidable, not as cut, and text that wraps inside a control counted as whole. The scores ' +
+      'on this page read code, not screenshots, so they do not see this. The cards read were ' +
+      'chosen, not drawn at random, so this is not a rate, and they were rendered on macOS, whose ' +
+      'fonts differ from those of the Linux the generator renders on.',
   },
   {
     date: '2026-10-24',
     text:
       'Correction (internal issue #1981): the 2026-10-22 entry below says the change deletes one ' +
       'sentence from the constrained prompt and one from text both prompts share. Only the first ' +
-      'reaches the model: the model receives the shared text in a shortened form, which the deleted ' +
-      'sentence was not part of, so the shared text the model reads is byte for byte the same with ' +
-      'and without the change, in every run of the A/B. The whole treatment the model received was ' +
-      'one sentence of the constrained prompt, 123 bytes. The A/B ran the constrained prompt, as ' +
-      'the benchmark does, and measured exactly that sentence, so its result stands as a result ' +
-      'about those 123 bytes. The free prompt changed only through the shared text, so nothing it ' +
-      'sends changed and nothing about it was tested. The rest of the change the entry describes is ' +
-      'unaffected.',
+      'reaches the model: the deleted shared-text sentence was never part of what the model reads, ' +
+      'so what the model reads of the shared text is byte for byte the same with and without the ' +
+      'change, in every run of the A/B. The whole treatment the model received was one sentence of ' +
+      'the constrained prompt, 123 bytes. The A/B ran the constrained prompt, as the benchmark ' +
+      'does, and measured exactly that sentence, so its result stands as a result about those 123 ' +
+      'bytes. The free prompt changed only through the shared text, so nothing it sends changed and ' +
+      'nothing about it was tested. The rest of the change the entry describes is unaffected.',
   },
   {
     date: '2026-10-23',
@@ -192,13 +194,14 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'side; read over all eight runs after the fact, -0.65 (-1.63 to +0.22). One prompt does get ' +
       'worse, and we report it: on google-fast, stock-ticker needed six or more turns in all 6 runs ' +
       'with the change and in none of the 6 without it, pooled from this A/B and the round before ' +
-      'it. This measures no harm on the bars above. It does not measure the change\'s visual result: ' +
-      'the page\'s scores read code, not screenshots, so that is checked on rendered cards outside ' +
-      'this benchmark. The version that landed differs from the one measured by a three-line ' +
-      'wording change in the generation prompt, which replaces a name with a description of the ' +
-      'same thing. The measured runs never used that name (0 of 180 generations), so we did not ' +
-      're-run. It lands together with the judge change below, so the first run after both cannot ' +
-      'separate their effects.',
+      'it. In those runs the model wrote layout and text properties the design system does not ' +
+      'have, and spent turns removing them. This measures no harm on the bars above. It does not ' +
+      'measure the change\'s visual result: the page\'s scores read code, not screenshots, so that ' +
+      'is checked on rendered cards outside this benchmark. The version that landed differs from ' +
+      'the one measured by a three-line wording change in the generation prompt, which replaces a ' +
+      'name with a description of the same thing. The measured runs never used that name (0 of 180 ' +
+      'generations), so we did not re-run. It lands together with the judge change below, so the ' +
+      'first run after both cannot separate their effects.',
   },
   {
     date: '2026-10-20',
