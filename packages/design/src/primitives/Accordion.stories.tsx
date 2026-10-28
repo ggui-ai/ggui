@@ -23,18 +23,18 @@ type Story = StoryObj<typeof meta>;
 const faqItems = [
   {
     key: 'what',
-    title: 'What is ggui?',
-    content: 'ggui is an agent interface platform that enables AI agents to create rich, interactive UIs on demand through MCP.',
+    title: 'What does this plan include?',
+    content: 'Unlimited projects, shared workspaces for up to five people, and daily backups of everything you store.',
   },
   {
     key: 'how',
     title: 'How does it work?',
-    content: 'Agents describe what they need in natural language, and ggui\'s UI Builder Agent generates ephemeral interfaces using React components.',
+    content: 'Create a project, invite your team, and start adding notes. Changes sync to every device within a few seconds.',
   },
   {
     key: 'pricing',
-    title: 'Is there a free tier?',
-    content: 'Yes! ggui offers a generous free tier with up to 100 UI generations per month.',
+    title: 'Can I try it before paying?',
+    content: 'Yes. Every new account starts with a 14-day trial, and no card is needed to begin.',
   },
   {
     key: 'support',
