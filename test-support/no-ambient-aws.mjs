@@ -17,8 +17,10 @@
  * A suite that is meant to reach a real account opts in by name, never by leaving this file out: its config sets
  * AWS_TEST_PINNED_CONFIG to a config file that names exactly one profile, and AWS_TEST_PINNED_PROFILE to that
  * profile. The shell's own config file, credentials file and profile are still dropped; only the pinned pair is
- * used. On a CI runner (CI=true) the static key trio a job step exported is kept in pinned mode, because there it
- * is the job's explicit credential; on a workstation it is dropped like everything else.
+ * used. On a GitHub Actions runner (CI=true and GITHUB_ACTIONS=true) the static key trio a job step exported is kept
+ * in pinned mode, because there it is the job's explicit credential; on a workstation it is dropped like everything
+ * else, even in a shell that exports CI=true. When that trio is kept, the pinned profile is not set: the SDK would
+ * prefer the profile over the keys.
  */
 
 const NULL_FILE = '/dev/null';
@@ -52,7 +54,8 @@ if (Boolean(pinnedConfig) !== Boolean(pinnedProfile)) {
   );
 }
 
-const keepKeys = Boolean(pinnedConfig) && process.env.CI === 'true';
+const onRunner = process.env.CI === 'true' && process.env.GITHUB_ACTIONS === 'true';
+const keepKeys = Boolean(pinnedConfig) && onRunner;
 for (const name of AMBIENT) {
   if (keepKeys && KEY_TRIO.includes(name)) continue;
   delete process.env[name];
@@ -60,9 +63,14 @@ for (const name of AMBIENT) {
 
 process.env.AWS_SHARED_CREDENTIALS_FILE = NULL_FILE;
 process.env.AWS_EC2_METADATA_DISABLED = 'true';
+// The key trio actually kept: pinned mode on a runner, with a job step having exported it.
+const keptKeys = keepKeys && Boolean(process.env.AWS_ACCESS_KEY_ID) && Boolean(process.env.AWS_SECRET_ACCESS_KEY);
 if (pinnedConfig && pinnedProfile) {
   process.env.AWS_CONFIG_FILE = pinnedConfig;
-  process.env.AWS_PROFILE = pinnedProfile;
+  // When both are set, the SDK signs with AWS_PROFILE over the key trio ("Multiple credential sources detected ...
+  // will proceed with the AWS_PROFILE value"), and the pinned profile is an SSO one that has no session on a runner.
+  // So the profile is pinned only when no key trio was kept: the job's own credential is then the only source left.
+  if (!keptKeys) process.env.AWS_PROFILE = pinnedProfile;
 } else {
   process.env.AWS_CONFIG_FILE = NULL_FILE;
 }
