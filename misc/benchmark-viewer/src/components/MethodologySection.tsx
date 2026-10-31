@@ -65,6 +65,45 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-10-31',
+    text:
+      'Instrument change (internal issue #1652): in short, the report-only pending-state field ' +
+      '(the 2026-10-01 entries) now also measures an action whose own press took its control ' +
+      'away, such as a Save button that closes its own editor; before, such an action read 0 ' +
+      'of 0, which means not measured. Only that field moves: no score, verdict, judge, ' +
+      'prompt, time limit or other probe finding changes, except in the one case the ' +
+      '2026-10-01 entry describes, a card that breaks the probe itself while pending, which ' +
+      'can now also happen on these actions because the probe now marks them pending. The ' +
+      'field is still not scored and the dashboard does not show it. On the five prompts whose ' +
+      'contracts declare an action, compare the field only between runs on runner images built ' +
+      'with this change, because there cells that read 0 of 0 for this reason can now read 1 ' +
+      'of 1 or 0 of 1, so `dispatched` can rise. No published run carries the change yet: ' +
+      'benchmark runs are paused, and the first run after the pause on a runner image built ' +
+      'with it is the first that does. The details: right after the press that fired an ' +
+      'action, the probe now records whether the pressed control was already no longer that ' +
+      'action\'s control, because it had left the page or now names another of the contract\'s ' +
+      'actions (a Send button that turns into Cancel). At the action\'s turn, if such an ' +
+      'action\'s control cannot be found again by its name or label, the probe reads the whole ' +
+      'card instead of one control: it compares the card just before marking the action ' +
+      'pending, that is after the press and after every other check, with the card while it is ' +
+      'pending. It reads `visible` when more of the card\'s elements are disabled, or more are ' +
+      'aria-busy, than before the mark, or when the card\'s text changed (whitespace at its ' +
+      'start and end aside); fewer disabled or busy elements does not count. Because the ' +
+      'comparison starts after the press, an editor that closed itself when pressed is already ' +
+      'gone from both looks and does not count. A new list, `card`, names the actions read ' +
+      'this way; each is counted in `dispatched` and in `visible` or `missing` like any other. ' +
+      'Rows published before this change have no `card` list. A limit to read it with: a card ' +
+      'read counts any change in the card\'s text while the action is pending, not only a ' +
+      'pending indicator, so a card whose text changes on its own, such as a displayed clock, ' +
+      'can read `visible` without showing a pending state; for actions in `card`, `visible` is ' +
+      'an upper bound. `gone` still holds an action whose control stayed in the page after its ' +
+      'own press but could not be found at its turn, for example because another action\'s ' +
+      'pending state had replaced the card, and, as before, an action the probe did not reach ' +
+      'because an earlier pending read crashed the card or did not settle in time, or the ' +
+      'probe\'s time ran out. A Send that turns into Cancel used to read `gone`; it is now ' +
+      'read on the card, and reads `missing` when the card shows nothing.',
+  },
+  {
     date: '2026-10-28',
     text:
       'Wording change, no score change: twelve entries are reworded so that they describe each ' +
