@@ -76,7 +76,7 @@ export const EDGE_BLOCKS_V3_EXPRESSION = String.raw`(() => {
   const measure = (door, colour, chain) => { if (!parses(colour)) return null; const g = over(null, chain); const c = over(colour, chain); const ratio = ratioOf(c, g); const de = deOf(c, g); const f = FLOORS[door]; return { door, ratio, de, byRatio: ratio >= f.ratio, byDe: de >= f.de, opens: ratio >= f.ratio || de >= f.de, score: Math.max(ratio / f.ratio, de / f.de) }; };
   // A box-shadow's layers: split on commas outside parentheses; the engine writes each layer's colour first.
   const shadowLayers = (v) => { if (!v || v === 'none') return []; const out = []; let depth = 0; let cur = ''; for (const ch of v) { if (ch === '(') depth += 1; if (ch === ')') depth -= 1; if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += ch; } if (cur.trim()) out.push(cur.trim()); return out; };
-  const shadowColour = (layer) => { if (/inset/.test(layer)) return null; const m = /^([a-z-]+\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)/i.exec(layer); if (!m) return null; const geo = layer.slice(m[0].length).match(/-?[\d.]+px/g) || []; return geo.some((g) => parseFloat(g) !== 0) ? { colour: m[0], geo: geo.join(' ') } : null; };
+  const shadowColour = (layer) => { if (/\binset\b/.test(layer)) return null; const m = /^([a-z-]+\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)/i.exec(layer); if (!m) return null; const geo = layer.slice(m[0].length).match(/-?[\d.]+px/g) || []; return geo.some((g) => parseFloat(g) !== 0) ? { colour: m[0], geo: geo.join(' ') } : null; };
   const doors = (el) => {
     const s = css(el);
     const ground = groundChain(el);
