@@ -163,7 +163,7 @@ const botanicalLight: DtcgTheme = {
     onSunken: { $value: '#746448', $type: 'color' },
     container: { $value: '#fefcf8', $type: 'color' },
     onContainer: { $value: '#352e20', $type: 'color' },
-    outline: { $value: '#f0e4c9', $type: 'color' },
+    outline: { $value: '#e7dbc1', $type: 'color' },
     outlineVariant: { $value: '#eae2d2', $type: 'color' },
     // Primary role pair — onPrimary is cream for the leaf-green brand hex.
     onPrimary: { $value: '#332407', $type: 'color' },
@@ -250,7 +250,7 @@ const botanicalDark: DtcgTheme = {
     onSunken: { $value: '#dccba5', $type: 'color' },
     container: { $value: '#1f1c18', $type: 'color' }, // deep forest
     onContainer: { $value: '#fefcf8', $type: 'color' },
-    outline: { $value: '#504530', $type: 'color' },
+    outline: { $value: '#524732', $type: 'color' },
     outlineVariant: { $value: '#474133', $type: 'color' },
     // Primary role pair — dark: lifted leaf-green, onPrimary = forest soil.
     onPrimary: { $value: '#141210', $type: 'color' }, // forest-soil base

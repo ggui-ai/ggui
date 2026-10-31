@@ -86,23 +86,26 @@ describe('ggui#1495 — a near-neutral anchor takes the host\'s temperature', ()
     // Re-recorded 2026-10-23 for ggui#1998 (the built-in ggui theme authors its light hero pair, the brand's dark pair):
     // ONE entry, marked, moves, and in it only `heroGround`, `onHeroGround`, `heroLink` and `heroOutline` moved
     // (#ebe9e1 / #292929 / #1f1f1f / #7e7d7a → #292929 / #f4f3ed / #d9d9d9 / #7a7a77). Every other key is byte-identical.
+    // Re-recorded 2026-10-31 for ggui#1765 (the decorative hairline floor: outlineVariant clears ΔE76 8 and 1.2:1 on
+    // container and sunken; outline sits a step above it): twelve entries, marked, move, and in each only `outline`
+    // and/or `outlineVariant` moved. Every other key is byte-identical.
     const BEFORE: Readonly<Record<string, string>> = {
-      'ggui/light': '94878f6fed63d3d3' /* ggui#1998 */,
-      'ggui/dark': '22562b54e1e6e3f5' /* ggui#1848 */,
-      'indigo/light': 'd1dec01a72b2cecb',
-      'indigo/dark': 'a91fab621fdc7529' /* ggui#1848 */,
-      'claudic/light': 'f6d559f50e5b058a',
-      'claudic/dark': '5e64b9389a15f7e2' /* ggui#1848 */,
+      'ggui/light': 'd3a0d0ac15828878' /* ggui#1765 */,
+      'ggui/dark': 'cceda85b53f1e021' /* ggui#1765 */,
+      'indigo/light': 'aca7c1512919f34c' /* ggui#1765 */,
+      'indigo/dark': 'fe57ed5ce3f80ef2' /* ggui#1765 */,
+      'claudic/light': 'afdf1b975e2f8b4c' /* ggui#1765 */,
+      'claudic/dark': '06dfcf31befb9e82' /* ggui#1765 */,
       'premium-cyberpunk/light': '202e6dd0cbf60f47' /* ggui#1848 */,
       'premium-cyberpunk/dark': '7200d5bf1d46aac9',
-      'premium-zen/light': '29069da50acdf22c',
-      'premium-zen/dark': '1c86f800de2ee241' /* ggui#1848 */,
+      'premium-zen/light': '7186d64bf93e1067' /* ggui#1765 */,
+      'premium-zen/dark': '5af374ba4630011b' /* ggui#1765 */,
       'premium-neon-noir/light': '229d181240aec26c' /* ggui#1848 */,
       'premium-neon-noir/dark': '01bf8a7e065b4760' /* ggui#1848 */,
-      'premium-botanical/light': 'f39c69dd44657323',
-      'premium-botanical/dark': '89aa7a1c72b23b12' /* ggui#1848 */,
-      'guuey-brand-v1/light': 'd13384d05e11ee3a',
-      'guuey-brand-v1/dark': '45d86c15bf7f433f' /* ggui#1848 */,
+      'premium-botanical/light': '24892d52575f3e7b' /* ggui#1765 */,
+      'premium-botanical/dark': '01d3a028d641954d' /* ggui#1765 */,
+      'guuey-brand-v1/light': '7d152554cad6a94e' /* ggui#1765 */,
+      'guuey-brand-v1/dark': '8ab387f671b8e880' /* ggui#1765 */,
     };
     // Keys added AFTER these digests were taken are left out, so the pin keeps its question — did any
     // key that existed then move? — and each new key carries its own pin (ggui#1494: control-outline.test.ts;

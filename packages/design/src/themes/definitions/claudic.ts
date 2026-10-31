@@ -247,7 +247,7 @@ const claudicLight: DtcgTheme = {
     onSunken: { $value: '#56544f', $type: 'color' },
     container: { $value: '#faf9f5', $type: 'color' }, // primary-50
     onContainer: { $value: '#141413', $type: 'color' }, // primary-900
-    outline: { $value: '#dad8cc', $type: 'color' },
+    outline: { $value: '#d6d4c8', $type: 'color' },
     outlineVariant: { $value: '#dedcd3', $type: 'color' },
     // Primary role pair — text on Crail CTAs is ivory, container is Crail-50.
     onPrimary: { $value: '#15130a', $type: 'color' }, // Ivory
@@ -378,7 +378,7 @@ const claudicDark: DtcgTheme = {
     onSunken: { $value: '#a8a59f', $type: 'color' },
     container: { $value: '#262624', $type: 'color' },
     onContainer: { $value: '#faf9f5', $type: 'color' },
-    outline: { $value: '#3d3b39', $type: 'color' },
+    outline: { $value: '#464542', $type: 'color' },
     outlineVariant: { $value: '#3f3e3c', $type: 'color' },
     // Primary role pair — dark: onPrimary is charcoal so text reads on the
     // lifted Crail; container/onContainer ladder along the inverted scale.

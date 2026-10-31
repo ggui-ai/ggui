@@ -223,8 +223,8 @@ const gguiLight: DtcgTheme = {
     onSunken: { $value: '#5a5a5a', $type: 'color' }, // ink-3
     container: { $value: '#f4f3ed', $type: 'color' }, // paper-2
     onContainer: { $value: '#292929', $type: 'color' }, // ink
-    outline: { $value: '#d6d4cb', $type: 'color' }, // line-2
-    outlineVariant: { $value: '#d3d3d1', $type: 'color' }, // chrome-2
+    outline: { $value: '#cac8c0', $type: 'color' }, // line-2, stepped toward ink (ggui#1765)
+    outlineVariant: { $value: '#d3d3d1', $type: 'color' }, // chrome-2, stepped toward ink (ggui#1765)
     // Primary role pair — text on ink CTAs is paper; container = paper-2.
     onPrimary: { $value: '#f4f3ed', $type: 'color' }, // paper
     primaryContainer: { $value: '#ebe9e1', $type: 'color' }, // paper-2
@@ -359,7 +359,7 @@ const gguiDark: DtcgTheme = {
     onSunken: { $value: '#a3a3a9', $type: 'color' },
     container: { $value: '#1f1f1f', $type: 'color' }, // ink
     onContainer: { $value: '#f4f3ed', $type: 'color' }, // paper
-    outline: { $value: '#3d3d3d', $type: 'color' }, // ink-2
+    outline: { $value: '#424242', $type: 'color' }, // ink-2, stepped toward paper (ggui#1765)
     outlineVariant: { $value: '#3b3b3b', $type: 'color' },
     // Primary role pair — dark inverts: primary is now paper, so onPrimary
     // is ink to keep the monochrome contrast architecture.

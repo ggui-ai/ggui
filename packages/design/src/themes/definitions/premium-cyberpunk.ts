@@ -332,7 +332,7 @@ const cyberpunkDark: DtcgTheme = {
     onSunken: { $value: '#aaaabe', $type: 'color' },
     container: { $value: '#000005', $type: 'color' }, // deeper teal
     onContainer: { $value: '#e8e8f0', $type: 'color' },
-    outline: { $value: '#1a1a24', $type: 'color' },
+    outline: { $value: '#262630', $type: 'color' },
     outlineVariant: { $value: '#202027', $type: 'color' },
     // Primary role pair — dark: onPrimary is pure-black-ish, container = deeper teal.
     onPrimary: { $value: '#000005', $type: 'color' },
