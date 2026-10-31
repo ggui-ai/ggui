@@ -83,25 +83,28 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'action, the probe now records whether the pressed control was already no longer that ' +
       'action\'s control, because it had left the page or now names another of the contract\'s ' +
       'actions (a Send button that turns into Cancel). At the action\'s turn, if such an ' +
-      'action\'s control cannot be found again by its name or label, the probe reads the whole ' +
-      'card instead of one control: it compares the card just before marking the action ' +
-      'pending, that is after the press and after every other check, with the card while it is ' +
-      'pending. It reads `visible` when more of the card\'s elements are disabled, or more are ' +
-      'aria-busy, than before the mark, or when the card\'s text changed (whitespace at its ' +
-      'start and end aside); fewer disabled or busy elements does not count. Because the ' +
-      'comparison starts after the press, an editor that closed itself when pressed is already ' +
-      'gone from both looks and does not count. A new list, `card`, names the actions read ' +
-      'this way; each is counted in `dispatched` and in `visible` or `missing` like any other. ' +
-      'Rows published before this change have no `card` list. A limit to read it with: a card ' +
-      'read counts any change in the card\'s text while the action is pending, not only a ' +
-      'pending indicator, so a card whose text changes on its own, such as a displayed clock, ' +
-      'can read `visible` without showing a pending state; for actions in `card`, `visible` is ' +
-      'an upper bound. `gone` still holds an action whose control stayed in the page after its ' +
-      'own press but could not be found at its turn, for example because another action\'s ' +
-      'pending state had replaced the card, and, as before, an action the probe did not reach ' +
-      'because an earlier pending read crashed the card or did not settle in time, or the ' +
-      'probe\'s time ran out. A Send that turns into Cancel used to read `gone`; it is now ' +
-      'read on the card, and reads `missing` when the card shows nothing.',
+      'action\'s control cannot be found again (an action fired by a click is looked for by ' +
+      'its name or label; a form that fired one and has left the page is not looked for), the ' +
+      'probe reads the whole card instead of one control: it compares the card just before ' +
+      'marking the action pending, that is after the press and after every other check, with ' +
+      'the card while it is pending. It reads `visible` when more of the card\'s elements are ' +
+      'disabled, or more are aria-busy, than before the mark, or when the card\'s text changed ' +
+      '(whitespace at its start and end aside); fewer disabled or busy elements does not ' +
+      'count. Because the comparison starts after the press, an editor that closed itself when ' +
+      'pressed is already gone from both looks and does not count. A new list, `card`, names ' +
+      'the actions read this way; each is counted in `dispatched` and in `visible` or ' +
+      '`missing` like any other. Rows published before this change have no `card` list. A ' +
+      'limit to read it with: a card read counts any change in the card\'s text while the ' +
+      'action is pending, not only a pending indicator, so a card whose text changes on its ' +
+      'own, such as a displayed clock, can read `visible` without showing a pending state, and ' +
+      'so can a change still under way from the action read just before it, such as a timed ' +
+      'confirmation message, which is then credited to the next action; for actions in `card`, ' +
+      '`visible` is an upper bound. `gone` still holds an action whose control stayed in the ' +
+      'page after its own press but could not be found at its turn, for example because ' +
+      'another action\'s pending state had replaced the card, and, as before, an action the ' +
+      'probe did not reach because an earlier pending read crashed the card or did not settle ' +
+      'in time, or the probe\'s time ran out. A Send that turns into Cancel used to read ' +
+      '`gone`; it is now read on the card, and reads `missing` when the card shows nothing.',
   },
   {
     date: '2026-10-28',
