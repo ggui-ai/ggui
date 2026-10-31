@@ -28,6 +28,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { cleanEnv } from './clean-env.js';
 import { OUTERMOST_WORKSPACE_ROOT } from './workspace-root.js';
+import { waitForUrl } from './wait-for-url.js';
 
 // ── Sample-agent process management ──────────────────────────────────
 
@@ -69,20 +70,6 @@ export interface SampleAgentHandle {
   readonly baseUrl: string;
   /** SIGTERM the process group, wait a grace period, then SIGKILL. */
   stop(): Promise<void>;
-}
-
-async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) return;
-    } catch {
-      /* not ready yet */
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
 }
 
 /**
@@ -147,7 +134,15 @@ export async function spawnSampleAgent(
   // probe gets answered by the SQUATTER while our child crashes with
   // EADDRINUSE — without the race that's a silent latch onto a stale
   // process.
-  await Promise.race([waitForUrl(`${baseUrl}/`, 30_000), exitPromise]);
+  const ready = await Promise.race([
+    waitForUrl(`${baseUrl}/`, { timeoutMs: 30_000 }),
+    exitPromise,
+  ]);
+  // The boot time on green runs, so a run shows how close it sits to the limit.
+  process.stdout.write(
+    `[${opts.logLabel}] ready: ${baseUrl}/ in ${ready.elapsedMs}ms ` +
+      `(${ready.attempts} attempts)\n`,
+  );
 
   // Identity check — the manifest's `name` is the adapter name.
   const manifestResp = await fetch(`${baseUrl}/`);

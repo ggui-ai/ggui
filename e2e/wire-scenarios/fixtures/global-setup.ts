@@ -21,6 +21,7 @@ import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { config as loadEnv } from 'dotenv';
+import { waitForUrl } from './wait-for-url.js';
 
 /**
  * Load `.env.local` into process.env BEFORE any services boot.
@@ -284,20 +285,6 @@ async function isReusable(port: number, healthPath: string): Promise<boolean> {
   }
 }
 
-async function waitForHealth(url: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) return;
-    } catch {
-      /* not ready */
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
-}
-
 export async function setup(): Promise<void> {
   loadDotenvLocal();
 
@@ -392,9 +379,30 @@ export async function setup(): Promise<void> {
     });
     children.push(child);
 
-    await waitForHealth(
-      `http://localhost:${svc.port}${svc.healthPath}`,
-      30_000,
+    // Race readiness against the service dying, so a crash at boot fails
+    // with its exit code now instead of a timeout 30 s later.
+    const healthUrl = `http://localhost:${svc.port}${svc.healthPath}`;
+    const exited = new Promise<never>((_resolve, reject) => {
+      child.once('exit', (code, signal) => {
+        reject(
+          new Error(
+            `[e2e/scenarios] ${svc.name} exited (code=${code} signal=${signal}) ` +
+              `before ${healthUrl} answered`,
+          ),
+        );
+      });
+    });
+    // Keep the rejection observed after boot (teardown's exit must not
+    // surface as an unhandled rejection).
+    exited.catch(() => undefined);
+    const ready = await Promise.race([
+      waitForUrl(healthUrl, { timeoutMs: 30_000 }),
+      exited,
+    ]);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[e2e/scenarios] ${svc.name} ready in ${ready.elapsedMs}ms ` +
+        `(${ready.attempts} attempts)`,
     );
   }
 }
