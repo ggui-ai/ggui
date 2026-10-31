@@ -2,8 +2,9 @@
 // packages/ui-gen/src/harness/check/runtime-render/probe-prewarm.test.ts
 //
 // Regression pin for ggui#403 defect 1: the probe must survive its own
-// pre-warm. `warmupRuntimeRenderProbe()` imports the probe's runtime
-// deps at dispatch entry — BEFORE any DOM exists. user-event v14
+// pre-warm. `warmupRuntimeRenderProbe()` can import the probe's runtime
+// deps BEFORE any DOM exists (a host that calls it at start as a
+// dependency census does exactly that). user-event v14
 // captures `globalThis.document` into its module-scope setup defaults
 // at MODULE LOAD, so a bare `userEvent.setup()` after a DOM-less
 // pre-warm received `document: undefined` and crashed every probe with
@@ -64,7 +65,7 @@ export default function Card(props: { title: string }) {
 
 describe("runtime-render probe after DOM-less pre-warm (ggui#403)", () => {
   it("probe still RUNS when user-event was imported before any DOM existed", async () => {
-    // Mimic generation-dispatch: warm the deps with no DOM up.
+    // Warm the deps with no DOM up, as a host's start-up census does.
     expect(globalThis.document).toBeUndefined();
     const warm = await warmupRuntimeRenderProbe();
     expect(warm.missing).toBe(0);
