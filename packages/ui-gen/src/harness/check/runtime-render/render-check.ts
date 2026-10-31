@@ -56,6 +56,7 @@ import type { ProbeHostLoad, ProbePendingAffordance } from "../../../evaluation/
 import {
   cardLookChanged,
   cardLookOf,
+  cardLookSame,
   createProbePendingSource,
   lookChanged,
   lookOf,
@@ -1380,6 +1381,8 @@ const PENDING_PHASE_TAIL_MS = 1000;
  *   action, else its first submit-type control, else the form itself.
  * - A card that throws while pending counts that control as missing, and
  *   every control after it is gone (the card renders nothing).
+ * - A card read (ggui#1652) is credited only when the card also changes back
+ *   once the action is cleared; a change that stays was not the pending state.
  * - Each mark-and-read is capped ({@link PENDING_TARGET_CAP_MS}, and never
  *   past the check's deadline less a tail). A control whose read does not
  *   settle in time counts as missing and ends the phase, so a stalled card
@@ -1402,17 +1405,20 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
       if (budget <= 0) stopped = true;
       continue;
     }
+    // A card read must also change back once the action is cleared: a pending
+    // state is a function of the pending flag, so a change that stays (a
+    // render counter, a clock, a timer that fired meanwhile) is not one.
     const read =
       found === undefined
         ? (() => {
             const look = () => cardLookOf(target.container);
             const before = look();
-            return { changed: () => cardLookChanged(before, look()) };
+            return { changed: () => cardLookChanged(before, look()), reverted: () => cardLookSame(before, look()) };
           })()
         : (() => {
             const el = controlToRead(found, target);
             const before = lookOf(el);
-            return { changed: () => lookChanged(before, lookOf(el)) };
+            return { changed: () => lookChanged(before, lookOf(el)), reverted: () => true };
           })();
     if (onCard) tally.card.push(target.actionName);
     const caughtBefore = input.catches();
@@ -1427,9 +1433,9 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
     );
     const crashed = input.catches() !== caughtBefore;
     tally.dispatched += 1;
-    if (settled && !crashed && read.changed()) tally.visible += 1;
-    else tally.missing.push(target.actionName);
+    const changed = settled && !crashed && read.changed();
     if (!settled) {
+      tally.missing.push(target.actionName);
       stopped = true;
       continue;
     }
@@ -1437,6 +1443,8 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
       input.source.clear();
     });
     await flushPromises();
+    if (changed && read.reverted()) tally.visible += 1;
+    else tally.missing.push(target.actionName);
     if (crashed) stopped = true;
   }
   return tally;

@@ -101,7 +101,8 @@ export async function settlesWithin(ms: number, work: Promise<unknown>): Promise
 
 /**
  * Whether the control visibly changed between two looks: it became disabled
- * or busy, its text changed (whitespace aside), or the card replaced it.
+ * or busy, its text changed (leading and trailing whitespace aside), or the
+ * card replaced it.
  */
 export function lookChanged(before: ControlLook, after: ControlLook): boolean {
   if (before.connected && !after.connected) return true;
@@ -140,11 +141,22 @@ export function cardLookOf(card: CardLookable): CardLook {
 
 /**
  * Whether the card visibly changed between two looks: one more of its
- * elements became disabled or busy, or its text changed (whitespace aside).
- * Fewer disabled or busy elements is not a pending state.
+ * elements became disabled or busy, or its text changed (leading and
+ * trailing whitespace aside). Fewer disabled or busy elements is not a
+ * pending state.
  */
 export function cardLookChanged(before: CardLook, after: CardLook): boolean {
   if (after.disabled > before.disabled) return true;
   if (after.busy > before.busy) return true;
   return before.text.trim() !== after.text.trim();
+}
+
+/**
+ * Whether two looks of a card are the same: the same text (leading and
+ * trailing whitespace aside) and as many disabled and busy elements. Used to
+ * check that a card read while pending changes back once the action is
+ * cleared (ggui#1652).
+ */
+export function cardLookSame(a: CardLook, b: CardLook): boolean {
+  return a.text.trim() === b.text.trim() && a.disabled === b.disabled && a.busy === b.busy;
 }

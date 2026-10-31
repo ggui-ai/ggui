@@ -213,6 +213,61 @@ export default function Component() {
 }
 `;
 
+// The card re-renders when the action goes pending (its root reads the
+// pending state for a control inside the closed editor) and shows something
+// that changes on every render. Nothing on screen says the action is pending.
+const CLOSES_ON_SAVE_RERENDERS = `
+import { useRef, useState } from 'react';
+import { useAction, useActionPending } from '@ggui-ai/wire';
+
+export default function Component() {
+  const update = useAction('taskUpdate');
+  const saving = useActionPending('taskUpdate');
+  const renders = useRef(0);
+  renders.current += 1;
+  const [editing, setEditing] = useState(false);
+  return (
+    <div>
+      <p>Design landing page</p>
+      <small>Render {renders.current}</small>
+      {editing
+        ? <div role="group" aria-label="Editor"><button disabled={saving} onClick={() => { update({}); setEditing(false); }}>Save</button></div>
+        : <button onClick={() => setEditing(true)}>Edit</button>}
+    </div>
+  );
+}
+`;
+
+// The previous action's pending state is still unwinding when the next one is
+// read: clearing `send` schedules a "Saved" note, which lands inside
+// `taskUpdate`'s card read. Nothing on screen says `taskUpdate` is pending.
+const PREVIOUS_ACTION_UNWINDS = `
+import { useEffect, useRef, useState } from 'react';
+import { useAction, useActionPending } from '@ggui-ai/wire';
+
+export default function Component() {
+  const send = useAction('send');
+  const update = useAction('taskUpdate');
+  const sending = useActionPending('send');
+  const wasSending = useRef(false);
+  const [note, setNote] = useState('');
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (wasSending.current && !sending) setTimeout(() => setNote('Saved'), 0);
+    wasSending.current = sending;
+  }, [sending]);
+  return (
+    <div>
+      <p>{note}</p>
+      <button onClick={() => send({})}>Send</button>
+      {editing
+        ? <div role="group" aria-label="Editor"><button onClick={() => { update({}); setEditing(false); }}>Save</button></div>
+        : <button onClick={() => setEditing(true)}>Edit</button>}
+    </div>
+  );
+}
+`;
+
 const withTaskUpdate: DataContract = { actionSpec: { taskUpdate: { label: "Save" } } };
 
 const withSend: DataContract = { actionSpec: { send: { label: "Send" } } };
@@ -281,6 +336,17 @@ describe("runRenderCheck — the pending affordance (ggui#1398)", () => {
   it("a control its own press closes, on a card that never shows pending: missing, still read on the card", async () => {
     const result = await runRenderCheck({ sourceCode: CLOSES_ON_SAVE_BLIND, mockupProps: {}, contract: withTaskUpdate });
     expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 0, missing: ["taskUpdate"], gone: [], card: ["taskUpdate"] });
+  }, 30000);
+
+  it("a card that changes only because it re-rendered, and does not change back once the action is cleared, is not credited: missing", async () => {
+    const result = await runRenderCheck({ sourceCode: CLOSES_ON_SAVE_RERENDERS, mockupProps: {}, contract: withTaskUpdate });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 0, missing: ["taskUpdate"], gone: [], card: ["taskUpdate"] });
+  }, 30000);
+
+  it("a change left over from the previous action, landing inside the next card read and staying, is not credited to it", async () => {
+    const contract: DataContract = { actionSpec: { send: { label: "Send" }, taskUpdate: { label: "Save" } } };
+    const result = await runRenderCheck({ sourceCode: PREVIOUS_ACTION_UNWINDS, mockupProps: {}, contract });
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 2, visible: 0, missing: ["send", "taskUpdate"], gone: [], card: ["taskUpdate"] });
   }, 30000);
 
   it("a control its own press closes is read on the card only when it cannot be found again by its own identity", async () => {

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   cardLookChanged,
   cardLookOf,
+  cardLookSame,
   createProbePendingSource,
   lookChanged,
   lookOf,
@@ -148,5 +149,21 @@ describe("cardLookOf and cardLookChanged (ggui#1652)", () => {
   it("a card with FEWER disabled or busy controls did not show a pending state", () => {
     const busy: CardLook = { ...idle, disabled: 2, busy: 1 };
     expect(cardLookChanged(busy, { ...busy, disabled: 1, busy: 0 })).toBe(false);
+  });
+});
+
+describe("cardLookSame (ggui#1652)", () => {
+  const look: CardLook = { text: "Design landing page Edit", disabled: 1, busy: 0 };
+
+  it("the same text (trimmed) and counts are the same look", () => {
+    expect(cardLookSame(look, { ...look, text: " Design landing page Edit\n" })).toBe(true);
+  });
+
+  it.each<[string, Partial<CardLook>]>([
+    ["text", { text: "Render 5" }],
+    ["disabled count", { disabled: 0 }],
+    ["busy count", { busy: 1 }],
+  ])("a different %s is not the same look", (_label, other) => {
+    expect(cardLookSame(look, { ...look, ...other })).toBe(false);
   });
 });
