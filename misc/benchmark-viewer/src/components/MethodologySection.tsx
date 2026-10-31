@@ -89,18 +89,21 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       'marking the action pending, that is after the press and after every other check, with ' +
       'the card while it is pending. It reads `visible` when more of the card\'s elements are ' +
       'disabled, or more are aria-busy, than before the mark, or when the card\'s text changed ' +
-      '(whitespace at its start and end aside); fewer disabled or busy elements does not ' +
-      'count. Because the comparison starts after the press, an editor that closed itself when ' +
-      'pressed is already gone from both looks and does not count. A new list, `card`, names ' +
-      'the actions read this way; each is counted in `dispatched` and in `visible` or ' +
-      '`missing` like any other. Rows published before this change have no `card` list. A ' +
-      'limit to read it with: a card read counts any change in the card\'s text while the ' +
-      'action is pending, not only a pending indicator, so a card whose text changes on its ' +
-      'own, such as a displayed clock, can read `visible` without showing a pending state, and ' +
-      'so can a change still under way from the action read just before it, such as a timed ' +
-      'confirmation message, which is then credited to the next action; for actions in `card`, ' +
-      '`visible` is an upper bound. `gone` still holds an action whose control stayed in the ' +
-      'page after its own press but could not be found at its turn, for example because ' +
+      '(whitespace at its start and end aside), and only when, once the action is cleared ' +
+      'again, the card looks as it did before the mark (the same text and as many disabled and ' +
+      'busy elements); a change that stays reads `missing`. Fewer disabled or busy elements ' +
+      'does not count. Because the comparison starts after the press, an editor that closed ' +
+      'itself when pressed is already gone from both looks and does not count. A new list, ' +
+      '`card`, names the actions read this way; each is counted in `dispatched` and in ' +
+      '`visible` or `missing` like any other. Rows published before this change have no `card` ' +
+      'list. A limit to read it with: the change-back rule keeps a change the card makes on ' +
+      'its own, such as a displayed clock or a confirmation left by the action read just ' +
+      'before, from counting, but it can also err the other way: a card that shows a pending ' +
+      'state and, once the action is cleared, keeps some other change, such as "Saving…" ' +
+      'giving way to "Saved", reads `missing`, so for actions in `card`, `visible` can ' +
+      'undercount; a change that comes and goes with every re-render, rather than with the ' +
+      'pending state, can still count. `gone` still holds an action whose control stayed in ' +
+      'the page after its own press but could not be found at its turn, for example because ' +
       'another action\'s pending state had replaced the card, and, as before, an action the ' +
       'probe did not reach because an earlier pending read crashed the card or did not settle ' +
       'in time, or the probe\'s time ran out. A Send that turns into Cancel used to read ' +
