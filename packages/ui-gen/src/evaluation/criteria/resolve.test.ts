@@ -132,6 +132,18 @@ describe('an instrument beside a judge row (ggui#1663)', () => {
   it('rows without an instrument beside them carry no v2 field either', () => {
     expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrumentV2');
   });
+  // #1765 — v3 reads beside v1 and v2 on the same row, report-only: its own verdict (spread from its own measurement, so a
+  // dropped spread reads here), its own id, and the judge's verdict unchanged.
+  it('v3 sits beside v1 and v2 with its own verdict and id, changes no verdict, and is absent from rows without an instrument', () => {
+    const rows = resolveCriteriaBlock({ bank: edgeBank, context: ctx, selected: sel, answers, measurements: { ...m, edge: null, edgeV3: fail } }).verdicts;
+    const v = rows.find((x) => x.id === 'space.edge')!;
+    expect(v.verdict).toBe('pass');
+    expect(v.instrumentV3).toEqual({ verdict: 'fail', evidence: fail.evidence, id: EDGE_INSTRUMENT_IDS.v3 });
+    expect(v.instrumentV2).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read', id: EDGE_INSTRUMENT_IDS.v2 });
+    expect(read(fail).verdicts.find((x) => x.id === 'space.edge')?.instrumentV3).toEqual({ verdict: 'n/a', evidence: 'not measured: this capture had no page to read', id: EDGE_INSTRUMENT_IDS.v3 });
+    expect(new Set(Object.values(EDGE_INSTRUMENT_IDS)).size).toBe(3);
+    expect(rows.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrumentV3');
+  });
   it('rows without an instrument beside them carry no field', () => {
     expect(read(fail).verdicts.find((x) => x.id === 'space.shape')).not.toHaveProperty('instrument');
   });
