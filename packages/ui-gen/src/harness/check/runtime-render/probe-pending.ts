@@ -109,3 +109,42 @@ export function lookChanged(before: ControlLook, after: ControlLook): boolean {
   if (!before.ariaBusy && after.ariaBusy) return true;
   return before.text.trim() !== after.text.trim();
 }
+
+/**
+ * ggui#1652 — what a whole card shows, for an action whose own press took
+ * its control out of the page (Save closing its editor). A person then
+ * looks at the card for the pending state, so the card is what is read.
+ */
+export interface CardLook {
+  /** The card's text. */
+  readonly text: string;
+  /** How many of its elements are disabled (`disabled`, or `aria-disabled="true"`). */
+  readonly disabled: number;
+  /** How many of its elements are `aria-busy="true"`. */
+  readonly busy: number;
+}
+
+/** The DOM surface {@link cardLookOf} reads: the probe's mount root. */
+export interface CardLookable {
+  readonly textContent: string | null;
+  querySelectorAll(selector: string): Iterable<unknown>;
+}
+
+export function cardLookOf(card: CardLookable): CardLook {
+  return {
+    text: card.textContent ?? "",
+    disabled: [...card.querySelectorAll('[disabled], [aria-disabled="true"]')].length,
+    busy: [...card.querySelectorAll('[aria-busy="true"]')].length,
+  };
+}
+
+/**
+ * Whether the card visibly changed between two looks: one more of its
+ * elements became disabled or busy, or its text changed (whitespace aside).
+ * Fewer disabled or busy elements is not a pending state.
+ */
+export function cardLookChanged(before: CardLook, after: CardLook): boolean {
+  if (after.disabled > before.disabled) return true;
+  if (after.busy > before.busy) return true;
+  return before.text.trim() !== after.text.trim();
+}

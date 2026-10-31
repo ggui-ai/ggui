@@ -3,7 +3,16 @@
  * visibly change" rule, as pure pieces.
  */
 import { describe, expect, it } from "vitest";
-import { createProbePendingSource, lookChanged, lookOf, settlesWithin, type ControlLook } from "./probe-pending";
+import {
+  cardLookChanged,
+  cardLookOf,
+  createProbePendingSource,
+  lookChanged,
+  lookOf,
+  settlesWithin,
+  type CardLook,
+  type ControlLook,
+} from "./probe-pending";
 
 describe("createProbePendingSource (ggui#1398)", () => {
   it("an action is pending once marked, until cleared, and nothing else is", () => {
@@ -105,5 +114,39 @@ describe("lookOf on an input button, and settlesWithin (ggui#1398)", () => {
   it("settles within the time when the work does, and reports false when it does not", async () => {
     expect(await settlesWithin(200, Promise.resolve())).toBe(true);
     expect(await settlesWithin(50, new Promise(() => undefined))).toBe(false);
+  });
+});
+
+describe("cardLookOf and cardLookChanged (ggui#1652)", () => {
+  // A card whose own press took its control away is read as a whole: its
+  // text, and how many of its controls are disabled or busy.
+  const card = (text: string, disabled: number, busy: number) => ({
+    textContent: text,
+    querySelectorAll: (selector: string) =>
+      Array.from({ length: selector.includes("aria-busy") ? busy : disabled }, () => ({})),
+  });
+
+  it("counts the card's disabled and busy controls, and reads its text", () => {
+    expect(cardLookOf(card("Design landing page", 1, 2))).toEqual({ text: "Design landing page", disabled: 1, busy: 2 });
+  });
+
+  const idle: CardLook = { text: "Design landing page Edit", disabled: 0, busy: 0 };
+
+  it("an unchanged card did not visibly change, and whitespace alone is not a change", () => {
+    expect(cardLookChanged(idle, { ...idle })).toBe(false);
+    expect(cardLookChanged(idle, { ...idle, text: " Design landing page Edit\n" })).toBe(false);
+  });
+
+  it.each<[string, Partial<CardLook>]>([
+    ["disabled one more control", { disabled: 1 }],
+    ["marked one more control busy", { busy: 1 }],
+    ["changed its text", { text: "Saving changes… Edit" }],
+  ])("a card that %s visibly changed", (_label, after) => {
+    expect(cardLookChanged(idle, { ...idle, ...after })).toBe(true);
+  });
+
+  it("a card with FEWER disabled or busy controls did not show a pending state", () => {
+    const busy: CardLook = { ...idle, disabled: 2, busy: 1 };
+    expect(cardLookChanged(busy, { ...busy, disabled: 1, busy: 0 })).toBe(false);
   });
 });

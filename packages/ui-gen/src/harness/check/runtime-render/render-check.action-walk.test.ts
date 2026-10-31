@@ -199,8 +199,8 @@ describe("runRenderCheck — the action walk (ggui#1652)", () => {
   it("follows a wizard to its last screen (Back first and disabled; Next gated on typed and picked answers) and verifies the action there", async () => {
     const result = await runRenderCheck({ sourceCode: STEP_GATED, mockupProps: {}, contract: actions("submit", "Submit Survey") });
     expect(result.issues.filter((i) => i.check === "action-wiring")).toEqual([]);
-    // The control the walk pressed is the one the pending phase reads.
-    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [] });
+    // The control the walk pressed is the one the pending phase reads, not the card.
+    expect(result.stats.pendingAffordance).toEqual({ dispatched: 1, visible: 1, missing: [], gone: [], card: [] });
   }, 30000);
 
   it("recognises a step it returns to although its controls carry fresh generated names (useId), so Back cannot loop it", async () => {

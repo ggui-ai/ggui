@@ -415,7 +415,7 @@ describe('toDisplayReport — ggui#1791 same-failure break', () => {
 
 describe('toDisplayReport — #1398 pending-affordance reading', () => {
   it('carries runtimeProbePendingAffordance on a cell that has one, as a copy, and no key on a cell that does not', () => {
-    const reading = { dispatched: 2, visible: 1, missing: ['submit'], gone: ['help'] };
+    const reading = { dispatched: 2, visible: 1, missing: ['submit'], gone: ['help'], card: ['save'] };
     const withReading: BenchmarkRunResult = { ...tierEvaluatedRun('with', ALL_RAN), runtimeProbePendingAffordance: reading };
     const without: BenchmarkRunResult = tierEvaluatedRun('without', ALL_RAN);
     const d = toDisplayReport(generateReport([withReading, without], 0), 'rep-1398', 'test');
@@ -424,6 +424,9 @@ describe('toDisplayReport — #1398 pending-affordance reading', () => {
     expect(byCommit.get('with')?.runtimeProbePendingAffordance?.missing).not.toBe(reading.missing);
     expect(byCommit.get('with')?.runtimeProbePendingAffordance?.gone).toEqual(['help']);
     expect(byCommit.get('with')?.runtimeProbePendingAffordance?.gone).not.toBe(reading.gone);
+    // #1652: the actions read on the card travel too, as a copy.
+    expect(byCommit.get('with')?.runtimeProbePendingAffordance?.card).toEqual(['save']);
+    expect(byCommit.get('with')?.runtimeProbePendingAffordance?.card).not.toBe(reading.card);
     const copy = byCommit.get('with')?.runtimeProbePendingAffordance;
     expect(copy && copy.visible + copy.missing.length).toBe(copy?.dispatched);
     expect(byCommit.get('without')).not.toHaveProperty('runtimeProbePendingAffordance');

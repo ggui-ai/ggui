@@ -402,17 +402,22 @@ export interface RuntimeProbeVerdictDisplay {
 }
 
 /**
- * Mirrors `ProbePendingAffordance` in `@ggui-ai/ui-gen/evaluation` (#1398): of the actions whose control the
- * runtime probe's click walk made dispatch and that were still in the page when marked pending, how many controls
- * visibly changed (disabled, busy, text, or replaced) and which did not (`visible + missing.length === dispatched`),
- * plus the actions whose control was gone before its turn (never marked). Report-only: it moves no verdict, count,
- * score or pass.
+ * Mirrors `ProbePendingAffordance` in `@ggui-ai/ui-gen/evaluation` (#1398): of the actions the runtime probe's
+ * click walk made dispatch and that were marked pending, how many visibly changed (the control: disabled, busy,
+ * text, or replaced; or, for those in `card`, the whole card) and which did not
+ * (`visible + missing.length === dispatched`), plus the actions whose control was gone before its turn (never
+ * marked). Report-only: it moves no verdict, count, score or pass.
  */
 export interface RuntimePendingAffordanceDisplay {
   dispatched: number;
   visible: number;
   missing: readonly string[];
   gone: readonly string[];
+  /**
+   * The actions read on the whole card because their own press took their control away (#1652). Absent on rows
+   * published before the probe read the card; such a row counted those actions as `gone`.
+   */
+  card?: readonly string[];
 }
 
 export interface VariantSummaryDisplay {

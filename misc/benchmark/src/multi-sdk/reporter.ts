@@ -745,6 +745,7 @@ export function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
             visible: r.runtimeProbePendingAffordance.visible,
             missing: [...r.runtimeProbePendingAffordance.missing],
             gone: [...r.runtimeProbePendingAffordance.gone],
+            card: [...r.runtimeProbePendingAffordance.card],
           },
         }
       : {}),

@@ -90,7 +90,7 @@ describe('deriveRuntimeProbeVerdict agrees with the probe metadata\'s own verdic
 });
 
 describe('runtimePendingAffordanceOf (#1398 — the pending-affordance reading rides beside the verdict, report-only)', () => {
-  const reading = { dispatched: 3, visible: 1, missing: ['submit', 'reset'], gone: ['cancel'] } as const;
+  const reading = { dispatched: 3, visible: 1, missing: ['submit', 'reset'], gone: ['cancel'], card: ['save'] } as const;
 
   it('is absent when no eval ran, or when the probe carries no reading (no action walk ran) — never zero-filled', () => {
     expect(runtimePendingAffordanceOf(undefined)).toBeUndefined();
@@ -100,7 +100,7 @@ describe('runtimePendingAffordanceOf (#1398 — the pending-affordance reading r
 
   it('copies the probe meta reading as is, 0/0 included', () => {
     expect(runtimePendingAffordanceOf(evalWith([], { status: 'ran', verdict: 'pass', pendingAffordance: reading }))).toEqual(reading);
-    const empty = { dispatched: 0, visible: 0, missing: [], gone: [] };
+    const empty = { dispatched: 0, visible: 0, missing: [], gone: [], card: [] };
     expect(runtimePendingAffordanceOf(evalWith([], { status: 'ran', verdict: 'pass', pendingAffordance: empty }))).toEqual(empty);
   });
 

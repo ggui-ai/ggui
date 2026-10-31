@@ -53,7 +53,15 @@ import {
 } from "./host-boundary.js";
 import { hostGlobals, openRecord } from "../../../internal/open-record.js";
 import type { ProbeHostLoad, ProbePendingAffordance } from "../../../evaluation/types-public.js";
-import { createProbePendingSource, lookChanged, lookOf, settlesWithin, type ProbePendingSource } from "./probe-pending.js";
+import {
+  cardLookChanged,
+  cardLookOf,
+  createProbePendingSource,
+  lookChanged,
+  lookOf,
+  settlesWithin,
+  type ProbePendingSource,
+} from "./probe-pending.js";
 import { primeInputs } from "@ggui-ai/ui-visual-tester/prime-inputs";
 import { walkToAction, type WalkControl, type WalkMount, type WalkStop } from "./walk.js";
 
@@ -649,6 +657,7 @@ export async function runRenderCheckInProcess(
       // still makes its two clicks there, as it always did.)
       if (input.contract?.actionSpec) {
         const actionSpec = input.contract.actionSpec;
+        const contractActions = Object.entries(actionSpec).map(([n, e]) => ({ name: n, label: e.label }));
         for (const [name, entry] of Object.entries(actionSpec)) {
           actionsChecked++;
           const wiring = findWiring({
@@ -687,6 +696,7 @@ export async function runRenderCheckInProcess(
             probe,
             user,
             pendingTargets,
+            actions: contractActions,
             stopAt: walkStopAt(input.deadlineAt),
             walkedTexts,
           });
@@ -1302,6 +1312,7 @@ function finalize(
               visible: pendingTally.visible,
               missing: [...pendingTally.missing],
               gone: [...pendingTally.gone],
+              card: [...pendingTally.card],
             },
           }
         : {}),
@@ -1315,6 +1326,8 @@ interface PendingTally {
   visible: number;
   missing: string[];
   gone: string[];
+  /** ggui#1652: the actions read on the card, because their own press took their control away. */
+  card: string[];
 }
 
 /** A control whose click really dispatched its action (ggui#1398). */
@@ -1325,6 +1338,13 @@ interface PendingTarget {
   readonly element: MinimalElement;
   /** The mount the action's walk pressed it in (ggui#1652), where it is looked for again. */
   readonly container: MinimalElement;
+  /**
+   * ggui#1652: right after its own press, the control was already no longer
+   * the action's control (it left the page, or now names another action), as
+   * when Save closes its editor. If it cannot be found again at the phase's
+   * turn, the card is read in its place: that is where a person looks.
+   */
+  readonly leftOnPress: boolean;
 }
 
 interface PendingPhaseInput {
@@ -1367,7 +1387,7 @@ const PENDING_PHASE_TAIL_MS = 1000;
  *   cut short this way; React turns runaway update loops into throws.
  */
 async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> {
-  const tally: PendingTally = { dispatched: 0, visible: 0, missing: [], gone: [] };
+  const tally: PendingTally = { dispatched: 0, visible: 0, missing: [], gone: [], card: [] };
   let stopped = false;
   for (const target of input.targets) {
     const budget = Math.min(
@@ -1375,13 +1395,26 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
       input.deadlineAt === undefined ? Number.POSITIVE_INFINITY : input.deadlineAt - Date.now() - PENDING_PHASE_TAIL_MS
     );
     const found = stopped || budget <= 0 ? undefined : pendingControlOf(target, input.actions);
-    if (found === undefined) {
+    // ggui#1652: a control its own press took away is read on the card instead.
+    const onCard = found === undefined && !stopped && budget > 0 && target.leftOnPress;
+    if (found === undefined && !onCard) {
       tally.gone.push(target.actionName);
       if (budget <= 0) stopped = true;
       continue;
     }
-    const el = controlToRead(found, target);
-    const before = lookOf(el);
+    const read =
+      found === undefined
+        ? (() => {
+            const look = () => cardLookOf(target.container);
+            const before = look();
+            return { changed: () => cardLookChanged(before, look()) };
+          })()
+        : (() => {
+            const el = controlToRead(found, target);
+            const before = lookOf(el);
+            return { changed: () => lookChanged(before, lookOf(el)) };
+          })();
+    if (onCard) tally.card.push(target.actionName);
     const caughtBefore = input.catches();
     const settled = await settlesWithin(
       budget,
@@ -1394,7 +1427,7 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
     );
     const crashed = input.catches() !== caughtBefore;
     tally.dispatched += 1;
-    if (settled && !crashed && lookChanged(before, lookOf(el))) tally.visible += 1;
+    if (settled && !crashed && read.changed()) tally.visible += 1;
     else tally.missing.push(target.actionName);
     if (!settled) {
       stopped = true;
@@ -1416,7 +1449,7 @@ async function runPendingPhase(input: PendingPhaseInput): Promise<PendingTally> 
  * identity only. A submit target (a form) has no identity to look for.
  */
 function pendingControlOf(
-  target: PendingTarget,
+  target: Omit<PendingTarget, "leftOnPress">,
   actions: readonly { readonly name: string; readonly label: string }[]
 ): MinimalElement | undefined {
   const movedToAnother =
@@ -1459,6 +1492,8 @@ interface CheckActionInput {
   user: { click: (el: MinimalElement) => Promise<void> };
   /** ggui#1398: where a control whose press dispatched is recorded, for the pending phase. */
   pendingTargets?: PendingTarget[];
+  /** Every action the contract declares, to tell whether a press turned its control into another's (ggui#1652). */
+  actions: readonly { readonly name: string; readonly label: string }[];
   /** Epoch ms after which the walk stops, once a press has left the first screen. */
   stopAt: number;
   /** Where the text of every screen the walk reaches is collected, for prop coverage (ggui#1652). */
@@ -1541,13 +1576,8 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
   if (walk.fired) {
     // ggui#1398: record the control for the pending phase; nothing is marked here.
     if (input.pendingTargets && walk.element && walk.container && (kind === "click" || kind === "submit")) {
-      input.pendingTargets.push({
-        actionName,
-        actionLabel,
-        wiringKind: kind,
-        element: walk.element,
-        container: walk.container,
-      });
+      const target = { actionName, actionLabel, wiringKind: kind, element: walk.element, container: walk.container };
+      input.pendingTargets.push({ ...target, leftOnPress: pendingControlOf(target, input.actions) === undefined });
     }
     return null; // verified — no issue
   }
