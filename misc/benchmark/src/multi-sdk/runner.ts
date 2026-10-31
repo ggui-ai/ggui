@@ -186,12 +186,12 @@ export class BenchmarkRunner {
       );
     }
 
-    // 2026-04-27: probe pre-warm now happens inside dispatchGeneration
-    // (parallel with the LLM cold call). Bench previously tried to
-    // pre-warm directly here but the imports resolved against the bench
-    // package's own node_modules where happy-dom isn't installed —
-    // dispatchGeneration's pre-warm runs from inside ui-gen where the
-    // resolution succeeds.
+    // No render-check pre-warm here. The bench is a plain Node process,
+    // so every render check runs in an isolated worker that loads its
+    // own DOM stack; dispatchGeneration warms only where the check runs
+    // in-process (`prewarmInProcessRenderCheck`), which is never the
+    // case in this process. A warm here would load happy-dom and the
+    // testing libraries onto this event loop for nothing.
 
     // Execute with concurrency limit, reporting progress after each completion
     let completedCount = 0;
@@ -513,9 +513,9 @@ export class BenchmarkRunner {
             // semantics — only fires on turns where deterministic checks
             // pass, then feeds back to the coding agent if it finds
             // wiring bugs). enableRuntimeRender defaults to true; bench
-            // gets probe-as-gate behavior natively. The pre-warm at
-            // dispatch entry overlaps the probe deps with the LLM cold
-            // call so first-turn probe is fast.
+            // gets probe-as-gate behavior natively. The check runs in a
+            // worker that loads its own deps, so the bench process itself
+            // pre-warms nothing.
           }),
           this.config.timeoutMs
         );
