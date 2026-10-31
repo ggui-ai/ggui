@@ -187,7 +187,7 @@ const zenLight: DtcgTheme = {
     container: { $value: '#faf9f7', $type: 'color' },
     onContainer: { $value: '#2a2724', $type: 'color' },
     outline: { $value: '#d5d0c8', $type: 'color' },
-    outlineVariant: { $value: '#e7e4de', $type: 'color' },
+    outlineVariant: { $value: '#dcd9d3', $type: 'color' },
     // Primary role pair — onPrimary is stone ivory on moss.
     onPrimary: { $value: '#faf9f7', $type: 'color' },
     primaryContainer: { $value: '#e8ebe2', $type: 'color' }, // primary-100
@@ -307,7 +307,7 @@ const zenDark: DtcgTheme = {
     container: { $value: '#2a2724', $type: 'color' }, // deep moss
     onContainer: { $value: '#f3f1ed', $type: 'color' }, // primary-100 in dark tree
     outline: { $value: '#5e5650', $type: 'color' },
-    outlineVariant: { $value: '#3e3a36', $type: 'color' },
+    outlineVariant: { $value: '#524e4a', $type: 'color' },
     // Primary role pair — dark: onPrimary is deep stone; container = deep moss.
     onPrimary: { $value: '#1a1816', $type: 'color' }, // deep stone base
     primaryContainer: { $value: '#3b4434', $type: 'color' }, // deep moss

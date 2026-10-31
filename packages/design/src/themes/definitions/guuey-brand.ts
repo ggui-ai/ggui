@@ -344,7 +344,7 @@ const guueyBrandLight: DtcgTheme = {
     container: { $value: '#FFFFFF', $type: 'color' },
     onContainer: { $value: '#1A1D24', $type: 'color' },
     outline: { $value: 'rgba(26, 29, 36, 0.18)', $type: 'color' },
-    outlineVariant: { $value: 'rgba(26, 29, 36, 0.10)', $type: 'color' },
+    outlineVariant: { $value: 'rgba(26, 29, 36, 0.11)', $type: 'color' },
     onPrimary: { $value: '#0E1014', $type: 'color' },
     primaryContainer: { $value: '#E9FFB8', $type: 'color' },
     onPrimaryContainer: { $value: '#28390B', $type: 'color' },

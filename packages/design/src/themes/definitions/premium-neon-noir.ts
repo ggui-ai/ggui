@@ -274,7 +274,7 @@ const neonNoirDark: DtcgTheme = {
     container: { $value: '#000000', $type: 'color' }, // richer magenta
     onContainer: { $value: '#ececf0', $type: 'color' },
     outline: { $value: '#19191e', $type: 'color' },
-    outlineVariant: { $value: '#111114', $type: 'color' },
+    outlineVariant: { $value: '#202023', $type: 'color' },
     // Primary role pair — dark: onPrimary is pure black, container = richer magenta.
     onPrimary: { $value: '#000000', $type: 'color' },
     primaryContainer: { $value: '#be185d', $type: 'color' }, // richer magenta

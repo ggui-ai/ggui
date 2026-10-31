@@ -228,7 +228,7 @@ const indigoLight: DtcgTheme = {
     container: { $value: '#fafaf7', $type: 'color' }, // primary-50 — pale indigo whisper
     onContainer: { $value: '#15131f', $type: 'color' }, // primary-900
     outline: { $value: '#d4d3cf', $type: 'color' },
-    outlineVariant: { $value: '#e8e7e3', $type: 'color' },
+    outlineVariant: { $value: '#dddcd9', $type: 'color' },
     // Primary role pair — text on indigo CTAs is paper, container = primary-50.
     onPrimary: { $value: '#fafaf7', $type: 'color' }, // Paper
     primaryContainer: { $value: '#eef2ff', $type: 'color' }, // primary-50
@@ -357,7 +357,7 @@ const indigoDark: DtcgTheme = {
     container: { $value: '#15131f', $type: 'color' }, // primary-100 dark
     onContainer: { $value: '#f5f4f9', $type: 'color' },
     outline: { $value: '#3e3c50', $type: 'color' },
-    outlineVariant: { $value: '#2a2839', $type: 'color' },
+    outlineVariant: { $value: '#302e3f', $type: 'color' },
     // Primary role pair — dark: onPrimary is midnight, container = deep indigo.
     onPrimary: { $value: '#0c0b14', $type: 'color' }, // Midnight
     primaryContainer: { $value: '#312e81', $type: 'color' }, // dark primary-100
