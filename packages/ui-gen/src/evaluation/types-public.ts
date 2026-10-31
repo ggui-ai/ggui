@@ -514,6 +514,11 @@ export interface CriterionVerdict {
    * REPORT-ONLY like `instrument`; `id` names the probe that produced it. Present only beside `space.edge`.
    */
   instrumentV2?: { verdict: CriteriaVerdict; evidence: string; id: string };
+  /**
+   * #1765 — `space.edge.v3`, the rule as ruled on the sealed v2 draw, a SEPARATE instrument beside v1 and v2 on the same
+   * capture, REPORT-ONLY like `instrument`; `id` names the probe that produced it. Present only beside `space.edge`.
+   */
+  instrumentV3?: { verdict: CriteriaVerdict; evidence: string; id: string };
 }
 /** ggui#1687 — the criteria call as it came back: its answer's counts, ids it answered outside the bank, its stop. */
 export interface CriteriaCallRecord {

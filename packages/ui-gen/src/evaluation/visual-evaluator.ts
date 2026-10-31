@@ -48,6 +48,8 @@ import { judgeEdges, type EdgeVerdict } from './criteria/edge.js';
 import { EDGE_BLOCKS_EXPRESSION, parseEdgeProbe } from './criteria/edge-probe.js';
 import { EDGE_BLOCKS_V2_EXPRESSION, parseEdgeProbeV2 } from './criteria/edge-probe-v2.js';
 import { judgeEdgesV2 } from './criteria/edge-v2.js';
+import { EDGE_BLOCKS_V3_EXPRESSION, parseEdgeProbeV3 } from './criteria/edge-probe-v3.js';
+import { judgeEdgesV3 } from './criteria/edge-v3.js';
 import { FINISH_PROBE_EXPRESSION, parseFinishProbe, type FinishProbe } from './criteria/finish-probe.js';
 
 // ---------------------------------------------------------------------------
@@ -907,6 +909,8 @@ export interface ScreenshotAttempt {
   readonly edge?: EdgeVerdict | null;
   /** #1765 — the v2 edge rule on the same DOM, read beside `edge` (report-only); `null` when its probe failed. */
   readonly edgeV2?: EdgeVerdict | null;
+  /** #1765 — the v3 edge rule on the same DOM, read beside `edge` and `edgeV2` (report-only); `null` when its probe failed. */
+  readonly edgeV3?: EdgeVerdict | null;
   /** ggui#1440 — the finish probe on the same DOM (report-only); `null` when it failed. Absent on a failed capture. */
   readonly finish?: FinishProbe | null;
 }
@@ -1009,8 +1013,8 @@ async function measureContentHeight(page: ScreenshotPage, expression: string = C
  * ggui#1663 — read the edge rule off the page the screenshot is about to take. The probe only reads layout (it never
  * writes to the DOM), so the frame is unchanged; a failed read is reported and returns `null`, never a failed capture.
  */
-async function measureEdges(page: ScreenshotPage): Promise<{ edge: EdgeVerdict | null; edgeV2: EdgeVerdict | null; finish: FinishProbe | null }> {
-  return { edge: await measureEdgesV1(page), edgeV2: await measureEdgesV2(page), finish: await measureFinish(page) };
+async function measureEdges(page: ScreenshotPage): Promise<{ edge: EdgeVerdict | null; edgeV2: EdgeVerdict | null; edgeV3: EdgeVerdict | null; finish: FinishProbe | null }> {
+  return { edge: await measureEdgesV1(page), edgeV2: await measureEdgesV2(page), edgeV3: await measureEdgesV3(page), finish: await measureFinish(page) };
 }
 
 /**
@@ -1040,6 +1044,21 @@ async function measureEdgesV2(page: ScreenshotPage): Promise<EdgeVerdict | null>
     return judgeEdgesV2(probe.blocks, { cardContent: probe.cardContent, placeholdersOnly: probe.placeholdersOnly });
   } catch (e) {
     console.warn(`[visual-eval] edge probe v2 unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+/** #1765 — the v3 rule on the same page, beside v1 and v2; a failed read is reported and returns `null`, never a failed capture. */
+async function measureEdgesV3(page: ScreenshotPage): Promise<EdgeVerdict | null> {
+  try {
+    const probe = parseEdgeProbeV3(await page.evaluate(EDGE_BLOCKS_V3_EXPRESSION));
+    if (probe === null) {
+      console.warn('[visual-eval] edge probe v3 unavailable: the page returned no readable blocks');
+      return null;
+    }
+    return judgeEdgesV3(probe.blocks, { cardContent: probe.cardContent, placeholdersOnly: probe.placeholdersOnly, unpainted: probe.unpainted });
+  } catch (e) {
+    console.warn(`[visual-eval] edge probe v3 unavailable: ${e instanceof Error ? e.message : String(e)}`);
     return null;
   }
 }
@@ -1773,7 +1792,7 @@ export async function runVisualEvaluationDetailed(
               context: criteriaContext,
               selected: criteriaSelected,
               answers: criteriaReads(criteriaAnswer),
-              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null, edgeV2: attempt.edgeV2 ?? null, finish: attempt.finish ?? null },
+              measurements: { overflow, contentHeight, viewportHeight: viewport.height, inkRatio, edge: attempt.edge ?? null, edgeV2: attempt.edgeV2 ?? null, edgeV3: attempt.edgeV3 ?? null, finish: attempt.finish ?? null },
               ...criteriaUnansweredReason(criteriaAnswer),
               ...criteriaCallOf(criteriaAnswer),
             })

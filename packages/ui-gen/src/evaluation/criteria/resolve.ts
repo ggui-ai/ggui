@@ -61,6 +61,8 @@ export interface CriteriaMeasurements {
   readonly edge?: EdgeVerdict | null;
   /** #1765 — the v2 edge rule on the same capture, read beside v1: absent / `null` as for `edge`. */
   readonly edgeV2?: EdgeVerdict | null;
+  /** #1765 — the v3 edge rule on the same capture, read beside v1 and v2 (pre-registered on the row): absent / `null` as for `edge`. */
+  readonly edgeV3?: EdgeVerdict | null;
   /** ggui#1711 — the capture includes a state after an action ran. Absent = no (every capture today). */
   readonly postActionCapture?: boolean;
   /**
@@ -160,6 +162,8 @@ export function resolveCriteriaBlock(args: {
             instrument: { ...besideRead(beside, args.measurements), id: EDGE_INSTRUMENT_IDS.v1 },
             // #1765 — v2 beside v1 on the same capture, report-only, until its own fresh sealed draw.
             instrumentV2: { ...edgeRead(args.measurements.edgeV2), id: EDGE_INSTRUMENT_IDS.v2 },
+            // #1765 — v3 beside v2, report-only, until its own fresh sealed draw.
+            instrumentV3: { ...edgeRead(args.measurements.edgeV3), id: EDGE_INSTRUMENT_IDS.v3 },
           }
         : {}),
     });

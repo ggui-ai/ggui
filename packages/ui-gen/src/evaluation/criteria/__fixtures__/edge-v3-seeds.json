@@ -1,0 +1,484 @@
+{
+  "source": "#1765 v3 seeds: the sealed v2 draw's cells (attempt 1), re-rendered locally through runVisualFit at the stored canvas box, sampleProps and app-row theme, read by edge-probe-v3; the design lead's eye: c.6540112464, rulings c.6540191139 / c.6540212399",
+  "seeds": {
+    "11": {
+      "cell": "LqdCugm3_kanban-week",
+      "canvas": "md",
+      "expect": "fail",
+      "read": {
+        "blocks": [
+          {
+            "id": "div:1>div:1 \"This week\"",
+            "kind": "surface",
+            "edge": 0,
+            "left": 0,
+            "right": 816,
+            "top": 16,
+            "bottom": 93,
+            "contentLeft": 24,
+            "contentRight": 792,
+            "edgeIs": "box",
+            "paint": "paints by fill (ratio and ΔE): fill 13.09:1 / ΔE 79.2"
+          },
+          {
+            "id": "div:1>div:1>div:2>h1:1 \"This week\"",
+            "kind": "text",
+            "edge": 168,
+            "left": 168,
+            "right": 332.5,
+            "top": 33,
+            "bottom": 76,
+            "within": "div:1>div:1 \"This week\"",
+            "parentRight": 792,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:1>h2:1 \"This week\"",
+            "kind": "text",
+            "edge": 24,
+            "left": 24,
+            "right": 100.5,
+            "top": 110,
+            "bottom": 128,
+            "parentRight": 269.5,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:3>div:1>h2:1 \"In progress\"",
+            "kind": "text",
+            "edge": 285.5,
+            "left": 285.5,
+            "right": 371,
+            "top": 110,
+            "bottom": 128,
+            "follows": "div:1>div:2>div:1>div:1>div:2 \"This week 3 Confirm Satu\"",
+            "item": "div:1>div:2>div:1>div:1>div:3 \"In progress 2 Rebook Mrs\"",
+            "parentRight": 530.5,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:4>div:1>h2:1 \"Done\"",
+            "kind": "text",
+            "edge": 546.5,
+            "left": 546.5,
+            "right": 586.5,
+            "top": 110,
+            "bottom": 128,
+            "follows": "div:1>div:2>div:1>div:1>div:2 \"This week 3 Confirm Satu\"",
+            "item": "div:1>div:2>div:1>div:1>div:4 \"Done 1 Send reminders fo\"",
+            "parentRight": 792,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2 \"This week 3 Confirm Satu\" [controls]",
+            "kind": "controls",
+            "edge": 49,
+            "left": 24,
+            "right": 269.5,
+            "top": 170,
+            "bottom": 481,
+            "textEdge": 49,
+            "parentRight": 792,
+            "edgeIs": "first character",
+            "textEdgeIs": "first character",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:3 \"In progress 2 Rebook Mrs\" [controls]",
+            "kind": "controls",
+            "edge": 310.5,
+            "left": 285.5,
+            "right": 530.5,
+            "top": 170,
+            "bottom": 404,
+            "textEdge": 310.5,
+            "follows": "div:1>div:2>div:1>div:1>div:2 \"This week 3 Confirm Satu\"",
+            "item": "div:1>div:2>div:1>div:1>div:3 \"In progress 2 Rebook Mrs\"",
+            "parentRight": 792,
+            "edgeIs": "first character",
+            "textEdgeIs": "first character",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:4 \"Done 1 Send reminders fo\" [controls]",
+            "kind": "controls",
+            "edge": 571.5,
+            "left": 546.5,
+            "right": 792,
+            "top": 170,
+            "bottom": 255,
+            "textEdge": 571.5,
+            "follows": "div:1>div:2>div:1>div:1>div:2 \"This week 3 Confirm Satu\"",
+            "item": "div:1>div:2>div:1>div:1>div:4 \"Done 1 Send reminders fo\"",
+            "parentRight": 792,
+            "edgeIs": "first character",
+            "textEdgeIs": "first character",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0"
+          }
+        ],
+        "unpainted": [
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:3 \"Confirm Saturday's colou\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:4 \"Order toner and foils st\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:5 \"Post the new-client offe\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:3>div:3 \"Rebook Mrs. Alvarez (mov\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:3>div:4 \"Update price list on the\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:4>div:3 \"Send reminders for Frida\"",
+            "paint": "paints nothing: border 1.15:1 / ΔE 5.6; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          }
+        ],
+        "cardContent": {
+          "left": 0,
+          "right": 816
+        },
+        "placeholdersOnly": false,
+        "skipped": {
+          "rowItems": 6,
+          "ornaments": 0
+        }
+      }
+    },
+    "17": {
+      "cell": "tb387rRD_36ee32b7a769",
+      "canvas": "xs-chat-card",
+      "expect": "fail",
+      "read": {
+        "blocks": [
+          {
+            "id": "div:1>div:1 \"Guuey pricing plans\"",
+            "kind": "surface",
+            "edge": 0,
+            "left": 0,
+            "right": 400,
+            "top": 17,
+            "bottom": 82,
+            "contentLeft": 24,
+            "contentRight": 376,
+            "edgeIs": "box",
+            "paint": "paints by fill (ΔE): fill 1.05:1 / ΔE 3.4"
+          },
+          {
+            "id": "div:1>div:1>div:2>h3:1 \"Guuey pricing plans\"",
+            "kind": "text",
+            "edge": 24,
+            "left": 24,
+            "right": 240.5,
+            "top": 35,
+            "bottom": 63,
+            "within": "div:1>div:1 \"Guuey pricing plans\"",
+            "parentRight": 376,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>p:4 \"Compute and storage beyo\"",
+            "kind": "text",
+            "edge": 24,
+            "left": 24,
+            "right": 354,
+            "top": 342,
+            "bottom": 375,
+            "parentRight": 376,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1 \"Free $0/mo 1 agent · 512\" [controls]",
+            "kind": "controls",
+            "edge": 69,
+            "left": 24,
+            "right": 376,
+            "top": 98,
+            "bottom": 333,
+            "textEdge": 49,
+            "parentRight": 376,
+            "edgeIs": "first character",
+            "textEdgeIs": "icon",
+            "paint": "paints nothing: border 1.16:1 / ΔE 6.5; fill 1.00:1 / ΔE 0.0"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:5 \"Choose Plan\" [controls]",
+            "kind": "controls",
+            "edge": 24,
+            "left": 24,
+            "right": 138,
+            "top": 385,
+            "bottom": 417,
+            "textEdge": 41,
+            "parentRight": 376,
+            "edgeIs": "box",
+            "textEdgeIs": "first character",
+            "paint": "paints by border (ratio and ΔE): border 3.85:1 / ΔE 59.9; shadow 1.09:1 / ΔE 4.3 (peak; 0px 1px 3px 0px)"
+          }
+        ],
+        "unpainted": [
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1 \"Free $0/mo 1 agent · 512\"",
+            "paint": "paints nothing: border 1.16:1 / ΔE 6.5; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2 \"Pro $29/mo 10 agents · 4\"",
+            "paint": "paints nothing: border 1.16:1 / ΔE 6.5; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:3 \"Enterprise Custom Unlimi\"",
+            "paint": "paints nothing: border 1.16:1 / ΔE 6.5; fill 1.00:1 / ΔE 0.0",
+            "v2": "border"
+          }
+        ],
+        "cardContent": {
+          "left": 0,
+          "right": 400
+        },
+        "placeholdersOnly": false,
+        "skipped": {
+          "rowItems": 0,
+          "ornaments": 0
+        }
+      }
+    },
+    "23": {
+      "cell": "VexMG7x8_c41defe3f51d",
+      "canvas": "md",
+      "expect": "pass",
+      "read": {
+        "blocks": [
+          {
+            "id": "div:1>div:1 \"Coffee subscription plan\"",
+            "kind": "surface",
+            "edge": 1,
+            "left": 1,
+            "right": 783,
+            "top": 33,
+            "bottom": 98,
+            "contentLeft": 25,
+            "contentRight": 759,
+            "edgeIs": "box",
+            "paint": "paints by fill (ratio and ΔE): fill 2.72:1 / ΔE 40.5"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:1 \"Can I change my roast se\"",
+            "kind": "surface",
+            "edge": 152,
+            "left": 152,
+            "right": 632,
+            "top": 459,
+            "bottom": 493,
+            "contentLeft": 152,
+            "contentRight": 632,
+            "parentRight": 759,
+            "edgeIs": "box",
+            "paint": "paints by border (ratio and ΔE): border 1.30:1 / ΔE 13.1"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:2 \"How do I cancel?\"",
+            "kind": "surface",
+            "edge": 152,
+            "left": 152,
+            "right": 632,
+            "top": 493,
+            "bottom": 526,
+            "contentLeft": 152,
+            "contentRight": 632,
+            "parentRight": 759,
+            "edgeIs": "box",
+            "paint": "paints by border (ratio and ΔE): border 1.30:1 / ΔE 13.1"
+          },
+          {
+            "id": "div:1>div:1>div:2>h3:1 \"Coffee subscription plan\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 432.5,
+            "top": 51,
+            "bottom": 79,
+            "within": "div:1>div:1 \"Coffee subscription plan\"",
+            "parentRight": 759,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:1>p:1 \"Explorer\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 215.5,
+            "top": 211,
+            "bottom": 229,
+            "parentRight": 632,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:2>p:1 \"16.99\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 217,
+            "top": 241,
+            "bottom": 269,
+            "parentRight": 632,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>p:3 \"One bag of a rotating si\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 532,
+            "top": 280,
+            "bottom": 297,
+            "parentRight": 759,
+            "edgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:4>p:2 \"Free shipping\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 271.5,
+            "top": 309,
+            "bottom": 326,
+            "textEdge": 184,
+            "follows": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:4>span:1",
+            "item": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:4>p:2 \"Free shipping\"",
+            "parentRight": 632,
+            "edgeIs": "marker",
+            "textEdgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:5>p:2 \"Cancel anytime\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 283,
+            "top": 341,
+            "bottom": 358,
+            "textEdge": 184,
+            "follows": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:5>span:1",
+            "item": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:5>p:2 \"Cancel anytime\"",
+            "parentRight": 632,
+            "edgeIs": "marker",
+            "textEdgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:6>p:2 \"New origin each month\"",
+            "kind": "text",
+            "edge": 152,
+            "left": 152,
+            "right": 333,
+            "top": 373,
+            "bottom": 390,
+            "textEdge": 184,
+            "follows": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:6>span:1",
+            "item": "div:1>div:2>div:1>div:1>div:1>div:2>div:2>div:6>p:2 \"New origin each month\"",
+            "parentRight": 632,
+            "edgeIs": "marker",
+            "textEdgeIs": "first character"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:1 \"Explorer Household\" [controls]",
+            "kind": "controls",
+            "edge": 152,
+            "left": 152,
+            "right": 379,
+            "top": 114,
+            "bottom": 152,
+            "textEdge": 169,
+            "parentRight": 632,
+            "edgeIs": "box",
+            "textEdgeIs": "icon",
+            "paint": "paints by shadow (ratio and ΔE): border 5.36:1 / ΔE 61.7; shadow 1.67:1 / ΔE 25.9 (peak; 0px 0px 4px 0px)"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2>div:1 \"All plans\" [controls]",
+            "kind": "controls",
+            "edge": 152,
+            "left": 152,
+            "right": 245.5,
+            "top": 168,
+            "bottom": 200,
+            "textEdge": 160,
+            "parentRight": 632,
+            "edgeIs": "box",
+            "textEdgeIs": "icon",
+            "paint": "paints by shadow (ratio and ΔE): shadow 1.67:1 / ΔE 25.9 (peak; 0px 0px 4px 0px)"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:1>div:2 \"All plans Explorer Month\" [controls]",
+            "kind": "controls",
+            "edge": 152,
+            "left": 152,
+            "right": 632,
+            "top": 403,
+            "bottom": 443,
+            "textEdge": 337,
+            "parentRight": 759,
+            "edgeIs": "box",
+            "textEdgeIs": "first character",
+            "paint": "paints by fill (ratio and ΔE): fill 5.36:1 / ΔE 61.7; shadow 1.67:1 / ΔE 25.9 (peak; 0px 0px 4px 0px)"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:1>h3:1 \"Can I change my roast se\" [controls]",
+            "kind": "controls",
+            "edge": 168,
+            "left": 152,
+            "right": 632,
+            "top": 460,
+            "bottom": 492,
+            "within": "div:1>div:2>div:1>div:1>div:2>div:1 \"Can I change my roast se\"",
+            "textEdge": 168,
+            "parentRight": 759,
+            "edgeIs": "first character",
+            "textEdgeIs": "first character",
+            "paint": "paints nothing: no border, fill or shadow"
+          },
+          {
+            "id": "div:1>div:2>div:1>div:1>div:2>div:2>h3:1 \"How do I cancel?\" [controls]",
+            "kind": "controls",
+            "edge": 168,
+            "left": 152,
+            "right": 632,
+            "top": 493,
+            "bottom": 525,
+            "within": "div:1>div:2>div:1>div:1>div:2>div:2 \"How do I cancel?\"",
+            "textEdge": 168,
+            "parentRight": 759,
+            "edgeIs": "first character",
+            "textEdgeIs": "first character",
+            "paint": "paints nothing: no border, fill or shadow"
+          }
+        ],
+        "unpainted": [],
+        "cardContent": {
+          "left": 1,
+          "right": 783
+        },
+        "placeholdersOnly": false,
+        "skipped": {
+          "rowItems": 2,
+          "ornaments": 0
+        }
+      }
+    }
+  }
+}
