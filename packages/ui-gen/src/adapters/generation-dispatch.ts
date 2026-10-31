@@ -45,7 +45,10 @@ import { matches as axisCheckMatches } from "../evaluation/types-public.js";
 // generator), never one per generation.
 import { DEFAULT_RUNTIME_RENDER_CHECK } from "../harness/check/runtime-render/adapter.js";
 import type { RuntimeRenderCheck } from "../harness/types-public.js";
-import { warmupRuntimeRenderProbe } from "../harness/check/runtime-render/index.js";
+import {
+  renderCheckRunsInProcess,
+  warmupRuntimeRenderProbe,
+} from "../harness/check/runtime-render/index.js";
 import { assembleGenerationResult } from "../harness/coding/assemble-result.js";
 import {
   createGenerateTaskRunner,
@@ -260,6 +263,32 @@ function mapProviderForLLMRouter(
 }
 
 /**
+ * Pre-warm the runtime-render check's deps in parallel with the LLM cold
+ * call, ONLY where the check will run in this process. The check lazily
+ * loads happy-dom + `@testing-library/*` + `@ggui-ai/wire` on first use
+ * (~700-1500ms cold); overlapping that with the first LLM round-trip
+ * means the first in-process check hits warm modules (~50ms).
+ * Fire-and-forget: if the check runs before the warm completes, it pays
+ * the cold cost itself.
+ *
+ * In a plain Node process the check runs in an isolated worker
+ * ({@link renderCheckRunsInProcess} is false), which loads its own copy:
+ * a warm here helps nothing, and its module loading runs on this
+ * process's event loop, stalling every request it serves for the length
+ * of the cold load on the first generation after a start (ggui#1769).
+ *
+ * Returns whether it started a warm.
+ */
+export function prewarmInProcessRenderCheck(enableRuntimeRender: boolean | undefined): boolean {
+  if ((enableRuntimeRender ?? true) !== true || !renderCheckRunsInProcess()) return false;
+  void warmupRuntimeRenderProbe().catch(() => {
+    // Pre-warm is best-effort; the check surfaces real failures
+    // through the standard check pipeline if a dep is missing.
+  });
+  return true;
+}
+
+/**
  * Dispatch to the closure-based harness pipeline. Single-implementation,
  * provider-agnostic.
  */
@@ -272,19 +301,7 @@ export async function dispatchGeneration(
   // to render PropEntry.example values as // Example: {...} comments in the TS interface.
   // Do NOT re-inject here.
 
-  // Pre-warm runtime-render probe deps in parallel with the LLM cold
-  // call. The probe lazily loads happy-dom +
-  // @testing-library + @ggui-ai/wire on first use (~700-1500ms cold);
-  // pre-warming so it overlaps with the first LLM round-trip means the
-  // first runCheck call hits warm modules (~50ms). Fire-and-forget — if
-  // the probe runs before pre-warm completes, runCheck just pays the
-  // cold cost on first invocation.
-  if ((params.enableRuntimeRender ?? true) === true) {
-    void warmupRuntimeRenderProbe().catch(() => {
-      // Pre-warm is best-effort; per-cell probe surfaces real failures
-      // through the standard check pipeline if a dep is missing.
-    });
-  }
+  prewarmInProcessRenderCheck(params.enableRuntimeRender);
 
   const routerProvider = mapProviderForLLMRouter(params.provider);
   const resolvedModel = params.models?.coding ?? params.models?.default ?? params.model;

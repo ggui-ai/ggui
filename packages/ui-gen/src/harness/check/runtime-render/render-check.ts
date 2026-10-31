@@ -238,6 +238,20 @@ export type RunRenderCheckOptions = RenderCheckHostOptions;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Whether {@link runRenderCheck} runs the check in THIS process: true only
+ * when the calling environment already owns a DOM (`window` + `document`
+ * on `globalThis`). In a plain Node process every check runs in an
+ * isolated worker, so this process never loads the check's DOM and
+ * testing stack (happy-dom, `@testing-library/*`). The one predicate both
+ * the dispatcher and any caller that pre-loads that stack read, so the two
+ * cannot disagree about where the check runs (ggui#1769).
+ */
+export function renderCheckRunsInProcess(): boolean {
+  const g = hostGlobals();
+  return "window" in g && "document" in g;
+}
+
+/**
  * Run the in-loop runtime render check.
  *
  * Isolation dispatcher (#592): when the CALLING environment already
@@ -261,8 +275,7 @@ export async function runRenderCheck(
   input: RunRenderCheckInput,
   options: RunRenderCheckOptions = {}
 ): Promise<RenderCheckResult> {
-  const g = hostGlobals();
-  if ("window" in g && "document" in g) {
+  if (renderCheckRunsInProcess()) {
     // In-process: nothing to bound — the check shares the caller's process.
     return runRenderCheckInProcess(input);
   }

@@ -14,6 +14,7 @@ import type { RenderCheckHostBounds } from "./render-check-host.js";
 
 export {
   RENDER_CHECK_KINDS,
+  renderCheckRunsInProcess,
   runRenderCheck,
   type RenderCheckKind,
   type RenderCheckResult,
