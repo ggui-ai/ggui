@@ -132,7 +132,7 @@ overrides:
   # see two nominal McpServer classes (install-order dependent!).
   "@modelcontextprotocol/sdk": 1.32.2
   # Same invariant (2.x only — @google/adk's 1.52.0 chain stays put).
-  "@google/genai@>=2": 2.31.0
+  "@google/genai@>=2": 2.32.0
   # Same invariant — 13.16-vs-13.17 split broke RN <WebView> JSX in CI.
   react-native-webview: 13.16.1
   # Same invariant, NATIVE flavor — dual sharp = libvips soname collision
@@ -368,6 +368,8 @@ overrides:
   "@esbuild/win32-x64@0.27.x": 0.27.7
   "@esbuild/win32-x64@0.28.x": 0.28.2
   "@google-cloud/storage": 7.21.0
+  "@google/genai@^1": 1.52.0
+  "@google/genai@^2": 2.32.0
   "@grpc/grpc-js": 1.14.6
   "@guuey/mcp-apps-host@0.30.x": 0.30.0
   "@guuey/threads": 0.30.0

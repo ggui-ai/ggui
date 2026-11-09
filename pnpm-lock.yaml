@@ -31,7 +31,7 @@ overrides:
   astro>vite@<8.2.4: ^8.3.5
   uuid@<14.0.0: ^14.0.0
   '@modelcontextprotocol/sdk': 1.32.2
-  '@google/genai@>=2': 2.31.0
+  '@google/genai@>=2': 2.32.0
   react-native-webview: 13.16.1
   sharp: 0.35.5
   puppeteer-core: 25.6.0
@@ -204,6 +204,8 @@ overrides:
   '@esbuild/win32-x64@0.27.x': 0.27.7
   '@esbuild/win32-x64@0.28.x': 0.28.2
   '@google-cloud/storage': 7.21.0
+  '@google/genai@^1': 1.52.0
+  '@google/genai@^2': 2.32.0
   '@grpc/grpc-js': 1.14.6
   '@guuey/mcp-apps-host@0.30.x': 0.30.0
   '@guuey/threads': 0.30.0
@@ -1766,8 +1768,8 @@ importers:
         specifier: workspace:*
         version: link:../wire
       '@google/genai':
-        specifier: 2.31.0
-        version: 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+        specifier: 2.32.0
+        version: 2.32.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@testing-library/dom':
         specifier: 10.4.1
         version: 10.4.1
@@ -1978,8 +1980,8 @@ importers:
         specifier: ^1.1.0
         version: 1.5.0(@grpc/grpc-js@1.14.6)(@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(pg@8.19.0))(@mikro-orm/mssql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/mysql@6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4))(@mikro-orm/sqlite@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0))(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
-        specifier: ^1.37.0
-        version: 1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+        specifier: 1.52.0
+        version: 1.52.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -3344,8 +3346,8 @@ packages:
       express:
         optional: true
 
-  '@google/genai@1.50.1':
-    resolution: {integrity: sha512-YbkX7H9+1Pt8wOt7DDREy8XSoiL6fRDzZQRyaVBarFf8MR3zHGqVdvM4cLbDXqPhxqvegZShgfxb8kw9C7YhAQ==}
+  '@google/genai@1.52.0':
+    resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': 1.32.2
@@ -3353,8 +3355,8 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@google/genai@2.31.0':
-    resolution: {integrity: sha512-u1fw0qEiuWwNcjZixJFRfQF0awQnHb/rBBQUeiYGF+nmTXQCvcgpR2UMhKU9KNdnZdYhahY5jwS6nJ2V2tGtDA==}
+  '@google/genai@2.32.0':
+    resolution: {integrity: sha512-60c79uXpR0a47bmGqDxbXEBuQUalNmwo5mx5kqb91jIW4FoqpsLSt86DeVhRhtH5+s/16Wqxt3sXzFQn2U1OHQ==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': 1.32.2
@@ -11324,7 +11326,7 @@ snapshots:
 
   '@google-cloud/vertexai@1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)':
     dependencies:
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       google-auth-library: 9.15.1(encoding@0.1.13)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -11340,7 +11342,7 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
       '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+      '@google/genai': 2.32.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/mariadb': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(pg@8.19.0)
       '@mikro-orm/mssql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@13.0.3)(mariadb@3.5.4)(pg@8.19.0)
@@ -11383,7 +11385,7 @@ snapshots:
     dependencies:
       '@a2a-js/sdk': 0.3.14(@grpc/grpc-js@1.14.6)(express@5.2.1)
       '@google-cloud/vertexai': 1.12.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(encoding@0.1.13)
-      '@google/genai': 2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
+      '@google/genai': 2.32.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))
       '@mikro-orm/core': 7.2.5(dataloader@2.2.3)
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/api-logs': 0.222.0
@@ -11426,7 +11428,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
@@ -11439,7 +11441,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/genai@2.31.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
+  '@google/genai@2.32.0(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
