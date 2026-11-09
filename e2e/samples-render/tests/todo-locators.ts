@@ -10,11 +10,47 @@
  */
 import type { FrameLocator, Locator } from '@playwright/test';
 
+/** A button or `role="button"` element that can be clicked, outside any loading preview. */
+const ENABLED_BUTTON =
+  '(self::button or @role="button") and not(@disabled) and not(@aria-disabled="true")' +
+  ' and not(ancestor::*[@data-ggui-preview])';
+
+/**
+ * Text that reads `name`, outside any `[data-ggui-preview]` subtree. The
+ * loading preview paints the same item texts in a disabled shell, so a row
+ * found from the preview's copy of the text would hold no control to click.
+ */
+function itemText(frame: FrameLocator, name: RegExp): Locator {
+  return frame
+    .getByText(name)
+    .locator('xpath=self::*[not(ancestor-or-self::*[@data-ggui-preview])]')
+    .first();
+}
+
+/**
+ * The row of a todo whose toggle is a button that does not carry the item in
+ * its name, e.g. every row's button reads "Toggle todo". The row is the
+ * nearest ancestor of the item's text that holds an enabled button. It is
+ * refused when it holds a checkbox or switch, which the checkbox row reads
+ * instead, or a list item or table row, which means it is the list rather
+ * than one row of it.
+ */
+function rowWithButton(frame: FrameLocator, name: RegExp): Locator {
+  return itemText(frame, name).locator(
+    `xpath=ancestor-or-self::*[.//*[${ENABLED_BUTTON}]][1]` +
+      '[not(.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]' +
+      ' or .//li or .//*[@role="listitem"] or .//tr or .//*[@role="row"])]',
+  );
+}
+
 /**
  * The clickable toggle for a todo named `name`. Tries named ARIA roles first
  * (checkbox / switch / menuitemcheckbox / button), then falls back to the
  * smallest ancestor row of the text that contains an interactive checkbox —
- * the unlabeled pattern Gemini tends to emit.
+ * the unlabeled pattern Gemini tends to emit — and then to the first enabled
+ * button in the item's row ({@link rowWithButton}), for rows whose buttons
+ * all share one name. A row with a delete button before its toggle would
+ * click delete; the checked indicator then fails, so that shape reads red.
  */
 export function findTodoToggleable(frame: FrameLocator, name: RegExp): Locator {
   const namedRoles = frame
@@ -23,24 +59,23 @@ export function findTodoToggleable(frame: FrameLocator, name: RegExp): Locator {
     .or(frame.getByRole('menuitemcheckbox', { name }))
     .or(frame.getByRole('button', { name }));
 
-  const rowWithCheckbox = frame
-    .getByText(name)
-    .first()
-    .locator(
-      'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
-    );
+  const rowWithCheckbox = itemText(frame, name).locator(
+    'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
+  );
   const rowCheckbox = rowWithCheckbox
     .getByRole('checkbox')
     .or(rowWithCheckbox.getByRole('switch'))
     .or(rowWithCheckbox.locator('input[type="checkbox"]'));
+  const rowButton = rowWithButton(frame, name).locator(`xpath=.//*[${ENABLED_BUTTON}]`).first();
 
-  return namedRoles.or(rowCheckbox).first();
+  return namedRoles.or(rowCheckbox).or(rowButton).first();
 }
 
 /**
  * A "completed/checked" indicator for the todo named `name`. Same labeled-vs-
- * unlabeled split as {@link findTodoToggleable}, plus a near-text fallback for
- * agents that render "done"/"completed"/"✓" text instead of a checked control.
+ * unlabeled split as {@link findTodoToggleable} (a pressed button in the
+ * item's row counts as checked), plus a near-text fallback for agents that
+ * render "done"/"completed"/"✓" text instead of a checked control.
  */
 export function findTodoCheckedIndicator(frame: FrameLocator, name: RegExp): Locator {
   const namedChecked = frame
@@ -48,16 +83,14 @@ export function findTodoCheckedIndicator(frame: FrameLocator, name: RegExp): Loc
     .or(frame.getByRole('switch', { name, checked: true }))
     .or(frame.getByRole('button', { name, pressed: true }));
 
-  const rowWithCheckbox = frame
-    .getByText(name)
-    .first()
-    .locator(
-      'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
-    );
+  const rowWithCheckbox = itemText(frame, name).locator(
+    'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
+  );
   const rowChecked = rowWithCheckbox
     .getByRole('checkbox', { checked: true })
     .or(rowWithCheckbox.getByRole('switch', { checked: true }))
-    .or(rowWithCheckbox.locator('input[type="checkbox"]:checked'));
+    .or(rowWithCheckbox.locator('input[type="checkbox"]:checked'))
+    .or(rowWithButton(frame, name).getByRole('button', { pressed: true }));
 
   const completionTextNear = frame.getByText(
     new RegExp(
