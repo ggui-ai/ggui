@@ -231,9 +231,10 @@ jobs:
       # Canonical leaf-first publish order — bare package directory names
       # (each use site below prefixes `packages/`). In github.com/ggui-ai/ggui
       # a package lives at `packages/<dir>/` after the subtree split strips
-      # the `oss/` prefix. Keep this list ordered by dependency depth —
-      # anything earlier in the list MAY be depended on by anything later,
-      # never the reverse.
+      # the `oss/` prefix. Keep this list dependency-first — anything earlier
+      # in the list MAY be depended on by anything later, never the reverse;
+      # the step checks it and fails otherwise. The packages are published in
+      # this list's order sorted by dependency depth.
       - name: Resolve publish filter
         id: resolve
         run: |
@@ -277,6 +278,18 @@ jobs:
             protocol-reference-server
             registry-server
           )
+
+          # ORDER must be dependency-first over every publishable package:
+          # the publish step waits, before each package, only for the
+          # packages it depends on, so a dependent listed first would wait
+          # on a package not yet published. packages/scripts/publish-order.mjs
+          # holds the one definition of an internal dependency that the
+          # wait also reads.
+          node packages/scripts/publish-order.mjs check packages "${ORDER[@]}"
+          # Publish a whole dependency depth before the next (ORDER's own
+          # sequence inside a depth), so each wait covers as many packages
+          # as it can.
+          read -r -a ORDER <<< "$(node packages/scripts/publish-order.mjs by-depth packages "${ORDER[@]}")"
 
           if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
             FILTER="${ORDER[*]}"
@@ -652,7 +665,7 @@ jobs:
 
       - run: pnpm -r --filter "./packages/*" build
 
-      - name: Publish (leaf-first)
+      - name: Publish (dependencies first, each after its dependencies are installable)
         # Auth via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret.
         # npm validates the OIDC token GitHub Actions auto-injects
         # (because we have `id-token: write` above) against each
@@ -662,6 +675,11 @@ jobs:
         # `npm publish` + `npm stage publish`. If the trusted-publisher
         # config is missing/mismatched, this step fails with auth error
         # and nothing lands — same all-or-nothing safety as tokens.
+        env:
+          # The control for the visibility wait (see the loop below): the
+          # one package whose canonical tarball URL is asked right after its
+          # publish. Nothing in the wave depends on it.
+          VISIBILITY_CONTROL_PKG: registry-server
         run: |
           set -euo pipefail
           DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
@@ -737,14 +755,47 @@ jobs:
             if [ "$DRY_RUN" = "true" ]; then
               echo "Dispatch dry-run requested — gate passed; skipping the real publish."
             else
+              # ── Visibility wait. `pnpm publish` returns before npm makes the
+              #    version visible: the registry ingests each publish
+              #    asynchronously, minutes later and not in publish order, and
+              #    `time[<version>]` records the visible instant. So before
+              #    each package, wait until every package it depends on is
+              #    installable — visible at the registry, its tarball served —
+              #    and settled: past the packument's max-age, after which no
+              #    edge still serves a copy without it. A dependent then never
+              #    becomes installable before its dependencies, anywhere.
+              #    packages/scripts/npm-visibility.mjs has the four reads.
+              STATE="$RUNNER_TEMP/npm-visibility.json"
+              PROBE="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
               for pkg in "${TODO[@]}"; do
                 name=$(node -pe "require('./packages/$pkg/package.json').name")
                 ver=$(node -pe "require('./packages/$pkg/package.json').version")
                 TAG=$(tag_for "$ver")
+                echo "::group::Waiting for the dependencies of $name@$ver"
+                node packages/scripts/npm-visibility.mjs deps packages "$pkg" --probe "$PROBE" --state "$STATE"
+                echo "::endgroup::"
                 echo "::group::Publishing $name@$ver from packages/$pkg/ (--tag $TAG)"
                 (cd "packages/$pkg" && pnpm publish --access public --no-git-checks --provenance --tag "$TAG")
                 echo "::endgroup::"
+                # The control: this one package's canonical tarball URL is
+                # asked right after its publish, before it can exist. Every
+                # other package's is asked only after a cache-busted probe
+                # has answered 200. The report compares the two, so each wave
+                # measures whether an early ask delays that URL for users.
+                if [ "$pkg" = "$VISIBILITY_CONTROL_PKG" ]; then
+                  node packages/scripts/npm-visibility.mjs plant packages "$pkg" --state "$STATE"
+                fi
               done
+              if [[ " ${TODO[*]} " == *" $VISIBILITY_CONTROL_PKG "* ]]; then
+                echo "::group::Waiting for the control package"
+                node packages/scripts/npm-visibility.mjs all packages "$VISIBILITY_CONTROL_PKG" --probe "$PROBE" --state "$STATE"
+                echo "::endgroup::"
+              fi
+              {
+                echo "## Visibility"
+                echo ""
+                node packages/scripts/npm-visibility.mjs report --state "$STATE"
+              } >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
 
@@ -758,80 +809,49 @@ jobs:
             echo "**Real publish of ${#TODO[@]} package(s). Tarballs are live on https://registry.npmjs.org/**." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # ── Post-publish consumer smoke. Two-phase: (1) poll npm registry
-  # for every published package until all are retrievable at the target
-  # version (up to 60 min — npm's CDN replication is usually <5 min but
-  # documented as long as 60 min for new versions of a scope's first
-  # publishes); (2) install @ggui-ai/cli at the exact target version
-  # in a clean directory, confirm the bin resolves + reports the
-  # expected version. Only runs on a real (non-dry) publish.
+  # ── Post-publish consumer smoke. Two-phase: (1) wait until every
+  # package this run published is installable and settled, with the same
+  # reads as the publish step's wait (packages/scripts/npm-visibility.mjs,
+  # up to 30 min per package); (2) install @ggui-ai/cli at the exact
+  # target version in a clean directory, confirm the bin resolves +
+  # reports the expected version. Only runs on a real (non-dry) publish.
   #
-  # Why poll: rc.1's first smoke run flaked at sleep(30) because
-  # @ggui-ai/project-config (a transitive of cli) hadn't replicated
-  # to all CDN mirrors yet. The fixed-sleep model trades flake risk
-  # for time on every release; the poll model gives generous budget
-  # while finishing fast when replication is quick.
+  # Why wait rather than sleep: rc.1's first smoke run flaked at
+  # sleep(30) because @ggui-ai/project-config (a transitive of cli)
+  # was not yet installable. The wait finishes as soon as the registry
+  # serves every package and no edge can still serve a stale packument,
+  # so the install below is what a user gets from then on.
   smoke:
     needs: [preflight, publish]
     if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
     runs-on: ubuntu-latest
-    # 60 min poll budget + 15 min headroom for the install/verify phase.
+    # The wait's 30 min per-package budget + headroom for the install/verify phase.
     timeout-minutes: 75
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
-      - name: Wait for npm registry replication (up to 60 min)
+      - name: Wait until every published package is installable
         env:
           TARGET_VERSION: ${{ needs.preflight.outputs.target_version }}
         run: |
-          set -uo pipefail
-          # Every published @ggui-ai/* name. Keep in sync with the
-          # preflight ORDER (modulo directory→name renames like
-          # mcp-apps-react → @ggui-ai/mcp-apps-react).
-          PACKAGES=(
-            protocol artifact-manifest gadget-signing wire live-channel
-            design gadgets ui-gen blueprint-probe preview-a2ui
-            iframe-runtime mcp-apps-react mcp-apps-react-native agent-runtime
-            mcp-server mcp-server-handlers mcp-server-core negotiator
-            registry-core registry-server ui-registry cli project-config
-            dev-stack sandbox embedding-local console shared
-            protocol-conformance protocol-reference-server ui-visual-tester
-            agent-server
-          )
-          DEADLINE=$(( $(date +%s) + 3600 ))   # +60 min
-          attempt=0
-          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-            attempt=$((attempt + 1))
-            MISSING=()
-            for pkg in "${PACKAGES[@]}"; do
-              # A package counts as replicated only when BOTH the packument
-              # (what `npm view` reads) AND its tarball (what `npm install`
-              # fetches) answer 200. npm replicates the packument first; on
-              # the v0.14.0 cut the packument poll passed and the install
-              # step 404'd on a tarball 35 s later (ggui#834). The tarball
-              # path is the registry's canonical <name>-<version>.tgz.
-              meta=$(curl -sf -o /dev/null -w "%{http_code}" \
-                "https://registry.npmjs.org/@ggui-ai%2F$pkg/$TARGET_VERSION" \
-                || echo "000")
-              tgz=$(curl -sf -o /dev/null -I -w "%{http_code}" \
-                "https://registry.npmjs.org/@ggui-ai/$pkg/-/$pkg-$TARGET_VERSION.tgz" \
-                || echo "000")
-              if [ "$meta" != "200" ] || [ "$tgz" != "200" ]; then
-                MISSING+=("$pkg(packument:$meta tarball:$tgz)")
-              fi
-            done
-            if [ "${#MISSING[@]}" -eq 0 ]; then
-              echo "::notice::All ${#PACKAGES[@]} packages retrievable — packument and tarball — at @0.x — $TARGET_VERSION (attempt $attempt)"
-              exit 0
-            fi
-            echo "[attempt $attempt] ${#MISSING[@]} still replicating: ${MISSING[@]:0:5}$([ "${#MISSING[@]}" -gt 5 ] && echo ' …more')"
-            sleep 30
-          done
-          echo "::error::Timed out after 60 min waiting for npm replication. Still missing: ${MISSING[*]}"
-          exit 1
+          set -euo pipefail
+          # --version: on a prerelease channel this checkout's package.json
+          # files still carry the committed version; the publish step
+          # rewrote them only on its own runner. The probe prefix differs
+          # from the publish step's so no probe key is ever reused.
+          STATE="$RUNNER_TEMP/npm-visibility.json"
+          node packages/scripts/npm-visibility.mjs all packages ${{ needs.preflight.outputs.filter }} \
+            --version "$TARGET_VERSION" --probe "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-smoke" --state "$STATE"
+          {
+            echo "## Installable"
+            echo ""
+            node packages/scripts/npm-visibility.mjs report --state "$STATE"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install + smoke-run @ggui-ai/cli at target version
         env:
