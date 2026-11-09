@@ -12,6 +12,7 @@ import type { AdapterConfig, GenerateParams } from '../base';
 import type { AdapterResult, ToolDefinition, ProviderName, AdapterMode } from '../types';
 import { zodToJsonSchema, toolArgsToJsonObject } from '../tool-bridge';
 import { createCapture, captureSourceCode, captureCompiledCode, captureMarkers } from '../extract-code';
+import { GEMINI_API_VERSION } from './api-version';
 
 async function loadGoogleGenAI() {
   return import('@google/genai');
@@ -39,6 +40,8 @@ export class GoogleRawAdapter extends GeneratorAdapter {
       const { GoogleGenAI } = await loadGoogleGenAI();
       this.client = new GoogleGenAI({
         apiKey: this.config.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+        // Pinned, not defaulted: the SDK's default Gemini API version is not ours to inherit.
+        apiVersion: GEMINI_API_VERSION,
         httpOptions: { timeout: 300_000 }, // 5 min — Pro models can be slow
       });
     }

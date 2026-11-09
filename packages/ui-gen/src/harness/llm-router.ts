@@ -33,6 +33,7 @@ import {
 import type { LLMToolDef } from '../llm.js';
 import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
+import { GEMINI_API_VERSION } from '../adapters/google/api-version.js';
 import { getBedrockModelId } from '../adapters/provider-router.js';
 import { toolArgsToJsonObject } from '../adapters/tool-bridge.js';
 import { splitCacheInclusiveUsage, splitOpenAiUsage } from '../adapters/openai/tokens.js';
@@ -1711,6 +1712,8 @@ export class GoogleAgent extends LLMAgent {
     return new GoogleGenAISDK({
       apiKey:
         this.routeOverride?.apiKey ?? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
+      // Pinned, not defaulted: the SDK's default Gemini API version is not ours to inherit.
+      apiVersion: GEMINI_API_VERSION,
       httpOptions: { timeout: 300_000 }, // 5 min — Pro models can be slow
     });
   }
