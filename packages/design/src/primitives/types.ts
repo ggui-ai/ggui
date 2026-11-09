@@ -855,7 +855,7 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
  * and an optional message `<span>` for error or helper text.
  *
  * Styling:
- * - Border: `1px solid var(--ggui-color-controlOutline)` (normal),
+ * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
@@ -944,7 +944,7 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
  *
  * Styling:
  * - Padding: `10px 12px`, font: `var(--ggui-font-size-sm)`, `font-family: inherit`
- * - Border: `1px solid var(--ggui-color-controlOutline)` (normal),
+ * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
@@ -1057,7 +1057,7 @@ export interface SelectOption {
  * padding (36px) accommodates the chevron.
  *
  * Styling:
- * - Border: `1px solid var(--ggui-color-controlOutline)` (normal),
+ * - Border: `1px solid var(--ggui-color-outline)` (normal),
  *   `var(--ggui-color-error-500)` (error)
  * - Background: `var(--ggui-color-container)` (normal),
  *   `var(--ggui-color-container)` (disabled)
@@ -1157,7 +1157,7 @@ export interface SelectProps extends BaseProps, Omit<SelectHTMLAttributes<HTMLSe
  *
  * Styling:
  * - Box border: `2px solid var(--ggui-color-primary-600)` (checked/indeterminate),
- *   `var(--ggui-color-controlOutline)` (unchecked)
+ *   `var(--ggui-color-outline)` (unchecked)
  * - Box fill: `var(--ggui-color-primary-600)` (checked/indeterminate),
  *   `var(--ggui-color-container)` (unchecked)
  * - Check/dash icon: white SVG, 12x12px
@@ -1224,7 +1224,7 @@ export interface CheckboxProps extends BaseProps {
  *
  * Styling:
  * - Track (on): `var(--ggui-color-primary-600)`
- * - Track (off): `var(--ggui-color-controlOutline)`
+ * - Track (off): `var(--ggui-color-outline)`
  * - Knob: white circle with `var(--ggui-shape-shadow-sm)`
  * - Focus ring: `0 0 0 3px var(--ggui-color-primary-200)`
  * - Transitions: background-color, box-shadow, knob position at 200ms ease-in-out
@@ -1306,7 +1306,7 @@ export interface RadioOption {
  * Styling:
  * - Selected circle: `2px solid var(--ggui-color-primary-600)` border with
  *   an 8px `var(--ggui-color-primary-600)` filled inner dot
- * - Unselected circle: `2px solid var(--ggui-color-controlOutline)` border,
+ * - Unselected circle: `2px solid var(--ggui-color-outline)` border,
  *   `var(--ggui-color-container)` fill
  * - Circle radius: `var(--ggui-shape-radius-full)`
  * - Transition: all 0.2s
