@@ -268,8 +268,14 @@ const renderFreeBoilerplates = (): string => renderBoilerplateTemplates('free');
 // Re-recorded 2026-10-20 for ggui#1966: rule 5 extends from a kit control's border to its ink and fill — never an
 // inline `color`, `background` or `backgroundColor` on a kit control, token or literal; the variant carries the look.
 // constrained prompt 87aec111… → dfabd5b5…. The free prompt and both boilerplates are unchanged.
+// Re-recorded 2026-11-09 for ggui#2195 (the component reference): six control primitives' docblocks name the
+// border they draw, `var(--ggui-color-controlOutline)`, in place of `var(--ggui-color-outline)` (Input, TextArea,
+// Select, Checkbox unchecked, Toggle off track, RadioGroup unselected). Both arms carry the reference:
+// constrained prompt 713ada53… → 88900de5…, free f29ca97d… → 684686c4…. The boilerplates are unchanged. These
+// digests hash the BUILT template; under the default `primitiveDocFormat: "ts"` the sent prompt swaps this
+// markdown reference for the TS one and is byte-identical across the change.
 export const CONSTRAINED_PROMPT_SHA256 =
-  "713ada53dc83df8dccbbfab8781b1cf50129cc300fbff3e096b60ef1403a1f4c";
+  "88900de50e3926f4a3a6aebb794b0a16762e0a4d9289a9a508cafe9d2bd369f1";
 export const CONSTRAINED_BOILERPLATE_SHA256 =
   '41af21c4d5f100825053a357afa9e6d0f2f8ce044deb8953afc14d84127e98a7';
 // Re-recorded 2026-09-27 for ggui#1320 (DATA_PARAMETERIZATION rule 6: keys on a mapped list come from the
@@ -336,8 +342,9 @@ export const CONSTRAINED_BOILERPLATE_SHA256 =
 // Re-recorded 2026-10-18 for ggui#1933 — see the constrained note (the `Input` onChange binding).
 // Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (the component reference).
 // Re-recorded 2026-10-20 for ggui#1765 — see the constrained note (no token named for the card inset).
+// Re-recorded 2026-11-09 for ggui#2195 — see the constrained note (the six control borders in the reference).
 export const FREE_PROMPT_SHA256 =
-  "f29ca97da14702906a22935d6d530398fe79c1f880b683d3c959e380f63c9405";
+  "684686c411a08ed1c91815509ef043b19fe27a0ea57686acfc66235e255c408c";
 // Re-recorded 2026-09-23 for ggui#1244 (the copy reminder moves from the hook line to the payload-type
 // doc comment — see the constrained note above); the free prompt is byte-stable.
 // Re-recorded 2026-10-18 for ggui#1924 — see the constrained note (the mount canvas export); the free prompt is byte-stable.
