@@ -74,10 +74,24 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
       expect(MODEL_REGISTRY[id as ModelId].retireNotBefore, id).toBe(floor);
     }
   });
+
+  it('the three dated vendor shutdowns carry their date as the floor and read legacy (ggui#2211, W46 sweep read 2026-11-09)', () => {
+    // Google deprecations: "gemini-3.1-flash-lite | released May 7, 2026 | shutdown May 7, 2027 | gemini-3.5-flash-lite".
+    // OpenAI deprecations (2026-10-01 section): "gpt-5.3-codex → gpt-6-sol" and "gpt-5.4-nano → gpt-6-luna", shutdown April 1, 2027.
+    const floors: Record<string, string> = {
+      'gemini/gemini-3.1-flash-lite': '2027-05-07',
+      'openai/gpt-5.3-codex': '2027-04-01',
+      'openai/gpt-5.4-nano': '2027-04-01',
+    };
+    for (const [id, floor] of Object.entries(floors)) {
+      expect(MODEL_REGISTRY[id as ModelId].retireNotBefore, id).toBe(floor);
+      expect(MODEL_REGISTRY[id as ModelId].state, id).toBe('legacy');
+    }
+  });
 });
 
 describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
-  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Sonnet 5, Gemini 3.5 Flash, Gemini 3.7 Flash — everything else is active (ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1803: Sonnet 5.5 replaces Sonnet 5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)"; ggui#1889: the two rerouted Gemini ids)', () => {
+  it('the legacy set is exactly Fable 5, Haiku 4.5, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Sonnet 5, Gemini 3.1 Flash Lite, Gemini 3.5 Flash, Gemini 3.7 Flash, GPT-5.3 Codex, GPT-5.4 Nano — everything else is active (ggui#2211: three dated vendor shutdowns with named replacements; ggui#1266: Opus 5.5 replaces Opus 5; ggui#1743: Haiku 5.5 replaces Haiku 4.5; ggui#1803: Sonnet 5.5 replaces Sonnet 5; ggui#1291: Opus 4.8 enters as the vendor lists it, "Active (legacy)"; ggui#1889: the two rerouted Gemini ids)', () => {
     const legacy = ids().filter((id) => MODEL_REGISTRY[id].state === 'legacy');
     expect(legacy).toEqual([
       'anthropic/claude-fable-5',
@@ -88,8 +102,11 @@ describe('MODEL_REGISTRY — state + lineup are registry facts', () => {
       'anthropic/claude-opus-5',
       'anthropic/claude-sonnet-4-6',
       'anthropic/claude-sonnet-5',
+      'gemini/gemini-3.1-flash-lite',
       'gemini/gemini-3.5-flash',
       'gemini/gemini-3.7-flash',
+      'openai/gpt-5.3-codex',
+      'openai/gpt-5.4-nano',
     ]);
     for (const id of ids()) {
       expect(['active', 'legacy'], id).toContain(MODEL_REGISTRY[id].state);

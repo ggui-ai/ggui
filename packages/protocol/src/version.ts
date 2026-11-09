@@ -6,6 +6,24 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Three rows with a dated vendor shutdown read legacy and carry the date
+ * as their floor (2026-11-09, ggui#2211; data only):
+ * `gemini/gemini-3.1-flash-lite` 2027-05-07 (Google deprecations page:
+ * shutdown May 7, 2027, replacement gemini-3.5-flash-lite),
+ * `openai/gpt-5.3-codex` and `openai/gpt-5.4-nano` 2027-04-01 (OpenAI
+ * deprecations page, 2026-10-01 section: shutdown April 1, 2027,
+ * replacements gpt-6-sol / gpt-6-luna). A shutdown date is the strongest
+ * floor a vendor quotes — served at least until then — and a named
+ * successor is what `legacy` means (`ModelState`): still routable, no
+ * longer the current generation. The #738 rule ("legacy ONLY when the
+ * vendor's page says so") is read as: a row in the vendor's own
+ * deprecations table, with a shutdown date and a named replacement, is
+ * the vendor saying so — a "Stable" badge on a models page is the
+ * release channel, not the lifecycle (gemini-3.1-flash-lite carries
+ * both, and they do not conflict). The successor ids are not added (a
+ * new row follows the lineup ruling). No wire change. No
+ * `PROTOCOL_VERSION` move.
+ * --------------------------------------------------------------------
  * Three legacy rows gain the vendor's retirement floor (2026-10-28,
  * ggui#2147; data only): `anthropic/claude-sonnet-4-6` 2027-02-17,
  * `anthropic/claude-opus-4-7` 2027-04-16 and `anthropic/claude-opus-4-6`
