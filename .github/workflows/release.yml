@@ -288,8 +288,10 @@ jobs:
           node packages/scripts/publish-order.mjs check packages "${ORDER[@]}"
           # Publish a whole dependency depth before the next (ORDER's own
           # sequence inside a depth), so each wait covers as many packages
-          # as it can.
-          read -r -a ORDER <<< "$(node packages/scripts/publish-order.mjs by-depth packages "${ORDER[@]}")"
+          # as it can. The assignment stands alone so a failure exits the
+          # step: inside a here-string it would leave ORDER empty instead.
+          BY_DEPTH=$(node packages/scripts/publish-order.mjs by-depth packages "${ORDER[@]}")
+          read -r -a ORDER <<< "$BY_DEPTH"
 
           if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
             FILTER="${ORDER[*]}"

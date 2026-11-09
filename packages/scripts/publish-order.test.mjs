@@ -184,6 +184,7 @@ test("releaseOrder: reads the ORDER array out of the release workflow text", () 
 test("the release workflow ORDER is dependency-first over the packages in this tree", () => {
   const yml = readFileSync(join(here, "..", "..", ".github", "workflows", "release.yml"), "utf8");
   const order = releaseOrder(yml);
-  assert.ok(order.length > 20, `expected the full wave, read ${order.length} entries`);
+  // The wave's size, pinned so adding or dropping a package is a deliberate edit here too.
+  assert.equal(order.length, 32, `expected the 32-package wave, read ${order.length} entries`);
   assert.deepEqual(checkPublishOrder(order, readPublishSet(join(here, ".."))), []);
 });

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  findingAnnotations,
   maxAgeSeconds,
   registryUrls,
   renderReport,
@@ -29,13 +30,25 @@ function fakeClock() {
  * set, the canonical tarball URL behaves like an edge that caches a 404:
  * once asked before the tarball exists, it keeps answering 404 until that
  * many ms after the first ask. A query-string URL that has answered 200
- * once answers HIT afterwards, as the edge does.
+ * once answers HIT afterwards, as the edge does. Every answer carries the
+ * registry's `date` header at one-second resolution, from a registry clock
+ * `registryOffsetMs` ahead of the runner's (negative: behind), unless
+ * `dateHeader` is false.
  */
-function fakeRegistry(clock, pkgs, { negativeCacheMs = 0 } = {}) {
+function fakeRegistry(
+  clock,
+  pkgs,
+  { negativeCacheMs = 0, registryOffsetMs = 0, dateHeader = true } = {}
+) {
   const requests = [];
   const firstCanonicalAsk = new Map();
   const seen200 = new Set();
-  const http = async (url, { method = "GET" } = {}) => {
+  const http = async (url, opts) => {
+    const res = await answer(url, opts);
+    const date = dateHeader ? new Date(clock.now() + registryOffsetMs).toUTCString() : null;
+    return { ...res, date };
+  };
+  const answer = async (url, { method = "GET" } = {}) => {
     requests.push({ url, method, at: clock.now() });
     const t = clock.now() - T0;
     const u = new URL(url);
@@ -144,7 +157,7 @@ test("waitVisible: while the tarball is still missing, every probe attempt uses 
   assert.ok(r.attempts.filter((a) => a.step === "probe").every((a) => a.cache !== "HIT"));
 });
 
-test("waitVisible: a probe answered from the edge cache is a finding, not a pass", async () => {
+test("waitVisible: a probe answered from the edge cache passes, since the tarball is there, and is recorded as a finding", async () => {
   const clock = fakeClock();
   const reg = fakeRegistry(clock, { "@ggui-ai/ui-gen": UI_GEN });
   const http = async (url, opts) => {
@@ -160,6 +173,7 @@ test("waitVisible: a probe answered from the edge cache is a finding, not a pass
   });
   assert.equal(r.findings.length, 1);
   assert.match(r.findings[0], /tarball probe .* answered from the edge cache \(HIT\)/);
+  assert.equal(r.settleAt, T0 + 38_000 + 300_000);
 });
 
 test("waitVisible: a canonical tarball that still answers 404 after the probe answered 200 is waited for and recorded as a finding", async () => {
@@ -213,6 +227,49 @@ test("waitVisible: past the budget it throws, naming the step it was stuck on an
     }),
     /@ggui-ai\/ui-gen@1\.2\.0 is not installable after 60 s: version document answered 404/
   );
+});
+
+test("waitVisible: settles on the runner's clock, shifted by how far it runs ahead of the registry's", async () => {
+  for (const [registryOffsetMs, expected] of [
+    [-20_000, T0 + 38_000 + 300_000 + 20_000],
+    [15_000, T0 + 38_000 + 300_000 - 15_000],
+  ]) {
+    const clock = fakeClock();
+    const reg = fakeRegistry(clock, { "@ggui-ai/ui-gen": UI_GEN }, { registryOffsetMs });
+    const r = await waitVisible({
+      name: "@ggui-ai/ui-gen",
+      version: "1.2.0",
+      probe: "run7",
+      http: reg.http,
+      clock,
+    });
+    assert.equal(r.settleAt, expected, `registry offset ${registryOffsetMs} ms`);
+    assert.equal(r.registryOffsetMs, registryOffsetMs);
+    assert.deepEqual(r.findings, []);
+  }
+});
+
+test("waitVisible: a packument without a date header settles with a fixed margin and says so", async () => {
+  const clock = fakeClock();
+  const reg = fakeRegistry(clock, { "@ggui-ai/ui-gen": UI_GEN }, { dateHeader: false });
+  const r = await waitVisible({
+    name: "@ggui-ai/ui-gen",
+    version: "1.2.0",
+    probe: "run7",
+    http: reg.http,
+    clock,
+  });
+  assert.equal(r.settleAt, T0 + 38_000 + 300_000 + 30_000);
+  assert.equal(r.registryOffsetMs, null);
+  assert.match(r.findings[0], /no date header; settling 30 s late/);
+});
+
+test("findingAnnotations: one ::warning:: line per finding, naming the package", () => {
+  assert.deepEqual(findingAnnotations("@ggui-ai/ui-gen@1.2.0", { findings: ["a", "b"] }), [
+    "::warning::@ggui-ai/ui-gen@1.2.0: a",
+    "::warning::@ggui-ai/ui-gen@1.2.0: b",
+  ]);
+  assert.deepEqual(findingAnnotations("@ggui-ai/ui-gen@1.2.0", { findings: [] }), []);
 });
 
 test("settle: waits until the latest settle instant among the records, and not at all once it has passed", async () => {

@@ -14,8 +14,10 @@
 //      edge, so it reads the registry's own state;
 //   2. its tarball answers 200 at a cache-busted URL. The query string is
 //      part of the edge's cache key, so a probe never touches the entry a
-//      user's install reads, and every attempt uses a key never used before:
-//      a probe answered from the edge cache (HIT) is a finding, not a pass;
+//      user's install reads, and every attempt uses a key never used before.
+//      A probe answered from the edge cache (HIT) still passes, since the
+//      tarball is there, and is recorded as a finding: a HIT on a key never
+//      used before means the probe did not reach past the edge;
 //   3. one GET of the canonical tarball URL answers 200. If it does not, the
 //      wait continues on that URL and records the delay as a finding;
 //   4. the packument (cache-busted) carries `time[<version>]`, and its
@@ -24,7 +26,10 @@
 // The version is then SETTLED at `time[<version>] + max-age`: from that
 // instant no edge can still serve a packument without it. A dependent
 // published after its dependencies have settled cannot become visible
-// before them anywhere.
+// before them anywhere. `time` is on the registry's clock and the wait runs
+// on the runner's, so the settle instant is moved onto the runner's clock by
+// the difference the packument's `date` header shows. A packument without
+// one settles DATE_MARGIN_S late instead, and says so.
 //
 //   node npm-visibility.mjs deps  <packages-root> <dir>    --probe P --state F [--version V]
 //   node npm-visibility.mjs all   <packages-root> <dir>... --probe P --state F [--version V]
@@ -50,6 +55,7 @@ import { readPublishSet } from "./publish-order.mjs";
 
 export const REGISTRY = "https://registry.npmjs.org";
 export const DEFAULT_MAX_AGE_S = 300;
+export const DATE_MARGIN_S = 30;
 
 const STEP_LABEL = {
   version: "version document",
@@ -75,7 +81,7 @@ export function maxAgeSeconds(cacheControl) {
   return match ? Number(match[1]) : null;
 }
 
-/** One registry read over the network: status, edge cache status, cache-control, and a JSON body when asked for. */
+/** One registry read over the network: status, edge cache status, cache-control, date, and a JSON body when asked for. */
 export async function fetchHttp(url, { method = "GET", json = false } = {}) {
   let res;
   try {
@@ -86,7 +92,14 @@ export async function fetchHttp(url, { method = "GET", json = false } = {}) {
     });
   } catch (error) {
     // A network failure is an answer for this attempt (status 0), and the wait polls again.
-    return { status: 0, cache: null, cacheControl: null, body: null, error: String(error) };
+    return {
+      status: 0,
+      cache: null,
+      cacheControl: null,
+      date: null,
+      body: null,
+      error: String(error),
+    };
   }
   let body = null;
   if (method !== "HEAD") {
@@ -97,6 +110,7 @@ export async function fetchHttp(url, { method = "GET", json = false } = {}) {
     status: res.status,
     cache: res.headers.get("cf-cache-status"),
     cacheControl: res.headers.get("cache-control"),
+    date: res.headers.get("date"),
     body,
   };
 }
@@ -109,7 +123,9 @@ export const realClock = {
 /**
  * Waits until `name@version` is installable (steps 1–4 above) and returns
  * what it read: every attempt, `publishedAt` (npm `time`), `maxAgeS`,
- * `settleAt` (ms) and any findings. Throws past `budgetMs`.
+ * `registryOffsetMs` (how far the registry's clock runs ahead of the
+ * runner's, or null without a date header), `settleAt` (ms, on the runner's
+ * clock) and any findings. Throws past `budgetMs`.
  */
 export async function waitVisible({
   name,
@@ -186,10 +202,14 @@ export async function waitVisible({
     }
   );
 
+  let packumentAt = null;
   const packument = await poll(
     "packument",
     () => ({ url: probed(urls.packument), json: true }),
-    (res) => res.status === 200 && typeof res.body?.time?.[version] === "string"
+    (res, attempt) => {
+      packumentAt = attempt.at;
+      return res.status === 200 && typeof res.body?.time?.[version] === "string";
+    }
   );
   const publishedAt = packument.body.time[version];
   let maxAgeS = maxAgeSeconds(packument.cacheControl);
@@ -199,15 +219,33 @@ export async function waitVisible({
     );
     maxAgeS = DEFAULT_MAX_AGE_S;
   }
+  // The date header is whole seconds, rounded down, so it can only make the
+  // registry look further behind than it is: the settle errs late, never early.
+  const registryDate = Date.parse(packument.date ?? "");
+  let registryOffsetMs = null;
+  let clockShiftMs;
+  if (Number.isNaN(registryDate)) {
+    findings.push(`packument carries no date header; settling ${DATE_MARGIN_S} s late`);
+    clockShiftMs = DATE_MARGIN_S * 1000;
+  } else {
+    registryOffsetMs = registryDate - packumentAt;
+    clockShiftMs = -registryOffsetMs;
+  }
   return {
     name,
     version,
     attempts,
     publishedAt,
     maxAgeS,
-    settleAt: Date.parse(publishedAt) + maxAgeS * 1000,
+    registryOffsetMs,
+    settleAt: Date.parse(publishedAt) + maxAgeS * 1000 + clockShiftMs,
     findings,
   };
+}
+
+/** One GitHub `::warning::` annotation per finding, so a finding shows on the run page as well as in the step summary. */
+export function findingAnnotations(key, record) {
+  return record.findings.map((finding) => `::warning::${key}: ${finding}`);
 }
 
 /** Sleeps until the latest `settleAt` among `records`; returns the ms waited. */
@@ -325,6 +363,7 @@ async function main() {
       log: (line) => say(line),
     });
     save();
+    for (const line of findingAnnotations(key(name), state.records[key(name)])) say(line);
   }
   const waited = await settle(names.map((name) => state.records[key(name)]));
   say(
