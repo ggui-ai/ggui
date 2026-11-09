@@ -503,11 +503,15 @@ const MODEL_ROWS = defineModelRegistry({
   // date — "gemini-3.1-flash-lite | released May 7, 2026 | shutdown May 7,
   // 2027 | replacement gemini-3.5-flash-lite" — so the row is legacy and
   // the date is its floor: served at least until then. The #738 rule is
-  // "legacy ONLY when the vendor's page says so": a row in the vendor's own
-  // deprecations table, with a shutdown date and a named replacement, IS
-  // the vendor saying so. The models page still badges this id "Stable" —
-  // that is the release channel (stable vs preview), not the lifecycle,
-  // and the two pages do not conflict.
+  // "legacy ONLY when the vendor's page says so": this id is a DATED row in
+  // the main lifecycle table of the vendor's deprecations page (the only
+  // dated one there on 2026-11-09; the page never uses the word
+  // "deprecated" for it and it is not in the page's "Deprecated models"
+  // subsection), and the page defines its dates as "the earliest possible
+  // dates on which a model might be retired" — `retireNotBefore` word for
+  // word. A dated row with a named replacement IS the vendor saying so.
+  // The models page still badges this id "Stable" — that is the release
+  // channel (stable vs preview), not the lifecycle; the two do not conflict.
   "gemini/gemini-3.1-flash-lite": {
     id: "gemini/gemini-3.1-flash-lite",
     provider: "google",

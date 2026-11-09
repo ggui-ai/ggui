@@ -16,11 +16,14 @@
  * floor a vendor quotes — served at least until then — and a named
  * successor is what `legacy` means (`ModelState`): still routable, no
  * longer the current generation. The #738 rule ("legacy ONLY when the
- * vendor's page says so") is read as: a row in the vendor's own
- * deprecations table, with a shutdown date and a named replacement, is
- * the vendor saying so — a "Stable" badge on a models page is the
- * release channel, not the lifecycle (gemini-3.1-flash-lite carries
- * both, and they do not conflict). The successor ids are not added (a
+ * vendor's page says so") is read as: a DATED row in the lifecycle table
+ * of the vendor's deprecations page, with a named replacement, is the
+ * vendor saying so — not the word "deprecated" (Google's page never uses
+ * it for gemini-3.1-flash-lite, which sits in the main table, not the
+ * "Deprecated models" subsection; the page defines its dates as "the
+ * earliest possible dates on which a model might be retired"). A
+ * "Stable" badge on a models page is the release channel, not the
+ * lifecycle; the two do not conflict. The successor ids are not added (a
  * new row follows the lineup ruling). No wire change. No
  * `PROTOCOL_VERSION` move.
  * --------------------------------------------------------------------
