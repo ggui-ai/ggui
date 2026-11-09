@@ -1,9 +1,10 @@
 {
-  "generatedAt": "2026-10-27T20:46:27.911Z",
+  "generatedAt": "2026-11-09T06:34:46.686Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
     "@anthropic-ai/bedrock-sdk",
+    "@anthropic-ai/claude-agent-sdk",
     "@anthropic-ai/claude-agent-sdk-darwin-arm64",
     "@anthropic-ai/claude-agent-sdk-darwin-x64",
     "@anthropic-ai/claude-agent-sdk-linux-arm64",
@@ -302,6 +303,7 @@
     "@a2a-js/sdk",
     "@adobe/css-tools",
     "@anthropic-ai/bedrock-sdk",
+    "@anthropic-ai/claude-agent-sdk",
     "@anthropic-ai/claude-agent-sdk-darwin-arm64",
     "@anthropic-ai/claude-agent-sdk-darwin-x64",
     "@anthropic-ai/claude-agent-sdk-linux-arm64",
