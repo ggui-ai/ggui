@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createGguiServer, type GguiServer } from './server.js';
 import type { Logger } from './logger.js';
 
@@ -40,9 +40,22 @@ async function register(fx: Fx, ip?: string): Promise<Response> {
   });
 }
 
+// The limiter's windows are fixed and line up with the clock (every 10 minutes from the epoch).
+// On the real clock, a run that crosses an edge between the 10th and 11th registration starts a
+// fresh window and gets 201 where the test expects 429. So `Date` is frozen mid-window here;
+// timers stay real, so the server and `fetch` run as usual.
+const MID_WINDOW = Date.UTC(2026, 0, 1, 0, 5, 0);
+
 describe('ggui#1193 — per-IP rate limit on POST /oauth/register', () => {
   let fx: Fx;
-  afterEach(async () => { await fx.server.close(); });
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(MID_WINDOW);
+  });
+  afterEach(async () => {
+    await fx.server.close();
+    vi.useRealTimers();
+  });
 
   it('allows 10 registrations per IP per window, refuses the 11th with 429 + Retry-After + a body that names the reason, and logs rate_limit_hit under its own quotaKey', async () => {
     fx = await boot();
